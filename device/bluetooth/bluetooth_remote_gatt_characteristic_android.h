@@ -75,7 +75,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
   base::android::ScopedJavaGlobalRef<jobject> j_characteristic_;
 
   // Adapter unique instance ID.
-  std::string instanceId_;
+  std::string instance_id_;
 
   // ReadRemoteCharacteristic callbacks and pending state.
   bool read_pending_ = false;

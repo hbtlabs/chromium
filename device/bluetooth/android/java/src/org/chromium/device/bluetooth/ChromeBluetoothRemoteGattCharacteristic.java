@@ -91,6 +91,17 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         return mCharacteristic.getProperties();
     }
 
+    // Implements BluetoothRemoteGattCharacteristicAndroid::StartNotifySession.
+    @CalledByNative
+    private boolean startNotifySession() {
+        if (!mChromeBluetoothDevice.mBluetoothGatt.setCharacteristicNotification(
+                    mCharacteristic, true)) {
+            Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
+            return false;
+        }
+        return true;
+    }
+
     // Implements BluetoothRemoteGattCharacteristicAndroid::ReadRemoteCharacteristic.
     @CalledByNative
     private boolean readRemoteCharacteristic() {

@@ -312,6 +312,27 @@ class Fakes {
         }
 
         @Override
+        boolean setCharacteristicNotification (Wrappers.BluetoothGattCharacteristicWrapper characteristic, boolean enable) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            return true;
+        }
+
+        @Override
         boolean writeCharacteristic(Wrappers.BluetoothGattCharacteristicWrapper characteristic) {
             if (mWriteCharacteristicWillFailSynchronouslyOnce) {
                 mWriteCharacteristicWillFailSynchronouslyOnce = false;
