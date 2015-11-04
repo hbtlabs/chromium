@@ -156,6 +156,17 @@ void BluetoothTestAndroid::SimulateGattCharacteristic(
       base::android::ConvertUTF8ToJavaString(env, uuid).obj(), properties);
 }
 
+void BluetoothTestAndroid::
+    SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
+        BluetoothGattCharacteristic* characteristic) {
+  BluetoothRemoteGattCharacteristicAndroid* characteristic_android =
+      static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
+  JNIEnv* env = base::android::AttachCurrentThread();
+
+  Java_FakeBluetoothGattCharacteristic_setCharacteristicNotificationWillFailSynchronouslyOnce(
+      env, characteristic_android->GetJavaObject().obj());
+}
+
 void BluetoothTestAndroid::SimulateGattCharacteristicRead(
     BluetoothGattCharacteristic* characteristic,
     const std::vector<uint8>& value) {
@@ -239,6 +250,12 @@ void BluetoothTestAndroid::OnFakeBluetoothGattDisconnect(JNIEnv* env,
 void BluetoothTestAndroid::OnFakeBluetoothGattDiscoverServices(JNIEnv* env,
                                                                jobject caller) {
   gatt_discovery_attempts_++;
+}
+
+void BluetoothTestAndroid::OnFakeBluetoothGattSetCharacteristicNotification(
+    JNIEnv* env,
+    jobject caller) {
+  gatt_notify_characteristic_attempts_++;
 }
 
 void BluetoothTestAndroid::OnFakeBluetoothGattReadCharacteristic(

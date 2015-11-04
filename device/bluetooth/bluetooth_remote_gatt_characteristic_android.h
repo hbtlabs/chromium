@@ -14,6 +14,8 @@ namespace device {
 // BluetoothRemoteGattCharacteristicAndroid along with its owned Java class
 // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic
 // implement BluetootGattCharacteristic.
+//
+// TODO(crbug.com/551634): Notifications call GattCharacteristicValueChanged.
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
     : public BluetoothGattCharacteristic {
  public:

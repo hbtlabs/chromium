@@ -277,6 +277,7 @@ class Fakes {
         final FakeBluetoothDevice mDevice;
         final ArrayList<Wrappers.BluetoothGattServiceWrapper> mServices;
         boolean mReadCharacteristicWillFailSynchronouslyOnce = false;
+        boolean mSetCharacteristicNotificationWillFailSynchronouslyOnce = false;
         boolean mWriteCharacteristicWillFailSynchronouslyOnce = false;
 
         public FakeBluetoothGatt(FakeBluetoothDevice device) {
@@ -313,22 +314,11 @@ class Fakes {
 
         @Override
         boolean setCharacteristicNotification (Wrappers.BluetoothGattCharacteristicWrapper characteristic, boolean enable) {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            if (mSetCharacteristicNotificationWillFailSynchronouslyOnce) {
+                mSetCharacteristicNotificationWillFailSynchronouslyOnce = false;
+                return false;
+            }
+            nativeOnFakeBluetoothGattSetCharacteristicNotification(mDevice.mAdapter.mNativeBluetoothTestAndroid);
             return true;
         }
 
@@ -445,6 +435,17 @@ class Fakes {
 
         // Cause subsequent value reads of a characteristic to fail synchronously.
         @CalledByNative("FakeBluetoothGattCharacteristic")
+        private static void setCharacteristicNotificationWillFailSynchronouslyOnce(
+                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic) {
+            FakeBluetoothGattCharacteristic fakeCharacteristic =
+                    (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
+
+            fakeCharacteristic.mService.mDevice.mGatt.mSetCharacteristicNotificationWillFailSynchronouslyOnce =
+                    true;
+        }
+
+        // Cause subsequent value reads of a characteristic to fail synchronously.
+        @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void setReadCharacteristicWillFailSynchronouslyOnce(
                 ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic) {
             FakeBluetoothGattCharacteristic fakeCharacteristic =
@@ -507,6 +508,10 @@ class Fakes {
 
     // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattDiscoverServices.
     private static native void nativeOnFakeBluetoothGattDiscoverServices(
+            long nativeBluetoothTestAndroid);
+
+    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattReadCharacteristic.
+    private static native void nativeOnFakeBluetoothGattSetCharacteristicNotification(
             long nativeBluetoothTestAndroid);
 
     // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattReadCharacteristic.

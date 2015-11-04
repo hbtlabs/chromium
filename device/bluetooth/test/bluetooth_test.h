@@ -101,6 +101,10 @@ class BluetoothTestBase : public testing::Test {
                                           const std::string& uuid,
                                           int properties) {}
 
+  // Simulates a Characteristic Set Notify operation failing synchronously once for an unknown reason.
+  virtual void SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
+      BluetoothGattCharacteristic* characteristic) {}
+
   // Simulates a Characteristic Read operation succeeding, returning |value|.
   virtual void SimulateGattCharacteristicRead(
       BluetoothGattCharacteristic* characteristic,
@@ -172,6 +176,7 @@ class BluetoothTestBase : public testing::Test {
   int gatt_connection_attempts_ = 0;
   int gatt_disconnection_attempts_ = 0;
   int gatt_discovery_attempts_ = 0;
+  int gatt_notify_characteristic_attempts_ = 0;
   int gatt_read_characteristic_attempts_ = 0;
   int gatt_write_characteristic_attempts_ = 0;
   base::WeakPtrFactory<BluetoothTestBase> weak_factory_;

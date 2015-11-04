@@ -128,11 +128,10 @@ void BluetoothRemoteGattCharacteristicAndroid::StartNotifySession(
           AttachCurrentThread(), j_characteristic_.obj())) {
     scoped_ptr<device::BluetoothGattNotifySession> notify_session(
                        new BluetoothGattNotifySessionAndroid(instance_id_));
-    callback.Run(notify_session.Pass());
-//  base::MessageLoop::current()->PostTask(
-//      FROM_HERE,
-//      base::Bind(callback,
-//                 notify_session));
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE,
+      base::Bind(callback,
+                 base::Passed(&notify_session)));
   } else {
     base::MessageLoop::current()->PostTask(
         FROM_HERE,
