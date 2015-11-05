@@ -36,6 +36,7 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
 {
     RefPtrWillBeRawPtr<PageAnimator> protector(this);
     TemporaryChange<bool> servicing(m_servicingAnimations, true);
+    clock().updateTime(monotonicAnimationStartTime);
 
     WillBeHeapVector<RefPtrWillBeMember<Document>> documents;
     for (Frame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
@@ -44,7 +45,7 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
     }
 
     for (auto& document : documents) {
-        DocumentAnimations::updateAnimationTimingForAnimationFrame(*document, monotonicAnimationStartTime);
+        DocumentAnimations::updateAnimationTimingForAnimationFrame(*document);
         if (document->view()) {
             if (document->view()->shouldThrottleRendering())
                 continue;
@@ -86,18 +87,11 @@ void PageAnimator::scheduleVisualUpdate(LocalFrame* frame)
     }
 }
 
-void PageAnimator::updateLayoutAndStyleForPainting(LocalFrame& rootFrame)
+void PageAnimator::updateLifecycleToCompositingCleanPlusScrolling(LocalFrame& rootFrame)
 {
     RefPtrWillBeRawPtr<FrameView> view = rootFrame.view();
-
     TemporaryChange<bool> servicing(m_updatingLayoutAndStyleForPainting, true);
-
-    // setFrameRect may have the side-effect of causing existing page layout to
-    // be invalidated, so layout needs to be called last.
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
-        view->updateLifecycleToCompositingCleanPlusScrolling();
-    else
-        view->updateAllLifecyclePhases();
+    view->updateLifecycleToCompositingCleanPlusScrolling();
 }
 
 void PageAnimator::updateAllLifecyclePhases(LocalFrame& rootFrame)

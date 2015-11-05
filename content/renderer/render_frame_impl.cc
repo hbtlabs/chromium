@@ -41,6 +41,7 @@
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/navigation_params.h"
+#include "content/common/savable_subframe.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
@@ -109,6 +110,7 @@
 #include "content/renderer/skia_benchmarking_extension.h"
 #include "content/renderer/stats_collection_controller.h"
 #include "content/renderer/wake_lock/wake_lock_dispatcher.h"
+#include "content/renderer/web_frame_utils.h"
 #include "content/renderer/web_ui_extension.h"
 #include "content/renderer/websharedworker_proxy.h"
 #include "gin/modules/module_registry.h"
@@ -271,11 +273,7 @@ static base::LazyInstance<RoutingIDFrameMap> g_routing_id_frame_map =
 typedef std::map<blink::WebFrame*, RenderFrameImpl*> FrameMap;
 base::LazyInstance<FrameMap> g_frame_map = LAZY_INSTANCE_INITIALIZER;
 
-int64 ExtractPostId(HistoryEntry* entry) {
-  if (!entry)
-    return -1;
-
-  const WebHistoryItem& item = entry->root();
+int64 ExtractPostId(const WebHistoryItem& item) {
   if (item.isNull() || item.httpBody().isNull())
     return -1;
 
@@ -457,28 +455,28 @@ WebURLRequest CreateURLRequestForNavigation(
   return request;
 }
 
-void UpdateFrameNavigationTiming(WebFrame* frame,
-                                 base::TimeTicks browser_navigation_start,
-                                 base::TimeTicks renderer_navigation_start) {
-  // The browser provides the navigation_start time to bootstrap the
-  // Navigation Timing information for the browser-initiated navigations. In
-  // case of cross-process navigations, this carries over the time of
-  // finishing the onbeforeunload handler of the previous page.
+// Sanitizes the navigation_start timestamp for browser-initiated navigations,
+// where the browser possibly has a better notion of start time than the
+// renderer. In the case of cross-process navigations, this carries over the
+// time of finishing the onbeforeunload handler of the previous page.
+// TimeTicks is sometimes not monotonic across processes, and because
+// |browser_navigation_start| is likely before this process existed,
+// InterProcessTimeTicksConverter won't help. The timestamp is sanitized by
+// clamping it to renderer_navigation_start, initialized earlier in the call
+// stack.
+base::TimeTicks SanitizeNavigationTiming(
+    blink::WebFrameLoadType load_type,
+    const base::TimeTicks& browser_navigation_start,
+    const base::TimeTicks& renderer_navigation_start) {
+  if (load_type != blink::WebFrameLoadType::Standard)
+    return base::TimeTicks();
   DCHECK(!browser_navigation_start.is_null());
-  if (frame->provisionalDataSource()) {
-    // |browser_navigation_start| is likely before this process existed, so we
-    // can't use InterProcessTimeTicksConverter. We need at least to ensure
-    // that the browser-side navigation start we set is not later than the one
-    // on the renderer side.
-    base::TimeTicks navigation_start = std::min(
-        browser_navigation_start, renderer_navigation_start);
-    double navigation_start_seconds =
-        (navigation_start - base::TimeTicks()).InSecondsF();
-    frame->provisionalDataSource()->setNavigationStartTime(
-        navigation_start_seconds);
-    // TODO(clamy): We need to provide additional timing values for the
-    // Navigation Timing API to work with browser-side navigations.
-  }
+  base::TimeTicks navigation_start =
+      std::min(browser_navigation_start, renderer_navigation_start);
+  // TODO(csharrison) Investigate how big a problem the cross process
+  // monotonicity really is and on what platforms. Log UMA for:
+  // |renderer_navigation_start - browser_navigation_start|
+  return navigation_start;
 }
 
 // PlzNavigate
@@ -508,7 +506,8 @@ CommonNavigationParams MakeCommonNavigationParams(
   return CommonNavigationParams(
       request->url(), referrer, extra_data->transition_type(),
       FrameMsg_Navigate_Type::NORMAL, true, should_replace_current_entry,
-      ui_timestamp, report_type, GURL(), GURL(), LOFI_UNSPECIFIED);
+      ui_timestamp, report_type, GURL(), GURL(), LOFI_UNSPECIFIED,
+      base::TimeTicks::Now());
 }
 
 #if !defined(OS_ANDROID) || defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
@@ -525,16 +524,6 @@ bool IsReload(FrameMsg_Navigate_Type::Value navigation_type) {
   return navigation_type == FrameMsg_Navigate_Type::RELOAD ||
          navigation_type == FrameMsg_Navigate_Type::RELOAD_IGNORING_CACHE ||
          navigation_type == FrameMsg_Navigate_Type::RELOAD_ORIGINAL_REQUEST_URL;
-}
-
-// Returns the routing ID of the RenderFrameImpl or RenderFrameProxy
-// associated with |web_frame|.
-int GetRoutingIdForFrameOrProxy(WebFrame* web_frame) {
-  if (!web_frame)
-    return MSG_ROUTING_NONE;
-  if (web_frame->isWebRemoteFrame())
-    return RenderFrameProxy::FromWebFrame(web_frame)->routing_id();
-  return RenderFrameImpl::FromWebFrame(web_frame)->GetRoutingID();
 }
 
 RenderFrameImpl::CreateRenderFrameImplFunction g_create_render_frame_impl =
@@ -733,7 +722,6 @@ blink::WebFrame* RenderFrameImpl::ResolveOpener(int opener_frame_routing_id,
 RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
     : frame_(NULL),
       is_main_frame_(true),
-      is_local_root_(false),
       render_view_(params.render_view->AsWeakPtr()),
       routing_id_(params.routing_id),
       is_swapped_out_(false),
@@ -841,7 +829,6 @@ void RenderFrameImpl::SetWebFrame(blink::WebLocalFrame* web_frame) {
 
 void RenderFrameImpl::Initialize() {
   is_main_frame_ = !frame_->parent();
-  is_local_root_ = is_main_frame_ || frame_->parent()->isWebRemoteFrame();
 
   RenderFrameImpl* parent_frame = RenderFrameImpl::FromWebFrame(
       frame_->parent());
@@ -862,7 +849,7 @@ void RenderFrameImpl::Initialize() {
 #endif
   new SharedWorkerRepository(this);
 
-  if (is_local_root_ && !render_frame_proxy_) {
+  if (IsLocalRoot() && !is_swapped_out_) {
     // DevToolsAgent is a RenderFrameObserver, and will destruct itself
     // when |this| is deleted.
     devtools_agent_ = new DevToolsAgent(this);
@@ -1176,7 +1163,6 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateSandboxFlags, OnDidUpdateSandboxFlags)
     IPC_MESSAGE_HANDLER(FrameMsg_SetFrameOwnerProperties,
                         OnSetFrameOwnerProperties)
-    IPC_MESSAGE_HANDLER(FrameMsg_ClearFocus, OnClearFocus)
     IPC_MESSAGE_HANDLER(FrameMsg_SetTextTrackSettings,
                         OnTextTrackSettingsChanged)
     IPC_MESSAGE_HANDLER(FrameMsg_PostMessageEvent, OnPostMessageEvent)
@@ -1277,7 +1263,10 @@ void RenderFrameImpl::OnSwapOut(
     // other active RenderFrames in it.
 
     // Send an UpdateState message before we get swapped out.
-    render_view_->SendUpdateState();
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      SendUpdateState();
+    else
+      render_view_->SendUpdateState();
 
     // If we need a proxy to replace this, create it now so its routing id is
     // registered for receiving IPC messages.
@@ -1736,10 +1725,6 @@ void RenderFrameImpl::OnSetFrameOwnerProperties(
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
   DCHECK(frame_);
   frame_->setFrameOwnerProperties(frame_owner_properties);
-}
-
-void RenderFrameImpl::OnClearFocus() {
-  frame_->clearFocus();
 }
 
 void RenderFrameImpl::OnTextTrackSettingsChanged(
@@ -2539,6 +2524,12 @@ void RenderFrameImpl::loadURLExternally(const blink::WebURLRequest& request,
 blink::WebHistoryItem RenderFrameImpl::historyItemForNewChildFrame(
     blink::WebFrame* frame) {
   DCHECK(!frame_ || frame_ == frame);
+
+  // TODO(creis): In OOPIF enabled modes, send an IPC to the browser process
+  // telling it to navigate the new frame.  See https://crbug.com/502317.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+    return WebHistoryItem();
+
   return render_view_->history_controller()->GetItemForNewChildFrame(this);
 }
 
@@ -2614,13 +2605,7 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
 
   // The rest of RenderView assumes that a WebDataSource will always have a
   // non-null NavigationState.
-  if (content_initiated) {
-    document_state->set_navigation_state(
-        NavigationStateImpl::CreateContentInitiated());
-  } else {
-    document_state->set_navigation_state(CreateNavigationStateFromPending());
-    pending_navigation_params_.reset();
-  }
+  UpdateNavigationState(document_state);
 
   // DocumentState::referred_by_prefetcher_ is true if we are
   // navigating from a page that used prefetching using a link on that
@@ -2670,15 +2655,23 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
     }
   }
 
+  NavigationStateImpl* navigation_state = static_cast<NavigationStateImpl*>(
+      document_state->navigation_state());
+
+  // Set the navigation start time in blink.
+  base::TimeTicks navigation_start =
+      navigation_state->common_params().navigation_start;
+  datasource->setNavigationStartTime(
+      (navigation_start - base::TimeTicks()).InSecondsF());
+  // TODO(clamy) We need to provide additional timing values for the Navigation
+  // Timing API to work with browser-side navigations.
+
   // Create the serviceworker's per-document network observing object if it
   // does not exist (When navigation happens within a page, the provider already
   // exists).
   if (ServiceWorkerNetworkProvider::FromDocumentState(
           DocumentState::FromDataSource(datasource)))
     return;
-
-  NavigationStateImpl* navigation_state = static_cast<NavigationStateImpl*>(
-      DocumentState::FromDataSource(datasource)->navigation_state());
 
   ServiceWorkerNetworkProvider::AttachToDocumentState(
       DocumentState::FromDataSource(datasource),
@@ -2739,6 +2732,11 @@ void RenderFrameImpl::didStartProvisionalLoad(blink::WebLocalFrame* frame,
 void RenderFrameImpl::didReceiveServerRedirectForProvisionalLoad(
     blink::WebLocalFrame* frame) {
   DCHECK(!frame_ || frame_ == frame);
+
+  // We don't use HistoryController in OOPIF enabled modes.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+    return;
+
   render_view_->history_controller()->RemoveChildrenForRedirect(this);
 }
 
@@ -2841,11 +2839,15 @@ void RenderFrameImpl::didCommitProvisionalLoad(
 
   // When we perform a new navigation, we need to update the last committed
   // session history entry with state for the page we are leaving. Do this
-  // before updating the HistoryController state.
-  render_view_->SendUpdateState();
-
-  render_view_->history_controller()->UpdateForCommit(
-      this, item, commit_type, navigation_state->WasWithinSamePage());
+  // before updating the current history item.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+    SendUpdateState();
+    current_history_item_ = item;
+  } else {
+    render_view_->SendUpdateState();
+    render_view_->history_controller()->UpdateForCommit(
+        this, item, commit_type, navigation_state->WasWithinSamePage());
+  }
 
   InternalDocumentStateData* internal_data =
       InternalDocumentStateData::FromDocumentState(document_state);
@@ -3155,11 +3157,10 @@ void RenderFrameImpl::didNavigateWithinPage(blink::WebLocalFrame* frame,
   // ExtraData will get the new NavigationState.  Similarly, if we did not
   // initiate this navigation, then we need to take care to reset any pre-
   // existing navigation state to a content-initiated navigation state.
-  // didCreateDataSource conveniently takes care of this for us.
-  didCreateDataSource(frame, frame->dataSource());
-
+  // UpdateNavigationState conveniently takes care of this for us.
   DocumentState* document_state =
       DocumentState::FromDataSource(frame->dataSource());
+  UpdateNavigationState(document_state);
   static_cast<NavigationStateImpl*>(document_state->navigation_state())
       ->set_was_within_same_page(true);
 
@@ -4004,12 +4005,11 @@ void RenderFrameImpl::PlayerGone(WebMediaPlayer* player) {
 }
 
 void RenderFrameImpl::didSerializeDataForFrame(
-    const WebURL& frame_url,
     const WebCString& data,
     WebPageSerializerClient::PageSerializationStatus status) {
   bool end_of_data = status == WebPageSerializerClient::CurrentFrameIsFinished;
   Send(new FrameHostMsg_SerializedHtmlWithLocalLinksResponse(
-      routing_id_, frame_url, data, end_of_data));
+      routing_id_, data, end_of_data));
 }
 
 void RenderFrameImpl::AddObserver(RenderFrameObserver* observer) {
@@ -4059,6 +4059,13 @@ bool RenderFrameImpl::IsMainFrame() {
 
 bool RenderFrameImpl::IsHidden() {
   return GetRenderWidget()->is_hidden();
+}
+
+bool RenderFrameImpl::IsLocalRoot() const {
+  bool is_local_root = render_widget_ != nullptr;
+  DCHECK_EQ(is_local_root,
+            !(frame_->parent() && frame_->parent()->isWebLocalFrame()));
+  return render_widget_ != nullptr;
 }
 
 // Tell the embedding application that the URL of the active page has changed.
@@ -4136,17 +4143,21 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
 
   // Make navigation state a part of the DidCommitProvisionalLoad message so
   // that committed entry has it at all times.
-  HistoryEntry* entry = render_view_->history_controller()->GetCurrentEntry();
+  int64 post_id = -1;
   if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    if (entry)
+    HistoryEntry* entry = render_view_->history_controller()->GetCurrentEntry();
+    if (entry) {
       params.page_state = HistoryEntryToPageState(entry);
-    else
+      post_id = ExtractPostId(entry->root());
+    } else {
       params.page_state = PageState::CreateFromURL(request.url());
+    }
   } else {
     // In --site-per-process, just send a single HistoryItem for this frame,
     // rather than the whole tree.  It will be stored in the corresponding
     // FrameNavigationEntry.
     params.page_state = SingleHistoryItemToPageState(item);
+    post_id = ExtractPostId(item);
   }
   params.item_sequence_number = item.itemSequenceNumber();
   params.document_sequence_number = item.documentSequenceNumber();
@@ -4217,7 +4228,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     base::string16 method = request.httpMethod();
     if (base::EqualsASCII(method, "POST")) {
       params.is_post = true;
-      params.post_id = ExtractPostId(entry);
+      params.post_id = post_id;
     }
 
     // Send the user agent override back.
@@ -4566,7 +4577,8 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
 
 void RenderFrameImpl::OnGetSavableResourceLinks() {
   std::vector<GURL> resources_list;
-  SavableResourcesResult result(&resources_list);
+  std::vector<SavableSubframe> subframes;
+  SavableResourcesResult result(&resources_list, &subframes);
 
   if (!GetSavableResourceLinksForFrame(
           frame_, &result, const_cast<const char**>(GetSavableSchemes()))) {
@@ -4578,7 +4590,7 @@ void RenderFrameImpl::OnGetSavableResourceLinks() {
       Referrer(frame_->document().url(), frame_->document().referrerPolicy());
 
   Send(new FrameHostMsg_SavableResourceLinksResponse(
-      routing_id_, frame_->document().url(), resources_list, referrer));
+      routing_id_, resources_list, referrer, subframes));
 }
 
 void RenderFrameImpl::OnGetSerializedHtmlWithLocalLinks(
@@ -4646,6 +4658,9 @@ void RenderFrameImpl::NavigateInternal(
   bool browser_side_navigation =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableBrowserSideNavigation);
+
+  // Lower bound for browser initiated navigation start time.
+  base::TimeTicks renderer_navigation_start = base::TimeTicks::Now();
   bool is_reload = IsReload(common_params.navigation_type);
   bool is_history_navigation = request_params.page_state.IsValid();
   WebURLRequest::CachePolicy cache_policy =
@@ -4662,7 +4677,11 @@ void RenderFrameImpl::NavigateInternal(
   if (request_params.has_committed_real_load && frame_->parent())
     frame_->setCommittedFirstRealLoad();
 
-  if (is_reload && !render_view_->history_controller()->GetCurrentEntry()) {
+  bool no_current_entry =
+      SiteIsolationPolicy::UseSubframeNavigationEntries()
+          ? current_history_item_.isNull()
+          : !render_view_->history_controller()->GetCurrentEntry();
+  if (is_reload && no_current_entry) {
     // We cannot reload if we do not have any history state.  This happens, for
     // example, when recovering from a crash.
     is_reload = false;
@@ -4671,6 +4690,14 @@ void RenderFrameImpl::NavigateInternal(
 
   pending_navigation_params_.reset(
       new NavigationParams(common_params, start_params, request_params));
+
+  // Unless the load is a WebFrameLoadType::Standard, this should remain
+  // uninitialized. It will be updated when the load type is determined to be
+  // Standard, or after the previous document's unload handler has been
+  // triggered. This occurs in UpdateNavigationState.
+  // TODO(csharrison) See if we can always use the browser timestamp.
+  pending_navigation_params_->common_params.navigation_start =
+      base::TimeTicks();
 
   // Create parameters for a standard navigation.
   blink::WebFrameLoadType load_type = blink::WebFrameLoadType::Standard;
@@ -4743,13 +4770,7 @@ void RenderFrameImpl::NavigateInternal(
                   ? blink::WebHistorySameDocumentLoad
                   : blink::WebHistoryDifferentDocumentLoad;
 
-          // Let the history controller know the provisional entry, since it is
-          // used at commit time.  Otherwise skip GoToEntry and navigate the
-          // frame directly.
-          // TODO(creis): Consider cloning the current entry to handle subframe
-          // cases.  Changes to SendUpdateState might affect this.
-          render_view_->history_controller()->set_provisional_entry(
-              entry.Pass());
+          // Navigate the frame directly.
           WebURLRequest request =
               frame_->requestFromHistoryItem(history_item, cache_policy);
           frame_->load(request, blink::WebFrameLoadType::BackForward,
@@ -4802,10 +4823,10 @@ void RenderFrameImpl::NavigateInternal(
   }
 
   if (should_load_request) {
-    // Record this before starting the load. We need a lower bound of this
-    // time to sanitize the navigationStart override set below.
-    base::TimeTicks renderer_navigation_start = base::TimeTicks::Now();
-
+    // Sanitize navigation start now that we know the load_type.
+    pending_navigation_params_->common_params.navigation_start =
+        SanitizeNavigationTiming(load_type, common_params.navigation_start,
+                                 renderer_navigation_start);
     // Perform a navigation to a data url if needed.
     if (!common_params.base_url_for_data_url.is_empty() ||
         (browser_side_navigation &&
@@ -4815,12 +4836,6 @@ void RenderFrameImpl::NavigateInternal(
       // Load the request.
       frame_->toWebLocalFrame()->load(request, load_type,
                                       item_for_history_navigation);
-    }
-
-    if (load_type == blink::WebFrameLoadType::Standard) {
-      UpdateFrameNavigationTiming(frame_,
-                                  request_params.browser_navigation_start,
-                                  renderer_navigation_start);
     }
   }
 
@@ -5075,6 +5090,15 @@ void RenderFrameImpl::LoadDataURL(const CommonNavigationParams& params,
   }
 }
 
+void RenderFrameImpl::SendUpdateState() {
+  DCHECK(SiteIsolationPolicy::UseSubframeNavigationEntries());
+  if (current_history_item_.isNull())
+    return;
+
+  Send(new FrameHostMsg_UpdateState(
+      routing_id_, SingleHistoryItemToPageState(current_history_item_)));
+}
+
 void RenderFrameImpl::SendFailedProvisionalLoad(
     const blink::WebURLRequest& request,
     const blink::WebURLError& error,
@@ -5180,6 +5204,22 @@ NavigationState* RenderFrameImpl::CreateNavigationStateFromPending() {
         pending_navigation_params_->request_params);
   }
   return NavigationStateImpl::CreateContentInitiated();
+}
+
+void RenderFrameImpl::UpdateNavigationState(DocumentState* document_state) {
+  if (pending_navigation_params_) {
+    // If this is a browser-initiated load that doesn't override
+    // navigation_start, set it here.
+    if (pending_navigation_params_->common_params.navigation_start.is_null()) {
+      pending_navigation_params_->common_params.navigation_start =
+          base::TimeTicks::Now();
+    }
+    document_state->set_navigation_state(CreateNavigationStateFromPending());
+    pending_navigation_params_.reset();
+  } else {
+    document_state->set_navigation_state(
+        NavigationStateImpl::CreateContentInitiated());
+  }
 }
 
 #if defined(OS_ANDROID)

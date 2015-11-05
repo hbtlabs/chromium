@@ -103,6 +103,21 @@ class BasicTests(Base):
 
 
 class MiscTests(Base):
+    def test_parse_mac_legacy_names(self):
+        host = MockHost()
+        expectations_dict = OrderedDict()
+        expectations_dict['expectations'] = '\nBug(x) [ Mac10.6 ] failures/expected/text.html [ Failure ]\n'
+
+        port = host.port_factory.get('test-mac-snowleopard', None)
+        port.expectations_dict = lambda: expectations_dict
+        expectations = TestExpectations(port, self.get_basic_tests())
+        self.assertEqual(expectations.get_expectations('failures/expected/text.html'), set([FAIL]))
+
+        port = host.port_factory.get('test-win-xp', None)
+        port.expectations_dict = lambda: expectations_dict
+        expectations = TestExpectations(port, self.get_basic_tests())
+        self.assertEqual(expectations.get_expectations('failures/expected/text.html'), set([PASS]))
+
     def test_multiple_results(self):
         self.parse_exp('Bug(x) failures/expected/text.html [ Crash Failure ]')
         self.assertEqual(self._exp.get_expectations('failures/expected/text.html'), set([FAIL, CRASH]))
@@ -465,6 +480,10 @@ class SemanticTests(Base):
 Bug(exp) failures/expected/text.html [ Failure ]
 Bug(exp) failures/expected/text.html [ Timeout ]""", is_lint_mode=True)
 
+        self.assertRaises(ParseError, self.parse_exp, """
+Bug(exp) failures/expected/text.html [ Failure ]
+Bug(exp) failures/expected/text.html [ NeedsRebaseline ]""", is_lint_mode=True)
+
         self.assertRaises(ParseError, self.parse_exp,
             self.get_basic_expectations(), overrides="""
 Bug(override) failures/expected/text.html [ Failure ]
@@ -475,6 +494,51 @@ Bug(override) failures/expected/text.html [ Timeout ]""", is_lint_mode=True)
 Bug(exp) [ Release ] failures/expected/text.html [ Failure ]
 Bug(exp) [ Debug ] failures/expected/text.html [ Failure ]
 """)
+
+    def test_duplicates_rebaseline_no_conflict(self):
+        # Rebaseline throws in lint mode, so only test it in non-lint mode.
+        # Check Rebaseline
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ Rebaseline ]
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+""", is_lint_mode=False)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, REBASELINE])
+
+        # Check NeedsRebaseline.
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+Bug(exp) failures/expected/text.html [ NeedsRebaseline ]
+""", is_lint_mode=False)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, NEEDS_REBASELINE])
+
+        # Check NeedsManualRebaseline
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+Bug(exp) failures/expected/text.html [ NeedsManualRebaseline ]
+""", is_lint_mode=False)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, NEEDS_MANUAL_REBASELINE])
+
+    def test_duplicates_rebaseline_no_conflict_linting(self):
+        # Check NeedsRebaseline
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ NeedsRebaseline ]
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+""", is_lint_mode=True)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, NEEDS_REBASELINE])
+
+        # Check lines in reverse order.
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+Bug(exp) failures/expected/text.html [ NeedsRebaseline ]
+""", is_lint_mode=True)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, NEEDS_REBASELINE])
+
+        # Check NeedsManualRebaseline
+        self.parse_exp("""
+Bug(exp) failures/expected/text.html [ Pass Failure ]
+Bug(exp) failures/expected/text.html [ NeedsManualRebaseline ]
+""", is_lint_mode=True)
+        self.assert_exp_list('failures/expected/text.html', [PASS, FAIL, NEEDS_MANUAL_REBASELINE])
 
     def test_missing_file(self):
         self.parse_exp('Bug(test) missing_file.html [ Failure ]')
@@ -817,6 +881,15 @@ class TestExpectationSerializationTests(unittest.TestCase):
         self.assertEqual(expectation_line.to_string(self._converter), 'Bug(x) [ XP Release ] test/name/for/realz.html [ Failure ]')
         expectation_line.matching_configurations = set([TestConfiguration('xp', 'x86', 'release'), TestConfiguration('xp', 'x86', 'debug')])
         self.assertEqual(expectation_line.to_string(self._converter), 'Bug(x) [ XP ] test/name/for/realz.html [ Failure ]')
+
+    def test_parsed_to_string_mac_legacy_names(self):
+        expectation_line = TestExpectationLine()
+        expectation_line.bugs = ['Bug(x)']
+        expectation_line.name = 'test/name/for/realz.html'
+        expectation_line.parsed_expectations = set([IMAGE])
+        self.assertEqual(expectation_line.to_string(self._converter), None)
+        expectation_line.matching_configurations = set([TestConfiguration('snowleopard', 'x86', 'release')])
+        self.assertEqual(expectation_line.to_string(self._converter), 'Bug(x) [ Mac10.6 Release ] test/name/for/realz.html [ Failure ]')
 
     def test_serialize_parsed_expectations(self):
         expectation_line = TestExpectationLine()

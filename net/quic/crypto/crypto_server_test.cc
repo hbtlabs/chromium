@@ -109,12 +109,10 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
         client_address_(Loopback4(), 1234),
         config_(QuicCryptoServerConfig::TESTING,
                 rand_,
-#if defined(USE_OPENSSL)
                 CryptoTestUtils::ProofSourceForTesting()) {
-#else
-                CryptoTestUtils::FakeProofSourceForTesting()) {
-#endif
     supported_versions_ = GetParam().supported_versions;
+    config_.set_enable_serving_sct(true);
+
     client_version_ = supported_versions_.front();
     client_version_string_ =
         QuicUtils::TagToString(QuicVersionToQuicTag(client_version_));
@@ -149,6 +147,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
         "KEXS", "C255",
         "PUBS", pub_hex_.c_str(),
         "NONC", nonce_hex_.c_str(),
+        "CSCT", "",
         "VER\0", client_version_string_.c_str(),
         "$padding", static_cast<int>(kClientHelloMinimumSize),
         nullptr);
@@ -348,14 +347,11 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     const vector<string>* certs;
     IPAddressNumber server_ip;
     string sig;
-#if defined(USE_OPENSSL)
+    string cert_sct;
     scoped_ptr<ProofSource> proof_source(
         CryptoTestUtils::ProofSourceForTesting());
-#else
-    scoped_ptr<ProofSource> proof_source(
-        CryptoTestUtils::FakeProofSourceForTesting());
-#endif
-    if (!proof_source->GetProof(server_ip, "", "", false, &certs, &sig) ||
+    if (!proof_source->GetProof(server_ip, "", "", false, &certs, &sig,
+                                &cert_sct) ||
         certs->empty()) {
       return "#0100000000000000";
     }
@@ -440,14 +436,17 @@ TEST_P(CryptoServerTest, DefaultCert) {
   // clang-format on
 
   ShouldSucceed(msg);
-  StringPiece cert, proof;
+  StringPiece cert, proof, cert_sct;
   EXPECT_TRUE(out_.GetStringPiece(kCertificateTag, &cert));
   EXPECT_TRUE(out_.GetStringPiece(kPROF, &proof));
+  EXPECT_EQ(client_version_ > QUIC_VERSION_29,
+            out_.GetStringPiece(kCertificateSCTTag, &cert_sct));
   EXPECT_NE(0u, cert.size());
   EXPECT_NE(0u, proof.size());
   const HandshakeFailureReason kRejectReasons[] = {
       SERVER_CONFIG_INCHOATE_HELLO_FAILURE};
   CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
+  EXPECT_EQ(client_version_ > QUIC_VERSION_29, cert_sct.size() > 0);
 }
 
 TEST_P(CryptoServerTest, TooSmall) {
@@ -776,17 +775,9 @@ TEST(CryptoServerConfigGenerationTest, Determinism) {
   MockClock clock;
 
   QuicCryptoServerConfig a(QuicCryptoServerConfig::TESTING, &rand_a,
-#if defined(USE_OPENSSL)
                            CryptoTestUtils::ProofSourceForTesting());
-#else
-                           CryptoTestUtils::FakeProofSourceForTesting());
-#endif
   QuicCryptoServerConfig b(QuicCryptoServerConfig::TESTING, &rand_b,
-#if defined(USE_OPENSSL)
                            CryptoTestUtils::ProofSourceForTesting());
-#else
-                           CryptoTestUtils::FakeProofSourceForTesting());
-#endif
   scoped_ptr<CryptoHandshakeMessage> scfg_a(
       a.AddDefaultConfig(&rand_a, &clock, options));
   scoped_ptr<CryptoHandshakeMessage> scfg_b(
@@ -804,18 +795,10 @@ TEST(CryptoServerConfigGenerationTest, SCIDVaries) {
   MockClock clock;
 
   QuicCryptoServerConfig a(QuicCryptoServerConfig::TESTING, &rand_a,
-#if defined(USE_OPENSSL)
                            CryptoTestUtils::ProofSourceForTesting());
-#else
-                           CryptoTestUtils::FakeProofSourceForTesting());
-#endif
   rand_b.ChangeValue();
   QuicCryptoServerConfig b(QuicCryptoServerConfig::TESTING, &rand_b,
-#if defined(USE_OPENSSL)
                            CryptoTestUtils::ProofSourceForTesting());
-#else
-                           CryptoTestUtils::FakeProofSourceForTesting());
-#endif
   scoped_ptr<CryptoHandshakeMessage> scfg_a(
       a.AddDefaultConfig(&rand_a, &clock, options));
   scoped_ptr<CryptoHandshakeMessage> scfg_b(
@@ -834,11 +817,7 @@ TEST(CryptoServerConfigGenerationTest, SCIDIsHashOfServerConfig) {
   MockClock clock;
 
   QuicCryptoServerConfig a(QuicCryptoServerConfig::TESTING, &rand_a,
-#if defined(USE_OPENSSL)
                            CryptoTestUtils::ProofSourceForTesting());
-#else
-                           CryptoTestUtils::FakeProofSourceForTesting());
-#endif
   scoped_ptr<CryptoHandshakeMessage> scfg(
       a.AddDefaultConfig(&rand_a, &clock, options));
 

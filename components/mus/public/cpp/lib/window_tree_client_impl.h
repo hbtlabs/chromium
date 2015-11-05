@@ -12,6 +12,7 @@
 #include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
 
 namespace gfx {
+class Insets;
 class Size;
 }
 
@@ -52,7 +53,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   bool OwnsWindow(Id id) const;
 
   void SetBounds(Id window_id, const gfx::Rect& bounds);
-  void SetClientArea(Id window_id, const gfx::Rect& client_area);
+  void SetClientArea(Id window_id, const gfx::Insets& client_area);
   void SetFocus(Id window_id);
   void SetVisible(Id window_id, bool visible);
   void SetProperty(Id window_id,
@@ -91,13 +92,17 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnRootDestroyed(Window* root);
 
   void SetPreferredSize(Id window_id, const gfx::Size& size);
-  void RequestBoundsChange(Id window_id, const gfx::Rect& bounds);
   void SetShowState(Id window_id, mojom::ShowState show_state);
 
  private:
   typedef std::map<Id, Window*> IdToWindowMap;
 
   Id CreateWindowOnServer();
+
+  void OnSetBoundsResponse(Id window_id,
+                           const gfx::Rect& requested_bounds,
+                           const gfx::Rect& real_bounds,
+                           bool success);
 
   // Overridden from WindowTreeConnection:
   Window* GetRoot() override;
@@ -119,8 +124,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                              mojo::RectPtr old_bounds,
                              mojo::RectPtr new_bounds) override;
   void OnClientAreaChanged(uint32_t window_id,
-                           mojo::RectPtr old_client_area,
-                           mojo::RectPtr new_client_area) override;
+                           mojo::InsetsPtr old_client_area,
+                           mojo::InsetsPtr new_client_area) override;
   void OnWindowViewportMetricsChanged(
       mojom::ViewportMetricsPtr old_metrics,
       mojom::ViewportMetricsPtr new_metrics) override;

@@ -48,6 +48,7 @@ def CommonChecks(input_api, output_api):
       output_api,
       unit_tests=[
           J('.', 'emma_coverage_stats_test.py'),
+          J('devil', 'android', 'fastboot_utils_test.py'),
           J('devil', 'android', 'battery_utils_test.py'),
           J('devil', 'android', 'device_utils_test.py'),
           J('devil', 'android', 'md5sum_test.py'),
@@ -55,6 +56,7 @@ def CommonChecks(input_api, output_api):
           J('devil', 'utils', 'cmd_helper_test.py'),
           J('devil', 'utils', 'timeout_retry_unittest.py'),
           J('gyp', 'util', 'md5_check_test.py'),
+          J('play_services', 'update_test.py'),
           J('pylib', 'base', 'test_dispatcher_unittest.py'),
           J('pylib', 'gtest', 'gtest_test_instance_test.py'),
           J('pylib', 'instrumentation',

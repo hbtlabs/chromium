@@ -8,6 +8,8 @@
 #include <limits>
 #include <set>
 
+#include "base/metrics/histogram_macros.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/animation/animation_host.h"
@@ -15,6 +17,7 @@
 #include "cc/animation/scrollbar_animation_controller.h"
 #include "cc/animation/scrollbar_animation_controller_linear_fade.h"
 #include "cc/animation/scrollbar_animation_controller_thinning.h"
+#include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
 #include "cc/debug/devtools_instrumentation.h"
@@ -177,6 +180,8 @@ void LayerTreeImpl::UpdateScrollbars(int scroll_layer_id, int clip_layer_id) {
   gfx::ScrollOffset current_offset = scroll_layer->CurrentScrollOffset();
   if (IsViewportLayerId(scroll_layer_id)) {
     current_offset += InnerViewportScrollLayer()->CurrentScrollOffset();
+    if (OuterViewportContainerLayer())
+      clip_size.SetToMin(OuterViewportContainerLayer()->BoundsForScrolling());
     clip_size.Scale(1 / current_page_scale_factor());
   }
 
@@ -627,6 +632,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
     return false;
 
   {
+    base::ElapsedTimer timer;
     TRACE_EVENT2(
         "cc", "LayerTreeImpl::UpdateDrawProperties::CalculateDrawProperties",
         "IsActive", IsActiveTree(), "SourceFrameNumber", source_frame_number_);
@@ -646,9 +652,17 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         settings().can_use_lcd_text, settings().layers_always_allowed_lcd_text,
         can_render_to_separate_surface,
         settings().layer_transforms_should_scale_layer_contents,
-        settings().verify_property_trees, &render_surface_layer_list_,
-        render_surface_layer_list_id_, &property_trees_);
+        settings().verify_property_trees, settings().use_property_trees,
+        &render_surface_layer_list_, render_surface_layer_list_id_,
+        &property_trees_);
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+    if (const char* client_name = GetClientNameForMetrics()) {
+      UMA_HISTOGRAM_COUNTS(
+          base::StringPrintf(
+              "Compositing.%s.LayerTreeImpl.CalculateDrawPropertiesUs",
+              client_name),
+          timer.Elapsed().InMicroseconds());
+    }
   }
 
   {
@@ -1538,10 +1552,11 @@ struct FindScrollingLayerFunctor {
 LayerImpl* LayerTreeImpl::FindFirstScrollingLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
   FindClosestMatchingLayerDataForRecursion data_for_recursion;
+  bool use_property_trees =
+      settings().use_property_trees || settings().verify_property_trees;
   FindClosestMatchingLayer(
       screen_space_point, root_layer(), FindScrollingLayerFunctor(),
-      property_trees_.transform_tree, settings().verify_property_trees,
-      &data_for_recursion);
+      property_trees_.transform_tree, use_property_trees, &data_for_recursion);
   return data_for_recursion.closest_match;
 }
 
@@ -1561,11 +1576,12 @@ LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPoint(
   bool update_lcd_text = false;
   if (!UpdateDrawProperties(update_lcd_text))
     return NULL;
+  bool use_property_trees =
+      settings().use_property_trees || settings().verify_property_trees;
   FindClosestMatchingLayerDataForRecursion data_for_recursion;
   FindClosestMatchingLayer(screen_space_point, root_layer(),
                            HitTestVisibleScrollableOrTouchableFunctor(),
-                           property_trees_.transform_tree,
-                           settings().verify_property_trees,
+                           property_trees_.transform_tree, use_property_trees,
                            &data_for_recursion);
   return data_for_recursion.closest_match;
 }
@@ -1607,11 +1623,13 @@ LayerImpl* LayerTreeImpl::FindLayerWithWheelHandlerThatIsHitByPoint(
   bool update_lcd_text = false;
   if (!UpdateDrawProperties(update_lcd_text))
     return NULL;
+  bool use_property_trees =
+      settings().use_property_trees || settings().verify_property_trees;
   FindWheelEventLayerFunctor func;
   FindClosestMatchingLayerDataForRecursion data_for_recursion;
-  FindClosestMatchingLayer(
-      screen_space_point, root_layer(), func, property_trees_.transform_tree,
-      settings().verify_property_trees, &data_for_recursion);
+  FindClosestMatchingLayer(screen_space_point, root_layer(), func,
+                           property_trees_.transform_tree, use_property_trees,
+                           &data_for_recursion);
   return data_for_recursion.closest_match;
 }
 
@@ -1632,13 +1650,14 @@ LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPointInTouchHandlerRegion(
   bool update_lcd_text = false;
   if (!UpdateDrawProperties(update_lcd_text))
     return NULL;
-  FindTouchEventLayerFunctor func = {screen_space_point,
-                                     property_trees_.transform_tree,
-                                     settings().verify_property_trees};
+  bool use_property_trees =
+      settings().use_property_trees || settings().verify_property_trees;
+  FindTouchEventLayerFunctor func = {
+      screen_space_point, property_trees_.transform_tree, use_property_trees};
   FindClosestMatchingLayerDataForRecursion data_for_recursion;
-  FindClosestMatchingLayer(
-      screen_space_point, root_layer(), func, property_trees_.transform_tree,
-      settings().verify_property_trees, &data_for_recursion);
+  FindClosestMatchingLayer(screen_space_point, root_layer(), func,
+                           property_trees_.transform_tree, use_property_trees,
+                           &data_for_recursion);
   return data_for_recursion.closest_match;
 }
 
@@ -1705,11 +1724,13 @@ static ViewportSelectionBound ComputeViewportSelectionBound(
 void LayerTreeImpl::GetViewportSelection(ViewportSelection* selection) {
   DCHECK(selection);
 
+  bool use_property_trees =
+      settings().use_property_trees || settings().verify_property_trees;
   selection->start = ComputeViewportSelectionBound(
       selection_.start,
       selection_.start.layer_id ? LayerById(selection_.start.layer_id) : NULL,
       device_scale_factor(), property_trees_.transform_tree,
-      settings().verify_property_trees);
+      use_property_trees);
   selection->is_editable = selection_.is_editable;
   selection->is_empty_text_form_control = selection_.is_empty_text_form_control;
   if (selection->start.type == SELECTION_BOUND_CENTER ||
@@ -1720,7 +1741,7 @@ void LayerTreeImpl::GetViewportSelection(ViewportSelection* selection) {
         selection_.end,
         selection_.end.layer_id ? LayerById(selection_.end.layer_id) : NULL,
         device_scale_factor(), property_trees_.transform_tree,
-        settings().verify_property_trees);
+        use_property_trees);
   }
 }
 

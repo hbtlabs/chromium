@@ -707,6 +707,9 @@ class TestPrerenderContentsFactory : public PrerenderContents::Factory {
 
 // TODO(nparker): Switch this to use TestSafeBrowsingDatabaseManager and run
 // with SAFE_BROWSING_DB_LOCAL || SAFE_BROWSING_DB_REMOTE.
+// Note: don't forget to override GetProtocolManagerDelegate and return NULL,
+// because FakeSafeBrowsingDatabaseManager does not implement
+// LocalSafeBrowsingDatabaseManager.
 #if defined(FULL_SAFE_BROWSING)
 // A SafeBrowsingDatabaseManager implementation that returns a fixed result for
 // a given URL.
@@ -755,7 +758,7 @@ class FakeSafeBrowsingDatabaseManager
         std::vector<GURL>(1, gurl),
         std::vector<SBFullHash>(),
         client,
-        safe_browsing_util::MALWARE,
+        safe_browsing::MALWARE,
         expected_threats);
     sb_check.url_results[0] = threat_type_;
     sb_check.OnSafeBrowsingResult();

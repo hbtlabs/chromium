@@ -162,6 +162,7 @@ android_library("chrome_java") {
 
   srcjar_deps = [
     ":chrome_android_java_enums_srcjar",
+    ":chrome_android_java_google_api_keys_srcjar",
     ":chrome_version_srcjar",
     ":custom_tabs_service_aidl",
     ":resource_id_javagen",
@@ -183,6 +184,19 @@ android_library("chrome_java") {
 # GYP: //chrome/chrome_browser.gypi:connection_security_levels_java
 # GYP: //chrome/chrome_browser.gypi:tab_load_status_java
 # GYP: //chrome/chrome_browser.gypi:infobar_action_type_java
+
+action("chrome_android_java_google_api_keys_srcjar") {
+  script = "//build/android/gyp/java_google_api_keys.py"
+  _output_path = "$target_gen_dir/$target_name.srcjar"
+  outputs = [
+    _output_path,
+  ]
+  args = [
+    "--srcjar",
+    rebase_path(_output_path, root_build_dir),
+  ]
+}
+
 java_cpp_enum("chrome_android_java_enums_srcjar") {
   sources = [
     "//chrome/browser/android/activity_type_ids.h",
@@ -193,16 +207,6 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/profiles/profile_metrics.h",
     "//chrome/browser/ssl/security_state_model.h",
     "//chrome/browser/ui/android/infobars/infobar_android.h",
-  ]
-  outputs = [
-    "org/chromium/chrome/browser/ActivityTypeIds.java",
-    "org/chromium/chrome/browser/feedback/ConnectivityCheckResult.java",
-    "org/chromium/chrome/browser/ntp/MostVisitedTileType.java",
-    "org/chromium/chrome/browser/ShortcutSource.java",
-    "org/chromium/chrome/browser/TabLoadStatus.java",
-    "org/chromium/chrome/browser/profiles/ProfileAccountManagementMetrics.java",
-    "org/chromium/chrome/browser/ssl/ConnectionSecurityLevel.java",
-    "org/chromium/chrome/browser/infobar/ActionType.java",
   ]
 }
 
@@ -418,6 +422,14 @@ chrome_public_apk_tmpl("chrome_public_apk") {
   apk_name = "ChromePublic"
   native_libs = [ "$root_build_dir/lib.stripped/libchrome_public.so" ]
   native_lib_version_rule = "//build/util:chrome_version_json"
+
+  # Only attempt loading the library from the APK for 64 bit devices
+  # until the number of 32 bit devices which don't support this
+  # approach falls to a minimal level -  http://crbug.com/390618.
+  if (chromium_linker_supported &&
+      (target_cpu == "arm64" || target_cpu == "x64")) {
+    load_library_from_apk = true
+  }
 
   deps = [
     ":chrome_java",

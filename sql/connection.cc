@@ -190,6 +190,16 @@ int GetSqlite3File(sqlite3* db, sqlite3_file** file) {
   return rc;
 }
 
+// Convenience to get the sqlite3_file* and the size for the "main" database.
+int GetSqlite3FileAndSize(sqlite3* db,
+                          sqlite3_file** file, sqlite3_int64* db_size) {
+  int rc = GetSqlite3File(db, file);
+  if (rc != SQLITE_OK)
+    return rc;
+
+  return (*file)->pMethods->xFileSize(*file, db_size);
+}
+
 // This should match UMA_HISTOGRAM_MEDIUM_TIMES().
 base::HistogramBase* GetMediumTimeHistogram(const std::string& name) {
   return base::Histogram::FactoryTimeGet(
@@ -515,12 +525,8 @@ void Connection::Preload() {
     return;
 
   sqlite3_file* file = NULL;
-  int rc = GetSqlite3File(db_, &file);
-  if (rc != SQLITE_OK)
-    return;
-
   sqlite3_int64 file_size = 0;
-  rc = file->pMethods->xFileSize(file, &file_size);
+  int rc = GetSqlite3FileAndSize(db_, &file, &file_size);
   if (rc != SQLITE_OK)
     return;
 
@@ -1628,18 +1634,6 @@ bool Connection::OpenInternal(const std::string& file_name,
   // secure_delete.
   ignore_result(Execute("PRAGMA journal_mode = TRUNCATE"));
 
-  // Enable memory-mapped access.  This value will be capped by
-  // SQLITE_MAX_MMAP_SIZE, which could be different between 32-bit and 64-bit
-  // platforms.
-  mmap_enabled_ = false;
-  if (!mmap_disabled_)
-    ignore_result(Execute("PRAGMA mmap_size = 268435456"));  // 256MB.
-  {
-    Statement s(GetUniqueStatement("PRAGMA mmap_size"));
-    if (s.Step() && s.ColumnInt64(0) > 0)
-      mmap_enabled_ = true;
-  }
-
   const base::TimeDelta kBusyTimeout =
     base::TimeDelta::FromSeconds(kBusyTimeoutSeconds);
 
@@ -1666,6 +1660,42 @@ bool Connection::OpenInternal(const std::string& file_name,
     if (was_poisoned && retry_flag == RETRY_ON_POISON)
       return OpenInternal(file_name, NO_RETRY);
     return false;
+  }
+
+  // Set a reasonable chunk size for larger files.  This reduces churn from
+  // remapping memory on size changes.  It also reduces filesystem
+  // fragmentation.
+  // TODO(shess): It may make sense to have this be hinted by the client.
+  // Database sizes seem to be bimodal, some clients have consistently small
+  // databases (<20k) while other clients have a broad distribution of sizes
+  // (hundreds of kilobytes to many megabytes).
+  sqlite3_file* file = NULL;
+  sqlite3_int64 db_size = 0;
+  int rc = GetSqlite3FileAndSize(db_, &file, &db_size);
+  if (rc == SQLITE_OK && db_size > 16 * 1024) {
+    int chunk_size = 4 * 1024;
+    if (db_size > 128 * 1024)
+      chunk_size = 32 * 1024;
+    sqlite3_file_control(db_, NULL, SQLITE_FCNTL_CHUNK_SIZE, &chunk_size);
+  }
+
+  // Enable memory-mapped access.  The explicit-disable case is because SQLite
+  // can be built to default-enable mmap.  This value will be capped by
+  // SQLITE_MAX_MMAP_SIZE, which could be different between 32-bit and 64-bit
+  // platforms.
+  if (mmap_disabled_) {
+    ignore_result(Execute("PRAGMA mmap_size = 0"));
+  } else {
+    ignore_result(Execute("PRAGMA mmap_size = 268435456"));  // 256MB.
+  }
+
+  // Determine if memory-mapping has actually been enabled.  The Execute() above
+  // can succeed without changing the amount mapped.
+  mmap_enabled_ = false;
+  {
+    Statement s(GetUniqueStatement("PRAGMA mmap_size"));
+    if (s.Step() && s.ColumnInt64(0) > 0)
+      mmap_enabled_ = true;
   }
 
   return true;

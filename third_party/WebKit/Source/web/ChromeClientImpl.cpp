@@ -65,8 +65,10 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCursorInfo.h"
+#include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/WebViewScheduler.h"
 #include "public/web/WebAXObject.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebColorChooser.h"
@@ -303,7 +305,7 @@ WebNavigationPolicy effectiveNavigationPolicy(NavigationPolicy navigationPolicy,
 } // namespace
 
 Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& r, const WindowFeatures& features,
-    NavigationPolicy navigationPolicy, ShouldSendReferrer shouldSendReferrer)
+    NavigationPolicy navigationPolicy, ShouldSetOpener shouldSetOpener)
 {
     if (!m_webView->client())
         return nullptr;
@@ -313,7 +315,7 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     Fullscreen::fullyExitFullscreen(*frame->document());
 
     WebViewImpl* newView = toWebViewImpl(
-        m_webView->client()->createView(WebLocalFrameImpl::fromFrame(frame), WrappedResourceRequest(r.resourceRequest()), features, r.frameName(), policy, shouldSendReferrer == NeverSendReferrer));
+        m_webView->client()->createView(WebLocalFrameImpl::fromFrame(frame), WrappedResourceRequest(r.resourceRequest()), features, r.frameName(), policy, shouldSetOpener == NeverSetOpener));
     if (!newView)
         return nullptr;
     return newView->page();
@@ -1006,6 +1008,11 @@ void ChromeClientImpl::didObserveNonGetFetchFromScript() const
 {
     if (m_webView->pageImportanceSignals())
         m_webView->pageImportanceSignals()->setIssuedNonGetFetchFromScript();
+}
+
+PassOwnPtr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler()
+{
+    return m_webView->scheduler()->createFrameScheduler().release();
 }
 
 } // namespace blink

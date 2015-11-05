@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "content/common/content_export.h"
+#include "content/common/savable_subframe.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "url/gurl.h"
 
@@ -27,12 +28,18 @@ namespace content {
 // for keeping these pointers valid for the lifetime of the
 // SavableResourcesResult instance.
 struct SavableResourcesResult {
-  // vector which contains all savable links of sub resource.
+  // Links of all savable resources.
   std::vector<GURL>* resources_list;
 
+  // Subframes.
+  std::vector<SavableSubframe>* subframes;
+
   // Constructor.
-  SavableResourcesResult(std::vector<GURL>* resources_list)
-      : resources_list(resources_list) {}
+  SavableResourcesResult(
+      std::vector<GURL>* resources_list,
+      std::vector<SavableSubframe>* subframes)
+      : resources_list(resources_list),
+        subframes(subframes) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SavableResourcesResult);

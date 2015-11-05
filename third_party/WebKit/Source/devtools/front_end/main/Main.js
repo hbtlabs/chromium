@@ -144,6 +144,7 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("securityPanel", "Security panel");
         Runtime.experiments.register("showPrimaryLoadWaterfallInNetworkTimeline", "Show primary load waterfall in Network timeline", true);
         Runtime.experiments.register("stepIntoAsync", "Step into async");
+        Runtime.experiments.register("stylesSidebarRuleToolbar", "Styles sidebar rule toolbar");
         Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
         Runtime.experiments.register("timelineTracingJSProfile", "Timeline tracing based JS profiler", true);
         Runtime.experiments.register("timelineEventsTreeView", "Timeline events tree view", true);
@@ -229,7 +230,6 @@ WebInspector.Main.prototype = {
         WebInspector.openAnchorLocationRegistry.registerHandler(autoselectPanel, function() { return false; });
         WebInspector.Linkifier.setLinkHandler(new WebInspector.HandlerRegistry.LinkHandler());
 
-        new WebInspector.WorkspaceController(WebInspector.workspace);
         new WebInspector.Main.PauseListener();
         new WebInspector.Main.InspectedNodeRevealer();
         new WebInspector.NetworkPanelIndicator();

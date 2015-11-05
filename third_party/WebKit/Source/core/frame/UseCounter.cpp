@@ -547,6 +547,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyGridRowGap: return 512;
     case CSSPropertyGridGap: return 513;
     case CSSPropertyFontFeatureSettings: return 514;
+    case CSSPropertyVariable: return 515;
 
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
@@ -563,7 +564,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 514; }
+static int maximumCSSSampleId() { return 515; }
 
 void UseCounter::muteForInspector()
 {
@@ -829,9 +830,6 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case ConsoleTimelineEnd:
         return replacedBy("console.timelineEnd", "console.timeEnd");
-
-    case CanvasRenderingContext2DCompositeOperationDarker:
-        return replacedBy("darker", "darken");
 
     case XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload:
         return "Synchronous XMLHttpRequest on the main thread is deprecated because of its detrimental effects to the end user's experience. For more help, check https://xhr.spec.whatwg.org/.";

@@ -92,6 +92,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(
 IPC_STRUCT_TRAITS_BEGIN(content::BluetoothDevice)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(name)
+  IPC_STRUCT_TRAITS_MEMBER(tx_power)
+  IPC_STRUCT_TRAITS_MEMBER(rssi)
   IPC_STRUCT_TRAITS_MEMBER(device_class)
   IPC_STRUCT_TRAITS_MEMBER(vendor_id_source)
   IPC_STRUCT_TRAITS_MEMBER(vendor_id)
@@ -106,6 +108,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebBluetoothError,
 
 IPC_STRUCT_TRAITS_BEGIN(content::BluetoothScanFilter)
 IPC_STRUCT_TRAITS_MEMBER(services)
+IPC_STRUCT_TRAITS_MEMBER(name)
+IPC_STRUCT_TRAITS_MEMBER(namePrefix)
 IPC_STRUCT_TRAITS_END()
 
 // Messages sent from the browser to the renderer.

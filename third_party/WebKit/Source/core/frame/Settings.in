@@ -93,6 +93,9 @@ antialiased2dCanvasEnabled initial=true
 antialiasedClips2dCanvasEnabled initial=false
 accelerated2dCanvasMSAASampleCount type=int, initial=0
 
+# Indicate if scheduling png image encoder of canvas toBlob on idle periods is enabled
+idleCanvasImageEncodingEnabled initial=true
+
 # WebAudio support.
 webAudioEnabled initial=false
 
@@ -240,7 +243,7 @@ invertViewportScrollOrder initial=false
 
 # Experiment to have all APIs reflect the layout viewport.
 # crbug.com/489206 tracks the experiment.
-inertVisualViewport initial=false
+inertVisualViewport initial=true
 
 # The rubber-band overscroll effect is implemented in Blink and is being moved
 # to the compositor thread. This will be set to true and eventually removed.

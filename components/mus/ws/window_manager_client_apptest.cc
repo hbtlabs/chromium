@@ -61,7 +61,7 @@ class ClientAreaChangeObserver : public WindowObserver {
  private:
   // Overridden from WindowObserver:
   void OnWindowClientAreaChanged(Window* window,
-                                 const gfx::Rect& old_client_area) override {
+                                 const gfx::Insets& old_client_area) override {
     DCHECK_EQ(window, window_);
     EXPECT_TRUE(WindowServerTestBase::QuitRunLoop());
   }
@@ -372,7 +372,12 @@ TEST_F(WindowServerTest, SetBoundsSecurity) {
   ASSERT_TRUE(WaitForBoundsToChange(window_in_embedded));
 
   window_in_embedded->SetBounds(gfx::Rect(0, 0, 1024, 768));
-  // Bounds change should have been rejected.
+  // Bounds change is initially accepted, but the server declines the request.
+  EXPECT_FALSE(window->bounds() == window_in_embedded->bounds());
+
+  // The client is notified when the requested is declined, and updates the
+  // local bounds accordingly.
+  ASSERT_TRUE(WaitForBoundsToChange(window_in_embedded));
   EXPECT_TRUE(window->bounds() == window_in_embedded->bounds());
 }
 
@@ -874,16 +879,16 @@ TEST_F(WindowServerTest, ClientAreaChanged) {
   WindowTreeConnection* embedded_connection = Embed(embed_window).connection;
 
   // Verify change from embedded makes it to parent.
-  embedded_connection->GetRoot()->SetClientArea(gfx::Rect(1, 2, 3, 4));
+  embedded_connection->GetRoot()->SetClientArea(gfx::Insets(1, 2, 3, 4));
   ASSERT_TRUE(WaitForClientAreaToChange(embed_window));
-  EXPECT_TRUE(gfx::Rect(1, 2, 3, 4) == embed_window->client_area());
+  EXPECT_TRUE(gfx::Insets(1, 2, 3, 4) == embed_window->client_area());
 
-  // Verify bounds change results in resetting client area in embedded.
+  // Changing bounds shouldn't effect client area.
   embed_window->SetBounds(gfx::Rect(21, 22, 23, 24));
   WaitForBoundsToChange(embedded_connection->GetRoot());
   EXPECT_TRUE(gfx::Rect(21, 22, 23, 24) ==
               embedded_connection->GetRoot()->bounds());
-  EXPECT_TRUE(gfx::Rect(0, 0, 23, 24) ==
+  EXPECT_TRUE(gfx::Insets(1, 2, 3, 4) ==
               embedded_connection->GetRoot()->client_area());
 }
 

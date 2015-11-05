@@ -60,4 +60,26 @@ void GetAccountChooserDialogTitleTextAndLinkRange(
     base::string16* title,
     gfx::Range* title_link_range);
 
+// Sets the formatted |explanation| in the Auto sign-in prompt.
+// If |is_smartlock_branding_enabled| is true, sets the
+// |explanation_link_range| for the "Google Smart Lock" text range to be set
+// visibly as a hyperlink in the prompt, otherwise chooses the title which
+// doesn't contain Smart Lock branding.
+void GetAutoSigninPromptFirstRunExperienceExplanation(
+    bool is_smartlock_branding_enabled,
+    base::string16* explanation,
+    gfx::Range* explanation_link_range);
+
+// Loads |smartlock_string_id| or |default_string_id| string from the resources
+// and substitutes the placeholder with the correct password manager branding
+// (Google Smart Lock, Google Chrome or Chromium) according to
+// |is_smartlock_branding_enabled|. If |is_smartlock_branding_enabled| is true
+// then |link_range| contains the link range for the brand name.
+void GetBrandedTextAndLinkRange(
+    bool is_smartlock_branding_enabled,
+    int smartlock_string_id,
+    int default_string_id,
+    base::string16* out_string,
+    gfx::Range* link_range);
+
 #endif  // CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_VIEW_UTILS_H_

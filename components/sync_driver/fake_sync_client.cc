@@ -12,6 +12,12 @@
 
 namespace sync_driver {
 
+namespace {
+
+void DummyClearBrowsingDataCallback(base::Time start, base::Time end) {}
+
+}  // namespace
+
 FakeSyncClient::FakeSyncClient()
     : factory_(nullptr),
       sync_service_(make_scoped_ptr(new FakeSyncService())) {}
@@ -49,6 +55,10 @@ FakeSyncClient::GetPasswordStore() {
   return scoped_refptr<password_manager::PasswordStore>();
 }
 
+ClearBrowsingDataCallback FakeSyncClient::GetClearBrowsingDataCallback() {
+  return base::Bind(&DummyClearBrowsingDataCallback);
+}
+
 base::Closure FakeSyncClient::GetPasswordStateChangedCallback() {
   return base::Bind(&base::DoNothing);
 }
@@ -63,6 +73,10 @@ FakeSyncClient::GetWebDataService() {
 }
 
 BookmarkUndoService* FakeSyncClient::GetBookmarkUndoServiceIfExists() {
+  return nullptr;
+}
+
+invalidation::InvalidationService* FakeSyncClient::GetInvalidationService() {
   return nullptr;
 }
 

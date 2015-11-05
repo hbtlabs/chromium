@@ -137,7 +137,7 @@ void InitializeMetadataEvent(TraceEvent* trace_event,
   ::trace_event_internal::SetTraceValue(value, &arg_type, &arg_value);
   trace_event->Initialize(
       thread_id,
-      TraceTicks(),
+      TimeTicks(),
       ThreadTicks(),
       TRACE_EVENT_PHASE_METADATA,
       &g_category_group_enabled[g_category_metadata],
@@ -432,6 +432,9 @@ bool TraceLog::OnMemoryDump(const MemoryDumpArgs& args,
     AutoLock lock(lock_);
     if (logged_events_)
       logged_events_->EstimateTraceMemoryOverhead(&overhead);
+
+    for (auto& metadata_event : metadata_events_)
+      metadata_event->EstimateTraceMemoryOverhead(&overhead);
   }
   overhead.AddSelf();
   overhead.DumpInto("tracing/main_trace_log", pmd);
@@ -1080,7 +1083,7 @@ TraceEventHandle TraceLog::AddTraceEvent(
     const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1111,7 +1114,7 @@ TraceEventHandle TraceLog::AddTraceEventWithContextId(
     const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1141,7 +1144,7 @@ TraceEventHandle TraceLog::AddTraceEventWithProcessId(
     const unsigned long long* arg_values,
     const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase,
       category_group_enabled,
@@ -1168,7 +1171,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const TraceTicks& timestamp,
+    const TimeTicks& timestamp,
     int num_args,
     const char** arg_names,
     const unsigned char* arg_types,
@@ -1200,7 +1203,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long context_id,
     unsigned long long bind_id,
     int thread_id,
-    const TraceTicks& timestamp,
+    const TimeTicks& timestamp,
     int num_args,
     const char** arg_names,
     const unsigned char* arg_types,
@@ -1229,7 +1232,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     id = MangleEventId(id);
   }
 
-  TraceTicks offset_event_timestamp = OffsetTimestamp(timestamp);
+  TimeTicks offset_event_timestamp = OffsetTimestamp(timestamp);
   ThreadTicks thread_now = ThreadNow();
 
   // |thread_local_event_buffer_| can be null if the current thread doesn't have
@@ -1378,7 +1381,7 @@ void TraceLog::AddMetadataEvent(
   scoped_ptr<TraceEvent> trace_event(new TraceEvent);
   trace_event->Initialize(
       0,  // thread_id
-      TraceTicks(), ThreadTicks(), TRACE_EVENT_PHASE_METADATA,
+      TimeTicks(), ThreadTicks(), TRACE_EVENT_PHASE_METADATA,
       &g_category_group_enabled[g_category_metadata], name,
       trace_event_internal::kNoId,  // id
       trace_event_internal::kNoId,  // context_id
@@ -1391,7 +1394,7 @@ void TraceLog::AddMetadataEvent(
 // May be called when a COMPELETE event ends and the unfinished event has been
 // recycled (phase == TRACE_EVENT_PHASE_END and trace_event == NULL).
 std::string TraceLog::EventToConsoleMessage(unsigned char phase,
-                                            const TraceTicks& timestamp,
+                                            const TimeTicks& timestamp,
                                             TraceEvent* trace_event) {
   AutoLock thread_info_lock(thread_info_lock_);
 
@@ -1453,7 +1456,7 @@ void TraceLog::UpdateTraceEventDuration(
   AutoThreadLocalBoolean thread_is_in_trace_event(&thread_is_in_trace_event_);
 
   ThreadTicks thread_now = ThreadNow();
-  TraceTicks now = OffsetNow();
+  TimeTicks now = OffsetNow();
 
 #if defined(OS_WIN)
   // Generate an ETW event that marks the end of a complete event.
@@ -1755,7 +1758,7 @@ ScopedTraceBinaryEfficient::ScopedTraceBinaryEfficient(
             trace_event_internal::kNoId,  // id
             trace_event_internal::kNoId,  // context_id
             static_cast<int>(base::PlatformThread::CurrentId()),  // thread_id
-            base::TraceTicks::Now(),
+            base::TimeTicks::Now(),
             trace_event_internal::kZeroNumArgs,
             nullptr,
             nullptr,

@@ -30,6 +30,7 @@
 #include "wtf/Forward.h"
 #include "wtf/MathExtras.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/TypeTraits.h"
 #include "wtf/text/StringHash.h"
 
 namespace blink {
@@ -76,6 +77,7 @@ public:
         Inches,
         Points,
         Picas,
+        UserUnits, // The SVG term for unitless lengths
         Degrees,
         Radians,
         Gradians,
@@ -167,7 +169,7 @@ public:
     static bool isViewportPercentageLength(UnitType type) { return type >= UnitType::ViewportWidth && type <= UnitType::ViewportMax; }
     static bool isLength(UnitType type)
     {
-        return (type >= UnitType::Ems && type <= UnitType::Picas) || type == UnitType::QuirkyEms || type == UnitType::Rems || type == UnitType::Chs || isViewportPercentageLength(type);
+        return (type >= UnitType::Ems && type <= UnitType::UserUnits) || type == UnitType::QuirkyEms || type == UnitType::Rems || type == UnitType::Chs || isViewportPercentageLength(type);
     }
     bool isLength() const { return isLength(typeWithCalcResolved()); }
     bool isNumber() const { return typeWithCalcResolved() == UnitType::Number || typeWithCalcResolved() == UnitType::Integer; }
@@ -199,6 +201,7 @@ public:
     }
     template<typename T> static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> create(T value)
     {
+        static_assert(!WTF::IsSameType<T, CSSValueID>::value, "Do not call create() with a CSSValueID; call createIdentifier() instead");
         return adoptRefWillBeNoop(new CSSPrimitiveValue(value));
     }
 

@@ -60,7 +60,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/crx_file/id_util.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -1615,12 +1614,15 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
 
     // Extensions that came to us disabled from sync need a similar inference,
     // except based on the new version's permissions.
+    // TODO(treib,devlin): Since M48, DISABLE_UNKNOWN_FROM_SYNC isn't used
+    // anymore; this code is still here to migrate any existing old state.
+    // Remove it after some grace period.
     if (previously_disabled &&
-        (disable_reasons & Extension::DISABLE_UNKNOWN_FROM_SYNC)) {
+        (disable_reasons & Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC)) {
       // Remove the DISABLE_UNKNOWN_FROM_SYNC reason.
-      disable_reasons &= ~Extension::DISABLE_UNKNOWN_FROM_SYNC;
+      disable_reasons &= ~Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC;
       extension_prefs_->RemoveDisableReason(
-          extension->id(), Extension::DISABLE_UNKNOWN_FROM_SYNC);
+          extension->id(), Extension::DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC);
       // If there was no privilege increase, it was likely disabled by the user.
       if (!is_privilege_increase)
         disable_reasons |= Extension::DISABLE_USER_ACTION;

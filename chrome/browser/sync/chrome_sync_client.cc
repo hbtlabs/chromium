@@ -7,9 +7,11 @@
 #include "base/bind.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -33,6 +35,7 @@
 #include "components/dom_distiller/core/dom_distiller_service.h"
 #include "components/history/core/browser/history_model_worker.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_model_worker.h"
 #include "components/sync_driver/glue/browser_thread_model_worker.h"
@@ -153,7 +156,9 @@ ChromeSyncClient::ChromeSyncClient(
     scoped_ptr<sync_driver::SyncApiComponentFactory> component_factory)
     : profile_(profile),
       component_factory_(component_factory.Pass()),
-      sync_sessions_client_(new SyncSessionsClientImpl(profile)) {}
+      sync_sessions_client_(new SyncSessionsClientImpl(profile)),
+      browsing_data_remover_observer_(NULL) {}
+
 ChromeSyncClient::~ChromeSyncClient() {
 }
 
@@ -206,6 +211,12 @@ ChromeSyncClient::GetPasswordStore() {
       profile_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
+sync_driver::ClearBrowsingDataCallback
+ChromeSyncClient::GetClearBrowsingDataCallback() {
+  return base::Bind(&ChromeSyncClient::ClearBrowsingData,
+                    base::Unretained(this));
+}
+
 base::Closure ChromeSyncClient::GetPasswordStateChangedCallback() {
   return base::Bind(
       &PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged,
@@ -221,6 +232,14 @@ ChromeSyncClient::GetWebDataService() {
 
 BookmarkUndoService* ChromeSyncClient::GetBookmarkUndoServiceIfExists() {
   return BookmarkUndoServiceFactory::GetForProfileIfExists(profile_);
+}
+
+invalidation::InvalidationService* ChromeSyncClient::GetInvalidationService() {
+  invalidation::ProfileInvalidationProvider* provider =
+      invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile_);
+  if (provider)
+    return provider->GetInvalidationService();
+  return nullptr;
 }
 
 scoped_refptr<syncer::ExtensionsActivity>
@@ -401,6 +420,25 @@ ChromeSyncClient::CreateModelWorkerForGroup(
 sync_driver::SyncApiComponentFactory*
 ChromeSyncClient::GetSyncApiComponentFactory() {
   return component_factory_.get();
+}
+
+void ChromeSyncClient::ClearBrowsingData(base::Time start, base::Time end) {
+  // BrowsingDataRemover deletes itself when it's done.
+  BrowsingDataRemover* remover =
+      BrowsingDataRemover::CreateForRange(profile_, start, end);
+  if (browsing_data_remover_observer_)
+    remover->AddObserver(browsing_data_remover_observer_);
+  remover->Remove(BrowsingDataRemover::REMOVE_ALL, BrowsingDataHelper::ALL);
+
+  scoped_refptr<password_manager::PasswordStore> password =
+      PasswordStoreFactory::GetForProfile(profile_,
+                                          ServiceAccessType::EXPLICIT_ACCESS);
+  password->RemoveLoginsSyncedBetween(start, end);
+}
+
+void ChromeSyncClient::SetBrowsingDataRemoverObserverForTesting(
+    BrowsingDataRemover::Observer* observer) {
+  browsing_data_remover_observer_ = observer;
 }
 
 }  // namespace browser_sync

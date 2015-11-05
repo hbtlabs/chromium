@@ -130,6 +130,7 @@
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebVector.h"
+#include "public/platform/WebViewScheduler.h"
 #include "public/web/WebAXObject.h"
 #include "public/web/WebActiveWheelFlingParameters.h"
 #include "public/web/WebAutofillClient.h"
@@ -449,6 +450,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     , m_shouldDispatchFirstLayoutAfterFinishedLoading(false)
     , m_displayMode(WebDisplayModeBrowser)
     , m_elasticOverscroll(FloatSize())
+    , m_scheduler(Platform::current()->currentThread()->scheduler()->createWebViewScheduler(this).release())
 {
     Page::PageClients pageClients;
     pageClients.chromeClient = m_chromeClientImpl.get();
@@ -1751,11 +1753,6 @@ void WebViewImpl::resizeVisualViewport(const WebSize& newSize)
     page()->frameHost().visualViewport().clampToBoundaries();
 }
 
-void WebViewImpl::resizePinchViewport(const WebSize& newSize)
-{
-    resizeVisualViewport(newSize);
-}
-
 void WebViewImpl::performResize()
 {
     pageScaleConstraintsSet().didChangeViewSize(m_size);
@@ -1920,10 +1917,12 @@ void WebViewImpl::updateAllLifecyclePhases()
     if (!mainFrameImpl())
         return;
 
-    PageWidgetDelegate::layout(*m_page, *mainFrameImpl()->frame());
+    PageWidgetDelegate::updateLifecycleToCompositingCleanPlusScrolling(*m_page, *mainFrameImpl()->frame());
+
     updateLayerTreeBackgroundColor();
 
-    // TODO(wangxianzhu): Refactor the following into the main layout stage. crbug.com/550517.
+    // TODO(wangxianzhu): Refactor overlay and link highlights updating and painting to make clearer
+    // dependency between web/ and core/ in synchronized painting mode.
     if (InspectorOverlay* overlay = inspectorOverlay())
         overlay->layout();
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
@@ -1950,8 +1949,7 @@ void WebViewImpl::updateAllLifecyclePhases()
         }
     }
 
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
-        PageWidgetDelegate::updateAllLifecyclePhases(*m_page, *mainFrameImpl()->frame());
+    PageWidgetDelegate::updateAllLifecyclePhases(*m_page, *mainFrameImpl()->frame());
 }
 
 void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
@@ -2681,6 +2679,7 @@ bool WebViewImpl::isAcceleratedCompositingActive() const
 void WebViewImpl::willCloseLayerTreeView()
 {
     if (m_linkHighlightsTimeline) {
+        m_linkHighlights.clear();
         detachCompositorAnimationTimeline(m_linkHighlightsTimeline.get());
         m_linkHighlightsTimeline.clear();
     }
@@ -2805,6 +2804,11 @@ void WebViewImpl::setFocusedFrame(WebFrame* frame)
     }
     LocalFrame* coreFrame = toWebLocalFrameImpl(frame)->frame();
     coreFrame->page()->focusController().setFocusedFrame(coreFrame);
+}
+
+void WebViewImpl::focusDocumentView(WebFrame* frame)
+{
+    page()->focusController().focusDocumentView(toCoreFrame(frame));
 }
 
 void WebViewImpl::setInitialFocus(bool reverse)
@@ -3039,20 +3043,10 @@ void WebViewImpl::setVisualViewportOffset(const WebFloatPoint& offset)
     page()->frameHost().visualViewport().setLocation(offset);
 }
 
-void WebViewImpl::setPinchViewportOffset(const WebFloatPoint& offset)
-{
-    setVisualViewportOffset(offset);
-}
-
 WebFloatPoint WebViewImpl::visualViewportOffset() const
 {
     ASSERT(page());
     return page()->frameHost().visualViewport().visibleRect().location();
-}
-
-WebFloatPoint WebViewImpl::pinchViewportOffset() const
-{
-    return visualViewportOffset();
 }
 
 WebFloatSize WebViewImpl::visualViewportSize() const
@@ -4403,6 +4397,12 @@ void WebViewImpl::setVisibilityState(WebPageVisibilityState visibilityState,
     if (m_layerTreeView) {
         bool visible = visibilityState == WebPageVisibilityStateVisible;
         m_layerTreeView->setVisible(visible);
+    }
+
+    if (visibilityState == WebPageVisibilityStateVisible) {
+        m_scheduler->setPageInBackground(false);
+    } else {
+        m_scheduler->setPageInBackground(true);
     }
 }
 

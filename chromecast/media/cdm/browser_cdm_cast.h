@@ -56,9 +56,6 @@ class BrowserCdmCast : public ::media::MediaKeys,
                      const base::Closure& cdm_unset_cb) override;
   void UnregisterPlayer(int registration_id) override;
 
-  // ::media::MediaKeys implementation:
-  ::media::CdmContext* GetCdmContext() override;
-
   // Returns the decryption context needed to decrypt frames encrypted with
   // |key_id|.
   // Returns null if |key_id| is not available.
@@ -66,6 +63,8 @@ class BrowserCdmCast : public ::media::MediaKeys,
       const std::string& key_id) const = 0;
 
  protected:
+  ~BrowserCdmCast() override;
+
   void OnSessionMessage(const std::string& session_id,
                         const std::vector<uint8_t>& message,
                         const GURL& destination_url,
@@ -76,8 +75,6 @@ class BrowserCdmCast : public ::media::MediaKeys,
 
  private:
   friend class BrowserCdmCastUi;
-
-  ~BrowserCdmCast() override;
 
   // Allow subclasses to override to provide key sysytem specific
   // initialization.
@@ -129,7 +126,6 @@ class BrowserCdmCastUi : public ::media::MediaKeys {
                     scoped_ptr<::media::SimpleCdmPromise> promise) override;
   void RemoveSession(const std::string& session_id,
                      scoped_ptr<::media::SimpleCdmPromise> promise) override;
-  ::media::CdmContext* GetCdmContext() override;
 
   scoped_refptr<BrowserCdmCast> browser_cdm_cast_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

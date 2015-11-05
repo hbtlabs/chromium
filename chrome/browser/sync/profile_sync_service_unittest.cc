@@ -24,12 +24,14 @@
 #include "chrome/browser/sync/glue/sync_backend_host_mock.h"
 #include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -100,6 +102,26 @@ ACTION_P(ReturnNewDataTypeManager, configure_called) {
 using testing::Return;
 using testing::StrictMock;
 using testing::_;
+
+class TestChromeSyncClient : public ChromeSyncClient {
+ public:
+  TestChromeSyncClient(
+      Profile* profile,
+      scoped_ptr<sync_driver::SyncApiComponentFactory> component_factory,
+      sync_driver::ClearBrowsingDataCallback callback)
+      : ChromeSyncClient(profile, component_factory.Pass()),
+        callback_(callback) {}
+  ~TestChromeSyncClient() override {}
+
+ private:
+  // SyncClient:
+  sync_driver::ClearBrowsingDataCallback GetClearBrowsingDataCallback()
+      override {
+    return callback_;
+  }
+
+  sync_driver::ClearBrowsingDataCallback callback_;
+};
 
 class TestSyncServiceObserver : public sync_driver::SyncServiceObserver {
  public:
@@ -281,15 +303,21 @@ class ProfileSyncServiceTest : public ::testing::Test {
     scoped_ptr<SyncApiComponentFactoryMock> components_factory(
         new SyncApiComponentFactoryMock());
     components_factory_ = components_factory.get();
-    scoped_ptr<ChromeSyncClient> sync_client(
-        new ChromeSyncClient(profile_, components_factory.Pass()));
-    service_.reset(new ProfileSyncService(
-        sync_client.Pass(), profile_,
-        make_scoped_ptr(new SigninManagerWrapper(signin)), oauth2_token_service,
-        behavior, base::Bind(&EmptyNetworkTimeUpdate)));
-    service_->SetClearingBrowseringDataForTesting(
+    scoped_ptr<ChromeSyncClient> sync_client(new TestChromeSyncClient(
+        profile_, components_factory.Pass(),
         base::Bind(&ProfileSyncServiceTest::ClearBrowsingDataCallback,
-                   base::Unretained(this)));
+                   base::Unretained(this))));
+    service_.reset(new ProfileSyncService(
+        sync_client.Pass(),
+        make_scoped_ptr(new SigninManagerWrapper(signin)), oauth2_token_service,
+        behavior, base::Bind(&EmptyNetworkTimeUpdate), profile_->GetPath(),
+        profile_->GetRequestContext(), profile_->GetDebugName(),
+        chrome::GetChannel(),
+        content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::DB),
+        content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::FILE),
+        content::BrowserThread::GetBlockingPool()));
     service_->RegisterDataTypeController(
         new sync_driver::FakeDataTypeController(syncer::BOOKMARKS));
   }
@@ -311,7 +339,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
   void InitializeForNthSync() {
     // Set first sync time before initialize to disable backup and simulate
     // a complete sync setup.
-    sync_driver::SyncPrefs sync_prefs(service()->profile()->GetPrefs());
+    sync_driver::SyncPrefs sync_prefs(profile()->GetPrefs());
     sync_prefs.SetFirstSyncTime(base::Time::Now());
     sync_prefs.SetSyncSetupCompleted();
     sync_prefs.SetKeepEverythingSynced(true);
@@ -400,11 +428,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
     return components_factory_;
   }
 
-  void ClearBrowsingDataCallback(BrowsingDataRemover::Observer* observer,
-                                 Profile* profile,
-                                 base::Time start,
-                                 base::Time end) {
-    EXPECT_EQ(profile_, profile);
+  void ClearBrowsingDataCallback(base::Time start, base::Time end) {
     clear_browsing_date_start_ = start;
   }
 
@@ -524,7 +548,7 @@ TEST_F(ProfileSyncServiceTest, EarlyRequestStop) {
       sync_driver::prefs::kSyncSuppressStart));
 
   // Because of suppression, this should fail.
-  sync_driver::SyncPrefs sync_prefs(service()->profile()->GetPrefs());
+  sync_driver::SyncPrefs sync_prefs(profile()->GetPrefs());
   sync_prefs.SetFirstSyncTime(base::Time::Now());
   service()->Initialize();
   EXPECT_FALSE(service()->IsSyncActive());
@@ -623,6 +647,38 @@ TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
   EXPECT_EQ(syncer::CONNECTION_OK, token_status.connection_status);
 }
 
+TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
+  CreateService(browser_sync::AUTO_START);
+  IssueTestTokens();
+  ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
+  ExpectSyncBackendHostCreation(1);
+  InitializeForNthSync();
+  EXPECT_TRUE(service()->IsSyncActive());
+
+  std::string primary_account_id =
+      SigninManagerFactory::GetForProfile(profile())
+          ->GetAuthenticatedAccountId();
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile())
+      ->LoadCredentials(primary_account_id);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(service()->GetAccessTokenForTest().empty());
+
+  std::string secondary_account_gaiaid = "1234567";
+  std::string secondary_account_name = "test_user2@gmail.com";
+  std::string secondary_account_id =
+      AccountTrackerServiceFactory::GetForProfile(profile())
+          ->SeedAccountInfo(secondary_account_gaiaid, secondary_account_name);
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile())
+      ->UpdateCredentials(secondary_account_id, "second_account_refresh_token");
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile())
+      ->RevokeCredentials(secondary_account_id);
+  EXPECT_FALSE(service()->GetAccessTokenForTest().empty());
+
+  ProfileOAuth2TokenServiceFactory::GetForProfile(profile())
+      ->RevokeCredentials(primary_account_id);
+  EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
+}
+
 #if defined(ENABLE_PRE_SYNC_BACKUP)
 TEST_F(ProfileSyncServiceTest, DontStartBackupOnBrowserStart) {
   CreateServiceWithoutSignIn();
@@ -694,7 +750,7 @@ TEST_F(ProfileSyncServiceTest, Rollback) {
   EXPECT_EQ(ProfileSyncService::SYNC, service()->backend_mode());
 
   // First sync time should be recorded.
-  sync_driver::SyncPrefs sync_prefs(service()->profile()->GetPrefs());
+  sync_driver::SyncPrefs sync_prefs(profile()->GetPrefs());
   base::Time first_sync_time = sync_prefs.GetFirstSyncTime();
   EXPECT_FALSE(first_sync_time.is_null());
 
@@ -768,7 +824,7 @@ TEST_F(ProfileSyncServiceTest, MemoryPressureRecording) {
 
   testing::Mock::VerifyAndClearExpectations(components_factory());
 
-  sync_driver::SyncPrefs sync_prefs(service()->profile()->GetPrefs());
+  sync_driver::SyncPrefs sync_prefs(profile()->GetPrefs());
 
   EXPECT_EQ(profile()->GetPrefs()->GetInteger(
                 sync_driver::prefs::kSyncMemoryPressureWarningCount),
@@ -965,7 +1021,7 @@ TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
   ExpectSyncBackendHostCreation(1);
   InitializeForNthSync();
 
-  sync_driver::SyncPrefs sync_prefs(service()->profile()->GetPrefs());
+  sync_driver::SyncPrefs sync_prefs(profile()->GetPrefs());
   EXPECT_EQ(PRODUCT_VERSION, sync_prefs.GetLastRunVersion());
 
   sync_prefs.SetPassphrasePrompted(true);

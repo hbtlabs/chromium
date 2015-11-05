@@ -13,7 +13,7 @@
       'browser/after_startup_task_utils_unittest.cc',
       'browser/android/bookmarks/partner_bookmarks_shim_unittest.cc',
       'browser/android/contextualsearch/contextual_search_delegate_unittest.cc',
-      'browser/android/datausage/external_data_use_observer_unittest.cc',
+      'browser/android/data_usage/external_data_use_observer_unittest.cc',
       'browser/android/history_report/delta_file_backend_leveldb_unittest.cc',
       'browser/android/history_report/delta_file_commons_unittest.cc',
       'browser/android/history_report/usage_reports_buffer_backend_unittest.cc',
@@ -233,7 +233,6 @@
       'browser/sync/profile_sync_service_startup_unittest.cc',
       'browser/sync/profile_sync_service_typed_url_unittest.cc',
       'browser/sync/profile_sync_service_unittest.cc',
-      'browser/sync/sessions/session_data_type_controller_unittest.cc',
       'browser/sync/startup_controller_unittest.cc',
       'browser/sync/sync_startup_tracker_unittest.cc',
       'browser/sync/test/test_http_bridge_factory.cc',
@@ -532,6 +531,7 @@
       'browser/password_manager/save_password_infobar_delegate_unittest.cc',
     ],
     'chrome_unit_tests_android_sources': [
+      'browser/password_manager/auto_signin_infobar_delegate_unittest.cc',
       'browser/permissions/permission_queue_controller_unittest.cc',
     ],
     'chrome_unit_tests_non_mobile_sources': [
@@ -995,7 +995,6 @@
       'browser/safe_browsing/safe_browsing_database_unittest.cc',
       'browser/safe_browsing/safe_browsing_store_file_unittest.cc',
       'browser/safe_browsing/safe_browsing_store_unittest.cc',
-      'browser/safe_browsing/safe_browsing_util_unittest.cc',
       'browser/safe_browsing/sandboxed_dmg_analyzer_mac_unittest.cc',
       'browser/safe_browsing/sandboxed_zip_analyzer_unittest.cc',
       'browser/safe_browsing/signature_evaluator_mac_unittest.cc',

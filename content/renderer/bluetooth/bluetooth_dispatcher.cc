@@ -199,6 +199,8 @@ void BluetoothDispatcher::requestDevice(
     for (const WebString& service : web_filter.services) {
       filter.services.push_back(device::BluetoothUUID(service.utf8()));
     }
+    filter.name = web_filter.name.utf8();
+    filter.namePrefix = web_filter.namePrefix.utf8();
   }
   std::vector<device::BluetoothUUID> optional_services;
   optional_services.reserve(options.optionalServices.size());
@@ -549,9 +551,9 @@ void BluetoothDispatcher::OnRequestDeviceSuccess(
   pending_requests_.Lookup(request_id)
       ->onSuccess(blink::adoptWebPtr(new WebBluetoothDevice(
           WebString::fromUTF8(device.id), WebString(device.name),
-          device.device_class, GetWebVendorIdSource(device.vendor_id_source),
-          device.vendor_id, device.product_id, device.product_version,
-          device.paired, uuids)));
+          device.tx_power, device.rssi, device.device_class,
+          GetWebVendorIdSource(device.vendor_id_source), device.vendor_id,
+          device.product_id, device.product_version, device.paired, uuids)));
   pending_requests_.Remove(request_id);
 }
 

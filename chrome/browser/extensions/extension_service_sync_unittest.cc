@@ -24,6 +24,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/crx_file/id_util.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -31,8 +32,10 @@
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/test_management_policy.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permission_set.h"
+#include "extensions/common/value_builder.h"
 #include "sync/api/fake_sync_change_processor.h"
 #include "sync/api/sync_data.h"
 #include "sync/api/sync_error_factory_mock.h"
@@ -839,8 +842,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataNewExtension) {
       Extension::DISABLE_USER_ACTION, true },
     // Legacy case (<M45): No disable reasons come in from Sync (see
     // crbug.com/484214). After installation, the reason should be set to
-    // DISABLE_UNKNOWN_FROM_SYNC.
-    { "Legacy", false, -1, Extension::DISABLE_UNKNOWN_FROM_SYNC, true },
+    // DISABLE_USER_ACTION (default assumption).
+    { "Legacy", false, -1, Extension::DISABLE_USER_ACTION, true },
     // If the extension came in disabled due to a permissions increase, then the
     // user has *not* approved the permissions, and they shouldn't be granted.
     // crbug.com/484214
@@ -1084,12 +1087,12 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataEnableDisable) {
       Extension::DISABLE_USER_ACTION, Extension::DISABLE_USER_ACTION },
     { "Disable", 0, false, Extension::DISABLE_USER_ACTION,
       Extension::DISABLE_USER_ACTION },
-    { "DisableLegacy", 0, false, -1, Extension::DISABLE_UNKNOWN_FROM_SYNC },
+    { "DisableLegacy", 0, false, -1, Extension::DISABLE_USER_ACTION },
     { "AddDisableReason", Extension::DISABLE_REMOTE_INSTALL, false,
       Extension::DISABLE_REMOTE_INSTALL | Extension::DISABLE_USER_ACTION,
       Extension::DISABLE_REMOTE_INSTALL | Extension::DISABLE_USER_ACTION },
     { "AddDisableReasonLegacy", Extension::DISABLE_USER_ACTION, false, -1,
-      Extension::DISABLE_USER_ACTION | Extension::DISABLE_UNKNOWN_FROM_SYNC},
+      Extension::DISABLE_USER_ACTION},
     { "RemoveDisableReason",
       Extension::DISABLE_REMOTE_INSTALL | Extension::DISABLE_USER_ACTION, false,
       Extension::DISABLE_USER_ACTION, Extension::DISABLE_USER_ACTION },
@@ -1714,6 +1717,54 @@ TEST_F(ExtensionServiceSyncTest, SyncUninstallByCustodianSkipsPolicy) {
   // But installed_by_custodian should result in bypassing the policy check.
   EXPECT_FALSE(
       registry()->GenerateInstalledExtensionsSet()->Contains(extension_ids[1]));
+}
+
+TEST_F(ExtensionServiceSyncTest, SyncExtensionHasAllhostsWithheld) {
+  InitializeEmptyExtensionService();
+
+  // Create an extension that needs all-hosts.
+  const std::string kName("extension");
+  scoped_refptr<const Extension> extension =
+      extensions::ExtensionBuilder()
+      .SetLocation(Manifest::INTERNAL)
+      .SetManifest(
+          extensions::DictionaryBuilder()
+              .Set("name", kName)
+              .Set("description", "foo")
+              .Set("manifest_version", 2)
+              .Set("version", "1.0")
+              .Set("permissions", extensions::ListBuilder().Append("*://*/*")))
+      .SetID(crx_file::id_util::GenerateId(kName))
+      .Build();
+
+  // Install and enable it.
+  service()->AddExtension(extension.get());
+  service()->GrantPermissionsAndEnableExtension(extension.get());
+  const std::string id = extension->id();
+  EXPECT_TRUE(registry()->enabled_extensions().GetByID(id));
+
+  // Simulate a sync node coming in where the extension had all-hosts withheld.
+  // This means that it should have all-hosts withheld on this machine, too.
+  syncer::SyncChangeList change_list;
+  sync_pb::EntitySpecifics specifics;
+  sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
+  ext_specifics->set_id(id);
+  ext_specifics->set_name(kName);
+  ext_specifics->set_version("1.0");
+  ext_specifics->set_all_urls_enabled(false);
+  ext_specifics->set_enabled(true);
+  syncer::SyncData sync_data =
+      syncer::SyncData::CreateLocalData(id, "Name", specifics);
+  change_list.push_back(syncer::SyncChange(FROM_HERE,
+                                           syncer::SyncChange::ACTION_UPDATE,
+                                           sync_data));
+
+  extension_sync_service()->ProcessSyncChanges(FROM_HERE, change_list);
+
+  EXPECT_TRUE(registry()->enabled_extensions().GetByID(id));
+  EXPECT_FALSE(extensions::util::AllowedScriptingOnAllUrls(id, profile()));
+  EXPECT_TRUE(extensions::util::HasSetAllowedScriptingOnAllUrls(id, profile()));
+  EXPECT_FALSE(extensions::util::AllowedScriptingOnAllUrls(id, profile()));
 }
 
 #endif  // defined(ENABLE_SUPERVISED_USERS)

@@ -506,16 +506,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -1058,6 +1061,175 @@
       }
     ]
   },
+  "ClangToTLinuxUBSanVptr tester": {
+    "gtest_tests": [
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "accessibility_unittests"
+      },
+      {
+        "test": "angle_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "base_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_heap_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_platform_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 5
+        },
+        "test": "browser_tests"
+      },
+      {
+        "test": "cacheinvalidation_unittests"
+      },
+      {
+        "test": "cast_unittests"
+      },
+      {
+        "test": "cc_unittests"
+      },
+      {
+        "test": "components_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "crypto_unittests"
+      },
+      {
+        "test": "device_unittests"
+      },
+      {
+        "test": "display_unittests"
+      },
+      {
+        "test": "extensions_browsertests"
+      },
+      {
+        "test": "extensions_unittests"
+      },
+      {
+        "test": "gcm_unit_tests"
+      },
+      {
+        "test": "gfx_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "google_apis_unittests"
+      },
+      {
+        "test": "gpu_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "interactive_ui_tests"
+      },
+      {
+        "test": "ipc_tests"
+      },
+      {
+        "test": "jingle_unittests"
+      },
+      {
+        "test": "media_blink_unittests"
+      },
+      {
+        "test": "media_unittests"
+      },
+      {
+        "test": "midi_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 4
+        },
+        "test": "net_unittests"
+      },
+      {
+        "test": "ppapi_unittests"
+      },
+      {
+        "test": "printing_unittests"
+      },
+      {
+        "test": "remoting_unittests"
+      },
+      {
+        "test": "sandbox_linux_unittests"
+      },
+      {
+        "test": "skia_unittests"
+      },
+      {
+        "test": "sql_unittests"
+      },
+      {
+        "test": "sync_unit_tests"
+      },
+      {
+        "test": "ui_base_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 2
+        },
+        "test": "unit_tests"
+      },
+      {
+        "test": "url_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "webkit_unit_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "wtf_unittests"
+      }
+    ]
+  },
   "ClangToTMac tester": {
     "gtest_tests": [
       {
@@ -1261,16 +1433,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -1472,16 +1647,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -4540,16 +4718,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -4735,16 +4916,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -5035,16 +5219,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -5218,16 +5405,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         }
+      },
+      {
+        "isolate_name": "telemetry_perf_unittests",
+        "name": "telemetry_perf_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ],
     "scripts": [
       {
         "name": "telemetry_unittests",
         "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
       },
       {
         "name": "nacl_integration",
@@ -5240,14 +5430,14 @@
       {
         "args": [
           "--site-per-process",
-          "--gtest_filter=-BrowserTest.ClearPendingOnFailUnlessNTP:BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:DevToolsExperimentalExtensionTest.*:DevToolsExtensionTest.*:DnsProbeBrowserTest.*:ErrorPageTest.*:ExtensionApiTest.ContentScriptOtherExtensions:ExtensionApiTest.ContentScriptExtensionProcess:ExtensionApiTest.DontInjectContentScriptsInBackgroundPages:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionApiTest.WindowOpenPopupIframe:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:ExtensionViewTest.*:InlineLoginUISafeIframeBrowserTest.*:IsolatedAppTest.*:LaunchWebAuthFlowFunctionTest.*:MimeHandlerViewTest.*:*.NewAvatarMenuEnabledInGuestMode:OptionsUIBrowserTest.*:*PDFExtensionTest.*:PhishingClassifierTest.*:PhishingDOMFeatureExtractorTest.*:PopupBlockerBrowserTest.*:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.*:ReferrerPolicyTest.*:*.RestoreCrossSiteWithExistingSiteInstance:SSLUITest.*:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.InterstitialTeardown*:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:ZoomControllerBrowserTest.*:*.NavigateFromNTPToOptionsInSameTab:*.ProfilesWithoutPagesNotLaunched:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
+          "--gtest_filter=-BrowserTest.ClearPendingOnFailUnlessNTP:BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:DevToolsExperimentalExtensionTest.*:DevToolsExtensionTest.*:DnsProbeBrowserTest.*:ErrorPageTest.*:ExtensionApiTest.ContentScriptOtherExtensions:ExtensionApiTest.ContentScriptExtensionProcess:ExtensionApiTest.DontInjectContentScriptsInBackgroundPages:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionApiTest.WindowOpenPopupIframe:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:ExtensionViewTest.*:InlineLoginUISafeIframeBrowserTest.*:IsolatedAppTest.*:LaunchWebAuthFlowFunctionTest.*:MimeHandlerViewTest.*:*.NewAvatarMenuEnabledInGuestMode:OptionsUIBrowserTest.*:*PDFExtensionTest.*:PhishingClassifierTest.*:PhishingDOMFeatureExtractorTest.*:PopupBlockerBrowserTest.*:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.*:ReferrerPolicyTest.*:*.RestoreCrossSiteWithExistingSiteInstance:SSLUITest.*:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:ZoomControllerBrowserTest.*:*.NavigateFromNTPToOptionsInSameTab:*.ProfilesWithoutPagesNotLaunched:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
         ],
         "test": "browser_tests"
       },
       {
         "args": [
           "--site-per-process",
-          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:*.PreventSpoofFromSubframeAndReplace:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:RenderFrameHostManagerTest.Restore*"
+          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:*.PreventSpoofFromSubframeAndReplace:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:*.RestoreSubframeFileAccessForHistoryNavigation"
         ],
         "test": "content_browsertests"
       },
@@ -5271,14 +5461,14 @@
       {
         "args": [
           "--site-per-process",
-          "--gtest_filter=-BrowserTest.ClearPendingOnFailUnlessNTP:BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:DevToolsExperimentalExtensionTest.*:DevToolsExtensionTest.*:DnsProbeBrowserTest.*:ErrorPageTest.*:ExtensionApiTest.ContentScriptOtherExtensions:ExtensionApiTest.ContentScriptExtensionProcess:ExtensionApiTest.DontInjectContentScriptsInBackgroundPages:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionApiTest.WindowOpenPopupIframe:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:ExtensionViewTest.*:InlineLoginUISafeIframeBrowserTest.*:IsolatedAppTest.*:LaunchWebAuthFlowFunctionTest.*:MimeHandlerViewTest.*:*.NewAvatarMenuEnabledInGuestMode:OptionsUIBrowserTest.*:*PDFExtensionTest.*:PhishingClassifierTest.*:PhishingDOMFeatureExtractorTest.*:PopupBlockerBrowserTest.*:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.*:ReferrerPolicyTest.*:*.RestoreCrossSiteWithExistingSiteInstance:SSLUITest.*:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.InterstitialTeardown*:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:ZoomControllerBrowserTest.*:*.NavigateFromNTPToOptionsInSameTab:*.ProfilesWithoutPagesNotLaunched:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
+          "--gtest_filter=-BrowserTest.ClearPendingOnFailUnlessNTP:BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:DevToolsExperimentalExtensionTest.*:DevToolsExtensionTest.*:DnsProbeBrowserTest.*:ErrorPageTest.*:ExtensionApiTest.ContentScriptOtherExtensions:ExtensionApiTest.ContentScriptExtensionProcess:ExtensionApiTest.DontInjectContentScriptsInBackgroundPages:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionApiTest.WindowOpenPopupIframe:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:ExtensionViewTest.*:InlineLoginUISafeIframeBrowserTest.*:IsolatedAppTest.*:LaunchWebAuthFlowFunctionTest.*:MimeHandlerViewTest.*:*.NewAvatarMenuEnabledInGuestMode:OptionsUIBrowserTest.*:*PDFExtensionTest.*:PhishingClassifierTest.*:PhishingDOMFeatureExtractorTest.*:PopupBlockerBrowserTest.*:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.*:ReferrerPolicyTest.*:*.RestoreCrossSiteWithExistingSiteInstance:SSLUITest.*:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:ZoomControllerBrowserTest.*:*.NavigateFromNTPToOptionsInSameTab:*.ProfilesWithoutPagesNotLaunched:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
         ],
         "test": "browser_tests"
       },
       {
         "args": [
           "--site-per-process",
-          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:*.PreventSpoofFromSubframeAndReplace:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:RenderFrameHostManagerTest.Restore*"
+          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:*.PreventSpoofFromSubframeAndReplace:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:*.RestoreSubframeFileAccessForHistoryNavigation"
         ],
         "test": "content_browsertests"
       },

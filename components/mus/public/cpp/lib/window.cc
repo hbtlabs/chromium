@@ -203,18 +203,18 @@ void Window::Destroy() {
 }
 
 void Window::SetBounds(const gfx::Rect& bounds) {
-  if (!OwnsWindow(connection_, this))
+  const bool is_root = !parent();
+  const bool can_change = OwnsWindow(connection_, this) || is_root;
+  if (!can_change)
     return;
-
   if (bounds_ == bounds)
     return;
-
   if (connection_)
     static_cast<WindowTreeClientImpl*>(connection_)->SetBounds(id_, bounds);
   LocalSetBounds(bounds_, bounds);
 }
 
-void Window::SetClientArea(const gfx::Rect& client_area) {
+void Window::SetClientArea(const gfx::Insets& client_area) {
   if (!OwnsWindow(connection_, this) && !IsConnectionRoot(this))
     return;
 
@@ -365,12 +365,6 @@ void Window::SetPreferredSize(const gfx::Size& size) {
   if (connection_)
     static_cast<WindowTreeClientImpl*>(connection_)
         ->SetPreferredSize(id_, size);
-}
-
-void Window::RequestBoundsChange(const gfx::Rect& bounds) {
-  if (connection_)
-    static_cast<WindowTreeClientImpl*>(connection_)
-        ->RequestBoundsChange(id_, bounds);
 }
 
 void Window::SetShowState(mojom::ShowState show_state) {
@@ -537,15 +531,15 @@ bool Window::LocalReorder(Window* relative, mojom::OrderDirection direction) {
 
 void Window::LocalSetBounds(const gfx::Rect& old_bounds,
                             const gfx::Rect& new_bounds) {
-  DCHECK(old_bounds == bounds_);
+  // If this client owns the window, then it should be the only one to change
+  // the bounds.
+  DCHECK(!OwnsWindow(connection_, this) || old_bounds == bounds_);
   ScopedSetBoundsNotifier notifier(this, old_bounds, new_bounds);
-  if (bounds_.size() != new_bounds.size())
-    client_area_ = gfx::Rect(new_bounds.size());
   bounds_ = new_bounds;
 }
 
-void Window::LocalSetClientArea(const gfx::Rect& new_client_area) {
-  const gfx::Rect old_client_area = client_area_;
+void Window::LocalSetClientArea(const gfx::Insets& new_client_area) {
+  const gfx::Insets old_client_area = client_area_;
   client_area_ = new_client_area;
   FOR_EACH_OBSERVER(WindowObserver, observers_,
                     OnWindowClientAreaChanged(this, old_client_area));

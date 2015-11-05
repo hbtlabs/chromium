@@ -512,6 +512,7 @@ WebInspector.ResponsiveDesignView.prototype = {
             this._pageScaleContainer.style.top = cssCanvasOffset;
             this._mediaInspectorContainer.style.left = cssRulerWidth;
             this._mediaInspectorContainer.style.marginTop = cssRulerHeight;
+            this._warningInfobar.element.style.left = cssRulerWidth;
         }
 
         var cssWidth = (this._dipWidth ? this._dipWidth : availableDip.width) / zoomFactor;
@@ -532,7 +533,7 @@ WebInspector.ResponsiveDesignView.prototype = {
             this._inspectedPagePlaceholder.onResize();
         }
 
-        if (this._cachedCssPageWidth !== cssPageHeight || this._cachedCssPageHeight !== cssPageHeight) {
+        if (this._cachedCssPageWidth !== cssPageWidth || this._cachedCssPageHeight !== cssPageHeight) {
             this._pageContainerImage.style.width = cssPageWidth + "px";
             this._pageContainerImage.style.height = cssPageHeight + "px";
         }

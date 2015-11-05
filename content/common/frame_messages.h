@@ -15,6 +15,7 @@
 #include "content/common/navigation_gesture.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_request_body.h"
+#include "content/common/savable_subframe.h"
 #include "content/public/common/color_suggestion.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/console_message_level.h"
@@ -283,6 +284,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::CommonNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(base_url_for_data_url)
   IPC_STRUCT_TRAITS_MEMBER(history_url_for_data_url)
   IPC_STRUCT_TRAITS_MEMBER(lofi_state)
+  IPC_STRUCT_TRAITS_MEMBER(navigation_start)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
@@ -307,7 +309,6 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(is_overriding_user_agent)
-  IPC_STRUCT_TRAITS_MEMBER(browser_navigation_start)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
   IPC_STRUCT_TRAITS_MEMBER(can_load_local_resources)
   IPC_STRUCT_TRAITS_MEMBER(request_time)
@@ -413,6 +414,11 @@ IPC_STRUCT_BEGIN(FrameMsg_TextTrackSettings_Params)
   // Size of the text track text.
   IPC_STRUCT_MEMBER(std::string, text_track_text_size)
 IPC_STRUCT_END()
+
+IPC_STRUCT_TRAITS_BEGIN(content::SavableSubframe)
+  IPC_STRUCT_TRAITS_MEMBER(original_url)
+  IPC_STRUCT_TRAITS_MEMBER(routing_id)
+IPC_STRUCT_TRAITS_END()
 
 #if defined(OS_MACOSX) || defined(OS_ANDROID)
 // This message is used for supporting popup menus on Mac OS X and Android using
@@ -648,8 +654,9 @@ IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateName, std::string /* name */)
 // new origin.
 IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateOrigin, url::Origin /* origin */)
 
-// Notifies this frame that it lost focus to a frame in another process.
-IPC_MESSAGE_ROUTED0(FrameMsg_ClearFocus)
+// Notifies this frame or proxy that it is now focused.  This is used to
+// support cross-process focused frame changes.
+IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame);
 
 // Send to the RenderFrame to set text tracks state and style settings.
 // Sent for top-level frames.
@@ -784,6 +791,9 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DidStartLoading,
 
 // Sent when the renderer is done loading a page.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_DidStopLoading)
+
+// Notifies the browser that this frame has new session history information.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateState, content::PageState /* state */)
 
 // Sent when the frame changes its window.name.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_DidChangeName, std::string /* name */)
@@ -1202,9 +1212,9 @@ IPC_MESSAGE_ROUTED2(FrameHostMsg_DidRunInsecureContent,
 
 // Response to FrameMsg_GetSavableResourceLinks.
 IPC_MESSAGE_ROUTED3(FrameHostMsg_SavableResourceLinksResponse,
-                    GURL /* frame URL */,
                     std::vector<GURL> /* savable resource links */,
-                    content::Referrer /* referrer for all the links above */)
+                    content::Referrer /* referrer for all the links above */,
+                    std::vector<content::SavableSubframe> /* subframes */);
 
 // Response to FrameMsg_GetSavableResourceLinks in case the frame contains
 // non-savable content (i.e. from a non-savable scheme) or if there were
@@ -1212,8 +1222,7 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_SavableResourceLinksResponse,
 IPC_MESSAGE_ROUTED0(FrameHostMsg_SavableResourceLinksError)
 
 // Response to FrameMsg_GetSerializedHtmlWithLocalLinks.
-IPC_MESSAGE_ROUTED3(FrameHostMsg_SerializedHtmlWithLocalLinksResponse,
-                    GURL /* frame URL */,
+IPC_MESSAGE_ROUTED2(FrameHostMsg_SerializedHtmlWithLocalLinksResponse,
                     std::string /* data buffer */,
                     bool /* end of data? */)
 

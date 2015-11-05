@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
+#include "base/prefs/json_pref_store.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
@@ -26,25 +27,15 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/chrome_signin_client_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/glue/sync_backend_host.h"
 #include "chrome/browser/sync/glue/sync_backend_host_impl.h"
-#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
 #include "chrome/browser/sync/sync_type_preference_provider.h"
-#include "chrome/common/channel_info.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/history/core/browser/typed_url_data_type_controller.h"
 #include "components/invalidation/impl/invalidation_prefs.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
-#include "components/password_manager/core/browser/password_store.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -56,6 +47,7 @@
 #include "components/sync_driver/device_info.h"
 #include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
 #include "components/sync_driver/pref_names.h"
+#include "components/sync_driver/signin_manager_wrapper.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "components/sync_driver/sync_client.h"
 #include "components/sync_driver/sync_driver_switches.h"
@@ -65,11 +57,11 @@
 #include "components/sync_driver/system_encryptor.h"
 #include "components/sync_driver/user_selectable_sync_type.h"
 #include "components/sync_sessions/favicon_cache.h"
+#include "components/sync_sessions/session_data_type_controller.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
-#include "content/public/browser/browser_thread.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "sync/api/sync_error.h"
@@ -153,24 +145,6 @@ static const base::FilePath::CharType kSyncBackupDataFolderName[] =
 
 namespace {
 
-void ClearBrowsingData(BrowsingDataRemover::Observer* observer,
-                       Profile* profile,
-                       base::Time start,
-                       base::Time end) {
-  // BrowsingDataRemover deletes itself when it's done.
-  BrowsingDataRemover* remover = BrowsingDataRemover::CreateForRange(
-      profile, start, end);
-  if (observer)
-    remover->AddObserver(observer);
-  remover->Remove(BrowsingDataRemover::REMOVE_ALL,
-                  BrowsingDataHelper::ALL);
-
-  scoped_refptr<password_manager::PasswordStore> password =
-      PasswordStoreFactory::GetForProfile(profile,
-                                          ServiceAccessType::EXPLICIT_ACCESS);
-  password->RemoveLoginsSyncedBetween(start, end);
-}
-
 // Perform the actual sync data folder deletion.
 // This should only be called on the sync thread.
 void DeleteSyncDataFolder(const base::FilePath& directory_path) {
@@ -194,21 +168,32 @@ bool ShouldShowActionOnUI(
 
 ProfileSyncService::ProfileSyncService(
     scoped_ptr<sync_driver::SyncClient> sync_client,
-    Profile* profile,
     scoped_ptr<SigninManagerWrapper> signin_wrapper,
     ProfileOAuth2TokenService* oauth2_token_service,
     ProfileSyncServiceStartBehavior start_behavior,
-    const syncer::NetworkTimeUpdateCallback& network_time_update_callback)
+    const syncer::NetworkTimeUpdateCallback& network_time_update_callback,
+    base::FilePath base_directory,
+    scoped_refptr<net::URLRequestContextGetter> url_request_context,
+    std::string debug_identifier,
+    version_info::Channel channel,
+    scoped_refptr<base::SingleThreadTaskRunner> db_thread,
+    scoped_refptr<base::SingleThreadTaskRunner> file_thread,
+    base::SequencedWorkerPool* blocking_pool)
     : OAuth2TokenService::Consumer("sync"),
       last_auth_error_(AuthError::AuthErrorNone()),
       passphrase_required_reason_(syncer::REASON_PASSPHRASE_NOT_REQUIRED),
       sync_client_(sync_client.Pass()),
-      profile_(profile),
-      sync_prefs_(profile_->GetPrefs()),
+      sync_prefs_(sync_client_->GetPrefService()),
       sync_service_url_(
-          GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(),
-                            chrome::GetChannel())),
+          GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(), channel)),
       network_time_update_callback_(network_time_update_callback),
+      base_directory_(base_directory),
+      url_request_context_(url_request_context),
+      debug_identifier_(debug_identifier),
+      channel_(channel),
+      db_thread_(db_thread),
+      file_thread_(file_thread),
+      blocking_pool_(blocking_pool),
       is_first_time_sync_configure_(false),
       backend_initialized_(false),
       sync_disabled_by_admin_(false),
@@ -229,14 +214,12 @@ ProfileSyncService::ProfileSyncService(
       backend_mode_(IDLE),
       need_backup_(false),
       backup_finished_(false),
-      clear_browsing_data_(base::Bind(&ClearBrowsingData)),
-      browsing_data_remover_observer_(NULL),
       catch_up_configure_in_progress_(false),
       passphrase_prompt_triggered_by_version_(false),
       weak_factory_(this),
       startup_controller_weak_factory_(this) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(profile);
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(sync_client_);
   startup_controller_.reset(new browser_sync::StartupController(
       start_behavior,
       oauth2_token_service,
@@ -258,12 +241,10 @@ ProfileSyncService::ProfileSyncService(
       sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter());
   local_device_ = sync_client_->GetSyncApiComponentFactory()
                       ->CreateLocalDeviceInfoProvider();
-  sync_stopped_reporter_.reset(
-          new browser_sync::SyncStoppedReporter(
-              sync_service_url_,
-              local_device_->GetSyncUserAgent(),
-              profile_->GetRequestContext(),
-              browser_sync::SyncStoppedReporter::ResultCallback()));
+  sync_stopped_reporter_.reset(new browser_sync::SyncStoppedReporter(
+      sync_service_url_, local_device_->GetSyncUserAgent(),
+      url_request_context_,
+      browser_sync::SyncStoppedReporter::ResultCallback()));
   sessions_sync_manager_.reset(new SessionsSyncManager(
       sync_client_->GetSyncSessionsClient(), &sync_prefs_, local_device_.get(),
       router.Pass(),
@@ -381,7 +362,7 @@ void ProfileSyncService::TrySyncDatatypePrefRecovery() {
   // kSyncKeepEverythingSynced has a default value. If so, and sync setup has
   // completed, it means sync was not properly configured, so we manually
   // set kSyncKeepEverythingSynced.
-  PrefService* const pref_service = profile_->GetPrefs();
+  PrefService* const pref_service = sync_client_->GetPrefService();
   if (!pref_service)
     return;
   if (GetPreferredDataTypes().Size() > 1)
@@ -403,7 +384,7 @@ void ProfileSyncService::TrySyncDatatypePrefRecovery() {
 }
 
 void ProfileSyncService::StartSyncingWithServer() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSyncEnableClearDataOnPassphraseEncryption) &&
@@ -478,6 +459,18 @@ void ProfileSyncService::GetDataTypeControllerStates(
       (*state_map)[iter->first] = iter->second.get()->state();
 }
 
+void ProfileSyncService::OnSessionRestoreComplete() {
+  scoped_refptr<DataTypeController> session_data_type_controller =
+      data_type_controllers_[syncer::SESSIONS];
+
+  if (!session_data_type_controller)
+    return;
+
+  static_cast<browser_sync::SessionDataTypeController*>(
+      session_data_type_controller.get())
+      ->OnSessionRestoreComplete();
+}
+
 SyncCredentials ProfileSyncService::GetCredentials() {
   SyncCredentials credentials;
   if (backend_mode_ == SYNC) {
@@ -524,23 +517,17 @@ void ProfileSyncService::InitializeBackend(bool delete_stale_data) {
       http_post_provider_factory_getter =
           base::Bind(&syncer::NetworkResources::GetHttpPostProviderFactory,
                      base::Unretained(network_resources_.get()),
-                     make_scoped_refptr(profile_->GetRequestContext()),
+                     url_request_context_,
                      network_time_update_callback_);
 
   backend_->Initialize(
-      this, sync_thread_.Pass(),
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::DB),
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::FILE),
-      GetJsEventHandler(), sync_service_url_, local_device_->GetSyncUserAgent(),
-      credentials, delete_stale_data,
-      scoped_ptr<syncer::SyncManagerFactory>(
-          new syncer::SyncManagerFactory(GetManagerType()))
-          .Pass(),
+      this, sync_thread_.Pass(), db_thread_, file_thread_, GetJsEventHandler(),
+      sync_service_url_, local_device_->GetSyncUserAgent(), credentials,
+      delete_stale_data, scoped_ptr<syncer::SyncManagerFactory>(
+                             new syncer::SyncManagerFactory(GetManagerType()))
+                             .Pass(),
       MakeWeakHandle(weak_factory_.GetWeakPtr()),
-      base::Bind(browser_sync::ChromeReportUnrecoverableError,
-                 chrome::GetChannel()),
+      base::Bind(browser_sync::ChromeReportUnrecoverableError, channel_),
       http_post_provider_factory_getter, saved_nigori_state_.Pass());
 }
 
@@ -678,20 +665,14 @@ void ProfileSyncService::StartUpSlowBackendComponents(
       base::FilePath(kSyncDataFolderName) :
       base::FilePath(kSyncBackupDataFolderName);
 
-  invalidation::InvalidationService* invalidator = NULL;
-  if (backend_mode_ == SYNC) {
-    invalidation::ProfileInvalidationProvider* provider =
-        invalidation::ProfileInvalidationProviderFactory::GetForProfile(
-            profile_);
-    if (provider)
-      invalidator = provider->GetInvalidationService();
-  }
+  invalidation::InvalidationService* invalidator =
+      backend_mode_ == SYNC ? sync_client_->GetInvalidationService() : nullptr;
 
-  directory_path_ = profile_->GetPath().Append(sync_folder);
+  directory_path_ = base_directory_.Append(sync_folder);
 
   backend_.reset(
       sync_client_->GetSyncApiComponentFactory()->CreateSyncBackendHost(
-          profile_->GetDebugName(), sync_client_.get(), invalidator,
+          debug_identifier_, sync_client_.get(), invalidator,
           sync_prefs_.AsWeakPtr(), directory_path_));
 
   // Initialize the backend.  Every time we start up a new SyncBackendHost,
@@ -784,14 +765,8 @@ void ProfileSyncService::OnRefreshTokenAvailable(
 
 void ProfileSyncService::OnRefreshTokenRevoked(
     const std::string& account_id) {
-  if (!IsOAuthRefreshTokenAvailable()) {
+  if (account_id == signin_->GetAccountIdToUse()) {
     access_token_.clear();
-    // The additional check around IsOAuthRefreshTokenAvailable() above
-    // prevents us sounding the alarm if we actually have a valid token but
-    // a refresh attempt failed for any variety of reasons
-    // (e.g. flaky network). It's possible the token we do have is also
-    // invalid, but in that case we should already have (or can expect) an
-    // auth error sent from the sync backend.
     UpdateAuthErrorState(
         GoogleServiceAuthError(GoogleServiceAuthError::REQUEST_CANCELED));
   }
@@ -1122,15 +1097,14 @@ void ProfileSyncService::OnBackendInitialized(
   sync_js_controller_.AttachJsBackend(js_backend);
   debug_info_listener_ = debug_info_listener;
 
-  SigninClient* signin_client =
-      ChromeSigninClientFactory::GetForProfile(profile_);
+  SigninClient* signin_client = signin_->GetOriginal()->signin_client();
   DCHECK(signin_client);
   std::string signin_scoped_device_id =
       signin_client->GetSigninScopedDeviceId();
 
   // Initialize local device info.
   local_device_->Initialize(cache_guid, signin_scoped_device_id,
-                            content::BrowserThread::GetBlockingPool());
+                            blocking_pool_);
 
   if (backend_mode_ == BACKUP || backend_mode_ == ROLLBACK)
     ConfigureDataTypeManager();
@@ -1158,10 +1132,10 @@ void ProfileSyncService::OnExperimentsChanged(
 
   current_experiments_ = experiments;
 
-  profile()->GetPrefs()->SetBoolean(
+  sync_client_->GetPrefService()->SetBoolean(
       invalidation::prefs::kInvalidationServiceUseGCMChannel,
       experiments.gcm_invalidations_enabled);
-  profile()->GetPrefs()->SetBoolean(
+  sync_client_->GetPrefService()->SetBoolean(
       autofill::prefs::kAutofillWalletSyncExperimentEnabled,
       experiments.wallet_sync_enabled);
 }
@@ -1377,8 +1351,9 @@ void ProfileSyncService::OnActionableError(const SyncProtocolError& error) {
       // On desktop Chrome, sign out the user after a dashboard clear.
       // Skip sign out on ChromeOS/Android.
       if (!startup_controller_->auto_start_enabled()) {
-        SigninManagerFactory::GetForProfile(profile_)->SignOut(
-            signin_metrics::SERVER_FORCED_DISABLE);
+        SigninManager* signin_manager =
+            static_cast<SigninManager*>(signin_->GetOriginal());
+        signin_manager->SignOut(signin_metrics::SERVER_FORCED_DISABLE);
       }
 #endif
       break;
@@ -1414,7 +1389,7 @@ void ProfileSyncService::OnActionableError(const SyncProtocolError& error) {
 
 void ProfileSyncService::OnLocalSetPassphraseEncryption(
     const syncer::SyncEncryptionHandler::NigoriState& nigori_state) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSyncEnableClearDataOnPassphraseEncryption))
     return;
@@ -1440,7 +1415,7 @@ void ProfileSyncService::BeginConfigureCatchUpBeforeClear() {
 }
 
 void ProfileSyncService::ClearAndRestartSyncForPassphraseEncryption() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(thread_checker_.CalledOnValidThread());
   backend_->ClearServerData(base::Bind(
       &ProfileSyncService::OnClearServerDataDone, weak_factory_.GetWeakPtr()));
 }
@@ -1920,8 +1895,7 @@ void ProfileSyncService::ConfigureDataTypeManager() {
 
     // We create the migrator at the same time.
     migrator_.reset(new browser_sync::BackendMigrator(
-        profile_->GetDebugName(), GetUserShare(), this,
-        data_type_manager_.get(),
+        debug_identifier_, GetUserShare(), this, data_type_manager_.get(),
         base::Bind(&ProfileSyncService::StartSyncingWithServer,
                    base::Unretained(this))));
   }
@@ -2453,7 +2427,7 @@ SigninManagerBase* ProfileSyncService::signin() const {
 }
 
 void ProfileSyncService::RequestStart() {
-  DCHECK(profile_);
+  DCHECK(sync_client_);
   sync_prefs_.SetSyncRequested(true);
   DCHECK(!signin_.get() || signin_->GetOriginal()->IsAuthenticated());
   startup_controller_->TryStart();
@@ -2578,23 +2552,8 @@ void ProfileSyncService::ClearBrowsingDataSinceFirstSync() {
   if (first_sync_time.is_null())
     return;
 
-  clear_browsing_data_.Run(browsing_data_remover_observer_,
-                           profile_,
-                           first_sync_time,
-                           base::Time::Now());
-}
-
-void ProfileSyncService::SetBrowsingDataRemoverObserverForTesting(
-    BrowsingDataRemover::Observer* observer) {
-  browsing_data_remover_observer_ = observer;
-}
-
-void ProfileSyncService::SetClearingBrowseringDataForTesting(
-    base::Callback<void(BrowsingDataRemover::Observer* observer,
-                        Profile*,
-                        base::Time,
-                        base::Time)> c) {
-  clear_browsing_data_ = c;
+  sync_client_->GetClearBrowsingDataCallback().Run(first_sync_time,
+                                                   base::Time::Now());
 }
 
 void ProfileSyncService::CheckSyncBackupIfNeeded() {
@@ -2613,15 +2572,15 @@ void ProfileSyncService::CheckSyncBackupIfNeeded() {
       sync_thread_->task_runner()->PostTask(
           FROM_HERE,
           base::Bind(syncer::CheckSyncDbLastModifiedTime,
-                     profile_->GetPath().Append(kSyncBackupDataFolderName),
+                     base_directory_.Append(kSyncBackupDataFolderName),
                      base::ThreadTaskRunnerHandle::Get(),
                      base::Bind(&ProfileSyncService::CheckSyncBackupCallback,
                                 weak_factory_.GetWeakPtr())));
     } else {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::FILE, FROM_HERE,
+      file_thread_->PostTask(
+          FROM_HERE,
           base::Bind(syncer::CheckSyncDbLastModifiedTime,
-                     profile_->GetPath().Append(kSyncBackupDataFolderName),
+                     base_directory_.Append(kSyncBackupDataFolderName),
                      base::ThreadTaskRunnerHandle::Get(),
                      base::Bind(&ProfileSyncService::CheckSyncBackupCallback,
                                 weak_factory_.GetWeakPtr())));
@@ -2644,11 +2603,16 @@ void ProfileSyncService::TryStartSyncAfterBackup() {
 
 void ProfileSyncService::CleanUpBackup() {
   sync_prefs_.ClearFirstSyncTime();
-  profile_->GetIOTaskRunner()->PostTask(
+
+  // Use the client's base directory to get the blocking task runner to use in
+  // order to ensure ordering between the tasks posted by different invocations
+  // of this method.
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner =
+      JsonPrefStore::GetTaskRunnerForFile(base_directory_, blocking_pool_);
+  blocking_task_runner->PostTask(
       FROM_HERE,
       base::Bind(base::IgnoreResult(base::DeleteFile),
-                 profile_->GetPath().Append(kSyncBackupDataFolderName),
-                 true));
+                 base_directory_.Append(kSyncBackupDataFolderName), true));
 }
 
 bool ProfileSyncService::NeedBackup() const {

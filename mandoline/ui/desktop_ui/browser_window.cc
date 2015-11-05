@@ -22,8 +22,11 @@
 #include "mojo/services/tracing/public/cpp/switches.h"
 #include "mojo/services/tracing/public/interfaces/tracing.mojom.h"
 #include "ui/gfx/canvas.h"
+#include "ui/mojo/init/ui_init.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/mus/aura_init.h"
+#include "ui/views/mus/display_converter.h"
 #include "ui/views/mus/native_widget_view_manager.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -388,8 +391,10 @@ void BrowserWindow::OnHideFindBar() {
 
 void BrowserWindow::Init(mus::Window* root) {
   DCHECK_GT(root->viewport_metrics().device_pixel_ratio, 0);
-  if (!aura_init_)
-    aura_init_.reset(new views::AuraInit(app_, "mandoline_ui.pak", root));
+  if (!aura_init_) {
+    ui_init_.reset(new ui::mojo::UIInit(views::GetDisplaysFromWindow(root)));
+    aura_init_.reset(new views::AuraInit(app_, "mandoline_ui.pak"));
+  }
 
   root_ = root;
   omnibox_view_ = root_->connection()->NewWindow();

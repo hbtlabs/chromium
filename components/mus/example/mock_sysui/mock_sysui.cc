@@ -10,6 +10,7 @@
 #include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/converters/network/network_type_converters.h"
 #include "ui/gfx/canvas.h"
+#include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/window_manager_connection.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -29,7 +30,7 @@ class DesktopBackground : public views::WidgetDelegateView {
         mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
             ash::mojom::CONTAINER_USER_BACKGROUND);
     mus::Window* window =
-        views::WindowManagerConnection::Get()->CreateWindow(properties);
+        views::WindowManagerConnection::Get()->NewWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
         widget, shell, window, mus::mojom::SURFACE_TYPE_DEFAULT);
     widget->Init(params);
@@ -64,7 +65,7 @@ class Shelf : public views::WidgetDelegateView {
         mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
             ash::mojom::CONTAINER_USER_SHELF);
     mus::Window* window =
-        views::WindowManagerConnection::Get()->CreateWindow(properties);
+        views::WindowManagerConnection::Get()->NewWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
         widget, shell, window, mus::mojom::SURFACE_TYPE_DEFAULT);
     widget->Init(params);
@@ -95,6 +96,7 @@ MockSysUI::~MockSysUI() {
 }
 
 void MockSysUI::Initialize(mojo::ApplicationImpl* app) {
+  aura_init_.reset(new views::AuraInit(app, "views_mus_resources.pak"));
   mus::mojom::WindowManagerPtr window_manager;
   app->ConnectToService(mojo::URLRequest::From(std::string("mojo:example_wm")),
                         &window_manager);

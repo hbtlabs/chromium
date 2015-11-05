@@ -84,6 +84,8 @@
 #if defined(OS_ANDROID)
 #include <android/keycodes.h>
 #include "content/renderer/android/synchronous_compositor_factory.h"
+#include "content/renderer/android/synchronous_compositor_filter.h"
+#include "content/renderer/android/synchronous_compositor_output_surface.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -823,17 +825,17 @@ void RenderWidget::Resize(const gfx::Size& new_size,
     // send an ACK if we are resized to a non-empty rect.
     webwidget_->resize(new_widget_size);
   }
-  WebSize pinch_viewport_size;
+  WebSize visual_viewport_size;
 
   if (IsUseZoomForDSFEnabled()) {
     gfx::SizeF scaled_visible_viewport_size =
         gfx::ScaleSize(gfx::SizeF(visible_viewport_size), device_scale_factor_);
-    pinch_viewport_size = gfx::ToCeiledSize(scaled_visible_viewport_size);
+    visual_viewport_size = gfx::ToCeiledSize(scaled_visible_viewport_size);
   } else {
-    pinch_viewport_size = visible_viewport_size_;
+    visual_viewport_size = visible_viewport_size_;
   }
 
-  webwidget()->resizePinchViewport(pinch_viewport_size);
+  webwidget()->resizeVisualViewport(visual_viewport_size);
 
   if (new_size.IsEmpty() || physical_backing_size.IsEmpty()) {
     // In this case there is no paint/composite and therefore no
@@ -1032,6 +1034,12 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
       return factory->CreateOutputSurface(
           routing_id(), frame_swap_message_queue_, context_provider,
           worker_context_provider);
+    } else if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
+      return make_scoped_ptr(new SynchronousCompositorOutputSurface(
+          context_provider, worker_context_provider, routing_id(),
+          content::RenderThreadImpl::current()
+              ->sync_compositor_message_filter(),
+          frame_swap_message_queue_));
     }
 #endif
   }
@@ -2373,7 +2381,9 @@ RenderWidget::CreateGraphicsContext3D(bool compositor) {
   WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
 #if defined(OS_ANDROID)
   bool using_synchronous_compositing =
-      SynchronousCompositorFactory::GetInstance();
+      SynchronousCompositorFactory::GetInstance() ||
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kIPCSyncCompositing);
   // If we raster too fast we become upload bound, and pending
   // uploads consume memory. For maximum upload throughput, we would
   // want to allow for upload_throughput * pipeline_time of pending

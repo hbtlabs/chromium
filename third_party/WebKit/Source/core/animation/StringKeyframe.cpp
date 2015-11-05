@@ -6,7 +6,6 @@
 #include "core/animation/StringKeyframe.h"
 
 #include "core/XLinkNames.h"
-#include "core/animation/AngleSVGInterpolation.h"
 #include "core/animation/CSSColorInterpolationType.h"
 #include "core/animation/CSSImageInterpolationType.h"
 #include "core/animation/CSSImageListInterpolationType.h"
@@ -135,17 +134,17 @@ bool StringKeyframe::CSSPropertySpecificKeyframe::populateAnimatableValue(CSSPro
 namespace {
 
 // TODO(alancutter): Move this into its own file.
-const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandle property)
+const InterpolationTypes* applicableTypesForProperty(PropertyHandle property)
 {
     // TODO(alancutter): Initialise this entire HashMap once instead of initialising each property individually.
-    using ApplicableTypesMap = HashMap<PropertyHandle, const Vector<const InterpolationType*>*>;
+    using ApplicableTypesMap = HashMap<PropertyHandle, OwnPtr<const InterpolationTypes>>;
     DEFINE_STATIC_LOCAL(ApplicableTypesMap, applicableTypesMap, ());
     auto entry = applicableTypesMap.find(property);
     if (entry != applicableTypesMap.end())
-        return entry->value;
+        return entry->value.get();
 
     bool fallbackToLegacy = false;
-    auto applicableTypes = new Vector<const InterpolationType*>();
+    OwnPtr<InterpolationTypes> applicableTypes = adoptPtr(new InterpolationTypes());
 
     if (property.isCSSProperty()) {
         CSSPropertyID cssProperty = property.cssProperty();
@@ -201,7 +200,7 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
         case CSSPropertyWordSpacing:
         case CSSPropertyX:
         case CSSPropertyY:
-            applicableTypes->append(new CSSLengthInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSLengthInterpolationType(cssProperty)));
             break;
         case CSSPropertyFlexGrow:
         case CSSPropertyFlexShrink:
@@ -217,11 +216,11 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
         case CSSPropertyWebkitColumnCount:
         case CSSPropertyWidows:
         case CSSPropertyZIndex:
-            applicableTypes->append(new CSSNumberInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSNumberInterpolationType(cssProperty)));
             break;
         case CSSPropertyLineHeight:
-            applicableTypes->append(new CSSLengthInterpolationType(cssProperty));
-            applicableTypes->append(new CSSNumberInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSLengthInterpolationType(cssProperty)));
+            applicableTypes->append(adoptPtr(new CSSNumberInterpolationType(cssProperty)));
             break;
         case CSSPropertyBackgroundColor:
         case CSSPropertyBorderBottomColor:
@@ -236,24 +235,24 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
         case CSSPropertyTextDecorationColor:
         case CSSPropertyWebkitColumnRuleColor:
         case CSSPropertyWebkitTextStrokeColor:
-            applicableTypes->append(new CSSColorInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSColorInterpolationType(cssProperty)));
             break;
         case CSSPropertyFill:
         case CSSPropertyStroke:
-            applicableTypes->append(new CSSPaintInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSPaintInterpolationType(cssProperty)));
             break;
         case CSSPropertyBoxShadow:
         case CSSPropertyTextShadow:
-            applicableTypes->append(new CSSShadowListInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSShadowListInterpolationType(cssProperty)));
             break;
         case CSSPropertyBorderImageSource:
         case CSSPropertyListStyleImage:
         case CSSPropertyWebkitMaskBoxImageSource:
-            applicableTypes->append(new CSSImageInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSImageInterpolationType(cssProperty)));
             break;
         case CSSPropertyBackgroundImage:
         case CSSPropertyWebkitMaskImage:
-            applicableTypes->append(new CSSImageListInterpolationType(cssProperty));
+            applicableTypes->append(adoptPtr(new CSSImageListInterpolationType(cssProperty)));
             break;
         default:
             // TODO(alancutter): Support all interpolable CSS properties here so we can stop falling back to the old StyleInterpolation implementation.
@@ -261,10 +260,15 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
                 fallbackToLegacy = true;
             break;
         }
-        applicableTypes->append(new CSSValueInterpolationType(cssProperty));
+
+        if (!fallbackToLegacy)
+            applicableTypes->append(adoptPtr(new CSSValueInterpolationType(cssProperty)));
+
     } else {
         const QualifiedName& attribute = property.svgAttribute();
-        if (attribute == SVGNames::amplitudeAttr
+        if (attribute == SVGNames::orientAttr) {
+            applicableTypes->append(adoptPtr(new SVGAngleInterpolationType(attribute)));
+        } else if (attribute == SVGNames::amplitudeAttr
             || attribute == SVGNames::azimuthAttr
             || attribute == SVGNames::biasAttr
             || attribute == SVGNames::diffuseConstantAttr
@@ -289,7 +293,7 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
             || attribute == SVGNames::specularExponentAttr
             || attribute == SVGNames::surfaceScaleAttr
             || attribute == SVGNames::zAttr) {
-            applicableTypes->append(new SVGNumberInterpolationType(attribute));
+            applicableTypes->append(adoptPtr(new SVGNumberInterpolationType(attribute)));
         } else if (attribute == HTMLNames::classAttr
             || attribute == SVGNames::clipPathUnitsAttr
             || attribute == SVGNames::edgeModeAttr
@@ -319,25 +323,16 @@ const Vector<const InterpolationType*>* applicableTypesForProperty(PropertyHandl
             || attribute == SVGNames::yChannelSelectorAttr
             || attribute == XLinkNames::hrefAttr) {
             // Use default SVGValueInterpolationType.
-            applicableTypes->append(new SVGValueInterpolationType(attribute));
-        } else if (attribute == SVGNames::orientAttr) {
-            applicableTypes->append(new SVGAngleInterpolationType(attribute));
         } else {
             fallbackToLegacy = true;
         }
 
         if (!fallbackToLegacy)
-            applicableTypes->append(new SVGValueInterpolationType(attribute));
+            applicableTypes->append(adoptPtr(new SVGValueInterpolationType(attribute)));
     }
 
-    if (fallbackToLegacy) {
-        delete applicableTypes;
-        applicableTypesMap.add(property, nullptr);
-        return nullptr;
-    }
-
-    applicableTypesMap.add(property, applicableTypes);
-    return applicableTypes;
+    auto addResult = applicableTypesMap.add(property, fallbackToLegacy ? nullptr : applicableTypes.release());
+    return addResult.storedValue->value.get();
 }
 
 } // namespace
@@ -360,7 +355,7 @@ PassRefPtr<Interpolation> StringKeyframe::CSSPropertySpecificKeyframe::createLeg
 
 PassRefPtr<Interpolation> StringKeyframe::CSSPropertySpecificKeyframe::maybeCreateInterpolation(PropertyHandle propertyHandle, Keyframe::PropertySpecificKeyframe& end, Element* element, const ComputedStyle* baseStyle) const
 {
-    const Vector<const InterpolationType*>* applicableTypes = applicableTypesForProperty(propertyHandle);
+    const InterpolationTypes* applicableTypes = applicableTypesForProperty(propertyHandle);
     if (applicableTypes)
         return InvalidatableInterpolation::create(*applicableTypes, *this, end);
 
@@ -606,7 +601,7 @@ PassRefPtr<Interpolation> createSVGInterpolation(SVGPropertyBase* fromValue, SVG
 
 PassRefPtr<Interpolation> SVGPropertySpecificKeyframe::maybeCreateInterpolation(PropertyHandle propertyHandle, Keyframe::PropertySpecificKeyframe& end, Element* element, const ComputedStyle* baseStyle) const
 {
-    const Vector<const InterpolationType*>* applicableTypes = applicableTypesForProperty(propertyHandle);
+    const InterpolationTypes* applicableTypes = applicableTypesForProperty(propertyHandle);
     if (applicableTypes)
         return InvalidatableInterpolation::create(*applicableTypes, *this, end);
 

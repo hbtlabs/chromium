@@ -182,8 +182,11 @@
         'browser/browser_state_metrics/browser_state_metrics.cc',
         'browser/browser_state_metrics/browser_state_metrics.h',
         'browser/browsing_data_change_listening.h',
+        'browser/chrome_constants.cc',
+        'browser/chrome_constants.h',
         'browser/chrome_paths.h',
         'browser/chrome_paths.mm',
+        'browser/chrome_paths_internal.h',
         'browser/chrome_switches.cc',
         'browser/chrome_switches.h',
         'browser/chrome_url_constants.cc',
@@ -295,6 +298,8 @@
         'browser/install_time_util.mm',
         'browser/installation_notifier.h',
         'browser/installation_notifier.mm',
+        'browser/ios_chrome_field_trials.cc',
+        'browser/ios_chrome_field_trials.h',
         'browser/memory/memory_debugger.h',
         'browser/memory/memory_debugger.mm',
         'browser/memory/memory_debugger_manager.h',
@@ -562,9 +567,9 @@
         '../..',
       ],
       'dependencies': [
-        'app_group_mainapp',
         '../../base/base.gyp:base',
         '../../components/components.gyp:version_info',
+        'app_group_mainapp',
       ],
       'link_settings': {
         'libraries': [
@@ -577,7 +582,7 @@
         'common/channel_info.mm',
         'common/string_util.h',
         'common/string_util.mm',
-      ]
+      ],
     },
     {
       'target_name': 'injected_js',
@@ -585,9 +590,7 @@
       'sources': [
         'browser/find_in_page/resources/find_in_page.js',
       ],
-      'includes': [
-        '../../ios/web/js_compile.gypi',
-      ],
+      'includes': [ '../../ios/web/js_compile.gypi' ],
       'link_settings': {
         'mac_bundle_resources': [
           '<(SHARED_INTERMEDIATE_DIR)/find_in_page.js',

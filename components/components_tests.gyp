@@ -578,7 +578,7 @@
     ],
     'safe_browsing_db_unittest_sources': [
       'safe_browsing_db/prefix_set_unittest.cc',
-      'safe_browsing_db/safe_browsing_db_util_unittest.cc',
+      'safe_browsing_db/util_unittest.cc',
     ],
     'safe_json_unittest_sources': [
       'safe_json/json_sanitizer_unittest.cc',
@@ -607,7 +607,7 @@
       'scheduler/renderer/render_widget_signals_unittest.cpp',
       'scheduler/renderer/task_cost_estimator_unittest.cc',
       'scheduler/renderer/user_model_unittest.cc',
-      'scheduler/renderer/web_frame_host_scheduler_impl_unittest.cc',
+      'scheduler/renderer/web_view_scheduler_impl_unittest.cc',
       'scheduler/renderer/webthread_impl_for_renderer_scheduler_unittest.cc',
     ],
     'search_unittest_sources': [
@@ -702,6 +702,7 @@
       'sync_sessions/revisit/page_revisit_broadcaster_unittest.cc',
       'sync_sessions/revisit/sessions_page_revisit_observer_unittest.cc',
       'sync_sessions/revisit/typed_url_page_revisit_task_unittest.cc',
+      'sync_sessions/session_data_type_controller_unittest.cc',
       'sync_sessions/synced_session_tracker_unittest.cc',
     ],
     'syncable_prefs_unittest_sources': [

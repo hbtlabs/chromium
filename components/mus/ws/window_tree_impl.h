@@ -19,6 +19,7 @@
 #include "components/mus/ws/ids.h"
 
 namespace gfx {
+class Insets;
 class Rect;
 }
 
@@ -66,7 +67,7 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
 
   bool is_embed_root() const { return is_embed_root_; }
 
-  WindowTreeHostImpl* GetHost();
+  WindowTreeHostImpl* GetHost() const;
 
   // Invoked when a connection is about to be destroyed.
   void OnWillDestroyWindowTreeImpl(WindowTreeImpl* connection);
@@ -91,8 +92,8 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                                   const gfx::Rect& new_bounds,
                                   bool originated_change);
   void ProcessClientAreaChanged(const ServerWindow* window,
-                                const gfx::Rect& old_client_area,
-                                const gfx::Rect& new_client_area,
+                                const gfx::Insets& old_client_area,
+                                const gfx::Insets& new_client_area,
                                 bool originated_change);
   void ProcessViewportMetricsChanged(const mojom::ViewportMetrics& old_metrics,
                                      const mojom::ViewportMetrics& new_metrics,
@@ -122,6 +123,8 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
  private:
   using WindowIdSet = base::hash_set<Id>;
   using WindowMap = std::map<ConnectionSpecificId, ServerWindow*>;
+
+  bool ShouldRouteToWindowManager(const ServerWindow* window) const;
 
   bool IsWindowKnown(const ServerWindow* window) const;
 
@@ -218,17 +221,13 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void SetClientArea(Id transport_window_id, mojo::RectPtr rect) override;
+  void SetClientArea(Id transport_window_id, mojo::InsetsPtr insets) override;
   void SetPreferredSize(uint32_t window_id,
                         mojo::SizePtr size,
                         const SetPreferredSizeCallback& callback) override;
-  void SetBounds(uint32_t window_id,
-                 mojo::RectPtr bounds,
-                 const SetBoundsCallback& callback) override;
   void SetShowState(uint32_t window_id,
                     mus::mojom::ShowState show_state,
                     const SetShowStateCallback& callback) override;
-  void GetDisplays(const GetDisplaysCallback& callback) override;
 
   // AccessPolicyDelegate:
   bool IsRootForAccessPolicy(const WindowId& id) const override;

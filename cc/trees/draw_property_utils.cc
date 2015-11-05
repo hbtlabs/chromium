@@ -433,6 +433,12 @@ void FindLayersThatNeedUpdates(
 
 }  // namespace
 
+static void ResetIfHasNanCoordinate(gfx::RectF* rect) {
+  if (std::isnan(rect->x()) || std::isnan(rect->y()) ||
+      std::isnan(rect->right()) || std::isnan(rect->bottom()))
+    *rect = gfx::RectF();
+}
+
 void ComputeClips(ClipTree* clip_tree,
                   const TransformTree& transform_tree,
                   bool non_root_surfaces_enabled) {
@@ -442,8 +448,9 @@ void ComputeClips(ClipTree* clip_tree,
     ClipNode* clip_node = clip_tree->Node(i);
 
     if (clip_node->id == 1) {
-      clip_node->data.combined_clip_in_target_space = clip_node->data.clip;
+      ResetIfHasNanCoordinate(&clip_node->data.clip);
       clip_node->data.clip_in_target_space = clip_node->data.clip;
+      clip_node->data.combined_clip_in_target_space = clip_node->data.clip;
       continue;
     }
     const TransformNode* transform_node =
@@ -496,6 +503,7 @@ void ComputeClips(ClipTree* clip_tree,
       if (clip_node->data.applies_local_clip) {
         clip_node->data.clip_in_target_space = MathUtil::MapClippedRect(
             transform_node->data.to_target, clip_node->data.clip);
+        ResetIfHasNanCoordinate(&clip_node->data.clip_in_target_space);
         clip_node->data.combined_clip_in_target_space =
             gfx::IntersectRects(clip_node->data.clip_in_target_space,
                                 parent_combined_clip_in_target_space);
@@ -505,6 +513,7 @@ void ComputeClips(ClipTree* clip_tree,
         clip_node->data.combined_clip_in_target_space =
             parent_combined_clip_in_target_space;
       }
+      ResetIfHasNanCoordinate(&clip_node->data.combined_clip_in_target_space);
       continue;
     }
 
@@ -563,6 +572,8 @@ void ComputeClips(ClipTree* clip_tree,
       clip_node->data.combined_clip_in_target_space = gfx::IntersectRects(
           parent_combined_clip_in_target_space, source_clip_in_target_space);
     }
+    ResetIfHasNanCoordinate(&clip_node->data.clip_in_target_space);
+    ResetIfHasNanCoordinate(&clip_node->data.combined_clip_in_target_space);
   }
   clip_tree->set_needs_update(false);
 }
@@ -588,7 +599,8 @@ void ComputeVisibleRectsUsingPropertyTreesInternal(
     LayerType* root_layer,
     PropertyTrees* property_trees,
     bool can_render_to_separate_surface,
-    typename LayerType::LayerListType* update_layer_list) {
+    typename LayerType::LayerListType* update_layer_list,
+    std::vector<LayerType*>* visible_layer_list) {
   if (property_trees->non_root_surfaces_enabled !=
       can_render_to_separate_surface) {
     property_trees->non_root_surfaces_enabled = can_render_to_separate_surface;
@@ -602,12 +614,11 @@ void ComputeVisibleRectsUsingPropertyTreesInternal(
   ComputeOpacities(&property_trees->effect_tree);
 
   const bool subtree_is_visible_from_ancestor = true;
-  std::vector<LayerType*> visible_layer_list;
   FindLayersThatNeedUpdates(root_layer, property_trees->transform_tree,
                             subtree_is_visible_from_ancestor, update_layer_list,
-                            &visible_layer_list);
+                            visible_layer_list);
   CalculateVisibleRects<LayerType>(
-      visible_layer_list, property_trees->clip_tree,
+      *visible_layer_list, property_trees->clip_tree,
       property_trees->transform_tree, can_render_to_separate_surface);
 }
 
@@ -643,32 +654,34 @@ void BuildPropertyTreesAndComputeVisibleRects(
     const gfx::Transform& device_transform,
     bool can_render_to_separate_surface,
     PropertyTrees* property_trees,
-    LayerImplList* update_layer_list) {
+    LayerImplList* visible_layer_list) {
   PropertyTreeBuilder::BuildPropertyTrees(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, page_scale_factor, device_scale_factor,
       viewport, device_transform, property_trees);
   ComputeVisibleRectsUsingPropertyTrees(root_layer, property_trees,
                                         can_render_to_separate_surface,
-                                        update_layer_list);
+                                        visible_layer_list);
 }
 
 void ComputeVisibleRectsUsingPropertyTrees(Layer* root_layer,
                                            PropertyTrees* property_trees,
                                            bool can_render_to_separate_surface,
                                            LayerList* update_layer_list) {
-  ComputeVisibleRectsUsingPropertyTreesInternal(root_layer, property_trees,
-                                                can_render_to_separate_surface,
-                                                update_layer_list);
+  std::vector<Layer*> visible_layer_list;
+  ComputeVisibleRectsUsingPropertyTreesInternal(
+      root_layer, property_trees, can_render_to_separate_surface,
+      update_layer_list, &visible_layer_list);
 }
 
 void ComputeVisibleRectsUsingPropertyTrees(LayerImpl* root_layer,
                                            PropertyTrees* property_trees,
                                            bool can_render_to_separate_surface,
-                                           LayerImplList* update_layer_list) {
-  ComputeVisibleRectsUsingPropertyTreesInternal(root_layer, property_trees,
-                                                can_render_to_separate_surface,
-                                                update_layer_list);
+                                           LayerImplList* visible_layer_list) {
+  LayerImplList update_layer_list;
+  ComputeVisibleRectsUsingPropertyTreesInternal(
+      root_layer, property_trees, can_render_to_separate_surface,
+      &update_layer_list, visible_layer_list);
 }
 
 template <typename LayerType>

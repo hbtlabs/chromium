@@ -43,9 +43,9 @@ namespace {
 // Size of client edge drawn inside the outer frame borders.
 const int kNonClientBorderThicknessPreWin10 = 3;
 const int kNonClientBorderThicknessWin10 = 1;
-// Besides the frame border, there's another 9 px of empty space atop the
-// window in restored mode, to use to drag the window around.
-const int kNonClientRestoredExtraThickness = 9;
+// Besides the frame border, there's empty space atop the window in restored
+// mode, to use to drag the window around.
+const int kNonClientRestoredExtraThickness = 11;
 // In the window corners, the resize areas don't actually expand bigger, but the
 // 16 px at the end of the top and bottom edges triggers diagonal resizing.
 const int kResizeCornerWidth = 16;
@@ -328,13 +328,18 @@ int GlassBrowserFrameView::NonClientTopBorderHeight() const {
   if (frame()->IsFullscreen())
     return 0;
 
+  const int top = FrameTopBorderHeight();
   // The tab top inset is equal to the height of any shadow region above the
   // tabs, plus a 1 px top stroke.  In maximized mode, we want to push the
-  // shadow region off the top of the screen.
-  const int tab_shadow_height = GetLayoutInsets(TAB).top() - 1;
-  return FrameTopBorderHeight() +
-      (frame()->IsMaximized() ?
-          -tab_shadow_height : kNonClientRestoredExtraThickness);
+  // shadow region off the top of the screen but leave the top stroke.
+  // Annoyingly, the pre-MD layout uses different heights for the hit-test
+  // exclusion region (which we want here, since we're trying to size the border
+  // so that the region above the tab's hit-test zone matches) versus the shadow
+  // thickness.
+  const int exclusion = GetLayoutConstant(TAB_TOP_EXCLUSION_HEIGHT);
+  return frame()->IsMaximized() ?
+      (top - GetLayoutInsets(TAB).top() + 1) :
+      (top + kNonClientRestoredExtraThickness - exclusion);
 }
 
 void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) {
@@ -347,65 +352,63 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) {
   int x = toolbar_bounds.x();
   int w = toolbar_bounds.width();
 
-  gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
-  gfx::ImageSkia* toolbar_center = tp->GetImageSkiaNamed(
-      IDR_CONTENT_TOP_CENTER);
-
+  // Toolbar background.
+  int y = toolbar_bounds.y();
   // Tile the toolbar image starting at the frame edge on the left and where
   // the tabstrip is on the top.
-  int y = toolbar_bounds.y();
-  int dest_y = browser_view()->IsTabStripVisible()
-                   ? y + (kFrameShadowThickness * 2)
-                   : y;
-  canvas->TileImageInt(*theme_toolbar,
-                       x + GetThemeBackgroundXInset(),
-                       dest_y - GetTopInset(), x,
-                       dest_y, w, theme_toolbar->height());
+  gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
+  int dest_y = y;
+  // In the pre-MD world, the toolbar top edge is drawn using the
+  // IDR_CONTENT_TOP_XXX images, which overlay the toolbar.  The top 2 px of
+  // these images is the actual top edge, and is partly transparent, so the
+  // toolbar background shouldn't be drawn over it.
+  const int kPreMDToolbarTopEdgeExclusion = 2;
+  if (browser_view()->IsTabStripVisible())
+    dest_y += kPreMDToolbarTopEdgeExclusion;
+  canvas->TileImageInt(*theme_toolbar, x + GetThemeBackgroundXInset(),
+                       dest_y - GetTopInset(), x, dest_y, w,
+                       theme_toolbar->height());
 
+  // Toolbar edges.
   if (browser_view()->IsTabStripVisible()) {
+    // Pre-Windows 10, we draw toolbar left and right edges and top corners,
+    // partly atop the window border.  In Windows 10+, we don't draw our own
+    // window border but rather go right to the system border, so we need only
+    // draw the toolbar top edge.
+    int center_x = x;
+    int center_w = w;
     if (base::win::GetVersion() < base::win::VERSION_WIN10) {
-      int left_x = x - kContentEdgeShadowThickness;
-      // Draw rounded corners for the tab.
-      gfx::ImageSkia* toolbar_left_mask =
-          tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER_MASK);
-      gfx::ImageSkia* toolbar_right_mask =
-          tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER_MASK);
-
-      // We mask out the corners by using the DestinationIn transfer mode,
-      // which keeps the RGB pixels from the destination and the alpha from
-      // the source.
+      // Mask out the top left corner and draw left corner and edge.
+      const int left_x = center_x - kContentEdgeShadowThickness;
       SkPaint paint;
       paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-
-      // Mask out the top left corner.
-      canvas->DrawImageInt(*toolbar_left_mask, left_x, y, paint);
-
-      // Mask out the top right corner.
-      int right_x =
-          x + w + kContentEdgeShadowThickness - toolbar_right_mask->width();
-      canvas->DrawImageInt(*toolbar_right_mask, right_x, y, paint);
-
-      // Draw left edge.
+      canvas->DrawImageInt(
+          *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER_MASK), left_x, y,
+          paint);
       gfx::ImageSkia* toolbar_left =
           tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER);
       canvas->DrawImageInt(*toolbar_left, left_x, y);
+      center_x = left_x + toolbar_left->width();
 
-      // Draw center edge.
-      canvas->TileImageInt(*toolbar_center, left_x + toolbar_left->width(), y,
-                           right_x - (left_x + toolbar_left->width()),
-                           toolbar_center->height());
-
-      // Right edge.
+      // Mask out the top right corner and draw right corner and edge.
+      gfx::ImageSkia* toolbar_right_mask =
+          tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER_MASK);
+      const int right_x = toolbar_bounds.right() +
+          kContentEdgeShadowThickness - toolbar_right_mask->width();
+      canvas->DrawImageInt(*toolbar_right_mask, right_x, y, paint);
       canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER),
                            right_x, y);
-    } else {
-      // On Windows 10, we don't draw our own window border but rather go right
-      // to the system border, so we don't need to draw the toolbar edges.
-      canvas->TileImageInt(*toolbar_center, x, y, w, toolbar_center->height());
+      center_w = right_x - center_x;
     }
+
+    // Top edge.
+    gfx::ImageSkia* toolbar_center =
+        tp->GetImageSkiaNamed(IDR_CONTENT_TOP_CENTER);
+    canvas->TileImageInt(*toolbar_center, center_x, y, center_w,
+                         toolbar_center->height());
   }
 
-  // Draw the content/toolbar separator.
+  // Toolbar/content separator.
   if (ui::MaterialDesignController::IsModeMaterial()) {
     toolbar_bounds.Inset(kClientEdgeThickness, 0);
     BrowserView::Paint1pxHorizontalLine(
@@ -417,8 +420,7 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) {
     canvas->FillRect(
         gfx::Rect(x + kClientEdgeThickness,
                   toolbar_bounds.bottom() - kClientEdgeThickness,
-                  w - (2 * kClientEdgeThickness),
-                  kClientEdgeThickness),
+                  w - (2 * kClientEdgeThickness), kClientEdgeThickness),
         ThemeProperties::GetDefaultColor(
             ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
   }

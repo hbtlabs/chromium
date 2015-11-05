@@ -840,8 +840,9 @@ WebUI* WebContentsImpl::CreateSubframeWebUI(const GURL& url,
 }
 
 WebUI* WebContentsImpl::GetWebUI() const {
-  return GetRenderManager()->web_ui() ? GetRenderManager()->web_ui()
-      : GetRenderManager()->pending_web_ui();
+  return GetRenderManager()->web_ui()
+             ? GetRenderManager()->web_ui()
+             : GetRenderManager()->GetNavigatingWebUI();
 }
 
 WebUI* WebContentsImpl::GetCommittedWebUI() const {
@@ -912,8 +913,9 @@ const base::string16& WebContentsImpl::GetTitle() const {
   if (entry) {
     return entry->GetTitleForDisplay(accept_languages);
   }
-  WebUI* our_web_ui = GetRenderManager()->pending_web_ui() ?
-      GetRenderManager()->pending_web_ui() : GetRenderManager()->web_ui();
+  WebUI* our_web_ui = GetRenderManager()->GetNavigatingWebUI()
+                          ? GetRenderManager()->GetNavigatingWebUI()
+                          : GetRenderManager()->web_ui();
   if (our_web_ui) {
     // Don't override the title in view source mode.
     entry = controller_.GetVisibleEntry();
@@ -3779,18 +3781,6 @@ void WebContentsImpl::RenderViewCreated(RenderViewHost* render_view_host) {
       Source<WebContents>(this),
       Details<RenderViewHost>(render_view_host));
 
-  // When we're creating views, we're still doing initial setup, so we always
-  // use the pending Web UI rather than any possibly existing committed one.
-  if (GetRenderManager()->pending_web_ui())
-    GetRenderManager()->pending_web_ui()->RenderViewCreated(render_view_host);
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation) &&
-      GetRenderManager()->speculative_web_ui()) {
-    GetRenderManager()->speculative_web_ui()->RenderViewCreated(
-        render_view_host);
-  }
-
   NavigationEntry* entry = controller_.GetPendingEntry();
   if (entry && entry->IsViewSourceMode()) {
     // Put the renderer in view source mode.
@@ -3872,6 +3862,8 @@ void WebContentsImpl::RenderViewDeleted(RenderViewHost* rvh) {
 void WebContentsImpl::UpdateState(RenderViewHost* rvh,
                                   int32 page_id,
                                   const PageState& page_state) {
+  DCHECK(!SiteIsolationPolicy::UseSubframeNavigationEntries());
+
   // Ensure that this state update comes from a RenderViewHost that belongs to
   // this WebContents.
   // TODO(nasko): This should go through RenderFrameHost.
@@ -3890,16 +3882,9 @@ void WebContentsImpl::UpdateState(RenderViewHost* rvh,
     return;
 
   NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
-      rvhi->nav_entry_id());
+      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame())->nav_entry_id());
 
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // TODO(creis): We can't properly update state for cross-process subframes
-    // until PageState is decomposed into FrameStates. Until then, use the new
-    // method.
-    entry = new_entry;
-  } else {
-    DCHECK_EQ(entry, new_entry);
-  }
+  DCHECK_EQ(entry, new_entry);
 
   if (page_state == entry->GetPageState())
     return;  // Nothing to update.
@@ -4061,6 +4046,34 @@ void WebContentsImpl::DocumentOnLoadCompleted(
       NotificationService::NoDetails());
 }
 
+void WebContentsImpl::UpdateStateForFrame(RenderFrameHost* render_frame_host,
+                                          const PageState& page_state) {
+  DCHECK(SiteIsolationPolicy::UseSubframeNavigationEntries());
+
+  // The state update affects the last NavigationEntry associated with the given
+  // |render_frame_host|. This may not be the last committed NavigationEntry (as
+  // in the case of an UpdateState from a frame being swapped out). We track
+  // which entry this is in the RenderFrameHost's nav_entry_id.
+  RenderFrameHostImpl* rfhi =
+      static_cast<RenderFrameHostImpl*>(render_frame_host);
+  NavigationEntryImpl* entry =
+      controller_.GetEntryWithUniqueID(rfhi->nav_entry_id());
+  if (!entry)
+    return;
+
+  FrameNavigationEntry* frame_entry =
+      entry->GetFrameEntry(rfhi->frame_tree_node());
+  if (!frame_entry)
+    return;
+
+  CHECK_EQ(frame_entry->site_instance(), rfhi->GetSiteInstance());
+  if (page_state == frame_entry->page_state())
+    return;  // Nothing to update.
+
+  frame_entry->set_page_state(page_state);
+  controller_.NotifyEntryChanged(entry);
+}
+
 void WebContentsImpl::UpdateTitle(RenderFrameHost* render_frame_host,
                                   int32 page_id,
                                   const base::string16& title,
@@ -4074,10 +4087,8 @@ void WebContentsImpl::UpdateTitle(RenderFrameHost* render_frame_host,
   NavigationEntryImpl* entry = controller_.GetEntryWithPageID(
       render_frame_host->GetSiteInstance(), page_id);
 
-  RenderViewHostImpl* rvhi =
-      static_cast<RenderViewHostImpl*>(render_frame_host->GetRenderViewHost());
   NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
-      rvhi->nav_entry_id());
+      static_cast<RenderFrameHostImpl*>(render_frame_host)->nav_entry_id());
   DCHECK_EQ(entry, new_entry);
 
   // We can handle title updates when we don't have an entry in
@@ -4178,7 +4189,7 @@ int WebContentsImpl::CreateSwappedOutRenderView(
     GetRenderManager()->CreateRenderFrameProxy(instance);
   } else {
     GetRenderManager()->CreateRenderFrame(
-        instance, nullptr, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
+        instance, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
         &render_view_routing_id);
   }
   return render_view_routing_id;
@@ -4345,7 +4356,7 @@ NavigationControllerImpl& WebContentsImpl::GetControllerForRenderManager() {
   return GetController();
 }
 
-scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderManager(
+scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderFrameHost(
     const GURL& url) {
   return scoped_ptr<WebUIImpl>(static_cast<WebUIImpl*>(CreateWebUI(
       url, std::string())));

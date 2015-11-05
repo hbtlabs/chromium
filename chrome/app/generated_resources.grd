@@ -5591,6 +5591,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_ENABLE_PANELS_DESCRIPTION" desc="Description for the flag to enable Panel windows.">
         Enable Panel windows that open outside of the browser frame. Attempts to open a Panel will open a popup instead if not enabled. Panels are always enabled on the dev and canary channels.
       </message>
+      <message name="IDS_FLAGS_ENABLE_WEAVE_PAIRING_NAME" desc="Title for the flag to turn on Weave pairing">
+        Enable Weave pairing
+      </message>
+      <message name="IDS_FLAGS_ENABLE_WEAVE_PAIRING_DESCRIPTION" desc="Description for the flag to turn on Weave pairing">
+        Weave pairing is used by Weave App for secure communication with devices on local network.
+      </message>
       <message name="IDS_FLAGS_ENABLE_WEBGL_DRAFT_EXTENSIONS_NAME" desc="Name of the 'Enable WebGL Draft Extensions' flag.">
         Enable WebGL Draft Extensions
       </message>
@@ -6027,11 +6033,8 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_PASSWORD_MANAGER_LINK_DESCRIPTION" desc="Description of the flag to enable showing a link to account central on password settings page">
         Show a link in the password manager settings page to manage your synced passwords online.
       </message>
-      <message name="IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE_SMART_LOCK" desc="The title of the account chooser infobar for Smart Lock users.">
-        Choose an account from your <ph name="LINK_TEXT">$1<ex>Google Smart Lock</ex></ph>
-      </message>
-      <message name="IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE" desc="The title of the password bubble when a credential should be chosen.">
-        Choose an account to login
+      <message name="IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE" desc="The title of the account chooser bubble/infobar.">
+        Choose your account from <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to sign in
       </message>
       <message name="IDS_PASSWORD_MANAGER_SAVE_PROMPT_FIRST_RUN_EXPERIENCE" desc="The message which explains to the user what is Smart Lock, when the user sees the branded title of the Save prompt for the first time.">
         Smart Lock helps you quickly sign in to apps and sites using passwords you have saved with Google.
@@ -7710,6 +7713,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_DEL_PASSWORDS_COUNTER" desc="A counter showing how many passwords the user has.">
         {COUNT, plural,
          =0 {none}
+         =1 {1}
          other {#}}
       </message>
 
@@ -12816,6 +12820,12 @@ Some features may be unavailable.  Please check that the profile exists and you 
         <message name="IDS_SHOW_DOWNLOADS_MAC" desc="The Mac menu item to show downloads in the window menu.">
           Downloads
         </message>
+        <message name="IDS_WINDOW_AUDIO_PLAYING_MAC" desc="The emoji to append to the title of a window showing audio is playing.">
+          <ph name="TAB_TITLE">$1<ex>The Title of the Tab</ex></ph> (audio)
+        </message>
+        <message name="IDS_WINDOW_AUDIO_MUTING_MAC" desc="The emoji to append to the title of a window showing audio is muting.">
+          <ph name="TAB_TITLE">$1<ex>The Title of the Tab</ex></ph> (muted)
+        </message>
         <message name="IDS_SHOW_EXTENSIONS_MAC" desc="The Mac menu item to show extensions in the window menu.">
           Extensions
         </message>
@@ -13132,9 +13142,6 @@ Some features may be unavailable.  Please check that the profile exists and you 
       </message>
       <message name="IDS_MANAGE_PASSWORDS_UNDO" desc="The text that is used in the manage passwords bubble when a password is deleted.">
         Undo
-      </message>
-      <message name="IDS_MANAGE_PASSWORDS_CHOOSE_TITLE" desc="The title of the password bubble when a credential should be chosen.">
-        Choose an account from your Google Smart Lock
       </message>
       <message name="IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE" desc="The title of the auto-signin toast.">
         Signing in as <ph name="username">$1<ex>chef@google.com</ex></ph>

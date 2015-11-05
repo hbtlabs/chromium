@@ -63,6 +63,7 @@ class Node;
 class Page;
 class PopupOpeningObserver;
 class WebCompositorAnimationTimeline;
+class WebFrameScheduler;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
@@ -98,7 +99,7 @@ public:
     // created Page has its show method called.
     // The FrameLoadRequest parameter is only for ChromeClient to check if the
     // request could be fulfilled. The ChromeClient should not load the request.
-    virtual Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSendReferrer) = 0;
+    virtual Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSetOpener) = 0;
     virtual void show(NavigationPolicy = NavigationPolicyIgnore) = 0;
 
     void setWindowFeatures(const WindowFeatures&);
@@ -252,6 +253,8 @@ public:
     // method is initiated from javascript. At this time, it is not guaranteed
     // that this is comprehensive.
     virtual void didObserveNonGetFetchFromScript() const {}
+
+    virtual PassOwnPtr<WebFrameScheduler> createFrameScheduler() = 0;
 
 protected:
     ~ChromeClient() override { }

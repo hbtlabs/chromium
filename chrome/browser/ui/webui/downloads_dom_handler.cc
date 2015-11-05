@@ -38,7 +38,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/downloads_util.h"
 #include "chrome/browser/ui/webui/fileicon_source.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -113,16 +112,6 @@ const char* GetDangerTypeString(content::DownloadDangerType danger_type) {
   }
 }
 
-// TODO(dbeam): if useful elsewhere, move to base/i18n/time_formatting.h?
-base::string16 TimeFormatLongDate(const base::Time& time) {
-  scoped_ptr<icu::DateFormat> formatter(
-      icu::DateFormat::createDateInstance(icu::DateFormat::kLong));
-  icu::UnicodeString date_string;
-  formatter->format(static_cast<UDate>(time.ToDoubleT() * 1000), date_string);
-  return base::string16(date_string.getBuffer(),
-                        static_cast<size_t>(date_string.length()));
-}
-
 // Returns a JSON dictionary containing some of the attributes of |download|.
 // The JSON dictionary will also have a field "id" set to |id|, and a field
 // "otr" set to |incognito|.
@@ -147,8 +136,7 @@ base::DictionaryValue* CreateDownloadItemValue(
           download_item->GetStartTime(), NULL));
 
   base::Time start_time = download_item->GetStartTime();
-  base::string16 date_string = MdDownloadsEnabled() ?
-      TimeFormatLongDate(start_time) : base::TimeFormatShortDate(start_time);
+  base::string16 date_string = base::TimeFormatShortDate(start_time);
   file_value->SetString("date_string", date_string);
 
   file_value->SetString("id", base::Uint64ToString(download_item->GetId()));
@@ -225,11 +213,7 @@ base::DictionaryValue* CreateDownloadItemValue(
         state = "IN_PROGRESS";
       }
       progress_status_text = download_model.GetTabProgressStatusText();
-
-      percent = download_item->PercentComplete();
-      if (!MdDownloadsEnabled())
-        percent = std::max(0, percent);
-
+      percent = std::max(0, download_item->PercentComplete());
       break;
     }
 

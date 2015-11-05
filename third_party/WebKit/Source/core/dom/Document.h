@@ -953,7 +953,7 @@ public:
     // Return a Locale for the default locale if the argument is null or empty.
     Locale& getCachedLocale(const AtomicString& locale = nullAtom);
 
-    AnimationClock& animationClock() { return m_animationClock; }
+    AnimationClock& animationClock();
     AnimationTimeline& timeline() const { return *m_timeline; }
     CompositorPendingAnimations& compositorPendingAnimations() { return m_compositorPendingAnimations; }
 
@@ -1042,6 +1042,9 @@ public:
 
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
+
+    // TODO(bokan): Temporary to help track down crash in crbug.com/519752.
+    bool m_detachingDocumentLoader;
 
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
@@ -1146,6 +1149,10 @@ private:
     static EventFactorySet& eventFactories();
 
     void setNthIndexCache(NthIndexCache* nthIndexCache) { ASSERT(!m_nthIndexCache || !nthIndexCache); m_nthIndexCache = nthIndexCache; }
+
+    // TODO(bokan): Temporarily moved this to the top of memebers so it's likely
+    // to be included in a minidump memory region. crbug.com/519752
+    LoadEventProgress m_loadEventProgress;
 
     DocumentLifecycle m_lifecycle;
 
@@ -1252,8 +1259,6 @@ private:
 
     RawPtrWillBeMember<Element> m_cssTarget;
 
-    LoadEventProgress m_loadEventProgress;
-
     double m_startTime;
 
     OwnPtrWillBeMember<ScriptRunner> m_scriptRunner;
@@ -1351,7 +1356,6 @@ private:
     using LocaleIdentifierToLocaleMap = HashMap<AtomicString, OwnPtr<Locale>>;
     LocaleIdentifierToLocaleMap m_localeCache;
 
-    AnimationClock m_animationClock;
     PersistentWillBeMember<AnimationTimeline> m_timeline;
     CompositorPendingAnimations m_compositorPendingAnimations;
 

@@ -244,8 +244,7 @@ void FrameTree::CreateProxiesForSiteInstance(
         root()->render_manager()->CreateRenderFrameProxy(site_instance);
       } else {
         root()->render_manager()->CreateRenderFrame(
-            site_instance, nullptr, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
-            nullptr);
+            site_instance, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN, nullptr);
       }
     } else {
       root()->render_manager()->EnsureRenderViewInitialized(render_view_host,
@@ -270,15 +269,21 @@ FrameTreeNode* FrameTree::GetFocusedFrame() {
 }
 
 void FrameTree::SetFocusedFrame(FrameTreeNode* node) {
-  // If the focused frame changed across processes, send a message to the old
-  // focused frame's renderer process to clear focus from that frame and fire
-  // blur events.
-  FrameTreeNode* oldFocusedFrame = GetFocusedFrame();
-  if (oldFocusedFrame &&
-      oldFocusedFrame->current_frame_host()->GetSiteInstance() !=
-          node->current_frame_host()->GetSiteInstance()) {
-    DCHECK(SiteIsolationPolicy::AreCrossProcessFramesPossible());
-    oldFocusedFrame->current_frame_host()->ClearFocus();
+  std::set<SiteInstance*> frame_tree_site_instances;
+  ForEach(base::Bind(&CollectSiteInstances, &frame_tree_site_instances));
+
+  // Update the focused frame in all other SiteInstances.  If focus changes to
+  // a cross-process frame, this allows the old focused frame's renderer
+  // process to clear focus from that frame and fire blur events.  It also
+  // ensures that the latest focused frame is available in all renderers to
+  // compute document.activeElement.
+  for (const auto& instance : frame_tree_site_instances) {
+    if (instance != node->current_frame_host()->GetSiteInstance()) {
+      DCHECK(SiteIsolationPolicy::AreCrossProcessFramesPossible());
+      RenderFrameProxyHost* proxy =
+          node->render_manager()->GetRenderFrameProxyHost(instance);
+      proxy->SetFocusedFrame();
+    }
   }
 
   node->set_last_focus_time(base::TimeTicks::Now());

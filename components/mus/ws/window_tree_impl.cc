@@ -28,6 +28,11 @@ namespace mus {
 
 namespace ws {
 
+void RunWMCallback(const Callback<void(bool)>& callback,
+                   mojom::WindowManagerErrorCode error_code) {
+  callback.Run(error_code == mojom::WINDOW_MANAGER_ERROR_CODE_SUCCESS);
+}
+
 WindowTreeImpl::WindowTreeImpl(ConnectionManager* connection_manager,
                                ConnectionSpecificId creator_id,
                                const WindowId& root_id,
@@ -89,7 +94,7 @@ bool WindowTreeImpl::IsRoot(const WindowId& id) const {
   return root_.get() && *root_ == id;
 }
 
-WindowTreeHostImpl* WindowTreeImpl::GetHost() {
+WindowTreeHostImpl* WindowTreeImpl::GetHost() const {
   return root_.get()
              ? connection_manager_->GetWindowTreeHostByWindow(GetWindow(*root_))
              : nullptr;
@@ -182,15 +187,16 @@ void WindowTreeImpl::ProcessWindowBoundsChanged(const ServerWindow* window,
                                   Rect::From(new_bounds));
 }
 
-void WindowTreeImpl::ProcessClientAreaChanged(const ServerWindow* window,
-                                              const gfx::Rect& old_client_area,
-                                              const gfx::Rect& new_client_area,
-                                              bool originated_change) {
+void WindowTreeImpl::ProcessClientAreaChanged(
+    const ServerWindow* window,
+    const gfx::Insets& old_client_area,
+    const gfx::Insets& new_client_area,
+    bool originated_change) {
   if (originated_change || !IsWindowKnown(window))
     return;
   client()->OnClientAreaChanged(WindowIdToTransportId(window->id()),
-                                Rect::From(old_client_area),
-                                Rect::From(new_client_area));
+                                mojo::Insets::From(old_client_area),
+                                mojo::Insets::From(new_client_area));
 }
 
 void WindowTreeImpl::ProcessViewportMetricsChanged(
@@ -331,6 +337,27 @@ void WindowTreeImpl::ProcessFocusChanged(
           : nullptr;
   client()->OnWindowFocused(window ? WindowIdToTransportId(window->id())
                                    : WindowIdToTransportId(WindowId()));
+}
+
+bool WindowTreeImpl::ShouldRouteToWindowManager(
+    const ServerWindow* window) const {
+  // If the client created this window, then do not route it through the WM.
+  if (window->id().connection_id == id_)
+    return false;
+  // If the client did not create the window, then it must be the root of the
+  // client. If not, that means the client should not know about this window,
+  // and so do not route the request to the WM.
+  if (!root_ || *root_ != window->id())
+    return false;
+
+  WindowTreeHostImpl* host = GetHost();
+  if (!host || !host->window_manager())
+    return false;
+  // Requests coming from the WM should not be routed through the WM again.
+  bool is_wm = host->GetWindowTree() == this;
+  if (is_wm)
+    return false;
+  return true;
 }
 
 bool WindowTreeImpl::IsWindowKnown(const ServerWindow* window) const {
@@ -597,7 +624,14 @@ void WindowTreeImpl::SetWindowBounds(Id window_id,
                                      mojo::RectPtr bounds,
                                      const Callback<void(bool)>& callback) {
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
-  const bool success = window && access_policy_->CanSetWindowBounds(window);
+  if (window && ShouldRouteToWindowManager(window)) {
+    GetHost()->window_manager()->SetBounds(
+        window_id, bounds.Pass(), base::Bind(&RunWMCallback, callback));
+    return;
+  }
+
+  // Only the owner of the window can change the bounds.
+  bool success = window && access_policy_->CanSetWindowBounds(window);
   if (success) {
     ConnectionManager::ScopedChange change(this, connection_manager_, false);
     window->SetBounds(bounds.To<gfx::Rect>());
@@ -669,16 +703,14 @@ void WindowTreeImpl::SetImeVisibility(Id transport_window_id,
   }
 }
 
-void WindowTreeImpl::SetClientArea(Id transport_window_id, mojo::RectPtr rect) {
+void WindowTreeImpl::SetClientArea(Id transport_window_id,
+                                   mojo::InsetsPtr insets) {
   ServerWindow* window =
       GetWindow(WindowIdFromTransportId(transport_window_id));
   if (!window || !access_policy_->CanSetClientArea(window))
     return;
 
-  if (rect.is_null())
-    window->SetClientArea(gfx::Rect(window->bounds().size()));
-  else
-    window->SetClientArea(rect.To<gfx::Rect>());
+  window->SetClientArea(insets.To<gfx::Insets>());
 }
 
 void WindowTreeImpl::Embed(Id transport_window_id,
@@ -715,16 +747,6 @@ void WindowTreeImpl::SetPreferredSize(
                                                 callback);
 }
 
-void WindowTreeImpl::SetBounds(uint32_t window_id,
-                               mojo::RectPtr bounds,
-                               const SetBoundsCallback& callback) {
-  if (!GetHost() || !GetHost()->window_manager())
-    return;
-
-  // TODO(sky): verify window_id is valid for the client.
-  GetHost()->window_manager()->SetBounds(window_id, bounds.Pass(), callback);
-}
-
 void WindowTreeImpl::SetShowState(uint32_t window_id,
                                   mojom::ShowState show_state,
                                   const SetShowStateCallback& callback) {
@@ -733,13 +755,6 @@ void WindowTreeImpl::SetShowState(uint32_t window_id,
 
   // TODO(sky): verify window_id is valid for the client.
   GetHost()->window_manager()->SetShowState(window_id, show_state, callback);
-}
-
-void WindowTreeImpl::GetDisplays(const GetDisplaysCallback& callback) {
-  if (!GetHost() || !GetHost()->window_manager())
-    return;
-
-  GetHost()->window_manager()->GetDisplays(callback);
 }
 
 bool WindowTreeImpl::IsRootForAccessPolicy(const WindowId& id) const {

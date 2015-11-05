@@ -368,8 +368,15 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
 
   PrintToStderr("[end of stack trace]\n");
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
   if (::signal(signal, SIG_DFL) == SIG_ERR)
     _exit(1);
+#else
+  // Non-Mac OSes should probably reraise the signal as well, but the Linux
+  // sandbox tests break on CrOS devices.
+  // https://code.google.com/p/chromium/issues/detail?id=551681
+  _exit(1);
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 }
 
 class PrintBacktraceOutputHandler : public BacktraceOutputHandler {

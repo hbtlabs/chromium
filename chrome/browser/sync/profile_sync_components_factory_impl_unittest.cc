@@ -17,6 +17,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/sync_driver/data_type_controller.h"
 #include "components/sync_driver/signin_manager_wrapper.h"
@@ -120,9 +121,16 @@ class ProfileSyncComponentsFactoryImplTest : public testing::Test {
     scoped_ptr<sync_driver::SyncClient> sync_client(
         new browser_sync::ChromeSyncClient(profile_.get(), factory.Pass()));
     scoped_ptr<ProfileSyncService> pss(new ProfileSyncService(
-        sync_client.Pass(), profile_.get(),
+        sync_client.Pass(),
         make_scoped_ptr<SigninManagerWrapper>(NULL), token_service,
-        browser_sync::MANUAL_START, base::Bind(&EmptyNetworkTimeUpdate)));
+        browser_sync::MANUAL_START, base::Bind(&EmptyNetworkTimeUpdate),
+        profile_->GetPath(), profile_->GetRequestContext(),
+        profile_->GetDebugName(), chrome::GetChannel(),
+        content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::DB),
+        content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::FILE),
+        content::BrowserThread::GetBlockingPool()));
     pss->GetSyncClient()->Initialize(pss.get());
     DataTypeController::StateMap controller_states;
     pss->GetDataTypeControllerStates(&controller_states);
@@ -147,9 +155,16 @@ TEST_F(ProfileSyncComponentsFactoryImplTest, CreatePSSDefault) {
   scoped_ptr<sync_driver::SyncClient> sync_client(
       new browser_sync::ChromeSyncClient(profile_.get(), factory.Pass()));
   scoped_ptr<ProfileSyncService> pss(new ProfileSyncService(
-      sync_client.Pass(), profile_.get(),
+      sync_client.Pass(),
       make_scoped_ptr<SigninManagerWrapper>(NULL), token_service,
-      browser_sync::MANUAL_START, base::Bind(&EmptyNetworkTimeUpdate)));
+      browser_sync::MANUAL_START, base::Bind(&EmptyNetworkTimeUpdate),
+      profile_->GetPath(), profile_->GetRequestContext(),
+      profile_->GetDebugName(), chrome::GetChannel(),
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::DB),
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::FILE),
+      content::BrowserThread::GetBlockingPool()));
   pss->GetSyncClient()->Initialize(pss.get());
   DataTypeController::StateMap controller_states;
   pss->GetDataTypeControllerStates(&controller_states);

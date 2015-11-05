@@ -187,15 +187,13 @@ select.toolbar-item {
     z-index: 1;
     width: 32px;
     height: 24px;
-}
-
-.toolbar-item > .glyph {
-    position: relative;
-    left: -3px;
+    flex-shrink: 0;
 }
 
 .toolbar-item > .long-click-glyph {
-    left: -5px;
+    right: 1px;
+    bottom: -1px;
+    position: absolute;
 }
 
 @media (-webkit-min-device-pixel-ratio: 1.5) {
@@ -500,6 +498,14 @@ button.record-toolbar-item.toggled-on .glyph {
 
 .view-quilt-toolbar-item .glyph {
     -webkit-mask-position: -320px -96px;
+}
+
+.background-color-toolbar-item .glyph {
+    -webkit-mask-position: -96px -144px;
+}
+
+.foreground-color-toolbar-item .glyph {
+    -webkit-mask-position: -128px -144px;
 }
 
 .case-sensitive-search-toolbar-item.toggled-on .toolbar-button-text {

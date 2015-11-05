@@ -154,19 +154,23 @@
           'product_name': '<(mac_product_name) Helper',
           'mac_bundle': 1,
           'dependencies': [
-            'chrome_dll',
+            'chrome_dll_dependency_shim',
             'infoplist_strings_tool',
+            'common_constants.gyp:version_header',
+          ],
+          'defines': [
+            'HELPER_EXECUTABLE'
           ],
           'sources': [
-            # chrome_exe_main_mac.cc's main() is the entry point for
+            # chrome_exe_main_mac.c's main() is the entry point for
             # the "chrome" (browser app) target.  All it does is jump
             # to chrome_dll's ChromeMain.  This is appropriate for
             # helper processes too, because the logic to discriminate
             # between process types at run time is actually directed
             # by the --type command line argument processed by
-            # ChromeMain.  Sharing chrome_exe_main_mac.cc with the
+            # ChromeMain.  Sharing chrome_exe_main_mac.c with the
             # browser app will suffice for now.
-            'app/chrome_exe_main_mac.cc',
+            'app/chrome_exe_main_mac.c',
             'app/helper-Info.plist',
           ],
           # TODO(mark): Come up with a fancier way to do this.  It should only
@@ -531,19 +535,20 @@
             'chrome_resources.gyp:chrome_strings',
             'chrome_strings_grd',
             'chrome_version_java',
+            'content_setting_java',
+            'content_settings_type_java',
             'connection_security_levels_java',
             'connectivity_check_result_java',
             'document_tab_model_info_proto_java',
             'infobar_action_type_java',
-            'profile_account_management_metrics_java',
-            'content_setting_java',
-            'content_settings_type_java',
             'most_visited_tile_type_java',
             'page_info_connection_type_java',
+            'profile_account_management_metrics_java',
             'resource_id_java',
-            'tab_load_status_java',
             'shortcut_source_java',
+            'tab_load_status_java',
             '../base/base.gyp:base',
+            '../build/android/java_google_api_keys.gyp:google_api_keys_java',
             '../chrome/android/chrome_apk.gyp:custom_tabs_service_aidl',
             '../components/components.gyp:autocomplete_match_type_java',
             '../components/components.gyp:bookmarks_java',

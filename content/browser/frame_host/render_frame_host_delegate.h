@@ -9,6 +9,7 @@
 
 #include "base/basictypes.h"
 #include "base/i18n/rtl.h"
+#include "content/browser/webui/web_ui_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/public/browser/site_instance.h"
@@ -28,6 +29,7 @@ class Message;
 
 namespace content {
 class GeolocationServiceContext;
+class PageState;
 class RenderFrameHost;
 class WakeLockServiceContext;
 class WebContents;
@@ -91,6 +93,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // The onload handler in the frame has completed. Only called for the top-
   // level frame.
   virtual void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host) {}
+
+  // The state for the page changed and should be updated in session history.
+  virtual void UpdateStateForFrame(RenderFrameHost* render_frame_host,
+                                   const PageState& page_state) {}
 
   // The page's title was changed and should be updated. Only called for the
   // top-level frame.
@@ -166,6 +172,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // refactoring for --site-per-process mode is further along.  See
   // https://crbug.com/330264.
   virtual void EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) {}
+
+  // Creates a WebUI object for a frame navigating to the given URL. If no WebUI
+  // applies, returns null.
+  virtual scoped_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(const GURL& url);
 
 #if defined(OS_WIN)
   // Returns the frame's parent's NativeViewAccessible.

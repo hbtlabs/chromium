@@ -15,12 +15,12 @@
 #include "components/mus/ws/ids.h"
 #include "components/mus/ws/server_window_surface.h"
 #include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/transform.h"
 #include "ui/platform_window/text_input_state.h"
 
 namespace mus {
-
 namespace ws {
 
 class ServerWindowDelegate;
@@ -40,6 +40,8 @@ class ServerWindowSurfaceManager;
 // from the parent.
 class ServerWindow {
  public:
+  using Windows = std::vector<ServerWindow*>;
+
   ServerWindow(ServerWindowDelegate* delegate, const WindowId& id);
   ~ServerWindow();
 
@@ -58,14 +60,16 @@ class ServerWindow {
   void Reorder(ServerWindow* child,
                ServerWindow* relative,
                mojom::OrderDirection direction);
+  void StackChildAtBottom(ServerWindow* child);
+  void StackChildAtTop(ServerWindow* child);
 
   const gfx::Rect& bounds() const { return bounds_; }
   // Sets the bounds. If the size changes this implicitly resets the client
   // area to fill the whole bounds.
   void SetBounds(const gfx::Rect& bounds);
 
-  const gfx::Rect& client_area() const { return client_area_; }
-  void SetClientArea(const gfx::Rect& bounds);
+  const gfx::Insets& client_area() const { return client_area_; }
+  void SetClientArea(const gfx::Insets& insets);
 
   const ServerWindow* parent() const { return parent_; }
   ServerWindow* parent() { return parent_; }
@@ -78,6 +82,7 @@ class ServerWindow {
 
   std::vector<const ServerWindow*> GetChildren() const;
   std::vector<ServerWindow*> GetChildren();
+  const Windows& children() const { return children_; }
 
   // Returns the ServerWindow object with the provided |id| if it lies in a
   // subtree of |this|.
@@ -86,8 +91,8 @@ class ServerWindow {
   // Returns true if this contains |window| or is |window|.
   bool Contains(const ServerWindow* window) const;
 
-  // Returns true if the window is visible. This does not consider visibility
-  // of any ancestors.
+  // Returns the visibility requested by this window. IsDrawn() returns whether
+  // the window is actually visible on screen.
   bool visible() const { return visible_; }
   void SetVisible(bool value);
 
@@ -124,10 +129,11 @@ class ServerWindow {
 #endif
 
  private:
-  typedef std::vector<ServerWindow*> Windows;
-
   // Implementation of removing a window. Doesn't send any notification.
   void RemoveImpl(ServerWindow* window);
+
+  // Called when this window's stacking order among its siblings is changed.
+  void OnStackingChanged();
 
   ServerWindowDelegate* delegate_;
   const WindowId id_;
@@ -135,7 +141,7 @@ class ServerWindow {
   Windows children_;
   bool visible_;
   gfx::Rect bounds_;
-  gfx::Rect client_area_;
+  gfx::Insets client_area_;
   scoped_ptr<ServerWindowSurfaceManager> surface_manager_;
   float opacity_;
   gfx::Transform transform_;
@@ -149,7 +155,6 @@ class ServerWindow {
 };
 
 }  // namespace ws
-
 }  // namespace mus
 
 #endif  // COMPONENTS_MUS_WS_SERVER_WINDOW_H_

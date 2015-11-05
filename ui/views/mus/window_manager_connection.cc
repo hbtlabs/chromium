@@ -15,8 +15,10 @@
 #include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/mus/aura_init.h"
+#include "ui/mojo/init/ui_init.h"
 #include "ui/views/mus/native_widget_mus.h"
+#include "ui/views/mus/window_manager_client_area_insets.h"
+#include "ui/views/views_delegate.h"
 
 namespace mojo {
 
@@ -57,6 +59,8 @@ struct TypeConverter<gfx::Display, mus::mojom::DisplayPtr> {
 
 }  // namespace mojo
 
+namespace views {
+
 namespace {
 
 using WindowManagerConnectionPtr =
@@ -68,18 +72,23 @@ base::LazyInstance<WindowManagerConnectionPtr>::Leaky lazy_tls_ptr =
 
 std::vector<gfx::Display> GetDisplaysFromWindowManager(
     mus::mojom::WindowManagerPtr* window_manager) {
+  WindowManagerClientAreaInsets client_insets;
   std::vector<gfx::Display> displays;
-  (*window_manager)->GetDisplays(
-      [&displays](mojo::Array<mus::mojom::DisplayPtr> mojom_displays) {
-        displays = mojom_displays.To<std::vector<gfx::Display>>();
+  (*window_manager)
+      ->GetConfig([&displays,
+                   &client_insets](mus::mojom::WindowManagerConfigPtr results) {
+        displays = results->displays.To<std::vector<gfx::Display>>();
+        client_insets.normal_insets =
+            results->normal_client_area_insets.To<gfx::Insets>();
+        client_insets.maximized_insets =
+            results->maximized_client_area_insets.To<gfx::Insets>();
       });
   CHECK(window_manager->WaitForIncomingResponse());
+  NativeWidgetMus::SetWindowManagerClientAreaInsets(client_insets);
   return displays;
 }
 
-}
-
-namespace views {
+}  // namespace
 
 // static
 void WindowManagerConnection::Create(
@@ -97,7 +106,7 @@ WindowManagerConnection* WindowManagerConnection::Get() {
   return connection;
 }
 
-mus::Window* WindowManagerConnection::CreateWindow(
+mus::Window* WindowManagerConnection::NewWindow(
     const std::map<std::string, std::vector<uint8_t>>& properties) {
   mus::mojom::WindowTreeClientPtr window_tree_client;
   mojo::InterfaceRequest<mus::mojom::WindowTreeClient>
@@ -117,33 +126,25 @@ WindowManagerConnection::WindowManagerConnection(
     mus::mojom::WindowManagerPtr window_manager,
     mojo::ApplicationImpl* app)
     : app_(app), window_manager_(window_manager.Pass()) {
-  aura_init_.reset(new AuraInit(
-      app, "views_mus_resources.pak",
+  ui_init_.reset(new ui::mojo::UIInit(
       GetDisplaysFromWindowManager(&window_manager_)));
+  ViewsDelegate::GetInstance()->set_native_widget_factory(
+      base::Bind(&WindowManagerConnection::CreateNativeWidget,
+                 base::Unretained(this)));
 }
 
 WindowManagerConnection::~WindowManagerConnection() {}
-
-NativeWidget* WindowManagerConnection::CreateNativeWidget(
-    internal::NativeWidgetDelegate* delegate) {
-  return new NativeWidgetMus(
-      delegate, app_->shell(),
-      CreateWindow(std::map<std::string, std::vector<uint8_t>>()),
-      mus::mojom::SURFACE_TYPE_DEFAULT);
-}
-
-void WindowManagerConnection::OnBeforeWidgetInit(
-    Widget::InitParams* params,
-    internal::NativeWidgetDelegate* delegate) {}
 
 void WindowManagerConnection::OnEmbed(mus::Window* root) {}
 void WindowManagerConnection::OnConnectionLost(
     mus::WindowTreeConnection* connection) {}
 
-#if defined(OS_WIN)
-HICON WindowManagerConnection::GetSmallWindowIcon() const {
-  return nullptr;
+NativeWidget* WindowManagerConnection::CreateNativeWidget(
+    internal::NativeWidgetDelegate* delegate) {
+  return new NativeWidgetMus(
+      delegate, app_->shell(),
+      NewWindow(std::map<std::string, std::vector<uint8_t>>()),
+      mus::mojom::SURFACE_TYPE_DEFAULT);
 }
-#endif
 
 }  // namespace views

@@ -16,9 +16,8 @@ div.box {
 <script>
 description("Verifies the effect of pointer event prevent-default on following pointer & mouse events.");
 
-// TODO(mustaq): Grow the lists as we add support for more PEs.
-var mouseEventList = ["mousedown", "mouseup", "mouseenter", "mouseleave", "mouseover", "mouseout"];
-var pointerEventList = ["pointerdown", "pointerup", "pointerenter", "pointerleave", "pointerover", "pointerout"];
+var mouseEventList = ["mousedown", "mouseup", "mouseenter", "mouseleave", "mouseover", "mouseout", "mousemove"];
+var pointerEventList = ["pointerdown", "pointerup", "pointerenter", "pointerleave", "pointerover", "pointerout", "pointermove"];
 
 var preventDefaultList = ["none"].concat(pointerEventList);
 var eventToPreventDefault = "";
@@ -67,12 +66,12 @@ function runTests() {
     eventSender.mouseDown();
     eventSender.mouseUp();
 
-    debug("- drag & release within target -");
+    debug("- drag out of and into target & release within target -");
     eventSender.mouseDown();
     eventSender.mouseMoveTo(x2+5, y2+5);
+    eventSender.mouseMoveTo(x1, y1);
+    eventSender.mouseMoveTo(x2, y2);
     eventSender.mouseUp();
-
-    // TODO(mustaq): Add drag across target border after fixing crbug.com/356090.
 
     debug("- move outside target again -");
     eventSender.mouseMoveTo(x1, y1);

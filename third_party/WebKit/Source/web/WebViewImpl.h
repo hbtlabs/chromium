@@ -87,6 +87,7 @@ class WebPagePopupImpl;
 class WebPlugin;
 class WebSelection;
 class WebSettingsImpl;
+class WebViewScheduler;
 
 class WebViewImpl final : public WebView
     , public RefCounted<WebViewImpl>
@@ -102,7 +103,6 @@ public:
     void willStartLiveResize() override;
     void resize(const WebSize&) override;
     void resizeVisualViewport(const WebSize&) override;
-    void resizePinchViewport(const WebSize&) override;
     void willEndLiveResize() override;
     void didEnterFullScreen() override;
     void didExitFullScreen() override;
@@ -181,6 +181,7 @@ public:
         const WebString& name, WebFrame* relativeToFrame) override;
     WebFrame* focusedFrame() override;
     void setFocusedFrame(WebFrame*) override;
+    void focusDocumentView(WebFrame*) override;
     void setInitialFocus(bool reverse) override;
     void clearFocusedElement() override;
     bool scrollFocusedNodeIntoRect(const WebRect&) override;
@@ -199,9 +200,7 @@ public:
     void setMaximumLegibleScale(float) override;
     void setPageScaleFactor(float) override;
     void setVisualViewportOffset(const WebFloatPoint&) override;
-    void setPinchViewportOffset(const WebFloatPoint&) override;
     WebFloatPoint visualViewportOffset() const override;
-    WebFloatPoint pinchViewportOffset() const override;
     WebFloatSize visualViewportSize() const override;
     void resetScrollAndScaleState() override;
     void setIgnoreViewportTagScaleLimits(bool) override;
@@ -519,6 +518,8 @@ public:
 
     FloatSize elasticOverscroll() const { return m_elasticOverscroll; }
 
+    WebViewScheduler* scheduler() const { return m_scheduler.get(); }
+
 private:
     InspectorOverlay* inspectorOverlay();
 
@@ -753,6 +754,8 @@ private:
     RefPtrWillBePersistent<EventListener> m_popupMouseWheelEventListener;
 
     WebPageImportanceSignals m_pageImportanceSignals;
+
+    const OwnPtr<WebViewScheduler> m_scheduler;
 };
 
 DEFINE_TYPE_CASTS(WebViewImpl, WebWidget, widget, widget->isWebView(), widget.isWebView());

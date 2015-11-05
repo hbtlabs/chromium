@@ -8,7 +8,6 @@
 # you add a new build file, there must be some path of dependencies from this
 # file to your new one or GN won't know about it.
 
-import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -79,7 +78,7 @@ group("both_gn_and_gyp") {
     "//url:url_unittests",
   ]
 
-  if (!is_ios && !is_android) {
+  if (!is_ios && !is_android && !is_chromecast) {
     deps += [
       "//chrome",
       "//chrome/test:browser_tests",
@@ -538,9 +537,12 @@ group("both_gn_and_gyp") {
     ]
   } else if (!is_android && !is_ios) {
     deps += [
-      "//breakpad:symupload",
+      "//breakpad:symupload($host_toolchain)",
       "//media/cast:cast_unittests",
     ]
+  }
+  if (is_chromecast) {
+    deps += [ "//chromecast:cast_shell" ]
   }
 }
 
@@ -549,7 +551,7 @@ group("gn_only") {
 
   deps = []
 
-  if (!is_ios) {
+  if (!is_ios && !is_chromecast) {
     deps += [ "//mandoline:all" ]
   }
 
@@ -561,7 +563,7 @@ group("gn_only") {
     deps += [ "//components/mus/example:all" ]
   }
 
-  if (is_linux && !is_chromeos) {
+  if (is_linux && !is_chromeos && !is_chromecast) {
     # TODO(GYP): Figure out if any of these should be in gn_all
     # and figure out how cross-platform they are
     deps += [

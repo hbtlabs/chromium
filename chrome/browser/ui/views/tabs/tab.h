@@ -239,9 +239,16 @@ class Tab : public gfx::AnimationDelegate,
   void PaintTabBackground(gfx::Canvas* canvas);
   void PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas);
   void PaintInactiveTabBackground(gfx::Canvas* canvas);
-  void PaintInactiveTabBackgroundUsingResourceId(gfx::Canvas* canvas,
-                                                 int tab_id);
-  void PaintActiveTabBackground(gfx::Canvas* canvas);
+  void PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
+                                     bool is_active,
+                                     int fill_id,
+                                     bool has_custom_image,
+                                     int y_offset);
+  void PaintTabFill(gfx::Canvas* canvas,
+                    gfx::ImageSkia* fill_image,
+                    int x_offset,
+                    int y_offset,
+                    bool is_active);
 
   // Paints the favicon, mirrored for RTL if needed.
   void PaintIcon(gfx::Canvas* canvas);
@@ -290,11 +297,6 @@ class Tab : public gfx::AnimationDelegate,
 
   // Returns the rectangle for the light bar in immersive mode.
   gfx::Rect GetImmersiveBarRect() const;
-
-  // Gets the tab id and frame id.
-  void GetTabIdAndFrameId(views::Widget* widget,
-                          int* tab_id,
-                          int* frame_id) const;
 
   // Performs a one-time initialization of static resources such as tab images.
   static void InitTabResources();
@@ -369,16 +371,16 @@ class Tab : public gfx::AnimationDelegate,
   // The offset used to paint the inactive background image.
   gfx::Point background_offset_;
 
-  struct TabImage {
+  struct TabImages {
     gfx::ImageSkia* image_l;
     gfx::ImageSkia* image_c;
     gfx::ImageSkia* image_r;
     int l_width;
     int r_width;
   };
-  static TabImage tab_active_;
-  static TabImage tab_inactive_;
-  static TabImage tab_alpha_;
+  static TabImages active_images_;
+  static TabImages inactive_images_;
+  static TabImages mask_images_;
 
   // Whether we're showing the icon. It is cached so that we can detect when it
   // changes and layout appropriately.

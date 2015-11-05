@@ -61,6 +61,7 @@
 #include "core/css/StyleRuleImport.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/AnimatedStyleBuilder.h"
+#include "core/css/resolver/CSSVariableResolver.h"
 #include "core/css/resolver/MatchResult.h"
 #include "core/css/resolver/MediaQueryResult.h"
 #include "core/css/resolver/ScopedStyleResolver.h"
@@ -351,7 +352,7 @@ void StyleResolver::popParentElement(Element& parent)
     m_selectorFilter.popParent(parent);
 }
 
-static inline ScopedStyleResolver* scopedResolverFor(const Element* element)
+static inline ScopedStyleResolver* scopedResolverFor(const Element& element)
 {
     // Ideally, returning element->treeScope().scopedStyleResolver() should be
     // enough, but ::cue and custom pseudo elements like ::-webkit-meter-bar pierce
@@ -364,17 +365,17 @@ static inline ScopedStyleResolver* scopedResolverFor(const Element* element)
     // FIXME: Make ::cue and custom pseudo elements part of boundary crossing rules
     // when moving those rules to ScopedStyleResolver as part of issue 401359.
 
-    TreeScope* treeScope = &element->treeScope();
+    TreeScope* treeScope = &element.treeScope();
     if (ScopedStyleResolver* resolver = treeScope->scopedStyleResolver()) {
-        ASSERT(element->shadowPseudoId().isEmpty());
-        ASSERT(!element->isVTTElement());
+        ASSERT(element.shadowPseudoId().isEmpty());
+        ASSERT(!element.isVTTElement());
         return resolver;
     }
 
     treeScope = treeScope->parentTreeScope();
     if (!treeScope)
         return nullptr;
-    if (element->shadowPseudoId().isEmpty() && !element->isVTTElement())
+    if (element.shadowPseudoId().isEmpty() && !element.isVTTElement())
         return nullptr;
     return treeScope->scopedStyleResolver();
 }
@@ -392,7 +393,7 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
         resolversInShadowTree.at(j)->collectMatchingShadowHostRules(collector, ++cascadeOrder);
 
     // Apply normal rules from element scope.
-    if (ScopedStyleResolver* resolver = scopedResolverFor(element))
+    if (ScopedStyleResolver* resolver = scopedResolverFor(*element))
         resolver->collectMatchingAuthorRules(collector, ++cascadeOrder);
 
     // Apply /deep/ and ::shadow rules from outer scopes, and ::content from inner.
@@ -1230,6 +1231,11 @@ static inline bool isPropertyInWhitelist(PropertyWhitelistType propertyWhitelist
 template <CSSPropertyPriority priority>
 void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allValue, bool inheritedOnly, PropertyWhitelistType propertyWhitelistType)
 {
+    // The 'all' property doesn't apply to variables:
+    // https://drafts.csswg.org/css-variables/#defining-variables
+    if (priority == ResolveVariables)
+        return;
+
     unsigned startCSSProperty = CSSPropertyPriorityData<priority>::first();
     unsigned endCSSProperty = CSSPropertyPriorityData<priority>::last();
 
@@ -1367,6 +1373,14 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state, const Matc
             return;
         }
         applyInheritedOnly = true;
+    }
+
+    // TODO(leviw): We need the proper bit for tracking whether we need to do this work.
+    if (RuntimeEnabledFeatures::cssVariablesEnabled()) {
+        applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(), false, applyInheritedOnly);
+        applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(), true, applyInheritedOnly);
+        // TODO(leviw): stop recalculating every time
+        CSSVariableResolver::resolveVariableDefinitions(state.style()->variables());
     }
 
     // Now we have all of the matched rules in the appropriate order. Walk the rules and apply

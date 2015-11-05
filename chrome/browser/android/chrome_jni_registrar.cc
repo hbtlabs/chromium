@@ -31,7 +31,7 @@
 #include "chrome/browser/android/contextualsearch/contextual_search_manager.h"
 #include "chrome/browser/android/contextualsearch/contextual_search_tab_helper.h"
 #include "chrome/browser/android/cookies/cookies_fetcher.h"
-#include "chrome/browser/android/datausage/external_data_use_observer.h"
+#include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/dev_tools_server.h"
 #include "chrome/browser/android/document/document_web_contents_delegate.h"
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
@@ -39,6 +39,7 @@
 #include "chrome/browser/android/favicon_helper.h"
 #include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/android/feedback/connectivity_checker.h"
+#include "chrome/browser/android/feedback/screenshot_task.h"
 #include "chrome/browser/android/find_in_page/find_in_page_bridge.h"
 #include "chrome/browser/android/foreign_session_helper.h"
 #include "chrome/browser/android/fullscreen/fullscreen_infobar_delegate.h"
@@ -74,7 +75,6 @@
 #include "chrome/browser/android/signin/account_management_screen_helper.h"
 #include "chrome/browser/android/signin/account_tracker_service_android.h"
 #include "chrome/browser/android/signin/signin_manager_android.h"
-#include "chrome/browser/android/tab/thumbnail_tab_helper_android.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/android/tab_state.h"
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
@@ -125,6 +125,7 @@
 #include "chrome/browser/ui/android/connection_info_popup_android.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/infobars/app_banner_infobar_android.h"
+#include "chrome/browser/ui/android/infobars/auto_signin_first_run_infobar.h"
 #include "chrome/browser/ui/android/infobars/confirm_infobar.h"
 #include "chrome/browser/ui/android/infobars/data_reduction_proxy_infobar.h"
 #include "chrome/browser/ui/android/infobars/download_overwrite_infobar.h"
@@ -136,7 +137,7 @@
 #include "chrome/browser/ui/android/javascript_app_modal_dialog_android.h"
 #include "chrome/browser/ui/android/omnibox/omnibox_url_emphasizer.h"
 #include "chrome/browser/ui/android/omnibox/omnibox_view_util.h"
-#include "chrome/browser/ui/android/snackbars/auto_signin_snackbar_controller.h"
+#include "chrome/browser/ui/android/snackbars/auto_signin_prompt_controller.h"
 #include "chrome/browser/ui/android/ssl_client_certificate_request.h"
 #include "chrome/browser/ui/android/tab_model/single_tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_jni_bridge.h"
@@ -314,7 +315,9 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
      remote_media::RemoteMediaPlayerBridge::RegisterRemoteMediaPlayerBridge},
     {"RevenueStats", RegisterRevenueStats},
     {"SavePasswordInfoBar", SavePasswordInfoBar::Register},
+    {"AutoSigninFirstRunInfoBar", AutoSigninFirstRunInfoBar::Register},
     {"SceneLayer", chrome::android::RegisterSceneLayer},
+    {"ScreenshotTask", RegisterScreenshotTask},
     {"ServiceTabLauncher", service_tab_launcher::RegisterServiceTabLauncherJni},
     {"SessionTabHelper", RegisterSessionTabHelper},
     {"SigninManager", SigninManagerAndroid::Register},
@@ -333,7 +336,6 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"TabStripSceneLayer", RegisterTabStripSceneLayer},
     {"TabWebContentsDelegateAndroid", RegisterTabWebContentsDelegateAndroid},
     {"TemplateUrlServiceAndroid", TemplateUrlServiceAndroid::Register},
-    {"ThumbnailTabHelperAndroid", RegisterThumbnailTabHelperAndroid},
     {"ToolbarModelAndroid", ToolbarModelAndroid::RegisterToolbarModelAndroid},
     {"TranslateInfoBarDelegate", RegisterTranslateInfoBarDelegate},
     {"TtsPlatformImpl", TtsPlatformImplAndroid::Register},

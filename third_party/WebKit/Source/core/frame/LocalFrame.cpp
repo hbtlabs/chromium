@@ -73,9 +73,9 @@
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/text/TextStream.h"
-#include "public/platform/WebFrameHostScheduler.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebSecurityOrigin.h"
+#include "public/platform/WebViewScheduler.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
@@ -127,8 +127,25 @@ inline float parentTextZoomFactor(LocalFrame* frame)
 
 } // namespace
 
+// TODO(bokan): Temporary to help track down crash in crbug.com/519752
+static void checkCanLoad(Document* doc)
+{
+    if (!doc)
+        return;
+
+    // I added this flag that gets set to true just before detaching the document loader. This
+    // should trip and will hopefully illuminate why the loadEventProgress state isn't stopping
+    // navigation.
+    RELEASE_ASSERT(!doc->m_detachingDocumentLoader);
+
+    checkCanLoad(doc->parentDocument());
+}
+
 PassRefPtrWillBeRawPtr<LocalFrame> LocalFrame::create(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner)
 {
+    if (owner && owner->isLocal())
+        checkCanLoad(&toHTMLFrameOwnerElement(owner)->document());
+
     RefPtrWillBeRawPtr<LocalFrame> frame = adoptRefWillBeNoop(new LocalFrame(client, host, owner));
     InspectorInstrumentation::frameAttachedToParent(frame.get());
     return frame.release();
@@ -891,7 +908,7 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameO
 WebFrameScheduler* LocalFrame::frameScheduler()
 {
     if (!m_frameScheduler.get())
-        m_frameScheduler = adoptPtr(host()->frameHostScheduler()->createFrameScheduler());
+        m_frameScheduler = page()->chromeClient().createFrameScheduler();
 
     ASSERT(m_frameScheduler.get());
     return m_frameScheduler.get();

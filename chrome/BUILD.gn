@@ -185,7 +185,7 @@ if (!is_android) {
         "//chrome/installer/util",
         "//content/public/app:both",
       ]
-      if (enable_plugins) {
+      if (enable_plugins && enable_pdf) {
         deps += [ "//pdf" ]
       }
 
@@ -209,7 +209,7 @@ if (!is_android) {
     }
 
     if (is_mac) {
-      sources += [ "app/chrome_exe_main_mac.cc" ]
+      sources += [ "app/chrome_exe_main_mac.c" ]
       deps += [ ":chrome_dll" ]
 
       # TODO(GYP) lots more stuff in the is_mac block.
@@ -220,7 +220,7 @@ if (!is_android) {
         ":packed_resources",
       ]
       deps += [
-        "//components/startup_metric_utils",
+        "//components/startup_metric_utils/browser",
 
         # Precompiled plugins that need to get copied to the output directory.
         # On Mac, internal plugins go inside the framework, so these
@@ -370,7 +370,7 @@ if (is_mac || is_win) {
       ]
     }
 
-    if (enable_plugins && !is_multi_dll_chrome) {
+    if (enable_plugins && enable_pdf && !is_multi_dll_chrome) {
       deps += [ "//pdf" ]
     }
   }
@@ -423,7 +423,7 @@ if (is_mac || is_win) {
         #   },
         # }],
       }
-      if (enable_plugins) {
+      if (enable_plugins && enable_pdf) {
         deps += [ "//pdf" ]
       }
     }
@@ -920,9 +920,6 @@ if (is_android) {
     sources = [
       "../components/content_settings/core/common/content_settings.h",
     ]
-    outputs = [
-      "org/chromium/chrome/browser/preferences/website/ContentSettingValues.java",
-    ]
   }
 
   # GYP: //chrome/chrome.gyp:content_settings_type_java
@@ -930,18 +927,12 @@ if (is_android) {
     sources = [
       "../components/content_settings/core/common/content_settings_types.h",
     ]
-    outputs = [
-      "org/chromium/chrome/browser/ContentSettingsType.java",
-    ]
   }
 
   # GYP: //chrome/chrome.gyp:page_info_connection_type_java
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
       "browser/ui/android/website_settings_popup_android.h",
-    ]
-    outputs = [
-      "org/chromium/chrome/browser/PageInfoConnectionType.java",
     ]
   }
 

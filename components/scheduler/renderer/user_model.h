@@ -35,9 +35,15 @@ class SCHEDULER_EXPORT UserModel {
   // Tries to guess if a user gesture is expected soon. Currently this is
   // very simple, but one day I hope to do something more sophisticated here.
   // The prediction may change after |prediction_valid_duration| has elapsed.
-  bool IsGestureExpectedSoon(RendererScheduler::UseCase use_case,
-                             const base::TimeTicks now,
+  bool IsGestureExpectedSoon(const base::TimeTicks now,
                              base::TimeDelta* prediction_valid_duration);
+
+  // Returns true if a gesture has been in progress for less than the median
+  // gesture duration. The prediction may change after
+  // |prediction_valid_duration| has elapsed.
+  bool IsGestureExpectedToContinue(
+      const base::TimeTicks now,
+      base::TimeDelta* prediction_valid_duration) const;
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
@@ -45,7 +51,7 @@ class SCHEDULER_EXPORT UserModel {
   static const int kGestureEstimationLimitMillis = 100;
 
   // This is based on two weeks of Android usage data.
-  static const int kMinimumTypicalScrollDurationMillis = 300;
+  static const int kMedianGestureDurationMillis = 300;
 
   // We consider further gesture start events to be likely if the user has
   // interacted with the device in the past two seconds.
@@ -58,7 +64,6 @@ class SCHEDULER_EXPORT UserModel {
 
  private:
   bool IsGestureExpectedSoonImpl(
-      RendererScheduler::UseCase use_case,
       const base::TimeTicks now,
       base::TimeDelta* prediction_valid_duration) const;
 
@@ -68,6 +73,7 @@ class SCHEDULER_EXPORT UserModel {
   base::TimeTicks last_continuous_gesture_time_;  // Doesn't include Taps.
   base::TimeTicks last_gesture_expected_start_time_;
   base::TimeTicks last_reset_time_;
+  bool is_gesture_active_;  // This typically means the user's finger is down.
   bool is_gesture_expected_;
 
   DISALLOW_COPY_AND_ASSIGN(UserModel);

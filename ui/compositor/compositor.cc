@@ -135,6 +135,8 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
 
+  settings.use_property_trees =
+      command_line->HasSwitch(cc::switches::kEnableCompositorPropertyTrees);
   settings.use_zero_copy = IsUIZeroCopyEnabled();
 
   settings.renderer_settings.use_rgba_4444_textures =
@@ -165,6 +167,14 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 
   settings.use_compositor_animation_timelines =
       command_line->HasSwitch(switches::kUIEnableCompositorAnimationTimelines);
+
+#if !defined(OS_ANDROID)
+  // TODO(sohanjg): Revisit this memory usage in tile manager.
+  cc::ManagedMemoryPolicy policy(
+      512 * 1024 * 1024, gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
+      settings.memory_policy_.num_resources_limit);
+  settings.memory_policy_ = policy;
+#endif
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 

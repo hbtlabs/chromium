@@ -26,6 +26,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/google_chrome_strings.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/cloud_devices/common/cloud_devices_switches.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
@@ -1332,6 +1333,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_PRINT_PREVIEW_REGISTER_PROMOS_DESCRIPTION,
      kOsDesktop,
      SINGLE_VALUE_TYPE(switches::kEnablePrintPreviewRegisterPromos)},
+    {"enable-privet-v3",
+     IDS_FLAGS_ENABLE_WEAVE_PAIRING_NAME,
+     IDS_FLAGS_ENABLE_WEAVE_PAIRING_DESCRIPTION,
+     kOsDesktop,
+     SINGLE_VALUE_TYPE(switches::kEnablePrivetV3)},
 #endif  // ENABLE_SERVICE_DISCOVERY
 #if defined(ENABLE_PRINT_PREVIEW)
     {"disable-print-preview-simplify",

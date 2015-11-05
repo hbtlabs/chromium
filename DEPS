@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '0c2999974d189ea257f82c9b7672d9afda52f6c2',
+  'skia_revision': 'fca294b83b9ffd77cab6326a8a76eb472b2b78d6',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'cb51cb31093584e061f207ee83919989d76259a6',
+  'v8_revision': 'b244d40e7ae7a73f2ceb08f0032519d66049c15f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'a5f64de71469f43d7d67b816646c96509bc0df3f',
+  'angle_revision': '5b58cae2f4b775ff974bc75570f7f2be2833246c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -59,7 +59,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'c89c6195373b63e99b9cd432c5a181bfb3ad8dbe',
+  'pdfium_revision': '955930dce7e4b5c764cdd34b134baea4207de523',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -75,7 +75,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
-  'google_toolbox_for_mac_revision': 'ce47a231ea0b238fbe95538e86cc61d74c234be6', # from svn revision 705
+  'google_toolbox_for_mac_revision': '401878398253074c515c03cb3a3f8bb0cc8da6e9',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling lighttpd
   # and whatever else without interference from each other.
@@ -130,7 +130,7 @@ deps = {
    Var('chromium_git') + '/crashpad/crashpad.git' + '@' + '6c0d42ce9dee55eaa906865191e28df35b32910d',
 
   'src/third_party/icu':
-   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '94e4b770ce2f6065d4261d29c32683a6099b9d93',
+   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '42c58d4e49f2250039f0e98d43e0b76e8f5ca024',
 
   'src/third_party/libexif/sources':
    Var('chromium_git') + '/chromium/deps/libexif/sources.git' + '@' + 'ed98343daabd7b4497f97fda972e132e6877c48a',
@@ -151,7 +151,7 @@ deps = {
     Var('chromium_git') + '/external/grit-i18n.git' + '@' + '4066463928d64337e6d70046aa4f18b833a2d0e3', # from svn revision 201
 
   'src/tools/gyp':
-    Var('chromium_git') + '/external/gyp.git' + '@' + 'f2c3cfc3b1df1a9658c6646faa67c670209cf963',
+    Var('chromium_git') + '/external/gyp.git' + '@' + '2c1e6cced23554ce84806e570acea637f6473afc',
 
   'src/tools/swarming_client':
    Var('chromium_git') + '/external/swarming.client.git' + '@' +  Var('swarming_revision'),
@@ -187,7 +187,7 @@ deps = {
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
 
   'src/third_party/libvpx_new/source/libvpx':
-   Var('chromium_git') + '/webm/libvpx.git' + '@' +  '9645cd4826de5a469e163838b997fccfd7907b91',
+   Var('chromium_git') + '/webm/libvpx.git' + '@' +  'c6641709a707ccb98cbdf785428659e44d4f2c8b',
 
   'src/third_party/ffmpeg':
    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'd2733b2c43f65f0e779d5d014777fb8ea1e89873',
@@ -226,7 +226,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
 
   'src/third_party/libyuv':
-    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '5d97b9336922eaee34c342a00c8e370933938703', # from version 1527
+    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + 'c2bff1a1af3933c866673c8184e635495d648739', # from version 1531
 
   'src/third_party/smhasher/src':
     Var('chromium_git') + '/external/smhasher.git' + '@' + 'e87738e57558e0ec472b2fc3a643b838e5b6e88f',
@@ -280,7 +280,7 @@ deps = {
 
   'src/third_party/catapult':
     Var('chromium_git') + '/external/github.com/catapult-project/catapult.git' + '@' +
-    '2e833914bbd78cf3db4b3ec7517c296faff84a6f',
+    'e2c6869c72944a7a7a729c7ccc9fdc1f8f90de8e',
 }
 
 
@@ -339,7 +339,7 @@ deps_os = {
      Var('chromium_git') + '/external/github.com/swisspol/GCDWebServer.git' + '@' + '3d5fd0b8281a7224c057deb2d17709b5bea64836',
 
     'src/third_party/google_toolbox_for_mac/src':
-      Var('chromium_git') + '/external/google-toolbox-for-mac.git' + '@' + Var('google_toolbox_for_mac_revision'),
+      Var('chromium_git') + '/external/github.com/google/google-toolbox-for-mac.git' + '@' + Var('google_toolbox_for_mac_revision'),
 
     'src/third_party/nss':
      Var('chromium_git') + '/chromium/deps/nss.git' + '@' + Var('nss_revision'),
@@ -361,7 +361,7 @@ deps_os = {
      Var('chromium_git') + '/chromium/reference_builds/chrome_mac.git' + '@' + '8dc181329e7c5255f83b4b85dc2f71498a237955',
 
     'src/third_party/google_toolbox_for_mac/src':
-      Var('chromium_git') + '/external/google-toolbox-for-mac.git' + '@' + Var('google_toolbox_for_mac_revision'),
+      Var('chromium_git') + '/external/github.com/google/google-toolbox-for-mac.git' + '@' + Var('google_toolbox_for_mac_revision'),
 
 
     'src/third_party/pdfsqueeze':
@@ -390,7 +390,7 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '4a77577ef89e8a3f44d6604dc3a552e33bfa79e3',
+     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'ecbd58958f83b7b32068f328ddd605ba732c7052',
 
     # Note that this is different from Android's freetype repo.
     'src/third_party/freetype2/src':
@@ -810,18 +810,6 @@ hooks = [
     'name': 'gyp',
     'pattern': '.',
     'action': ['python', 'src/build/gyp_chromium'],
-  },
-  {
-    # Verify committers' ~/.netc, gclient and git are properly configured for
-    # write access to the git repo. To be removed sometime after Chrome to git
-    # migration completes (let's say Sep 1 2014).
-    'name': 'check_git_config',
-    'pattern': '.',
-    'action': [
-        'python',
-        'src/tools/check_git_config.py',
-        '--running-as-hook',
-    ],
   },
 ]
 

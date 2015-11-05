@@ -59,6 +59,19 @@ MISSING_KEYWORD = 'Missing'
 NEEDS_REBASELINE_KEYWORD = 'NeedsRebaseline'
 NEEDS_MANUAL_REBASELINE_KEYWORD = 'NeedsManualRebaseline'
 
+# TODO(ojan): Don't add new platforms here. New mac platforms
+# should use the version number directly instead of the english
+# language names throughout the code.
+MAC_VERSION_MAPPING = {
+    'mac10.6': 'snowleopard',
+    'mac10.7': 'lion',
+    'mac10.8': 'mountainlion',
+    'mac10.9': 'mavericks',
+}
+
+INVERTED_MAC_VERSION_MAPPING = {value: name for name, value in MAC_VERSION_MAPPING.items()}
+
+
 class ParseError(Exception):
     def __init__(self, warnings):
         super(ParseError, self).__init__()
@@ -149,11 +162,15 @@ class TestExpectationParser(object):
         self._parse_specifiers(expectation_line)
         self._parse_expectations(expectation_line)
 
+    def _parse_specifier(self, specifier):
+        specifier = specifier.lower()
+        return MAC_VERSION_MAPPING.get(specifier, specifier)
+
     def _parse_specifiers(self, expectation_line):
         if self._is_lint_mode:
             self._lint_line(expectation_line)
 
-        parsed_specifiers = set([specifier.lower() for specifier in expectation_line.specifiers])
+        parsed_specifiers = set([self._parse_specifier(specifier) for specifier in expectation_line.specifiers])
         expectation_line.matching_configurations = self._test_configuration_converter.to_config_set(parsed_specifiers, expectation_line.warnings)
 
     def _lint_line(self, expectation_line):
@@ -213,7 +230,7 @@ class TestExpectationParser(object):
 
     # FIXME: Update the original specifiers and remove this once the old syntax is gone.
     _configuration_tokens_list = [
-        'Mac', 'SnowLeopard', 'Lion', 'MountainLion', 'Retina', 'Mavericks', 'Yosemite',
+        'Mac', 'Mac10.6', 'Mac10.7', 'Mac10.8', 'Mac10.9', 'Mac10.10', 'Retina',
         'Win', 'XP', 'Win7', 'Win10',
         'Linux', 'Linux32', 'Precise', 'Trusty',
         'Android',
@@ -491,6 +508,7 @@ class TestExpectationLine(object):
         result = []
         result.extend(sorted(self.parsed_specifiers))
         result.extend(test_configuration_converter.specifier_sorter().sort_specifiers(specifiers))
+        result = [INVERTED_MAC_VERSION_MAPPING.get(specifier, specifier) for specifier in result]
         return ' '.join(result)
 
     @staticmethod
@@ -661,17 +679,27 @@ class TestExpectationsModel(object):
 
     def add_expectation_line(self, expectation_line,
                              model_all_expectations=False):
-        """Returns a list of warnings encountered while matching specifiers."""
-
         if expectation_line.is_invalid():
             return
 
         for test in expectation_line.matching_tests:
-            if self._already_seen_better_match(test, expectation_line):
-                continue
+            lines_involve_rebaseline = False
+            prev_expectation_line = self.get_expectation_line(test)
 
-            if model_all_expectations:
-                expectation_line = TestExpectationLine.merge_expectation_lines(self.get_expectation_line(test), expectation_line, model_all_expectations)
+            if prev_expectation_line:
+                # The previous path matched more of the test.
+                if len(prev_expectation_line.path) > len(expectation_line.path):
+                    continue
+
+                if self._lines_conflict(prev_expectation_line, expectation_line):
+                    continue
+
+                lines_involve_rebaseline = self._expects_rebaseline(prev_expectation_line) or self._expects_rebaseline(expectation_line)
+
+            # Exact path matches that conflict should be merged, e.g.
+            # [ Pass Timeout ] + [ NeedsRebaseline ] ==> [ Pass Timeout NeedsRebaseline ].
+            if model_all_expectations or lines_involve_rebaseline:
+                expectation_line = TestExpectationLine.merge_expectation_lines(prev_expectation_line, expectation_line, model_all_expectations)
 
             self._clear_expectations_for_test(test)
             self._test_to_expectation_line[test] = expectation_line
@@ -725,40 +753,19 @@ class TestExpectationsModel(object):
             if test in set_of_tests:
                 set_of_tests.remove(test)
 
-    def _already_seen_better_match(self, test, expectation_line):
-        """Returns whether we've seen a better match already in the file.
+    def _expects_rebaseline(self, expectation_line):
+        expectations = expectation_line.parsed_expectations
+        return REBASELINE in expectations or NEEDS_REBASELINE in expectations or NEEDS_MANUAL_REBASELINE in expectations
 
-        Returns True if we've already seen a expectation_line.name that matches more of the test
-            than this path does
-        """
-        # FIXME: See comment below about matching test configs and specificity.
-        if not self.has_test(test):
-            # We've never seen this test before.
+    def _lines_conflict(self, prev_expectation_line, expectation_line):
+        if prev_expectation_line.path != expectation_line.path:
             return False
 
-        prev_expectation_line = self._test_to_expectation_line[test]
-
-        if prev_expectation_line.filename != expectation_line.filename:
-            # We've moved on to a new expectation file, which overrides older ones.
+        if PASS in expectation_line.parsed_expectations and self._expects_rebaseline(prev_expectation_line):
             return False
 
-        if len(prev_expectation_line.path) > len(expectation_line.path):
-            # The previous path matched more of the test.
-            return True
-
-        if len(prev_expectation_line.path) < len(expectation_line.path):
-            # This path matches more of the test.
+        if PASS in prev_expectation_line.parsed_expectations and self._expects_rebaseline(expectation_line):
             return False
-
-        # At this point we know we have seen a previous exact match on this
-        # base path, so we need to check the two sets of specifiers.
-
-        # FIXME: This code was originally designed to allow lines that matched
-        # more specifiers to override lines that matched fewer specifiers.
-        # However, we currently view these as errors.
-        #
-        # To use the "more specifiers wins" policy, change the errors for overrides
-        # to be warnings and return False".
 
         if prev_expectation_line.matching_configurations == expectation_line.matching_configurations:
             expectation_line.warnings.append('Duplicate or ambiguous entry lines %s:%s and %s:%s.' % (

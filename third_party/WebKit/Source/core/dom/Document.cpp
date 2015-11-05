@@ -375,6 +375,8 @@ private:
 Document::Document(const DocumentInit& initializer, DocumentClassFlags documentClasses)
     : ContainerNode(0, CreateDocument)
     , TreeScope(*this)
+    , m_detachingDocumentLoader(false)
+    , m_loadEventProgress(LoadEventNotRun)
     , m_hasNodesWithPlaceholderStyle(false)
     , m_evaluateMediaQueriesOnStyleRecalc(false)
     , m_pendingSheetLayout(NoLayoutWithPendingSheets)
@@ -408,7 +410,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_markers(adoptPtrWillBeNoop(new DocumentMarkerController))
     , m_updateFocusAppearanceTimer(this, &Document::updateFocusAppearanceTimerFired)
     , m_cssTarget(nullptr)
-    , m_loadEventProgress(LoadEventNotRun)
     , m_startTime(currentTime())
     , m_scriptRunner(ScriptRunner::create(this))
     , m_xmlVersion("1.0")
@@ -1632,7 +1633,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
     // documentElement's style was dirty. We could keep track of which elements depend on
     // rem units like we do for viewport styles, but we assume root font size changes are
     // rare and just invalidate the cache for now.
-    if (styleEngine().usesRemUnits() && (documentElement()->needsAttach() || documentElement()->ensureComputedStyle()->fontSize() != documentElementStyle->fontSize())) {
+    if (styleEngine().usesRemUnits() && (documentElement()->needsAttach() || !documentElement()->computedStyle() || documentElement()->computedStyle()->fontSize() != documentElementStyle->fontSize())) {
         ensureStyleResolver().invalidateMatchedPropertiesCache();
         documentElement()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FontSizeChange));
     }
@@ -4690,9 +4691,9 @@ Vector<IconURL> Document::iconURLs(int iconTypesMask)
 Color Document::themeColor() const
 {
     for (HTMLMetaElement* metaElement = head() ? Traversal<HTMLMetaElement>::firstChild(*head()) : 0; metaElement; metaElement = Traversal<HTMLMetaElement>::nextSibling(*metaElement)) {
-        RGBA32 rgb = Color::transparent;
-        if (equalIgnoringCase(metaElement->name(), "theme-color") && CSSParser::parseColor(rgb, metaElement->content().string().stripWhiteSpace(), true))
-            return Color(rgb);
+        Color color = Color::transparent;
+        if (equalIgnoringCase(metaElement->name(), "theme-color") && CSSParser::parseColor(color, metaElement->content().string().stripWhiteSpace(), true))
+            return color;
     }
     return Color();
 }
@@ -5442,6 +5443,12 @@ Locale& Document::getCachedLocale(const AtomicString& locale)
     if (result.isNewEntry)
         result.storedValue->value = Locale::create(localeKey);
     return *(result.storedValue->value);
+}
+
+AnimationClock& Document::animationClock()
+{
+    ASSERT(page());
+    return page()->animator().clock();
 }
 
 Document& Document::ensureTemplateDocument()

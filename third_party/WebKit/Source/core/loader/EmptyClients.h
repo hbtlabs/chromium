@@ -45,6 +45,7 @@
 #include "platform/network/ResourceError.h"
 #include "platform/text/TextCheckerClient.h"
 #include "public/platform/WebFocusType.h"
+#include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
 #include "wtf/Forward.h"
 #include <v8.h>
@@ -84,7 +85,7 @@ public:
 
     void focusedNodeChanged(Node*, Node*) override {}
     void focusedFrameChanged(LocalFrame*) override {}
-    Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSendReferrer) override { return nullptr; }
+    Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSetOpener) override { return nullptr; }
     void show(NavigationPolicy) override {}
 
     void didOverscroll(const FloatSize&, const FloatSize&, const FloatPoint&, const FloatSize&) override {}
@@ -163,6 +164,8 @@ public:
 
     void registerPopupOpeningObserver(PopupOpeningObserver*) override {}
     void unregisterPopupOpeningObserver(PopupOpeningObserver*) override {}
+
+    PassOwnPtr<WebFrameScheduler> createFrameScheduler() override;
 };
 
 class CORE_EXPORT EmptyFrameLoaderClient : public FrameLoaderClient {

@@ -53,6 +53,7 @@ CSSOMSmoothScroll status=experimental
 CSSStickyPosition
 CSSTouchActionPanDirections status=experimental
 CSSTypedOM status=experimental
+CSSVariables status=experimental
 CSSViewport status=experimental
 CSSScrollSnapPoints status=test
 // getPropertyCSSValue, CSSValue, etc. will be removed once layout tests no longer depend on them. crbug.com/331608
@@ -70,6 +71,7 @@ ComputedAccessibilityInfo status=experimental
 EventListenerOptions status=experimental
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
+ExperimentalFramework
 FastMobileScrolling
 FileAPIBlobClose status=experimental
 FileSystem status=stable
@@ -143,7 +145,7 @@ RenderingPipelineThrottling status=experimental
 RequestIdleCallback status=stable
 RequestAutocomplete status=test
 RestrictIFramePermissions
-RTCCertificate status=test
+RTCCertificate status=experimental
 SandboxBlocksModals status=stable
 ScreenOrientation status=stable
 ScriptedSpeech status=stable

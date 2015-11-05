@@ -381,7 +381,8 @@ WebInspector.AbstractToolbarButton.prototype = {
     _clicked: function(event)
     {
         this._longClickController.reset();
-        this.dispatchEventToListeners("click", event);
+        var defaultPrevented = this.dispatchEventToListeners("click", event);
+        event.consume(defaultPrevented);
     },
 
     /**
@@ -468,7 +469,7 @@ WebInspector.AbstractToolbarButton.prototype = {
     makeLongClickEnabled: function()
     {
         this._longClickController.enable();
-        this._longClickGlyph = this.element.createChild("div", "fill long-click-glyph toolbar-button-theme");
+        this._longClickGlyph = this.element.createChild("div", "long-click-glyph toolbar-button-theme");
     },
 
     unmakeLongClickEnabled: function()

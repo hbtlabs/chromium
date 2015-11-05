@@ -479,7 +479,6 @@ public:
         WindowPostMessage = 574,
         WindowPostMessageWithLegacyTargetOriginArgument = 575,
         RenderRuby = 576,
-        CanvasRenderingContext2DCompositeOperationDarker = 577,
         ScriptElementWithInvalidTypeHasSrc = 578,
         XMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload = 581,
         CSSSelectorPseudoScrollbar = 582,
@@ -861,6 +860,8 @@ public:
         HTMLLabelElementFormContentAttribute = 986,
         DeviceOrientationAbsoluteInsecureOrigin = 987,
         DeviceOrientationAbsoluteSecureOrigin = 988,
+        FontFaceConstructor = 989,
+        ServiceWorkerControlledPage = 990,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

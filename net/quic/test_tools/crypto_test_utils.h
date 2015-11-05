@@ -69,12 +69,12 @@ class CryptoTestUtils {
   };
 
   // returns: the number of client hellos that the client sent.
-  static int HandshakeWithFakeServer(MockHelper* helper,
+  static int HandshakeWithFakeServer(MockConnectionHelper* helper,
                                      PacketSavingConnection* client_conn,
                                      QuicCryptoClientStream* client);
 
   // returns: the number of client hellos that the client sent.
-  static int HandshakeWithFakeClient(MockHelper* helper,
+  static int HandshakeWithFakeClient(MockConnectionHelper* helper,
                                      PacketSavingConnection* server_conn,
                                      QuicCryptoServerStream* server,
                                      const QuicServerId& server_id,
@@ -127,18 +127,12 @@ class CryptoTestUtils {
   // Returns a |ProofVerifier| that uses the QUIC testing root CA.
   static ProofVerifier* ProofVerifierForTesting();
 
+  // Returns a real ProofVerifier (not a fake proof verifier) for testing.
+  static ProofVerifier* RealProofVerifierForTesting();
+
   // Returns a |ProofVerifyContext| that must be used with the verifier
   // returned by |ProofVerifierForTesting|.
   static ProofVerifyContext* ProofVerifyContextForTesting();
-
-  // These functions return a fake |ProofSource|, |ProofVerifier|, or
-  // |ProofVerifyContext| that works with each other. These are suitable for
-  // unit tests that aren't concerned with |ProofSource| and |ProofVerifier|.
-  // TODO(wtc): delete these when Chromium has a working
-  // ProofSourceForTesting().
-  static ProofSource* FakeProofSourceForTesting();
-  static ProofVerifier* FakeProofVerifierForTesting();
-  static ProofVerifyContext* FakeProofVerifyContextForTesting();
 
   // MockCommonCertSets returns a CommonCertSets that contains a single set with
   // hash |hash|, consisting of the certificate |cert| at index |index|.

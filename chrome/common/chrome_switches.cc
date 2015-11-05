@@ -339,16 +339,6 @@ const char kDisableSessionCrashedBubble[] = "disable-session-crashed-bubble";
 // and allocates certain resources accordingly.
 const char kDisableSiteEngagementService[] = "disable-site-engagement-service";
 
-// Disables syncing browser data to a Google Account.
-const char kDisableSync[]                   = "disable-sync";
-
-// Disables syncing one or more sync data types that are on by default.
-// See sync/internal_api/public/base/model_type.h for possible types. Types
-// should be comma separated, and follow the naming convention for string
-// representation of model types, e.g.:
-// --disable-synctypes='Typed URLs, Bookmarks, Autofill Profiles'
-const char kDisableSyncTypes[]              = "disable-sync-types";
-
 // Disables Web Notification custom layouts.
 const char kDisableWebNotificationCustomLayouts[] =
     "disable-web-notification-custom-layouts";
@@ -571,9 +561,6 @@ const char kEnableWebNotificationCustomLayouts[] =
 // Bypasses the WebUSB permission prompt as it is not yet implemented.
 // crbug.com/529950
 const char kEnableWebUsbOnAnyOrigin[] = "enable-webusb-on-any-origin";
-
-// Enables synchronizing WiFi credentials across devices, using Chrome Sync.
-const char kEnableWifiCredentialSync[]      = "enable-wifi-credential-sync";
 
 // Values for the kExtensionContentVerification flag.
 // See ContentVerifierDelegate::Mode for more explanation.
@@ -956,6 +943,15 @@ const char kSbDisableDownloadProtection[] =
 // Disables safebrowsing feature that checks for blacklisted extensions.
 const char kSbDisableExtensionBlacklist[] =
     "safebrowsing-disable-extension-blacklist";
+
+// List of comma-separated sha256 hashes of executable files which the
+// download-protection service should treat as "dangerous."  For a file to
+// show a warning, it also must be considered a dangerous filetype and not
+// be whitelisted otherwise (by signature or URL) and must be on a supported
+// OS. Hashes are in hex. This is used for manual testing when looking
+// for ways to by-pass download protection.
+const char kSbManualDownloadBlacklist[] =
+    "safebrowsing-manual-download-blacklist";
 
 // Causes the process to run as a service process.
 const char kServiceProcess[]                = "service";

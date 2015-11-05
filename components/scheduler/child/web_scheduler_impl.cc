@@ -9,6 +9,7 @@
 #include "components/scheduler/child/web_task_runner_impl.h"
 #include "components/scheduler/child/worker_scheduler.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
+#include "third_party/WebKit/public/platform/WebViewScheduler.h"
 
 namespace scheduler {
 
@@ -94,8 +95,16 @@ void WebSchedulerImpl::postTimerTaskAt(
   tracked_objects::Location location(web_location.functionName(),
                                      web_location.fileName(), -1, nullptr);
   timer_task_runner_->PostDelayedTaskAt(
-      location, base::Bind(&blink::WebTaskRunner::Task::run, base::Owned(task)),
+      location,
+      base::Bind(&WebTaskRunnerImpl::runTask,
+                 base::Passed(scoped_ptr<blink::WebTaskRunner::Task>(task))),
       base::TimeTicks() + base::TimeDelta::FromSecondsD(monotonicTime));
+}
+
+blink::WebPassOwnPtr<blink::WebViewScheduler>
+WebSchedulerImpl::createWebViewScheduler(blink::WebView*) {
+  NOTREACHED();
+  return nullptr;
 }
 
 }  // namespace scheduler

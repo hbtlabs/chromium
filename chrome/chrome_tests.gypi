@@ -157,7 +157,6 @@
       'browser/extensions/api/file_system/file_system_apitest.cc',
       'browser/extensions/api/file_system/file_system_apitest_chromeos.cc',
       'browser/extensions/api/font_settings/font_settings_apitest.cc',
-      'browser/extensions/api/gcd_private/gcd_private_apitest.cc',
       'browser/extensions/api/gcm/gcm_apitest.cc',
       'browser/extensions/api/history/history_apitest.cc',
       'browser/extensions/api/hotword_private/hotword_private_apitest.cc',
@@ -959,7 +958,6 @@
       'test/data/webui/async_gen.js',
       'test/data/webui/certificate_viewer_dialog_test.js',
       'test/data/webui/chrome_send_browsertest.js',
-      'test/data/webui/extensions/cr_extensions_browsertest.js',
       'test/data/webui/history_browsertest.js',
       'test/data/webui/mock4js_browsertest.js',
       'test/data/webui/net_internals/bandwidth_view.js',
@@ -2596,6 +2594,7 @@
         }],
         ['enable_mdns==1', {
           'sources' : [
+            'browser/extensions/api/gcd_private/gcd_private_apitest.cc',
             'browser/ui/webui/local_discovery/local_discovery_ui_browsertest.cc',
           ]
         }],
@@ -3181,6 +3180,30 @@
     ['test_isolation_mode != "noop"', {
       'targets': [
         {
+          'target_name': 'telemetry_chrome_test_base',
+          'type': 'none',
+          'dependencies': [
+            '../content/content_shell_and_tests.gyp:telemetry_base',
+          ],
+          'conditions': [
+            ['OS=="linux" or OS=="mac"', {
+              'dependencies': [
+                '../breakpad/breakpad.gyp:dump_syms',
+              ],
+            }],
+            ['OS=="mac"', {
+              'dependencies': [
+                '../third_party/crashpad/crashpad/tools/tools.gyp:crashpad_database_util',
+              ],
+            }],
+            ['OS=="win"', {
+              'dependencies': [
+                'chrome.gyp:crash_service',
+              ],
+            }],
+          ],
+        },
+        {
           'target_name': 'browser_tests_run',
           'type': 'none',
           'dependencies': [
@@ -3200,6 +3223,20 @@
                 '../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
               ],
             }],
+          ],
+        },
+        {
+         'target_name': 'telemetry_perf_unittests',
+         'type': 'none',
+         'dependencies': [
+            'chrome_run',
+            'telemetry_chrome_test_base'
+         ],
+         'includes': [
+           '../build/isolate.gypi',
+          ],
+          'sources': [
+            'telemetry_perf_unittests.isolate',
           ],
         },
         {
@@ -3296,30 +3333,6 @@
                   '../build/isolate.gypi',
                 ],
               },
-            },
-            {
-              'target_name': 'telemetry_chrome_test_base',
-              'type': 'none',
-              'dependencies': [
-                '../content/content_shell_and_tests.gyp:telemetry_base',
-              ],
-              'conditions': [
-                ['OS=="linux" or OS=="mac"', {
-                  'dependencies': [
-                    '../breakpad/breakpad.gyp:dump_syms',
-                  ],
-                }],
-                ['OS=="mac"', {
-                  'dependencies': [
-                    '../third_party/crashpad/crashpad/tools/tools.gyp:crashpad_database_util',
-                  ],
-                }],
-                ['OS=="win"', {
-                  'dependencies': [
-                    'chrome.gyp:crash_service',
-                  ],
-                }],
-              ],
             },
             {
               # GN: //gpu:angle_unittests_run

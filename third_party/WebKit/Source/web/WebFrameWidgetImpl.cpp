@@ -199,11 +199,6 @@ void WebFrameWidgetImpl::sendResizeEventAndRepaint()
     }
 }
 
-void WebFrameWidgetImpl::resizePinchViewport(const WebSize& newSize)
-{
-    // TODO(bokan): To Remove.
-}
-
 void WebFrameWidgetImpl::resizeVisualViewport(const WebSize& newSize)
 {
     // FIXME: Implement visual viewport for out-of-process iframes.
@@ -258,7 +253,7 @@ void WebFrameWidgetImpl::updateAllLifecyclePhases()
     if (!m_localRoot)
         return;
 
-    PageWidgetDelegate::layout(*page(), *m_localRoot->frame());
+    PageWidgetDelegate::updateAllLifecyclePhases(*page(), *m_localRoot->frame());
     updateLayerTreeBackgroundColor();
 }
 

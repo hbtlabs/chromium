@@ -5,20 +5,27 @@
 #include "ui/views/mus/native_widget_mus.h"
 
 #include "components/mus/public/cpp/window.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
+#include "ui/base/hit_test.h"
+#include "ui/compositor/clip_transform_recorder.h"
+#include "ui/compositor/paint_recorder.h"
+#include "ui/gfx/canvas.h"
 #include "ui/native_theme/native_theme_aura.h"
+#include "ui/views/mus/window_manager_client_area_insets.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/views/window/custom_frame_view.h"
 #include "ui/wm/core/base_focus_rules.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/focus_controller.h"
 
 namespace views {
 namespace {
+
+WindowManagerClientAreaInsets* window_manager_client_area_insets = nullptr;
 
 // TODO: figure out what this should be.
 class FocusRulesImpl : public wm::BaseFocusRules {
@@ -61,6 +68,60 @@ class ContentWindowLayoutManager : public aura::LayoutManager {
   DISALLOW_COPY_AND_ASSIGN(ContentWindowLayoutManager);
 };
 
+// As the window manager renderers the non-client decorations this class does
+// very little but honor the client area insets from the window manager.
+class ClientSideNonClientFrameView : public NonClientFrameView {
+ public:
+  explicit ClientSideNonClientFrameView(views::Widget* widget)
+      : widget_(widget) {}
+  ~ClientSideNonClientFrameView() override {}
+
+ private:
+  // Returns the default values of client area insets from the window manager.
+  static gfx::Insets GetDefaultWindowManagerInsets(bool is_maximized) {
+    if (!window_manager_client_area_insets)
+      return gfx::Insets();
+    return is_maximized ? window_manager_client_area_insets->maximized_insets
+                        : window_manager_client_area_insets->normal_insets;
+  }
+
+  // NonClientFrameView:
+  gfx::Rect GetBoundsForClientView() const override {
+    gfx::Rect result(GetLocalBounds());
+    result.Inset(GetDefaultWindowManagerInsets(widget_->IsMaximized()));
+    return result;
+  }
+  gfx::Rect GetWindowBoundsForClientBounds(
+      const gfx::Rect& client_bounds) const override {
+    const gfx::Insets insets(
+        GetDefaultWindowManagerInsets(widget_->IsMaximized()));
+    return gfx::Rect(client_bounds.x() - insets.left(),
+                     client_bounds.y() - insets.top(),
+                     client_bounds.width() + insets.width(),
+                     client_bounds.height() + insets.height());
+  }
+  int NonClientHitTest(const gfx::Point& point) override { return HTNOWHERE; }
+  void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override {
+    // The window manager provides the shape; do nothing.
+  }
+  void ResetWindowControls() override {
+    // TODO(sky): push to wm?
+  }
+  void UpdateWindowIcon() override {
+    // NOTIMPLEMENTED();
+  }
+  void UpdateWindowTitle() override {
+    // NOTIMPLEMENTED();
+  }
+  void SizeConstraintsChanged() override {
+    // NOTIMPLEMENTED();
+  }
+
+  views::Widget* widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(ClientSideNonClientFrameView);
+};
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,9 +135,18 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
       shell_(shell),
       native_widget_delegate_(delegate),
       surface_type_(surface_type),
-      show_state_before_fullscreen_(mus::mojom::SHOW_STATE_RESTORED),
+      show_state_before_fullscreen_(ui::PLATFORM_WINDOW_STATE_UNKNOWN),
       content_(new aura::Window(this)) {}
 NativeWidgetMus::~NativeWidgetMus() {}
+
+// static
+void NativeWidgetMus::SetWindowManagerClientAreaInsets(
+    const WindowManagerClientAreaInsets& insets) {
+  delete window_manager_client_area_insets;
+  // This is called early on, so we don't bother trying to relayout existing
+  // NativeWidgetMus. When we support restarting the WM we'll need to do that.
+  window_manager_client_area_insets = new WindowManagerClientAreaInsets(insets);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMus, private:
@@ -87,11 +157,19 @@ void NativeWidgetMus::UpdateClientAreaInWindowManager() {
   if (!non_client_view || !non_client_view->client_view())
     return;
 
-  window_->SetClientArea(non_client_view->client_view()->bounds());
+  const gfx::Rect client_area_rect(non_client_view->client_view()->bounds());
+  window_->SetClientArea(gfx::Insets(
+      client_area_rect.y(), client_area_rect.x(),
+      non_client_view->bounds().height() - client_area_rect.bottom(),
+      non_client_view->bounds().width() - client_area_rect.right()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMus, internal::NativeWidgetPrivate implementation:
+
+NonClientFrameView* NativeWidgetMus::CreateNonClientFrameView() {
+  return new ClientSideNonClientFrameView(GetWidget());
+}
 
 void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   window_tree_host_.reset(
@@ -119,23 +197,18 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   // TODO(beng): much else, see [Desktop]NativeWidgetAura.
 }
 
-NonClientFrameView* NativeWidgetMus::CreateNonClientFrameView() {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-
 bool NativeWidgetMus::ShouldUseNativeFrame() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return false;
 }
 
 bool NativeWidgetMus::ShouldWindowContentsBeTransparent() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return true;
 }
 
 void NativeWidgetMus::FrameTypeChanged() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 Widget* NativeWidgetMus::GetWidget() {
@@ -143,7 +216,7 @@ Widget* NativeWidgetMus::GetWidget() {
 }
 
 const Widget* NativeWidgetMus::GetWidget() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return native_widget_delegate_->AsWidget();
 }
 
@@ -168,26 +241,26 @@ const ui::Layer* NativeWidgetMus::GetLayer() const {
 }
 
 void NativeWidgetMus::ReorderNativeViews() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::ViewRemoved(View* view) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetNativeWindowProperty(const char* name, void* value) {
   // TODO(beng): push properties to mus::Window.
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void* NativeWidgetMus::GetNativeWindowProperty(const char* name) const {
   // TODO(beng): pull properties to mus::Window.
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return nullptr;
 }
 
 TooltipManager* NativeWidgetMus::GetTooltipManager() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return nullptr;
 }
 
@@ -215,69 +288,70 @@ void NativeWidgetMus::CenterWindow(const gfx::Size& size) {
 void NativeWidgetMus::GetWindowPlacement(
       gfx::Rect* bounds,
       ui::WindowShowState* maximized) const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 bool NativeWidgetMus::SetWindowTitle(const base::string16& title) {
   // TODO(beng): push title to window manager.
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return false;
 }
 
 void NativeWidgetMus::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                      const gfx::ImageSkia& app_icon) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::InitModalType(ui::ModalType modal_type) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 gfx::Rect NativeWidgetMus::GetWindowBoundsInScreen() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return gfx::Rect();
 }
 
 gfx::Rect NativeWidgetMus::GetClientAreaBoundsInScreen() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return gfx::Rect();
 }
 
 gfx::Rect NativeWidgetMus::GetRestoredBounds() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return gfx::Rect();
 }
 
 void NativeWidgetMus::SetBounds(const gfx::Rect& bounds) {
-  window_->RequestBoundsChange(bounds);
+  window_tree_host_->SetBounds(bounds);
 }
 
 void NativeWidgetMus::SetSize(const gfx::Size& size) {
-  window_->RequestBoundsChange(gfx::Rect(window_->bounds().size()));
+  gfx::Rect bounds = window_tree_host_->GetBounds();
+  SetBounds(gfx::Rect(bounds.origin(), size));
 }
 
 void NativeWidgetMus::StackAbove(gfx::NativeView native_view) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::StackAtTop() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::StackBelow(gfx::NativeView native_view) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetShape(SkRegion* shape) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::Close() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::CloseNow() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::Show() {
@@ -291,7 +365,7 @@ void NativeWidgetMus::Hide() {
 
 void NativeWidgetMus::ShowMaximizedWithBounds(
     const gfx::Rect& restored_bounds) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::ShowWithWindowState(ui::WindowShowState state) {
@@ -300,79 +374,95 @@ void NativeWidgetMus::ShowWithWindowState(ui::WindowShowState state) {
 }
 
 bool NativeWidgetMus::IsVisible() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return true;
 }
 
 void NativeWidgetMus::Activate() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::Deactivate() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 bool NativeWidgetMus::IsActive() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return true;
 }
 
 void NativeWidgetMus::SetAlwaysOnTop(bool always_on_top) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 bool NativeWidgetMus::IsAlwaysOnTop() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return false;
 }
 
 void NativeWidgetMus::SetVisibleOnAllWorkspaces(bool always_visible) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::Maximize() {
-  window_tree_host_->SetShowState(mus::mojom::SHOW_STATE_MAXIMIZED);
+  window_tree_host_->platform_window()->Maximize();
 }
 
 void NativeWidgetMus::Minimize() {
-  window_tree_host_->SetShowState(mus::mojom::SHOW_STATE_MINIMIZED);
+  window_tree_host_->platform_window()->Minimize();
 }
 
 bool NativeWidgetMus::IsMaximized() const {
-  return window_tree_host_->show_state() == mus::mojom::SHOW_STATE_MAXIMIZED;
+  return window_tree_host_->show_state() == ui::PLATFORM_WINDOW_STATE_MAXIMIZED;
 }
 
 bool NativeWidgetMus::IsMinimized() const {
-  return window_tree_host_->show_state() == mus::mojom::SHOW_STATE_MINIMIZED;
+  return window_tree_host_->show_state() == ui::PLATFORM_WINDOW_STATE_MINIMIZED;
 }
 
 void NativeWidgetMus::Restore() {
-  window_tree_host_->SetShowState(mus::mojom::SHOW_STATE_RESTORED);
+  window_tree_host_->platform_window()->Restore();
 }
 
 void NativeWidgetMus::SetFullscreen(bool fullscreen) {
+  if (IsFullscreen() == fullscreen)
+    return;
   if (fullscreen) {
     show_state_before_fullscreen_ = window_tree_host_->show_state();
-    window_tree_host_->SetShowState(mus::mojom::SHOW_STATE_PRESENTATION);
+    window_tree_host_->platform_window()->ToggleFullscreen();
   } else {
-    window_tree_host_->SetShowState(show_state_before_fullscreen_);
+    switch (show_state_before_fullscreen_) {
+      case ui::PLATFORM_WINDOW_STATE_MAXIMIZED:
+        Maximize();
+        break;
+      case ui::PLATFORM_WINDOW_STATE_MINIMIZED:
+        Minimize();
+        break;
+      case ui::PLATFORM_WINDOW_STATE_UNKNOWN:
+      case ui::PLATFORM_WINDOW_STATE_NORMAL:
+      case ui::PLATFORM_WINDOW_STATE_FULLSCREEN:
+        // TODO(sad): This may not be sufficient.
+        Restore();
+        break;
+    }
   }
 }
 
 bool NativeWidgetMus::IsFullscreen() const {
-  return window_tree_host_->show_state() == mus::mojom::SHOW_STATE_PRESENTATION;
+  return window_tree_host_->show_state() ==
+      ui::PLATFORM_WINDOW_STATE_FULLSCREEN;
 }
 
 void NativeWidgetMus::SetOpacity(unsigned char opacity) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetUseDragFrame(bool use_drag_frame) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::FlashFrame(bool flash_frame) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::RunShellDrag(
@@ -381,28 +471,28 @@ void NativeWidgetMus::RunShellDrag(
     const gfx::Point& location,
     int operation,
     ui::DragDropTypes::DragEventSource source) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SchedulePaintInRect(const gfx::Rect& rect) {
-  NOTIMPLEMENTED();
+  content_->SchedulePaintInRect(rect);
 }
 
 void NativeWidgetMus::SetCursor(gfx::NativeCursor cursor) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 bool NativeWidgetMus::IsMouseEventsEnabled() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return true;
 }
 
 void NativeWidgetMus::ClearNativeFocus() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 gfx::Rect NativeWidgetMus::GetWorkAreaBoundsInScreen() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return gfx::Rect();
 }
 
@@ -410,26 +500,26 @@ Widget::MoveLoopResult NativeWidgetMus::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return Widget::MOVE_LOOP_CANCELED;
 }
 
 void NativeWidgetMus::EndMoveLoop() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetVisibilityChangedAnimationsEnabled(bool value) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetVisibilityAnimationDuration(
     const base::TimeDelta& duration) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::SetVisibilityAnimationTransition(
     Widget::VisibilityTransition transition) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 ui::NativeTheme* NativeWidgetMus::GetNativeTheme() const {
@@ -437,20 +527,20 @@ ui::NativeTheme* NativeWidgetMus::GetNativeTheme() const {
 }
 
 void NativeWidgetMus::OnRootViewLayout() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 bool NativeWidgetMus::IsTranslucentWindowOpacitySupported() const {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
   return true;
 }
 
 void NativeWidgetMus::OnSizeConstraintsChanged() {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 void NativeWidgetMus::RepostNativeEvent(gfx::NativeEvent native_event) {
-  NOTIMPLEMENTED();
+  // NOTIMPLEMENTED();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

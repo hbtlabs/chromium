@@ -90,9 +90,8 @@ interface WindowTree {
   // Sets the specified bounds of the specified window.
   SetWindowBounds(uint32 window_id, mojo.Rect bounds) => (bool success);
 
-  // Sets the client area of the specified window. Areas outside the client
-  // area are treated specially.
-  SetClientArea(uint32 window_id, mojo.Rect rect);
+  // Sets the insets of the client area of the specified window.
+  SetClientArea(uint32 window_id, mojo.Insets insets);
 
   // Sets the visibility of the specified window to |visible|. Connections are
   // allowed to change the visibility of any window they have created, as well
@@ -195,16 +194,14 @@ interface WindowTree {
   //   OpenWindow(WindowTreeClient client);
   SetPreferredSize(uint32 window_id, mojo.Size size) =>
       (WindowManagerErrorCode result);
-  SetBounds(uint32 window_id, mojo.Rect bounds) =>
-      (WindowManagerErrorCode result);
   SetShowState(uint32 window_id, ShowState show_state) =>
       (WindowManagerErrorCode result);
-  GetDisplays() => (array<Display> displays);
 };
 
 // Changes to windows are not sent to the connection that originated the
 // change. For example, if connection 1 changes the bounds of a window by
-// calling SetBounds(), connection 1 does not receive OnWindowBoundsChanged().
+// calling SetWindowBounds(), connection 1 does not receive
+// OnWindowBoundsChanged().
 interface WindowTreeClient {
   // Invoked when the client application has been embedded at |root|.
   // See Embed() on WindowTree for more details. |tree| will be a handle back to
@@ -232,8 +229,8 @@ interface WindowTreeClient {
                         mojo.Rect new_bounds);
 
   OnClientAreaChanged(uint32 window_id,
-                      mojo.Rect old_client_area,
-                      mojo.Rect new_client_area);
+                      mojo.Insets old_client_area,
+                      mojo.Insets new_client_area);
 
   // Invoked when the viewport metrics for the window have changed.
   // Clients are expected to propagate this to the window tree.

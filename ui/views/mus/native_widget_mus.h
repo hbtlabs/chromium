@@ -8,6 +8,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/platform_window/platform_window_delegate.h"
 #include "ui/views/widget/native_widget_private.h"
 
 namespace aura {
@@ -23,6 +24,10 @@ class Shell;
 
 namespace mus {
 class Window;
+
+namespace mojom {
+class WindowManager;
+}
 }
 
 namespace wm {
@@ -30,6 +35,7 @@ class FocusController;
 }
 
 namespace views {
+struct WindowManagerClientAreaInsets;
 class WindowTreeHostMus;
 
 // An implementation of NativeWidget that binds to a mus::Window. Because Aura
@@ -47,12 +53,22 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
                   mus::mojom::SurfaceType surface_type);
   ~NativeWidgetMus() override;
 
+  // Sets the insets for the client area. These values come from the window
+  // manager.
+  static void SetWindowManagerClientAreaInsets(
+      const WindowManagerClientAreaInsets& insets);
+
+  mus::Window* window() { return window_; }
+
+ protected:
+  // internal::NativeWidgetPrivate:
+  NonClientFrameView* CreateNonClientFrameView() override;
+
  private:
   void UpdateClientAreaInWindowManager();
 
   // internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override;
-  NonClientFrameView* CreateNonClientFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
@@ -169,8 +185,7 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   internal::NativeWidgetDelegate* native_widget_delegate_;
 
   const mus::mojom::SurfaceType surface_type_;
-
-  mus::mojom::ShowState show_state_before_fullscreen_;
+  ui::PlatformWindowState show_state_before_fullscreen_;
 
   // Aura configuration.
   scoped_ptr<WindowTreeHostMus> window_tree_host_;

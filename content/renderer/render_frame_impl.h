@@ -596,7 +596,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // WebPageSerializerClient implementation:
   void didSerializeDataForFrame(
-      const blink::WebURL& frame_url,
       const blink::WebCString& data,
       blink::WebPageSerializerClient::PageSerializationStatus status) override;
 
@@ -672,6 +671,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void AddObserver(RenderFrameObserver* observer);
   void RemoveObserver(RenderFrameObserver* observer);
 
+  bool IsLocalRoot() const;
+
   // Builds and sends DidCommitProvisionalLoad to the host.
   void SendDidCommitProvisionalLoad(blink::WebFrame* frame,
                                     blink::WebHistoryCommitType commit_type,
@@ -736,7 +737,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags);
   void OnSetFrameOwnerProperties(
       const blink::WebFrameOwnerProperties& frame_owner_properties);
-  void OnClearFocus();
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
   void OnPostMessageEvent(const FrameMsg_PostMessage_Params& params);
@@ -847,6 +847,9 @@ class CONTENT_EXPORT RenderFrameImpl
   void LoadDataURL(const CommonNavigationParams& params,
                    blink::WebFrame* frame);
 
+  // Sends the current frame's navigation state to the browser.
+  void SendUpdateState();
+
   // Sends a proper FrameHostMsg_DidFailProvisionalLoadWithError_Params IPC for
   // the failed request |request|.
   void SendFailedProvisionalLoad(const blink::WebURLRequest& request,
@@ -866,6 +869,10 @@ class CONTENT_EXPORT RenderFrameImpl
   // Returns a new NavigationState populated with the navigation information
   // saved in OnNavigate().
   NavigationState* CreateNavigationStateFromPending();
+
+  // Sets the NavigationState on the DocumentState based on
+  // the value of |pending_navigation_params_|.
+  void UpdateNavigationState(DocumentState* document_state);
 
 #if defined(OS_ANDROID)
   blink::WebMediaPlayer* CreateAndroidWebMediaPlayer(
@@ -906,10 +913,6 @@ class CONTENT_EXPORT RenderFrameImpl
   // |frame_| has been invalidated.
   bool is_main_frame_;
 
-  // Frame is a local root if it is rendered in a process different than parent
-  // or it is a main frame.
-  bool is_local_root_;
-
   base::WeakPtr<RenderViewImpl> render_view_;
   int routing_id_;
   bool is_swapped_out_;
@@ -926,17 +929,19 @@ class CONTENT_EXPORT RenderFrameImpl
   // TODO(creis): Remove this after switching to PlzNavigate.
   int proxy_routing_id_;
 
-  // Used when the RenderFrame is a local root. For now, RenderWidgets are
-  // added only when a child frame is in a different process from its parent
-  // frame, but eventually this will also apply to top-level frames.
-  // TODO(kenrb): Correct the above statement when top-level frames have their
-  // own RenderWidgets.
+  // Non-null when the RenderFrame is a local root for compositing, input,
+  // layout, etc. A local frame is also a local root iff it does not have a
+  // parent that is a local frame.
   scoped_refptr<RenderWidget> render_widget_;
 
   // Temporarily holds state pertaining to a navigation that has been initiated
   // until the NavigationState corresponding to the new navigation is created in
   // didCreateDataSource().
   scoped_ptr<NavigationParams> pending_navigation_params_;
+
+  // Stores the current history item for this frame, so that updates to it can
+  // be reported to the browser process via SendUpdateState.
+  blink::WebHistoryItem current_history_item_;
 
 #if defined(ENABLE_PLUGINS)
   // Current text input composition text. Empty if no composition is in

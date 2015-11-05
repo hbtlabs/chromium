@@ -9,6 +9,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "content/renderer/web_frame_utils.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -42,9 +43,17 @@ void GetSavableResourceLinkForElement(
     const WebElement& element,
     const WebDocument& current_doc,
     SavableResourcesResult* result) {
-  // Skipping frame and iframe tag.
-  if (element.hasHTMLTagName("iframe") || element.hasHTMLTagName("frame"))
+  if (element.hasHTMLTagName("iframe") || element.hasHTMLTagName("frame")) {
+    GURL complete_url = current_doc.completeURL(element.getAttribute("src"));
+    WebFrame* web_frame = WebFrame::fromFrameOwnerElement(element);
+
+    SavableSubframe subframe;
+    subframe.original_url = complete_url;
+    subframe.routing_id = GetRoutingIdForFrameOrProxy(web_frame);
+
+    result->subframes->push_back(subframe);
     return;
+  }
 
   // Check whether the node has sub resource URL or not.
   WebString value = GetSubResourceLinkFromElement(element);
