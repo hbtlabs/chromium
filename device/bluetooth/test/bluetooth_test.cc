@@ -64,6 +64,12 @@ void BluetoothTestBase::GattConnectionCallback(
   gatt_connections_.push_back(connection.release());
 }
 
+void BluetoothTestBase::NotifyCallback(
+    scoped_ptr<BluetoothGattNotifySession> notify_session) {
+  ++callback_count_;
+  notify_sessions_.push_back(notify_session.Pass());
+}
+
 void BluetoothTestBase::ReadValueCallback(const std::vector<uint8>& value) {
   ++callback_count_;
   last_read_value_ = value;
@@ -98,6 +104,12 @@ BluetoothTestBase::GetDiscoverySessionCallback() {
 BluetoothDevice::GattConnectionCallback
 BluetoothTestBase::GetGattConnectionCallback() {
   return base::Bind(&BluetoothTestBase::GattConnectionCallback,
+                    weak_factory_.GetWeakPtr());
+}
+
+BluetoothGattCharacteristic::NotifySessionCallback
+BluetoothTestBase::GetNotifyCallback() {
+  return base::Bind(&BluetoothTestBase::NotifyCallback,
                     weak_factory_.GetWeakPtr());
 }
 

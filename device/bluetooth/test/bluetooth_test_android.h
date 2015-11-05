@@ -39,7 +39,7 @@ class BluetoothTestAndroid : public BluetoothTestBase {
                                   const std::string& uuid,
                                   int properties) override;
   virtual void SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
-      BluetoothGattCharacteristic* characteristic) {}
+      BluetoothGattCharacteristic* characteristic) override;
   void SimulateGattCharacteristicRead(
       BluetoothGattCharacteristic* characteristic,
       const std::vector<uint8>& value) override;
@@ -65,8 +65,10 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   // Records that Java FakeBluetoothGatt discoverServices was called.
   void OnFakeBluetoothGattDiscoverServices(JNIEnv* env, jobject caller);
 
-  // Records that Java FakeBluetoothGatt setCharacteristicNotification was called.
-  void OnFakeBluetoothGattSetCharacteristicNotification(JNIEnv* env, jobject caller);
+  // Records that Java FakeBluetoothGatt setCharacteristicNotification was
+  // called.
+  void OnFakeBluetoothGattSetCharacteristicNotification(JNIEnv* env,
+                                                        jobject caller);
 
   // Records that Java FakeBluetoothGatt readCharacteristic was called.
   void OnFakeBluetoothGattReadCharacteristic(JNIEnv* env, jobject caller);

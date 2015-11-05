@@ -313,12 +313,14 @@ class Fakes {
         }
 
         @Override
-        boolean setCharacteristicNotification (Wrappers.BluetoothGattCharacteristicWrapper characteristic, boolean enable) {
+        boolean setCharacteristicNotification(
+                Wrappers.BluetoothGattCharacteristicWrapper characteristic, boolean enable) {
             if (mSetCharacteristicNotificationWillFailSynchronouslyOnce) {
                 mSetCharacteristicNotificationWillFailSynchronouslyOnce = false;
                 return false;
             }
-            nativeOnFakeBluetoothGattSetCharacteristicNotification(mDevice.mAdapter.mNativeBluetoothTestAndroid);
+            nativeOnFakeBluetoothGattSetCharacteristicNotification(
+                    mDevice.mAdapter.mNativeBluetoothTestAndroid);
             return true;
         }
 
@@ -440,8 +442,8 @@ class Fakes {
             FakeBluetoothGattCharacteristic fakeCharacteristic =
                     (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
 
-            fakeCharacteristic.mService.mDevice.mGatt.mSetCharacteristicNotificationWillFailSynchronouslyOnce =
-                    true;
+            fakeCharacteristic.mService.mDevice.mGatt
+                    .mSetCharacteristicNotificationWillFailSynchronouslyOnce = true;
         }
 
         // Cause subsequent value reads of a characteristic to fail synchronously.

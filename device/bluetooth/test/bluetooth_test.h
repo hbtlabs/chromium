@@ -101,7 +101,12 @@ class BluetoothTestBase : public testing::Test {
                                           const std::string& uuid,
                                           int properties) {}
 
-  // Simulates a Characteristic Set Notify operation failing synchronously once for an unknown reason.
+  // Simulates a Characteristic Set Notify success.
+  virtual void SimulateGattConnection(
+      BluetoothGattCharacteristic* characteristic) {}
+
+  // Simulates a Characteristic Set Notify operation failing synchronously once
+  // for an unknown reason.
   virtual void SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) {}
 
@@ -141,6 +146,7 @@ class BluetoothTestBase : public testing::Test {
   void Callback();
   void DiscoverySessionCallback(scoped_ptr<BluetoothDiscoverySession>);
   void GattConnectionCallback(scoped_ptr<BluetoothGattConnection>);
+  void NotifyCallback(scoped_ptr<BluetoothGattNotifySession>);
   void ReadValueCallback(const std::vector<uint8>& value);
   void ErrorCallback();
   void ConnectErrorCallback(enum BluetoothDevice::ConnectErrorCode);
@@ -150,6 +156,7 @@ class BluetoothTestBase : public testing::Test {
   base::Closure GetCallback();
   BluetoothAdapter::DiscoverySessionCallback GetDiscoverySessionCallback();
   BluetoothDevice::GattConnectionCallback GetGattConnectionCallback();
+  BluetoothGattCharacteristic::NotifySessionCallback GetNotifyCallback();
   BluetoothGattCharacteristic::ValueCallback GetReadValueCallback();
   BluetoothAdapter::ErrorCallback GetErrorCallback();
   BluetoothDevice::ConnectErrorCallback GetConnectErrorCallback();
@@ -168,6 +175,7 @@ class BluetoothTestBase : public testing::Test {
   ScopedVector<BluetoothGattConnection> gatt_connections_;
   enum BluetoothDevice::ConnectErrorCode last_connect_error_code_ =
       BluetoothDevice::ERROR_UNKNOWN;
+  ScopedVector<BluetoothGattNotifySession> notify_sessions_;
   std::vector<uint8> last_read_value_;
   std::vector<uint8> last_write_value_;
   BluetoothGattService::GattErrorCode last_gatt_error_code_;
