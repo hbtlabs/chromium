@@ -5,7 +5,6 @@
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
 
 #include "base/run_loop.h"
-#include "device/bluetooth/bluetooth_gatt_notify_session.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -567,14 +566,16 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
-  characteristic1_->StartNotifySession(GetNotifyCallback(), GetGattErrorCallback());
-  SimulateGattConnection(characteristic1_);
+  characteristic1_->StartNotifySession(GetNotifyCallback(),
+                                       GetGattErrorCallback());
+  SimulateGattNotifySessionStarted(characteristic1_);
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
-  EXPECT_EQ(1u, notify_sessions_.size());
+  ASSERT_EQ(1u, notify_sessions_.size());
+  ASSERT_TRUE(notify_sessions_[0]);
   EXPECT_EQ(characteristic1_->GetIdentifier(),
-            notify_sessions_[0].GetCharacteristicIdentifier());
-  EXPECT_TRUE(notify_sessions_[0].IsActive());
+            notify_sessions_[0]->GetCharacteristicIdentifier());
+  EXPECT_TRUE(notify_sessions_[0]->IsActive());
 }
 #endif  // defined(OS_ANDROID)
 

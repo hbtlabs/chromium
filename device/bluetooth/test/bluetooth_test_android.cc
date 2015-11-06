@@ -10,6 +10,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
+#include "base/run_loop.h"
 #include "device/bluetooth/android/wrappers.h"
 #include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_device_android.h"
@@ -154,6 +155,14 @@ void BluetoothTestAndroid::SimulateGattCharacteristic(
   Java_FakeBluetoothGattService_addCharacteristic(
       env, service_android->GetJavaObject().obj(),
       base::android::ConvertUTF8ToJavaString(env, uuid).obj(), properties);
+}
+
+void BluetoothTestAndroid::SimulateGattNotifySessionStarted(
+    BluetoothGattCharacteristic* characteristic) {
+  // Android doesn't provide any sort of callback for when notifications have
+  // been enabled. So, just run the message loop to process the success
+  // callback.
+  base::RunLoop().RunUntilIdle();
 }
 
 void BluetoothTestAndroid::

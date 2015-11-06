@@ -13,6 +13,7 @@
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
+#include "device/bluetooth/bluetooth_gatt_notify_session.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -102,7 +103,7 @@ class BluetoothTestBase : public testing::Test {
                                           int properties) {}
 
   // Simulates a Characteristic Set Notify success.
-  virtual void SimulateGattConnection(
+  virtual void SimulateGattNotifySessionStarted(
       BluetoothGattCharacteristic* characteristic) {}
 
   // Simulates a Characteristic Set Notify operation failing synchronously once

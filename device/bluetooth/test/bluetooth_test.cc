@@ -67,7 +67,7 @@ void BluetoothTestBase::GattConnectionCallback(
 void BluetoothTestBase::NotifyCallback(
     scoped_ptr<BluetoothGattNotifySession> notify_session) {
   ++callback_count_;
-  notify_sessions_.push_back(notify_session.Pass());
+  notify_sessions_.push_back(notify_session.release());
 }
 
 void BluetoothTestBase::ReadValueCallback(const std::vector<uint8>& value) {
