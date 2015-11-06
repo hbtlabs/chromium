@@ -211,6 +211,20 @@ function Gallery(volumeManager) {
    * @const
    */
   this.onSubModeChangedBound_ = this.onSubModeChanged_.bind(this);
+
+  chrome.accessibilityFeatures.largeCursor.onChange.addListener(
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'large-cursor'));
+  chrome.accessibilityFeatures.largeCursor.get({},
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'large-cursor'));
+
+  chrome.accessibilityFeatures.highContrast.onChange.addListener(
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'high-contrast'));
+  chrome.accessibilityFeatures.highContrast.get({},
+      this.onGetOrChangedAccessibilityConfiguration_.bind(
+          this, 'high-contrast'));
 }
 
 /**
@@ -261,6 +275,22 @@ Gallery.SubMode = {
   BROWSE: 'browse',
   EDIT: 'edit',
   SLIDESHOW: 'slideshow'
+};
+
+/**
+ * Updates attributes of container element when accessibility configuration has
+ * been changed.
+ * @param {string} name
+ * @param {Object} details
+ * @private
+ */
+Gallery.prototype.onGetOrChangedAccessibilityConfiguration_ = function(
+    name, details) {
+  if (details.value) {
+    this.container_.setAttribute(name, true);
+  } else {
+    this.container_.removeAttribute(name);
+  }
 };
 
 /**
@@ -561,8 +591,6 @@ Gallery.prototype.changeCurrentMode_ = function(mode, opt_event) {
           }.bind(this));
       this.bottomToolbar_.hidden = true;
     } else {
-      // TODO(yawano): Make animation smooth. With this implementation,
-      //     animation starts after the image is fully loaded.
       this.setCurrentMode_(this.slideMode_);
       this.slideMode_.enter(
           thumbnailRect,

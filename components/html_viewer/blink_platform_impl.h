@@ -49,8 +49,8 @@ class BlinkPlatformImpl : public blink::Platform {
   virtual blink::WebThemeEngine* themeEngine();
   virtual blink::WebString defaultLocale();
   virtual blink::WebBlobRegistry* blobRegistry();
-  virtual double currentTime();
-  virtual double monotonicallyIncreasingTime();
+  virtual double currentTimeSeconds();
+  virtual double monotonicallyIncreasingTimeSeconds();
   virtual void cryptographicallyRandomValues(unsigned char* buffer,
                                              size_t length);
   virtual bool isThreadedCompositingEnabled();
@@ -104,7 +104,7 @@ class BlinkPlatformImpl : public blink::Platform {
   GlobalState* global_state_;
   mojo::ApplicationImpl* app_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-  scoped_ptr<scheduler::WebThreadImplForRendererScheduler> main_thread_;
+  scoped_ptr<blink::WebThread> main_thread_;
   base::ThreadLocalStorage::Slot current_thread_slot_;
   cc_blink::WebCompositorSupportImpl compositor_support_;
   WebThemeEngineImpl theme_engine_;

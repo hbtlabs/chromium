@@ -41,6 +41,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
+#include "ui/gfx/switches.h"
 
 namespace content {
 
@@ -107,6 +108,149 @@ void SimulateMouseClick(RenderWidgetHost* rwh, int x, int y) {
   mouse_event.x = x;
   mouse_event.y = y;
   rwh->ForwardMouseEvent(mouse_event);
+}
+
+class RenderWidgetHostMouseEventMonitor {
+ public:
+  explicit RenderWidgetHostMouseEventMonitor(RenderWidgetHost* host)
+      : host_(host), event_received_(false) {
+    host_->AddMouseEventCallback(
+        base::Bind(&RenderWidgetHostMouseEventMonitor::MouseEventCallback,
+                   base::Unretained(this)));
+  }
+  ~RenderWidgetHostMouseEventMonitor() {
+    host_->RemoveMouseEventCallback(
+        base::Bind(&RenderWidgetHostMouseEventMonitor::MouseEventCallback,
+                   base::Unretained(this)));
+  }
+  bool EventWasReceived() const { return event_received_; }
+  void ResetEventReceived() { event_received_ = false; }
+  const blink::WebMouseEvent& event() const { return event_; }
+
+ private:
+  bool MouseEventCallback(const blink::WebMouseEvent& event) {
+    event_received_ = true;
+    event_ = event;
+    return false;
+  }
+  RenderWidgetHost* host_;
+  bool event_received_;
+  blink::WebMouseEvent event_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostMouseEventMonitor);
+};
+
+// Helper function that performs a surface hittest.
+void SurfaceHitTestTestHelper(
+    Shell* shell,
+    net::test_server::EmbeddedTestServer* embedded_test_server) {
+  if (!UseSurfacesEnabled())
+    return;
+
+  GURL main_url(embedded_test_server->GetURL(
+      "/frame_tree/page_with_positioned_frame.html"));
+  NavigateToURL(shell, main_url);
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  ASSERT_EQ(1U, root->child_count());
+
+  FrameTreeNode* child_node = root->child_at(0);
+  GURL site_url(embedded_test_server->GetURL("baz.com", "/title1.html"));
+  EXPECT_EQ(site_url, child_node->current_url());
+  EXPECT_NE(shell->web_contents()->GetSiteInstance(),
+            child_node->current_frame_host()->GetSiteInstance());
+
+  // Create listeners for mouse events.
+  RenderWidgetHostMouseEventMonitor main_frame_monitor(
+      root->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor child_frame_monitor(
+      child_node->current_frame_host()->GetRenderWidgetHost());
+
+  RenderWidgetHostInputEventRouter* router =
+      static_cast<WebContentsImpl*>(shell->web_contents())
+          ->GetInputEventRouter();
+
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderWidgetHostViewBase* rwhv_child = static_cast<RenderWidgetHostViewBase*>(
+      child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  // We need to wait for a compositor frame from the child frame, at which
+  // point its surface will be created.
+  while (rwhv_child->RendererFrameNumber() <= 0) {
+    // TODO(lazyboy): Find a better way to avoid sleeping like this. See
+    // http://crbug.com/405282 for details.
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromMilliseconds(10));
+    run_loop.Run();
+  }
+
+  uint32_t cur_render_frame_number = root_view->RendererFrameNumber();
+
+  // Target input event to child frame.
+  blink::WebMouseEvent child_event;
+  child_event.type = blink::WebInputEvent::MouseDown;
+  child_event.button = blink::WebPointerProperties::ButtonLeft;
+  child_event.x = 75;
+  child_event.y = 75;
+  child_event.clickCount = 1;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  router->RouteMouseEvent(root_view, &child_event);
+
+  while (!child_frame_monitor.EventWasReceived()) {
+    // This is working around a big synchronization problem. It is very
+    // difficult to know if we have received a compositor frame from the
+    // main frame renderer *after* it received the child frame's surface
+    // ID. Hit testing won't work until this happens. So if the hit test
+    // fails then we wait for another frame to arrive and try again.
+    // TODO(kenrb): We need a better way to do all of this, possibly coming
+    // from http://crbug.com/405282.
+    while (root_view->RendererFrameNumber() <= cur_render_frame_number) {
+      base::RunLoop run_loop;
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, run_loop.QuitClosure(),
+          base::TimeDelta::FromMilliseconds(10));
+      run_loop.Run();
+    }
+    cur_render_frame_number = root_view->RendererFrameNumber();
+    child_event.type = blink::WebInputEvent::MouseDown;
+    child_event.button = blink::WebPointerProperties::ButtonLeft;
+    child_event.x = 75;
+    child_event.y = 75;
+    child_event.clickCount = 1;
+    main_frame_monitor.ResetEventReceived();
+    child_frame_monitor.ResetEventReceived();
+    router->RouteMouseEvent(root_view, &child_event);
+  }
+
+  EXPECT_TRUE(child_frame_monitor.EventWasReceived());
+  EXPECT_EQ(23, child_frame_monitor.event().x);
+  EXPECT_EQ(23, child_frame_monitor.event().y);
+  EXPECT_FALSE(main_frame_monitor.EventWasReceived());
+
+  child_frame_monitor.ResetEventReceived();
+  main_frame_monitor.ResetEventReceived();
+
+  // Target input event to main frame.
+  blink::WebMouseEvent main_event;
+  main_event.type = blink::WebInputEvent::MouseDown;
+  main_event.button = blink::WebPointerProperties::ButtonLeft;
+  main_event.x = 1;
+  main_event.y = 1;
+  main_event.clickCount = 1;
+  // Ladies and gentlemen, THIS is the main_event!
+  router->RouteMouseEvent(root_view, &main_event);
+
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
+  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
+  EXPECT_EQ(1, main_frame_monitor.event().x);
+  EXPECT_EQ(1, main_frame_monitor.event().y);
 }
 
 class RedirectNotificationObserver : public NotificationObserver {
@@ -329,6 +473,23 @@ void SitePerProcessBrowserTest::SetUpOnMainThread() {
   SetupCrossSiteRedirector(embedded_test_server());
 }
 
+//
+// SitePerProcessHighDPIBrowserTest
+//
+
+
+class SitePerProcessHighDPIBrowserTest : public SitePerProcessBrowserTest {
+ public:
+  SitePerProcessHighDPIBrowserTest() {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SitePerProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor,
+                                    base::StringPrintf("2"));
+  }
+};
+
 // Ensure that navigating subframes in --site-per-process mode works and the
 // correct documents are committed.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CrossSiteIframe) {
@@ -458,34 +619,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CrossSiteIframe) {
       DepictFrameTree(root));
 }
 
-class RenderWidgetHostMouseEventMonitor {
- public:
-  RenderWidgetHostMouseEventMonitor(RenderWidgetHost* host)
-      : host_(host), event_received(false) {
-    host_->AddMouseEventCallback(
-        base::Bind(&RenderWidgetHostMouseEventMonitor::MouseEventCallback,
-                   base::Unretained(this)));
-  }
-  ~RenderWidgetHostMouseEventMonitor() {
-    host_->RemoveMouseEventCallback(
-        base::Bind(&RenderWidgetHostMouseEventMonitor::MouseEventCallback,
-                   base::Unretained(this)));
-  }
-  bool EventWasReceived() { return event_received; }
-  void ResetEventReceived() { event_received = false; }
-  const blink::WebMouseEvent& event() const { return event_; }
-
- private:
-  bool MouseEventCallback(const blink::WebMouseEvent& event) {
-    event_received = true;
-    event_ = event;
-    return false;
-  }
-  RenderWidgetHost* host_;
-  bool event_received;
-  blink::WebMouseEvent event_;
-};
-
 // Test that mouse events are being routed to the correct RenderWidgetHostView
 // based on coordinates.
 #if defined(OS_ANDROID)
@@ -496,113 +629,21 @@ class RenderWidgetHostMouseEventMonitor {
 #define MAYBE_SurfaceHitTestTest SurfaceHitTestTest
 #endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_SurfaceHitTestTest) {
-  if (!UseSurfacesEnabled())
-    return;
+  SurfaceHitTestTestHelper(shell(), embedded_test_server());
+}
 
-  GURL main_url(embedded_test_server()->GetURL(
-      "/frame_tree/page_with_positioned_frame.html"));
-  NavigateToURL(shell(), main_url);
-
-  // It is safe to obtain the root frame tree node here, as it doesn't change.
-  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
-  ASSERT_EQ(1U, root->child_count());
-
-  FrameTreeNode* child_node = root->child_at(0);
-  GURL site_url(embedded_test_server()->GetURL("baz.com", "/title1.html"));
-  EXPECT_EQ(site_url, child_node->current_url());
-  EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
-            child_node->current_frame_host()->GetSiteInstance());
-
-  // Create listeners for mouse events.
-  RenderWidgetHostMouseEventMonitor main_frame_monitor(
-      root->current_frame_host()->GetRenderWidgetHost());
-  RenderWidgetHostMouseEventMonitor child_frame_monitor(
-      child_node->current_frame_host()->GetRenderWidgetHost());
-
-  RenderWidgetHostInputEventRouter* router =
-      static_cast<WebContentsImpl*>(shell()->web_contents())
-          ->GetInputEventRouter();
-
-  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
-      root->current_frame_host()->GetRenderWidgetHost()->GetView());
-  RenderWidgetHostViewBase* rwhv_child = static_cast<RenderWidgetHostViewBase*>(
-      child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
-
-  // We need to wait for a compositor frame from the child frame, at which
-  // point its surface will be created.
-  while (rwhv_child->RendererFrameNumber() <= 0) {
-    // TODO(lazyboy): Find a better way to avoid sleeping like this. See
-    // http://crbug.com/405282 for details.
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(),
-        base::TimeDelta::FromMilliseconds(10));
-    run_loop.Run();
-  }
-
-  uint32_t cur_render_frame_number = root_view->RendererFrameNumber();
-
-  // Target input event to child frame.
-  blink::WebMouseEvent child_event;
-  child_event.type = blink::WebInputEvent::MouseDown;
-  child_event.button = blink::WebPointerProperties::ButtonLeft;
-  child_event.x = 75;
-  child_event.y = 75;
-  child_event.clickCount = 1;
-  main_frame_monitor.ResetEventReceived();
-  child_frame_monitor.ResetEventReceived();
-  router->RouteMouseEvent(root_view, &child_event);
-
-  while (!child_frame_monitor.EventWasReceived()) {
-    // This is working around a big synchronization problem. It is very
-    // difficult to know if we have received a compositor frame from the
-    // main frame renderer *after* it received the child frame's surface
-    // ID. Hit testing won't work until this happens. So if the hit test
-    // fails then we wait for another frame to arrive and try again.
-    // TODO(kenrb): We need a better way to do all of this, possibly coming
-    // from http://crbug.com/405282.
-    while (root_view->RendererFrameNumber() <= cur_render_frame_number) {
-      base::RunLoop run_loop;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, run_loop.QuitClosure(),
-          base::TimeDelta::FromMilliseconds(10));
-      run_loop.Run();
-    }
-    cur_render_frame_number = root_view->RendererFrameNumber();
-    child_event.type = blink::WebInputEvent::MouseDown;
-    child_event.button = blink::WebPointerProperties::ButtonLeft;
-    child_event.x = 75;
-    child_event.y = 75;
-    child_event.clickCount = 1;
-    main_frame_monitor.ResetEventReceived();
-    child_frame_monitor.ResetEventReceived();
-    router->RouteMouseEvent(root_view, &child_event);
-  }
-
-  EXPECT_TRUE(child_frame_monitor.EventWasReceived());
-  EXPECT_EQ(23, child_frame_monitor.event().x);
-  EXPECT_EQ(23, child_frame_monitor.event().y);
-  EXPECT_FALSE(main_frame_monitor.EventWasReceived());
-
-  child_frame_monitor.ResetEventReceived();
-  main_frame_monitor.ResetEventReceived();
-
-  // Target input event to main frame.
-  blink::WebMouseEvent main_event;
-  main_event.type = blink::WebInputEvent::MouseDown;
-  main_event.button = blink::WebPointerProperties::ButtonLeft;
-  main_event.x = 1;
-  main_event.y = 1;
-  main_event.clickCount = 1;
-  // Ladies and gentlemen, THIS is the main_event!
-  router->RouteMouseEvent(root_view, &main_event);
-
-  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
-  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
-  EXPECT_EQ(1, main_frame_monitor.event().x);
-  EXPECT_EQ(1, main_frame_monitor.event().y);
+// Same test as above, but runs in high-dpi mode.
+#if defined(OS_ANDROID) || defined(OS_WIN)
+// Browser process hit testing is not implemented on Android.
+// https://crbug.com/491334
+// Windows is disabled because of https://crbug.com/545547.
+#define MAYBE_HighDPISurfaceHitTestTest DISABLED_SurfaceHitTestTest
+#else
+#define MAYBE_HighDPISurfaceHitTestTest SurfaceHitTestTest
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIBrowserTest,
+                       MAYBE_HighDPISurfaceHitTestTest) {
+  SurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
 // Tests OOPIF rendering by checking that the RWH of the iframe generates
@@ -3909,6 +3950,49 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OpenerSetLocation) {
   EXPECT_TRUE(ExecuteScript(popup->web_contents(), script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), cross_url);
+}
+
+// Ensure that a cross-process subframe can receive keyboard events when in
+// focus.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       SubframeKeyboardEventRouting) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_one_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+
+  GURL frame_url(
+      embedded_test_server()->GetURL("b.com", "/page_with_input_field.html"));
+  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(WaitForRenderFrameReady(root->child_at(0)->current_frame_host()));
+
+  // Click on the subframe to focus it.
+  SimulateMouseClick(
+      root->child_at(0)->current_frame_host()->GetRenderWidgetHost(), 1, 1);
+
+  // Focus the input field in the subframe.  The return value "input-focus"
+  // will be sent once the input field's focus event fires.
+  std::string result;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      root->child_at(0)->current_frame_host(), "focusInputField()", &result));
+  EXPECT_EQ(result, "input-focus");
+
+  // The subframe should now be focused.
+  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
+
+  // Generate a few keyboard events and route them to currently focused frame.
+  SimulateKeyPress(web_contents, ui::VKEY_F, false, false, false, false);
+  SimulateKeyPress(web_contents, ui::VKEY_O, false, false, false, false);
+  SimulateKeyPress(web_contents, ui::VKEY_O, false, false, false, false);
+
+  // Verify that the input field in the subframe received the keystrokes.
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      root->child_at(0)->current_frame_host(),
+      "window.domAutomationController.send(getInputFieldText());", &result));
+  EXPECT_EQ("FOO", result);
 }
 
 }  // namespace content

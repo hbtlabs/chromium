@@ -39,7 +39,6 @@
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSImageSetValue.h"
 #include "core/css/CSSImageValue.h"
-#include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSProperty.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -57,7 +56,6 @@
 #include "core/css/parser/CSSParserValues.h"
 #include "core/frame/UseCounter.h"
 #include "core/style/GridCoordinate.h"
-#include "core/svg/SVGPathUtilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
@@ -438,11 +436,9 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyWebkitBorderEndColor:
     case CSSPropertyWebkitBorderBeforeColor:
     case CSSPropertyWebkitBorderAfterColor:
-    case CSSPropertyTextDecorationColor: // CSS3 text decoration colors
     case CSSPropertyWebkitColumnRuleColor:
     case CSSPropertyWebkitTextEmphasisColor:
     case CSSPropertyWebkitTextStrokeColor:
-        ASSERT(propId != CSSPropertyTextDecorationColor || RuntimeEnabledFeatures::css3TextDecorationsEnabled());
         parsedValue = parseColor(m_valueList->current(), acceptQuirkyColors(propId));
         if (parsedValue)
             m_valueList->next();
@@ -665,19 +661,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
             validPrimitive = true;
         else
             validPrimitive = validUnit(value, FLength | FPercent | unitless);
-        break;
-
-    case CSSPropertyTextDecoration:
-        // Fall through 'text-decoration-line' parsing if CSS 3 Text Decoration
-        // is disabled to match CSS 2.1 rules for parsing 'text-decoration'.
-        if (RuntimeEnabledFeatures::css3TextDecorationsEnabled()) {
-            // [ <text-decoration-line> || <text-decoration-style> || <text-decoration-color> ] | inherit
-            return parseShorthand(CSSPropertyTextDecoration, textDecorationShorthand(), important);
-        }
-    case CSSPropertyWebkitTextDecorationsInEffect:
-    case CSSPropertyTextDecorationLine:
-        // none | [ underline || overline || line-through || blink ] | inherit
-        parsedValue = parseTextDecoration();
         break;
 
     case CSSPropertyTextUnderlinePosition:
@@ -915,26 +898,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
         addProperty(propId, list.release(), important);
         return true;
     }
-
-    case CSSPropertyMotion:
-        // <motion-path> && <motion-offset> && <motion-rotation>
-        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
-        return parseShorthand(propId, motionShorthand(), important);
-    case CSSPropertyMotionPath:
-        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
-        if (id == CSSValueNone)
-            validPrimitive = true;
-        else
-            parsedValue = parseMotionPath();
-        break;
-    case CSSPropertyMotionOffset:
-        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
-        validPrimitive = validUnit(value, FLength | FPercent);
-        break;
-    case CSSPropertyMotionRotation:
-        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
-        parsedValue = parseMotionRotation();
-        break;
 
     case CSSPropertyJustifyContent:
         ASSERT(RuntimeEnabledFeatures::cssGridLayoutEnabled());
@@ -1222,6 +1185,14 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyBoxShadow:
     case CSSPropertyWebkitFilter:
     case CSSPropertyBackdropFilter:
+    case CSSPropertyTextDecorationColor:
+    case CSSPropertyWebkitTextDecorationsInEffect:
+    case CSSPropertyTextDecorationLine:
+    case CSSPropertyTextDecoration:
+    case CSSPropertyMotionPath:
+    case CSSPropertyMotionOffset:
+    case CSSPropertyMotionRotation:
+    case CSSPropertyMotion:
         validPrimitive = false;
         break;
 
@@ -5405,39 +5376,6 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSPropertyParser::parseTransformOrigin()
     return list.release();
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTextDecoration()
-{
-    CSSParserValue* value = m_valueList->current();
-    if (value && value->id == CSSValueNone) {
-        m_valueList->next();
-        return cssValuePool().createIdentifierValue(CSSValueNone);
-    }
-
-    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
-    bool isValid = true;
-    while (isValid && value) {
-        switch (value->id) {
-        case CSSValueUnderline:
-        case CSSValueOverline:
-        case CSSValueLineThrough:
-        case CSSValueBlink:
-            // TODO(timloh): This will incorrectly accept "blink blink"
-            list->append(cssValuePool().createIdentifierValue(value->id));
-            break;
-        default:
-            isValid = false;
-            break;
-        }
-        if (isValid)
-            value = m_valueList->next();
-    }
-
-    // Values are either valid or in shorthand scope.
-    if (list->length())
-        return list.release();
-    return nullptr;
-}
-
 PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTextEmphasisStyle()
 {
     RefPtrWillBeRawPtr<CSSPrimitiveValue> fill = nullptr;
@@ -6011,56 +5949,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTransformValue(bool use
     }
 
     return transformValue.release();
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseMotionPath()
-{
-    CSSParserValue* value = m_valueList->current();
-
-    // FIXME: Add support for <url>, <basic-shape>, <geometry-box>.
-    if (value->m_unit != CSSParserValue::Function || value->function->id != CSSValuePath)
-        return nullptr;
-
-    // FIXME: Add support for <fill-rule>.
-    CSSParserValueList* functionArgs = value->function->args.get();
-    if (!functionArgs || functionArgs->size() != 1 || !functionArgs->current())
-        return nullptr;
-
-    CSSParserValue* arg = functionArgs->current();
-    if (arg->m_unit != CSSParserValue::String)
-        return nullptr;
-
-    String pathString = arg->string;
-    Path path;
-    if (!buildPathFromString(pathString, path))
-        return nullptr;
-
-    m_valueList->next();
-    return CSSPathValue::create(pathString);
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseMotionRotation()
-{
-    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
-    bool hasAutoOrReverse = false;
-    bool hasAngle = false;
-
-    for (CSSParserValue* value = m_valueList->current(); value; value = m_valueList->next()) {
-        if ((value->id == CSSValueAuto || value->id == CSSValueReverse) && !hasAutoOrReverse) {
-            list->append(cssValuePool().createIdentifierValue(value->id));
-            hasAutoOrReverse = true;
-        } else if (!hasAngle && validUnit(value, FAngle)) {
-            list->append(createPrimitiveNumericValue(value));
-            hasAngle = true;
-        } else {
-            break;
-        }
-    }
-
-    if (!list->length())
-        return nullptr;
-
-    return list.release();
 }
 
 } // namespace blink

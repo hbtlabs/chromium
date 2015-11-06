@@ -613,6 +613,10 @@ ResourceProvider::ResourceType ResourceProvider::GetResourceType(
   return GetResource(id)->type;
 }
 
+GLenum ResourceProvider::GetResourceTextureTarget(ResourceId id) {
+  return GetResource(id)->target;
+}
+
 void ResourceProvider::CopyToResource(ResourceId id,
                                       const uint8_t* image,
                                       const gfx::Size& image_size) {
@@ -1448,11 +1452,6 @@ void ResourceProvider::CreateForTesting(ResourceId id) {
   LazyCreate(GetResource(id));
 }
 
-GLenum ResourceProvider::TargetForTesting(ResourceId id) {
-  Resource* resource = GetResource(id);
-  return resource->target;
-}
-
 void ResourceProvider::LazyCreate(Resource* resource) {
   if (resource->type != RESOURCE_TYPE_GL_TEXTURE ||
       resource->origin != Resource::INTERNAL)
@@ -1502,7 +1501,7 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
     resource->gpu_memory_buffer =
         gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
                                       size, BufferFormat(format),
-                                      gfx::BufferUsage::SCANOUT)
+                                      gfx::BufferUsage::GPU_READ_CPU_READ_WRITE)
             .release();
     LazyCreateImage(resource);
     resource->dirty_image = true;

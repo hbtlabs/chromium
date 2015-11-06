@@ -5486,7 +5486,7 @@ bool ValidImageFormat(GLenum internalformat,
       return capabilities.texture_format_dxt5;
     case GL_ETC1_RGB8_OES:
       return capabilities.texture_format_etc1;
-    case GL_R8:
+    case GL_RED:
     case GL_RGB:
     case GL_RGBA:
     case GL_RGB_YCBCR_422_CHROMIUM:
@@ -5521,6 +5521,10 @@ GLuint GLES2Implementation::CreateImageCHROMIUMHelper(ClientBuffer buffer,
     SetGLError(GL_INVALID_VALUE, "glCreateImageCHROMIUM", "invalid format");
     return 0;
   }
+
+  // CreateImage creates a fence sync so we must flush first to ensure all
+  // previously created fence syncs are flushed first.
+  FlushHelper();
 
   int32_t image_id =
       gpu_control_->CreateImage(buffer, width, height, internalformat);

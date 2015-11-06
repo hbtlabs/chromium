@@ -4,12 +4,18 @@
 
 #include "content/test/fake_renderer_scheduler.h"
 
+#include "third_party/WebKit/public/platform/WebThread.h"
+
 namespace content {
 
 FakeRendererScheduler::FakeRendererScheduler() {
 }
 
 FakeRendererScheduler::~FakeRendererScheduler() {
+}
+
+scoped_ptr<blink::WebThread> FakeRendererScheduler::CreateMainThread() {
+  return nullptr;
 }
 
 scoped_refptr<scheduler::TaskQueue> FakeRendererScheduler::DefaultTaskRunner() {
@@ -117,5 +123,13 @@ void FakeRendererScheduler::ResumeTimerQueue() {
 
 void FakeRendererScheduler::SetTimerQueueSuspensionWhenBackgroundedEnabled(
     bool enabled) {}
+
+double FakeRendererScheduler::CurrentTimeSeconds() const {
+  return 0.0;
+}
+
+double FakeRendererScheduler::MonotonicallyIncreasingTimeSeconds() const {
+  return 0.0;
+}
 
 }  // namespace content

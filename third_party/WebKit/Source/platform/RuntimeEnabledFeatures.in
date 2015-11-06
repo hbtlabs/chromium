@@ -112,7 +112,7 @@ NavigatorConnect status=experimental
 NavigatorContentUtils
 WebNFC status=experimental
 NetworkInformation status=stable
-NetInfoDownlinkMax status=experimental
+NetInfoDownlinkMax status=stable
 NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationExperimental status=test
@@ -165,7 +165,7 @@ SharedWorker status=stable
 SlimmingPaintV2
 SlimmingPaintOffsetCaching implied_by=SlimmingPaintV2
 SlimmingPaintStrictCullRectClipping
-SlimmingPaintSynchronizedPainting implied_by=SlimmingPaintV2
+SlimmingPaintSynchronizedPainting implied_by=SlimmingPaintV2, status=stable
 SlimmingPaintUnderInvalidationChecking
 StackedCSSPropertyAnimations status=experimental
 StyleSharing status=stable
