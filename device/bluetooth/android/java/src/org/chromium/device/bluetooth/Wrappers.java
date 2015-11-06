@@ -323,6 +323,13 @@ class Wrappers {
         }
 
         @Override
+        public void onCharacteristicChanged(
+                BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            mWrapperCallback.onCharacteristicChanged(
+                    mDeviceWrapper.mCharacteristicsToWrappers.get(characteristic));
+        }
+
+        @Override
         public void onCharacteristicRead(
                 BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             mWrapperCallback.onCharacteristicRead(
@@ -358,6 +365,8 @@ class Wrappers {
      * call.
      */
     abstract static class BluetoothGattCallbackWrapper {
+        public abstract void onCharacteristicChanged(
+                BluetoothGattCharacteristicWrapper characteristic);
         public abstract void onCharacteristicRead(
                 BluetoothGattCharacteristicWrapper characteristic, int status);
         public abstract void onCharacteristicWrite(

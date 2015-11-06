@@ -186,9 +186,9 @@ final class ChromeBluetoothDevice {
                 @Override
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
-                                    mWrapperToChromeCharacteristicsMap.get(characteristic);
+                            mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
-                      chromeCharacteristic.onCharacteristicRead();
+                        chromeCharacteristic.onCharacteristicRead();
                     }
                 }
             });
@@ -202,9 +202,9 @@ final class ChromeBluetoothDevice {
                 @Override
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
-                                    mWrapperToChromeCharacteristicsMap.get(characteristic);
+                            mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
-                      chromeCharacteristic.onCharacteristicRead(status);
+                        chromeCharacteristic.onCharacteristicRead(status);
                     }
                 }
             });
@@ -218,9 +218,9 @@ final class ChromeBluetoothDevice {
                 @Override
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
-                                    mWrapperToChromeCharacteristicsMap.get(characteristic);
+                            mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
-                      chromeCharacteristic.onCharacteristicWrite(status);
+                        chromeCharacteristic.onCharacteristicWrite(status);
                     }
                 }
             });

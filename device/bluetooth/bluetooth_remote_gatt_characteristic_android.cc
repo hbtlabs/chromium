@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothRemoteGattCharacteristic_jni.h"
@@ -21,12 +22,13 @@ namespace device {
 // static
 scoped_ptr<BluetoothRemoteGattCharacteristicAndroid>
 BluetoothRemoteGattCharacteristicAndroid::Create(
+    BluetoothAdapterAndroid* adapter,
     const std::string& instanceId,
     jobject /* BluetoothGattCharacteristicWrapper */
     bluetooth_gatt_characteristic_wrapper,
     jobject /* ChromeBluetoothDevice */ chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> characteristic(
-      new BluetoothRemoteGattCharacteristicAndroid(instanceId));
+      new BluetoothRemoteGattCharacteristicAndroid(adapter, instanceId));
 
   characteristic->j_characteristic_.Reset(
       Java_ChromeBluetoothRemoteGattCharacteristic_create(
@@ -186,12 +188,11 @@ void BluetoothRemoteGattCharacteristicAndroid::WriteRemoteCharacteristic(
 }
 
 void BluetoothRemoteGattCharacteristicAndroid::OnChanged(JNIEnv* env,
-                                                      jobject jcaller,
-                                                      jbyteArray value) {
+                                                         jobject jcaller,
+                                                         jbyteArray value) {
   base::android::JavaByteArrayToByteVector(env, value, &value_);
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
-                    GattCharacteristicValueChanged(GetAdapter(), this));
-
+  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, adapter_->GetObservers(),
+                    GattCharacteristicValueChanged(adapter_, this, value_));
 }
 
 void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
@@ -210,8 +211,7 @@ void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
       && !read_callback.is_null()) {
     base::android::JavaByteArrayToByteVector(env, value, &value_);
     read_callback.Run(value_);
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
-                      GattCharacteristicValueChanged(GetAdapter(), this));
+    // TODO(http://crbug.com/545682): Call GattCharacteristicValueChanged.
   } else if (!read_error_callback.is_null()) {
     read_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
@@ -232,17 +232,16 @@ void BluetoothRemoteGattCharacteristicAndroid::OnWrite(JNIEnv* env,
   if (status == 0  // android.bluetooth.BluetoothGatt.GATT_SUCCESS
       && !write_callback.is_null()) {
     write_callback.Run();
+    // TODO(http://crbug.com/545682): Call GattCharacteristicValueChanged.
   } else if (!write_error_callback.is_null()) {
     write_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
-    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
-                      GattCharacteristicValueChanged(GetAdapter(), this));
-    ??
   }
 }
 
 BluetoothRemoteGattCharacteristicAndroid::
-    BluetoothRemoteGattCharacteristicAndroid(const std::string& instanceId)
-    : instance_id_(instanceId) {}
+    BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
+                                             const std::string& instanceId)
+    : adapter_(adapter), instance_id_(instanceId) {}
 
 }  // namespace device
