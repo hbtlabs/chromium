@@ -99,6 +99,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
             return false;
         }
+        Log.i(TAG, "startNotifySession.");
         return true;
     }
 
