@@ -124,6 +124,8 @@ bool BluetoothRemoteGattCharacteristicAndroid::UpdateValue(
 void BluetoothRemoteGattCharacteristicAndroid::StartNotifySession(
     const NotifySessionCallback& callback,
     const ErrorCallback& error_callback) {
+  // TODO(crbug.com/551634): Check characteristic properties and return a better
+  // error code if notifications aren't permitted.
   if (Java_ChromeBluetoothRemoteGattCharacteristic_startNotifySession(
           AttachCurrentThread(), j_characteristic_.obj())) {
     scoped_ptr<device::BluetoothGattNotifySession> notify_session(
