@@ -4,6 +4,8 @@
 
 #include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
 
+#include "base/logging.h"
+
 namespace device {
 
 BluetoothGattNotifySessionAndroid::BluetoothGattNotifySessionAndroid(
