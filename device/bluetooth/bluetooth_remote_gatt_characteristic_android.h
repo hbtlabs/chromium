@@ -64,6 +64,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
                                  const base::Closure& callback,
                                  const ErrorCallback& error_callback) override;
 
+  // Called when value changed even occurs.
+  void OnChanged(JNIEnv* env, jobject jcaller, jbyteArray value);
+
   // Callback after Read operation completes.
   void OnRead(JNIEnv* env, jobject jcaller, int32_t status, jbyteArray value);
 

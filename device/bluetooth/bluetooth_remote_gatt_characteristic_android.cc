@@ -183,6 +183,15 @@ void BluetoothRemoteGattCharacteristicAndroid::WriteRemoteCharacteristic(
   write_error_callback_ = error_callback;
 }
 
+void BluetoothRemoteGattCharacteristicAndroid::OnChanged(JNIEnv* env,
+                                                      jobject jcaller,
+                                                      jbyteArray value) {
+  base::android::JavaByteArrayToByteVector(env, value, &value_);
+  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
+                    GattCharacteristicValueChanged(GetAdapter(), this));
+
+}
+
 void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
                                                       jobject jcaller,
                                                       int32_t status,
@@ -199,6 +208,8 @@ void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
       && !read_callback.is_null()) {
     base::android::JavaByteArrayToByteVector(env, value, &value_);
     read_callback.Run(value_);
+    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
+                      GattCharacteristicValueChanged(GetAdapter(), this));
   } else if (!read_error_callback.is_null()) {
     read_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
@@ -222,6 +233,9 @@ void BluetoothRemoteGattCharacteristicAndroid::OnWrite(JNIEnv* env,
   } else if (!write_error_callback.is_null()) {
     write_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
+    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, GetAdapter()->GetObservers(),
+                      GattCharacteristicValueChanged(GetAdapter(), this));
+    ??
   }
 }
 

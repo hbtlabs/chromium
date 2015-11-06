@@ -180,16 +180,32 @@ final class ChromeBluetoothDevice {
         }
 
         @Override
+        public void onCharacteristicChanged(
+                final Wrappers.BluetoothGattCharacteristicWrapper characteristic) {
+            ThreadUtils.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
+                                    mWrapperToChromeCharacteristicsMap.get(characteristic);
+                    if (chromeCharacteristic != null) {
+                      chromeCharacteristic.onCharacteristicRead();
+                    }
+                }
+            });
+        }
+
+        @Override
         public void onCharacteristicRead(
                 final Wrappers.BluetoothGattCharacteristicWrapper characteristic,
                 final int status) {
             ThreadUtils.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    ChromeBluetoothRemoteGattCharacteristic
-                            chromeBluetoothRemoteGattCharacteristic =
+                    ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                                     mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    chromeBluetoothRemoteGattCharacteristic.onCharacteristicRead(status);
+                    if (chromeCharacteristic != null) {
+                      chromeCharacteristic.onCharacteristicRead(status);
+                    }
                 }
             });
         }
@@ -201,10 +217,11 @@ final class ChromeBluetoothDevice {
             ThreadUtils.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    ChromeBluetoothRemoteGattCharacteristic
-                            chromeBluetoothRemoteGattCharacteristic =
+                    ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                                     mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    chromeBluetoothRemoteGattCharacteristic.onCharacteristicWrite(status);
+                    if (chromeCharacteristic != null) {
+                      chromeCharacteristic.onCharacteristicWrite(status);
+                    }
                 }
             });
         }

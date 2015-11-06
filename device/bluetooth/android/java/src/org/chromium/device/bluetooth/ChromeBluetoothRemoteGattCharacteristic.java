@@ -46,6 +46,14 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         mChromeBluetoothDevice.mWrapperToChromeCharacteristicsMap.remove(mCharacteristic);
     }
 
+    void onCharacteristicChanged() {
+        Log.i(TAG, "onCharacteristicChanged");
+        if (mNativeBluetoothRemoteGattCharacteristicAndroid != 0) {
+            nativeOnChanged(mNativeBluetoothRemoteGattCharacteristicAndroid,
+                    mCharacteristic.getValue());
+        }
+    }
+
     void onCharacteristicRead(int status) {
         Log.i(TAG, "onCharacteristicRead status:%d==%s", status,
                 status == android.bluetooth.BluetoothGatt.GATT_SUCCESS ? "OK" : "Error");
@@ -129,6 +137,10 @@ final class ChromeBluetoothRemoteGattCharacteristic {
 
     // ---------------------------------------------------------------------------------------------
     // BluetoothAdapterDevice C++ methods declared for access from java:
+
+    // Binds to BluetoothRemoteGattServiceAndroid::OnChanged.
+    native void nativeOnChanged(
+            long nativeBluetoothRemoteGattCharacteristicAndroid, byte[] value);
 
     // Binds to BluetoothRemoteGattServiceAndroid::OnRead.
     native void nativeOnRead(
