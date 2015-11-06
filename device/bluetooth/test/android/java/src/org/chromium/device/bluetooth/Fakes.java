@@ -513,26 +513,26 @@ class Fakes {
     // ---------------------------------------------------------------------------------------------
     // BluetoothTestAndroid C++ methods declared for access from java:
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothDeviceConnectGattCalled.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothDeviceConnectGattCalled.
     private static native void nativeOnFakeBluetoothDeviceConnectGattCalled(
             long nativeBluetoothTestAndroid);
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattDisconnect.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattDisconnect.
     private static native void nativeOnFakeBluetoothGattDisconnect(long nativeBluetoothTestAndroid);
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattDiscoverServices.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattDiscoverServices.
     private static native void nativeOnFakeBluetoothGattDiscoverServices(
             long nativeBluetoothTestAndroid);
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattReadCharacteristic.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattSetCharacteristicNotification.
     private static native void nativeOnFakeBluetoothGattSetCharacteristicNotification(
             long nativeBluetoothTestAndroid);
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattReadCharacteristic.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattReadCharacteristic.
     private static native void nativeOnFakeBluetoothGattReadCharacteristic(
             long nativeBluetoothTestAndroid);
 
-    // Binds to BluetoothAdapterAndroid::OnFakeBluetoothGattWriteCharacteristic.
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattWriteCharacteristic.
     private static native void nativeOnFakeBluetoothGattWriteCharacteristic(
             long nativeBluetoothTestAndroid, byte[] value);
 }

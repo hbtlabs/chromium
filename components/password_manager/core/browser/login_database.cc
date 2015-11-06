@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/pickle.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -32,7 +33,7 @@ using autofill::PasswordForm;
 namespace password_manager {
 
 // The current version number of the login database schema.
-const int kCurrentVersionNumber = 15;
+const int kCurrentVersionNumber = 16;
 // The oldest version of the schema such that a legacy Chrome client using that
 // version can still read/write the current database.
 const int kCompatibleVersionNumber = 14;
@@ -419,13 +420,7 @@ bool LoginDatabase::Init() {
     db_.Close();
     return false;
   }
-
-  if (!stats_table_.Init(&db_)) {
-    LogDatabaseInitError(INIT_STATS_ERROR);
-    LOG(ERROR) << "Unable to initialize the stats table.";
-    db_.Close();
-    return false;
-  }
+  stats_table_.Init(&db_);
 
   // If the file on disk is an older database version, bring it up to date.
   if (meta_table_.GetVersionNumber() < kCurrentVersionNumber &&
@@ -436,6 +431,13 @@ bool LoginDatabase::Init() {
     LOG(ERROR) << "Unable to migrate database from "
                << meta_table_.GetVersionNumber() << " to "
                << kCurrentVersionNumber;
+    db_.Close();
+    return false;
+  }
+
+  if (!stats_table_.CreateTableIfNecessary()) {
+    LogDatabaseInitError(INIT_STATS_ERROR);
+    LOG(ERROR) << "Unable to create the stats table.";
     db_.Close();
     return false;
   }
@@ -606,7 +608,11 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
       // through an otherwise no-op migration process that will, however, now
       // correctly set the 'compatible version number'. Previously, it was
       // always being set to (and forever left at) version 1.
-      // Fall through.
+      meta_table_.SetCompatibleVersionNumber(kCompatibleVersionNumber);
+    case 15:
+      // Recreate the statistics.
+      if (!stats_table_.MigrateToVersion(16))
+        return false;
 
     // -------------------------------------------------------------------------
     // DO NOT FORGET to update |kCompatibleVersionNumber| if you add a migration
@@ -617,7 +623,6 @@ bool LoginDatabase::MigrateOldVersionsAsNeeded() {
     case kCurrentVersionNumber:
       // Already up to date.
       meta_table_.SetVersionNumber(kCurrentVersionNumber);
-      meta_table_.SetCompatibleVersionNumber(kCompatibleVersionNumber);
       return true;
     default:
       NOTREACHED();
@@ -878,6 +883,9 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
           &encrypted_password) != ENCRYPTION_RESULT_SUCCESS)
     return PasswordStoreChangeList();
 
+#if defined(OS_IOS)
+  DeleteEncryptedPassword(form);
+#endif
   // Replacement is necessary to deal with updating imported credentials. See
   // crbug.com/349138 for details.
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
@@ -947,6 +955,9 @@ bool LoginDatabase::RemoveLogin(const PasswordForm& form) {
     // credentials.
     return false;
   }
+#if defined(OS_IOS)
+  DeleteEncryptedPassword(form);
+#endif
   // Remove a login by UNIQUE-constrained fields.
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
                                           "DELETE FROM logins WHERE "
@@ -968,6 +979,15 @@ bool LoginDatabase::RemoveLogin(const PasswordForm& form) {
 
 bool LoginDatabase::RemoveLoginsCreatedBetween(base::Time delete_begin,
                                                base::Time delete_end) {
+#if defined(OS_IOS)
+  ScopedVector<autofill::PasswordForm> forms;
+  if (GetLoginsCreatedBetween(delete_begin, delete_end, &forms)) {
+    for (size_t i = 0; i < forms.size(); i++) {
+      DeleteEncryptedPassword(*forms[i]);
+    }
+  }
+#endif
+
   sql::Statement s(db_.GetCachedStatement(SQL_FROM_HERE,
       "DELETE FROM logins WHERE "
       "date_created >= ? AND date_created < ?"));
@@ -1205,6 +1225,32 @@ bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
   db_.Close();
   sql::Connection::Delete(db_path_);
   return Init();
+}
+
+std::string LoginDatabase::GetEncryptedPassword(
+    const autofill::PasswordForm& form) const {
+  sql::Statement s(
+      db_.GetCachedStatement(SQL_FROM_HERE,
+                             "SELECT password_value FROM logins WHERE "
+                             "origin_url = ? AND "
+                             "username_element = ? AND "
+                             "username_value = ? AND "
+                             "password_element = ? AND "
+                             "submit_element = ? AND "
+                             "signon_realm = ? "));
+
+  s.BindString(0, form.origin.spec());
+  s.BindString16(1, form.username_element);
+  s.BindString16(2, form.username_value);
+  s.BindString16(3, form.password_element);
+  s.BindString16(4, form.submit_element);
+  s.BindString(5, form.signon_realm);
+
+  std::string encrypted_password;
+  if (s.Step()) {
+    s.ColumnBlobAsString(0, &encrypted_password);
+  }
+  return encrypted_password;
 }
 
 // static

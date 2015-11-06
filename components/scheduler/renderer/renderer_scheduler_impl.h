@@ -37,6 +37,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   ~RendererSchedulerImpl() override;
 
   // RendererScheduler implementation:
+  scoped_ptr<blink::WebThread> CreateMainThread() override;
   scoped_refptr<TaskQueue> DefaultTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
@@ -70,6 +71,8 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void SuspendTimerQueue() override;
   void ResumeTimerQueue() override;
   void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) override;
+  double CurrentTimeSeconds() const override;
+  double MonotonicallyIncreasingTimeSeconds() const override;
 
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;

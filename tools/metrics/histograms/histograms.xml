@@ -2848,6 +2848,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Image codec inferred during decode.</summary>
 </histogram>
 
+<histogram name="Blink.Fonts.ShapeCache">
+  <owner>eae@chromium.org</owner>
+  <summary>
+    Total number of entires in all blink ShapeCache instances. The value is
+    reported each time the FontCache::purge() method is called.
+  </summary>
+</histogram>
+
 <histogram name="Blink.MediaElement.Autoplay" enum="MediaElementAutoPlay">
   <owner>oysteine@chromium.org</owner>
   <summary>
@@ -36986,9 +36994,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Quota.EvictedOriginAccessCount">
+  <owner>calamity@chromium.org</owner>
+  <summary>
+    The number of times the evicted origin was accessed. Logged when the origin
+    is evicted.
+  </summary>
+</histogram>
+
 <histogram name="Quota.EvictedOriginsPerHour">
   <owner>tzik@chromium.org</owner>
   <summary>Number of evicted origins in an hour.</summary>
+</histogram>
+
+<histogram name="Quota.EvictedOriginTimeSinceAccess">
+  <owner>calamity@chromium.org</owner>
+  <summary>
+    The time since the evicted origin was last accessed. Logged when the origin
+    is evicted.
+  </summary>
 </histogram>
 
 <histogram name="Quota.EvictionRoundsPerHour">
@@ -50569,6 +50593,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>HTTP response codes seen by Wallet client.</summary>
 </histogram>
 
+<histogram name="Web.CertVerifyAgreement" enum="WebCertVerifyAgreement">
+  <owner>eugenebut@chromium.com</owner>
+  <summary>
+    [iOS] Reports certificate verification mismatch between SecTrust API and
+    CertVerifier. SecTrust API is used for making load/no-load decision and
+    CertVerifier is used for getting the reason of verification failure. It is
+    expected that mismatches will happen for those 2 approaches (e.g. SecTrust
+    API considers cert as good, but CertVerifier considers same cert as bad).
+    This metric helps to understand how common mismatches are.
+  </summary>
+</histogram>
+
 <histogram name="Webapp.Splashscreen.BackgroundColor"
     enum="SplashscreenColorStatus">
   <owner>mlamouri@chromium.org</owner>
@@ -50608,6 +50644,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>mlamouri@chromium.org</owner>
   <summary>
     Records the status of the splashscreen's theme color (default or custom).
+  </summary>
+</histogram>
+
+<histogram name="WebController.CertVerificationErrorsCacheHit"
+    enum="BooleanCacheHit">
+  <owner>eugenebut@chromium.org</owner>
+  <summary>
+    [iOS] Report cache hit/miss for WKWebView cert verification. WKWebView Web
+    Controller has a cache of pending cert verification results to avoid extra
+    verifications when presenting SSL interstitial. This metric helps to
+    understand whether or not cache miss is possible.
   </summary>
 </histogram>
 
@@ -52633,6 +52680,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="WebRTC.Video.SendSideDelayInMs" units="ms">
+  <owner>asapersson@chromium.org</owner>
+  <summary>
+    The average delay (of average delays) of sent packets for a sent video
+    stream. Recorded when a stream is removed. The delay is measured from a
+    frame is input to video engine until a packet is sent to the network. For
+    each sent packet, the average delay of all sent packets over the last second
+    is reported. The average of these reported delays is recorded.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.Video.SendSideDelayMaxInMs" units="ms">
+  <owner>asapersson@chromium.org</owner>
+  <summary>
+    The average delay (of max delays) of sent packets for a sent video stream.
+    Recorded when a stream is removed. The delay is measured from a frame is
+    input to video engine until a packet is sent to the network. For each sent
+    packet, the maximum delay of all sent packets over the last second is
+    reported. The average of these reported delays is recorded.
+  </summary>
+</histogram>
+
 <histogram name="WebRTC.Video.SentFramesPerSecond" units="fps">
   <owner>asapersson@chromium.org</owner>
   <summary>
@@ -54337,6 +54406,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <enum name="BooleanBringToForegroundReason" type="int">
   <int value="0" label="Other"/>
   <int value="1" label="Notification click (within last 5 seconds)"/>
+</enum>
+
+<enum name="BooleanCacheHit" type="int">
+  <int value="0" label="Miss"/>
+  <int value="1" label="Hit"/>
 </enum>
 
 <enum name="BooleanCanCheckUrl" type="int">
@@ -61364,6 +61438,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="987" label="DeviceOrientationAbsoluteInsecureOrigin"/>
   <int value="988" label="DeviceOrientationAbsoluteSecureOrigin"/>
   <int value="989" label="FontFaceConstructor"/>
+  <int value="990" label="ServiceWorkerControlledPage"/>
+  <int value="991" label="MeterElementWithContinuousCapacityAppearance"/>
+  <int value="992" label="MeterElementWithDiscreteCapacityAppearance"/>
+  <int value="993" label="MeterElementWithMeterAppearance"/>
+  <int value="994" label="MeterElementWithNoneAppearance"/>
+  <int value="995" label="MeterElementWithRatingAppearance"/>
+  <int value="996" label="MeterElementWithRelevancyAppearance"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -72882,6 +72963,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="Keypress"/>
   <int value="2" label="Mouse"/>
   <int value="3" label="Touch gesture"/>
+  <int value="4" label="Mouse wheel"/>
+  <int value="5" label="Media (foreground tab)"/>
+  <int value="6" label="Media (background tab)"/>
 </enum>
 
 <enum name="SiteIsolationMimeType" type="int">
@@ -75810,6 +75894,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="8"
       label="Chosen device vanished between discovery and user selection"/>
   <int value="9" label="Chooser cancelled"/>
+</enum>
+
+<enum name="WebCertVerifyAgreement" type="int">
+  <int value="0" label="Accepted by both iOS and NSS."/>
+  <int value="1" label="Rejected by both iOS and NSS."/>
+  <int value="2" label="Accepted only by iOS (rejected by NSS)."/>
+  <int value="3" label="Accepted only by NSS (rejected by iOS)."/>
 </enum>
 
 <enum name="WebFontCacheHit" type="int">

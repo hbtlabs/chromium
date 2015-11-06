@@ -30,7 +30,6 @@
 #include "third_party/WebKit/public/web/WebLabelElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebNodeList.h"
 #include "third_party/WebKit/public/web/WebOptionElement.h"
 #include "third_party/WebKit/public/web/WebSelectElement.h"
 #include "third_party/WebKit/public/web/WebTextAreaElement.h"
@@ -44,7 +43,6 @@ using blink::WebFrame;
 using blink::WebInputElement;
 using blink::WebLabelElement;
 using blink::WebNode;
-using blink::WebNodeList;
 using blink::WebOptionElement;
 using blink::WebSelectElement;
 using blink::WebTextAreaElement;
@@ -1418,11 +1416,26 @@ bool UnownedCheckoutFormElementsAndFieldSetsToFormData(
   std::string lang;
   if (!html_element.isNull())
     lang = html_element.getAttribute("lang").utf8();
-  if ((lang.empty() ||
-       base::StartsWith(lang, "en", base::CompareCase::INSENSITIVE_ASCII)) &&
-      !MatchesPattern(document.title(),
-          base::UTF8ToUTF16("payment|checkout|address|delivery|shipping"))) {
-    return false;
+  if (lang.empty() ||
+      base::StartsWith(lang, "en", base::CompareCase::INSENSITIVE_ASCII)) {
+    std::string title(base::UTF16ToUTF8(base::string16(document.title())));
+    const char* const kKeywords[] = {
+      "payment",
+      "checkout",
+      "address",
+      "delivery",
+      "shipping",
+    };
+
+    bool found = false;
+    for (const auto& keyword : kKeywords) {
+      if (title.find(keyword) != base::string16::npos) {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      return false;
   }
 
   return UnownedFormElementsAndFieldSetsToFormData(

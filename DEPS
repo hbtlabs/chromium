@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'fca294b83b9ffd77cab6326a8a76eb472b2b78d6',
+  'skia_revision': '42597bc99f00553825843b5ed41e81b121773368',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'b244d40e7ae7a73f2ceb08f0032519d66049c15f',
+  'v8_revision': 'e6b4ab5c3268efc45d13e06b7758670934f93fc5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '5b58cae2f4b775ff974bc75570f7f2be2833246c',
+  'angle_revision': 'a5f64de71469f43d7d67b816646c96509bc0df3f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -59,7 +59,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '955930dce7e4b5c764cdd34b134baea4207de523',
+  'pdfium_revision': '34bb6c58fe60206a08dc0a1f37b7cfe83e8c762c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -87,7 +87,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '0f5756e09816dba8fc189ae75a55cd96fd5edeac',
+  'nacl_revision': 'f3dcedcdb5cf72890166b9618005331bd2666e84',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.
@@ -106,7 +106,7 @@ allowed_hosts = [
 
 deps = {
   'src/breakpad/src':
-   Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + 'b0383cd494e736720d237d61af2912bb60960cd8',
+   Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + '615a6b0e2b376e3ae946972a52ef897bf6daaff3',
 
   'src/buildtools':
    Var('chromium_git') + '/chromium/buildtools.git' + '@' +  Var('buildtools_revision'),
@@ -217,7 +217,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'c8b569e0a7ad0b369e15f0197b3a558699ec8efa', # commit position 10494
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '7ad9e661f8a035d49d049ccdb87c77ae8ecdfa35', # commit position 10537
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -390,7 +390,7 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'ecbd58958f83b7b32068f328ddd605ba732c7052',
+     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'ed198c46f73e67d9a494c3c0623e3ba16e4da5e8',
 
     # Note that this is different from Android's freetype repo.
     'src/third_party/freetype2/src':
@@ -540,13 +540,15 @@ hooks = [
   },
   {
     # This downloads SDK extras and puts them in the
-    # third_party/android_tools/sdk/extras directory on the bots. Developers
-    # need to manually install these packages and accept the ToS.
+    # third_party/android_tools/sdk/extras directory.
     'name': 'sdkextras',
     'pattern': '.',
     # When adding a new sdk extras package to download, add the package
     # directory and zip file to .gitignore in third_party/android_tools.
-    'action': ['python', 'src/build/download_sdk_extras.py'],
+    'action': ['python',
+               'src/build/android/play_services/update.py',
+               'download'
+    ],
   },
   {
     # Downloads the current stable linux sysroot to build/linux/ if needed.

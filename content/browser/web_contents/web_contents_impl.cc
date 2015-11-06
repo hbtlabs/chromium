@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -840,9 +841,8 @@ WebUI* WebContentsImpl::CreateSubframeWebUI(const GURL& url,
 }
 
 WebUI* WebContentsImpl::GetWebUI() const {
-  return GetRenderManager()->web_ui()
-             ? GetRenderManager()->web_ui()
-             : GetRenderManager()->GetNavigatingWebUI();
+  return GetRenderManager()->web_ui() ? GetRenderManager()->web_ui()
+      : GetRenderManager()->pending_web_ui();
 }
 
 WebUI* WebContentsImpl::GetCommittedWebUI() const {
@@ -913,9 +913,8 @@ const base::string16& WebContentsImpl::GetTitle() const {
   if (entry) {
     return entry->GetTitleForDisplay(accept_languages);
   }
-  WebUI* our_web_ui = GetRenderManager()->GetNavigatingWebUI()
-                          ? GetRenderManager()->GetNavigatingWebUI()
-                          : GetRenderManager()->web_ui();
+  WebUI* our_web_ui = GetRenderManager()->pending_web_ui() ?
+      GetRenderManager()->pending_web_ui() : GetRenderManager()->web_ui();
   if (our_web_ui) {
     // Don't override the title in view source mode.
     entry = controller_.GetVisibleEntry();
@@ -1586,6 +1585,18 @@ void WebContentsImpl::ReplicatePageFocus(bool is_focused) {
     return;
 
   frame_tree_.ReplicatePageFocus(is_focused);
+}
+
+RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost() {
+  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
+    return GetMainFrame()->GetRenderWidgetHost();
+
+  FrameTreeNode* focused_frame = frame_tree_.GetFocusedFrame();
+  if (!focused_frame)
+    return GetMainFrame()->GetRenderWidgetHost();
+
+  return RenderWidgetHostImpl::From(
+      focused_frame->current_frame_host()->GetView()->GetRenderWidgetHost());
 }
 
 void WebContentsImpl::EnterFullscreenMode(const GURL& origin) {
@@ -3633,8 +3644,6 @@ const GURL& WebContentsImpl::GetMainFrameLastCommittedURL() const {
 }
 
 void WebContentsImpl::RenderFrameCreated(RenderFrameHost* render_frame_host) {
-  // Note this is only for subframes, the notification for the main frame
-  // happens in RenderViewCreated.
   FOR_EACH_OBSERVER(WebContentsObserver,
                     observers_,
                     RenderFrameCreated(render_frame_host));
@@ -3781,6 +3790,18 @@ void WebContentsImpl::RenderViewCreated(RenderViewHost* render_view_host) {
       Source<WebContents>(this),
       Details<RenderViewHost>(render_view_host));
 
+  // When we're creating views, we're still doing initial setup, so we always
+  // use the pending Web UI rather than any possibly existing committed one.
+  if (GetRenderManager()->pending_web_ui())
+    GetRenderManager()->pending_web_ui()->RenderViewCreated(render_view_host);
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableBrowserSideNavigation) &&
+      GetRenderManager()->speculative_web_ui()) {
+    GetRenderManager()->speculative_web_ui()->RenderViewCreated(
+        render_view_host);
+  }
+
   NavigationEntry* entry = controller_.GetPendingEntry();
   if (entry && entry->IsViewSourceMode()) {
     // Put the renderer in view source mode.
@@ -3878,13 +3899,36 @@ void WebContentsImpl::UpdateState(RenderViewHost* rvh,
   RenderViewHostImpl* rvhi = static_cast<RenderViewHostImpl*>(rvh);
   NavigationEntryImpl* entry = controller_.GetEntryWithPageID(
       rvhi->GetSiteInstance(), page_id);
+
+  int nav_entry_id =
+      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame())->nav_entry_id();
+  NavigationEntryImpl* new_entry =
+      controller_.GetEntryWithUniqueID(nav_entry_id);
+
+  base::debug::SetCrashKeyValue("pageid", base::IntToString(page_id));
+  base::debug::SetCrashKeyValue("navuniqueid", base::IntToString(nav_entry_id));
+  base::debug::SetCrashKeyValue(
+      "oldindex", base::IntToString(controller_.GetIndexOfEntry(entry)));
+  base::debug::SetCrashKeyValue(
+      "newindex", base::IntToString(controller_.GetIndexOfEntry(new_entry)));
+  base::debug::SetCrashKeyValue(
+      "lastcommittedindex",
+      base::IntToString(controller_.GetLastCommittedEntryIndex()));
+  base::debug::SetCrashKeyValue("oldurl",
+                                entry ? entry->GetURL().spec() : "-nullptr-");
+  base::debug::SetCrashKeyValue(
+      "newurl", new_entry ? new_entry->GetURL().spec() : "-nullptr-");
+  base::debug::SetCrashKeyValue(
+      "updatedvalue", page_state.GetTopLevelUrlStringTemporaryForBug369661());
+  base::debug::SetCrashKeyValue(
+      "oldvalue", entry ? entry->GetURL().spec() : "-nullptr-");
+  base::debug::SetCrashKeyValue(
+      "newvalue",
+      new_entry ? new_entry->GetURL().spec() : "-nullptr-");
+  CHECK_EQ(entry, new_entry);
+
   if (!entry)
     return;
-
-  NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
-      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame())->nav_entry_id());
-
-  DCHECK_EQ(entry, new_entry);
 
   if (page_state == entry->GetPageState())
     return;  // Nothing to update.
@@ -4087,9 +4131,31 @@ void WebContentsImpl::UpdateTitle(RenderFrameHost* render_frame_host,
   NavigationEntryImpl* entry = controller_.GetEntryWithPageID(
       render_frame_host->GetSiteInstance(), page_id);
 
-  NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
-      static_cast<RenderFrameHostImpl*>(render_frame_host)->nav_entry_id());
-  DCHECK_EQ(entry, new_entry);
+  int nav_entry_id =
+      static_cast<RenderFrameHostImpl*>(render_frame_host)->nav_entry_id();
+  NavigationEntryImpl* new_entry =
+      controller_.GetEntryWithUniqueID(nav_entry_id);
+
+  base::debug::SetCrashKeyValue("pageid", base::IntToString(page_id));
+  base::debug::SetCrashKeyValue("navuniqueid", base::IntToString(nav_entry_id));
+  base::debug::SetCrashKeyValue(
+      "oldindex", base::IntToString(controller_.GetIndexOfEntry(entry)));
+  base::debug::SetCrashKeyValue(
+      "newindex", base::IntToString(controller_.GetIndexOfEntry(new_entry)));
+  base::debug::SetCrashKeyValue(
+      "lastcommittedindex",
+      base::IntToString(controller_.GetLastCommittedEntryIndex()));
+  base::debug::SetCrashKeyValue("oldurl",
+                                entry ? entry->GetURL().spec() : "-nullptr-");
+  base::debug::SetCrashKeyValue(
+      "newurl", new_entry ? new_entry->GetURL().spec() : "-nullptr-");
+  base::debug::SetCrashKeyValue("updatedvalue", base::UTF16ToUTF8(title));
+  base::debug::SetCrashKeyValue(
+      "oldvalue", entry ? base::UTF16ToUTF8(entry->GetTitle()) : "-nullptr-");
+  base::debug::SetCrashKeyValue(
+      "newvalue",
+      new_entry ? base::UTF16ToUTF8(new_entry->GetTitle()) : "-nullptr-");
+  CHECK_EQ(entry, new_entry);
 
   // We can handle title updates when we don't have an entry in
   // UpdateTitleForEntry, but only if the update is from the current RVH.
@@ -4189,7 +4255,7 @@ int WebContentsImpl::CreateSwappedOutRenderView(
     GetRenderManager()->CreateRenderFrameProxy(instance);
   } else {
     GetRenderManager()->CreateRenderFrame(
-        instance, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
+        instance, nullptr, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
         &render_view_routing_id);
   }
   return render_view_routing_id;
@@ -4356,7 +4422,7 @@ NavigationControllerImpl& WebContentsImpl::GetControllerForRenderManager() {
   return GetController();
 }
 
-scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderFrameHost(
+scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderManager(
     const GURL& url) {
   return scoped_ptr<WebUIImpl>(static_cast<WebUIImpl*>(CreateWebUI(
       url, std::string())));

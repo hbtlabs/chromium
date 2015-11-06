@@ -75,13 +75,14 @@ class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
                       const gpu::SyncToken& sync_token)
       : gl_(gl), sync_token_(sync_token) {}
   ~SyncTokenClientImpl() override {}
-  uint32 InsertSyncPoint() override {
+  void GenerateSyncToken(gpu::SyncToken* sync_token) override {
     if (sync_token_.HasData()) {
-      DCHECK_EQ(gpu::CommandBufferNamespace::OLD_SYNC_POINTS,
-                sync_token_.namespace_id());
-      return static_cast<uint32>(sync_token_.release_count());
+      *sync_token = sync_token_;
+    } else {
+      const uint64_t fence_sync = gl_->InsertFenceSyncCHROMIUM();
+      gl_->ShallowFlushCHROMIUM();
+      gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token->GetData());
     }
-    return gl_->InsertSyncPointCHROMIUM();
   }
   void WaitSyncToken(const gpu::SyncToken& sync_token) override {
     if (sync_token.HasData()) {
@@ -168,8 +169,10 @@ VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
 
     gl->GenMailboxCHROMIUM(mailbox.name);
     ResourceProvider::ScopedWriteLockGL lock(resource_provider_, resource_id);
-    gl->ProduceTextureDirectCHROMIUM(lock.texture_id(), GL_TEXTURE_2D,
-                                     mailbox.name);
+    gl->ProduceTextureDirectCHROMIUM(
+        lock.texture_id(),
+        resource_provider_->GetResourceTextureTarget(resource_id),
+        mailbox.name);
   }
   all_resources_.push_front(
       PlaneResource(resource_id, plane_size, format, mailbox));
@@ -384,8 +387,10 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       SetPlaneResourceUniqueId(video_frame.get(), i, &plane_resource);
     }
 
-    external_resources.mailboxes.push_back(TextureMailbox(
-        plane_resource.mailbox, gpu::SyncToken(), GL_TEXTURE_2D));
+    external_resources.mailboxes.push_back(
+        TextureMailbox(plane_resource.mailbox, gpu::SyncToken(),
+                       resource_provider_->GetResourceTextureTarget(
+                           plane_resource.resource_id)));
     external_resources.release_callbacks.push_back(
         base::Bind(&RecycleResource, AsWeakPtr(), plane_resource.resource_id));
   }

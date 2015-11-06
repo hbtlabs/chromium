@@ -11,6 +11,7 @@
 #include "core/css/CSSFontFaceSrcValue.h"
 #include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSFunctionValue.h"
+#include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSQuadValue.h"
 #include "core/css/CSSSVGDocumentValue.h"
@@ -26,6 +27,7 @@
 #include "core/css/parser/CSSParserValues.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/LayoutTheme.h"
+#include "core/svg/SVGPathUtilities.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -1426,7 +1428,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeShadow(CSSParserTokenRange& range
     return shadowValueList;
 }
 
-static PassRefPtrWillBeRawPtr<CSSFunctionValue> consumeFilterFunction(CSSParserTokenRange& range,  const CSSParserContext& context)
+static PassRefPtrWillBeRawPtr<CSSFunctionValue> consumeFilterFunction(CSSParserTokenRange& range, const CSSParserContext& context)
 {
     CSSValueID filterType = range.peek().functionId();
     if (filterType < CSSValueInvert || filterType > CSSValueDropShadow)
@@ -1468,7 +1470,7 @@ static PassRefPtrWillBeRawPtr<CSSFunctionValue> consumeFilterFunction(CSSParserT
     return filterValue.release();
 }
 
-static PassRefPtrWillBeRawPtr<CSSValue> consumeFilter(CSSParserTokenRange& range,  const CSSParserContext& context)
+static PassRefPtrWillBeRawPtr<CSSValue> consumeFilter(CSSParserTokenRange& range, const CSSParserContext& context)
 {
     if (range.peek().id() == CSSValueNone)
         return consumeIdent(range);
@@ -1487,7 +1489,68 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeFilter(CSSParserTokenRange& range
         }
         list->append(filterValue.release());
     } while (!range.atEnd());
+    return list.release();
+}
 
+static PassRefPtrWillBeRawPtr<CSSValue> consumeTextDecorationLine(CSSParserTokenRange& range)
+{
+    CSSValueID id = range.peek().id();
+    if (id == CSSValueNone)
+        return consumeIdent(range);
+
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> ident;
+    while ((ident = consumeIdent<CSSValueBlink, CSSValueUnderline, CSSValueOverline, CSSValueLineThrough>(range))) {
+        if (list->hasValue(ident.get()))
+            return nullptr;
+        list->append(ident.release());
+    }
+
+    if (!list->length())
+        return nullptr;
+    return list.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeMotionPath(CSSParserTokenRange& range)
+{
+    CSSValueID id = range.peek().id();
+    if (id == CSSValueNone)
+        return consumeIdent(range);
+
+    // FIXME: Add support for <url>, <basic-shape>, <geometry-box>.
+    if (range.peek().functionId() != CSSValuePath)
+        return nullptr;
+
+    // FIXME: Add support for <fill-rule>.
+    CSSParserTokenRange functionRange = range;
+    CSSParserTokenRange functionArgs = consumeFunction(functionRange);
+
+    if (functionArgs.peek().type() != StringToken)
+        return nullptr;
+    String pathString = functionArgs.consumeIncludingWhitespace().value();
+    Path path;
+    if (!buildPathFromString(pathString, path) || !functionArgs.atEnd())
+        return nullptr;
+
+    range = functionRange;
+    return CSSPathValue::create(pathString);
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeMotionRotation(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    RefPtrWillBeRawPtr<CSSValue> angle = consumeAngle(range, cssParserMode);
+    RefPtrWillBeRawPtr<CSSValue> keyword = consumeIdent<CSSValueAuto, CSSValueReverse>(range);
+    if (!angle && !keyword)
+        return nullptr;
+
+    if (!angle)
+        angle = consumeAngle(range, cssParserMode);
+
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    if (keyword)
+        list->append(keyword.release());
+    if (angle)
+        list->append(angle.release());
     return list.release();
 }
 
@@ -1588,6 +1651,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyOrphans:
     case CSSPropertyWidows:
         return consumeWidowsOrOrphans(m_range);
+    case CSSPropertyTextDecorationColor:
+        ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        return consumeColor(m_range, m_context);
     case CSSPropertyWebkitTextFillColor:
     case CSSPropertyWebkitTapHighlightColor:
         return consumeColor(m_range, m_context);
@@ -1601,6 +1667,18 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyWebkitFilter:
     case CSSPropertyBackdropFilter:
         return consumeFilter(m_range, m_context);
+    case CSSPropertyWebkitTextDecorationsInEffect:
+    case CSSPropertyTextDecorationLine:
+        return consumeTextDecorationLine(m_range);
+    case CSSPropertyMotionPath:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        return consumeMotionPath(m_range);
+    case CSSPropertyMotionOffset:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        return consumeLengthOrPercent(m_range, m_context.mode(), ValueRangeAll);
+    case CSSPropertyMotionRotation:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        return consumeMotionRotation(m_range, m_context.mode());
     default:
         return nullptr;
     }
@@ -1963,6 +2041,40 @@ bool CSSPropertyParser::consumeColumns(bool important)
     return true;
 }
 
+bool CSSPropertyParser::consumeShorthandGreedily(const StylePropertyShorthand& shorthand, bool important)
+{
+    ASSERT(shorthand.length() <= 6); // Existing shorthands have at most 6 longhands.
+    RefPtrWillBeRawPtr<CSSValue> longhands[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    const CSSPropertyID* shorthandProperties = shorthand.properties();
+    do {
+        bool foundLonghand = false;
+        for (size_t i = 0; !foundLonghand && i < shorthand.length(); ++i) {
+            if (longhands[i])
+                continue;
+            // TODO: parseSingleValue needs to handle fastpath keywords.
+            if (CSSParserFastPaths::isKeywordPropertyID(shorthandProperties[i])) {
+                if (CSSParserFastPaths::isValidKeywordPropertyAndValue(shorthandProperties[i], m_range.peek().id()))
+                    longhands[i] = consumeIdent(m_range);
+            } else {
+                longhands[i] = parseSingleValue(shorthandProperties[i]);
+            }
+            if (longhands[i])
+                foundLonghand = true;
+        }
+        if (!foundLonghand)
+            return false;
+    } while (!m_range.atEnd());
+
+    ImplicitScope implicitScope(this);
+    for (size_t i = 0; i < shorthand.length(); ++i) {
+        if (longhands[i])
+            addProperty(shorthandProperties[i], longhands[i].release(), important);
+        else
+            addProperty(shorthandProperties[i], cssValuePool().createImplicitInitialValue(), important);
+    }
+    return true;
+}
+
 bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool important)
 {
     CSSPropertyID property = resolveCSSPropertyID(unresolvedProperty);
@@ -2027,6 +2139,22 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool im
         return consumeAnimationShorthand(animationShorthandForParsing(), unresolvedProperty == CSSPropertyAliasWebkitAnimation, important);
     case CSSPropertyTransition:
         return consumeAnimationShorthand(transitionShorthandForParsing(), false, important);
+    case CSSPropertyTextDecoration: {
+        // Fall through 'text-decoration-line' parsing if CSS 3 Text Decoration
+        // is disabled to match CSS 2.1 rules for parsing 'text-decoration'.
+        if (RuntimeEnabledFeatures::css3TextDecorationsEnabled())
+            return consumeShorthandGreedily(textDecorationShorthand(), important);
+        // TODO(rwlbuis): investigate if this shorthand hack can be removed.
+        m_currentShorthand = oldShorthand;
+        RefPtrWillBeRawPtr<CSSValue> textDecoration = consumeTextDecorationLine(m_range);
+        if (!textDecoration || !m_range.atEnd())
+            return false;
+        addProperty(CSSPropertyTextDecoration, textDecoration.release(), important);
+        return true;
+    }
+    case CSSPropertyMotion:
+        ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
+        return consumeShorthandGreedily(motionShorthand(), important);
     default:
         m_currentShorthand = oldShorthand;
         return false;

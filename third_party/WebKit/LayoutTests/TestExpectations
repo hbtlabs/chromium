@@ -71,7 +71,6 @@ crbug.com/492664 [ Win ] imported/csswg-test/css-writing-modes-3/bidi-plaintext-
 crbug.com/492664 imported/csswg-test/css-transitions-2/transitioncancel-001.html [ Failure ]
 crbug.com/418091 [ Mac10.6 ] fast/text/aat-morx.html [ Failure ]
 crbug.com/463358 [ Mac Linux ] svg/hixie/perf/005.xml [ Pass Failure ]
-crbug.com/463358 [ Mac Linux ] svg/hixie/perf/006.xml [ Pass Failure ]
 crbug.com/463358 [ Linux Mac ] svg/transforms/text-with-pattern-inside-transformed-html.xhtml [ Failure ]
 crbug.com/463358 [ Mac Linux Debug ] fast/backgrounds/transformed-body-html-background.html [ Failure ]
 crbug.com/463358 [ Mac Linux Debug ] css3/masking/clip-path-polygon-nonzero.html [ Failure ]
@@ -333,6 +332,11 @@ crbug.com/543110 [ Mac ] fast/text/international/text-shaping-arabic.html [ Fail
 
 crbug.com/548904 [ Linux Win7 ] fast/writing-mode/Kusa-Makura-background-canvas.html [ Failure Pass ]
 
+crbug.com/552433 svg/W3C-SVG-1.1/coords-units-02-b.svg [ Pass Failure ]
+crbug.com/552433 svg/dom/length-list-parser.html [ Pass Failure ]
+crbug.com/552433 svg/transforms/text-with-pattern-with-svg-transform.svg [ Pass Failure ]
+crbug.com/552433 svg/hixie/perf/006.xml [ Pass Failure ]
+
 crbug.com/441840 [ Mac XP ] cssom/ahem-ex-units.html [ Failure ]
 
 crbug.com/530044 transforms/2d/transform-borderbox.html [ NeedsManualRebaseline ]
@@ -399,7 +403,9 @@ crbug.com/537409 virtual/spv2/paint/invalidation/spv2/overflow-hidden-in-overflo
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/repaint-squashed-layer-in-rect.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/repaint-via-layout-offset.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/resize-repaint.html [ Skip ]
+crbug.com/537409 virtual/spv2/paint/invalidation/spv2/scroll-fixed-layer-with-reflection.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/scroll-fixed-squahed-layer.html [ Skip ]
+crbug.com/537409 virtual/spv2/paint/invalidation/spv2/scroll-fixed-reflected-layer.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/selection-change-in-iframe-with-relative-parent.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/selection-within-composited-scroller.html [ Skip ]
 crbug.com/537409 virtual/spv2/paint/invalidation/spv2/should-not-clip-composited-overflow-scrolling-layer.html [ Skip ]
@@ -663,8 +669,6 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/orthogonal-parent-shrin
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-orientation-script-001.html [ Skip ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-orientation-script-001e.html [ Failure ]
 
-crbug.com/551966 [ Linux ] inspector-protocol/input/dispatchTouchEvent.html [ Pass Failure Crash ]
-
 # These tests pass but images do not match because of wrong half-leading in vertical-lr
 crbug.com/537080 imported/csswg-test/css-writing-modes-3/vertical-alignment-003.xht [ Failure ]
 crbug.com/537080 imported/csswg-test/css-writing-modes-3/vertical-alignment-009.xht [ Failure ]
@@ -921,7 +925,7 @@ crbug.com/546538 svg/clip-path/clip-path-nonzero-evenodd.svg [ NeedsManualRebase
 crbug.com/425113 svg/clip-path/clip-path-multiple-children.svg [ Failure ]
 
 crbug.com/480769 http/tests/inspector/service-workers/service-workers-redundant.html [ Crash Pass Slow Failure ]
-crbug.com/528198 http/tests/inspector/service-workers/service-worker-agents.html [ Crash Pass Slow ]
+crbug.com/480769 http/tests/inspector/service-workers/service-worker-agents.html [ Crash Pass Timeout Slow ]
 
 crbug.com/472330 fast/borders/border-image-outset-split-inline-vertical-lr.html [ Failure ]
 crbug.com/472330 fast/writing-mode/box-shadow-vertical-lr.html [ Failure ]
@@ -1002,6 +1006,9 @@ crbug.com/474798 virtual/spv2/paint/invalidation/spv2/justify-self-change-keepin
 crbug.com/474798 virtual/syncpaint/fast/repaint/align-self-change-keeping-geometry-grid.html [ Skip ]
 crbug.com/474798 virtual/syncpaint/fast/repaint/justify-self-change-keeping-geometry.html [ Skip ]
 
+crbug.com/548695 fast/forms/datalist/update-range-with-datalist.html [ Failure ]
+
+crbug.com/548705 fast/css/first-line-hover-001.html [ Failure ]
 
 # Temporarily disabled after chromium change
 crbug.com/492511 [ Mac ] fast/text/atsui-negative-spacing-features.html [ Failure ]
@@ -1291,7 +1298,6 @@ crbug.com/521730 [ Win10 ] svg/text/bidi-tspans.svg [ Failure ]
 crbug.com/521730 [ Win10 ] svg/text/text-selection-fonts-01-t.svg [ Failure ]
 crbug.com/521730 [ Win10 ] svg/text/text-selection-intro-05-t.svg [ Failure ]
 
-crbug.com/550430 fast/html/details-writing-mode.html [ Failure Pass ]
 crbug.com/550285 [ Mac10.6 ] virtual/syncpaint/compositing/repaint/newly-composited-on-scroll.html [ Failure ]
 crbug.com/550285 [ Mac10.6 ] virtual/syncpaint/fast/repaint/background-image-paint-invalidation-large-abspos-div.html [ Failure ]
 crbug.com/550285 [ Mac10.6 ] virtual/syncpaint/fast/repaint/repaint-during-scroll.html [ Failure ]
@@ -1354,11 +1360,6 @@ crbug.com/548416 [ Mac10.6 ] virtual/syncpaint/compositing/repaint/background-at
 crbug.com/548765 http/tests/inspector/console-fetch-logging.html [ Failure Pass Slow ]
 
 crbug.com/549314 [ XP ] inspector-protocol/layout-fonts/unicode-range-combining-chars-fallback.html [ Failure ]
-
-crbug.com/467464 svg/W3C-SVG-1.1/coords-units-02-b.svg [ NeedsRebaseline ]
-crbug.com/467464 svg/dom/length-list-parser.html [ NeedsRebaseline ]
-crbug.com/467464 svg/transforms/text-with-pattern-with-svg-transform.svg [ NeedsRebaseline ]
-crbug.com/467464 svg/hixie/perf/006.xml [ NeedsRebaseline ]
 
 crbug.com/551272 fast/js/getOwnPropertyDescriptor.html [ NeedsManualRebaseline ]
 crbug.com/551272 fast/js/pic/cached-named-property-getter.html [ NeedsManualRebaseline ]
