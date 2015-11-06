@@ -15,7 +15,8 @@ namespace device {
 // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic
 // implement BluetootGattCharacteristic.
 //
-// TODO(crbug.com/551634): Notifications call GattCharacteristicValueChanged.
+// TODO(crbug.com/551634): When notifications are enabled characteristic updates
+// should call observers' GattCharacteristicValueChanged.
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
     : public BluetoothGattCharacteristic {
  public:
