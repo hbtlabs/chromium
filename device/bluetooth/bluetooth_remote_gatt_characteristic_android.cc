@@ -128,13 +128,16 @@ void BluetoothRemoteGattCharacteristicAndroid::StartNotifySession(
     const ErrorCallback& error_callback) {
   // TODO(crbug.com/551634): Check characteristic properties and return a better
   // error code if notifications aren't permitted.
+LOG(WARNING) << __FUNCTION__;
   if (Java_ChromeBluetoothRemoteGattCharacteristic_startNotifySession(
           AttachCurrentThread(), j_characteristic_.obj())) {
+LOG(WARNING) << __FUNCTION__;
     scoped_ptr<device::BluetoothGattNotifySession> notify_session(
         new BluetoothGattNotifySessionAndroid(instance_id_));
     base::MessageLoop::current()->PostTask(
         FROM_HERE, base::Bind(callback, base::Passed(&notify_session)));
   } else {
+LOG(WARNING) << __FUNCTION__;
     base::MessageLoop::current()->PostTask(
         FROM_HERE,
         base::Bind(error_callback,

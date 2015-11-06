@@ -325,6 +325,7 @@ class Wrappers {
         @Override
         public void onCharacteristicChanged(
                 BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            Log.i(TAG, "wrapper onCharacteristicChanged.");
             mWrapperCallback.onCharacteristicChanged(
                     mDeviceWrapper.mCharacteristicsToWrappers.get(characteristic));
         }

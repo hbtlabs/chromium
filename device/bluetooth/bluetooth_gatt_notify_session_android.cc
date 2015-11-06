@@ -10,7 +10,9 @@ namespace device {
 
 BluetoothGattNotifySessionAndroid::BluetoothGattNotifySessionAndroid(
     const std::string& characteristic_identifier)
-    : characteristic_id_(characteristic_identifier) {}
+    : characteristic_id_(characteristic_identifier) {
+LOG(WARNING) << __FUNCTION__;
+}
 
 BluetoothGattNotifySessionAndroid::~BluetoothGattNotifySessionAndroid() {}
 

@@ -869,6 +869,7 @@ void BluetoothDispatcherHost::OnStartNotifications(
     int thread_id,
     int request_id,
     const std::string& characteristic_instance_id) {
+LOG(WARNING) << __FUNCTION__;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RecordWebBluetoothFunctionCall(
       UMAWebBluetoothFunction::CHARACTERISTIC_START_NOTIFICATIONS);
@@ -882,6 +883,7 @@ void BluetoothDispatcherHost::OnStartNotifications(
     return;
   }
 
+LOG(WARNING) << __FUNCTION__;
   // TODO(ortuno): Check if notify/indicate bit is set.
   // http://crbug.com/538869
 
@@ -899,6 +901,7 @@ void BluetoothDispatcherHost::OnStartNotifications(
     return;
   }
 
+LOG(WARNING) << __FUNCTION__;
   query_result.characteristic->StartNotifySession(
       base::Bind(&BluetoothDispatcherHost::OnStartNotifySessionSuccess,
                  weak_ptr_factory_.GetWeakPtr(), thread_id, request_id),

@@ -182,13 +182,16 @@ final class ChromeBluetoothDevice {
         @Override
         public void onCharacteristicChanged(
                 final Wrappers.BluetoothGattCharacteristicWrapper characteristic) {
+            Log.i(TAG, "device onCharacteristicChanged.");
             ThreadUtils.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
-                        chromeCharacteristic.onCharacteristicRead();
+                        chromeCharacteristic.onCharacteristicChanged();
+                    } else {
+                        Log.i(TAG, "onCharacteristicChanged called on null chromeCharacteristic.");
                     }
                 }
             });
