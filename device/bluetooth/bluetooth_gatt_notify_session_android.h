@@ -17,18 +17,20 @@ class BluetoothRemoteGattCharacteristicAndroid;
 
 // BluetoothGattNotifySessionAndroid implements
 // BluetoothGattNotifySession for the Android platform.
-// 
+//
 // TODO(crbug.com/551634): Detect destroyed Characteristic or parents objects.
 // TODO(crbug.com/551634): Implement Stop.
 class DEVICE_BLUETOOTH_EXPORT BluetoothGattNotifySessionAndroid
     : public device::BluetoothGattNotifySession {
  public:
-   explicit BluetoothGattNotifySessionAndroid(
-       const std::string& characteristic_identifier);
+  explicit BluetoothGattNotifySessionAndroid(
+      const std::string& characteristic_identifier);
   ~BluetoothGattNotifySessionAndroid() override;
 
   // BluetoothGattNotifySession overrides.
-  std::string GetCharacteristicIdentifier() const override { return characteristic_id_; }
+  std::string GetCharacteristicIdentifier() const override {
+    return characteristic_id_;
+  }
   bool IsActive() override { return true; }
   void Stop(const base::Closure& callback) override { NOTIMPLEMENTED(); }
 
