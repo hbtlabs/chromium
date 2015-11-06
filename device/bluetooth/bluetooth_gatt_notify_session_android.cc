@@ -12,4 +12,17 @@ BluetoothGattNotifySessionAndroid::BluetoothGattNotifySessionAndroid(
 
 BluetoothGattNotifySessionAndroid::~BluetoothGattNotifySessionAndroid() {}
 
+std::string BluetoothGattNotifySessionAndroid::GetCharacteristicIdentifier()
+    const {
+  return characteristic_id_;
+}
+
+bool BluetoothGattNotifySessionAndroid::IsActive() {
+  return true;
+}
+
+void BluetoothGattNotifySessionAndroid::Stop(const base::Closure& callback) {
+  NOTIMPLEMENTED();
+}
+
 }  // namespace device

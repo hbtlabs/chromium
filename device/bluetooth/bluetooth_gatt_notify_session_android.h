@@ -30,11 +30,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattNotifySessionAndroid
   ~BluetoothGattNotifySessionAndroid() override;
 
   // BluetoothGattNotifySession overrides.
-  std::string GetCharacteristicIdentifier() const override {
-    return characteristic_id_;
-  }
-  bool IsActive() override { return true; }
-  void Stop(const base::Closure& callback) override { NOTIMPLEMENTED(); }
+  std::string GetCharacteristicIdentifier() const override;
+  bool IsActive() override;
+  void Stop(const base::Closure& callback) override;
 
  private:
   // Identifier of the associated characteristic.
