@@ -326,7 +326,7 @@ WebInspector.TimelineUIUtils.buildDetailsTextForTraceEvent = function(event, tar
     case recordType.ParseHTML:
         var endLine = event.args["endData"] && event.args["endData"]["endLine"];
         var url = WebInspector.displayNameForURL(event.args["beginData"]["url"]);
-        detailsText = endLine ? WebInspector.UIString("%s [%d\u2009\u2013\u2009%d]", url, event.args["beginData"]["startLine"] + 1, endLine + 1) : url;
+        detailsText = WebInspector.UIString("%s [%s\u2026%s]", url, event.args["beginData"]["startLine"] + 1, endLine >= 0 ? endLine + 1 : "");
         break;
 
     case recordType.CompileScript:
@@ -491,9 +491,10 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
     {
         if (!url)
             return null;
-
         // FIXME(62725): stack trace line/column numbers are one-based.
-        return linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber - 1, (columnNumber || 1) - 1, "timeline-details");
+        if (columnNumber)
+            --columnNumber;
+        return linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber - 1, columnNumber, "timeline-details");
     }
 
     /**
@@ -517,9 +518,10 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
  * @param {!WebInspector.TracingModel.Event} event
  * @param {!WebInspector.TimelineModel} model
  * @param {!WebInspector.Linkifier} linkifier
+ * @param {boolean} detailed
  * @param {function(!DocumentFragment)} callback
  */
-WebInspector.TimelineUIUtils.buildTraceEventDetails = function(event, model, linkifier, callback)
+WebInspector.TimelineUIUtils.buildTraceEventDetails = function(event, model, linkifier, detailed, callback)
 {
     var target = model.target();
     if (!target) {
@@ -564,7 +566,7 @@ WebInspector.TimelineUIUtils.buildTraceEventDetails = function(event, model, lin
 
     function callbackWrapper()
     {
-        callback(WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously(event, model, linkifier, relatedNodes));
+        callback(WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously(event, model, linkifier, detailed, relatedNodes));
     }
 }
 
@@ -572,10 +574,11 @@ WebInspector.TimelineUIUtils.buildTraceEventDetails = function(event, model, lin
  * @param {!WebInspector.TracingModel.Event} event
  * @param {!WebInspector.TimelineModel} model
  * @param {!WebInspector.Linkifier} linkifier
+ * @param {boolean} detailed
  * @param {?Map<number, ?WebInspector.DOMNode>} relatedNodesMap
  * @return {!DocumentFragment}
  */
-WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(event, model, linkifier, relatedNodesMap)
+WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(event, model, linkifier, detailed, relatedNodesMap)
 {
     var fragment = createDocumentFragment();
     var stats = {};
@@ -589,9 +592,11 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
     if (event.warning)
         contentHelper.appendWarningRow(event.warning, event);
 
-    contentHelper.appendTextRow(WebInspector.UIString("Type"), WebInspector.TimelineUIUtils.eventTitle(event));
-    contentHelper.appendTextRow(WebInspector.UIString("Total Time"), Number.millisToString(event.duration || 0, true));
-    contentHelper.appendTextRow(WebInspector.UIString("Self Time"), Number.millisToString(event.selfTime, true));
+    if (detailed) {
+        contentHelper.appendTextRow(WebInspector.UIString("Type"), WebInspector.TimelineUIUtils.eventTitle(event));
+        contentHelper.appendTextRow(WebInspector.UIString("Total Time"), Number.millisToString(event.duration || 0, true));
+        contentHelper.appendTextRow(WebInspector.UIString("Self Time"), Number.millisToString(event.selfTime, true));
+    }
     if (event.previewElement)
         contentHelper.appendElementRow(WebInspector.UIString("Preview"), event.previewElement);
 
@@ -748,8 +753,8 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
     if (event.stackTrace || (event.initiator && event.initiator.stackTrace) || event.invalidationTrackingEvents)
         WebInspector.TimelineUIUtils._generateCauses(event, model.target(), contentHelper);
 
-    var hasChildren = WebInspector.TimelineUIUtils._aggregatedStatsForTraceEvent(stats, model, event);
-    if (hasChildren) {
+    var showPieChart = detailed && WebInspector.TimelineUIUtils._aggregatedStatsForTraceEvent(stats, model, event);
+    if (showPieChart) {
         var pieChart = WebInspector.TimelineUIUtils.generatePieChart(stats, WebInspector.TimelineUIUtils.eventStyle(event).category, event.selfTime);
         contentHelper.appendElementRow(WebInspector.UIString("Aggregated Time"), pieChart);
     }
@@ -1982,7 +1987,9 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
     {
         if (!this._linkifier || !this._target)
             return;
-        this.appendElementRow(title, this._linkifier.linkifyScriptLocation(this._target, null, url, startLine - 1, (startColumn || 1) - 1));
+        if (startColumn)
+            --startColumn;
+        this.appendElementRow(title, this._linkifier.linkifyScriptLocation(this._target, null, url, startLine - 1, startColumn));
     },
 
     /**
@@ -1997,7 +2004,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
             return;
         var locationContent = createElement("span");
         locationContent.appendChild(this._linkifier.linkifyScriptLocation(this._target, null, url, startLine - 1));
-        locationContent.createTextChild(endLine ? String.sprintf(" [%d\u2009\u2013\u2009%d]", startLine , endLine) : "")
+        locationContent.createTextChild(String.sprintf(" [%s\u2026%s]", startLine, endLine || ""));
         this.appendElementRow(title, locationContent);
     },
 
@@ -2045,7 +2052,7 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
         switch (warningType) {
         case warnings.ForcedStyle:
         case warnings.ForcedLayout:
-            span.appendChild(WebInspector.linkifyDocumentationURLAsNode("fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts",
+            span.appendChild(WebInspector.linkifyDocumentationURLAsNode("../../fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts",
                 WebInspector.UIString("Forced reflow")));
             span.createTextChild(WebInspector.UIString(" is a likely performance bottleneck."));
             break;

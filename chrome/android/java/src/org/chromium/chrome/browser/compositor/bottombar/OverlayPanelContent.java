@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.compositor.bottombar;
 
+import android.text.TextUtils;
+
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -53,6 +55,11 @@ public class OverlayPanelContent {
     private WebContentsObserver mWebContentsObserver;
 
     /**
+     * The URL that was directly loaded using the {@link #loadUrl(String)} method.
+     */
+    private String mLoadedUrl;
+
+    /**
      * Whether the ContentViewCore has started loading a URL.
      */
     private boolean mDidStartLoadingUrl;
@@ -89,6 +96,11 @@ public class OverlayPanelContent {
      * Used to observe progress bar events.
      */
     private OverlayContentProgressObserver mProgressObserver;
+
+    /**
+     * If a URL is set to delayed load (load on user interaction), it will be stored here.
+     */
+    private String mPendingUrl;
 
     // http://crbug.com/522266 : An instance of InterceptNavigationDelegateImpl should be kept in
     // java layer. Otherwise, the instance could be garbage-collected unexpectedly.
@@ -205,7 +217,8 @@ public class OverlayPanelContent {
                             boolean isMainFrame, String validatedUrl, boolean isErrorPage,
                             boolean isIframeSrcdoc) {
                         if (isMainFrame) {
-                            mContentDelegate.onMainFrameLoadStarted(validatedUrl);
+                            mContentDelegate.onMainFrameLoadStarted(validatedUrl,
+                                    !TextUtils.equals(validatedUrl, mLoadedUrl));
                         }
                     }
 
@@ -215,6 +228,7 @@ public class OverlayPanelContent {
                             int httpResultCode) {
                         mIsProcessingPendingNavigation = false;
                         mContentDelegate.onMainFrameNavigation(url,
+                                !TextUtils.equals(url, mLoadedUrl),
                                 isHttpFailureCode(httpResultCode));
                     }
 
@@ -257,13 +271,20 @@ public class OverlayPanelContent {
     }
 
     /**
-     * Load a URL, this will trigger creation of a new ContentViewCore.
+     * Load a URL; this will trigger creation of a new ContentViewCore if being loaded immediately,
+     * otherwise one is created when the panel's content becomes visible.
      * @param url The URL that should be loaded.
+     * @param shouldLoadImmediately If a URL should be loaded immediately or wait until visibility
+     *                        changes.
      */
-    public void loadUrl(String url) {
-        createNewContentView();
+    public void loadUrl(String url, boolean shouldLoadImmediately) {
+        mPendingUrl = null;
 
-        if (mContentViewCore != null && mContentViewCore.getWebContents() != null) {
+        if (!shouldLoadImmediately) {
+            mPendingUrl = url;
+        } else {
+            createNewContentView();
+            mLoadedUrl = url;
             mDidStartLoadingUrl = true;
             mIsProcessingPendingNavigation = true;
             mContentViewCore.getWebContents().getNavigationController().loadUrl(
@@ -331,6 +352,11 @@ public class OverlayPanelContent {
         mIsContentViewShowing = isVisible;
 
         if (isVisible) {
+            // If the last call to loadUrl was sepcified to be delayed, load it now.
+            if (!TextUtils.isEmpty(mPendingUrl)) {
+                loadUrl(mPendingUrl, false);
+            }
+
             // The CVC is created with the search request, but if none was made we'll need
             // one in order to display an empty panel.
             if (mContentViewCore == null) {

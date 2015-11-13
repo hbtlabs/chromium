@@ -38,7 +38,6 @@ WebInspector.CSSStyleModel = function(target)
     WebInspector.SDKModel.call(this, WebInspector.CSSStyleModel, target);
     this._domModel = WebInspector.DOMModel.fromTarget(target);
     this._agent = target.cssAgent();
-    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.SuspendStateChanged, this._suspendStateChanged, this);
     this._styleLoader = new WebInspector.CSSStyleModel.ComputedStyleLoader(this);
     target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
     target.registerCSSDispatcher(new WebInspector.CSSDispatcher(this));
@@ -140,7 +139,11 @@ WebInspector.CSSStyleModel.prototype = {
             if (error)
                 return null;
 
-            return new WebInspector.CSSStyleModel.MatchedStyleResult(this, nodeId, inlinePayload, attributesPayload, matchedPayload, pseudoPayload, inheritedPayload);
+             var node = this._domModel.nodeForId(nodeId);
+             if (!node)
+                return null;
+
+            return new WebInspector.CSSStyleModel.MatchedStyleResult(this, node, inlinePayload, attributesPayload, matchedPayload, pseudoPayload, inheritedPayload);
         }
 
         return this._agent.getMatchedStylesForNode(nodeId, callback.bind(this));
@@ -153,6 +156,23 @@ WebInspector.CSSStyleModel.prototype = {
     computedStylePromise: function(nodeId)
     {
         return this._styleLoader.computedStylePromise(nodeId);
+    },
+
+    /**
+     * @param {number} nodeId
+     * @return {!Promise<?Array<string>>}
+     */
+    backgroundColorsPromise: function(nodeId)
+    {
+        /**
+         * @param {?string} error
+         * @param {!Array<string>=} backgroundColors
+         * @return {?Array<string>}
+         */
+        function backgroundColorsCallback(error, backgroundColors) {
+            return !error && backgroundColors ? backgroundColors : null;
+        }
+        return this._agent.getBackgroundColors(nodeId, backgroundColorsCallback);
     },
 
     /**
@@ -459,9 +479,6 @@ WebInspector.CSSStyleModel.prototype = {
      */
     _fireStyleSheetChanged: function(styleSheetId)
     {
-        if (!styleSheetId || !this.hasEventListeners(WebInspector.CSSStyleModel.Events.StyleSheetChanged))
-            return;
-
         this.dispatchEventToListeners(WebInspector.CSSStyleModel.Events.StyleSheetChanged, { styleSheetId: styleSheetId });
     },
 
@@ -567,14 +584,23 @@ WebInspector.CSSStyleModel.prototype = {
             this.dispatchEventToListeners(WebInspector.CSSStyleModel.Events.StyleSheetRemoved, headers[i]);
     },
 
-    _suspendStateChanged: function()
+    /**
+     * @override
+     * @return {!Promise}
+     */
+    suspendModel: function()
     {
-        if (WebInspector.targetManager.allTargetsSuspended()) {
-            this._agent.disable(this._resetStyleSheets.bind(this));
-            this._isEnabled = false;
-        } else {
-            this._agent.enable().then(this._wasEnabled.bind(this));
-        }
+        this._isEnabled = false;
+        return this._agent.disable().then(this._resetStyleSheets.bind(this));
+    },
+
+    /**
+     * @override
+     * @return {!Promise}
+     */
+    resumeModel: function()
+    {
+        return this._agent.enable().then(this._wasEnabled.bind(this));
     },
 
     /**
@@ -650,19 +676,6 @@ WebInspector.CSSStyleDeclaration.Type = {
     Regular: "Regular",
     Inline: "Inline",
     Attributes: "Attributes"
-}
-
-/**
- * @param {!WebInspector.CSSStyleModel} cssModel
- * @return {!WebInspector.CSSStyleDeclaration}
- */
-WebInspector.CSSStyleDeclaration.createDummyStyle = function(cssModel)
-{
-    var dummyPayload = {
-        shorthandEntries: [],
-        cssProperties: []
-    };
-    return new WebInspector.CSSStyleDeclaration(cssModel, null, dummyPayload, WebInspector.CSSStyleDeclaration.Type.Regular);
 }
 
 WebInspector.CSSStyleDeclaration.prototype = {
@@ -1038,6 +1051,27 @@ WebInspector.CSSRule = function(cssModel, payload, matchingSelectors)
         this.media = WebInspector.CSSMedia.parseMediaArrayPayload(cssModel, payload.media);
 }
 
+/**
+ * @param {!WebInspector.CSSStyleModel} cssModel
+ * @param {string} selectorText
+ * @return {!WebInspector.CSSRule}
+ */
+WebInspector.CSSRule.createDummyRule = function(cssModel, selectorText)
+{
+    var dummyPayload = {
+        selectorList: {
+            selectors: [{ value: selectorText}],
+        },
+        style: {
+            styleSheetId: "0",
+            range: new WebInspector.TextRange(0, 0, 0, 0),
+            shorthandEntries: [],
+            cssProperties: []
+        }
+    };
+    return new WebInspector.CSSRule(cssModel, /** @type {!CSSAgent.CSSRule} */(dummyPayload));
+}
+
 WebInspector.CSSRule.prototype = {
     /**
      * @param {!DOMAgent.NodeId} nodeId
@@ -1238,7 +1272,7 @@ WebInspector.CSSRule.prototype = {
 
 /**
  * @constructor
- * @param {?WebInspector.CSSStyleDeclaration} ownerStyle
+ * @param {!WebInspector.CSSStyleDeclaration} ownerStyle
  * @param {number} index
  * @param {string} name
  * @param {string} value
@@ -1265,7 +1299,7 @@ WebInspector.CSSProperty = function(ownerStyle, index, name, value, important, d
 }
 
 /**
- * @param {?WebInspector.CSSStyleDeclaration} ownerStyle
+ * @param {!WebInspector.CSSStyleDeclaration} ownerStyle
  * @param {number} index
  * @param {!CSSAgent.CSSProperty} payload
  * @return {!WebInspector.CSSProperty}
@@ -1875,14 +1909,17 @@ WebInspector.CSSStyleSheetHeader.prototype = {
         newText = this._trimSourceURL(newText);
         if (this.hasSourceURL)
             newText += "\n/*# sourceURL=" + this.sourceURL + " */";
-        return this._cssModel._agent.setStyleSheetText(this.id, newText, extractProtocolError);
+        return this._cssModel._agent.setStyleSheetText(this.id, newText, callback.bind(this));
 
         /**
          * @param {?Protocol.Error} error
+         * @param {string=} sourceMapURL
          * @return {?Protocol.Error}
+         * @this {WebInspector.CSSStyleSheetHeader}
          */
-        function extractProtocolError(error)
+        function callback(error, sourceMapURL)
         {
+            this.sourceMapURL = sourceMapURL;
             return error || null;
         }
     },
@@ -2038,20 +2075,20 @@ WebInspector.CSSStyleModel.fromNode = function(node)
 /**
  * @constructor
  * @param {!WebInspector.CSSStyleModel} cssModel
- * @param {!DOMAgent.NodeId} nodeId
+ * @param {!WebInspector.DOMNode} node
  * @param {?CSSAgent.CSSStyle=} inlinePayload
  * @param {?CSSAgent.CSSStyle=} attributesPayload
  * @param {!Array.<!CSSAgent.RuleMatch>=} matchedPayload
  * @param {!Array.<!CSSAgent.PseudoElementMatches>=} pseudoPayload
  * @param {!Array.<!CSSAgent.InheritedStyleEntry>=} inheritedPayload
  */
-WebInspector.CSSStyleModel.MatchedStyleResult = function(cssModel, nodeId, inlinePayload, attributesPayload, matchedPayload, pseudoPayload, inheritedPayload)
+WebInspector.CSSStyleModel.MatchedStyleResult = function(cssModel, node, inlinePayload, attributesPayload, matchedPayload, pseudoPayload, inheritedPayload)
 {
     this._cssModel = cssModel;
-    this._node = this._cssModel._domModel.nodeForId(nodeId);
-
+    this._node = node;
     this._nodeStyles = [];
     this._nodeForStyle = new Map();
+    this._inheritedStyles = new Set();
 
     /**
      * @this {WebInspector.CSSStyleModel.MatchedStyleResult}
@@ -2098,6 +2135,7 @@ WebInspector.CSSStyleModel.MatchedStyleResult = function(cssModel, nodeId, inlin
         if (inheritedInlineStyle && this._containsInherited(inheritedInlineStyle)) {
             this._nodeForStyle.set(inheritedInlineStyle, parentNode);
             this._nodeStyles.push(inheritedInlineStyle);
+            this._inheritedStyles.add(inheritedInlineStyle);
         }
 
         for (var j = inheritedMatchedCSSRules.length - 1; j >= 0; --j) {
@@ -2106,6 +2144,7 @@ WebInspector.CSSStyleModel.MatchedStyleResult = function(cssModel, nodeId, inlin
                 continue;
             this._nodeForStyle.set(inheritedRule.style, parentNode);
             this._nodeStyles.push(inheritedRule.style);
+            this._inheritedStyles.add(inheritedRule.style);
         }
         parentNode = parentNode.parentNode;
     }
@@ -2126,9 +2165,42 @@ WebInspector.CSSStyleModel.MatchedStyleResult = function(cssModel, nodeId, inlin
             this._pseudoStyles.set(entryPayload.pseudoType, pseudoStyles);
         }
     }
+
+    this.resetActiveProperties();
 }
 
 WebInspector.CSSStyleModel.MatchedStyleResult.prototype = {
+    /**
+     * @return {!WebInspector.DOMNode}
+     */
+    node: function()
+    {
+        return this._node;
+    },
+
+    /**
+     * @param {!WebInspector.CSSStyleDeclaration} style
+     * @return {boolean}
+     */
+    hasMatchingSelectors: function(style)
+    {
+        return style.parentRule ? style.parentRule.matchingSelectors && style.parentRule.matchingSelectors.length > 0 && this.mediaMatches(style) : true;
+    },
+
+    /**
+     * @param {!WebInspector.CSSStyleDeclaration} style
+     * @return {boolean}
+     */
+    mediaMatches: function(style)
+    {
+        var media = style.parentRule ? style.parentRule.media : [];
+        for (var i = 0; media && i < media.length; ++i) {
+            if (!media[i].active())
+                return false;
+        }
+        return true;
+    },
+
     /**
      * @return {!Array<!WebInspector.CSSStyleDeclaration>}
      */
@@ -2176,8 +2248,127 @@ WebInspector.CSSStyleModel.MatchedStyleResult.prototype = {
      */
     isInherited: function(style)
     {
-        return this.nodeForStyle(style) !== this._node;
+        return this._inheritedStyles.has(style);
+    },
+
+    /**
+     * @param {!WebInspector.CSSProperty} property
+     * @return {?WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState}
+     */
+    propertyState: function(property)
+    {
+        if (this._propertiesState.size === 0) {
+            this._computeActiveProperties(this._nodeStyles, this._propertiesState);
+            for (var pseudoElementStyles of this._pseudoStyles.valuesArray())
+                this._computeActiveProperties(pseudoElementStyles, this._propertiesState);
+        }
+        return this._propertiesState.get(property) || null;
+    },
+
+    resetActiveProperties: function()
+    {
+        /** @type {!Map<!WebInspector.CSSProperty, !WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState>} */
+        this._propertiesState = new Map();
+    },
+
+    /**
+     * @param {!Array<!WebInspector.CSSStyleDeclaration>} styles
+     * @param {!Map<!WebInspector.CSSProperty, !WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState>} result
+     */
+    _computeActiveProperties: function(styles, result)
+    {
+        /** @type {!Set.<string>} */
+        var foundImportantProperties = new Set();
+        /** @type {!Map.<string, !Map<string, !WebInspector.CSSProperty>>} */
+        var propertyToEffectiveRule = new Map();
+        /** @type {!Map.<string, !WebInspector.DOMNode>} */
+        var inheritedPropertyToNode = new Map();
+        /** @type {!Set<string>} */
+        var allUsedProperties = new Set();
+        for (var i = 0; i < styles.length; ++i) {
+            var style = styles[i];
+            if (!this.hasMatchingSelectors(style))
+                continue;
+
+            /** @type {!Map<string, !WebInspector.CSSProperty>} */
+            var styleActiveProperties = new Map();
+            var allProperties = style.allProperties;
+            for (var j = 0; j < allProperties.length; ++j) {
+                var property = allProperties[j];
+
+                // Do not pick non-inherited properties from inherited styles.
+                var inherited = this.isInherited(style);
+                if (inherited && !WebInspector.CSSMetadata.isPropertyInherited(property.name))
+                    continue;
+
+                if (!property.activeInStyle()) {
+                    result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+                    continue;
+                }
+
+                var canonicalName = WebInspector.CSSMetadata.canonicalPropertyName(property.name);
+                if (foundImportantProperties.has(canonicalName)) {
+                    result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+                    continue;
+                }
+
+                if (!property.important && allUsedProperties.has(canonicalName)) {
+                    result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+                    continue;
+                }
+
+                var isKnownProperty = propertyToEffectiveRule.has(canonicalName);
+                var inheritedFromNode = inherited ? this.nodeForStyle(style) : null;
+                if (!isKnownProperty && inheritedFromNode && !inheritedPropertyToNode.has(canonicalName))
+                    inheritedPropertyToNode.set(canonicalName, inheritedFromNode);
+
+                if (property.important) {
+                    if (inherited && isKnownProperty && inheritedFromNode !== inheritedPropertyToNode.get(canonicalName)) {
+                        result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+                        continue;
+                    }
+
+                    foundImportantProperties.add(canonicalName);
+                    if (isKnownProperty) {
+                        var overloaded = /** @type {!WebInspector.CSSProperty} */(propertyToEffectiveRule.get(canonicalName).get(canonicalName));
+                        result.set(overloaded, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+                        propertyToEffectiveRule.get(canonicalName).delete(canonicalName);
+                    }
+                }
+
+                styleActiveProperties.set(canonicalName, property);
+                allUsedProperties.add(canonicalName);
+                propertyToEffectiveRule.set(canonicalName, styleActiveProperties);
+                result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Active);
+            }
+
+            // If every longhand of the shorthand is not active, then the shorthand is not active too.
+            for (var property of style.leadingProperties()) {
+                var canonicalName = WebInspector.CSSMetadata.canonicalPropertyName(property.name);
+                if (!styleActiveProperties.has(canonicalName))
+                    continue;
+                var longhands = style.longhandProperties(property.name);
+                if (!longhands.length)
+                    continue;
+                var notUsed = true;
+                for (var longhand of longhands) {
+                    var longhandCanonicalName = WebInspector.CSSMetadata.canonicalPropertyName(longhand.name);
+                    notUsed = notUsed && !styleActiveProperties.has(longhandCanonicalName);
+                }
+                if (!notUsed)
+                    continue;
+                styleActiveProperties.delete(canonicalName);
+                allUsedProperties.delete(canonicalName);
+                result.set(property, WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState.Overloaded);
+            }
+        }
     }
+}
+
+/** @enum {string} */
+WebInspector.CSSStyleModel.MatchedStyleResult.PropertyState = {
+    Active: "Active",
+    Overloaded: "Overloaded"
 }
 
 /**

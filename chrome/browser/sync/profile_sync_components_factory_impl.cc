@@ -11,10 +11,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/sync/glue/sync_backend_host.h"
-#include "chrome/browser/sync/glue/sync_backend_host_impl.h"
 #include "chrome/browser/sync/glue/theme_data_type_controller.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -23,6 +20,7 @@
 #include "components/autofill/core/browser/webdata/autofill_profile_data_type_controller.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/history/core/browser/history_delete_directives_data_type_controller.h"
@@ -37,12 +35,13 @@
 #include "components/sync_driver/data_type_manager_impl.h"
 #include "components/sync_driver/device_info_data_type_controller.h"
 #include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
+#include "components/sync_driver/glue/sync_backend_host.h"
+#include "components/sync_driver/glue/sync_backend_host_impl.h"
 #include "components/sync_driver/local_device_info_provider_impl.h"
 #include "components/sync_driver/proxy_data_type_controller.h"
 #include "components/sync_driver/sync_client.h"
 #include "components/sync_driver/ui_data_type_controller.h"
 #include "components/sync_sessions/session_data_type_controller.h"
-#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "google_apis/gaia/oauth2_token_service_request.h"
@@ -103,17 +102,6 @@ syncer::ModelTypeSet GetDisabledTypesFromCommandLine(
   syncer::ModelTypeSet disabled_types;
   std::string disabled_types_str =
       command_line.GetSwitchValueASCII(switches::kDisableSyncTypes);
-
-  // Disable sync types experimentally to measure impact on startup time.
-  // TODO(mlerman): Remove this after the experiment. crbug.com/454788
-  std::string disable_types_finch =
-      variations::GetVariationParamValue("LightSpeed", "DisableSyncPart");
-  if (!disable_types_finch.empty()) {
-    if (disabled_types_str.empty())
-      disabled_types_str = disable_types_finch;
-    else
-      disabled_types_str += ", " + disable_types_finch;
-  }
 
   disabled_types = syncer::ModelTypeSetFromString(disabled_types_str);
   return disabled_types;

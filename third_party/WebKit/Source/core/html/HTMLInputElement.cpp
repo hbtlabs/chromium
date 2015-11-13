@@ -340,17 +340,26 @@ bool HTMLInputElement::shouldShowFocusRingOnMouseFocus() const
     return m_inputType->shouldShowFocusRingOnMouseFocus();
 }
 
-void HTMLInputElement::updateFocusAppearance(bool restorePreviousSelection)
+void HTMLInputElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionBehavior)
 {
     if (isTextField()) {
-        if (!restorePreviousSelection)
+        switch (selectionBehavior) {
+        case SelectionBehaviorOnFocus::Reset:
             select(NotDispatchSelectEvent);
-        else
+            break;
+        case SelectionBehaviorOnFocus::Restore:
             restoreCachedSelection();
+            break;
+        case SelectionBehaviorOnFocus::None:
+            // |None| is used only for FocusController::setFocusedElement and
+            // Document::setFocusedElement, and they don't call
+            // updateFocusAppearance().
+            ASSERT_NOT_REACHED();
+        }
         if (document().frame())
             document().frame()->selection().revealSelection();
     } else {
-        HTMLTextFormControlElement::updateFocusAppearance(restorePreviousSelection);
+        HTMLTextFormControlElement::updateFocusAppearance(selectionBehavior);
     }
 }
 
@@ -504,7 +513,7 @@ void HTMLInputElement::updateType()
     }
 
     if (document().focusedElement() == this)
-        document().updateFocusAppearanceSoon(true /* restore selection */);
+        document().updateFocusAppearanceSoon(SelectionBehaviorOnFocus::Restore);
 
     setTextAsOfLastFormControlChangeEvent(value());
     setChangedSinceLastFormControlChangeEvent(false);
@@ -831,7 +840,7 @@ void HTMLInputElement::attach(const AttachContext& context)
     m_inputType->countUsage();
 
     if (document().focusedElement() == this)
-        document().updateFocusAppearanceSoon(true /* restore selection */);
+        document().updateFocusAppearanceSoon(SelectionBehaviorOnFocus::Restore);
 }
 
 void HTMLInputElement::detach(const AttachContext& context)

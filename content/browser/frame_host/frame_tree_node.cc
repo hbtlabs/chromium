@@ -129,6 +129,7 @@ void FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
                              int frame_routing_id) {
   // Child frame must always be created in the same process as the parent.
   CHECK_EQ(process_id, render_manager_.current_host()->GetProcess()->GetID());
+  child->set_parent(this);
 
   // Initialize the RenderFrameHost for the new node.  We always create child
   // frames in the same SiteInstance as the current frame, and they can swap to
@@ -137,7 +138,6 @@ void FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
       render_manager_.current_host()->GetSiteInstance(),
       render_manager_.current_host()->GetRoutingID(), frame_routing_id,
       MSG_ROUTING_NONE);
-  child->set_parent(this);
 
   // Other renderer processes in this BrowsingInstance may need to find out
   // about the new frame.  Create a proxy for the child frame in all
@@ -384,6 +384,11 @@ bool FrameTreeNode::StopLoading() {
 
   render_manager_.Stop();
   return true;
+}
+
+void FrameTreeNode::DidFocus() {
+  last_focus_time_ = base::TimeTicks::Now();
+  FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeFocused(this));
 }
 
 }  // namespace content

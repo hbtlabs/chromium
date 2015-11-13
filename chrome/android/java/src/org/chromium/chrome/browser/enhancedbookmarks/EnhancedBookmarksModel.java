@@ -8,8 +8,8 @@ import android.content.Context;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.BookmarksBridge;
 import org.chromium.chrome.browser.ChromeBrowserProviderClient;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
@@ -20,7 +20,6 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.offlinepages.SavePageResult;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -237,27 +236,25 @@ public class EnhancedBookmarksModel extends BookmarksBridge {
             final AddBookmarkCallback callback) {
         assert bookmarkId.getId() != ChromeBrowserProviderClient.INVALID_BOOKMARK_ID;
         if (mOfflinePageBridge != null) {
-            mOfflinePageBridge.savePage(webContents, bookmarkId,
-                    ContentViewCore.fromWebContents(webContents).getWindowAndroid(),
-                    new SavePageCallback() {
-                        @Override
-                        public void onSavePageDone(int savePageResult, String url) {
-                            int saveResult;
-                            if (savePageResult == SavePageResult.SUCCESS) {
-                                saveResult = AddBookmarkCallback.SAVED;
-                            } else if (savePageResult == SavePageResult.SKIPPED) {
-                                saveResult = AddBookmarkCallback.SKIPPED;
-                            } else {
-                                saveResult = AddBookmarkCallback.ERROR;
-                            }
-                            callback.onBookmarkAdded(bookmarkId, saveResult);
-                        }
-                    });
+            mOfflinePageBridge.savePage(webContents, bookmarkId, new SavePageCallback() {
+                @Override
+                public void onSavePageDone(int savePageResult, String url) {
+                    int saveResult;
+                    if (savePageResult == SavePageResult.SUCCESS) {
+                        saveResult = AddBookmarkCallback.SAVED;
+                    } else if (savePageResult == SavePageResult.SKIPPED) {
+                        saveResult = AddBookmarkCallback.SKIPPED;
+                    } else {
+                        saveResult = AddBookmarkCallback.ERROR;
+                    }
+                    callback.onBookmarkAdded(bookmarkId, saveResult);
+                }
+            });
         }
     }
 
     /**
-     * @see org.chromium.chrome.browser.BookmarksBridge.BookmarkItem#getTitle()
+     * @see org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem#getTitle()
      */
     public String getBookmarkTitle(BookmarkId bookmarkId) {
         return getBookmarkById(bookmarkId).getTitle();

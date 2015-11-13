@@ -3224,6 +3224,9 @@
                     { "name": "styleSheetId", "$ref": "StyleSheetId" },
                     { "name": "text", "type": "string" }
                 ],
+                "returns": [
+                    { "name": "sourceMapURL", "type": "string", "optional": true, "description": "URL of source map associated with script (if any)." }
+                ],
                 "description": "Sets the new stylesheet text."
             },
             {
@@ -3308,6 +3311,16 @@
                     { "name": "value", "type": "string"}
                 ],
                 "description": "Find a rule with the given active property for the given node and set the new value for this property",
+                "hidden": true
+            },
+            {
+                "name": "getBackgroundColors",
+                "parameters": [
+                    { "name": "nodeId", "$ref": "DOM.NodeId", "description": "Id of the node to get background colors for." }
+                ],
+                "returns": [
+                    { "name": "backgroundColors", "type": "array", "items": { "type": "string" }, "description": "The range of background colors behind this element, if it contains any visible text. If no visible text is present, this will be undefined. In the case of a flat background color, this will consist of simply that color. In the case of a gradient, this will consist of each of the color stops. For anything more complicated, this will be an empty array. Images will be ignored (as if the image had failed to load).", "optional": true }
+                ],
                 "hidden": true
             }
         ],
@@ -3954,6 +3967,7 @@
                     { "name": "endColumn", "type": "integer", "description": "Length of the last line of the script." },
                     { "name": "isContentScript", "type": "boolean", "optional": true, "description": "Determines whether this script is a user extension script." },
                     { "name": "isInternalScript", "type": "boolean", "optional": true, "description": "Determines whether this script is an internal script.", "hidden": true },
+                    { "name": "isLiveEdit", "type": "boolean", "optional": true, "description": "True, if this script is generated as a result of the live edit operation.", "hidden": true },
                     { "name": "sourceMapURL", "type": "string", "optional": true, "description": "URL of source map associated with script (if any)." },
                     { "name": "hasSourceURL", "type": "boolean", "optional": true, "description": "True, if this script has sourceURL.", "hidden": true }
                 ],
@@ -5161,6 +5175,13 @@
                     { "name": "animation", "$ref": "Animation", "description": "Animation that was started." }
                 ],
                 "description": "Event for animation that has been started."
+            },
+            {
+                "name": "animationCanceled",
+                "parameters": [
+                    { "name": "id", "type": "string", "description": "Id of the animation that was cancelled."}
+                ],
+                "description": "Event for when an animation has been cancelled."
             }
         ]
     },
@@ -5187,7 +5208,7 @@
             },
             { "id": "AXValueNativeSourceType",
               "type": "string",
-              "enum": [ "figcaption", "label", "labelfor", "labelwrapped", "tablecaption", "other" ],
+              "enum": [ "figcaption", "label", "labelfor", "labelwrapped", "legend", "tablecaption", "other" ],
               "description": "Enum of possible native property sources (as a subtype of a particular AXValueSourceType)."
             },
             {

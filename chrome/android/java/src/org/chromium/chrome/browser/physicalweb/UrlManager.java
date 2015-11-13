@@ -12,11 +12,13 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
+import android.text.TextUtils;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -89,6 +91,15 @@ public class UrlManager {
         return getCachedUrls();
     }
 
+    /**
+     * Forget all stored URLs and clear the notification.
+     */
+    public void clearUrls() {
+        Set<String> emptySet = Collections.emptySet();
+        putCachedUrls(emptySet);
+        updateNotification(emptySet);
+    }
+
     private Set<String> getCachedUrls() {
         // Check the version.
         SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -120,6 +131,11 @@ public class UrlManager {
     }
 
     private void updateNotification(Set<String> urls) {
+        if (urls.isEmpty()) {
+            mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB);
+            return;
+        }
+
         mPwsClient.resolve(urls, new PwsClient.ResolveScanCallback() {
             @Override
             public void onPwsResults(Collection<PwsResult> pwsResults) {
@@ -132,28 +148,41 @@ public class UrlManager {
                     }
                 }
 
-                if (siteUrls.isEmpty()) {
+                int urlCount = siteUrls.size();
+
+                if (urlCount == 0) {
                     mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB);
                 } else {
-                    String displayUrl = siteUrls.iterator().next();
-                    createNotification(displayUrl, siteUrls.size());
+                    Resources resources = mContext.getResources();
+                    String title = resources.getQuantityString(
+                            R.plurals.physical_web_notification_title, urlCount, urlCount);
+                    String text = null;
+
+                    // when only one URL is found, display its title and description in the
+                    // notification (but avoid displaying a blank notification)
+                    if (urlCount == 1) {
+                        PwsResult onlyResult = pwsResults.iterator().next();
+                        if (!TextUtils.isEmpty(onlyResult.title)) {
+                            title = onlyResult.title;
+                            text = onlyResult.description;
+                        }
+                    }
+
+                    createNotification(title, text);
                 }
             }
         });
     }
 
-    private void createNotification(String displayUrl, int urlCount) {
+    private void createNotification(String title, String text) {
         // Get values to display.
-        Resources resources = mContext.getResources();
-        String title = resources.getQuantityString(R.plurals.physical_web_notification_title,
-                                                   urlCount, urlCount);
         PendingIntent pendingIntent = createListUrlsIntent();
 
         // Create the notification.
         Notification notification = new NotificationCompat.Builder(mContext)
                 .setSmallIcon(R.drawable.ic_physical_web_notification)
                 .setContentTitle(title)
-                .setContentText(displayUrl)
+                .setContentText(text)
                 .setContentIntent(pendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

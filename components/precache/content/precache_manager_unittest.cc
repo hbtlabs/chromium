@@ -21,6 +21,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/precache/core/precache_switches.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/http/http_status_code.h"
@@ -116,10 +117,17 @@ class PrecacheManagerUnderTest : public PrecacheManager {
   PrecacheManagerUnderTest(content::BrowserContext* browser_context,
                            const sync_driver::SyncService* const sync_service,
                            const history::HistoryService* const history_service)
-      : PrecacheManager(browser_context, sync_service, history_service) {}
-  bool IsInExperimentGroup() const override { return true; }
-  bool IsInControlGroup() const override { return false; }
+      : PrecacheManager(browser_context, sync_service, history_service),
+        control_group_(false) {}
+  bool IsInExperimentGroup() const override { return !control_group_; }
+  bool IsInControlGroup() const override { return control_group_; }
   bool IsPrecachingAllowed() const override { return true; }
+  void SetInControlGroup(bool in_control_group) {
+    control_group_ = in_control_group;
+  }
+
+ private:
+  bool control_group_;
 };
 
 class PrecacheManagerTest : public testing::Test {
@@ -146,8 +154,9 @@ class PrecacheManagerTest : public testing::Test {
                              net::URLRequestStatus::FAILED);
   }
 
-  content::TestBrowserThreadBundle test_browser_thread_bundle_;
+  // Must be declared first so that it is destroyed last.
   content::TestBrowserContext browser_context_;
+  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   PrecacheManagerUnderTest precache_manager_;
   TestURLFetcherCallback url_callback_;
   net::FakeURLFetcherFactory factory_;
@@ -180,6 +189,26 @@ TEST_F(PrecacheManagerTest, StartAndFinishPrecaching) {
   expected_requested_urls.insert(GURL(kConfigURL));
   expected_requested_urls.insert(GURL(kGoodManifestURL));
   EXPECT_EQ(expected_requested_urls, url_callback_.requested_urls());
+}
+
+TEST_F(PrecacheManagerTest, StartAndCancelPrecachingBeforeTopHostsCompleted) {
+  EXPECT_FALSE(precache_manager_.IsPrecaching());
+
+  MockHistoryService::TopHostsCallback top_hosts_callback;
+  EXPECT_CALL(history_service_, TopHosts(NumTopHosts(), _))
+      .WillOnce(SaveArg<1>(&top_hosts_callback));
+
+  precache_manager_.SetInControlGroup(true);
+  precache_manager_.StartPrecaching(precache_callback_.GetCallback());
+  EXPECT_TRUE(precache_manager_.IsPrecaching());
+
+  precache_manager_.CancelPrecaching();
+  EXPECT_FALSE(precache_manager_.IsPrecaching());
+
+  top_hosts_callback.Run(
+      history::TopHostsList(1, std::make_pair("starting-url.com", 1)));
+  EXPECT_FALSE(precache_manager_.IsPrecaching());
+  EXPECT_FALSE(precache_callback_.was_on_done_called());
 }
 
 TEST_F(PrecacheManagerTest, StartAndCancelPrecachingBeforeURLsReceived) {

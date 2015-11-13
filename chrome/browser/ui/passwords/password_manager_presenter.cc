@@ -14,7 +14,6 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
@@ -22,6 +21,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/sync/browser/password_sync_util.h"
@@ -131,7 +131,7 @@ void PasswordManagerPresenter::RemovePasswordException(size_t index) {
 }
 
 void PasswordManagerPresenter::RequestShowPassword(size_t index) {
-#if !defined(OS_ANDROID) // This is never called on Android.
+#if !defined(OS_ANDROID)  // This is never called on Android.
   if (index >= password_list_.size()) {
     // |index| out of bounds might come from a compromised renderer, don't let
     // it crash the browser. http://crbug.com/362054

@@ -23,12 +23,7 @@ PassOwnPtr<InterpolationValue> SVGAngleInterpolationType::maybeConvertSVGValue(c
     return InterpolationValue::create(*this, InterpolableNumber::create(toSVGAngle(svgValue).value()));
 }
 
-PassOwnPtr<InterpolationValue> SVGAngleInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const
-{
-    return maybeConvertSVGValue(environment.svgBaseValue());
-}
-
-RefPtrWillBeRawPtr<SVGPropertyBase> SVGAngleInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
+PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGAngleInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
 {
     double doubleValue = toInterpolableNumber(interpolableValue).value();
     RefPtrWillBeRawPtr<SVGAngle> result = SVGAngle::create();

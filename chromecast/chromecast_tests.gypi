@@ -348,6 +348,8 @@
           'type': '<(gtest_target_type)',
           'dependencies': [
             'cast_shell_test_support',
+            '../content/content_shell_and_tests.gyp:test_support_content',
+            '../media/media.gyp:media_test_support',
             '../testing/gtest.gyp:gtest',
           ],
           'defines': [
@@ -355,6 +357,15 @@
           ],
           'sources': [
             'browser/test/chromecast_shell_browser_test.cc',
+          ],
+          'conditions': [
+            ['chromecast_branding=="public"', {
+              'dependencies': [
+                # Link default libcast_media_1.0 statically to prevent
+                # linking dynamically against dummy implementation.
+                'media/media.gyp:libcast_media_1.0_default_core',
+              ],
+            }],
           ],
         },
         # GN target: //chromecast/app:cast_shell_unittests
@@ -385,7 +396,7 @@
           'variables': {
             'test_generator_py': '<(DEPTH)/chromecast/tools/build/generate_test_lists.py',
             'test_inputs_dir': '<(SHARED_INTERMEDIATE_DIR)/chromecast/tests',
-            'test_additional_options': '--ozone-platform=test'
+            'test_additional_options': '--ozone-platform=headless'
           },
           'actions': [
             {

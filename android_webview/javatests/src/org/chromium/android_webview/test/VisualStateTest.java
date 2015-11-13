@@ -21,6 +21,7 @@ import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.android_webview.test.util.JavascriptEventObserver;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -136,6 +137,8 @@ public class VisualStateTest extends AwTestBase {
 
     @Feature({"AndroidWebView"})
     @SmallTest
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testVisualStateCallbackWaitsForContentsToBeOnScreen() throws Throwable {
         // This test loads a page with a blue background color. It then waits for the DOM tree
         // in blink to contain the contents of the blue page (which happens when the onPageFinished
@@ -190,6 +193,8 @@ public class VisualStateTest extends AwTestBase {
 
     @Feature({"AndroidWebView"})
     @SmallTest
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testOnPageCommitVisible() throws Throwable {
         // This test loads a page with a blue background color. It then waits for the DOM tree
         // in blink to contain the contents of the blue page (which happens when the onPageFinished
@@ -265,6 +270,8 @@ public class VisualStateTest extends AwTestBase {
 
     @Feature({"AndroidWebView"})
     @SmallTest
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testVisualStateCallbackWaitsForJs() throws Throwable {
         // This test checks that when a VisualStateCallback completes the results of executing
         // any block of JS prior to the time at which the callback was inserted will be visible
@@ -336,6 +343,8 @@ public class VisualStateTest extends AwTestBase {
 
     @Feature({"AndroidWebView"})
     @SmallTest
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testVisualStateCallbackFromJsDuringFullscreenTransitions() throws Throwable {
         // This test checks that VisualStateCallbacks are delivered correctly during
         // fullscreen transitions. It loads a page, clicks a button to enter fullscreen,
@@ -422,6 +431,8 @@ public class VisualStateTest extends AwTestBase {
 
     @Feature({"AndroidWebView"})
     @SmallTest
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testVisualStateCallbackWhenContainerViewDetached() throws Throwable {
         final CountDownLatch testFinishedSignal = new CountDownLatch(1);
 

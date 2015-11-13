@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/policy_indicator_localized_strings_provider.h"
 #include "chrome/common/url_constants.h"
@@ -15,6 +16,7 @@
 #include "chrome/grit/settings_chromium_strings.h"
 #include "chrome/grit/settings_google_chrome_strings.h"
 #include "chrome/grit/settings_strings.h"
+#include "components/google/core/browser/google_util.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -56,11 +58,7 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "stickyKeysLabel", IDS_SETTINGS_STICKY_KEYS_LABEL);
   html_source->AddLocalizedString(
-      "stickyKeysSublabel", IDS_SETTINGS_STICKY_KEYS_SUBLABEL);
-  html_source->AddLocalizedString(
       "chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL);
-  html_source->AddLocalizedString(
-      "chromeVoxSublabel", IDS_SETTINGS_CHROMEVOX_SUBLABEL);
   html_source->AddLocalizedString(
       "screenMagnifierLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL);
   html_source->AddLocalizedString(
@@ -122,6 +120,15 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "chooseFromWebStore", IDS_SETTINGS_WEB_STORE);
 }
+
+#if defined(OS_CHROMEOS)
+void AddBluetoothStrings(content::WebUIDataSource* html_source) {
+  html_source->AddLocalizedString(
+      "bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH);
+  html_source->AddLocalizedString(
+      "enableBluetooth", IDS_SETTINGS_BLUETOOTH_ENABLE);
+}
+#endif
 
 void AddCertificateManagerStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("certificateManagerPageTitle",
@@ -239,6 +246,24 @@ void AddResetStrings(content::WebUIDataSource* html_source) {
   html_source->AddString(
       "resetPageLearnMoreUrl",
       chrome::kResetProfileSettingsLearnMoreURL);
+
+#if defined(OS_CHROMEOS)
+  html_source->AddLocalizedString(
+      "powerwashTitle", IDS_OPTIONS_FACTORY_RESET);
+  html_source->AddString(
+      "powerwashDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_OPTIONS_FACTORY_RESET_DESCRIPTION,
+          l10n_util::GetStringUTF16(IDS_PRODUCT_NAME)));
+  html_source->AddLocalizedString(
+      "powerwashDialogTitle", IDS_OPTIONS_FACTORY_RESET_HEADING);
+  html_source->AddLocalizedString(
+      "powerwashDialogBody", IDS_OPTIONS_FACTORY_RESET_WARNING);
+  html_source->AddLocalizedString(
+      "powerwashDialogButton", IDS_RELAUNCH_BUTTON);
+  html_source->AddLocalizedString(
+      "powerwashLearnMoreUrl", IDS_FACTORY_RESET_HELP_URL);
+#endif
 }
 
 void AddDateTimeStrings(content::WebUIDataSource* html_source) {
@@ -381,6 +406,18 @@ void AddOnStartupStrings(content::WebUIDataSource* html_source) {
       IDS_SETTINGS_ON_STARTUP_ENTER_URL);
 }
 
+void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
+  html_source->AddLocalizedString(
+      "passwordsAndAutofillPageTitle",
+      IDS_SETTINGS_PASSWORDS_AND_AUTOFILL_PAGE_TITLE);
+  html_source->AddLocalizedString("autofill", IDS_SETTINGS_AUTOFILL);
+  html_source->AddLocalizedString("autofillDetail",
+                                  IDS_SETTINGS_AUTOFILL_DETAIL);
+  html_source->AddLocalizedString("passwords", IDS_SETTINGS_PASSWORDS);
+  html_source->AddLocalizedString("passwordsDetail",
+                                  IDS_SETTINGS_PASSWORDS_DETAIL);
+}
+
 void AddPrivacyStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("privacyPageTitle",
                                   IDS_SETTINGS_PRIVACY);
@@ -459,12 +496,6 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_SEARCH_ENGINES_ADD_BUTTON_LABEL);
 }
 
-#if !defined(OS_CHROMEOS)
-void AddSigninSettingsStrings(content::WebUIDataSource* html_source) {
-  html_source->AddLocalizedString("signinPageTitle", IDS_SETTINGS_SIGNIN);
-}
-#endif
-
 void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("siteSettingsPageTitle",
                                   IDS_SETTINGS_SITE_SETTINGS);
@@ -531,9 +562,38 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_SITE_SETTINGS_BLOCK_MENU);
   html_source->AddLocalizedString("siteSettingsActionReset",
                                   IDS_SETTINGS_SITE_SETTINGS_RESET_MENU);
+  html_source->AddLocalizedString("siteSettingsUsage",
+                                  IDS_SETTINGS_SITE_SETTINGS_USAGE);
+  html_source->AddLocalizedString("siteSettingsPermissions",
+                                  IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS);
+  html_source->AddLocalizedString("siteSettingsClearAndReset",
+                                  IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON);
+  html_source->AddLocalizedString("siteSettingsDelete",
+                                  IDS_SETTINGS_SITE_SETTINGS_DELETE);
 }
 
 void AddSyncStrings(content::WebUIDataSource* html_source) {
+  html_source->AddLocalizedString("peoplePageTitle", IDS_SETTINGS_SYNC_PEOPLE);
+  html_source->AddLocalizedString("syncOverview", IDS_SETTINGS_SYNC_OVERVIEW);
+  html_source->AddLocalizedString("syncSignin", IDS_SETTINGS_SYNC_SIGNIN);
+  html_source->AddLocalizedString("syncDisconnect",
+                                  IDS_SETTINGS_SYNC_DISCONNECT);
+  html_source->AddLocalizedString("syncDisconnectTitle",
+                                  IDS_SETTINGS_SYNC_DISCONNECT_TITLE);
+  std::string disconnect_help_url =
+      google_util::AppendGoogleLocaleParam(
+          GURL(chrome::kSyncGoogleDashboardURL),
+          g_browser_process->GetApplicationLocale())
+          .spec();
+  html_source->AddString(
+      "syncDisconnectExplanation",
+      l10n_util::GetStringFUTF16(IDS_SETTINGS_SYNC_DISCONNECT_EXPLANATION,
+                                 base::ASCIIToUTF16(disconnect_help_url)));
+  html_source->AddLocalizedString("syncDisconnectDeleteProfile",
+                                  IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE);
+  html_source->AddLocalizedString("syncDisconnectConfirm",
+                                  IDS_SETTINGS_SYNC_DISCONNECT_CONFIRM);
+
   html_source->AddLocalizedString("syncPageTitle", IDS_SETTINGS_SYNC);
   html_source->AddLocalizedString("syncLoading", IDS_SETTINGS_SYNC_LOADING);
   html_source->AddLocalizedString("syncTimeout", IDS_SETTINGS_SYNC_TIMEOUT);
@@ -594,7 +654,6 @@ void AddSyncStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "passphraseConfirmationPlaceholder",
       IDS_SETTINGS_PASSPHRASE_CONFIRMATION_PLACEHOLDER);
-
 }
 
 void AddUsersStrings(content::WebUIDataSource* html_source) {
@@ -661,6 +720,9 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddAccountUITweaksStrings(html_source, profile);
 #endif
   AddAppearanceStrings(html_source);
+#if defined(OS_CHROMEOS)
+  AddBluetoothStrings(html_source);
+#endif
   AddCertificateManagerStrings(html_source);
   AddClearBrowsingDataStrings(html_source);
 #if !defined(OS_CHROMEOS)
@@ -676,13 +738,11 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddMultiProfilesStrings(html_source, profile);
 #endif
   AddOnStartupStrings(html_source);
+  AddPasswordsAndFormsStrings(html_source);
   AddPrivacyStrings(html_source);
   AddResetStrings(html_source);
   AddSearchEnginesStrings(html_source);
   AddSearchStrings(html_source);
-#if !defined(OS_CHROMEOS)
-  AddSigninSettingsStrings(html_source);
-#endif
   AddSiteSettingsStrings(html_source);
   AddSyncStrings(html_source);
   AddUsersStrings(html_source);

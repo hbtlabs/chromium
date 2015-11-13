@@ -30,6 +30,11 @@ class ContextualSearchPolicy {
     private static final Pattern CONTAINS_WHITESPACE_PATTERN = Pattern.compile("\\s");
     private static final int REMAINING_NOT_APPLICABLE = -1;
     private static final int ONE_DAY_IN_MILLIS = 24 * 60 * 60 * 1000;
+    private static final int TAP_TRIGGERED_PROMO_LIMIT = 50;
+    private static final int TAP_RESOLVE_LIMIT_FOR_DECIDED = 50;
+    private static final int TAP_PREFETCH_LIMIT_FOR_DECIDED = 50;
+    private static final int TAP_RESOLVE_LIMIT_FOR_UNDECIDED = 20;
+    private static final int TAP_PREFETCH_LIMIT_FOR_UNDECIDED = 20;
 
     private static ContextualSearchPolicy sInstance;
 
@@ -39,6 +44,11 @@ class ContextualSearchPolicy {
     private boolean mDidOverrideDecidedStateForTesting;
     private boolean mDecidedStateForTesting;
     private boolean mDidResetCounters;
+    private Integer mTapTriggeredPromoLimitForTesting;
+    private Integer mTapResolveLimitForDecided;
+    private Integer mTapPrefetchLimitForDecided;
+    private Integer mTapResolveLimitForUndecided;
+    private Integer mTapPrefetchLimitForUndecided;
 
     public static ContextualSearchPolicy getInstance(Context context) {
         if (sInstance == null) {
@@ -70,11 +80,18 @@ class ContextualSearchPolicy {
         // Return a non-negative value if opt-out promo counter is enabled, and there's a limit.
         DisableablePromoTapCounter counter = getPromoTapCounter();
         if (counter.isEnabled()) {
-            int limit = ContextualSearchFieldTrial.getPromoTapTriggeredLimit();
+            int limit = getPromoTapTriggeredLimit();
             if (limit >= 0) return Math.max(0, limit - counter.getCount());
         }
 
         return REMAINING_NOT_APPLICABLE;
+    }
+
+    private int getPromoTapTriggeredLimit() {
+        if (mTapTriggeredPromoLimitForTesting != null) {
+            return mTapTriggeredPromoLimitForTesting.intValue();
+        }
+        return TAP_TRIGGERED_PROMO_LIMIT;
     }
 
     /**
@@ -89,8 +106,7 @@ class ContextualSearchPolicy {
      */
     boolean isTapSupported() {
         if (!isUserUndecided()) return true;
-        return !ContextualSearchFieldTrial.isPromoLimitedByTapCounts()
-                || getPromoTapsRemaining() != 0;
+        return getPromoTapsRemaining() != 0;
     }
 
     /**
@@ -410,10 +426,12 @@ class ContextualSearchPolicy {
      * Determines the best target language.
      */
     String bestTargetLanguage(List<String> targetLanguages) {
-        // For now, we just return the first language, unless it's English (due to over-usage).
+        // For now, we just return the first language, unless it's English
+        // (due to over-usage).
         // TODO(donnd): Improve this logic. Determining the right language seems non-trivial.
         // E.g. If this language doesn't match the user's server preferences, they might see a page
         // in one language and the one box translation in another, which might be confusing.
+        // Also this logic should only apply on Android, where English setup is over used.
         if (TextUtils.equals(targetLanguages.get(0), Locale.ENGLISH.getLanguage())
                 && targetLanguages.size() > 1) {
             return targetLanguages.get(1);
@@ -423,10 +441,38 @@ class ContextualSearchPolicy {
     }
 
     /**
-     * @return Whether translation should be enabled or not.
+     * @return Whether forcing a translation Onebox is disabled.
      */
-    boolean isTranslationEnabled() {
-        return ContextualSearchFieldTrial.isTranslationOneboxEnabled();
+    boolean disableForceTranslationOnebox() {
+        return ContextualSearchFieldTrial.disableForceTranslationOnebox();
+    }
+
+    /**
+     * Sets the limit for the tap triggered promo.
+     */
+    @VisibleForTesting
+    void setPromoTapTriggeredLimitForTesting(int limit) {
+        mTapTriggeredPromoLimitForTesting = limit;
+    }
+
+    @VisibleForTesting
+    void setTapResolveLimitForDecidedForTesting(int limit) {
+        mTapResolveLimitForDecided = limit;
+    }
+
+    @VisibleForTesting
+    void setTapPrefetchLimitForDecidedForTesting(int limit) {
+        mTapPrefetchLimitForDecided = limit;
+    }
+
+    @VisibleForTesting
+    void setTapPrefetchLimitForUndecidedForTesting(int limit) {
+        mTapPrefetchLimitForUndecided = limit;
+    }
+
+    @VisibleForTesting
+    void setTapResolveLimitForUndecidedForTesting(int limit) {
+        mTapResolveLimitForUndecided = limit;
     }
 
     // --------------------------------------------------------------------------------------------
@@ -456,32 +502,14 @@ class ContextualSearchPolicy {
      * @return Whether the tap resolve limit has been exceeded.
      */
     private boolean isTapResolveBeyondTheLimit() {
-        return isTapResolveLimited() && getTapCount() > getTapResolveLimit();
+        return getTapCount() > getTapResolveLimit();
     }
 
     /**
      * @return Whether the tap resolve limit has been exceeded.
      */
     private boolean isTapPrefetchBeyondTheLimit() {
-        return isTapPrefetchLimited() && getTapCount() > getTapPrefetchLimit();
-    }
-
-    /**
-     * @return Whether a tap gesture is resolve-limited.
-     */
-    private boolean isTapResolveLimited() {
-        return isUserUndecided()
-                ? ContextualSearchFieldTrial.isTapResolveLimitedForUndecided()
-                : ContextualSearchFieldTrial.isTapResolveLimitedForDecided();
-    }
-
-    /**
-     * @return Whether a tap gesture is resolve-limited.
-     */
-    private boolean isTapPrefetchLimited() {
-        return isUserUndecided()
-                ? ContextualSearchFieldTrial.isTapPrefetchLimitedForUndecided()
-                : ContextualSearchFieldTrial.isTapPrefetchLimitedForDecided();
+        return getTapCount() > getTapPrefetchLimit();
     }
 
     /**
@@ -489,8 +517,8 @@ class ContextualSearchPolicy {
      */
     private int getTapPrefetchLimit() {
         return isUserUndecided()
-                ? ContextualSearchFieldTrial.getTapPrefetchLimitForUndecided()
-                : ContextualSearchFieldTrial.getTapPrefetchLimitForDecided();
+                ? getTapPrefetchLimitForUndecided()
+                : getTapPrefetchLimitForDecided();
     }
 
     /**
@@ -498,7 +526,27 @@ class ContextualSearchPolicy {
      */
     private int getTapResolveLimit() {
         return isUserUndecided()
-                ? ContextualSearchFieldTrial.getTapResolveLimitForUndecided()
-                : ContextualSearchFieldTrial.getTapResolveLimitForDecided();
+                ? getTapResolveLimitForUndecided()
+                : getTapResolveLimitForDecided();
+    }
+
+    private int getTapPrefetchLimitForDecided() {
+        if (mTapPrefetchLimitForDecided != null) return mTapPrefetchLimitForDecided.intValue();
+        return TAP_PREFETCH_LIMIT_FOR_DECIDED;
+    }
+
+    private int getTapResolveLimitForDecided() {
+        if (mTapResolveLimitForDecided != null) return mTapResolveLimitForDecided.intValue();
+        return TAP_RESOLVE_LIMIT_FOR_DECIDED;
+    }
+
+    private int getTapPrefetchLimitForUndecided() {
+        if (mTapPrefetchLimitForUndecided != null) return mTapPrefetchLimitForUndecided.intValue();
+        return TAP_PREFETCH_LIMIT_FOR_UNDECIDED;
+    }
+
+    private int getTapResolveLimitForUndecided() {
+        if (mTapResolveLimitForUndecided != null) return mTapResolveLimitForUndecided.intValue();
+        return TAP_RESOLVE_LIMIT_FOR_UNDECIDED;
     }
 }

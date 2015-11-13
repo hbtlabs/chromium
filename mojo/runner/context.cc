@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/i18n/icu_util.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -22,12 +23,14 @@
 #include "build/build_config.h"
 #include "components/devtools_service/public/cpp/switches.h"
 #include "components/devtools_service/public/interfaces/devtools_service.mojom.h"
+#include "components/tracing/tracing_switches.h"
 #include "mojo/application/public/cpp/application_connection.h"
 #include "mojo/application/public/cpp/application_delegate.h"
 #include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/package_manager/package_manager_impl.h"
-#include "mojo/runner/in_process_native_runner.h"
-#include "mojo/runner/out_of_process_native_runner.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/runner/host/in_process_native_runner.h"
+#include "mojo/runner/host/out_of_process_native_runner.h"
 #include "mojo/runner/register_local_aliases.h"
 #include "mojo/runner/switches.h"
 #include "mojo/runner/tracer.h"
@@ -41,7 +44,6 @@
 #include "mojo/shell/switches.h"
 #include "mojo/util/filename_util.h"
 #include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
 #include "url/gurl.h"
 
 namespace mojo {
@@ -69,7 +71,7 @@ void InitContentHandlers(package_manager::PackageManagerImpl* manager,
   manager->RegisterContentHandler("application/pdf", GURL("mojo:pdf_viewer"));
   manager->RegisterContentHandler("image/gif", GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("image/jpeg", GURL("mojo:html_viewer"));
-  manager->RegisterContentHandler("image/png", GURL("mojo:png_viewer"));
+  manager->RegisterContentHandler("image/png", GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("text/css", GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("text/html", GURL("mojo:html_viewer"));
   manager->RegisterContentHandler("text/plain", GURL("mojo:html_viewer"));
@@ -171,11 +173,8 @@ class TracingServiceProvider : public ServiceProvider {
 
 }  // namespace
 
-Context::Context(const base::FilePath& shell_file_root, Tracer* tracer)
-    : shell_file_root_(shell_file_root),
-      tracer_(tracer),
-      package_manager_(nullptr),
-      main_entry_time_(base::Time::Now()) {}
+Context::Context()
+    : package_manager_(nullptr), main_entry_time_(base::Time::Now()) {}
 
 Context::~Context() {
   DCHECK(!base::MessageLoop::current());
@@ -187,38 +186,58 @@ void Context::EnsureEmbedderIsInitialized() {
   setup.Get();
 }
 
-bool Context::Init() {
+bool Context::Init(const base::FilePath& shell_file_root) {
   TRACE_EVENT0("mojo_shell", "Context::Init");
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
+
+  bool trace_startup = command_line.HasSwitch(switches::kTraceStartup);
+  if (trace_startup) {
+    tracer_.Start(
+        command_line.GetSwitchValueASCII(switches::kTraceStartup),
+        command_line.GetSwitchValueASCII(switches::kTraceStartupDuration),
+        "mojo_runner.trace");
+  }
+
+  // ICU data is a thing every part of the system needs. This here warms
+  // up the copy of ICU in the mojo runner.
+  CHECK(base::i18n::InitializeICU());
 
   EnsureEmbedderIsInitialized();
   task_runners_.reset(
       new TaskRunners(base::MessageLoop::current()->task_runner()));
 
   // TODO(vtl): This should be MASTER, not NONE.
-  embedder::InitIPCSupport(
-      embedder::ProcessType::NONE, task_runners_->shell_runner(), this,
-      task_runners_->io_runner(), embedder::ScopedPlatformHandle());
+  embedder::InitIPCSupport(embedder::ProcessType::NONE, this,
+                           task_runners_->io_runner(),
+                           embedder::ScopedPlatformHandle());
 
   package_manager_ = new package_manager::PackageManagerImpl(
-      shell_file_root_, task_runners_->blocking_pool());
+      shell_file_root, task_runners_->blocking_pool());
   InitContentHandlers(package_manager_, command_line);
 
   RegisterLocalAliases(package_manager_);
 
   scoped_ptr<shell::NativeRunnerFactory> runner_factory;
-  if (command_line.HasSwitch(switches::kEnableMultiprocess))
-    runner_factory.reset(new OutOfProcessNativeRunnerFactory(this));
-  else
-    runner_factory.reset(new InProcessNativeRunnerFactory(this));
+  if (command_line.HasSwitch(switches::kEnableMultiprocess)) {
+    runner_factory.reset(
+        new OutOfProcessNativeRunnerFactory(task_runners_->blocking_pool()));
+  } else {
+#if defined(COMPONENT_BUILD)
+    LOG(ERROR) << "Running Mojo in single process component build, which isn't "
+               << "supported because statics in apps interact. Use static build"
+               << " or don't pass --single-process.";
+#endif
+    runner_factory.reset(
+        new InProcessNativeRunnerFactory(task_runners_->blocking_pool()));
+  }
   application_manager_.reset(new shell::ApplicationManager(
       make_scoped_ptr(package_manager_), runner_factory.Pass(),
       task_runners_->blocking_pool()));
 
   ServiceProviderPtr tracing_services;
   ServiceProviderPtr tracing_exposed_services;
-  new TracingServiceProvider(tracer_, GetProxy(&tracing_exposed_services));
+  new TracingServiceProvider(&tracer_, GetProxy(&tracing_exposed_services));
 
   scoped_ptr<shell::ConnectToApplicationParams> params(
       new shell::ConnectToApplicationParams);
@@ -231,12 +250,11 @@ bool Context::Init() {
   application_manager_->ConnectToApplication(params.Pass());
 
   if (command_line.HasSwitch(tracing::kTraceStartup)) {
-    DCHECK(tracer_);
     tracing::TraceCollectorPtr coordinator;
     auto coordinator_request = GetProxy(&coordinator);
     tracing_services->ConnectToService(tracing::TraceCollector::Name_,
                                        coordinator_request.PassMessagePipe());
-    tracer_->StartCollectingFromTracingService(coordinator.Pass());
+    tracer_.StartCollectingFromTracingService(coordinator.Pass());
   }
 
   // Record the shell startup metrics used for performance testing.

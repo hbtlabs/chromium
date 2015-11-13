@@ -30,6 +30,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/data_usage/tab_id_annotator.h"
 #include "chrome/browser/net/async_dns_field_trial.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/connect_interceptor.h"
@@ -42,6 +43,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/data_usage/core/data_use_amortizer.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
@@ -114,6 +116,7 @@
 #include "base/android/build_info.h"
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
+#include "components/data_usage/android/traffic_stats_amortizer.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -605,7 +608,15 @@ void IOThread::Init() {
       extension_event_router_forwarder_;
 #endif
 
-  data_use_aggregator_.reset(new data_usage::DataUseAggregator());
+  scoped_ptr<data_usage::DataUseAmortizer> data_use_amortizer;
+#if defined(OS_ANDROID)
+  data_use_amortizer.reset(new data_usage::android::TrafficStatsAmortizer());
+#endif
+
+  data_use_aggregator_.reset(new data_usage::DataUseAggregator(
+      scoped_ptr<data_usage::DataUseAnnotator>(
+          new chrome_browser_data_usage::TabIdAnnotator()),
+      data_use_amortizer.Pass()));
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.

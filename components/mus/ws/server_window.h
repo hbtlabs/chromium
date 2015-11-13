@@ -14,7 +14,7 @@
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/ids.h"
 #include "components/mus/ws/server_window_surface.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/transform.h"
@@ -57,9 +57,7 @@ class ServerWindow {
 
   void Add(ServerWindow* child);
   void Remove(ServerWindow* child);
-  void Reorder(ServerWindow* child,
-               ServerWindow* relative,
-               mojom::OrderDirection direction);
+  void Reorder(ServerWindow* relative, mojom::OrderDirection diretion);
   void StackChildAtBottom(ServerWindow* child);
   void StackChildAtTop(ServerWindow* child);
 
@@ -87,6 +85,15 @@ class ServerWindow {
   // Returns the ServerWindow object with the provided |id| if it lies in a
   // subtree of |this|.
   ServerWindow* GetChildWindow(const WindowId& id);
+
+  // Transient window management.
+  void AddTransientWindow(ServerWindow* child);
+  void RemoveTransientWindow(ServerWindow* child);
+
+  ServerWindow* transient_parent() { return transient_parent_; }
+  const ServerWindow* transient_parent() const { return transient_parent_; }
+
+  const Windows& transient_children() const { return transient_children_; }
 
   // Returns true if this contains |window| or is |window|.
   bool Contains(const ServerWindow* window) const;
@@ -116,6 +123,9 @@ class ServerWindow {
   // visible.
   bool IsDrawn() const;
 
+  // Called when its appropriate to destroy surfaces scheduled for destruction.
+  void DestroySurfacesScheduledForDestruction();
+
   ServerWindowSurfaceManager* GetOrCreateSurfaceManager();
   ServerWindowSurfaceManager* surface_manager() {
     return surface_manager_.get();
@@ -135,10 +145,26 @@ class ServerWindow {
   // Called when this window's stacking order among its siblings is changed.
   void OnStackingChanged();
 
+  static void ReorderImpl(ServerWindow* window,
+                          ServerWindow* relative,
+                          mojom::OrderDirection diretion);
+
+  // Returns a pointer to the stacking target that can be used by
+  // RestackTransientDescendants.
+  static ServerWindow** GetStackingTarget(ServerWindow* window);
+
   ServerWindowDelegate* delegate_;
   const WindowId id_;
   ServerWindow* parent_;
   Windows children_;
+
+  // Transient window management.
+  // If non-null we're actively restacking transient as the result of a
+  // transient ancestor changing.
+  ServerWindow* stacking_target_;
+  ServerWindow* transient_parent_;
+  Windows transient_children_;
+
   bool visible_;
   gfx::Rect bounds_;
   gfx::Insets client_area_;

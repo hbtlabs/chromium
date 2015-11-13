@@ -1516,7 +1516,6 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeMotionPath(CSSParserTokenRange& r
     CSSValueID id = range.peek().id();
     if (id == CSSValueNone)
         return consumeIdent(range);
-
     // FIXME: Add support for <url>, <basic-shape>, <geometry-box>.
     if (range.peek().functionId() != CSSValuePath)
         return nullptr;
@@ -1552,6 +1551,59 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeMotionRotation(CSSParserTokenRang
     if (angle)
         list->append(angle.release());
     return list.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeTextEmphasisStyle(CSSParserTokenRange& range)
+{
+    CSSValueID id = range.peek().id();
+    if (id == CSSValueNone)
+        return consumeIdent(range);
+
+    if (RefPtrWillBeRawPtr<CSSValue> textEmphasisStyle = consumeString(range))
+        return textEmphasisStyle.release();
+
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> fill = consumeIdent<CSSValueFilled, CSSValueOpen>(range);
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> shape = consumeIdent<CSSValueDot, CSSValueCircle, CSSValueDoubleCircle, CSSValueTriangle, CSSValueSesame>(range);
+    if (!fill)
+        fill = consumeIdent<CSSValueFilled, CSSValueOpen>(range);
+    if (fill && shape) {
+        RefPtrWillBeRawPtr<CSSValueList> parsedValues = CSSValueList::createSpaceSeparated();
+        parsedValues->append(fill.release());
+        parsedValues->append(shape.release());
+        return parsedValues.release();
+    }
+    if (fill)
+        return fill.release();
+    if (shape)
+        return shape.release();
+    return nullptr;
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeOutlineColor(CSSParserTokenRange& range, const CSSParserContext& context)
+{
+    // Outline color has "invert" as additional keyword.
+    // Also, we want to allow the special focus color even in HTML Standard parsing mode.
+    if (range.peek().id() == CSSValueInvert || range.peek().id() == CSSValueWebkitFocusRingColor)
+        return consumeIdent(range);
+    return consumeColor(range, context);
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeLineWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    CSSValueID id = range.peek().id();
+    if (id == CSSValueThin || id == CSSValueMedium || id == CSSValueThick)
+        return consumeIdent(range);
+    return consumeLength(range, cssParserMode, ValueRangeNonNegative);
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeBorderWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    return consumeLineWidth(range, cssParserMode);
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeTextStrokeWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    return consumeLineWidth(range, cssParserMode);
 }
 
 PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID unresolvedProperty)
@@ -1654,11 +1706,24 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyTextDecorationColor:
         ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
         return consumeColor(m_range, m_context);
+    case CSSPropertyWebkitTextStrokeWidth:
+        return consumeTextStrokeWidth(m_range, m_context.mode());
     case CSSPropertyWebkitTextFillColor:
     case CSSPropertyWebkitTapHighlightColor:
+    case CSSPropertyWebkitTextEmphasisColor:
+    case CSSPropertyWebkitBorderStartColor:
+    case CSSPropertyWebkitBorderEndColor:
+    case CSSPropertyWebkitBorderBeforeColor:
+    case CSSPropertyWebkitBorderAfterColor:
+    case CSSPropertyWebkitTextStrokeColor:
         return consumeColor(m_range, m_context);
     case CSSPropertyColor:
         return consumeColor(m_range, m_context, inQuirksMode());
+    case CSSPropertyWebkitBorderStartWidth:
+    case CSSPropertyWebkitBorderEndWidth:
+    case CSSPropertyWebkitBorderBeforeWidth:
+    case CSSPropertyWebkitBorderAfterWidth:
+        return consumeBorderWidth(m_range, m_context.mode());
     case CSSPropertyZIndex:
         return consumeZIndex(m_range);
     case CSSPropertyTextShadow: // CSS2 property, dropped in CSS2.1, back in CSS3, so treat as CSS3
@@ -1679,6 +1744,14 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyMotionRotation:
         ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
         return consumeMotionRotation(m_range, m_context.mode());
+    case CSSPropertyWebkitTextEmphasisStyle:
+        return consumeTextEmphasisStyle(m_range);
+    case CSSPropertyOutlineColor:
+        return consumeOutlineColor(m_range, m_context);
+    case CSSPropertyOutlineOffset:
+        return consumeLength(m_range, m_context.mode(), ValueRangeAll);
+    case CSSPropertyOutlineWidth:
+        return consumeLineWidth(m_range, m_context.mode());
     default:
         return nullptr;
     }
@@ -2155,6 +2228,20 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool im
     case CSSPropertyMotion:
         ASSERT(RuntimeEnabledFeatures::cssMotionPathEnabled());
         return consumeShorthandGreedily(motionShorthand(), important);
+    case CSSPropertyWebkitTextEmphasis:
+        return consumeShorthandGreedily(webkitTextEmphasisShorthand(), important);
+    case CSSPropertyOutline:
+        return consumeShorthandGreedily(outlineShorthand(), important);
+    case CSSPropertyWebkitBorderStart:
+        return consumeShorthandGreedily(webkitBorderStartShorthand(), important);
+    case CSSPropertyWebkitBorderEnd:
+        return consumeShorthandGreedily(webkitBorderEndShorthand(), important);
+    case CSSPropertyWebkitBorderBefore:
+        return consumeShorthandGreedily(webkitBorderBeforeShorthand(), important);
+    case CSSPropertyWebkitBorderAfter:
+        return consumeShorthandGreedily(webkitBorderAfterShorthand(), important);
+    case CSSPropertyWebkitTextStroke:
+        return consumeShorthandGreedily(webkitTextStrokeShorthand(), important);
     default:
         m_currentShorthand = oldShorthand;
         return false;

@@ -34,6 +34,7 @@
 #include "chrome/browser/net/safe_search_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_management/task_manager_interface.h"
+#include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/data_usage/core/data_use_aggregator.h"
@@ -115,9 +116,9 @@ void RecordPrecacheStatsOnUIThread(const GURL& url,
                                    void* profile_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  Profile* profile = reinterpret_cast<Profile*>(profile_id);
-  if (!g_browser_process->profile_manager()->IsValidProfile(profile))
+  if (!g_browser_process->profile_manager()->IsValidProfile(profile_id))
     return;
+  Profile* profile = reinterpret_cast<Profile*>(profile_id);
 
   precache::PrecacheManager* precache_manager =
       precache::PrecacheManagerFactory::GetForBrowserContext(profile);
@@ -492,38 +493,21 @@ void ChromeNetworkDelegate::OnResponseStarted(net::URLRequest* request) {
   extensions_delegate_->OnResponseStarted(request);
 }
 
-void ChromeNetworkDelegate::OnNetworkBytesReceived(
-    const net::URLRequest& request,
-    int64_t bytes_received) {
+void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
+                                                   int64_t bytes_received) {
 #if defined(ENABLE_TASK_MANAGER)
   // Note: Currently, OnNetworkBytesReceived is only implemented for HTTP jobs,
   // not FTP or other types, so those kinds of bytes will not be reported here.
-  task_management::TaskManagerInterface::OnRawBytesRead(request,
+  task_management::TaskManagerInterface::OnRawBytesRead(*request,
                                                         bytes_received);
 #endif  // defined(ENABLE_TASK_MANAGER)
 
-  if (data_use_aggregator_) {
-    if (is_data_usage_off_the_record_) {
-      data_use_aggregator_->ReportOffTheRecordDataUse(0 /* tx_bytes */,
-                                                      bytes_received);
-    } else {
-      data_use_aggregator_->ReportDataUse(request, -1 /* tab_id */,
-                                          0 /* tx_bytes */, bytes_received);
-    }
-  }
+  ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
 }
 
-void ChromeNetworkDelegate::OnNetworkBytesSent(const net::URLRequest& request,
+void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
                                                int64_t bytes_sent) {
-  if (data_use_aggregator_) {
-    if (is_data_usage_off_the_record_) {
-      data_use_aggregator_->ReportOffTheRecordDataUse(bytes_sent,
-                                                      0 /* rx_bytes */);
-    } else {
-      data_use_aggregator_->ReportDataUse(request, -1 /* tab_id */, bytes_sent,
-                                          0 /* rx_bytes */);
-    }
-  }
+  ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
 }
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
@@ -695,6 +679,15 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
   if (external_storage_path.IsParent(path))
     return true;
 
+  // Allow to load offline pages, which are stored in the $PROFILE_PATH/Offline
+  // Pages/archives.
+  if (!profile_path_.empty()) {
+    const base::FilePath offline_page_archives =
+        profile_path_.Append(chrome::kOfflinePageArchviesDirname);
+    if (offline_page_archives.IsParent(path))
+      return true;
+  }
+
   // Whitelist of other allowed directories.
   static const char* const kLocalAccessWhiteList[] = {
       "/sdcard",
@@ -741,4 +734,18 @@ bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
     const GURL& referrer_url) const {
   ReportInvalidReferrerSend(target_url, referrer_url);
   return true;
+}
+
+void ChromeNetworkDelegate::ReportDataUsageStats(net::URLRequest* request,
+                                                 int64_t tx_bytes,
+                                                 int64_t rx_bytes) {
+  if (!data_use_aggregator_)
+    return;
+
+  if (is_data_usage_off_the_record_) {
+    data_use_aggregator_->ReportOffTheRecordDataUse(tx_bytes, rx_bytes);
+    return;
+  }
+
+  data_use_aggregator_->ReportDataUse(request, tx_bytes, rx_bytes);
 }

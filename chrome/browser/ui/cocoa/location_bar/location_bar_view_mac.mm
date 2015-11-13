@@ -40,7 +40,6 @@
 #import "chrome/browser/ui/cocoa/location_bar/keyword_hint_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_icon_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
-#import "chrome/browser/ui/cocoa/location_bar/mic_search_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/page_action_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/selected_keyword_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/star_decoration.h"
@@ -102,24 +101,24 @@ LocationBarViewMac::LocationBarViewMac(AutocompleteTextField* field,
       translate_decoration_(new TranslateDecoration(command_updater)),
       zoom_decoration_(new ZoomDecoration(this)),
       keyword_hint_decoration_(new KeywordHintDecoration()),
-      mic_search_decoration_(new MicSearchDecoration(command_updater)),
       manage_passwords_decoration_(
           new ManagePasswordsDecoration(command_updater, this)),
       browser_(browser),
       location_bar_visible_(true),
       weak_ptr_factory_(this) {
-  for (ContentSettingsType type :
-       ContentSettingBubbleModel::GetSupportedBubbleTypes()) {
+  ScopedVector<ContentSettingImageModel> models =
+      ContentSettingImageModel::GenerateContentSettingImageModels();
+  for (ContentSettingImageModel* model : models.get()) {
+    // ContentSettingDecoration takes ownership of its model.
     content_setting_decorations_.push_back(
-        new ContentSettingDecoration(type, this, profile));
+        new ContentSettingDecoration(model, this, profile));
   }
+  models.weak_clear();
 
   edit_bookmarks_enabled_.Init(
       bookmarks::prefs::kEditBookmarksEnabled, profile->GetPrefs(),
       base::Bind(&LocationBarViewMac::OnEditBookmarksEnabledChanged,
                  base::Unretained(this)));
-
-  browser_->search_model()->AddObserver(this);
 
   ui_zoom::ZoomEventManager::GetForBrowserContext(profile)
       ->AddZoomEventManagerObserver(this);
@@ -136,7 +135,6 @@ LocationBarViewMac::~LocationBarViewMac() {
   // Disconnect from cell in case it outlives us.
   [[field_ cell] clearDecorations];
 
-  browser_->search_model()->RemoveObserver(this);
   ui_zoom::ZoomEventManager::GetForBrowserContext(profile())
       ->RemoveZoomEventManagerObserver(this);
 }
@@ -410,7 +408,6 @@ void LocationBarViewMac::Layout() {
   }
 
   [cell addRightDecoration:keyword_hint_decoration_.get()];
-  [cell addRightDecoration:mic_search_decoration_.get()];
 
   // By default only the location icon is visible.
   location_icon_decoration_->SetVisible(true);
@@ -523,7 +520,6 @@ void LocationBarViewMac::Update(const WebContents* contents) {
   UpdateZoomDecoration(/*default_zoom_changed=*/false);
   RefreshPageActionDecorations();
   RefreshContentSettingsDecorations();
-  UpdateMicSearchDecorationVisibility();
   if (contents)
     omnibox_view_->OnTabChanged(contents);
   else
@@ -582,12 +578,6 @@ NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
   }
 
   return OmniboxViewMac::ImageForResource(IDR_OMNIBOX_SEARCH);
-}
-
-void LocationBarViewMac::ModelChanged(const SearchModel::State& old_state,
-                                      const SearchModel::State& new_state) {
-  if (UpdateMicSearchDecorationVisibility())
-    Layout();
 }
 
 void LocationBarViewMac::PostNotification(NSString* notification) {
@@ -726,13 +716,4 @@ bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
 void LocationBarViewMac::OnDefaultZoomLevelChanged() {
   if (UpdateZoomDecoration(/*default_zoom_changed=*/true))
     OnDecorationsChanged();
-}
-
-bool LocationBarViewMac::UpdateMicSearchDecorationVisibility() {
-  bool is_visible = !GetToolbarModel()->input_in_progress() &&
-                    browser_->search_model()->voice_search_supported();
-  if (mic_search_decoration_->IsVisible() == is_visible)
-    return false;
-  mic_search_decoration_->SetVisible(is_visible);
-  return true;
 }

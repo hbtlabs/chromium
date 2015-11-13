@@ -152,7 +152,6 @@ bool AUAudioInputStream::Open() {
                                 &enableIO,  // enable
                                 sizeof(enableIO));
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -166,7 +165,6 @@ bool AUAudioInputStream::Open() {
                                 &enableIO,  // disable
                                 sizeof(enableIO));
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -180,7 +178,6 @@ bool AUAudioInputStream::Open() {
                                 &input_device_id_,
                                 sizeof(input_device_id_));
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -195,7 +192,6 @@ bool AUAudioInputStream::Open() {
                                 &format_,
                                 sizeof(format_));
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -203,7 +199,8 @@ bool AUAudioInputStream::Open() {
   if (!manager_->MaybeChangeBufferSize(input_device_id_, audio_unit_, 1,
                                        number_of_frames_,
                                        &buffer_size_was_changed_)) {
-    CloseAudioUnit();
+    result = kAudioUnitErr_FormatNotSupported;
+    HandleError(result);
     return false;
   }
   DLOG_IF(WARNING, buffer_size_was_changed_) << "IO buffer size was changed to "
@@ -222,7 +219,6 @@ bool AUAudioInputStream::Open() {
                                 &callback,
                                 sizeof(callback));
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -232,7 +228,6 @@ bool AUAudioInputStream::Open() {
   // it can produce in response to a single render call.
   result = AudioUnitInitialize(audio_unit_);
   if (result != noErr) {
-    CloseAudioUnit();
     HandleError(result);
     return false;
   }
@@ -797,6 +792,12 @@ void AUAudioInputStream::AddHistogramsForFailedStartup() {
                         start_was_deferred_);
   UMA_HISTOGRAM_BOOLEAN("Media.Audio.InputBufferSizeWasChangedMac",
                         buffer_size_was_changed_);
+  UMA_HISTOGRAM_COUNTS_1000("Media.Audio.NumberOfOutputStreamsMac",
+                            manager_->output_streams());
+  UMA_HISTOGRAM_COUNTS_1000("Media.Audio.NumberOfLowLatencyInputStreamsMac",
+                            manager_->low_latency_input_streams());
+  UMA_HISTOGRAM_COUNTS_1000("Media.Audio.NumberOfBasicInputStreamsMac",
+                            manager_->basic_input_streams());
 }
 
 }  // namespace media

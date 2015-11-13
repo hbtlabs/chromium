@@ -158,7 +158,7 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
                             QuicPacketNumber original_packet_number,
                             EncryptionLevel level,
                             TransmissionType transmission_type,
-                            const QuicEncryptedPacket& packet,
+                            size_t encrypted_length,
                             QuicTime sent_time) {}
 
   // Called when a packet has been received, but before it is
@@ -915,6 +915,10 @@ class NET_EXPORT_PRIVATE QuicConnection
   // The last time this connection began sending a new (non-retransmitted)
   // packet.
   QuicTime time_of_last_sent_new_packet_;
+
+  // The the send time of the first retransmittable packet sent after
+  // |time_of_last_received_packet_|.
+  QuicTime last_send_for_timeout_;
 
   // packet number of the last sent packet.  Packets are guaranteed to be sent
   // in packet number order.

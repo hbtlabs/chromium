@@ -6,6 +6,7 @@
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_PRIVATE_H_
 
 #include "components/mus/public/cpp/window.h"
+#include "mojo/public/cpp/bindings/array.h"
 
 namespace mus {
 
@@ -23,7 +24,9 @@ class WindowPrivate {
     return &window_->observers_;
   }
 
-  void ClearParent() { window_->parent_ = NULL; }
+  void ClearParent() { window_->parent_ = nullptr; }
+
+  void ClearTransientParent() { window_->transient_parent_ = nullptr; }
 
   void set_visible(bool visible) { window_->visible_ = visible; }
 
@@ -47,6 +50,12 @@ class WindowPrivate {
   void LocalDestroy() { window_->LocalDestroy(); }
   void LocalAddChild(Window* child) { window_->LocalAddChild(child); }
   void LocalRemoveChild(Window* child) { window_->LocalRemoveChild(child); }
+  void LocalAddTransientWindow(Window* child) {
+    window_->LocalAddTransientWindow(child);
+  }
+  void LocalRemoveTransientWindow(Window* child) {
+    window_->LocalRemoveTransientWindow(child);
+  }
   void LocalReorder(Window* relative, mojom::OrderDirection direction) {
     window_->LocalReorder(relative, direction);
   }
@@ -60,9 +69,12 @@ class WindowPrivate {
   void LocalSetDrawn(bool drawn) { window_->LocalSetDrawn(drawn); }
   void LocalSetVisible(bool visible) { window_->LocalSetVisible(visible); }
   void LocalSetSharedProperty(const std::string& name,
-                              const std::vector<uint8_t>* data){
+                              mojo::Array<uint8_t> new_data);
+  void LocalSetSharedProperty(const std::string& name,
+                              const std::vector<uint8_t>* data) {
     window_->LocalSetSharedProperty(name, data);
   }
+  void NotifyWindowStackingChanged() { window_->NotifyWindowStackingChanged(); }
 
  private:
   Window* window_;

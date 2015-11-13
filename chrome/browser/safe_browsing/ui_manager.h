@@ -16,10 +16,9 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "chrome/browser/safe_browsing/hit_report.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "url/gurl.h"
-
-class SafeBrowsingService;
 
 namespace base {
 class Thread;
@@ -29,6 +28,10 @@ namespace net {
 class SSLInfo;
 }  // namespace net
 
+namespace safe_browsing {
+
+class SafeBrowsingService;
+
 // Construction needs to happen on the main thread.
 class SafeBrowsingUIManager
     : public base::RefCountedThreadSafe<SafeBrowsingUIManager> {
@@ -36,13 +39,6 @@ class SafeBrowsingUIManager
   // Passed a boolean indicating whether or not it is OK to proceed with
   // loading an URL.
   typedef base::Callback<void(bool /*proceed*/)> UrlCheckCallback;
-
-  // What service classified this threat as unsafe.
-  enum ThreatSource {
-    FROM_UNKNOWN,
-    FROM_DATA_SAVER,  // From the Data Reduction service.
-    FROM_DEVICE,      // From {Local,Remote}SafeBrowingDatabaseManager.
-  };
 
   // Structure used to pass parameters between the IO and UI thread when
   // interacting with the blocking page.
@@ -60,7 +56,7 @@ class SafeBrowsingUIManager
     UrlCheckCallback callback;  // This is called back on the IO thread.
     int render_process_host_id;
     int render_view_id;
-    ThreatSource threat_source;
+    safe_browsing::ThreatSource threat_source;
   };
 
   // Observer class can be used to get notified when a SafeBrowsing hit
@@ -125,13 +121,8 @@ class SafeBrowsingUIManager
   // to the server. Can only be called on UI thread.  If |post_data| is
   // non-empty, the request will be sent as a POST instead of a GET.
   // Will report only for UMA || is_extended_reporting.
-  virtual void MaybeReportSafeBrowsingHit(const GURL& malicious_url,
-                                          const GURL& page_url,
-                                          const GURL& referrer_url,
-                                          bool is_subresource,
-                                          SBThreatType threat_type,
-                                          const std::string& post_data,
-                                          bool is_extended_reporting);
+  virtual void MaybeReportSafeBrowsingHit(
+      const safe_browsing::HitReport& hit_report);
 
   // Report an invalid TLS/SSL certificate chain to the server. Can only
   // be called on UI thread.
@@ -150,13 +141,8 @@ class SafeBrowsingUIManager
   friend class SafeBrowsingUIManagerTest;
 
   // Call protocol manager on IO thread to report hits of unsafe contents.
-  void ReportSafeBrowsingHitOnIOThread(const GURL& malicious_url,
-                                       const GURL& page_url,
-                                       const GURL& referrer_url,
-                                       bool is_subresource,
-                                       SBThreatType threat_type,
-                                       const std::string& post_data,
-                                       bool is_extended_reporting);
+  void ReportSafeBrowsingHitOnIOThread(
+      const safe_browsing::HitReport& hit_report);
 
   // Sends an invalid certificate chain report over the network.
   void ReportInvalidCertificateChainOnIOThread(
@@ -172,5 +158,7 @@ class SafeBrowsingUIManager
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingUIManager);
 };
+
+}  // namespace safe_browsing
 
 #endif  // CHROME_BROWSER_SAFE_BROWSING_UI_MANAGER_H_

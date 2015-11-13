@@ -23,17 +23,11 @@
     <message name="IDS_SETTINGS_HIGH_CONTRAST_LABEL" desc="Label for checkbox which enables high-contrast UI.">
       Use high contrast mode
     </message>
-    <message name="IDS_SETTINGS_STICKY_KEYS_LABEL" desc="Label for checkbox which enables sticky keys.">
-      Enable sticky keys
+    <message name="IDS_SETTINGS_STICKY_KEYS_LABEL" desc="Label for checkbox which enables sticky keys, with an explanation of the term 'sticky keys'.">
+      Enable sticky keys (to perform keyboard shortcuts by typing them sequentially)
     </message>
-    <message name="IDS_SETTINGS_STICKY_KEYS_SUBLABEL" desc="Sub-label describing what the term 'sticky keys' means.">
-      (to perform keyboard shortcuts by typing them sequentially)
-    </message>
-    <message name="IDS_SETTINGS_CHROMEVOX_LABEL" desc="Label for checkbox which enables ChromeVox">
-      Enable ChromeVox
-    </message>
-    <message name="IDS_SETTINGS_CHROMEVOX_SUBLABEL" desc="Sub-label describingn what ChromeVox is.">
-      (spoken feedback)
+    <message name="IDS_SETTINGS_CHROMEVOX_LABEL" desc="Label for checkbox which enables ChromeVox, with a description of what ChromeVox is.">
+      Enable ChromeVox (spoken feedback)
     </message>
     <message name="IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL" desc="Label for checkbox which enables the screen magnifier">
       Enable screen magnifier
@@ -108,6 +102,23 @@
   </message>
 
 
+  <!-- Passwords and Autofill Page -->
+  <message name="IDS_SETTINGS_PASSWORDS_AND_AUTOFILL_PAGE_TITLE" desc="Name of the settings page which allows managing passwords and autofill settings.">
+    Passwords and Forms
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL" desc="Name for the autofill section and toggle.">
+    Autofill settings
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_DETAIL" desc="Description of what toggling the 'Autofill' setting does. Immediately underneath IDS_SETTINGS_AUTOFILL">
+    Enable Autofill to fill out forms in a single click
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
+    Manage passwords
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_DETAIL" desc="Description of what toggling the 'Manage passwords' setting does. Immediately underneath IDS_SETTINGS_PASSWORDS">
+    Offer to save your web passwords
+  </message>
+
   <!-- Basic Page -->
   <message name="IDS_SETTINGS_BASIC" desc="Name of the settings page which displays advanced preferences.">
     Basic
@@ -117,6 +128,16 @@
   <if expr="not chromeos">
     <message name="IDS_SETTINGS_DEFAULT_BROWSER" desc="Name of the Default Browser page, which allows users to set which browser will open .html files within the OS.">
       Default browser
+    </message>
+  </if>
+
+  <!-- Bluetooth Page -->
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_BLUETOOTH" desc="Name of the settings page which displays bluetooth device settings.">
+      Bluetooth
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_ENABLE" desc="Label for control to enable or disable bluetooth.">
+      Enable Bluetooth
     </message>
   </if>
 
@@ -505,13 +526,39 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_RESET_MENU" desc="Label for the menu item to reset the permission for a particular site (make it ask you again next time).">
     Reset to ask
   </message>
-
-  <!-- Sign-in Page -->
-  <message name="IDS_SETTINGS_SIGNIN" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
-    Sign in
+  <message name="IDS_SETTINGS_SITE_SETTINGS_USAGE" desc="The Usage header, used to group disk and battery usage information on the Site Details page.">
+    Usage
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS" desc="The Permissions header, used to group together permissions, such as Geolocation, on the Site Details page.">
+    Permissions
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON" desc="The Clear and Reset button, used to clear all permissions and storage for a given site.">
+    Clear &amp; Reset
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE" desc="Label for the trashcan icon used to delete storage on the Site Details page.">
+    Delete
   </message>
 
-  <!-- Sync Page -->
+  <!-- Sync / People Page -->
+  <message name="IDS_SETTINGS_SYNC_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
+    People
+  </message>
+  <message name="IDS_SETTINGS_SYNC_OVERVIEW" desc="The message that appears in the options dialog when sync has not been set up by the user.">
+    Sign in to get your bookmarks, history, passwords and other settings on all your devices. You'll also automatically be signed in to your Google services.
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT" desc="The text to display on the button to indicate stop syncing functionality.">
+    Sign Out
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_TITLE" desc="The title of the dialog that explains what 'stop syncing' means.">
+    Disconnect your Google Account
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE" desc="The text to display by the checkbox asking user whether to also delete profile when stopping sync.">
+    Also clear your history, bookmarks, settings, and other Chrome data stored on this device.
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_CONFIRM" desc="The text to display on the button to confirm the user wishes to stop syncing.">
+    Clear and Disconnect
+  </message>
+
   <message name="IDS_SETTINGS_SYNC" desc="Name of the settings page which manages syncing data between multiple browser instances with the same Google profile.">
     Advanced sync settings
   </message>

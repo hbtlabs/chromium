@@ -39,16 +39,18 @@ blink::WebPresentationError::ErrorType GetWebPresentationErrorTypeFromMojo(
 }
 
 blink::WebPresentationConnectionState GetWebPresentationConnectionStateFromMojo(
-        presentation::PresentationSessionState mojoSessionState) {
+    presentation::PresentationConnectionState mojoSessionState) {
   switch (mojoSessionState) {
-    case presentation::PRESENTATION_SESSION_STATE_CONNECTED:
+    case presentation::PRESENTATION_CONNECTION_STATE_CONNECTED:
       return blink::WebPresentationConnectionState::Connected;
-    case presentation::PRESENTATION_SESSION_STATE_DISCONNECTED:
-      return blink::WebPresentationConnectionState::Disconnected;
+    case presentation::PRESENTATION_CONNECTION_STATE_CLOSED:
+      return blink::WebPresentationConnectionState::Closed;
+    case presentation::PRESENTATION_CONNECTION_STATE_TERMINATED:
+      return blink::WebPresentationConnectionState::Terminated;
   }
 
   NOTREACHED();
-  return blink::WebPresentationConnectionState::Disconnected;
+  return blink::WebPresentationConnectionState::Terminated;
 }
 
 }  // namespace
@@ -335,11 +337,6 @@ void PresentationDispatcher::OnDefaultSessionStarted(
   if (!controller_)
     return;
 
-  // Reset the callback to get the next event.
-  presentation_service_->ListenForDefaultSessionStart(base::Bind(
-      &PresentationDispatcher::OnDefaultSessionStarted,
-      base::Unretained(this)));
-
   if (!session_info.is_null()) {
     controller_->didStartDefaultSession(
         new PresentationConnectionClient(session_info.Clone()));
@@ -368,7 +365,7 @@ void PresentationDispatcher::OnSessionCreated(
 
 void PresentationDispatcher::OnSessionStateChanged(
     presentation::PresentationSessionInfoPtr session_info,
-    presentation::PresentationSessionState session_state) {
+    presentation::PresentationConnectionState session_state) {
   if (!controller_)
     return;
 
@@ -424,9 +421,6 @@ void PresentationDispatcher::ConnectToPresentationServiceIfNeeded() {
   binding_.Bind(GetProxy(&client_ptr));
   presentation_service_->SetClient(client_ptr.Pass());
 
-  presentation_service_->ListenForDefaultSessionStart(base::Bind(
-      &PresentationDispatcher::OnDefaultSessionStarted,
-      base::Unretained(this)));
   presentation_service_->ListenForSessionStateChange();
 }
 

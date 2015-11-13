@@ -19,6 +19,7 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/url_formatter/elide_url.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_controller.h"
@@ -33,6 +34,8 @@
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/text_elider.h"
+#include "ui/gfx/vector_icons_public.h"
 
 using content::NavigationController;
 using content::NavigationEntry;
@@ -61,16 +64,26 @@ base::string16 ToolbarModelImpl::GetFormattedURL(size_t* prefix_end) const {
     languages = profile->GetPrefs()->GetString(prefs::kAcceptLanguages);
 
   GURL url(GetURL());
-  if (url.spec().length() > content::kMaxURLDisplayChars)
-    url = url.IsStandard() ? url.GetOrigin() : GURL(url.scheme() + ":");
   // Note that we can't unescape spaces here, because if the user copies this
   // and pastes it into another program, that program may think the URL ends at
   // the space.
-  return AutocompleteInput::FormattedStringWithEquivalentMeaning(
-      url, url_formatter::FormatUrl(
-               url, languages, url_formatter::kFormatUrlOmitAll,
-               net::UnescapeRule::NORMAL, nullptr, prefix_end, nullptr),
-      ChromeAutocompleteSchemeClassifier(profile));
+  const base::string16 formatted_text =
+      AutocompleteInput::FormattedStringWithEquivalentMeaning(
+          url, url_formatter::FormatUrl(
+                   url, languages, url_formatter::kFormatUrlOmitAll,
+                   net::UnescapeRule::NORMAL, nullptr, prefix_end, nullptr),
+          ChromeAutocompleteSchemeClassifier(profile));
+  if (formatted_text.length() <= content::kMaxURLDisplayChars)
+    return formatted_text;
+
+  // Truncating the URL breaks editing and then pressing enter, but hopefully
+  // people won't try to do much with such enormous URLs anyway. If this becomes
+  // a real problem, we could perhaps try to keep some sort of different "elided
+  // visible URL" where editing affects and reloads the "real underlying URL",
+  // but this seems very tricky for little gain.
+  return gfx::TruncateString(formatted_text, content::kMaxURLDisplayChars - 1,
+                             gfx::CHARACTER_BREAK) +
+         gfx::kEllipsisUTF16;
 }
 
 base::string16 ToolbarModelImpl::GetCorpusNameForMobile() const {
@@ -126,15 +139,7 @@ SecurityStateModel::SecurityLevel ToolbarModelImpl::GetSecurityLevel(
 }
 
 int ToolbarModelImpl::GetIcon() const {
-  if (WouldPerformSearchTermReplacement(false))
-    return IDR_OMNIBOX_SEARCH_SECURED;
-
-  return GetIconForSecurityLevel(GetSecurityLevel(false));
-}
-
-int ToolbarModelImpl::GetIconForSecurityLevel(
-    SecurityStateModel::SecurityLevel level) const {
-  switch (level) {
+  switch (GetSecurityLevel(false)) {
     case SecurityStateModel::NONE:
       return IDR_LOCATION_BAR_HTTP;
     case SecurityStateModel::EV_SECURE:
@@ -151,6 +156,28 @@ int ToolbarModelImpl::GetIconForSecurityLevel(
 
   NOTREACHED();
   return IDR_LOCATION_BAR_HTTP;
+}
+
+gfx::VectorIconId ToolbarModelImpl::GetVectorIcon() const {
+#if !defined(OS_ANDROID) && !defined(OS_MACOSX) && !defined(OS_IOS)
+  switch (GetSecurityLevel(false)) {
+    case SecurityStateModel::NONE:
+      return gfx::VectorIconId::LOCATION_BAR_HTTP;
+    case SecurityStateModel::EV_SECURE:
+    case SecurityStateModel::SECURE:
+      return gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID;
+    case SecurityStateModel::SECURITY_WARNING:
+      // Surface Dubious as Neutral.
+      return gfx::VectorIconId::LOCATION_BAR_HTTP;
+    case SecurityStateModel::SECURITY_POLICY_WARNING:
+      return gfx::VectorIconId::BUSINESS;
+    case SecurityStateModel::SECURITY_ERROR:
+      return gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID;
+  }
+#endif
+
+  NOTREACHED();
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
 }
 
 base::string16 ToolbarModelImpl::GetEVCertName() const {

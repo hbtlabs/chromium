@@ -46,8 +46,8 @@
 #include "chrome/renderer/prerender/prerender_dispatcher.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/prerender/prerenderer_client.h"
-#include "chrome/renderer/safe_browsing/malware_dom_details.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
+#include "chrome/renderer/safe_browsing/threat_dom_details.h"
 #include "chrome/renderer/searchbox/search_bouncer.h"
 #include "chrome/renderer/searchbox/searchbox.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
@@ -555,7 +555,7 @@ void ChromeContentRendererClient::RenderViewCreated(
 #endif
   new prerender::PrerendererClient(render_view);
 #if defined(FULL_SAFE_BROWSING)
-  safe_browsing::MalwareDOMDetails::Create(render_view);
+  safe_browsing::ThreatDOMDetails::Create(render_view);
 #endif
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -636,10 +636,13 @@ void ChromeContentRendererClient::DeferMediaLoad(
   // loads even when hidden to allow playlist-like functionality.
   //
   // NOTE: This is also used to defer media loading for prerender.
+  // NOTE: Switch can be used to allow autoplay, unless frame is prerendered.
   //
   // TODO(dalecurtis): Include an idle check too.  http://crbug.com/509135
-  if (render_frame->IsHidden() && !has_played_media_before) {
-    // Lifetime is tied to |render_frame| via content::RenderFrameObserver.
+  if ((render_frame->IsHidden() && !has_played_media_before &&
+       !base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kDisableGestureRequirementForMediaPlayback)) ||
+      prerender::PrerenderHelper::IsPrerendering(render_frame)) {
     new MediaLoadDeferrer(render_frame, closure);
     return;
   }
@@ -1106,9 +1109,12 @@ void ChromeContentRendererClient::GetNavigationErrorStrings(
 
   bool is_post = base::EqualsASCII(
       base::StringPiece16(failed_request.httpMethod()), "POST");
-
-  if (error_html)
-    NetErrorHelper::Get(render_frame)->GetErrorHTML(error, is_post, error_html);
+  bool is_ignoring_cache = failed_request.cachePolicy() ==
+                           blink::WebURLRequest::ReloadBypassingCache;
+  if (error_html) {
+    NetErrorHelper::Get(render_frame)
+        ->GetErrorHTML(error, is_post, is_ignoring_cache, error_html);
+  }
 
   if (error_description)
     *error_description = LocalizedError::GetErrorDetails(error, is_post);

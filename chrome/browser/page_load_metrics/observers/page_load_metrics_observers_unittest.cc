@@ -18,6 +18,16 @@ const char kHistogramNameFromGWSFirstTextPaint[] =
 
 }  // namespace
 
+class TestPageLoadMetricsEmbedderInterface
+    : public page_load_metrics::PageLoadMetricsEmbedderInterface {
+ public:
+  TestPageLoadMetricsEmbedderInterface() {}
+  rappor::RapporService* GetRapporService() override { return nullptr; }
+  bool IsPrerendering(content::WebContents* web_contents) override {
+    return false;
+  }
+};
+
 class TestFromGWSPageLoadMetricsObserver
     : public FromGWSPageLoadMetricsObserver {
  public:
@@ -46,7 +56,8 @@ class PageLoadMetricsObserverTest : public ChromeRenderViewHostTestHarness {
     NavigateAndCommit(GURL("http://www.google.com"));
     observer_ =
         make_scoped_ptr(new page_load_metrics::MetricsWebContentsObserver(
-            web_contents(), nullptr));
+            web_contents(),
+            make_scoped_ptr(new TestPageLoadMetricsEmbedderInterface())));
     observer_->WasShown();
 
     // Add PageLoadMetricsObservers here.
@@ -115,6 +126,29 @@ TEST_F(PageLoadMetricsObserverTest, ReferralFromGWS) {
   observer_->OnMessageReceived(
       PageLoadMetricsMsg_TimingUpdated(observer_->routing_id(), timing),
       web_contents()->GetMainFrame());
+
+  // Navigate again to force logging.
+  NavigateAndCommit(GURL("https://www.example2.com"));
+  histogram_tester_.ExpectTotalCount(kHistogramNameFromGWSFirstTextPaint, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramNameFromGWSFirstTextPaint,
+                                      timing.first_text_paint.InMilliseconds(),
+                                      1);
+}
+
+TEST_F(PageLoadMetricsObserverTest, ReferralFromGWSBackgroundLater) {
+  page_load_metrics::PageLoadTiming timing;
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.first_text_paint = base::TimeDelta::FromMicroseconds(1);
+
+  gws_observer_->set_referrer(content::Referrer(
+      GURL("https://www.google.com/url"), blink::WebReferrerPolicyDefault));
+  NavigateAndCommit(GURL("https://www.example.com"));
+
+  observer_->OnMessageReceived(
+      PageLoadMetricsMsg_TimingUpdated(observer_->routing_id(), timing),
+      web_contents()->GetMainFrame());
+
+  observer_->WasHidden();
 
   // Navigate again to force logging.
   NavigateAndCommit(GURL("https://www.example2.com"));

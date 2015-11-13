@@ -10,9 +10,13 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/time/time.h"
 #include "components/data_usage/core/data_use.h"
+#include "components/data_usage/core/data_use_amortizer.h"
+#include "components/data_usage/core/data_use_annotator.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate_impl.h"
@@ -26,8 +30,21 @@ namespace data_usage {
 
 namespace {
 
+base::TimeTicks GetRequestStart(const net::URLRequest& request) {
+  net::LoadTimingInfo load_timing_info;
+  request.GetLoadTimingInfo(&load_timing_info);
+  return load_timing_info.request_start;
+}
+
 // Test class that can set the network operator's MCCMNC.
 class TestDataUseAggregator : public DataUseAggregator {
+ public:
+  TestDataUseAggregator(scoped_ptr<DataUseAnnotator> annotator,
+                        scoped_ptr<DataUseAmortizer> amortizer)
+      : DataUseAggregator(annotator.Pass(), amortizer.Pass()) {}
+
+  ~TestDataUseAggregator() override {}
+
  private:
   friend class TestNetworkChangeNotifier;
   using DataUseAggregator::OnConnectionTypeChanged;
@@ -64,6 +81,48 @@ class TestNetworkChangeNotifier : public net::NetworkChangeNotifier {
   DISALLOW_COPY_AND_ASSIGN(TestNetworkChangeNotifier);
 };
 
+// A fake DataUseAnnotator that sets the tab ID of DataUse objects to a
+// predetermined fake tab ID.
+class FakeDataUseAnnotator : public DataUseAnnotator {
+ public:
+  FakeDataUseAnnotator() : tab_id_(-1) {}
+  ~FakeDataUseAnnotator() override {}
+
+  void Annotate(
+      net::URLRequest* request,
+      scoped_ptr<DataUse> data_use,
+      const base::Callback<void(scoped_ptr<DataUse>)>& callback) override {
+    data_use->tab_id = tab_id_;
+    callback.Run(data_use.Pass());
+  }
+
+  void set_tab_id(int32_t tab_id) { tab_id_ = tab_id; }
+
+ private:
+  int32_t tab_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeDataUseAnnotator);
+};
+
+// Test DataUseAmortizer that doubles the bytes of all DataUse objects it sees.
+class DoublingAmortizer : public DataUseAmortizer {
+ public:
+  DoublingAmortizer() {}
+  ~DoublingAmortizer() override {}
+
+  void AmortizeDataUse(scoped_ptr<DataUse> data_use,
+                       const AmortizationCompleteCallback& callback) override {
+    data_use->tx_bytes *= 2;
+    data_use->rx_bytes *= 2;
+    callback.Run(data_use.Pass());
+  }
+
+  void OnExtraBytes(int64_t extra_tx_bytes, int64_t extra_rx_bytes) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DoublingAmortizer);
+};
+
 // A network delegate that reports all received and sent network bytes to a
 // DataUseAggregator.
 class ReportingNetworkDelegate : public net::NetworkDelegateImpl {
@@ -86,10 +145,15 @@ class ReportingNetworkDelegate : public net::NetworkDelegateImpl {
 
   typedef std::map<const net::URLRequest*, DataUseContext> DataUseContextMap;
 
+  // Constructs a ReportingNetworkDelegate. |fake_data_use_annotator| can be
+  // NULL, indicating that no annotator is in use and no requests should be
+  // annotated with tab IDs.
   ReportingNetworkDelegate(
       TestDataUseAggregator* data_use_aggregator,
+      FakeDataUseAnnotator* fake_data_use_annotator,
       TestNetworkChangeNotifier* test_network_change_notifier)
       : data_use_aggregator_(data_use_aggregator),
+        fake_data_use_annotator_(fake_data_use_annotator),
         test_network_change_notifier_(test_network_change_notifier) {}
 
   ~ReportingNetworkDelegate() override {}
@@ -99,7 +163,7 @@ class ReportingNetworkDelegate : public net::NetworkDelegateImpl {
   }
 
  private:
-  DataUseContext UpdateDataUseContext(const net::URLRequest& request) {
+  void UpdateDataUseContext(const net::URLRequest& request) {
     DataUseContextMap::const_iterator data_use_context_it =
         data_use_context_map_.find(&request);
     DataUseContext data_use_context =
@@ -107,29 +171,31 @@ class ReportingNetworkDelegate : public net::NetworkDelegateImpl {
             ? DataUseContext()
             : data_use_context_it->second;
 
+    if (fake_data_use_annotator_)
+      fake_data_use_annotator_->set_tab_id(data_use_context.tab_id);
+
     if (test_network_change_notifier_->GetCurrentConnectionType() !=
         data_use_context.connection_type) {
       test_network_change_notifier_->SimulateNetworkConnectionChange(
           data_use_context.connection_type, data_use_context.mcc_mnc);
     }
-    return data_use_context;
   }
 
-  void OnNetworkBytesReceived(const net::URLRequest& request,
+  void OnNetworkBytesReceived(net::URLRequest* request,
                               int64_t bytes_received) override {
-    DataUseContext data_use_context = UpdateDataUseContext(request);
-    data_use_aggregator_->ReportDataUse(request, data_use_context.tab_id,
-                                        0 /* tx_bytes */, bytes_received);
+    UpdateDataUseContext(*request);
+    data_use_aggregator_->ReportDataUse(request, 0 /* tx_bytes */,
+                                        bytes_received);
   }
 
-  void OnNetworkBytesSent(const net::URLRequest& request,
+  void OnNetworkBytesSent(net::URLRequest* request,
                           int64_t bytes_sent) override {
-    DataUseContext data_use_context = UpdateDataUseContext(request);
-    data_use_aggregator_->ReportDataUse(request, data_use_context.tab_id,
-                                        bytes_sent, 0 /* rx_bytes */);
+    UpdateDataUseContext(*request);
+    data_use_aggregator_->ReportDataUse(request, bytes_sent, 0 /* rx_bytes */);
   }
 
   TestDataUseAggregator* data_use_aggregator_;
+  FakeDataUseAnnotator* fake_data_use_annotator_;
   TestNetworkChangeNotifier* test_network_change_notifier_;
   DataUseContextMap data_use_context_map_;
 
@@ -170,18 +236,36 @@ class TestObserver : public DataUseAggregator::Observer {
 
 class DataUseAggregatorTest : public testing::Test {
  public:
-  DataUseAggregatorTest()
-      : test_network_change_notifier_(&data_use_aggregator_),
-        reporting_network_delegate_(&data_use_aggregator_,
-                                    &test_network_change_notifier_),
-        context_(true),
-        test_observer_(&data_use_aggregator_) {
-    context_.set_client_socket_factory(&mock_socket_factory_);
-    context_.set_network_delegate(&reporting_network_delegate_);
-    context_.Init();
-  }
-
+  DataUseAggregatorTest() {}
   ~DataUseAggregatorTest() override {}
+
+  void Initialize(scoped_ptr<FakeDataUseAnnotator> annotator,
+                  scoped_ptr<DataUseAmortizer> amortizer) {
+    // Destroy objects that have dependencies on other objects here in the
+    // reverse order that they are created.
+    context_.reset();
+    reporting_network_delegate_.reset();
+    mock_socket_factory_.reset();
+    test_network_change_notifier_.reset();
+    test_observer_.reset();
+
+    // Initialize testing objects.
+    FakeDataUseAnnotator* fake_data_use_annotator = annotator.get();
+    data_use_aggregator_.reset(
+        new TestDataUseAggregator(annotator.Pass(), amortizer.Pass()));
+    test_observer_.reset(new TestObserver(data_use_aggregator_.get()));
+    test_network_change_notifier_.reset(
+        new TestNetworkChangeNotifier(data_use_aggregator_.get()));
+    mock_socket_factory_.reset(new net::MockClientSocketFactory());
+    reporting_network_delegate_.reset(new ReportingNetworkDelegate(
+        data_use_aggregator_.get(), fake_data_use_annotator,
+        test_network_change_notifier_.get()));
+
+    context_.reset(new net::TestURLRequestContext(true));
+    context_->set_client_socket_factory(mock_socket_factory_.get());
+    context_->set_network_delegate(reporting_network_delegate_.get());
+    context_->Init();
+  }
 
   scoped_ptr<net::URLRequest> ExecuteRequest(
       const GURL& url,
@@ -194,18 +278,18 @@ class DataUseAggregatorTest : public testing::Test {
         net::MockRead(net::SYNCHRONOUS, net::OK),
     };
     net::StaticSocketDataProvider socket(reads, arraysize(reads), nullptr, 0);
-    mock_socket_factory_.AddSocketDataProvider(&socket);
+    mock_socket_factory_->AddSocketDataProvider(&socket);
 
     net::TestDelegate delegate;
     scoped_ptr<net::URLRequest> request =
-        context_.CreateRequest(url, net::IDLE, &delegate);
+        context_->CreateRequest(url, net::IDLE, &delegate);
     request->set_first_party_for_cookies(first_party_for_cookies);
 
     ReportingNetworkDelegate::DataUseContextMap data_use_context_map;
     data_use_context_map[request.get()] =
         ReportingNetworkDelegate::DataUseContext(tab_id, connection_type,
                                                  mcc_mnc);
-    reporting_network_delegate_.set_data_use_context_map(data_use_context_map);
+    reporting_network_delegate_->set_data_use_context_map(data_use_context_map);
 
     request->Start();
     loop_.RunUntilIdle();
@@ -214,187 +298,132 @@ class DataUseAggregatorTest : public testing::Test {
   }
 
   ReportingNetworkDelegate* reporting_network_delegate() {
-    return &reporting_network_delegate_;
+    return reporting_network_delegate_.get();
   }
 
-  DataUseAggregator* data_use_aggregator() { return &data_use_aggregator_; }
+  DataUseAggregator* data_use_aggregator() {
+    return data_use_aggregator_.get();
+  }
 
   net::MockClientSocketFactory* mock_socket_factory() {
-    return &mock_socket_factory_;
+    return mock_socket_factory_.get();
   }
 
-  net::TestURLRequestContext* context() { return &context_; }
+  net::TestURLRequestContext* context() { return context_.get(); }
 
-  TestObserver* test_observer() { return &test_observer_; }
+  TestObserver* test_observer() { return test_observer_.get(); }
 
  private:
   base::MessageLoopForIO loop_;
-  TestDataUseAggregator data_use_aggregator_;
-  TestNetworkChangeNotifier test_network_change_notifier_;
-  net::MockClientSocketFactory mock_socket_factory_;
-  ReportingNetworkDelegate reporting_network_delegate_;
-  net::TestURLRequestContext context_;
-  TestObserver test_observer_;
+  scoped_ptr<TestDataUseAggregator> data_use_aggregator_;
+  scoped_ptr<TestObserver> test_observer_;
+  scoped_ptr<TestNetworkChangeNotifier> test_network_change_notifier_;
+  scoped_ptr<net::MockClientSocketFactory> mock_socket_factory_;
+  scoped_ptr<ReportingNetworkDelegate> reporting_network_delegate_;
+  scoped_ptr<net::TestURLRequestContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(DataUseAggregatorTest);
 };
 
 TEST_F(DataUseAggregatorTest, ReportDataUse) {
-  const int32_t kFooTabId = 10;
-  const net::NetworkChangeNotifier::ConnectionType kFooConnectionType =
-      net::NetworkChangeNotifier::CONNECTION_2G;
-  const std::string kFooMccMnc = "foo_mcc_mnc";
-  scoped_ptr<net::URLRequest> foo_request =
-      ExecuteRequest(GURL("http://foo.com"), GURL("http://foofirstparty.com"),
-                     kFooTabId, kFooConnectionType, kFooMccMnc);
-
-  const int32_t kBarTabId = 20;
-  const net::NetworkChangeNotifier::ConnectionType kBarConnectionType =
-      net::NetworkChangeNotifier::CONNECTION_WIFI;
-  const std::string kBarMccMnc = "bar_mcc_mnc";
-  scoped_ptr<net::URLRequest> bar_request =
-      ExecuteRequest(GURL("http://bar.com"), GURL("http://barfirstparty.com"),
-                     kBarTabId, kBarConnectionType, kBarMccMnc);
-
-  auto data_use_it = test_observer()->observed_data_use().begin();
-
-  // First, the |foo_request| data use should have happened.
-  int64_t observed_foo_tx_bytes = 0, observed_foo_rx_bytes = 0;
-  while (data_use_it != test_observer()->observed_data_use().end() &&
-         data_use_it->url == GURL("http://foo.com")) {
-    net::LoadTimingInfo foo_load_timing_info;
-    foo_request->GetLoadTimingInfo(&foo_load_timing_info);
-
-    EXPECT_EQ(foo_load_timing_info.request_start, data_use_it->request_start);
-    EXPECT_EQ(GURL("http://foofirstparty.com"),
-              data_use_it->first_party_for_cookies);
-    EXPECT_EQ(kFooTabId, data_use_it->tab_id);
-    EXPECT_EQ(kFooConnectionType, data_use_it->connection_type);
-    EXPECT_EQ(kFooMccMnc, data_use_it->mcc_mnc);
-
-    observed_foo_tx_bytes += data_use_it->tx_bytes;
-    observed_foo_rx_bytes += data_use_it->rx_bytes;
-    ++data_use_it;
-  }
-  EXPECT_EQ(foo_request->GetTotalSentBytes(), observed_foo_tx_bytes);
-  EXPECT_EQ(foo_request->GetTotalReceivedBytes(), observed_foo_rx_bytes);
-
-  // Then, the |bar_request| data use should have happened.
-  int64_t observed_bar_tx_bytes = 0, observed_bar_rx_bytes = 0;
-  while (data_use_it != test_observer()->observed_data_use().end()) {
-    net::LoadTimingInfo bar_load_timing_info;
-    bar_request->GetLoadTimingInfo(&bar_load_timing_info);
-
-    EXPECT_EQ(GURL("http://bar.com"), data_use_it->url);
-    EXPECT_EQ(bar_load_timing_info.request_start, data_use_it->request_start);
-    EXPECT_EQ(GURL("http://barfirstparty.com"),
-              data_use_it->first_party_for_cookies);
-    EXPECT_EQ(kBarTabId, data_use_it->tab_id);
-    EXPECT_EQ(kBarConnectionType, data_use_it->connection_type);
-    EXPECT_EQ(kBarMccMnc, data_use_it->mcc_mnc);
-
-    observed_bar_tx_bytes += data_use_it->tx_bytes;
-    observed_bar_rx_bytes += data_use_it->rx_bytes;
-    ++data_use_it;
-  }
-  EXPECT_EQ(bar_request->GetTotalSentBytes(), observed_bar_tx_bytes);
-  EXPECT_EQ(bar_request->GetTotalReceivedBytes(), observed_bar_rx_bytes);
-}
-
-TEST_F(DataUseAggregatorTest, ReportCombinedDataUse) {
-  // Set up the |foo_request|.
-  net::MockRead foo_reads[] = {
-      net::MockRead(net::SYNCHRONOUS, "HTTP/1.1 200 OK\r\n\r\n"),
-      net::MockRead(net::SYNCHRONOUS, "hello world"),
-      net::MockRead(net::SYNCHRONOUS, net::OK),
+  const struct {
+    bool use_annotator;
+    bool use_amortizer;
+    bool expect_tab_ids;
+    int64_t expected_amortization_multiple;
+  } kTestCases[] = {
+      {false, false, false, 1},
+      {false, true, false, 2},
+      {true, false, true, 1},
+      {true, true, true, 2},
   };
-  net::StaticSocketDataProvider foo_socket(foo_reads, arraysize(foo_reads),
-                                           nullptr, 0);
-  mock_socket_factory()->AddSocketDataProvider(&foo_socket);
 
-  net::TestDelegate foo_delegate;
-  scoped_ptr<net::URLRequest> foo_request = context()->CreateRequest(
-      GURL("http://foo.com"), net::IDLE, &foo_delegate);
-  foo_request->set_first_party_for_cookies(GURL("http://foofirstparty.com"));
+  for (const auto& test_case : kTestCases) {
+    scoped_ptr<FakeDataUseAnnotator> annotator(
+        test_case.use_annotator ? new FakeDataUseAnnotator() : nullptr);
+    scoped_ptr<DataUseAmortizer> amortizer(
+        test_case.use_amortizer ? new DoublingAmortizer() : nullptr);
 
-  // Set up the |bar_request|.
-  net::MockRead bar_reads[] = {
-      net::MockRead(net::SYNCHRONOUS, "HTTP/1.1 200 OK\r\n\r\n"),
-      net::MockRead(net::SYNCHRONOUS, "hello world"),
-      net::MockRead(net::SYNCHRONOUS, net::OK),
-  };
-  net::StaticSocketDataProvider bar_socket(bar_reads, arraysize(bar_reads),
-                                           nullptr, 0);
-  mock_socket_factory()->AddSocketDataProvider(&bar_socket);
+    Initialize(annotator.Pass(), amortizer.Pass());
 
-  net::TestDelegate bar_delegate;
-  scoped_ptr<net::URLRequest> bar_request = context()->CreateRequest(
-      GURL("http://bar.com"), net::IDLE, &bar_delegate);
-  bar_request->set_first_party_for_cookies(GURL("http://barfirstparty.com"));
+    const int32_t kFooTabId = 10;
+    const net::NetworkChangeNotifier::ConnectionType kFooConnectionType =
+        net::NetworkChangeNotifier::CONNECTION_2G;
+    const std::string kFooMccMnc = "foo_mcc_mnc";
+    scoped_ptr<net::URLRequest> foo_request =
+        ExecuteRequest(GURL("http://foo.com"), GURL("http://foofirstparty.com"),
+                       kFooTabId, kFooConnectionType, kFooMccMnc);
 
-  // Set up the network delegate to assign tab IDs and connection types for each
-  // request.
-  const int32_t kFooTabId = 10;
-  const net::NetworkChangeNotifier::ConnectionType kFooConnectionType =
-      net::NetworkChangeNotifier::CONNECTION_2G;
-  const std::string kFooMccMnc = "foo_mcc_mnc";
-  const int32_t kBarTabId = 20;
-  const net::NetworkChangeNotifier::ConnectionType kBarConnectionType =
-      net::NetworkChangeNotifier::CONNECTION_WIFI;
-  const std::string kBarMccMnc = "bar_mcc_mnc";
+    const int32_t kBarTabId = 20;
+    const net::NetworkChangeNotifier::ConnectionType kBarConnectionType =
+        net::NetworkChangeNotifier::CONNECTION_WIFI;
+    const std::string kBarMccMnc = "bar_mcc_mnc";
+    scoped_ptr<net::URLRequest> bar_request =
+        ExecuteRequest(GURL("http://bar.com"), GURL("http://barfirstparty.com"),
+                       kBarTabId, kBarConnectionType, kBarMccMnc);
 
-  ReportingNetworkDelegate::DataUseContextMap data_use_context_map;
-  data_use_context_map[foo_request.get()] =
-      ReportingNetworkDelegate::DataUseContext(kFooTabId, kFooConnectionType,
-                                               kFooMccMnc);
-  data_use_context_map[bar_request.get()] =
-      ReportingNetworkDelegate::DataUseContext(kBarTabId, kBarConnectionType,
-                                               kBarMccMnc);
-  reporting_network_delegate()->set_data_use_context_map(data_use_context_map);
+    auto data_use_it = test_observer()->observed_data_use().begin();
 
-  // Run the requests.
-  foo_request->Start();
-  bar_request->Start();
-  base::MessageLoop::current()->RunUntilIdle();
+    // First, the |foo_request| data use should have happened.
+    int64_t observed_foo_tx_bytes = 0, observed_foo_rx_bytes = 0;
+    while (data_use_it != test_observer()->observed_data_use().end() &&
+           data_use_it->url == GURL("http://foo.com")) {
+      EXPECT_EQ(GetRequestStart(*foo_request), data_use_it->request_start);
+      EXPECT_EQ(GURL("http://foofirstparty.com"),
+                data_use_it->first_party_for_cookies);
 
-  // The observer should have been notified once with a DataUse element for each
-  // request.
-  EXPECT_EQ(1, test_observer()->on_data_use_called_count());
-  EXPECT_EQ(static_cast<size_t>(2),
-            test_observer()->observed_data_use().size());
+      if (test_case.expect_tab_ids)
+        EXPECT_EQ(kFooTabId, data_use_it->tab_id);
+      else
+        EXPECT_EQ(-1, data_use_it->tab_id);
 
-  // All of the |foo_request| DataUse should have been combined into a single
-  // DataUse element.
-  const DataUse& foo_data_use = test_observer()->observed_data_use().front();
-  EXPECT_EQ(GURL("http://foo.com"), foo_data_use.url);
-  net::LoadTimingInfo foo_load_timing_info;
-  foo_request->GetLoadTimingInfo(&foo_load_timing_info);
-  EXPECT_EQ(foo_load_timing_info.request_start, foo_data_use.request_start);
-  EXPECT_EQ(GURL("http://foofirstparty.com"),
-            foo_data_use.first_party_for_cookies);
-  EXPECT_EQ(kFooTabId, foo_data_use.tab_id);
-  EXPECT_EQ(kFooConnectionType, foo_data_use.connection_type);
-  EXPECT_EQ(kFooMccMnc, foo_data_use.mcc_mnc);
-  EXPECT_EQ(foo_request->GetTotalSentBytes(), foo_data_use.tx_bytes);
-  EXPECT_EQ(foo_request->GetTotalReceivedBytes(), foo_data_use.rx_bytes);
+      EXPECT_EQ(kFooConnectionType, data_use_it->connection_type);
+      EXPECT_EQ(kFooMccMnc, data_use_it->mcc_mnc);
 
-  // All of the |bar_request| DataUse should have been combined into a single
-  // DataUse element.
-  const DataUse& bar_data_use = test_observer()->observed_data_use().back();
-  EXPECT_EQ(GURL("http://bar.com"), bar_data_use.url);
-  net::LoadTimingInfo bar_load_timing_info;
-  bar_request->GetLoadTimingInfo(&bar_load_timing_info);
-  EXPECT_EQ(bar_load_timing_info.request_start, bar_data_use.request_start);
-  EXPECT_EQ(GURL("http://barfirstparty.com"),
-            bar_data_use.first_party_for_cookies);
-  EXPECT_EQ(kBarTabId, bar_data_use.tab_id);
-  EXPECT_EQ(kBarConnectionType, bar_data_use.connection_type);
-  EXPECT_EQ(kBarMccMnc, bar_data_use.mcc_mnc);
-  EXPECT_EQ(bar_request->GetTotalSentBytes(), bar_data_use.tx_bytes);
-  EXPECT_EQ(bar_request->GetTotalReceivedBytes(), bar_data_use.rx_bytes);
+      observed_foo_tx_bytes += data_use_it->tx_bytes;
+      observed_foo_rx_bytes += data_use_it->rx_bytes;
+      ++data_use_it;
+    }
+    EXPECT_EQ(foo_request->GetTotalSentBytes() *
+                  test_case.expected_amortization_multiple,
+              observed_foo_tx_bytes);
+    EXPECT_EQ(foo_request->GetTotalReceivedBytes() *
+                  test_case.expected_amortization_multiple,
+              observed_foo_rx_bytes);
+
+    // Then, the |bar_request| data use should have happened.
+    int64_t observed_bar_tx_bytes = 0, observed_bar_rx_bytes = 0;
+    while (data_use_it != test_observer()->observed_data_use().end()) {
+      EXPECT_EQ(GURL("http://bar.com"), data_use_it->url);
+      EXPECT_EQ(GetRequestStart(*bar_request), data_use_it->request_start);
+      EXPECT_EQ(GURL("http://barfirstparty.com"),
+                data_use_it->first_party_for_cookies);
+
+      if (test_case.expect_tab_ids)
+        EXPECT_EQ(kBarTabId, data_use_it->tab_id);
+      else
+        EXPECT_EQ(-1, data_use_it->tab_id);
+
+      EXPECT_EQ(kBarConnectionType, data_use_it->connection_type);
+      EXPECT_EQ(kBarMccMnc, data_use_it->mcc_mnc);
+
+      observed_bar_tx_bytes += data_use_it->tx_bytes;
+      observed_bar_rx_bytes += data_use_it->rx_bytes;
+      ++data_use_it;
+    }
+    EXPECT_EQ(bar_request->GetTotalSentBytes() *
+                  test_case.expected_amortization_multiple,
+              observed_bar_tx_bytes);
+    EXPECT_EQ(bar_request->GetTotalReceivedBytes() *
+                  test_case.expected_amortization_multiple,
+              observed_bar_rx_bytes);
+  }
 }
 
 TEST_F(DataUseAggregatorTest, ReportOffTheRecordDataUse) {
+  Initialize(scoped_ptr<FakeDataUseAnnotator>(new FakeDataUseAnnotator()),
+             scoped_ptr<DataUseAmortizer>(new DoublingAmortizer()));
+
   // Off the record data use should not be reported to observers.
   data_use_aggregator()->ReportOffTheRecordDataUse(1000, 1000);
   base::MessageLoop::current()->RunUntilIdle();

@@ -15,7 +15,6 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sync_driver/glue/synced_session.h"
@@ -272,6 +272,8 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
   if (command_id == IDC_SHOW_HISTORY) {
     UMA_HISTOGRAM_ENUMERATION("WrenchMenu.RecentTabsSubMenu", SHOW_MORE,
                               LIMIT_RECENT_TAB_ACTION);
+    UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.ShowHistory",
+                               menu_opened_timer_.Elapsed());
     // We show all "other devices" on the history page.
     chrome::ExecuteCommandWithDisposition(browser_, IDC_SHOW_HISTORY,
         ui::DispositionFromEventFlags(event_flags));

@@ -5,6 +5,7 @@
 #ifndef CONTENT_RENDERER_RENDER_FRAME_IMPL_H_
 #define CONTENT_RENDERER_RENDER_FRAME_IMPL_H_
 
+#include <string>
 #include <vector>
 
 #include "base/basictypes.h"
@@ -82,6 +83,7 @@ class Rect;
 namespace media {
 class CdmFactory;
 class MediaPermission;
+class RendererWebMediaPlayerDelegate;
 class WebEncryptedMediaClientImpl;
 }
 
@@ -137,7 +139,6 @@ class VRDispatcher;
 class CONTENT_EXPORT RenderFrameImpl
     : public RenderFrame,
       NON_EXPORTED_BASE(public blink::WebFrameClient),
-      NON_EXPORTED_BASE(public media::WebMediaPlayerDelegate),
       NON_EXPORTED_BASE(public blink::WebPageSerializerClient) {
  public:
   // Creates a new RenderFrame as the main frame of |render_view|.
@@ -584,15 +585,14 @@ class CONTENT_EXPORT RenderFrameImpl
                                  const blink::WebURL& url) override;
   blink::WebBluetooth* bluetooth() override;
   blink::WebUSBClient* usbClient() override;
+  void checkIfAudioSinkExistsAndIsAuthorized(
+      const blink::WebString& sink_id,
+      const blink::WebSecurityOrigin& security_origin,
+      blink::WebSetSinkIdCallbacks* web_callbacks) override;
 
 #if defined(ENABLE_WEBVR)
   blink::WebVRClient* webVRClient() override;
 #endif
-
-  // WebMediaPlayerDelegate implementation:
-  void DidPlay(blink::WebMediaPlayer* player) override;
-  void DidPause(blink::WebMediaPlayer* player) override;
-  void PlayerGone(blink::WebMediaPlayer* player) override;
 
   // WebPageSerializerClient implementation:
   void didSerializeDataForFrame(
@@ -870,6 +870,10 @@ class CONTENT_EXPORT RenderFrameImpl
   // saved in OnNavigate().
   NavigationState* CreateNavigationStateFromPending();
 
+  // Sets the NavigationState on the DocumentState based on
+  // the value of |pending_navigation_params_|.
+  void UpdateNavigationState(DocumentState* document_state);
+
 #if defined(OS_ANDROID)
   blink::WebMediaPlayer* CreateAndroidWebMediaPlayer(
       blink::WebMediaPlayerClient* client,
@@ -897,6 +901,10 @@ class CONTENT_EXPORT RenderFrameImpl
   // Connects to a Mojo application and returns a proxy to its exposed
   // ServiceProvider.
   mojo::ServiceProviderPtr ConnectToApplication(const GURL& url);
+
+  // Returns the media delegate for WebMediaPlayer usage.  If
+  // |media_player_delegate_| is NULL, one is created.
+  media::RendererWebMediaPlayerDelegate* GetWebMediaPlayerDelegate();
 
   // Stores the WebLocalFrame we are associated with.  This is null from the
   // constructor until SetWebFrame is called, and it is null after
@@ -1032,9 +1040,6 @@ class CONTENT_EXPORT RenderFrameImpl
   bool contains_media_player_;
 #endif
 
-  // True if this RenderFrame has ever played media.
-  bool has_played_media_;
-
   // The devtools agent for this frame; only created for main frame and
   // local roots.
   DevToolsAgent* devtools_agent_;
@@ -1078,6 +1083,10 @@ class CONTENT_EXPORT RenderFrameImpl
   scoped_ptr<blink::WebBluetooth> bluetooth_;
 
   scoped_ptr<blink::WebUSBClient> usb_client_;
+
+  // Manages play, pause notifications for WebMediaPlayer implementations; its
+  // lifetime is tied to the RenderFrame via the RenderFrameObserver interface.
+  media::RendererWebMediaPlayerDelegate* media_player_delegate_;
 
   // Whether or not this RenderFrame is using Lo-Fi mode.
   bool is_using_lofi_;

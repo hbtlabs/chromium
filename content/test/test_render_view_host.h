@@ -121,7 +121,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void CopyFromCompositingSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
       const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) override;
+      const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
 #if defined(OS_MACOSX)
@@ -244,7 +244,6 @@ class TestRenderViewHost
                         int32 max_page_id,
                         const FrameReplicationState& replicated_frame_state,
                         bool window_was_created_with_opener) override;
-  bool IsFullscreenGranted() const override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(RenderViewHostTest, FilterNavigate);

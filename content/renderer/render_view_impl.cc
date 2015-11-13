@@ -364,7 +364,6 @@ static bool DeviceScaleEnsuresTextQuality(float device_scale_factor) {
   // devices main thread antialiasing is a heavy burden.
   return device_scale_factor >= 1.5f;
 #endif
-
 }
 
 static bool PreferCompositingToLCDText(CompositorDependencies* compositor_deps,
@@ -659,8 +658,7 @@ RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
       pepper_last_mouse_event_target_(NULL),
 #endif
       enumeration_completion_id_(0),
-      session_storage_namespace_id_(params.session_storage_namespace_id),
-      page_scale_factor_is_one_(true) {
+      session_storage_namespace_id_(params.session_storage_namespace_id) {
 }
 
 void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
@@ -673,7 +671,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
   if (opener_view_routing_id != MSG_ROUTING_NONE && was_created_by_renderer)
     opener_id_ = opener_view_routing_id;
 
-  display_mode_= params.initial_size.display_mode;
+  display_mode_ = params.initial_size.display_mode;
 
   // Ensure we start with a valid next_page_id_ from the browser.
   DCHECK_GE(next_page_id_, 0);
@@ -1303,7 +1301,7 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewMsg_SaveImageAt, OnSaveImageAt)
     IPC_MESSAGE_HANDLER(ViewMsg_Find, OnFind)
     IPC_MESSAGE_HANDLER(ViewMsg_StopFinding, OnStopFinding)
-    IPC_MESSAGE_HANDLER(ViewMsg_ResetPageScale, OnResetPageScale)
+    IPC_MESSAGE_HANDLER(ViewMsg_SetPageScale, OnSetPageScale)
     IPC_MESSAGE_HANDLER(ViewMsg_Zoom, OnZoom)
     IPC_MESSAGE_HANDLER(ViewMsg_SetZoomLevelForLoadingURL,
                         OnSetZoomLevelForLoadingURL)
@@ -2270,6 +2268,8 @@ blink::WebPlugin* RenderViewImpl::GetWebPluginForFind() {
 void RenderViewImpl::OnFind(int request_id,
                             const base::string16& search_text,
                             const WebFindOptions& options) {
+  DCHECK(!search_text.empty());
+
   WebFrame* main_frame = webview()->mainFrame();
   blink::WebPlugin* plugin = GetWebPluginForFind();
   // Check if the plugin still exists in the document.
@@ -2471,10 +2471,10 @@ void RenderViewImpl::OnFindMatchRects(int current_version) {
 }
 #endif
 
-void RenderViewImpl::OnResetPageScale() {
+void RenderViewImpl::OnSetPageScale(float page_scale_factor) {
   if (!webview())
     return;
-  webview()->setPageScaleFactor(1);
+  webview()->setPageScaleFactor(page_scale_factor);
 }
 
 void RenderViewImpl::OnZoom(PageZoom zoom) {
@@ -3043,7 +3043,7 @@ void RenderViewImpl::OnWasHidden() {
     (*plugin_it)->SetContainerVisibility(false);
   }
 #endif  // OS_MACOSX
-#endif // ENABLE_PLUGINS
+#endif  // ENABLE_PLUGINS
 }
 
 void RenderViewImpl::OnWasShown(bool needs_repainting,
@@ -3393,12 +3393,9 @@ void RenderViewImpl::zoomLevelChanged() {
 void RenderViewImpl::pageScaleFactorChanged() {
   if (!webview())
     return;
-  bool page_scale_factor_is_one = webview()->pageScaleFactor() == 1;
-  if (page_scale_factor_is_one == page_scale_factor_is_one_)
-    return;
-  page_scale_factor_is_one_ = page_scale_factor_is_one;
-  Send(new ViewHostMsg_PageScaleFactorIsOneChanged(routing_id_,
-                                                   page_scale_factor_is_one_));
+
+  Send(new ViewHostMsg_PageScaleFactorChanged(routing_id_,
+                                              webview()->pageScaleFactor()));
 }
 
 double RenderViewImpl::zoomLevelToZoomFactor(double zoom_level) const {

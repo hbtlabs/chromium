@@ -11,8 +11,6 @@ group("desktop") {
 executable("mandoline") {
   sources = [
     "../register_local_aliases.cc",
-    "launcher_process.cc",
-    "launcher_process.h",
     "main.cc",
   ]
 
@@ -25,6 +23,8 @@ executable("mandoline") {
     "//mojo/package_manager",
     "//mojo/runner:lib",
     "//mojo/runner:register_local_aliases_fwd",
+    "//mojo/runner/host:lib",
+    "//mojo/runner/host:switches",
     "//mojo/shell",
   ]
 

@@ -100,6 +100,14 @@ void RecordFullscreenStyle(FullscreenStyle style) {
 
 }  // namespace
 
+@interface NSWindow (NSPrivateApis)
+// Note: These functions are private, use -[NSObject respondsToSelector:]
+// before calling them.
+
+- (NSWindow*)_windowForToolbar;
+
+@end
+
 @implementation BrowserWindowController(Private)
 
 // Create the tab strip controller.
@@ -694,7 +702,7 @@ willPositionSheet:(NSWindow*)sheet
   // in startCustomAnimationToEnterFullScreenWithDuration. In order to prevent
   // multiple resizing messages from being sent to the renderer, we should call
   // adjustUIForEnteringFullscreen after the layout gets resized.
-  if ([self shouldUseCustomAppKitFullscreenTransition:YES])
+  if (isUsingCustomAnimation_)
     blockLayoutSubviews_ = YES;
   else
     [self adjustUIForEnteringFullscreen];
@@ -712,7 +720,12 @@ willPositionSheet:(NSWindow*)sheet
     for (NSWindow* window in [[NSApplication sharedApplication] windows]) {
       if ([window
               isKindOfClass:NSClassFromString(@"NSToolbarFullScreenWindow")]) {
-        [[window contentView] setHidden:YES];
+        // Hide the toolbar if it is for a FramedBrowserWindow.
+        if ([window respondsToSelector:@selector(_windowForToolbar)]) {
+          if ([[window _windowForToolbar]
+                  isKindOfClass:[FramedBrowserWindow class]])
+            [[window contentView] setHidden:YES];
+        }
       }
     }
   }
@@ -748,6 +761,7 @@ willPositionSheet:(NSWindow*)sheet
   enteringAppKitFullscreen_ = NO;
   enteringImmersiveFullscreen_ = NO;
   enteringPresentationMode_ = NO;
+  isUsingCustomAnimation_ = NO;
 
   [self showFullscreenExitBubbleIfNecessary];
   browser_->WindowFullscreenStateChanged();
@@ -761,7 +775,7 @@ willPositionSheet:(NSWindow*)sheet
   // Like windowWillEnterFullScreen, if we use custom animations,
   // adjustUIForExitingFullscreen should be called after the layout resizes in
   // startCustomAnimationToExitFullScreenWithDuration.
-  if ([self shouldUseCustomAppKitFullscreenTransition:NO])
+  if (isUsingCustomAnimation_)
     blockLayoutSubviews_ = YES;
   else
     [self adjustUIForExitingFullscreen];
@@ -776,6 +790,7 @@ willPositionSheet:(NSWindow*)sheet
   browser_->WindowFullscreenStateChanged();
 
   exitingAppKitFullscreen_ = NO;
+  isUsingCustomAnimation_ = NO;
   fullscreenTransition_.reset();
 
   blockLayoutSubviews_ = NO;
@@ -786,6 +801,7 @@ willPositionSheet:(NSWindow*)sheet
   enteringAppKitFullscreen_ = NO;
   fullscreenTransition_.reset();
   blockLayoutSubviews_ = NO;
+  isUsingCustomAnimation_ = NO;
   [self adjustUIForExitingFullscreenAndStopOmniboxSliding];
 }
 
@@ -793,6 +809,7 @@ willPositionSheet:(NSWindow*)sheet
   [self deregisterForContentViewResizeNotifications];
   exitingAppKitFullscreen_ = NO;
   fullscreenTransition_.reset();
+  isUsingCustomAnimation_ = NO;
   blockLayoutSubviews_ = NO;
   // Force a relayout to try and get the window back into a reasonable state.
   [self layoutSubviews];
@@ -1108,14 +1125,13 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (BOOL)shouldUseCustomAppKitFullscreenTransition:(BOOL)enterFullScreen {
-  // We are temporary disabling exit fullscreen animation because it only
-  // works on OSX 10.10.
-  // TODO(spqchan): Fix exit fullscreen animation so that it works on all
-  // OSX versions.
-  if (!enterFullScreen)
+  // Custom fullscreen transitions should only be available in OSX 10.10+.
+  if (base::mac::IsOSMountainLionOrEarlier())
     return NO;
 
-  if (base::mac::IsOSMountainLionOrEarlier())
+  // Disable the custom exit animation in OSX 10.9:
+  // https://code.google.com/p/chromium/issues/detail?id=526327#c3.
+  if (base::mac::IsOSMavericks() && !enterFullScreen)
     return NO;
 
   NSView* root = [[self.window contentView] superview];
@@ -1144,7 +1160,11 @@ willPositionSheet:(NSWindow*)sheet
       base::mac::ObjCCast<FramedBrowserWindow>([self window]);
   fullscreenTransition_.reset([[BrowserWindowFullscreenTransition alloc]
       initEnterWithWindow:framedBrowserWindow]);
-  return [fullscreenTransition_ customWindowsForFullScreenTransition];
+
+  NSArray* customWindows =
+      [fullscreenTransition_ customWindowsForFullScreenTransition];
+  isUsingCustomAnimation_ = !customWindows;
+  return customWindows;
 }
 
 - (NSArray*)customWindowsToExitFullScreenForWindow:(NSWindow*)window {
@@ -1156,10 +1176,14 @@ willPositionSheet:(NSWindow*)sheet
   FramedBrowserWindow* framedBrowserWindow =
       base::mac::ObjCCast<FramedBrowserWindow>([self window]);
   fullscreenTransition_.reset([[BrowserWindowFullscreenTransition alloc]
-      initExitWithWindow:framedBrowserWindow
-                   frame:savedRegularWindowFrame_]);
+          initExitWithWindow:framedBrowserWindow
+                       frame:savedRegularWindowFrame_
+      tabStripBackgroundView:[self tabStripBackgroundView]]);
 
-  return [fullscreenTransition_ customWindowsForFullScreenTransition];
+  NSArray* customWindows =
+      [fullscreenTransition_ customWindowsForFullScreenTransition];
+  isUsingCustomAnimation_ = !customWindows;
+  return customWindows;
 }
 
 - (void)window:(NSWindow*)window

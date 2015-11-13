@@ -1832,11 +1832,12 @@ Psst! Incognito mode <ph name="SHORTCUT_KEY">$1<ex>(Ctrl+Shift+N)</ex></ph> may 
         </message>
         <message name="IDS_DOWNLOAD_NOTIFICATION_STATUS"
                  desc="Size and units downloaded and total, the origin domain, and the current status od download.">
-          <ph name="DOWNLOAD_RECEIVED_AND_TOTAL">$1<ex>54/154 MB</ex></ph> from <ph name="DOWNLOAD_DOMAIN">$2<ex>example.com</ex></ph>, <ph name="SUB_STATUS_TEXT">$3<ex>24 secs remaining</ex></ph>
+          <ph name="DOWNLOAD_RECEIVED_AND_TOTAL">$1<ex>54/154 MB</ex></ph>, <ph name="SUB_STATUS_TEXT">$2<ex>24 secs remaining</ex></ph>
+From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         </message>
         <message name="IDS_DOWNLOAD_NOTIFICATION_STATUS_COMPLETED"
                  desc="Size and units downloaded, and the origin domain.">
-          <ph name="DOWNLOAD_RECEIVED_AND_TOTAL">$1<ex>154/154 MB</ex></ph> from <ph name="DOWNLOAD_DOMAIN">$2<ex>example.com</ex></ph>
+          <ph name="DOWNLOAD_RECEIVED">$1<ex>154 MB</ex></ph> from <ph name="DOWNLOAD_DOMAIN">$2<ex>example.com</ex></ph>
         </message>
       </if>
       <message name="IDS_DOWNLOAD_STATUS_IN_PROGRESS"
@@ -3397,16 +3398,6 @@ Even if you have downloaded files from this website before, the website might ha
         View
       </message>
 
-      <!-- Autolaunch infobar -->
-      <if expr="is_win">
-        <message name="IDS_AUTO_LAUNCH_OK" desc="Label for OK button on Autolaunch confirmation infobar.">
-          OK
-        </message>
-        <message name="IDS_AUTO_LAUNCH_REVERT" desc="Label for button (on Autolaunch confirmation infobar) that disables autolaunching.">
-          Cut it out!
-        </message>
-      </if>
-
       <!-- DevTools attached infobar -->
       <message name="IDS_DEV_TOOLS_INFOBAR_LABEL" desc="Label displayed in an infobar when external debugger is attached to the browser">
         "<ph name="CLIENT_NAME">$1<ex>Extension Foo</ex></ph>" is debugging this browser.
@@ -4109,9 +4100,6 @@ Even if you have downloaded files from this website before, the website might ha
         <message name="IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST" desc="Permission string for access to a list of USB devices.">
           Access any of these USB devices
         </message>
-        <message name="IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST_ITEM" desc="Line item for a USB device listed under IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST.">
-          <ph name="DEVICE_NAME_AND_VENDOR">$1<ex>SoundKnob from Griffin Technology</ex></ph>
-        </message>
         <message name="IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST_ITEM_UNKNOWN_PRODUCT" desc="Line item for a USB device listed under IDS_EXTENSION_PROMPT_WARNING_USB_DEVICE_LIST that has an unknown product ID.">
           unknown devices from <ph name="VENDOR_NAME">$1<ex>Griffin Technology</ex></ph>
         </message>
@@ -4616,11 +4604,20 @@ Even if you have downloaded files from this website before, the website might ha
         <message name="IDS_MD_EXTENSIONS_SEARCH" desc="The text displayed in the search box on the chrome://extensions page.">
           Search
         </message>
+        <message name="IDS_MD_EXTENSIONS_SIDEBAR_APPS" desc="The text displayed in the sidebar to go to the apps section of the page.">
+          Chrome Apps
+        </message>
         <message name="IDS_MD_EXTENSIONS_SIDEBAR_EXTENSIONS" desc="The text displayed in the sidebar to go to the extensions section of the page.">
           Extensions
         </message>
-        <message name="IDS_MD_EXTENSIONS_SIDEBAR_APPS" desc="The text displayed in the sidebar to go to the apps section of the page.">
-          Chrome Apps
+        <message name="IDS_MD_EXTENSIONS_SIDEBAR_LOAD_UNPACKED" desc="The text displayed in the sidebar to load unpacked extensions.">
+          Load unpacked extensions
+        </message>
+        <message name="IDS_MD_EXTENSIONS_SIDEBAR_PACK" desc="The text displayed in the sidebar to pack an extension directory.">
+          Pack extensions...
+        </message>
+        <message name="IDS_MD_EXTENSIONS_SIDEBAR_UPDATE_NOW" desc="The text displayed in the sidebar to update existing extensions now.">
+          Update extensions now
         </message>
         <message name="IDS_MD_EXTENSIONS_SIDEBAR_WEBSITES" desc="The text displayed in the sidebar to go to the websites section of the page.">
           Websites
@@ -5479,11 +5476,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_ENABLE_FAST_UNLOAD_NAME" desc="Name of the 'Extensions on chrome:// URLs' lab">
         Enable fast tab/window close
       </message>
-      <message name="IDS_FLAGS_DISABLE_DISTILLER_IN_PRINT_PREVIEW_NAME" desc="Name of the 'disable simplify on print preview' lab">
-        Disable simplify page on print preview
+      <message name="IDS_FLAGS_ENABLE_DISTILLER_IN_PRINT_PREVIEW_NAME" desc="Name of the 'enable simplify on print preview' lab">
+        Enable simplify page on print preview
       </message>
-      <message name="IDS_FLAGS_DISABLE_DISTILLER_IN_PRINT_PREVIEW_DESCRIPTION" desc="Description of the 'disable simplify on print preview' lab">
-        Disable the simplify page check box on the print preview dialog
+      <message name="IDS_FLAGS_ENABLE_DISTILLER_IN_PRINT_PREVIEW_DESCRIPTION" desc="Description of the 'enable simplify on print preview' lab">
+        Enable the simplify page check box on the print preview dialog
       </message>
       <message name="IDS_FLAGS_ENABLE_APP_WINDOW_CONTROLS_NAME" desc="Name of the 'Enable 'window-controls' element' lab.">
         Enable 'window-controls' element
@@ -5908,14 +5905,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_ALLOW_NACL_SOCKET_API_DESCRIPTION" desc="Description for the NaCl Socket API feature.">
         Allows applications to use NaCl Socket API. Use only to test NaCl plugins.
       </message>
-      <if expr="enable_plugins">
-        <message name="IDS_FLAGS_ENABLE_PLUGIN_POWER_SAVER_NAME" desc="Name for the flag to force on the Plugin Power Saver feature.">
-          Enable Plugin Power Saver
-        </message>
-        <message name="IDS_FLAGS_ENABLE_PLUGIN_POWER_SAVER_DESCRIPTION" desc="Description of the flag to force on the Plugin Power Saver feature.">
-          Force on the experimental power saver mode for peripheral plugin content. Overrides content settings.
-        </message>
-      </if>
       <message name="IDS_FLAGS_ENABLE_PINCH_SCALE_NAME" desc="Name of the flag to turn on experiental pinch to scale.">
         Enable pinch scale.
       </message>
@@ -7695,6 +7684,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_CLEAR_BROWSING_DATA_CALCULATING" desc="A text that is shown while the data volume is being counted.">
         Calculating...
       </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_UNKNOWN_SIZE" desc="A text that is shown when the data volume could not be calculated. This string refers to uncountable objects, such as cache.">
+        unknown size
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_UNKNOWN_AMOUNT" desc="A text that is shown when the data volume could not be calculated. This string refers to countable objects, such as history entries or passwords.">
+        unknown amount
+      </message>
       <message name="IDS_DEL_BROWSING_HISTORY_COUNTER" desc="A counter showing how many items of browsing history the user has.">
         {COUNT, plural,
          =0 {none}
@@ -7710,11 +7705,48 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_DEL_CACHE_COUNTER_UPPER_ESTIMATE" desc="A counter showing that the user has less than X megabytes of cache. The value X will be substituted.">
         less than <ph name="UPPER_ESTIMATE">$1<ex>328 MB</ex></ph>
       </message>
+      <message name="IDS_DEL_CACHE_COUNTER_ALMOST_EMPTY" desc="A counter showing that the user's cache is almost empty, having less than 1 MB of data.">
+        less than 1 MB
+      </message>
       <message name="IDS_DEL_PASSWORDS_COUNTER" desc="A counter showing how many passwords the user has.">
         {COUNT, plural,
          =0 {none}
          =1 {1}
          other {#}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_EMPTY" desc="A counter showing that the user has no form data stored.">
+        none
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_CREDIT_CARDS" desc="A counter showing how many credit cards the user has.">
+        {COUNT, plural,
+         =1 {1 credit card}
+         other {# credit cards}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_ADDRESSES" desc="A counter showing how many addresses the user has.">
+        {COUNT, plural,
+         =1 {1 address}
+         other {# addresses}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_SUGGESTIONS" desc="A counter showing how many form autocompletion suggestions the user has.">
+        {COUNT, plural,
+         =1 {1 suggestion}
+         other {# suggestions}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_SUGGESTIONS_LONG" desc="A counter showing how many other form autocompletion suggestions the user has. Note that this message is shown at the end of an enumeration of form data types, such as '2 addresses, 5 others suggestions'.">
+        {COUNT, plural,
+         =1 {1 other suggestion}
+         other {# other suggestions}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_SUGGESTIONS_SHORT" desc="A counter showing how many other items of form data the user has. Note that this message is shown at the end of an enumeration of form data types, such as '3 credit cards, 2 addresses, 5 others'.">
+        {COUNT, plural,
+         =1 {1 other}
+         other {# others}}
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_TWO_TYPES" desc="A counter showing that the user has two types of form data. The types and their counts will be substituted, this message only provides the comma separator.">
+        <ph name="TYPE_1">$1<ex>2 credit cards</ex></ph>, <ph name="TYPE_2">$2<ex>1 address</ex></ph>
+      </message>
+      <message name="IDS_DEL_AUTOFILL_COUNTER_THREE_TYPES" desc="A counter showing that the user has three types of form data. The types and their counts will be substituted, this message only provides the comma separators.">
+        <ph name="TYPE_1">$1<ex>2 credit cards</ex></ph>, <ph name="TYPE_2">$2<ex>1 address</ex></ph>, <ph name="TYPE_3">$3<ex>5 others</ex></ph>
       </message>
 
       <!-- Supervised User (Legacy and Accounts for Kids) Avatar Menu -->
@@ -8793,6 +8825,11 @@ I don't think this site should be blocked!
           Show saved copy
         </message>
       </if>
+      <if expr="is_android">
+        <message name="IDS_ERRORPAGES_BUTTON_SHOW_SAVED_PAGES" desc="Label for the button on an error page to show pages that have been saved offline">
+          Show all saved pages
+        </message>
+      </if>
       <message name="IDS_ERRORPAGE_FUN_DISABLED" desc="Explanation for when easter egg has been disabled by administrator">
         The owner of this device turned off the dinosaur game.
       </message>
@@ -9311,10 +9348,10 @@ I don't think this site should be blocked!
         This webpage is not available
       </message>
       <message name="IDS_ERRORPAGES_SUMMARY_SSL_VERSION_OR_CIPHER_MISMATCH" desc="Summary in the error page for SSL cipher and version errors.">
-        A secure connection cannot be established because this site uses an unsupported protocol or cipher suite. This is usually caused when the server needs RC4 support, which has been removed.
+        A secure connection cannot be established because this site uses an unsupported protocol or cipher suite. This is likely to be caused when the server needs RC4, which is no longer considered secure.
       </message>
       <message name="IDS_ERRORPAGES_DETAILS_SSL_VERSION_OR_CIPHER_MISMATCH" desc="The error message displayed for SSL cipher and version errors.">
-        The client and server don't support a common SSL protocol version or cipher suite. This is usually caused when the server needs RC4 support, which has been removed.
+        The client and server don't support a common SSL protocol version or cipher suite. This is likely to be caused when the server needs RC4, which is no longer considered secure.
       </message>
 
       <message name="IDS_ERRORPAGES_HEADING_PINNING_FAILURE" desc="Title of the error page for a certificate which doesn't match the built-in pins for that name">
@@ -13320,8 +13357,11 @@ Some features may be unavailable.  Please check that the profile exists and you 
       <message name="IDS_FULLSCREEN_ENTERED_MOUSELOCK" desc="Text displayed in the bubble to inform the user that the page has locked the mouse. (No domain to be shown, e.g. from filesystem page)">
         This page has disabled your mouse cursor.
       </message>
-      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT" desc="Text displayed in the bubble to tell users how to return to normal mode">
+      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_SENTENCE" desc="Text displayed in the bubble to tell users how to return to normal mode.">
         Press <ph name="ACCELERATOR">$1<ex>Esc</ex></ph> to exit.
+      </message>
+      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT" desc="Text displayed in the bubble to tell users how to return to normal mode. Please surround the name of the key (e.g. 'Esc') in pipe characters so it can be rendered as a key.">
+        Press |<ph name="ACCELERATOR">$1<ex>Esc</ex></ph>| to exit
       </message>
       <message name="IDS_FULLSCREEN_ALLOW" desc="Text in the bubble button that grants permission for a site to enter fullscreen and/or lock the mouse.">
         Allow
@@ -15250,12 +15290,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_USE_ANDROID_MIDI_API_DESCRIPTION" desc="Description for the flag to use android midi api.">
         Use Android Midi API for WebMIDI (effective only with Android M+ devices).
       </message>
-      <message name="IDS_FLAGS_THEME_COLOR_IN_TABBED_MODE_NAME" desc="Name for the flag to enable theme-color in tabbed mode of Chrome.">
-        Enable <ph name="META_TAG_NAME">theme-color<ex>theme-color</ex></ph> in tabbed mode.
-      </message>
-      <message name="IDS_FLAGS_THEME_COLOR_IN_TABBED_MODE_DESCRIPTION" desc="Description for the flag to enable theme-color in tabbed mode of Chrome.">
-        Allows websites to set the color of the omnibox in tabbed mode ("Merge Apps and Tabs" off) via <ph name="META_TAG_NAME">theme-color<ex>theme-color</ex></ph> meta tag.
-      </message>
    </if>
 
     <if expr="is_win">
@@ -15310,6 +15344,36 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
           Default (pick up everything)
         </message>
       </if>
+      
+    <if expr="is_android">
+      <!-- Data Use -->
+      <message name="IDS_DATA_USE_TRACKING_STARTED_SNACKBAR_MESSAGE" desc="Message shown when data use tracking starts." formatter_data="android_java">
+        Data use is being measured
+      </message>
+      <message name="IDS_DATA_USE_TRACKING_ENDED_SNACKBAR_MESSAGE" desc="Message shown when data use tracking has ended." formatter_data="android_java">
+        Data use measuring has ended
+      </message>
+      <message name="IDS_DATA_USE_TRACKING_ENDED_TITLE" desc="Message shown on the dialog when data use tracking has ended." formatter_data="android_java">
+        Data use measuring ended
+      </message>
+      <message name="IDS_DATA_USE_TRACKING_ENDED_MESSAGE" desc="Message shown on the dialog when data use tracking has ended." formatter_data="android_java">
+        Your data use will no longer be measured.
+      </message>
+      <message name="IDS_DATA_USE_LEARN_MORE_TITLE" desc="Title for the 'Learn more' link in the the dialog shown when data use tracking has ended." formatter_data="android_java">
+        Learn more
+      </message>
+      <message name="IDS_DATA_USE_LEARN_MORE_LINK_URL" desc="URL for the 'Learn more' link in the the dialog shown when data use tracking has ended." formatter_data="android_java">
+        <!-- Intentionally empty. This is overridden via Finch. -->
+      </message>
+
+      <!-- Disable Auto-Hiding Toolbar Flags -->
+      <message name="IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_NAME" desc="Name of the flag to disable auto-hiding the toolbar.">
+        Disable auto-hiding the toolbar
+      </message>
+      <message name="IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_DESCRIPTION" desc="Description of the flag to disable auto-hiding the toolbar.">
+        When enabled, the toolbar will never be hidden due to scrolling. It will still be hidden if page contents go fullscreen.
+      </message>
+    </if>
 
     </messages>
   </release>

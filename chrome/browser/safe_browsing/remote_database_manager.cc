@@ -26,6 +26,8 @@ const char kAndroidTypesToCheckParam[] = "types_to_check";
 
 }  // namespace
 
+namespace safe_browsing {
+
 //
 // RemoteSafeBrowsingDatabaseManager::ClientRequest methods
 //
@@ -124,6 +126,11 @@ RemoteSafeBrowsingDatabaseManager::~RemoteSafeBrowsingDatabaseManager() {
 bool RemoteSafeBrowsingDatabaseManager::IsSupported() const {
   return SafeBrowsingApiHandler::GetInstance() != nullptr &&
          is_android_field_trial_enabled_;
+}
+
+safe_browsing::ThreatSource RemoteSafeBrowsingDatabaseManager::GetThreatSource()
+    const {
+  return safe_browsing::ThreatSource::REMOTE;
 }
 
 bool RemoteSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
@@ -263,3 +270,5 @@ void RemoteSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
   }
   enabled_ = false;
 }
+
+}  // namespace safe_browsing

@@ -16,7 +16,7 @@
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/ids.h"
 #include "mojo/converters/surfaces/custom_surface_converter.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace mus {
 
@@ -51,6 +51,9 @@ class ServerWindowSurface : public mojom::Surface,
   }
 
   const cc::SurfaceId& id() const { return surface_id_; }
+
+  // Destroys old surfaces that have been outdated by a new surface.
+  void DestroySurfacesScheduledForDestruction();
 
  private:
   ServerWindow* window();
@@ -87,6 +90,9 @@ class ServerWindowSurface : public mojom::Surface,
 
   mojom::SurfaceClientPtr client_;
   mojo::Binding<Surface> binding_;
+
+  // Set of surface ids that need to be destroyed.
+  std::set<cc::SurfaceId> surfaces_scheduled_for_destruction_;
 
   DISALLOW_COPY_AND_ASSIGN(ServerWindowSurface);
 };

@@ -557,6 +557,8 @@
         'filters/jpeg_parser.h',
         'filters/opus_audio_decoder.cc',
         'filters/opus_audio_decoder.h',
+        'filters/opus_constants.cc',
+        'filters/opus_constants.h',
         'filters/source_buffer_range.cc',
         'filters/source_buffer_range.h',
         'filters/source_buffer_stream.cc',
@@ -715,12 +717,6 @@
           'sources': [
             'capture/webm_muxer.cc',
             'capture/webm_muxer.h',
-          ],
-        }],
-        ['enable_browser_cdms==1', {
-          'sources': [
-            'base/browser_cdm_factory.cc',
-            'base/browser_cdm_factory.h',
           ],
         }],
         ['OS=="android"', {
@@ -1393,6 +1389,15 @@
             'filters/decrypting_video_decoder_unittest.cc',
           ],
         }],
+        # If ExternalClearKey is built, we can test CdmAdapter.
+        ['enable_pepper_cdms == 1', {
+          'dependencies': [
+            'clearkeycdm',
+          ],
+          'sources': [
+            'cdm/cdm_adapter_unittest.cc',
+          ],
+        }],
         ['target_arch != "arm" and chromeos == 1 and use_x11 == 1', {
           'sources': [
             'filters/h264_bitstream_buffer_unittest.cc',
@@ -1451,9 +1456,10 @@
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         '../testing/perf/perf_test.gyp:perf_test',
+        '../third_party/libyuv/libyuv.gyp:libyuv',
         '../ui/gfx/gfx.gyp:gfx',
-        '../ui/gfx/gfx.gyp:gfx_test_support',
         '../ui/gfx/gfx.gyp:gfx_geometry',
+        '../ui/gfx/gfx.gyp:gfx_test_support',
         'media',
         'media_test_support',
         'shared_memory_support',
@@ -1842,10 +1848,10 @@
           'sources': [
             'base/android/access_unit_queue.cc',
             'base/android/access_unit_queue.h',
+            'base/android/android_cdm_factory.cc',
+            'base/android/android_cdm_factory.h',
             'base/android/audio_decoder_job.cc',
             'base/android/audio_decoder_job.h',
-            'base/android/browser_cdm_factory_android.cc',
-            'base/android/browser_cdm_factory_android.h',
             'base/android/demuxer_android.h',
             'base/android/demuxer_stream_player_params.cc',
             'base/android/demuxer_stream_player_params.h',

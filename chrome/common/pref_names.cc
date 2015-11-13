@@ -790,6 +790,10 @@ const char kFileSystemProviderMounted[] = "file_system_provider.mounted";
 // A boolean pref set to true if the virtual keyboard should be enabled.
 const char kTouchVirtualKeyboardEnabled[] = "ui.touch_virtual_keyboard_enabled";
 
+// Boolean prefs for the status of the touch screen and the touchpad.
+const char kTouchScreenEnabled[] = "events.touch_screen.enabled";
+const char kTouchPadEnabled[] = "events.touch_pad.enabled";
+
 // A boolean pref that controls whether the dark connect feature is enabled.
 // The dark connect feature allows a Chrome OS device to periodically wake
 // from suspend in a low-power state to maintain WiFi connectivity.
@@ -1197,14 +1201,19 @@ const char kToolbarIconSurfacingBubbleLastShowTime[] =
 
 #if defined(ENABLE_WEBRTC)
 // Whether WebRTC should bind to individual NICs to explore all possible routing
-// options. Default is true.
+// options. Default is true. This has become obsoleted and replaced by
+// kWebRTCIPHandlingPolicy. TODO(guoweis): Remove this at M50.
 const char kWebRTCMultipleRoutesEnabled[] = "webrtc.multiple_routes_enabled";
 // Whether WebRTC should use non-proxied UDP. If false, WebRTC will not send UDP
 // unless it goes through a proxy (i.e RETURN when it's available).  If no UDP
 // proxy is configured, it will not send UDP.  If true, WebRTC will send UDP
-// regardless of whether or not a proxy is configured.
+// regardless of whether or not a proxy is configured. TODO(guoweis): Remove
+// this at M50.
 const char kWebRTCNonProxiedUdpEnabled[] =
     "webrtc.nonproxied_udp_enabled";
+// Define the IP handling policy override that WebRTC should follow. When not
+// set, it defaults to "default".
+const char kWebRTCIPHandlingPolicy[] = "webrtc.ip_handling_policy";
 #endif
 
 // *************** LOCAL STATE ***************
@@ -1591,10 +1600,6 @@ const char kRegisteredBackgroundContents[] = "background_contents.registered";
 #if defined(OS_WIN)
 // The "major.minor" OS version for which the welcome page was last shown.
 const char kLastWelcomedOSVersion[] = "browser.last_welcomed_os_version";
-
-// An int that stores how often we've shown the "Chrome is configured to
-// auto-launch" infobar.
-const char kShownAutoLaunchInfobar[] = "browser.shown_autolaunch_infobar";
 
 // Boolean that specifies whether or not showing the welcome page following an
 // OS upgrade is enabled. True by default. May be set by master_preferences or

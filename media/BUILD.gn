@@ -215,6 +215,8 @@ component("media") {
     "filters/ivf_parser.h",
     "filters/jpeg_parser.cc",
     "filters/jpeg_parser.h",
+    "filters/opus_constants.cc",
+    "filters/opus_constants.h",
     "filters/source_buffer_range.cc",
     "filters/source_buffer_range.h",
     "filters/source_buffer_stream.cc",
@@ -387,8 +389,6 @@ component("media") {
       "capture/video/android/video_capture_device_android.h",
       "capture/video/android/video_capture_device_factory_android.cc",
       "capture/video/android/video_capture_device_factory_android.h",
-      "cdm/android_cdm_factory.cc",
-      "cdm/android_cdm_factory.h",
     ]
     sources -= [
       "filters/decrypting_audio_decoder.cc",
@@ -658,7 +658,7 @@ test("media_unittests") {
     "test/data/",
   ]
 
-  # TODO(wolenetz): Fix size_t to int trunctaion in win64.
+  # TODO(wolenetz): Fix size_t to int truncation in win64.
   # See http://crbug.com/171009
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
@@ -693,6 +693,12 @@ test("media_unittests") {
       "//media/base/android:media_java",
       "//ui/android:ui_java",
     ]
+  }
+
+  # If ExternalClearKey is built, we can test CdmAdapter.
+  if (enable_pepper_cdms) {
+    sources += [ "cdm/cdm_adapter_unittest.cc" ]
+    deps += [ "//media/cdm/ppapi:clearkeycdm" ]
   }
 
   if (media_use_ffmpeg) {

@@ -8,7 +8,11 @@
 
 #include "base/android/jni_string.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/field_trial.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/android/data_usage/data_use_tab_model.h"
 #include "components/data_usage/core/data_use.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/ExternalDataUseObserver_jni.h"
 #include "third_party/re2/re2/re2.h"
@@ -17,9 +21,54 @@
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ToJavaArrayOfStrings;
 
+namespace {
+
+// Default duration after which matching rules are periodically fetched. May be
+// overridden by the field trial.
+const int kDefaultFetchMatchingRulesDurationSeconds = 60 * 15;  // 15 minutes.
+
+// Default value of the minimum number of bytes that should be buffered before
+// a data use report is submitted. May be overridden by the field trial.
+const int64_t kDefaultDataUseReportMinBytes = 100 * 1024;  // 100 KB.
+
+// Populates various parameters from the values specified in the field trial.
+int32_t GetFetchMatchingRulesDurationSeconds() {
+  int32_t duration_seconds = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "fetch_matching_rules_duration_seconds");
+  if (!variation_value.empty() &&
+      base::StringToInt(variation_value, &duration_seconds)) {
+    DCHECK_LE(0, duration_seconds);
+    return duration_seconds;
+  }
+  return kDefaultFetchMatchingRulesDurationSeconds;
+}
+
+// Populates various parameters from the values specified in the field trial.
+int64_t GetMinBytes() {
+  int64_t min_bytes = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "data_use_report_min_bytes");
+  if (!variation_value.empty() &&
+      base::StringToInt64(variation_value, &min_bytes)) {
+    DCHECK_LE(0, min_bytes);
+    return min_bytes;
+  }
+  return kDefaultDataUseReportMinBytes;
+}
+
+}  // namespace
+
 namespace chrome {
 
 namespace android {
+
+const char ExternalDataUseObserver::kExternalDataUseObserverFieldTrial[] =
+    "ExternalDataUseObserver";
 
 ExternalDataUseObserver::ExternalDataUseObserver(
     data_usage::DataUseAggregator* data_use_aggregator,
@@ -32,11 +81,17 @@ ExternalDataUseObserver::ExternalDataUseObserver(
       io_task_runner_(io_task_runner),
       ui_task_runner_(ui_task_runner),
       previous_report_time_(base::Time::Now()),
+      last_matching_rules_fetch_time_(base::TimeTicks::Now()),
+      total_bytes_buffered_(0),
+      fetch_matching_rules_duration_(
+          base::TimeDelta::FromSeconds(GetFetchMatchingRulesDurationSeconds())),
+      data_use_report_min_bytes_(GetMinBytes()),
       io_weak_factory_(this),
       ui_weak_factory_(this) {
   DCHECK(data_use_aggregator_);
   DCHECK(io_task_runner_);
   DCHECK(ui_task_runner_);
+
   ui_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&ExternalDataUseObserver::CreateJavaObjectOnUIThread,
@@ -46,6 +101,9 @@ ExternalDataUseObserver::ExternalDataUseObserver(
       FROM_HERE,
       base::Bind(&ExternalDataUseObserver::FetchMatchingRulesOnUIThread,
                  GetUIWeakPtr()));
+
+  // |this| owns and must outlive the |data_use_tab_model_|.
+  data_use_tab_model_.reset(new DataUseTabModel(this, ui_task_runner_));
 
   matching_rules_fetch_pending_ = true;
   data_use_aggregator_->AddObserver(this);
@@ -81,7 +139,7 @@ void ExternalDataUseObserver::FetchMatchingRulesOnUIThread() const {
       env, j_external_data_use_observer_.obj());
 }
 
-void ExternalDataUseObserver::FetchMatchingRulesCallback(
+void ExternalDataUseObserver::FetchMatchingRulesDone(
     JNIEnv* env,
     jobject obj,
     const base::android::JavaParamRef<jobjectArray>& app_package_name,
@@ -104,12 +162,12 @@ void ExternalDataUseObserver::FetchMatchingRulesCallback(
 
   io_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&ExternalDataUseObserver::FetchMatchingRulesCallbackOnIOThread,
+      base::Bind(&ExternalDataUseObserver::FetchMatchingRulesDoneOnIOThread,
                  GetIOWeakPtr(), app_package_name_native,
                  domain_path_regex_native, label_native));
 }
 
-void ExternalDataUseObserver::FetchMatchingRulesCallbackOnIOThread(
+void ExternalDataUseObserver::FetchMatchingRulesDoneOnIOThread(
     const std::vector<std::string>& app_package_name,
     const std::vector<std::string>& domain_path_regex,
     const std::vector<std::string>& label) {
@@ -153,6 +211,17 @@ void ExternalDataUseObserver::OnReportDataUseDoneOnIOThread(bool success) {
 void ExternalDataUseObserver::OnDataUse(
     const std::vector<const data_usage::DataUse*>& data_use_sequence) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // If the time when the matching rules were last fetched is more than
+  // |fetch_matching_rules_duration_|, fetch them again.
+  if (base::TimeTicks::Now() - last_matching_rules_fetch_time_ >=
+      fetch_matching_rules_duration_) {
+    last_matching_rules_fetch_time_ = base::TimeTicks::Now();
+    ui_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&ExternalDataUseObserver::FetchMatchingRulesOnUIThread,
+                   GetUIWeakPtr()));
+  }
 
   if (matching_rules_fetch_pending_) {
     // TODO(tbansal): Buffer reports.
@@ -199,8 +268,7 @@ void ExternalDataUseObserver::BufferDataUseReport(
     // Limit the buffer size.
     if (buffered_data_reports_.size() == kMaxBufferSize) {
       // TODO(tbansal): Add UMA to track impact of lost reports.
-      // Remove the first entry.
-      buffered_data_reports_.erase(buffered_data_reports_.begin());
+      return;
     }
     buffered_data_reports_.insert(std::make_pair(data_use_report_key, report));
   } else {
@@ -214,9 +282,9 @@ void ExternalDataUseObserver::BufferDataUseReport(
     buffered_data_reports_.insert(
         std::make_pair(data_use_report_key, merged_report));
   }
+  total_bytes_buffered_ += (data_use->rx_bytes + data_use->tx_bytes);
 
-    DCHECK_LE(buffered_data_reports_.size(),
-              static_cast<size_t>(kMaxBufferSize));
+  DCHECK_LE(buffered_data_reports_.size(), static_cast<size_t>(kMaxBufferSize));
 }
 
 void ExternalDataUseObserver::SubmitBufferedDataUseReport() {
@@ -225,7 +293,8 @@ void ExternalDataUseObserver::SubmitBufferedDataUseReport() {
   if (submit_data_report_pending_ || buffered_data_reports_.empty())
     return;
 
-  // TODO(tbansal): Keep buffering until enough data has been received.
+  if (total_bytes_buffered_ < data_use_report_min_bytes_)
+    return;
 
   // Send one data use report.
   DataUseReports::iterator it = buffered_data_reports_.begin();
@@ -234,6 +303,7 @@ void ExternalDataUseObserver::SubmitBufferedDataUseReport() {
 
   // Remove the entry from the map.
   buffered_data_reports_.erase(it);
+  total_bytes_buffered_ -= (report.bytes_downloaded + report.bytes_uploaded);
 
   submit_data_report_pending_ = true;
 
@@ -314,6 +384,45 @@ bool ExternalDataUseObserver::Matches(const GURL& gurl,
   }
 
   return false;
+}
+
+ExternalDataUseObserver::DataUseReportKey::DataUseReportKey(
+    const std::string& label,
+    net::NetworkChangeNotifier::ConnectionType connection_type,
+    const std::string& mcc_mnc)
+    : label(label), connection_type(connection_type), mcc_mnc(mcc_mnc) {}
+
+bool ExternalDataUseObserver::DataUseReportKey::operator==(
+    const DataUseReportKey& other) const {
+  return label == other.label && connection_type == other.connection_type &&
+         mcc_mnc == other.mcc_mnc;
+}
+
+ExternalDataUseObserver::DataUseReport::DataUseReport(
+    const base::Time& start_time,
+    const base::Time& end_time,
+    int64_t bytes_downloaded,
+    int64_t bytes_uploaded)
+    : start_time(start_time),
+      end_time(end_time),
+      bytes_downloaded(bytes_downloaded),
+      bytes_uploaded(bytes_uploaded) {}
+
+size_t ExternalDataUseObserver::DataUseReportKeyHash::operator()(
+    const DataUseReportKey& k) const {
+  //  The hash is computed by hashing individual variables and combining them
+  //  using prime numbers. Prime numbers are used for multiplication because the
+  //  number of buckets used by map is always an even number. Using a prime
+  //  number ensures that for two different DataUseReportKey objects (say |j|
+  //  and |k|), if the hash value of |k.label| is equal to hash value of
+  //  |j.mcc_mnc|, then |j| and |k| map to different buckets. Large prime
+  //  numbers are used so that hash value is spread over a larger range.
+  std::hash<std::string> hash_function;
+  size_t hash = 1;
+  hash = hash * 23 + hash_function(k.label);
+  hash = hash * 43 + k.connection_type;
+  hash = hash * 83 + hash_function(k.mcc_mnc);
+  return hash;
 }
 
 ExternalDataUseObserver::MatchingRule::MatchingRule(

@@ -6,6 +6,7 @@
 
 #include "base/thread_task_runner_handle.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/statistics_table.h"
 
 namespace password_manager {
 
@@ -105,6 +106,12 @@ PasswordStoreChangeList TestPasswordStore::RemoveLoginsSyncedBetweenImpl(
     base::Time end) {
   PasswordStoreChangeList changes;
   return changes;
+}
+
+bool TestPasswordStore::RemoveStatisticsCreatedBetweenImpl(
+    base::Time delete_begin,
+    base::Time delete_end) {
+  return false;
 }
 
 bool TestPasswordStore::FillAutofillableLogins(

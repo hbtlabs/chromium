@@ -5,19 +5,30 @@
   -->
 
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/font-roboto/roboto.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-slider/paper-slider.html">
-<link rel="import" href="chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/foreground/elements/files_ripple.html">
-<link rel="import" href="chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/foreground/elements/files_toggle_ripple.html">
+<link rel="import" href="volume_controller.html">
 
 <dom-module id="control-panel">
   <link rel="import" type="css" href="control_panel.css">
   <template>
     <div class="controls">
-      <div class="control-row volume-controls" hidden="[[!volumeSliderShown]]">
-        <paper-slider id="volumeSlider" value="{{volume::change}}"></paper-slider>
+      <div class="upper-controls time-controls">
+        <div class="time media-control">
+          <div class="current">[[time2string_(time)]]</div>
+        </div>
+        <div class="progress media-control custom-slider">
+          <input id="timeInput" name="timeInput" type="range" touch-action="manipulation"
+                 min="0" max="[[duration]]" value="{{time::input}}">
+          <div class="bar">
+            <div class="filled" style$="[[computeProgressBarStyle_(time, duration)]]"></div>
+            <div class="cap left"></div>
+            <div class="cap right"></div>
+          </div>
+        </div>
+        <div class="time media-control">
+          <div class="duration">[[time2string_(duration)]]</div>
+        </div>
       </div>
-      <div class="control-row audio-controls">
+      <div class="lower-controls audio-controls">
         <!-- Shuffle toggle button in the bottom line. -->
         <button class="shuffle-mode media-button toggle" state="default">
           <label>
@@ -26,7 +37,6 @@
                    checked="{{shuffle::change}}">
             <span class="icon"></span>
           </label>
-          <files-toggle-ripple activated="[[shuffle]]"></files-toggle-ripple>
         </button>
 
         <!-- Repeat toggle button in the bottom line. -->
@@ -37,7 +47,6 @@
                    checked="{{repeat::change}}">
             <span class="icon"></span>
           </label>
-          <files-toggle-ripple activated="[[repeat]]"></files-toggle-ripple>
         </button>
 
         <!-- Prev button in the bottom line. -->
@@ -46,17 +55,15 @@
                on-click="previousClick">
           <div class="normal default"></div>
           <div class="disabled"></div>
-          <files-ripple></files-ripple>
         </button>
 
         <!-- Play button in the bottom line. -->
-        <button class="play media-button"
+        <button class="play media-control media-button"
                 state$="[[computePlayState_(playing)]]"
                 on-click="playClick">
           <div class="normal playing"></div>
           <div class="normal ended"></div>
           <div class="disabled"></div>
-          <files-ripple></files-ripple>
         </button>
 
         <!-- Next button in the bottom line. -->
@@ -65,8 +72,17 @@
                 on-click="nextClick">
           <div class="normal default"></div>
           <div class="disabled"></div>
-          <files-ripple></files-ripple>
         </button>
+
+        <div id="volumeContainer"
+             class="default-hidden"
+             anchor-point="bottom center">
+          <volume-controller id="volumeSlider" value="{{volume}}"
+                             width="32" height="85" value="50">
+          </volume-controller>
+
+          <polymer-anchor-point id="anchorHelper"></polymer-anchor-point>
+        </div>
 
         <!-- Volume button in the bottom line. -->
         <button id="volumeButton"
@@ -77,7 +93,6 @@
             <input type="checkbox" checked="{{volumeSliderShown::change}}">
             <span class="icon"></span>
           </label>
-          <files-toggle-ripple activated="[[volumeSliderShown]]"></files-toggle-ripple>
         </button>
 
         <!-- Playlist button in the bottom line. -->
@@ -88,15 +103,7 @@
             <input type="checkbox" checked="{{expanded::change}}">
             <span class="icon"></span>
           </label>
-          <files-toggle-ripple activated="[[expanded]]"></files-toggle-ripple>
         </button>
-      </div>
-      <div class="control-row time-controls">
-        <div class="time-container">
-          <div class="time-spacer">[[computeTimeString_(duration, duration)]]</div>
-          <div class="time">[[computeTimeString_(time, duration)]]</div>
-        </div>
-        <paper-slider id="timeSlider" max="[[duration]]" value="{{time::change}}"></paper-slider>
       </div>
     </div>
   </template>

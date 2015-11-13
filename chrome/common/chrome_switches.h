@@ -42,7 +42,6 @@ extern const char kAppModeAuthCode[];
 extern const char kAppModeOAuth2Token[];
 extern const char kAuthExtensionPath[];
 extern const char kAuthServerWhitelist[];
-extern const char kAutoLaunchAtStartup[];
 extern const char kAutoSelectDesktopCaptureSource[];
 extern const char kBypassAppBannerEngagementChecks[];
 extern const char kCertificateTransparencyLog[];
@@ -67,6 +66,7 @@ extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
 extern const char kDisableCastStreamingHWEncoding[];
 extern const char kDisableChildAccountDetection[];
+extern const char kDisableClearBrowsingDataCounters[];
 extern const char kDisableClientSidePhishingDetection[];
 extern const char kDisableComponentExtensionsWithBackgroundPages[];
 extern const char kDisableComponentUpdate[];
@@ -91,7 +91,6 @@ extern const char kDisablePdfMaterialUI[];
 extern const char kDisablePopupBlocking[];
 extern const char kDisablePreconnect[];
 extern const char kDisablePrintPreview[];
-extern const char kDisablePrintPreviewSimplify[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableQuic[];
@@ -125,7 +124,6 @@ extern const char kEnableFastUnload[];
 extern const char kEnableMaterialDesignDownloads[];
 extern const char kEnableMaterialDesignExtensions[];
 extern const char kEnableMaterialDesignPolicyPage[];
-extern const char kEnableMediaRouter[];
 extern const char kEnableNaCl[];
 extern const char kEnableNavigationTracing[];
 extern const char kEnableNetBenchmarking[];
@@ -202,6 +200,7 @@ extern const char kMarkNonSecureAs[];
 extern const char kMarkNonSecureAsNeutral[];
 extern const char kMarkNonSecureAsNonSecure[];
 extern const char kMediaCacheSize[];
+extern const char kMediaRouter[];
 extern const char kMessageLoopHistogrammer[];
 extern const char kMetricsRecordingOnly[];
 extern const char kMonitoringDestinationID[];
@@ -317,6 +316,7 @@ extern const char kEnableHungRendererInfoBar[];
 extern const char kEnablePhysicalWeb[];
 extern const char kProgressBarAnimation[];
 extern const char kEnableThemeColorInTabbedMode[];
+extern const char kDisableAutoHidingToolbarThreshold[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -370,10 +370,6 @@ extern const char kWaitForMutex[];
 extern const char kWindows8Search[];
 #endif  // defined(OS_WIN)
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-extern const char kEnableTabDiscarding[];
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
-
 #if defined(ENABLE_IPC_FUZZER)
 extern const char kIpcFuzzerTestcase[];
 #endif
@@ -386,8 +382,6 @@ extern const char kDebugPrint[];
 extern const char kAllowNaClCrxFsAPI[];
 extern const char kAllowNaClFileHandleAPI[];
 extern const char kAllowNaClSocketAPI[];
-extern const char kDisablePluginPowerSaver[];
-extern const char kEnablePluginPowerSaver[];
 #endif
 
 #if defined(FULL_SAFE_BROWSING)

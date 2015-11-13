@@ -9,6 +9,9 @@
 #include <signal.h>
 #include <sys/prctl.h>
 #endif
+#if defined(OS_LINUX)
+#include <fontconfig/fontconfig.h>
+#endif
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -45,7 +48,6 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/audio/audio_manager.h"
 #include "media/audio/audio_manager_factory.h"
-#include "media/base/browser_cdm_factory.h"
 #include "media/base/media.h"
 #include "ui/compositor/compositor_switches.h"
 
@@ -256,6 +258,23 @@ void CastBrowserMainParts::PostMainMessageLoopStart() {
 #endif  // defined(OS_ANDROID)
 }
 
+void CastBrowserMainParts::ToolkitInitialized() {
+#if defined(OS_LINUX)
+  // Without this call, the FontConfig library gets implicitly initialized
+  // on the first call to FontConfig. Since it's not safe to initialize it
+  // concurrently from multiple threads, we explicitly initialize it here
+  // to prevent races when there are multiple renderer's querying the library:
+  // http://crbug.com/404311
+  // Also, implicit initialization can cause a long delay on the first
+  // rendering if the font cache has to be regenerated for some reason. Doing it
+  // explicitly here helps in cases where the browser process is starting up in
+  // the background (resources have not yet been granted to cast) since it
+  // prevents the long delay the user would have seen on first rendering. Note
+  // that future calls to FcInit() are safe no-ops per the FontConfig interface.
+  FcInit();
+#endif
+}
+
 int CastBrowserMainParts::PreCreateThreads() {
 #if defined(OS_ANDROID)
   // GPU process is started immediately after threads are created, requiring
@@ -311,12 +330,6 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 #if defined(OS_ANDROID)
   ::media::SetMediaClientAndroid(new media::CastMediaClientAndroid());
-#else
-  if (cmd_line->HasSwitch(switches::kEnableCmaMediaPipeline)) {
-    scoped_ptr<::media::BrowserCdmFactory> cdm_factory =
-        cast_browser_process_->browser_client()->CreateBrowserCdmFactory();
-    ::media::SetBrowserCdmFactory(cdm_factory.release());
-  }
 #endif  // defined(OS_ANDROID)
 
   cast_browser_process_->SetConnectivityChecker(

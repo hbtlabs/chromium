@@ -74,8 +74,10 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
 
   // These functions are synchronous variants of those defined in the mojom. The
   // WindowTree implementations all call into these. See the mojom for details.
-  mojom::ErrorCode NewWindow(const WindowId& window_id);
+  bool NewWindow(const WindowId& window_id);
   bool AddWindow(const WindowId& parent_id, const WindowId& child_id);
+  bool AddTransientWindow(const WindowId& window_id,
+                          const WindowId& transient_window_id);
   std::vector<const ServerWindow*> GetWindowTree(
       const WindowId& window_id) const;
   bool SetWindowVisibility(const WindowId& window_id, bool visible);
@@ -119,6 +121,12 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                                          bool originated_change);
   void ProcessFocusChanged(const ServerWindow* old_focused_window,
                            const ServerWindow* new_focused_window);
+  void ProcessTransientWindowAdded(const ServerWindow* window,
+                                   const ServerWindow* transient_window,
+                                   bool originated_change);
+  void ProcessTransientWindowRemoved(const ServerWindow* window,
+                                     const ServerWindow* transient_window,
+                                     bool originated_change);
 
  private:
   using WindowIdSet = base::hash_set<Id>;
@@ -177,10 +185,12 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void PrepareForEmbed(const WindowId& window_id);
   void RemoveChildrenAsPartOfEmbed(const WindowId& window_id);
 
+  // Calls OnChangeCompleted() on the client.
+  void NotifyChangeCompleted(uint32_t change_id,
+                             mojom::WindowManagerErrorCode error_code);
+
   // WindowTree:
-  void NewWindow(
-      Id transport_window_id,
-      const mojo::Callback<void(mojom::ErrorCode)>& callback) override;
+  void NewWindow(uint32_t change_id, Id transport_window_id) override;
   void DeleteWindow(Id transport_window_id,
                     const mojo::Callback<void(bool)>& callback) override;
   void AddWindow(Id parent_id,
@@ -189,6 +199,11 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void RemoveWindowFromParent(
       Id window_id,
       const mojo::Callback<void(bool)>& callback) override;
+  void AddTransientWindow(uint32_t change_id,
+                          Id window_id,
+                          Id transient_window_id) override;
+  void RemoveTransientWindowFromParent(uint32_t change_id,
+                                       Id transient_window_id) override;
   void ReorderWindow(Id window_id,
                      Id relative_window_id,
                      mojom::OrderDirection direction,
@@ -197,16 +212,16 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
       Id window_id,
       const mojo::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
       override;
-  void SetWindowBounds(Id window_id,
-                       mojo::RectPtr bounds,
-                       const mojo::Callback<void(bool)>& callback) override;
+  void SetWindowBounds(uint32_t change_id,
+                       Id window_id,
+                       mojo::RectPtr bounds) override;
   void SetWindowVisibility(Id window_id,
                            bool visible,
                            const mojo::Callback<void(bool)>& callback) override;
-  void SetWindowProperty(Id window_id,
+  void SetWindowProperty(uint32_t change_id,
+                         Id window_id,
                          const mojo::String& name,
-                         mojo::Array<uint8_t> value,
-                         const mojo::Callback<void(bool)>& callback) override;
+                         mojo::Array<uint8_t> value) override;
   void RequestSurface(Id window_id,
                       mojom::SurfaceType type,
                       mojo::InterfaceRequest<mojom::Surface> surface,
@@ -228,6 +243,9 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void SetShowState(uint32_t window_id,
                     mus::mojom::ShowState show_state,
                     const SetShowStateCallback& callback) override;
+  void SetResizeBehavior(uint32_t window_id,
+                         mus::mojom::ResizeBehavior resize_behavior) override;
+  void WmResponse(uint32 change_id, bool response) override;
 
   // AccessPolicyDelegate:
   bool IsRootForAccessPolicy(const WindowId& id) const override;

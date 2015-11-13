@@ -13,6 +13,7 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
+#include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/switches.h"
 #include "extensions/common/url_pattern_set.h"
@@ -23,7 +24,7 @@ namespace extensions {
 
 namespace {
 
-PermissionsData::PolicyDelegate* g_policy_delegate = NULL;
+PermissionsData::PolicyDelegate* g_policy_delegate = nullptr;
 
 class AutoLockOnValidThread {
  public:
@@ -89,9 +90,13 @@ bool PermissionsData::IsRestrictedUrl(const GURL& document_url,
   if (!URLPattern::IsValidSchemeForExtensions(document_url.scheme()) &&
       document_url.spec() != url::kAboutBlankURL) {
     if (error) {
-      *error = ErrorUtils::FormatErrorMessage(
-                   manifest_errors::kCannotAccessPage,
-                   document_url.spec());
+      if (extension->permissions_data()->active_permissions().HasAPIPermission(
+              APIPermission::kTab)) {
+        *error = ErrorUtils::FormatErrorMessage(
+            manifest_errors::kCannotAccessPageWithUrl, document_url.spec());
+      } else {
+        *error = manifest_errors::kCannotAccessPage;
+      }
     }
     return true;
   }
@@ -149,7 +154,7 @@ void PermissionsData::UpdateTabSpecificPermissions(
           ? static_cast<const PermissionSet&>(PermissionSet())
           : *iter->second,
       permissions);
-  tab_specific_permissions_.set(tab_id, new_permissions.Pass());
+  tab_specific_permissions_[tab_id] = new_permissions.Pass();
 }
 
 void PermissionsData::ClearTabSpecificPermissions(int tab_id) const {
@@ -304,7 +309,7 @@ const PermissionSet* PermissionsData::GetTabSpecificPermissions(
   runtime_lock_.AssertAcquired();
   TabPermissionsMap::const_iterator iter =
       tab_specific_permissions_.find(tab_id);
-  return (iter != tab_specific_permissions_.end()) ? iter->second : nullptr;
+  return iter != tab_specific_permissions_.end() ? iter->second.get() : nullptr;
 }
 
 bool PermissionsData::HasTabSpecificPermissionToExecuteScript(
@@ -349,9 +354,15 @@ PermissionsData::AccessType PermissionsData::CanRunOnPage(
     return ACCESS_WITHHELD;
 
   if (error) {
-    *error = ErrorUtils::FormatErrorMessage(manifest_errors::kCannotAccessPage,
-                                            document_url.spec());
+    if (extension->permissions_data()->active_permissions().HasAPIPermission(
+            APIPermission::kTab)) {
+      *error = ErrorUtils::FormatErrorMessage(
+          manifest_errors::kCannotAccessPageWithUrl, document_url.spec());
+    } else {
+      *error = manifest_errors::kCannotAccessPage;
+    }
   }
+
   return ACCESS_DENIED;
 }
 

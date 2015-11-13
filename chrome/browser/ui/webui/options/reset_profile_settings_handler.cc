@@ -140,8 +140,8 @@ void ResetProfileSettingsHandler::RegisterMessages() {
 void ResetProfileSettingsHandler::HandleResetProfileSettings(
     const base::ListValue* value) {
   bool send_settings = false;
-  if (!value->GetBoolean(0, &send_settings))
-    NOTREACHED();
+  bool success = value->GetBoolean(0, &send_settings);
+  DCHECK(success);
 
   DCHECK(brandcode_.empty() || config_fetcher_);
   if (config_fetcher_ && config_fetcher_->IsActive()) {

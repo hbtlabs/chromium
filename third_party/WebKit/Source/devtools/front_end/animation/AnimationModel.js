@@ -23,8 +23,7 @@ WebInspector.AnimationModel = function(target)
 }
 
 WebInspector.AnimationModel.Events = {
-    AnimationGroupStarted: "AnimationGroupStarted",
-    AnimationCanceled: "AnimationCanceled"
+    AnimationGroupStarted: "AnimationGroupStarted"
 }
 
 WebInspector.AnimationModel.prototype = {
@@ -44,13 +43,35 @@ WebInspector.AnimationModel.prototype = {
     },
 
     /**
+     * @param {string} id
+     */
+    _animationCanceled: function(id)
+    {
+        this._pendingAnimations.remove(id);
+        this._flushPendingAnimationsIfNeeded();
+    },
+
+    /**
      * @param {!AnimationAgent.Animation} payload
      */
     animationStarted: function(payload)
     {
         var animation = WebInspector.AnimationModel.Animation.parsePayload(this.target(), payload);
-        this._animationsById.set(animation.id(), animation);
 
+        // Ignore Web Animations custom effects & groups.
+        if (animation.type() === "WebAnimation" && animation.source().keyframesRule().keyframes().length === 0) {
+            this._pendingAnimations.remove(animation.id());
+        } else {
+           this._animationsById.set(animation.id(), animation);
+           if (this._pendingAnimations.indexOf(animation.id()) === -1)
+                this._pendingAnimations.push(animation.id());
+        }
+
+        this._flushPendingAnimationsIfNeeded();
+    },
+
+    _flushPendingAnimationsIfNeeded: function()
+    {
         for (var id of this._pendingAnimations) {
             if (!this._animationsById.get(id))
                 return;
@@ -416,6 +437,9 @@ WebInspector.AnimationModel.AnimationEffect.prototype = {
      */
     iterations: function()
     {
+        // Animations with zero duration, zero delays and infinite iterations can't be shown.
+        if (!this.delay() && !this.endDelay() && !this.duration())
+            return 0;
         return this._payload.iterations || Infinity;
     },
 
@@ -748,6 +772,15 @@ WebInspector.AnimationDispatcher.prototype = {
     animationCreated: function(id)
     {
         this._animationModel.animationCreated(id);
+    },
+
+    /**
+     * @override
+     * @param {string} id
+     */
+    animationCanceled: function(id)
+    {
+        this._animationModel._animationCanceled(id);
     },
 
     /**

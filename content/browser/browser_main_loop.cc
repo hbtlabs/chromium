@@ -374,12 +374,7 @@ class BrowserMainLoop::MemoryObserver : public base::MessageLoop::TaskObserver {
   void DidProcessTask(const base::PendingTask& pending_task) override {
 #if !defined(OS_IOS)  // No ProcessMetrics on IOS.
     scoped_ptr<base::ProcessMetrics> process_metrics(
-        base::ProcessMetrics::CreateProcessMetrics(
-#if defined(OS_MACOSX)
-            base::GetCurrentProcessHandle(), NULL));
-#else
-            base::GetCurrentProcessHandle()));
-#endif
+        base::ProcessMetrics::CreateCurrentProcessMetrics());
     size_t private_bytes;
     process_metrics->GetMemoryBytes(&private_bytes, NULL);
     LOCAL_HISTOGRAM_MEMORY_KB("Memory.BrowserUsed", private_bytes >> 10);
@@ -616,7 +611,8 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
           BrowserSurfaceTextureManager::GetInstance());
     }
   }
-
+  // TODO(mfomitchev): Screen Orientation APIs on Aura - crbug.com/546719.
+#if !defined(USE_AURA)
   if (!parsed_command_line_.HasSwitch(
       switches::kDisableScreenOrientationLock)) {
     TRACE_EVENT0("startup",
@@ -625,6 +621,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
         new ScreenOrientationDelegateAndroid());
     ScreenOrientationProvider::SetDelegate(screen_orientation_delegate_.get());
   }
+#endif
 #endif
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -1179,7 +1176,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 
   bool always_uses_gpu = true;
   bool established_gpu_channel = false;
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   // TODO(crbug.com/439322): This should be set to |true|.
   established_gpu_channel = false;
   BrowserGpuChannelHostFactory::Initialize(established_gpu_channel);
@@ -1381,7 +1378,7 @@ base::FilePath BrowserMainLoop::GetStartupTraceFileName(
       return trace_file;
 
     if (trace_file.empty()) {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
       TracingControllerAndroid::GenerateTracingFilePath(&trace_file);
 #else
       // Default to saving the startup trace into the current dir.
@@ -1389,7 +1386,7 @@ base::FilePath BrowserMainLoop::GetStartupTraceFileName(
 #endif
     }
   } else {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
     TracingControllerAndroid::GenerateTracingFilePath(&trace_file);
 #else
     trace_file = tracing::TraceConfigFile::GetInstance()->GetResultFile();
@@ -1431,7 +1428,7 @@ void BrowserMainLoop::EndStartupTracing() {
   DCHECK(is_tracing_startup_for_duration_);
 
   is_tracing_startup_for_duration_ = false;
-  TracingController::GetInstance()->DisableRecording(
+  TracingController::GetInstance()->StopTracing(
       TracingController::CreateFileSink(
           startup_trace_file_,
           base::Bind(OnStoppedStartupTracing, startup_trace_file_)));

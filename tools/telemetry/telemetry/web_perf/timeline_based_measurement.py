@@ -266,17 +266,23 @@ class TimelineBasedMeasurement(story_test.StoryTest):
     threads_to_records_map = _GetRendererThreadsToInteractionRecordsMap(model)
     if (len(threads_to_records_map.values()) == 0 and
         self._tbm_options.tracing_options.enable_chrome_trace):
-      raise story_test.Failure(
+      logging.warning(
           'No timeline interaction records were recorded in the trace. '
           'This could be caused by console.time() & console.timeEnd() execution'
           ' failure or the tracing category specified doesn\'t include '
           'blink.console categories.')
+
+    all_metrics = self._tbm_options.GetTimelineBasedMetrics()
+
     for renderer_thread, interaction_records in (
         threads_to_records_map.iteritems()):
       meta_metrics = _TimelineBasedMetrics(
-          model, renderer_thread, interaction_records,
-          self._results_wrapper, self._tbm_options.GetTimelineBasedMetrics())
+          model, renderer_thread, interaction_records, self._results_wrapper,
+          all_metrics)
       meta_metrics.AddResults(results)
+
+    for metric in all_metrics:
+      metric.AddWholeTraceResults(model, results)
 
   def DidRunStory(self, platform):
     """Clean up after running the story."""

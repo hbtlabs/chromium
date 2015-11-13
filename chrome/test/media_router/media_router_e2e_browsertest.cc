@@ -29,7 +29,7 @@
 //   --enable-logging=stderr
 //   --whitelisted-extension-id=enhhojjnijigcajfphajepfemndkmdlo
 //   --ui-test-action-timeout=200000
-//   --enable-media-router
+//   --media-router=1
 
 namespace {
 // Command line argument to specify receiver,
@@ -76,6 +76,7 @@ void MediaRouterE2EBrowserTest::CreateMediaRoute(
     content::WebContents* web_contents) {
   DCHECK(media_router_);
   observer_.reset(new TestMediaSinksObserver(media_router_, source));
+  observer_->Init();
 
   DVLOG(1) << "Receiver name: " << receiver_;
   // Wait for MediaSinks compatible with |source| to be discovered.

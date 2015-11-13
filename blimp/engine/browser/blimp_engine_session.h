@@ -7,8 +7,9 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "blimp/net/blimp_message_receiver.h"
+#include "blimp/net/blimp_message_processor.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "net/base/completion_callback.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace aura {
@@ -42,7 +43,7 @@ class BlimpScreen;
 class BlimpUiContextFactory;
 class BlimpWindowTreeHost;
 
-class BlimpEngineSession : public BlimpMessageReceiver,
+class BlimpEngineSession : public BlimpMessageProcessor,
                            public content::WebContentsDelegate {
  public:
   explicit BlimpEngineSession(scoped_ptr<BlimpBrowserContext> browser_context);
@@ -52,16 +53,23 @@ class BlimpEngineSession : public BlimpMessageReceiver,
 
   BlimpBrowserContext* browser_context() { return browser_context_.get(); }
 
-  // BlimpMessageReceiver implementation.
-  // TODO(haibinlu): Remove this in favor of the BlimpMessageDispatcher.
-  net::Error OnBlimpMessage(const BlimpMessage& message) override;
+  // BlimpMessageProcessor implementation.
+  // TODO(haibinlu): Delete this and move to BlimpMessageDemultiplexer.
+  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+                      const net::CompletionCallback& callback) override;
 
  private:
+  // ControlMessage handler methods.
   // Creates a new WebContents, which will be indexed by |target_tab_id|.
   void CreateWebContents(const int target_tab_id);
+  void CloseWebContents(const int target_tab_id);
 
+  // NavigationMessage handler methods.
   // Navigates the target tab to the |url|.
   void LoadUrl(const int target_tab_id, const GURL& url);
+  void GoBack(const int target_tab_id);
+  void GoForward(const int target_tab_id);
+  void Reload(const int target_tab_id);
 
   // content::WebContentsDelegate implementation.
   content::WebContents* OpenURLFromTab(

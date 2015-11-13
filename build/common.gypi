@@ -1535,7 +1535,7 @@
     'ozone_platform_egltest%': 0,
     'ozone_platform_gbm%': 0,
     'ozone_platform_ozonex%': 0,
-    'ozone_platform_test%': 0,
+    'ozone_platform_headless%': 0,
 
     # Experiment: http://crbug.com/426914
     'envoy%': 0,
@@ -2212,13 +2212,8 @@
               # no need to load it dynamically.
               'clang_dynlib_flags%': '',
             }],
-            # https://crbug.com/441916
-            ['OS=="android" or OS=="linux" or OS=="mac"', {
-              'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates ',
-            }, { # OS != "linux"
-              'clang_plugin_args%': ''
-            }],
           ],
+          'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates ',
         },
         # If you change these, also change build/config/clang/BUILD.gn.
         'clang_chrome_plugins_flags%':
@@ -2368,13 +2363,13 @@
       }],
 
       ['use_ozone==1 and ozone_auto_platforms==1', {
-        # Use test as the default platform.
-        'ozone_platform%': 'test',
+        # Use headless as the default platform.
+        'ozone_platform%': 'headless',
 
         # Build all platforms whose deps are in install-build-deps.sh.
         # Only these platforms will be compile tested by buildbots.
         'ozone_platform_gbm%': 1,
-        'ozone_platform_test%': 1,
+        'ozone_platform_headless%': 1,
         'ozone_platform_egltest%': 1,
       }],
 
@@ -6002,6 +5997,9 @@
         # Limited to Windows because lld-link is the driver that is
         # compatible with link.exe.
         ['LD', '<(make_clang_dir)/bin/lld-link'],
+        # lld-link includes a replacement for lib.exe that can produce thin
+        # archives and understands bitcode (for use_lto==1).
+        ['AR', '<(make_clang_dir)/bin/lld-link /lib /llvmlibthin'],
       ],
     }],
     ['OS=="android" and clang==0', {
@@ -6087,10 +6085,19 @@
             ],
           }],
         ],
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            'AdditionalOptions': [
+              # TODO(pcc): Add LTO support to clang-cl driver and use it here.
+              '-Xclang',
+              '-emit-llvm-bc',
+            ],
+          },
+        },
       },
     }],
-    # Apply a lower LTO optimization level in non-official builds.
-    ['use_lto==1 and clang==1 and buildtype!="Official"', {
+    # Apply a lower LTO optimization level as the default is too slow.
+    ['use_lto==1 and clang==1', {
       'target_defaults': {
         'target_conditions': [
           ['_toolset=="target"', {
@@ -6106,6 +6113,13 @@
             },
           }],
         ],
+        'msvs_settings': {
+          'VCLinkerTool': {
+            'AdditionalOptions': [
+              '/opt:lldlto=1',
+            ],
+          },
+        },
       },
     }],
     ['use_lto==1 and clang==1 and target_arch=="arm"', {
@@ -6222,16 +6236,6 @@
                 '-fsanitize-blacklist=<(cfi_blacklist)',
               ],
             },
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'AdditionalOptions': [
-                  '-fsanitize=cfi-vcall',
-                  '-fsanitize=cfi-derived-cast',
-                  '-fsanitize=cfi-unrelated-cast',
-                  '-fsanitize-blacklist=<(cfi_blacklist)',
-                ],
-              },
-            },
           }],
           ['_toolset=="target" and _type!="static_library"', {
             'xcode_settings':  {
@@ -6240,6 +6244,38 @@
                 '-fsanitize=cfi-derived-cast',
                 '-fsanitize=cfi-unrelated-cast',
               ],
+            },
+          }],
+        ],
+      },
+    }],
+    ['cfi_vptr==1 and OS=="win"', {
+      'target_defaults': {
+        'target_conditions': [
+          ['_toolset=="target"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  # TODO(pcc): Use regular -fsanitize=* flags here once clang-cl
+                  # supports LTO.
+                  '-Xclang',
+                  '-fsanitize=cfi-vcall',
+                  '-Xclang',
+                  '-fsanitize=cfi-derived-cast',
+                  '-Xclang',
+                  '-fsanitize=cfi-unrelated-cast',
+                  '-Xclang',
+                  '-fsanitize-trap=cfi-vcall',
+                  '-Xclang',
+                  '-fsanitize-trap=cfi-derived-cast',
+                  '-Xclang',
+                  '-fsanitize-trap=cfi-unrelated-cast',
+                  '-Xclang',
+                  '-fsanitize-blacklist=<(cfi_blacklist)',
+                  '-Xclang',
+                  '-fsanitize-blacklist=../../<(make_clang_dir)/lib/clang/<!(python <(DEPTH)/tools/clang/scripts/update.py --print-clang-version)/cfi_blacklist.txt',
+                ],
+              },
             },
           }],
         ],

@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/mojo_application.gni")
-import("//third_party/mojo/src/mojo/public/tools/bindings/mojom.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 group("child") {
   testonly = true
@@ -25,7 +25,7 @@ source_set("lib") {
     "//mojo/application/public/interfaces",
     "//mojo/gles2",
     "//mojo/message_pump",
-    "//mojo/platform_handle:for_shared_library",
+    "//mojo/platform_handle:platform_handle_impl",
     "//third_party/mojo/src/mojo/edk/system",
   ]
 }
@@ -40,6 +40,26 @@ mojom("interfaces") {
   ]
 
   import_dirs = [ "//mojo/services" ]
+}
+
+source_set("test_native_main") {
+  sources = [
+    "test_native_main.cc",
+    "test_native_main.h",
+  ]
+
+  public_deps = [
+    "//mojo/runner:init",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/application/public/cpp",
+    "//mojo/gles2",
+    "//mojo/message_pump",
+    "//mojo/runner/child:lib",
+    "//third_party/mojo/src/mojo/edk/system",
+  ]
 }
 
 mojom("apptest_interfaces") {
@@ -89,14 +109,9 @@ executable("native_target") {
   deps = [
     ":apptest_interfaces",
     ":lib",
+    ":test_native_main",
     "//base",
-    "//base:base_static",
     "//mojo/application/public/cpp",
-    "//mojo/application/public/interfaces",
     "//mojo/common:common_base",
-    "//mojo/gles2",
-    "//mojo/message_pump",
-    "//mojo/runner:init",
-    "//third_party/mojo/src/mojo/edk/system",
   ]
 }

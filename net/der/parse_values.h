@@ -41,6 +41,9 @@ NET_EXPORT bool IsValidInteger(const Input& in,
 // integer.
 NET_EXPORT bool ParseUint64(const Input& in, uint64_t* out) WARN_UNUSED_RESULT;
 
+// Same as ParseUint64() but for a uint8_t.
+NET_EXPORT bool ParseUint8(const Input& in, uint8_t* out) WARN_UNUSED_RESULT;
+
 // The BitString class is a helper for representing a valid parsed BIT STRING.
 //
 // * The bits are ordered within each octet of bytes() from most to least
@@ -58,6 +61,14 @@ class NET_EXPORT BitString {
 
   const Input& bytes() const { return bytes_; }
   uint8_t unused_bits() const { return unused_bits_; }
+
+  // Returns true if the bit string contains 1 at the specified position.
+  // Otherwise returns false.
+  //
+  // A return value of false can mean either:
+  //  * The bit value at |bit_index| is 0.
+  //  * There is no bit at |bit_index| (index is beyond the end).
+  bool AssertsBit(size_t bit_index) const WARN_UNUSED_RESULT;
 
  private:
   Input bytes_;

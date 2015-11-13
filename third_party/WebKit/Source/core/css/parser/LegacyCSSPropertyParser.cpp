@@ -419,26 +419,12 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
         }
         break;
 
-    case CSSPropertyOutlineColor:        // <color> | invert | inherit
-        // Outline color has "invert" as additional keyword.
-        // Also, we want to allow the special focus color even in HTML Standard parsing mode.
-        if (id == CSSValueInvert || id == CSSValueWebkitFocusRingColor) {
-            validPrimitive = true;
-            break;
-        }
-        /* nobreak */
     case CSSPropertyBackgroundColor: // <color> | inherit
     case CSSPropertyBorderTopColor: // <color> | inherit
     case CSSPropertyBorderRightColor:
     case CSSPropertyBorderBottomColor:
     case CSSPropertyBorderLeftColor:
-    case CSSPropertyWebkitBorderStartColor:
-    case CSSPropertyWebkitBorderEndColor:
-    case CSSPropertyWebkitBorderBeforeColor:
-    case CSSPropertyWebkitBorderAfterColor:
     case CSSPropertyWebkitColumnRuleColor:
-    case CSSPropertyWebkitTextEmphasisColor:
-    case CSSPropertyWebkitTextStrokeColor:
         parsedValue = parseColor(m_valueList->current(), acceptQuirkyColors(propId));
         if (parsedValue)
             m_valueList->next();
@@ -607,12 +593,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
         if (!inShorthand() || m_currentShorthand == CSSPropertyBorderWidth)
             unitless = FUnitlessQuirk;
         // fall through
-    case CSSPropertyWebkitTextStrokeWidth:
-    case CSSPropertyOutlineWidth: // <border-width> | inherit
-    case CSSPropertyWebkitBorderStartWidth:
-    case CSSPropertyWebkitBorderEndWidth:
-    case CSSPropertyWebkitBorderBeforeWidth:
-    case CSSPropertyWebkitBorderAfterWidth:
     case CSSPropertyWebkitColumnRuleWidth:
         if (id == CSSValueThin || id == CSSValueMedium || id == CSSValueThick)
             validPrimitive = true;
@@ -749,9 +729,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyBorderRadius:
     case CSSPropertyAliasWebkitBorderRadius:
         return parseBorderRadius(unresolvedProperty, important);
-    case CSSPropertyOutlineOffset:
-        validPrimitive = validUnit(value, FLength);
-        break;
     case CSSPropertyWebkitBoxReflect:
         if (id == CSSValueNone)
             validPrimitive = true;
@@ -1014,17 +991,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyBorderLeft:
         // [ 'border-left-width' || 'border-style' || <color> ] | inherit
         return parseShorthand(propId, borderLeftShorthand(), important);
-    case CSSPropertyWebkitBorderStart:
-        return parseShorthand(propId, webkitBorderStartShorthand(), important);
-    case CSSPropertyWebkitBorderEnd:
-        return parseShorthand(propId, webkitBorderEndShorthand(), important);
-    case CSSPropertyWebkitBorderBefore:
-        return parseShorthand(propId, webkitBorderBeforeShorthand(), important);
-    case CSSPropertyWebkitBorderAfter:
-        return parseShorthand(propId, webkitBorderAfterShorthand(), important);
-    case CSSPropertyOutline:
-        // [ 'outline-color' || 'outline-style' || 'outline-width' ] | inherit
-        return parseShorthand(propId, outlineShorthand(), important);
     case CSSPropertyBorderColor:
         // <color>{1,4} | inherit
         return parse4Values(propId, borderColorShorthand().properties(), important);
@@ -1046,18 +1012,9 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
         return parseShorthand(propId, listStyleShorthand(), important);
     case CSSPropertyWebkitColumnRule:
         return parseShorthand(propId, webkitColumnRuleShorthand(), important);
-    case CSSPropertyWebkitTextStroke:
-        return parseShorthand(propId, webkitTextStrokeShorthand(), important);
     case CSSPropertyInvalid:
         return false;
     // CSS Text Layout Module Level 3: Vertical writing support
-    case CSSPropertyWebkitTextEmphasis:
-        return parseShorthand(propId, webkitTextEmphasisShorthand(), important);
-
-    case CSSPropertyWebkitTextEmphasisStyle:
-        parsedValue = parseTextEmphasisStyle();
-        break;
-
     case CSSPropertyWebkitTextOrientation:
         // FIXME: For now just support sideways, sideways-right, upright and vertical-right.
         if (id == CSSValueSideways || id == CSSValueSidewaysRight || id == CSSValueVerticalRight || id == CSSValueUpright)
@@ -1193,6 +1150,28 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyMotionOffset:
     case CSSPropertyMotionRotation:
     case CSSPropertyMotion:
+    case CSSPropertyWebkitTextEmphasisColor:
+    case CSSPropertyWebkitTextEmphasisStyle:
+    case CSSPropertyWebkitTextEmphasis:
+    case CSSPropertyOutline:
+    case CSSPropertyOutlineColor:
+    case CSSPropertyOutlineWidth:
+    case CSSPropertyOutlineOffset:
+    case CSSPropertyWebkitBorderStartColor:
+    case CSSPropertyWebkitBorderEndColor:
+    case CSSPropertyWebkitBorderBeforeColor:
+    case CSSPropertyWebkitBorderAfterColor:
+    case CSSPropertyWebkitBorderStartWidth:
+    case CSSPropertyWebkitBorderEndWidth:
+    case CSSPropertyWebkitBorderBeforeWidth:
+    case CSSPropertyWebkitBorderAfterWidth:
+    case CSSPropertyWebkitBorderStart:
+    case CSSPropertyWebkitBorderEnd:
+    case CSSPropertyWebkitBorderBefore:
+    case CSSPropertyWebkitBorderAfter:
+    case CSSPropertyWebkitTextStroke:
+    case CSSPropertyWebkitTextStrokeColor:
+    case CSSPropertyWebkitTextStrokeWidth:
         validPrimitive = false;
         break;
 
@@ -5374,53 +5353,6 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSPropertyParser::parseTransformOrigin()
     if (zValue)
         list->append(zValue.release());
     return list.release();
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseTextEmphasisStyle()
-{
-    RefPtrWillBeRawPtr<CSSPrimitiveValue> fill = nullptr;
-    RefPtrWillBeRawPtr<CSSPrimitiveValue> shape = nullptr;
-
-    for (CSSParserValue* value = m_valueList->current(); value; value = m_valueList->next()) {
-        if (value->m_unit == CSSParserValue::String) {
-            if (fill || shape)
-                return nullptr;
-            m_valueList->next();
-            return createPrimitiveStringValue(value);
-        }
-
-        if (value->id == CSSValueNone) {
-            if (fill || shape)
-                return nullptr;
-            m_valueList->next();
-            return cssValuePool().createIdentifierValue(CSSValueNone);
-        }
-
-        if (value->id == CSSValueOpen || value->id == CSSValueFilled) {
-            if (fill)
-                return nullptr;
-            fill = cssValuePool().createIdentifierValue(value->id);
-        } else if (value->id == CSSValueDot || value->id == CSSValueCircle || value->id == CSSValueDoubleCircle || value->id == CSSValueTriangle || value->id == CSSValueSesame) {
-            if (shape)
-                return nullptr;
-            shape = cssValuePool().createIdentifierValue(value->id);
-        } else {
-            break;
-        }
-    }
-
-    if (fill && shape) {
-        RefPtrWillBeRawPtr<CSSValueList> parsedValues = CSSValueList::createSpaceSeparated();
-        parsedValues->append(fill.release());
-        parsedValues->append(shape.release());
-        return parsedValues.release();
-    }
-    if (fill)
-        return fill.release();
-    if (shape)
-        return shape.release();
-
-    return nullptr;
 }
 
 bool CSSPropertyParser::parseCalculation(CSSParserValue* value, ValueRange range)

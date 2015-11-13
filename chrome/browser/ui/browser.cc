@@ -77,7 +77,6 @@
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ssl/security_state_model.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/tab_contents/retargeting_details.h"
@@ -158,13 +157,14 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/search/search.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/ui/zoom/zoom_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -1423,7 +1423,7 @@ void Browser::OnWindowDidShow() {
     return;
   window_has_shown_ = true;
 
-  startup_metric_utils::RecordBrowserWindowDisplay(base::Time::Now());
+  startup_metric_utils::RecordBrowserWindowDisplay(base::TimeTicks::Now());
 
   // Nothing to do for non-tabbed windows.
   if (!is_type_tabbed())

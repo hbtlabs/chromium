@@ -13,21 +13,31 @@ shared_library("blimp_client") {
     "compositor/blimp_compositor.h",
     "compositor/blimp_context_provider.cc",
     "compositor/blimp_context_provider.h",
+    "compositor/blimp_layer_tree_settings.cc",
+    "compositor/blimp_layer_tree_settings.h",
     "compositor/blimp_output_surface.cc",
     "compositor/blimp_output_surface.h",
     "compositor/test/dummy_layer_driver.cc",
     "compositor/test/dummy_layer_driver.h",
+
+    # TODO(dtrainor): Remove this once the LayerTreeHost settings for Blimp
+    # are finalized or are pushed from the server component.  See
+    # crbug.com/527655.
+    "../../content/public/common/content_switches.cc",
+    "../../ui/native_theme/native_theme_switches.cc",
   ]
 
   deps = [
     "//base",
     "//blimp/common:blimp_common",
+    "//blimp/common/proto",
     "//cc",
     "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/skia_bindings",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//url:url",
   ]
 
   if (is_android) {
@@ -38,6 +48,8 @@ shared_library("blimp_client") {
       "android/blimp_library_loader.h",
       "android/blimp_view.cc",
       "android/blimp_view.h",
+      "android/toolbar.cc",
+      "android/toolbar.h",
       "compositor/blimp_compositor_android.cc",
       "compositor/blimp_compositor_android.h",
     ]
@@ -72,6 +84,7 @@ if (is_android) {
     sources = [
       "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
     ]
 
     jni_package = "blimp"
@@ -154,6 +167,8 @@ if (is_android) {
       "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
+      "android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
     ]
   }
 

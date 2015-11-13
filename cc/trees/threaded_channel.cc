@@ -12,21 +12,16 @@ namespace cc {
 
 scoped_ptr<ThreadedChannel> ThreadedChannel::Create(
     ThreadProxy* thread_proxy,
-    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner) {
+    TaskRunnerProvider* task_runner_provider) {
   return make_scoped_ptr(
-      new ThreadedChannel(thread_proxy, main_task_runner, impl_task_runner));
+      new ThreadedChannel(thread_proxy, task_runner_provider));
 }
 
-ThreadedChannel::ThreadedChannel(
-    ThreadProxy* thread_proxy,
-    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner)
+ThreadedChannel::ThreadedChannel(ThreadProxy* thread_proxy,
+                                 TaskRunnerProvider* task_runner_provider)
     : proxy_main_(thread_proxy),
       proxy_impl_(thread_proxy),
-      proxy_(thread_proxy),
-      main_task_runner_(main_task_runner),
-      impl_task_runner_(impl_task_runner) {}
+      task_runner_provider_(task_runner_provider) {}
 
 void ThreadedChannel::SetThrottleFrameProductionOnImpl(bool throttle) {
   ImplThreadTaskRunner()->PostTask(
@@ -80,10 +75,13 @@ void ThreadedChannel::SetNeedsCommitOnImpl() {
                                               proxy_impl_->GetImplWeakPtr()));
 }
 
-void ThreadedChannel::BeginMainFrameAbortedOnImpl(CommitEarlyOutReason reason) {
+void ThreadedChannel::BeginMainFrameAbortedOnImpl(
+    CommitEarlyOutReason reason,
+    base::TimeTicks main_thread_start_time) {
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE, base::Bind(&ProxyImpl::BeginMainFrameAbortedOnImpl,
-                            proxy_impl_->GetImplWeakPtr(), reason));
+                            proxy_impl_->GetImplWeakPtr(), reason,
+                            main_thread_start_time));
 }
 
 void ThreadedChannel::SetNeedsRedrawOnImpl(const gfx::Rect& damage_rect) {
@@ -94,11 +92,13 @@ void ThreadedChannel::SetNeedsRedrawOnImpl(const gfx::Rect& damage_rect) {
 
 void ThreadedChannel::StartCommitOnImpl(CompletionEvent* completion,
                                         LayerTreeHost* layer_tree_host,
+                                        base::TimeTicks main_thread_start_time,
                                         bool hold_commit_for_activation) {
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&ProxyImpl::StartCommitOnImpl, proxy_impl_->GetImplWeakPtr(),
-                 completion, layer_tree_host, hold_commit_for_activation));
+                 completion, layer_tree_host, main_thread_start_time,
+                 hold_commit_for_activation));
 }
 
 void ThreadedChannel::InitializeImplOnImpl(CompletionEvent* completion,
@@ -226,11 +226,11 @@ ThreadedChannel::~ThreadedChannel() {
 }
 
 base::SingleThreadTaskRunner* ThreadedChannel::MainThreadTaskRunner() const {
-  return main_task_runner_.get();
+  return task_runner_provider_->MainThreadTaskRunner();
 }
 
 base::SingleThreadTaskRunner* ThreadedChannel::ImplThreadTaskRunner() const {
-  return impl_task_runner_.get();
+  return task_runner_provider_->ImplThreadTaskRunner();
 }
 
 }  // namespace cc

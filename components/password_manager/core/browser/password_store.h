@@ -15,7 +15,6 @@
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
-#include "components/password_manager/core/browser/statistics_table.h"
 #include "sync/api/syncable_service.h"
 
 namespace url {
@@ -37,6 +36,7 @@ namespace password_manager {
 class AffiliatedMatchHelper;
 class PasswordStoreConsumer;
 class PasswordSyncableService;
+struct InteractionsStats;
 
 // Interface for storing form passwords in a platform-specific secure way.
 // The login request/manipulation API is not threadsafe and must be used
@@ -111,21 +111,29 @@ class PasswordStore : protected PasswordStoreSync,
   // in the given date range. |completion| will be posted to the
   // |main_thread_runner_| after deletions have been completed and notification
   // have been sent out.
-  virtual void RemoveLoginsByOriginAndTime(const url::Origin& origin,
-                                           base::Time delete_begin,
-                                           base::Time delete_end,
-                                           const base::Closure& completion);
+  void RemoveLoginsByOriginAndTime(const url::Origin& origin,
+                                   base::Time delete_begin,
+                                   base::Time delete_end,
+                                   const base::Closure& completion);
 
   // Removes all logins created in the given date range. If |completion| is not
   // null, it will be posted to the |main_thread_runner_| after deletions have
   // be completed and notification have been sent out.
-  virtual void RemoveLoginsCreatedBetween(base::Time delete_begin,
-                                          base::Time delete_end,
-                                          const base::Closure& completion);
+  void RemoveLoginsCreatedBetween(base::Time delete_begin,
+                                  base::Time delete_end,
+                                  const base::Closure& completion);
 
   // Removes all logins synced in the given date range.
-  virtual void RemoveLoginsSyncedBetween(base::Time delete_begin,
-                                         base::Time delete_end);
+  void RemoveLoginsSyncedBetween(base::Time delete_begin,
+                                 base::Time delete_end);
+
+  // Removes all the stats created in the given date range. If |completion| is
+  // not null, it will be posted to the |main_thread_runner_| after deletions
+  // have been completed.
+  // Should be called on the UI thread.
+  void RemoveStatisticsCreatedBetween(base::Time delete_begin,
+                                      base::Time delete_end,
+                                      const base::Closure& completion);
 
   // Removes cached affiliation data that is no longer needed; provided that
   // affiliation-based matching is enabled.
@@ -249,6 +257,10 @@ class PasswordStore : protected PasswordStoreSync,
       base::Time delete_begin,
       base::Time delete_end) = 0;
 
+  // Synchronous implementation to remove the statistics.
+  virtual bool RemoveStatisticsCreatedBetweenImpl(base::Time delete_begin,
+                                                  base::Time delete_end) = 0;
+
   // Finds all PasswordForms with a signon_realm that is equal to, or is a
   // PSL-match to that of |form|, and takes care of notifying the consumer with
   // the results when done.
@@ -282,9 +294,8 @@ class PasswordStore : protected PasswordStoreSync,
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
   virtual void RemoveSiteStatsImpl(const GURL& origin_domain) = 0;
-  // Returns a raw pointer so that InteractionsStats can be forward declared.
   virtual ScopedVector<InteractionsStats> GetSiteStatsImpl(
-      const GURL& origin_domain) WARN_UNUSED_RESULT = 0;
+      const GURL& origin_domain) = 0;
 
   // Log UMA stats for number of bulk deletions.
   void LogStatsForBulkDeletion(int num_deletions);
@@ -348,6 +359,9 @@ class PasswordStore : protected PasswordStoreSync,
                                           const base::Closure& completion);
   void RemoveLoginsSyncedBetweenInternal(base::Time delete_begin,
                                          base::Time delete_end);
+  void RemoveStatisticsCreatedBetweenInternal(base::Time delete_begin,
+                                              base::Time delete_end,
+                                              const base::Closure& completion);
 
   // Finds all non-blacklist PasswordForms, and notifies the consumer.
   void GetAutofillableLoginsImpl(scoped_ptr<GetLoginsRequest> request);

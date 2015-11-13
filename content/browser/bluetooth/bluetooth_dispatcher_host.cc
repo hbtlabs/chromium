@@ -269,15 +269,34 @@ bool BluetoothDispatcherHost::OnMessageReceived(const IPC::Message& message) {
 void BluetoothDispatcherHost::SetBluetoothAdapterForTesting(
     scoped_refptr<device::BluetoothAdapter> mock_adapter) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  current_delay_time_ = kTestingDelayTime;
-  devices_with_discovered_services_.clear();
-  // Reset the discovery session timer to use the new delay time.
-  discovery_session_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromSecondsD(current_delay_time_),
-      base::Bind(&BluetoothDispatcherHost::StopDeviceDiscovery,
-                 // base::Timer guarantees it won't call back after its
-                 // destructor starts.
-                 base::Unretained(this)));
+
+  if (mock_adapter.get()) {
+    current_delay_time_ = kTestingDelayTime;
+    // Reset the discovery session timer to use the new delay time.
+    discovery_session_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromSecondsD(current_delay_time_),
+        base::Bind(&BluetoothDispatcherHost::StopDeviceDiscovery,
+                   // base::Timer guarantees it won't call back after its
+                   // destructor starts.
+                   base::Unretained(this)));
+  } else {
+    // The following data structures are used to store pending operations.
+    // They should never contain elements at the end of a test.
+    DCHECK(request_device_sessions_.IsEmpty());
+    DCHECK(pending_primary_services_requests_.empty());
+
+    // The following data structures are cleaned up when a
+    // device/service/characteristic is removed.
+    // Since this can happen after the test is done and the cleanup function is
+    // called, we clean them here.
+    service_to_device_.clear();
+    characteristic_to_service_.clear();
+    characteristic_id_to_notify_session_.clear();
+    active_characteristic_threads_.clear();
+    connections_.clear();
+    devices_with_discovered_services_.clear();
+  }
+
   set_adapter(mock_adapter.Pass());
 }
 
@@ -628,6 +647,13 @@ void BluetoothDispatcherHost::OnRequestDevice(
         << "No Bluetooth chooser implementation; falling back to first device.";
     session->chooser.reset(
         new FirstDeviceBluetoothChooser(chooser_event_handler));
+  }
+
+  if (!session->chooser->CanAskForScanningPermission()) {
+    VLOG(1) << "Closing immediately because Chooser cannot obtain permission.";
+    OnBluetoothChooserEvent(chooser_id,
+                            BluetoothChooser::Event::DENIED_PERMISSION, "");
+    return;
   }
 
   // Populate the initial list of devices.
@@ -999,6 +1025,7 @@ void BluetoothDispatcherHost::OnBluetoothChooserEvent(
     case BluetoothChooser::Event::RESCAN:
       StartDeviceDiscovery(session, chooser_id);
       break;
+    case BluetoothChooser::Event::DENIED_PERMISSION:
     case BluetoothChooser::Event::CANCELLED:
     case BluetoothChooser::Event::SELECTED: {
       // Synchronously ensure nothing else calls into the chooser after it has
@@ -1025,6 +1052,9 @@ void BluetoothDispatcherHost::OnBluetoothChooserEvent(
     case BluetoothChooser::Event::SHOW_ADAPTER_OFF_HELP:
       ShowBluetoothAdapterOffLink();
       break;
+    case BluetoothChooser::Event::SHOW_NEED_LOCATION_HELP:
+      ShowNeedLocationLink();
+      break;
   }
 }
 
@@ -1043,6 +1073,16 @@ void BluetoothDispatcherHost::FinishClosingChooser(
     Send(new BluetoothMsg_RequestDeviceError(
         session->thread_id, session->request_id,
         WebBluetoothError::ChooserCancelled));
+    request_device_sessions_.Remove(chooser_id);
+    return;
+  }
+  if (event == BluetoothChooser::Event::DENIED_PERMISSION) {
+    RecordRequestDeviceOutcome(
+        UMARequestDeviceOutcome::BLUETOOTH_CHOOSER_DENIED_PERMISSION);
+    VLOG(1) << "Bluetooth chooser denied permission";
+    Send(new BluetoothMsg_RequestDeviceError(
+        session->thread_id, session->request_id,
+        WebBluetoothError::ChooserDeniedPermission));
     request_device_sessions_.Remove(chooser_id);
     return;
   }
@@ -1294,6 +1334,11 @@ void BluetoothDispatcherHost::ShowBluetoothPairingLink() {
 }
 
 void BluetoothDispatcherHost::ShowBluetoothAdapterOffLink() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  NOTIMPLEMENTED();
+}
+
+void BluetoothDispatcherHost::ShowNeedLocationLink() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   NOTIMPLEMENTED();
 }

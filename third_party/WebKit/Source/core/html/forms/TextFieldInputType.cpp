@@ -352,7 +352,7 @@ void TextFieldInputType::listAttributeTargetChanged()
             rpContainer->appendChild(editingViewPort.release());
             rpContainer->appendChild(DataListIndicatorElement::create(document));
             if (element().document().focusedElement() == element())
-                element().updateFocusAppearance(true /* restore selection */);
+                element().updateFocusAppearance(SelectionBehaviorOnFocus::Restore);
         }
     } else {
         picker->remove(ASSERT_NO_EXCEPTION);
@@ -486,8 +486,6 @@ String TextFieldInputType::convertFromVisibleValue(const String& visibleValue) c
 
 void TextFieldInputType::subtreeHasChanged()
 {
-    ASSERT(element().layoutObject());
-
     bool wasChanged = element().wasChangedSinceLastFormControlChangeEvent();
     element().setChangedSinceLastFormControlChangeEvent(true);
 

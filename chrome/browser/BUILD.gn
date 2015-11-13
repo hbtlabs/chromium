@@ -103,6 +103,7 @@ source_set("browser") {
     "//components/autofill/core/browser",
     "//components/bookmarks/browser",
     "//components/bookmarks/managed",
+    "//components/browser_sync/browser",
     "//components/browser_sync/common",
     "//components/captive_portal",
     "//components/certificate_reporting",
@@ -159,7 +160,7 @@ source_set("browser") {
     "//components/security_interstitials/core",
     "//components/signin/core/browser",
     "//components/ssl_errors",
-    "//components/startup_metric_utils",
+    "//components/startup_metric_utils/browser",
     "//components/strings",
     "//components/suggestions",
     "//components/sync_bookmarks",
@@ -206,6 +207,7 @@ source_set("browser") {
     "//ui/strings",
     "//ui/resources",
   ]
+  data_deps = []
 
   sources +=
       rebase_path(gypi_values.chrome_browser_undo_sources, ".", "//chrome")
@@ -223,6 +225,9 @@ source_set("browser") {
                            ".",
                            "//chrome")
     sources += rebase_path(gypi_values.chrome_browser_content_settings_sources,
+                           ".",
+                           "//chrome")
+    sources += rebase_path(gypi_values.chrome_browser_data_usage_sources,
                            ".",
                            "//chrome")
     sources += rebase_path(gypi_values.chrome_browser_engagement_sources,
@@ -297,7 +302,6 @@ source_set("browser") {
       "//components/network_hints/common",
       "//components/password_manager/content/browser",
       "//components/password_manager/sync/browser",
-      "//components/plugins/common",
       "//components/profile_metrics",
       "//components/proxy_config",
       "//components/resources",
@@ -321,6 +325,8 @@ source_set("browser") {
       "//mojo/application/public/cpp",
       "//mojo/common",
       "//mojo/environment:chromium",
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/js",
       "//net:extras",
       "//net:net_with_v8",
       "//storage/browser",
@@ -331,8 +337,6 @@ source_set("browser") {
       "//third_party/libaddressinput",
       "//third_party/libyuv",
       "//third_party/mojo/src/mojo/edk/system",
-      "//third_party/mojo/src/mojo/public/cpp/bindings",
-      "//third_party/mojo/src/mojo/public/js",
       "//third_party/re2",
       "//third_party/smhasher:cityhash",
       "//third_party/webrtc/modules/desktop_capture",
@@ -500,7 +504,7 @@ source_set("browser") {
     deps += [
       "//chrome/browser/safe_browsing:chunk_proto",
       "//chrome/browser/safe_browsing:metadata_proto",
-      "//chrome/browser/safe_browsing:report_proto",
+      "//chrome/common/safe_browsing:proto",
     ]
     if (safe_browsing_mode == 1) {
       sources +=
@@ -567,12 +571,27 @@ source_set("browser") {
   if (use_aura) {
     sources +=
         rebase_path(gypi_values.chrome_browser_aura_sources, ".", "//chrome")
+
+    # These files are only built in a GN build because they bring in
+    # dependencies that don't build with GYP.
+    sources += [
+      "mojo_runner_state.cc",
+      "mojo_runner_state.h",
+      "ui/views/frame/browser_frame_mus.cc",
+      "ui/views/frame/browser_frame_mus.h",
+    ]
     deps += [
+      "//components/mus/public/interfaces",
+      "//mojo/runner/child:lib",
+      "//mojo/converters/network",
       "//ui/aura",
       "//ui/compositor",
       "//ui/keyboard",
       "//ui/keyboard:keyboard_with_content",
+      "//ui/views/mus",
     ]
+    defines += [ "MOJO_RUNNER_CLIENT" ]
+    data_deps += [ "//components/mus/example/wm:example_wm" ]
   }
   if (ui_compositor_image_transport) {
     deps += [ "//ui/gl" ]
@@ -708,6 +727,7 @@ source_set("browser") {
       ":delta_file_proto",
       ":jni_headers",
       "//components/cdm/browser",
+      "//components/data_usage/android",
       "//components/enhanced_bookmarks",
       "//components/precache/content",
       "//components/precache/core",

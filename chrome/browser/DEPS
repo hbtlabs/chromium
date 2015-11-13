@@ -34,7 +34,7 @@ include_rules = [
   "+components/crash",
   "+components/crx_file",
   "+components/data_reduction_proxy",
-  "+components/data_usage/core",
+  "+components/data_usage",
   "+components/data_use_measurement/core",
   "+components/device_event_log",
   "+components/dom_distiller",
@@ -58,6 +58,7 @@ include_rules = [
   "+components/metrics",
   "+components/metrics_services_manager",
   "+components/mime_util",
+  "+components/mus/public/interfaces",
   "+components/nacl/browser",
   "+components/nacl/common",
   "+components/navigation_interception",
@@ -70,7 +71,6 @@ include_rules = [
   "+components/os_crypt",
   "+components/password_manager",
   "+components/pdf/browser",
-  "+components/plugins/common",
   "+components/policy",
   "+components/power",
   "+components/precache",
@@ -96,7 +96,7 @@ include_rules = [
   "+components/signin",
   "+components/ssl_config",
   "+components/ssl_errors",
-  "+components/startup_metric_utils",
+  "+components/startup_metric_utils/browser",
   "+components/storage_monitor",
   "+components/strings",
   "+components/suggestions",
@@ -149,6 +149,8 @@ include_rules = [
   "+media/base",  # For media switches
   "+media/midi",  # For midi switches
   "+mojo/application/public/cpp",
+  "+mojo/converters",
+  "+mojo/runner/child",
   "+policy",  # For generated headers and source
   "+ppapi/c",  # For various types.
   "+ppapi/host",

@@ -249,8 +249,6 @@ IPC_MESSAGE_ROUTED2(ChromeViewMsg_ChromeIdentityCheckResult,
                     base::string16 /* identity */,
                     bool /* identity_match */)
 
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_SearchBoxToggleVoiceSearch)
-
 // Sent on process startup to indicate whether this process is running in
 // incognito mode.
 IPC_MESSAGE_CONTROL1(ChromeViewMsg_SetIsIncognitoProcess,
@@ -324,6 +322,13 @@ IPC_MESSAGE_ROUTED1(ChromeViewMsg_NetErrorInfo,
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetCanShowNetworkDiagnosticsDialog,
                     bool /* can_show_network_diagnostics_dialog */)
 
+#if defined(OS_ANDROID)
+// Tells the renderer whether or not an offline page exists. This is used to
+// decide if "show saved pages" button will be provided on certain error page.
+IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetHasOfflinePages,
+                    bool /* has_offline_pages */)
+#endif
+
 // Provides the information needed by the renderer process to contact a
 // navigation correction service.  Handled by the NetErrorHelper.
 IPC_MESSAGE_ROUTED5(ChromeViewMsg_SetNavigationCorrectionInfo,
@@ -335,6 +340,12 @@ IPC_MESSAGE_ROUTED5(ChromeViewMsg_SetNavigationCorrectionInfo,
 
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_RunNetworkDiagnostics,
                     GURL /* failed_url */)
+
+#if defined(OS_ANDROID)
+// Message sent from the renderer to the browser to show the UI for offline
+// pages.
+IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_ShowOfflinePages)
+#endif
 
 //-----------------------------------------------------------------------------
 // Misc messages
@@ -538,11 +549,6 @@ IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SearchBoxUndoAllMostVisitedDeletions,
 IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_SearchBoxUndoMostVisitedDeletion,
                     int /* page_seq_no */,
                     GURL /* url */)
-
-// Tells InstantExtended whether the page supports voice search.
-IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_SetVoiceSearchSupported,
-                    int /* page_seq_no */,
-                    bool /* supported */)
 
 // Tells the renderer a list of URLs which should be bounced back to the browser
 // process so that they can be assigned to an Instant renderer.

@@ -489,7 +489,7 @@ void InputType::disableSecureTextInput()
 
 void InputType::accessKeyAction(bool)
 {
-    element().focus(false);
+    element().focus(FocusParams(SelectionBehaviorOnFocus::Reset, WebFocusTypeNone, nullptr));
 }
 
 void InputType::countUsage()
@@ -689,7 +689,7 @@ bool InputType::supportsReadOnly() const
 
 String InputType::defaultToolTip() const
 {
-    return String();
+    return validationMessage();
 }
 
 Decimal InputType::findClosestTickMarkValue(const Decimal&)

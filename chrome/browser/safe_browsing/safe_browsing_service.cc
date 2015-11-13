@@ -34,7 +34,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/metrics/metrics_service.h"
 #include "components/user_prefs/tracked/tracked_preference_validation_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
@@ -64,6 +63,8 @@
 #endif
 
 using content::BrowserThread;
+
+namespace safe_browsing {
 
 namespace {
 
@@ -223,20 +224,20 @@ void SafeBrowsingService::Initialize() {
 #if defined(SAFE_BROWSING_CSD)
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableClientSidePhishingDetection)) {
-    csd_service_.reset(safe_browsing::ClientSideDetectionService::Create(
+    csd_service_.reset(ClientSideDetectionService::Create(
         url_request_context_getter_.get()));
   }
 #endif  // defined(SAFE_BROWSING_CSD)
 
-  download_service_.reset(new safe_browsing::DownloadProtectionService(
+  download_service_.reset(new DownloadProtectionService(
       this, url_request_context_getter_.get()));
 
   incident_service_.reset(CreateIncidentReportingService());
-  resource_request_detector_.reset(new safe_browsing::ResourceRequestDetector(
+  resource_request_detector_.reset(new ResourceRequestDetector(
       incident_service_->GetIncidentReceiver()));
 
   off_domain_inclusion_detector_.reset(
-      new safe_browsing::OffDomainInclusionDetector(database_manager_));
+      new OffDomainInclusionDetector(database_manager_));
 #endif  // !defined(FULL_SAFE_BROWSING)
 
   // Track the safe browsing preference of existing profiles.
@@ -306,10 +307,8 @@ bool SafeBrowsingService::DownloadBinHashNeeded() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
 #if defined(FULL_SAFE_BROWSING)
-  const metrics::MetricsService* metrics = g_browser_process->metrics_service();
-  const bool metrics_active = metrics && metrics->reporting_active();
-
-  return (database_manager_->download_protection_enabled() && metrics_active) ||
+  return (database_manager_->download_protection_enabled() &&
+          safe_browsing::IsMetricsReportingActive()) ||
          (download_protection_service() &&
           download_protection_service()->enabled());
 #else
@@ -354,7 +353,7 @@ SafeBrowsingService::CreatePreferenceValidationDelegate(
 
 #if defined(FULL_SAFE_BROWSING)
 void SafeBrowsingService::RegisterDelayedAnalysisCallback(
-    const safe_browsing::DelayedAnalysisCallback& callback) {
+    const DelayedAnalysisCallback& callback) {
   incident_service_->RegisterDelayedAnalysisCallback(callback);
 }
 #endif
@@ -390,18 +389,18 @@ SafeBrowsingDatabaseManager* SafeBrowsingService::CreateDatabaseManager() {
 }
 
 #if defined(FULL_SAFE_BROWSING)
-safe_browsing::IncidentReportingService*
+IncidentReportingService*
 SafeBrowsingService::CreateIncidentReportingService() {
-  return new safe_browsing::IncidentReportingService(
+  return new IncidentReportingService(
       this, url_request_context_getter_);
 }
 #endif
 
 void SafeBrowsingService::RegisterAllDelayedAnalysis() {
 #if defined(FULL_SAFE_BROWSING)
-  safe_browsing::RegisterBinaryIntegrityAnalysis();
-  safe_browsing::RegisterBlacklistLoadAnalysis();
-  safe_browsing::RegisterVariationsSeedSignatureAnalysis();
+  RegisterBinaryIntegrityAnalysis();
+  RegisterBlacklistLoadAnalysis();
+  RegisterVariationsSeedSignatureAnalysis();
 #else
   NOTREACHED();
 #endif
@@ -645,3 +644,5 @@ void SafeBrowsingService::RefreshState() {
     download_service_->SetEnabled(enable);
 #endif
 }
+
+}  // namespace safe_browsing

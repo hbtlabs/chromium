@@ -57,14 +57,6 @@ Polymer({
     },
 
     /**
-     * Whether the volume slider is shown.
-     */
-    volumeSliderShown: {
-      type: Boolean,
-      observer: 'volumeSliderShownChanged'
-    },
-
-    /**
      * Track index of the current track.
      */
     currentTrackIndex: {
@@ -102,12 +94,6 @@ Polymer({
   },
 
   /**
-   * The last playing state when user starts dragging the seek bar.
-   * @private {boolean}
-   */
-  wasPlayingOnDragStart_: false,
-
-  /**
    * Handles change event for shuffle mode.
    * @param {boolean} shuffle
    */
@@ -143,22 +129,11 @@ Polymer({
   },
 
   /**
-   * Handles change event for volumeSliderShown state.
-   */
-  volumeSliderShownChanged: function(volumeSliderShown) {
-    if (this.model)
-      this.model.volumeSliderShown = volumeSliderShown;
-  },
-
-  /**
    * Initializes an element. This method is called automatically when the
    * element is ready.
    */
   ready: function() {
     this.addEventListener('keydown', this.onKeyDown_.bind(this));
-
-    this.$.audioController.addEventListener('dragging-changed',
-        this.onDraggingChanged_.bind(this));
 
     this.$.audio.volume = 0;  // Temporary initial volume.
     this.$.audio.addEventListener('ended', this.onAudioEnded.bind(this));
@@ -238,7 +213,6 @@ Polymer({
       this.repeat = newModel.repeat;
       this.volume = newModel.volume;
       this.expanded = newModel.expanded;
-      this.volumeSliderShown = newModel.volumeSliderShown;
     }
   },
 
@@ -298,13 +272,6 @@ Polymer({
     this.time = (this.lastAudioUpdateTime_ = this.$.audio.currentTime * 1000);
     this.duration = this.$.audio.duration * 1000;
     this.playing = !this.$.audio.paused;
-  },
-
-  /**
-   * Invoked when receivig a request to start playing the current music.
-   */
-  onPlayCurrentTrack: function() {
-    this.$.audio.play();
   },
 
   /**
@@ -426,24 +393,6 @@ Polymer({
    */
   onPageUnload: function() {
     this.$.audio.src = '';  // Hack to prevent crashing.
-  },
-
-  /**
-   * Invoked when dragging state of seek bar on control panel is changed.
-   * During the user is dragging it, audio playback is paused temporalily.
-   */
-  onDraggingChanged_: function() {
-    if (this.$.audioController.dragging) {
-      if (this.playing) {
-        this.wasPlayingOnDragStart_ = true;
-        this.$.audio.pause();
-      }
-    } else {
-      if (this.wasPlayingOnDragStart_) {
-        this.$.audio.play();
-        this.wasPlayingOnDragStart_ = false;
-      }
-    }
   },
 
   /**

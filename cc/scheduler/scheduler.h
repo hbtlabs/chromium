@@ -35,7 +35,8 @@ class CompositorTimingHistory;
 class SchedulerClient {
  public:
   virtual void WillBeginImplFrame(const BeginFrameArgs& args) = 0;
-  virtual void ScheduledActionSendBeginMainFrame() = 0;
+  virtual void ScheduledActionSendBeginMainFrame(
+      const BeginFrameArgs& args) = 0;
   virtual DrawResult ScheduledActionDrawAndSwapIfPossible() = 0;
   virtual DrawResult ScheduledActionDrawAndSwapForced() = 0;
   virtual void ScheduledActionAnimate() = 0;
@@ -128,7 +129,11 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
     return state_machine_.impl_latency_takes_priority();
   }
 
-  void NotifyBeginMainFrameStarted();
+  // Pass in a main_thread_start_time of base::TimeTicks() if it is not
+  // known or not trustworthy (e.g. blink is running on a remote channel)
+  // to signal that the start time isn't known and should not be used for
+  // scheduling or statistics purposes.
+  void NotifyBeginMainFrameStarted(base::TimeTicks main_thread_start_time);
 
   base::TimeTicks LastBeginImplFrameTime();
 
@@ -176,6 +181,7 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   SchedulerStateMachine::BeginImplFrameDeadlineMode
       begin_impl_frame_deadline_mode_;
   BeginFrameTracker begin_impl_frame_tracker_;
+  BeginFrameArgs begin_main_frame_args_;
 
   base::Closure begin_retro_frame_closure_;
   base::Closure begin_impl_frame_deadline_closure_;

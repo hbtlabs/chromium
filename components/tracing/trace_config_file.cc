@@ -109,9 +109,9 @@ bool TraceConfigFile::ParseTraceConfigFileContent(const std::string& content) {
   if (startup_duration_ < 0)
       startup_duration_ = 0;
 
-  std::string result_file_str;
+  base::FilePath::StringType result_file_str;
   if (dict->GetString(kResultFileParam, &result_file_str))
-    result_file_ = base::FilePath().AppendASCII(result_file_str);
+    result_file_ = base::FilePath(result_file_str);
 
   return true;
 }
@@ -130,7 +130,7 @@ int TraceConfigFile::GetStartupDuration() const {
   return startup_duration_;
 }
 
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) || defined(USE_AURA)
 base::FilePath TraceConfigFile::GetResultFile() const {
   DCHECK(IsEnabled());
   return result_file_;

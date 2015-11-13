@@ -12,6 +12,8 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.scene_layer.ContextualSearchSceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
@@ -24,11 +26,6 @@ import org.chromium.ui.resources.ResourceManager;
  * Controls the Contextual Search Panel.
  */
 public class ContextualSearchPanel extends OverlayPanel {
-
-    /**
-     * The extra dp added around the close button touch target.
-     */
-    private static final int CLOSE_BUTTON_TOUCH_SLOP_DP = 5;
 
     /**
      * The delay after which the hide progress will be hidden.
@@ -67,9 +64,11 @@ public class ContextualSearchPanel extends OverlayPanel {
     /**
      * @param context The current Android {@link Context}.
      * @param updateHost The {@link LayoutUpdateHost} used to request updates in the Layout.
+     * @param panelManager The object managing the how different panels are shown.
      */
-    public ContextualSearchPanel(Context context, LayoutUpdateHost updateHost) {
-        super(context, updateHost);
+    public ContextualSearchPanel(Context context, LayoutUpdateHost updateHost,
+                OverlayPanelManager panelManager) {
+        super(context, updateHost, panelManager);
         mSceneLayer = createNewContextualSearchSceneLayer();
         mPanelMetrics = new ContextualSearchPanelMetrics();
     }
@@ -159,7 +158,14 @@ public class ContextualSearchPanel extends OverlayPanel {
     public void updateSceneLayer(ResourceManager resourceManager) {
         if (mSceneLayer == null) return;
 
-        mSceneLayer.update(resourceManager, this);
+        mSceneLayer.update(resourceManager, this,
+                ContextualSearchSceneLayer.CONTEXTUAL_SEARCH_PANEL,
+                getSearchContextViewId(),
+                getSearchTermViewId(),
+                getPeekPromoControl(),
+                getSearchBarContextOpacity(),
+                getSearchBarTermOpacity(),
+                getIconSpriteControl());
     }
 
     /**
@@ -270,7 +276,7 @@ public class ContextualSearchPanel extends OverlayPanel {
     public void handleBarClick(long time, float x, float y) {
         super.handleBarClick(time, x, y);
         if (isExpanded() || isMaximized()) {
-            if (isCoordinateInsideCloseButton(x, y)) {
+            if (isCoordinateInsideCloseButton(x)) {
                 closePanel(StateChangeReason.CLOSE_BUTTON, true);
             } else if (!mActivity.isCustomTab()) {
                 getManagementDelegate().promoteToTab();
@@ -278,26 +284,46 @@ public class ContextualSearchPanel extends OverlayPanel {
         }
     }
 
-    /**
-     * @param x The x coordinate in dp.
-     * @param y The y coordinate in dp.
-     * @return Whether the given |x| |y| coordinate is inside the close button.
-     */
-    private boolean isCoordinateInsideCloseButton(float x, float y) {
-        boolean isInY = y >= (getCloseIconY() - CLOSE_BUTTON_TOUCH_SLOP_DP)
-                && y <= (getCloseIconY() + getCloseIconDimension() + CLOSE_BUTTON_TOUCH_SLOP_DP);
-        boolean isInX = x >= (getCloseIconX() - CLOSE_BUTTON_TOUCH_SLOP_DP)
-                && x <= (getCloseIconX() + getCloseIconDimension() + CLOSE_BUTTON_TOUCH_SLOP_DP);
-        return isInY && isInX;
+    @Override
+    public boolean onInterceptBarClick() {
+        return onInterceptOpeningPanel();
     }
 
     @Override
-    public boolean onInterceptBarClick() {
+    public boolean onInterceptBarSwipe() {
+        return onInterceptOpeningPanel();
+    }
+
+    /**
+     * @return True if the event on the bar was intercepted.
+     */
+    private boolean onInterceptOpeningPanel() {
         if (mManagementDelegate.isRunningInCompatibilityMode()) {
             mManagementDelegate.openResolvedSearchUrlInNewTab();
             return true;
         }
         return false;
+    }
+
+    // ============================================================================================
+    // Panel base methods
+    // ============================================================================================
+
+    @Override
+    public PanelPriority getPriority() {
+        return PanelPriority.HIGH;
+    }
+
+    @Override
+    public boolean canBeSuppressed() {
+        // The selected text on the page is lost when the panel is closed, thus, this panel cannot
+        // be restored if it is suppressed.
+        return false;
+    }
+
+    @Override
+    public boolean supportsContextualSearchLayout() {
+        return mManagementDelegate != null && !mManagementDelegate.isRunningInCompatibilityMode();
     }
 
     // ============================================================================================
@@ -696,22 +722,9 @@ public class ContextualSearchPanel extends OverlayPanel {
     // Panel Content
     // ============================================================================================
 
-    // TODO(pedrosimonetti): move content code to its own section.
-
-    /**
-     * Acknowledges that there was a touch in the search content view, though no immediate action
-     * needs to be taken.
-     * TODO(mdjones): Get a better name for this.
-     */
+    @Override
     public void onTouchSearchContentViewAck() {
         mHasContentBeenTouched = true;
-    }
-
-    /**
-     * Notify the panel that it's content has been touched.
-     */
-    public void notifyPanelTouched() {
-        getOverlayPanelContent().notifyPanelTouched();
     }
 
     /**

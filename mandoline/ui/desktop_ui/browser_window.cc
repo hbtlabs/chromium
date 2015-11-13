@@ -25,9 +25,10 @@
 #include "ui/mojo/init/ui_init.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/layout/layout_manager.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/display_converter.h"
-#include "ui/views/mus/native_widget_view_manager.h"
+#include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget_delegate.h"
 
 namespace mandoline {
@@ -69,6 +70,25 @@ class ProgressView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(ProgressView);
 };
 
+class BrowserWindow::LayoutManagerImpl : public views::LayoutManager {
+ public:
+  explicit LayoutManagerImpl(BrowserWindow* window) : window_(window) {}
+  ~LayoutManagerImpl() override {}
+
+ private:
+  // views::LayoutManager:
+  gfx::Size GetPreferredSize(const views::View* view) const override {
+    return gfx::Size();
+  }
+  void Layout(views::View* host) override {
+    window_->Layout(host);
+  }
+
+  BrowserWindow* window_;
+
+  DISALLOW_COPY_AND_ASSIGN(LayoutManagerImpl);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow, public:
 
@@ -90,7 +110,7 @@ BrowserWindow::BrowserWindow(mojo::ApplicationImpl* app,
   mus::mojom::WindowTreeHostClientPtr host_client;
   host_client_binding_.Bind(GetProxy(&host_client));
   mus::CreateWindowTreeHost(host_factory, host_client.Pass(), this, &host_,
-                            nullptr);
+                            nullptr, nullptr);
 }
 
 void BrowserWindow::LoadURL(const GURL& url) {
@@ -170,7 +190,7 @@ void BrowserWindow::OnEmbed(mus::Window* root) {
   CHECK(!root_);
 
   // Record when the browser window was displayed, used for performance testing.
-  const base::Time display_time = base::Time::Now();
+  const base::TimeTicks display_ticks = base::TimeTicks::Now();
 
   root_ = root;
 
@@ -214,7 +234,8 @@ void BrowserWindow::OnEmbed(mus::Window* root) {
   LoadURL(default_url_);
 
   // Record the time spent opening initial tabs, used for performance testing.
-  const base::TimeDelta open_tabs_delta = base::Time::Now() - display_time;
+  const base::TimeDelta open_tabs_delta =
+      base::TimeTicks::Now() - display_ticks;
 
   // Record the browser startup time metrics, used for performance testing.
   static bool recorded_browser_startup_metrics = false;
@@ -225,10 +246,10 @@ void BrowserWindow::OnEmbed(mus::Window* root) {
     request->url = mojo::String::From("mojo:tracing");
     tracing::StartupPerformanceDataCollectorPtr collector;
     app_->ConnectToService(request.Pass(), &collector);
-    collector->SetBrowserWindowDisplayTime(display_time.ToInternalValue());
+    collector->SetBrowserWindowDisplayTicks(display_ticks.ToInternalValue());
     collector->SetBrowserOpenTabsTimeDelta(open_tabs_delta.ToInternalValue());
-    collector->SetBrowserMessageLoopStartTime(
-        manager_->startup_time().ToInternalValue());
+    collector->SetBrowserMessageLoopStartTicks(
+        manager_->startup_ticks().ToInternalValue());
     recorded_browser_startup_metrics = true;
   }
 }
@@ -338,42 +359,6 @@ void BrowserWindow::Create(mojo::ApplicationConnection* connection,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// BrowserWindow, views::LayoutManager implementation:
-
-gfx::Size BrowserWindow::GetPreferredSize(const views::View* view) const {
-  return gfx::Size();
-}
-
-void BrowserWindow::Layout(views::View* host) {
-  // TODO(fsamuel): All bounds should be in physical pixels.
-  gfx::Rect bounds_in_physical_pixels(host->bounds());
-  float inverse_device_pixel_ratio =
-      1.0f / root_->viewport_metrics().device_pixel_ratio;
-
-  gfx::Rect toolbar_bounds = gfx::ScaleToEnclosingRect(
-      bounds_in_physical_pixels, inverse_device_pixel_ratio);
-  toolbar_bounds.Inset(10, 10, 10, toolbar_bounds.height() - 40);
-  toolbar_view_->SetBoundsRect(toolbar_bounds);
-
-  find_bar_view_->SetBoundsRect(toolbar_bounds);
-
-  gfx::Rect progress_bar_bounds(toolbar_bounds.x(), toolbar_bounds.bottom() + 2,
-                                toolbar_bounds.width(), 5);
-
-  // The content view bounds are in physical pixels.
-  gfx::Rect content_bounds(DIPSToPixels(progress_bar_bounds.x()),
-                           DIPSToPixels(progress_bar_bounds.bottom() + 10), 0,
-                           0);
-  content_bounds.set_width(DIPSToPixels(progress_bar_bounds.width()));
-  content_bounds.set_height(host->bounds().height() - content_bounds.y() -
-                            DIPSToPixels(10));
-  content_->SetBounds(content_bounds);
-
-  // The omnibox view bounds are in physical pixels.
-  omnibox_view_->SetBounds(bounds_in_physical_pixels);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow, FindBarDelegate implementation:
 
 void BrowserWindow::OnDoFind(const std::string& find, bool forward) {
@@ -407,7 +392,8 @@ void BrowserWindow::Init(mus::Window* root) {
   progress_bar_ = new ProgressView;
   widget_delegate->GetContentsView()->AddChildView(toolbar_view_);
   widget_delegate->GetContentsView()->AddChildView(progress_bar_);
-  widget_delegate->GetContentsView()->SetLayoutManager(this);
+  widget_delegate->GetContentsView()->SetLayoutManager(
+      new LayoutManagerImpl(this));
 
   find_bar_view_ = new FindBarView(this);
   widget_delegate->GetContentsView()->AddChildView(find_bar_view_);
@@ -415,8 +401,8 @@ void BrowserWindow::Init(mus::Window* root) {
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.native_widget =
-      new views::NativeWidgetViewManager(widget, app_->shell(), root_);
+  params.native_widget = new views::NativeWidgetMus(
+      widget, app_->shell(), root, mus::mojom::SURFACE_TYPE_DEFAULT);
   params.delegate = widget_delegate;
   params.bounds = root_->bounds();
   widget->Init(params);
@@ -434,6 +420,35 @@ void BrowserWindow::EmbedOmnibox() {
   //             currently prevents the embedded app from changing window z for
   //             its own window.
   omnibox_view_->MoveToFront();
+}
+
+void BrowserWindow::Layout(views::View* host) {
+  // TODO(fsamuel): All bounds should be in physical pixels.
+  gfx::Rect bounds_in_physical_pixels(host->bounds());
+  float inverse_device_pixel_ratio =
+      1.0f / root_->viewport_metrics().device_pixel_ratio;
+
+  gfx::Rect toolbar_bounds = gfx::ScaleToEnclosingRect(
+      bounds_in_physical_pixels, inverse_device_pixel_ratio);
+  toolbar_bounds.Inset(10, 10, 10, toolbar_bounds.height() - 40);
+  toolbar_view_->SetBoundsRect(toolbar_bounds);
+
+  find_bar_view_->SetBoundsRect(toolbar_bounds);
+
+  gfx::Rect progress_bar_bounds(toolbar_bounds.x(), toolbar_bounds.bottom() + 2,
+                                toolbar_bounds.width(), 5);
+
+  // The content view bounds are in physical pixels.
+  gfx::Rect content_bounds(DIPSToPixels(progress_bar_bounds.x()),
+                           DIPSToPixels(progress_bar_bounds.bottom() + 10), 0,
+                           0);
+  content_bounds.set_width(DIPSToPixels(progress_bar_bounds.width()));
+  content_bounds.set_height(host->bounds().height() - content_bounds.y() -
+                            DIPSToPixels(10));
+  content_->SetBounds(content_bounds);
+
+  // The omnibox view bounds are in physical pixels.
+  omnibox_view_->SetBounds(bounds_in_physical_pixels);
 }
 
 }  // namespace mandoline

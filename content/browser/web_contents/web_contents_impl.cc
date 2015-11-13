@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -122,10 +121,13 @@
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/content_video_view.h"
-#include "content/browser/android/date_time_chooser_android.h"
 #include "content/browser/media/android/media_session.h"
+#endif  // OS_ANDROID
+
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+#include "content/browser/android/date_time_chooser_android.h"
 #include "content/browser/web_contents/web_contents_android.h"
-#endif
+#endif  // OS_ANDROID && !USE_AURA
 
 #if defined(OS_MACOSX)
 #include "base/mac/foundation_util.h"
@@ -400,6 +402,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
           BrowserAccessibilityStateImpl::GetInstance()->accessibility_mode()),
       audio_stream_monitor_(this),
       virtual_keyboard_requested_(false),
+      page_scale_factor_is_one_(true),
       loading_weak_factory_(this) {
   frame_tree_.SetFrameRemoveListener(
       base::Bind(&WebContentsImpl::OnFrameRemoved,
@@ -623,6 +626,8 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHost* render_view_host,
                         OnDidRunInsecureContent)
     IPC_MESSAGE_HANDLER(ViewHostMsg_GoToEntryAtOffset, OnGoToEntryAtOffset)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateZoomLimits, OnUpdateZoomLimits)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_PageScaleFactorChanged,
+                        OnPageScaleFactorChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_EnumerateDirectory, OnEnumerateDirectory)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RegisterProtocolHandler,
                         OnRegisterProtocolHandler)
@@ -653,7 +658,7 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHost* render_view_host,
                         OnHideValidationMessage)
     IPC_MESSAGE_HANDLER(ViewHostMsg_MoveValidationMessage,
                         OnMoveValidationMessage)
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FindMatchRects_Reply,
                         OnFindMatchRectsReply)
     IPC_MESSAGE_HANDLER(ViewHostMsg_OpenDateTimeDialog,
@@ -1175,8 +1180,10 @@ void WebContentsImpl::WasShown() {
   // The resize rect might have changed while this was inactive -- send the new
   // one to make sure it's up to date.
   RenderViewHostImpl* rvh = GetRenderViewHost();
-  if (rvh)
-    rvh->GetWidget()->ResizeRectChanged(GetRootWindowResizerRect());
+  if (rvh) {
+    rvh->GetWidget()->ResizeRectChanged(
+        GetRootWindowResizerRect(rvh->GetWidget()));
+  }
 
   // Restore power save blocker if there are active video players running.
   if (!active_video_players_.empty() && !video_power_save_blocker_)
@@ -1388,7 +1395,7 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
 
   manifest_manager_host_.reset(new ManifestManagerHost(this));
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   date_time_chooser_.reset(new DateTimeChooserAndroid());
 #endif
 
@@ -1473,7 +1480,10 @@ void WebContentsImpl::Activate() {
     delegate_->ActivateContents(this);
 }
 
-void WebContentsImpl::LostCapture() {
+void WebContentsImpl::LostCapture(RenderWidgetHostImpl* render_widget_host) {
+  if (!RenderViewHostImpl::From(render_widget_host))
+    return;
+
   if (delegate_)
     delegate_->LostCapture();
 }
@@ -1610,7 +1620,8 @@ void WebContentsImpl::EnterFullscreenMode(const GURL& origin) {
     delegate_->EnterFullscreenModeForTab(this, origin);
 
   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
-                    DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab()));
+                    DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab(
+                        GetRenderViewHost()->GetWidget())));
 }
 
 void WebContentsImpl::ExitFullscreenMode() {
@@ -1640,30 +1651,47 @@ void WebContentsImpl::ExitFullscreenMode() {
       render_widget_host->WasResized();
   }
 
-  FOR_EACH_OBSERVER(WebContentsObserver,
-                    observers_,
-                    DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab()));
+  FOR_EACH_OBSERVER(WebContentsObserver, observers_,
+                    DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab(
+                        GetRenderViewHost()->GetWidget())));
 }
 
-bool WebContentsImpl::IsFullscreenForCurrentTab() const {
+bool WebContentsImpl::IsFullscreenForCurrentTab(
+    RenderWidgetHostImpl* render_widget_host) const {
+  if (!RenderViewHostImpl::From(render_widget_host))
+    return false;
+
   return delegate_ ? delegate_->IsFullscreenForTabOrPending(this) : false;
 }
 
-blink::WebDisplayMode WebContentsImpl::GetDisplayMode() const {
+blink::WebDisplayMode WebContentsImpl::GetDisplayMode(
+    RenderWidgetHostImpl* render_widget_host) const {
+  if (!RenderViewHostImpl::From(render_widget_host))
+    return blink::WebDisplayModeBrowser;
+
   return delegate_ ? delegate_->GetDisplayMode(this)
                    : blink::WebDisplayModeBrowser;
 }
 
-void WebContentsImpl::RequestToLockMouse(bool user_gesture,
-                                         bool last_unlocked_by_target) {
-  if (delegate_) {
-    delegate_->RequestToLockMouse(this, user_gesture, last_unlocked_by_target);
-  } else {
-    GotResponseToLockMouseRequest(false);
+void WebContentsImpl::RequestToLockMouse(
+    RenderWidgetHostImpl* render_widget_host,
+    bool user_gesture,
+    bool last_unlocked_by_target) {
+  if (render_widget_host != GetRenderViewHost()->GetWidget()) {
+    render_widget_host->GotResponseToLockMouseRequest(false);
+    return;
   }
+
+  if (delegate_)
+    delegate_->RequestToLockMouse(this, user_gesture, last_unlocked_by_target);
+  else
+    GotResponseToLockMouseRequest(false);
 }
 
-void WebContentsImpl::LostMouseLock() {
+void WebContentsImpl::LostMouseLock(RenderWidgetHostImpl* render_widget_host) {
+  if (!RenderViewHostImpl::From(render_widget_host))
+    return;
+
   if (delegate_)
     delegate_->LostMouseLock();
 }
@@ -2158,7 +2186,12 @@ void WebContentsImpl::UpdatePreferredSize(const gfx::Size& pref_size) {
   OnPreferredSizeChanged(old_size);
 }
 
-void WebContentsImpl::ResizeDueToAutoResize(const gfx::Size& new_size) {
+void WebContentsImpl::ResizeDueToAutoResize(
+    RenderWidgetHostImpl* render_widget_host,
+    const gfx::Size& new_size) {
+  if (render_widget_host != GetRenderViewHost()->GetWidget())
+    return;
+
   if (delegate_)
     delegate_->ResizeDueToAutoResize(this, new_size);
 }
@@ -2603,7 +2636,7 @@ void WebContentsImpl::SystemDragEnded() {
 }
 
 void WebContentsImpl::UserGestureDone() {
-  OnUserGesture();
+  OnUserGesture(GetRenderViewHost()->GetWidget());
 }
 
 void WebContentsImpl::SetClosedByUserGesture(bool value) {
@@ -2641,8 +2674,8 @@ int WebContentsImpl::GetMaximumZoomPercent() const {
   return maximum_zoom_percent_;
 }
 
-void WebContentsImpl::ResetPageScale() {
-  Send(new ViewMsg_ResetPageScale(GetRoutingID()));
+void WebContentsImpl::SetPageScale(float page_scale_factor) {
+  Send(new ViewMsg_SetPageScale(GetRoutingID(), page_scale_factor));
 }
 
 gfx::Size WebContentsImpl::GetPreferredSize() const {
@@ -2741,6 +2774,12 @@ bool WebContentsImpl::IsSubframe() const {
 void WebContentsImpl::Find(int request_id,
                            const base::string16& search_text,
                            const blink::WebFindOptions& options) {
+  // Cowardly refuse to search for no text.
+  if (search_text.empty()) {
+    NOTREACHED();
+    return;
+  }
+
   // See if a top level browser plugin handles the find request first.
   if (browser_plugin_embedder_ &&
       browser_plugin_embedder_->Find(request_id, search_text, options)) {
@@ -2954,9 +2993,9 @@ void WebContentsImpl::DidNavigateMainFramePreCommit(
     // No page change?  Then, the renderer and browser can remain in fullscreen.
     return;
   }
-  if (IsFullscreenForCurrentTab())
+  if (IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()))
     ExitFullscreen();
-  DCHECK(!IsFullscreenForCurrentTab());
+  DCHECK(!IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()));
 }
 
 void WebContentsImpl::DidNavigateMainFramePostCommit(
@@ -3140,6 +3179,26 @@ void WebContentsImpl::OnUpdateZoomLimits(int minimum_percent,
   maximum_zoom_percent_ = maximum_percent;
 }
 
+void WebContentsImpl::OnPageScaleFactorChanged(float page_scale_factor) {
+  bool is_one = page_scale_factor == 1.f;
+  if (is_one != page_scale_factor_is_one_) {
+    page_scale_factor_is_one_ = is_one;
+
+    HostZoomMapImpl* host_zoom_map =
+        static_cast<HostZoomMapImpl*>(HostZoomMap::GetForWebContents(this));
+
+    if (host_zoom_map && GetRenderProcessHost()) {
+      host_zoom_map->SetPageScaleFactorIsOneForView(
+          GetRenderProcessHost()->GetID(), GetRoutingID(),
+          page_scale_factor_is_one_);
+    }
+  }
+
+  FOR_EACH_OBSERVER(WebContentsObserver,
+                    observers_,
+                    OnPageScaleFactorChanged(page_scale_factor));
+}
+
 void WebContentsImpl::OnEnumerateDirectory(int request_id,
                                            const base::FilePath& path) {
   if (!delegate_)
@@ -3196,7 +3255,7 @@ void WebContentsImpl::OnFindReply(int request_id,
   }
 }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
 void WebContentsImpl::OnFindMatchRectsReply(
     int version,
     const std::vector<gfx::RectF>& rects,
@@ -3359,8 +3418,9 @@ void WebContentsImpl::CreateVideoPowerSaveBlocker() {
   video_power_save_blocker_ = PowerSaveBlocker::Create(
       PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
       PowerSaveBlocker::kReasonVideoPlayback, "Playing video");
-#if defined(OS_ANDROID)
-  static_cast<PowerSaveBlockerImpl*>(video_power_save_blocker_.get())
+  //TODO(mfomitchev): Support PowerSaveBlocker on Aura - crbug.com/546718.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+static_cast<PowerSaveBlockerImpl*>(video_power_save_blocker_.get())
       ->InitDisplaySleepBlocker(this);
 #endif
 }
@@ -3764,7 +3824,11 @@ RendererPreferences WebContentsImpl::GetRendererPrefs(
   return renderer_preferences_;
 }
 
-gfx::Rect WebContentsImpl::GetRootWindowResizerRect() const {
+gfx::Rect WebContentsImpl::GetRootWindowResizerRect(
+    RenderWidgetHostImpl* render_widget_host) const {
+  if (!RenderViewHostImpl::From(render_widget_host))
+    return gfx::Rect();
+
   if (delegate_)
     return delegate_->GetRootWindowResizerRect();
   return gfx::Rect();
@@ -3852,7 +3916,7 @@ void WebContentsImpl::RenderViewTerminated(RenderViewHost* rvh,
 
   // Ensure fullscreen mode is exited in the |delegate_| since a crashed
   // renderer may not have made a clean exit.
-  if (IsFullscreenForCurrentTab())
+  if (IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()))
     ExitFullscreenMode();
 
   // Cancel any visible dialogs so they are not left dangling over the sad tab.
@@ -3899,36 +3963,13 @@ void WebContentsImpl::UpdateState(RenderViewHost* rvh,
   RenderViewHostImpl* rvhi = static_cast<RenderViewHostImpl*>(rvh);
   NavigationEntryImpl* entry = controller_.GetEntryWithPageID(
       rvhi->GetSiteInstance(), page_id);
-
-  int nav_entry_id =
-      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame())->nav_entry_id();
-  NavigationEntryImpl* new_entry =
-      controller_.GetEntryWithUniqueID(nav_entry_id);
-
-  base::debug::SetCrashKeyValue("pageid", base::IntToString(page_id));
-  base::debug::SetCrashKeyValue("navuniqueid", base::IntToString(nav_entry_id));
-  base::debug::SetCrashKeyValue(
-      "oldindex", base::IntToString(controller_.GetIndexOfEntry(entry)));
-  base::debug::SetCrashKeyValue(
-      "newindex", base::IntToString(controller_.GetIndexOfEntry(new_entry)));
-  base::debug::SetCrashKeyValue(
-      "lastcommittedindex",
-      base::IntToString(controller_.GetLastCommittedEntryIndex()));
-  base::debug::SetCrashKeyValue("oldurl",
-                                entry ? entry->GetURL().spec() : "-nullptr-");
-  base::debug::SetCrashKeyValue(
-      "newurl", new_entry ? new_entry->GetURL().spec() : "-nullptr-");
-  base::debug::SetCrashKeyValue(
-      "updatedvalue", page_state.GetTopLevelUrlStringTemporaryForBug369661());
-  base::debug::SetCrashKeyValue(
-      "oldvalue", entry ? entry->GetURL().spec() : "-nullptr-");
-  base::debug::SetCrashKeyValue(
-      "newvalue",
-      new_entry ? new_entry->GetURL().spec() : "-nullptr-");
-  CHECK_EQ(entry, new_entry);
-
   if (!entry)
     return;
+
+  NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
+      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame())->nav_entry_id());
+
+  DCHECK_EQ(entry, new_entry);
 
   if (page_state == entry->GetPageState())
     return;  // Nothing to update.
@@ -4110,7 +4151,13 @@ void WebContentsImpl::UpdateStateForFrame(RenderFrameHost* render_frame_host,
   if (!frame_entry)
     return;
 
-  CHECK_EQ(frame_entry->site_instance(), rfhi->GetSiteInstance());
+  // The SiteInstance might not match if we do a cross-process navigation with
+  // replacement (e.g., auto-subframe), in which case the swap out of the old
+  // RenderFrameHost runs in the background after the old FrameNavigationEntry
+  // has already been replaced and destroyed.
+  if (frame_entry->site_instance() != rfhi->GetSiteInstance())
+    return;
+
   if (page_state == frame_entry->page_state())
     return;  // Nothing to update.
 
@@ -4131,31 +4178,9 @@ void WebContentsImpl::UpdateTitle(RenderFrameHost* render_frame_host,
   NavigationEntryImpl* entry = controller_.GetEntryWithPageID(
       render_frame_host->GetSiteInstance(), page_id);
 
-  int nav_entry_id =
-      static_cast<RenderFrameHostImpl*>(render_frame_host)->nav_entry_id();
-  NavigationEntryImpl* new_entry =
-      controller_.GetEntryWithUniqueID(nav_entry_id);
-
-  base::debug::SetCrashKeyValue("pageid", base::IntToString(page_id));
-  base::debug::SetCrashKeyValue("navuniqueid", base::IntToString(nav_entry_id));
-  base::debug::SetCrashKeyValue(
-      "oldindex", base::IntToString(controller_.GetIndexOfEntry(entry)));
-  base::debug::SetCrashKeyValue(
-      "newindex", base::IntToString(controller_.GetIndexOfEntry(new_entry)));
-  base::debug::SetCrashKeyValue(
-      "lastcommittedindex",
-      base::IntToString(controller_.GetLastCommittedEntryIndex()));
-  base::debug::SetCrashKeyValue("oldurl",
-                                entry ? entry->GetURL().spec() : "-nullptr-");
-  base::debug::SetCrashKeyValue(
-      "newurl", new_entry ? new_entry->GetURL().spec() : "-nullptr-");
-  base::debug::SetCrashKeyValue("updatedvalue", base::UTF16ToUTF8(title));
-  base::debug::SetCrashKeyValue(
-      "oldvalue", entry ? base::UTF16ToUTF8(entry->GetTitle()) : "-nullptr-");
-  base::debug::SetCrashKeyValue(
-      "newvalue",
-      new_entry ? base::UTF16ToUTF8(new_entry->GetTitle()) : "-nullptr-");
-  CHECK_EQ(entry, new_entry);
+  NavigationEntryImpl* new_entry = controller_.GetEntryWithUniqueID(
+      static_cast<RenderFrameHostImpl*>(render_frame_host)->nav_entry_id());
+  DCHECK_EQ(entry, new_entry);
 
   // We can handle title updates when we don't have an entry in
   // UpdateTitleForEntry, but only if the update is from the current RVH.
@@ -4261,7 +4286,10 @@ int WebContentsImpl::CreateSwappedOutRenderView(
   return render_view_routing_id;
 }
 
-void WebContentsImpl::OnUserGesture() {
+void WebContentsImpl::OnUserGesture(RenderWidgetHostImpl* render_widget_host) {
+  if (render_widget_host != GetRenderViewHost()->GetWidget())
+    return;
+
   // Notify observers.
   FOR_EACH_OBSERVER(WebContentsObserver, observers_, DidGetUserGesture());
 
@@ -4280,14 +4308,14 @@ void WebContentsImpl::OnIgnoredUIEvent() {
   FOR_EACH_OBSERVER(WebContentsObserver, observers_, DidGetIgnoredUIEvent());
 }
 
-void WebContentsImpl::RendererUnresponsive(RenderViewHost* render_view_host) {
+void WebContentsImpl::RendererUnresponsive(
+    RenderWidgetHostImpl* render_widget_host) {
   // Don't show hung renderer dialog for a swapped out RVH.
-  if (render_view_host != GetRenderViewHost())
+  if (render_widget_host != GetRenderViewHost()->GetWidget())
     return;
 
-  RenderViewHostImpl* rvhi = static_cast<RenderViewHostImpl*>(render_view_host);
   RenderFrameHostImpl* rfhi =
-      static_cast<RenderFrameHostImpl*>(rvhi->GetMainFrame());
+      static_cast<RenderFrameHostImpl*>(GetRenderViewHost()->GetMainFrame());
 
   // Ignore renderer unresponsive event if debugger is attached to the tab
   // since the event may be a result of the renderer sitting on a breakpoint.
@@ -4299,7 +4327,7 @@ void WebContentsImpl::RendererUnresponsive(RenderViewHost* render_view_host) {
       rfhi->IsWaitingForUnloadACK()) {
     // Hang occurred while firing the beforeunload/unload handler.
     // Pretend the handler fired so tab closing continues as if it had.
-    rvhi->set_sudden_termination_allowed(true);
+    GetRenderViewHost()->set_sudden_termination_allowed(true);
 
     if (!GetRenderManager()->ShouldCloseTabOnUnresponsiveRenderer())
       return;
@@ -4315,7 +4343,7 @@ void WebContentsImpl::RendererUnresponsive(RenderViewHost* render_view_host) {
       delegate_->BeforeUnloadFired(this, true, &close);
     }
     if (close)
-      Close(rvhi);
+      Close();
     return;
   }
 
@@ -4326,7 +4354,11 @@ void WebContentsImpl::RendererUnresponsive(RenderViewHost* render_view_host) {
     delegate_->RendererUnresponsive(this);
 }
 
-void WebContentsImpl::RendererResponsive(RenderViewHost* render_view_host) {
+void WebContentsImpl::RendererResponsive(
+    RenderWidgetHostImpl* render_widget_host) {
+  if (render_widget_host != GetRenderViewHost()->GetWidget())
+    return;
+
   if (delegate_)
     delegate_->RendererResponsive(this);
 }
@@ -4514,7 +4546,7 @@ bool WebContentsImpl::CreateRenderFrameForRenderManager(
   return true;
 }
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !defined(USE_AURA)
 
 base::android::ScopedJavaLocalRef<jobject>
 WebContentsImpl::GetJavaWebContents() {

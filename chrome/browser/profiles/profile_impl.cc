@@ -451,7 +451,7 @@ ProfileImpl::ProfileImpl(
       path_, sequenced_task_runner, create_mode == CREATE_MODE_SYNCHRONOUS);
 #endif
 
-  scoped_refptr<SafeBrowsingService> safe_browsing_service(
+  scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service(
       g_browser_process->safe_browsing_service());
   if (safe_browsing_service.get()) {
     pref_validation_delegate_ =
@@ -833,8 +833,6 @@ void ProfileImpl::OnLocaleReady() {
     TRACE_EVENT0("browser", "ProfileImpl::OnPrefsLoaded:NetPrefObserver")
     net_pref_observer_.reset(new NetPrefObserver(prefs_.get()));
   }
-
-  chrome_prefs::SchedulePrefsFilePathVerification(path_);
 
   ChromeVersionService::OnProfileLoaded(prefs_.get(), IsNewProfile());
   DoFinalInit();

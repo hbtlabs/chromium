@@ -27,6 +27,7 @@
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -44,6 +45,9 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/password_manager/core/browser/mock_password_store.h"
+#include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_store_consumer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/dom_storage_context.h"
@@ -344,8 +348,8 @@ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
  public:
   RemoveSafeBrowsingCookieTester()
       : browser_process_(TestingBrowserProcess::GetGlobal()) {
-    scoped_refptr<SafeBrowsingService> sb_service =
-        SafeBrowsingService::CreateSafeBrowsingService();
+    scoped_refptr<safe_browsing::SafeBrowsingService> sb_service =
+        safe_browsing::SafeBrowsingService::CreateSafeBrowsingService();
     browser_process_->SetSafeBrowsingService(sb_service.get());
     sb_service->Initialize();
     base::MessageLoop::current()->RunUntilIdle();
@@ -2115,4 +2119,21 @@ TEST_F(BrowsingDataRemoverTest, RemoveSameOriginDownloads) {
 
   BlockUntilOriginDataRemoved(BrowsingDataRemover::EVERYTHING,
                               BrowsingDataRemover::REMOVE_DOWNLOADS, kOrigin1);
+}
+
+TEST_F(BrowsingDataRemoverTest, RemovePasswordStatistics) {
+  PasswordStoreFactory::GetInstance()->SetTestingFactoryAndUse(
+      GetProfile(),
+      password_manager::BuildPasswordStoreService<
+          content::BrowserContext, password_manager::MockPasswordStore>);
+  password_manager::MockPasswordStore* store =
+      static_cast<password_manager::MockPasswordStore*>(
+          PasswordStoreFactory::GetInstance()
+              ->GetForProfile(GetProfile(), ServiceAccessType::EXPLICIT_ACCESS)
+              .get());
+  EXPECT_CALL(*store, RemoveStatisticsCreatedBetweenImpl(base::Time(),
+                                                         base::Time::Max()));
+  BlockUntilBrowsingDataRemoved(
+      BrowsingDataRemover::EVERYTHING,
+      BrowsingDataRemover::REMOVE_HISTORY, false);
 }

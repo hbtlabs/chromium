@@ -241,13 +241,21 @@ bool HTMLTextAreaElement::shouldShowFocusRingOnMouseFocus() const
     return true;
 }
 
-void HTMLTextAreaElement::updateFocusAppearance(bool restorePreviousSelection)
+void HTMLTextAreaElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionBehavior)
 {
-    if (!restorePreviousSelection)
+    switch (selectionBehavior) {
+    case SelectionBehaviorOnFocus::Reset:
         setSelectionRange(0, 0, SelectionHasNoDirection, NotDispatchSelectEvent);
-    else
+        break;
+    case SelectionBehaviorOnFocus::Restore:
         restoreCachedSelection();
-
+        break;
+    case SelectionBehaviorOnFocus::None:
+        // |None| is used only for FocusController::setFocusedElement and
+        // Document::setFocusedElement, and they don't call
+        // updateFocusAppearance().
+        ASSERT_NOT_REACHED();
+    }
     if (document().frame())
         document().frame()->selection().revealSelection();
 }

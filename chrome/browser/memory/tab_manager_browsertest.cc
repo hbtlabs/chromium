@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "chrome/browser/browser_process.h"
@@ -27,11 +28,13 @@ namespace memory {
 
 class TabManagerTest : public InProcessBrowserTest {
  public:
-  // Tab discarding is enabled by default on CrOS, on other platforms, force it
-  // by setting the command line flag.
+  // Tab discarding is enabled by default on CrOS. On other platforms, force it
+  // by turning on the corresponding experiment as some tests assume this
+  // behavior it turned on.
   void SetUpCommandLine(base::CommandLine* command_line) override {
 #if !defined(OS_CHROMEOS)
-    command_line->AppendSwitch(switches::kEnableTabDiscarding);
+    command_line->AppendSwitchASCII(switches::kForceFieldTrials,
+                                    "AutomaticTabDiscarding/Enabled/");
 #endif
   }
 };
@@ -216,6 +219,37 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, OomPressureListener) {
   EXPECT_TRUE(tab_manager->recent_tab_discard());
 }
 
+IN_PROC_BROWSER_TEST_F(TabManagerTest, InvalidOrEmptyURL) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  ASSERT_TRUE(tab_manager);
+
+  // Open two tabs. Wait for the foreground one to load but do not wait for the
+  // background one.
+  content::WindowedNotificationObserver load1(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
+                      CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open1);
+  load1.Wait();
+
+  content::WindowedNotificationObserver load2(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      NEW_BACKGROUND_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open2);
+
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
+
+  // This shouldn't be able to discard a tab as the background tab has not yet
+  // started loading (its URL is not committed).
+  EXPECT_FALSE(tab_manager->DiscardTab());
+
+  // Wait for the background tab to load which then allows it to be discarded.
+  load2.Wait();
+  EXPECT_TRUE(tab_manager->DiscardTab());
+}
 }  // namespace memory
 
 #endif  // OS_WIN || OS_CHROMEOS

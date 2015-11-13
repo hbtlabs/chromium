@@ -54,6 +54,10 @@ namespace gfx {
 class ImageSkia;
 }
 
+namespace media {
+class CdmFactory;
+}
+
 namespace mojo {
 class ApplicationDelegate;
 }
@@ -709,6 +713,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual ScopedVector<NavigationThrottle> CreateThrottlesForNavigation(
       NavigationHandle* navigation_handle);
 
+  // Creates and returns a factory used for creating CDM instances for playing
+  // protected content.
+  virtual scoped_ptr<media::CdmFactory> CreateCdmFactory();
+
   // Populates |mappings| with all files that need to be mapped before launching
   // a child process.
 #if defined(OS_ANDROID)
@@ -731,8 +739,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the PROCESS_LAUNCHER thread before the renderer process
   // is launched. It gives the embedder a chance to add loosen the sandbox
   // policy.
-  virtual void PreSpawnRenderer(sandbox::TargetPolicy* policy,
-                                bool* success) {}
+  virtual bool PreSpawnRenderer(sandbox::TargetPolicy* policy);
 
   // Returns the AppContainer SID for the specified sandboxed process type, or
   // empty string if this sandboxed process type does not support living inside

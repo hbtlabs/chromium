@@ -232,6 +232,23 @@ bool Connection::ShouldIgnoreSqliteError(int error) {
   return current_ignorer_cb_->Run(error);
 }
 
+// static
+bool Connection::ShouldIgnoreSqliteCompileError(int error) {
+  // Put this first in case tests need to see that the check happened.
+  if (ShouldIgnoreSqliteError(error))
+    return true;
+
+  // Trim extended error codes.
+  int basic_error = error & 0xff;
+
+  // These errors relate more to the runtime context of the system than to
+  // errors with a SQL statement or with the schema, so they aren't generally
+  // interesting to flag.  This list is not comprehensive.
+  return basic_error == SQLITE_BUSY ||
+      basic_error == SQLITE_NOTADB ||
+      basic_error == SQLITE_CORRUPT;
+}
+
 bool Connection::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                               base::trace_event::ProcessMemoryDump* pmd) {
   if (args.level_of_detail ==
@@ -537,6 +554,8 @@ void Connection::Preload() {
   scoped_ptr<char[]> buf(new char[page_size]);
   for (sqlite3_int64 pos = 0; pos < preload_size; pos += page_size) {
     rc = file->pMethods->xRead(file, buf.get(), page_size, pos);
+
+    // TODO(shess): Consider calling OnSqliteError().
     if (rc != SQLITE_OK)
       return;
   }
@@ -861,6 +880,144 @@ std::string Connection::CollectCorruptionInfo() {
   return debug_info;
 }
 
+size_t Connection::GetAppropriateMmapSize() {
+  AssertIOAllowed();
+
+  // TODO(shess): Using sql::MetaTable seems indicated, but mixing
+  // sql::MetaTable and direct access seems error-prone.  It might make sense to
+  // simply integrate sql::MetaTable functionality into sql::Connection.
+
+#if defined(OS_IOS)
+  // iOS SQLite does not support memory mapping.
+  return 0;
+#endif
+
+  // If the database doesn't have a place to track progress, assume the worst.
+  // This will happen when new databases are created.
+  if (!DoesTableExist("meta")) {
+    RecordOneEvent(EVENT_MMAP_META_MISSING);
+    return 0;
+  }
+
+  // Key into meta table to get status from a previous run.  The value
+  // represents how much data in bytes has successfully been read from the
+  // database.  |kMmapFailure| indicates that there was a read error and the
+  // database should not be memory-mapped, while |kMmapSuccess| indicates that
+  // the entire file was read at some point and can be memory-mapped without
+  // constraint.
+  const char* kMmapStatusKey = "mmap_status";
+  static const sqlite3_int64 kMmapFailure = -2;
+  static const sqlite3_int64 kMmapSuccess = -1;
+
+  // Start reading from 0 unless status is found in meta table.
+  sqlite3_int64 mmap_ofs = 0;
+
+  // Retrieve the current status.  It is fine for the status to be missing
+  // entirely, but any error prevents memory-mapping.
+  {
+    const char* kMmapStatusSql = "SELECT value FROM meta WHERE key = ?";
+    Statement s(GetUniqueStatement(kMmapStatusSql));
+    s.BindString(0, kMmapStatusKey);
+    if (s.Step()) {
+      mmap_ofs = s.ColumnInt64(0);
+    } else if (!s.Succeeded()) {
+      RecordOneEvent(EVENT_MMAP_META_FAILURE_READ);
+      return 0;
+    }
+  }
+
+  // Database read failed in the past, don't memory map.
+  if (mmap_ofs == kMmapFailure) {
+    RecordOneEvent(EVENT_MMAP_FAILED);
+    return 0;
+  } else if (mmap_ofs != kMmapSuccess) {
+    // Continue reading from previous offset.
+    DCHECK_GE(mmap_ofs, 0);
+
+    // TODO(shess): Could this reading code be shared with Preload()?  It would
+    // require locking twice (this code wouldn't be able to access |db_size| so
+    // the helper would have to return amount read).
+
+    // Read more of the database looking for errors.  The VFS interface is used
+    // to assure that the reads are valid for SQLite.  |g_reads_allowed| is used
+    // to limit checking to 20MB per run of Chromium.
+    sqlite3_file* file = NULL;
+    sqlite3_int64 db_size = 0;
+    if (SQLITE_OK != GetSqlite3FileAndSize(db_, &file, &db_size)) {
+      RecordOneEvent(EVENT_MMAP_VFS_FAILURE);
+      return 0;
+    }
+
+    // Read the data left, or |g_reads_allowed|, whichever is smaller.
+    // |g_reads_allowed| limits the total amount of I/O to spend verifying data
+    // in a single Chromium run.
+    sqlite3_int64 amount = db_size - mmap_ofs;
+    if (amount < 0)
+      amount = 0;
+    if (amount > 0) {
+      base::AutoLock lock(g_sqlite_init_lock.Get());
+      static sqlite3_int64 g_reads_allowed = 20 * 1024 * 1024;
+      if (g_reads_allowed < amount)
+        amount = g_reads_allowed;
+      g_reads_allowed -= amount;
+    }
+
+    // |amount| can be <= 0 if |g_reads_allowed| ran out of quota, or if the
+    // database was truncated after a previous pass.
+    if (amount <= 0 && mmap_ofs < db_size) {
+      DCHECK_EQ(0, amount);
+      RecordOneEvent(EVENT_MMAP_SUCCESS_NO_PROGRESS);
+    } else {
+      static const int kPageSize = 4096;
+      char buf[kPageSize];
+      while (amount > 0) {
+        int rc = file->pMethods->xRead(file, buf, sizeof(buf), mmap_ofs);
+        if (rc == SQLITE_OK) {
+          mmap_ofs += sizeof(buf);
+          amount -= sizeof(buf);
+        } else if (rc == SQLITE_IOERR_SHORT_READ) {
+          // Reached EOF for a database with page size < |kPageSize|.
+          mmap_ofs = db_size;
+          break;
+        } else {
+          // TODO(shess): Consider calling OnSqliteError().
+          mmap_ofs = kMmapFailure;
+          break;
+        }
+      }
+
+      // Log these events after update to distinguish meta update failure.
+      Events event;
+      if (mmap_ofs >= db_size) {
+        mmap_ofs = kMmapSuccess;
+        event = EVENT_MMAP_SUCCESS_NEW;
+      } else if (mmap_ofs > 0) {
+        event = EVENT_MMAP_SUCCESS_PARTIAL;
+      } else {
+        DCHECK_EQ(kMmapFailure, mmap_ofs);
+        event = EVENT_MMAP_FAILED_NEW;
+      }
+
+      const char* kMmapUpdateStatusSql = "REPLACE INTO meta VALUES (?, ?)";
+      Statement s(GetUniqueStatement(kMmapUpdateStatusSql));
+      s.BindString(0, kMmapStatusKey);
+      s.BindInt64(1, mmap_ofs);
+      if (!s.Run()) {
+        RecordOneEvent(EVENT_MMAP_META_FAILURE_UPDATE);
+        return 0;
+      }
+
+      RecordOneEvent(event);
+    }
+  }
+
+  if (mmap_ofs == kMmapFailure)
+    return 0;
+  if (mmap_ofs == kMmapSuccess)
+    return 256 * 1024 * 1024;
+  return mmap_ofs;
+}
+
 void Connection::TrimMemory(bool aggressively) {
   if (!db_)
     return;
@@ -1145,7 +1302,7 @@ void Connection::RollbackTransaction() {
 
 bool Connection::CommitTransaction() {
   if (!transaction_nesting_) {
-    DLOG_IF(FATAL, !poisoned_) << "Committing back a nonexistent transaction";
+    DLOG_IF(FATAL, !poisoned_) << "Committing a nonexistent transaction";
     return false;
   }
   transaction_nesting_--;
@@ -1339,7 +1496,7 @@ scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
   int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteError(rc))
+    if (!ShouldIgnoreSqliteCompileError(rc))
       DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
 
     // It could also be database corruption.
@@ -1349,6 +1506,8 @@ scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
   return new StatementRef(this, stmt, true);
 }
 
+// TODO(shess): Unify this with GetUniqueStatement().  The only difference that
+// seems legitimate is not passing |this| to StatementRef.
 scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
     const char* sql) const {
   // Return inactive statement.
@@ -1359,7 +1518,7 @@ scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
   int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteError(rc))
+    if (!ShouldIgnoreSqliteCompileError(rc))
       DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
     return new StatementRef(NULL, NULL, false);
   }
@@ -1680,14 +1839,14 @@ bool Connection::OpenInternal(const std::string& file_name,
   }
 
   // Enable memory-mapped access.  The explicit-disable case is because SQLite
-  // can be built to default-enable mmap.  This value will be capped by
-  // SQLITE_MAX_MMAP_SIZE, which could be different between 32-bit and 64-bit
-  // platforms.
-  if (mmap_disabled_) {
-    ignore_result(Execute("PRAGMA mmap_size = 0"));
-  } else {
-    ignore_result(Execute("PRAGMA mmap_size = 268435456"));  // 256MB.
-  }
+  // can be built to default-enable mmap.  GetAppropriateMmapSize() calculates a
+  // safe range to memory-map based on past regular I/O.  This value will be
+  // capped by SQLITE_MAX_MMAP_SIZE, which could be different between 32-bit and
+  // 64-bit platforms.
+  size_t mmap_size = mmap_disabled_ ? 0 : GetAppropriateMmapSize();
+  std::string mmap_sql =
+      base::StringPrintf("PRAGMA mmap_size = %" PRIuS, mmap_size);
+  ignore_result(Execute(mmap_sql.c_str()));
 
   // Determine if memory-mapping has actually been enabled.  The Execute() above
   // can succeed without changing the amount mapped.
@@ -1766,7 +1925,11 @@ int Connection::OnSqliteError(int err, sql::Statement *stmt, const char* sql) {
     sql = stmt->GetSQLStatement();
   if (!sql)
     sql = "-- unknown";
-  LOG(ERROR) << histogram_tag_ << " sqlite error " << err
+
+  std::string id = histogram_tag_;
+  if (id.empty())
+    id = DbPath().BaseName().AsUTF8Unsafe();
+  LOG(ERROR) << id << " sqlite error " << err
              << ", errno " << GetLastErrno()
              << ": " << GetErrorMessage()
              << ", sql: " << sql;

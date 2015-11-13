@@ -43,6 +43,7 @@
 #include "mojo/application/public/interfaces/shell.mojom.h"
 #include "mojo/common/common_type_converters.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "skia/ext/refptr.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
@@ -61,7 +62,6 @@
 #include "third_party/WebKit/public/web/WebRemoteFrameClient.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkDevice.h"
@@ -426,8 +426,8 @@ void HTMLFrame::didHandleOnloadEvents(blink::WebLocalFrame* frame) {
   DVLOG(2) << "XXX HTMLFrame::didHandleOnloadEvents id=" << id_;
   static bool recorded = false;
   if (!recorded && startup_performance_data_collector_) {
-    startup_performance_data_collector_->SetFirstWebContentsMainFrameLoadTime(
-        base::Time::Now().ToInternalValue());
+    startup_performance_data_collector_->SetFirstWebContentsMainFrameLoadTicks(
+        base::TimeTicks::Now().ToInternalValue());
     recorded = true;
   }
 }

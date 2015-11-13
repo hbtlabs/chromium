@@ -17,10 +17,7 @@ if (is_android) {
     deps = [
       ":java_library",
       ":resource_provider_lib",
-      "//third_party/icu:icudata",
     ]
-
-    resources = [ "$root_out_dir/icudtl.dat" ]
   }
 
   shared_library("resource_provider_lib") {
@@ -37,7 +34,7 @@ if (is_android) {
       "//components/resource_provider/public/interfaces",
       "//mojo/environment:chromium",
       "//mojo/platform_handle:for_shared_library",
-      "//third_party/mojo/src/mojo/public/c/system:for_shared_library",
+      "//mojo/public/c/system:for_shared_library",
       "//url",
     ]
   }
@@ -75,11 +72,8 @@ if (is_android) {
       "//base",
       "//components/resource_provider/public/interfaces",
       "//mojo/environment:chromium",
-      "//third_party/icu:icudata",
       "//url",
     ]
-
-    resources = [ "$root_out_dir/icudtl.dat" ]
   }
 }
 

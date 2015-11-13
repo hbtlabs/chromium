@@ -50,6 +50,7 @@
 #include "content/public/browser/web_contents.h"
 
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/data_usage/data_use_tab_helper.h"
 #include "chrome/browser/android/voice_search_tab_helper.h"
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
@@ -93,6 +94,7 @@
 #if defined(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_preview_message_handler.h"
 #include "chrome/browser/printing/print_view_manager.h"
+#include "chrome/browser/ui/webui/print_preview/print_preview_distiller.h"
 #else
 #include "chrome/browser/printing/print_view_manager_basic.h"
 #endif  // defined(ENABLE_PRINT_PREVIEW)
@@ -163,11 +165,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   ManagePasswordsUIController::CreateForWebContents(web_contents);
   NavigationCorrectionTabObserver::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
-  // rappor_service will either be null or share a lifetime with the
-  // BrowserProcess g_browser_process. The above ensures rappor_service() will
-  // survive as long as the web_contents will survive.
-  chrome::InitializePageLoadMetricsForWebContents(
-      web_contents, g_browser_process->rappor_service());
+  chrome::InitializePageLoadMetricsForWebContents(web_contents);
   PopupBlockerTabHelper::CreateForWebContents(web_contents);
   PrefsTabHelper::CreateForWebContents(web_contents);
   prerender::PrerenderTabHelper::CreateForWebContents(web_contents);
@@ -183,6 +181,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
 #if defined(OS_ANDROID)
   ContextMenuHelper::CreateForWebContents(web_contents);
+  DataUseTabHelper::CreateForWebContents(web_contents);
   SingleTabModeTabHelper::CreateForWebContents(web_contents);
   VoiceSearchTabHelper::CreateForWebContents(web_contents);
   WindowAndroidHelper::CreateForWebContents(web_contents);
@@ -238,10 +237,14 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 #endif  // defined(ENABLE_PRINTING) && !defined(OS_ANDROID)
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDomDistiller) ||
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisablePrintPreviewSimplify)) {
+  bool enabled_distiller = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableDomDistiller);
+#if defined(ENABLE_PRINT_PREVIEW)
+  if (PrintPreviewDistiller::IsEnabled())
+    enabled_distiller = true;
+#endif  // defined(ENABLE_PRINT_PREVIEW)
+
+  if (enabled_distiller) {
     dom_distiller::WebContentsMainFrameObserver::CreateForWebContents(
         web_contents);
   }

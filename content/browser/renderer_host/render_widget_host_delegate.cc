@@ -4,6 +4,7 @@
 
 #include "base/basictypes.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace content {
 
@@ -51,6 +52,21 @@ RenderWidgetHostDelegate::GetInputEventRouter() {
 // assume its own RenderWidgetHost should consume keyboard events.
 RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFocusedRenderWidgetHost() {
   return nullptr;
+}
+
+gfx::Rect RenderWidgetHostDelegate::GetRootWindowResizerRect(
+    RenderWidgetHostImpl* render_widget_host) const {
+  return gfx::Rect();
+};
+
+bool RenderWidgetHostDelegate::IsFullscreenForCurrentTab(
+    RenderWidgetHostImpl* render_widget_host) const {
+  return false;
+}
+
+blink::WebDisplayMode RenderWidgetHostDelegate::GetDisplayMode(
+    RenderWidgetHostImpl* render_widget_host) const {
+  return blink::WebDisplayModeBrowser;
 }
 
 }  // namespace content

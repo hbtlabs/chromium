@@ -493,6 +493,7 @@
       'browser/media/capture/audio_mirroring_manager_unittest.cc',
       'browser/media/capture/web_contents_audio_input_stream_unittest.cc',
       'browser/media/capture/web_contents_video_capture_device_unittest.cc',
+      'browser/media/capture/cursor_renderer_aura_unittest.cc',
       'browser/media/media_internals_unittest.cc',
       'browser/media/midi_host_unittest.cc',
       'browser/media/webrtc_identity_store_unittest.cc',
@@ -748,6 +749,7 @@
       'browser/renderer_host/p2p/socket_host_test_utils.h',
       'browser/renderer_host/p2p/socket_host_udp_unittest.cc',
       'browser/renderer_host/p2p/socket_host_unittest.cc',
+      'renderer/media/audio_repetition_detector_unittest.cc',
       'renderer/media/media_recorder_handler_unittest.cc',
       'renderer/media/media_stream_audio_processor_unittest.cc',
       'renderer/media/media_stream_constraints_util_unittest.cc',
@@ -970,7 +972,7 @@
             '../third_party/iaccessible2/iaccessible2.gyp:iaccessible2',
           ],
         }],
-        ['OS!="android" and OS!="ios"', {
+        ['use_aura==1 or OS=="mac"', {
           'sources': [
             'browser/compositor/test/no_transport_image_transport_factory.cc',
             'browser/compositor/test/no_transport_image_transport_factory.h',
@@ -1260,6 +1262,12 @@
             }, {  # OS != "android"
               'dependencies': [
                 '../third_party/libvpx_new/libvpx.gyp:libvpx_new',
+              ],
+            }],
+            # Avoid windows due to non-availability of cursor resources in test.
+            ['OS != "linux"', {
+              'sources!': [
+              'browser/media/capture/cursor_renderer_aura_unittest.cc',
               ],
             }],
             ['use_aura!=1 and OS!="android"', {
@@ -1885,6 +1893,7 @@
           ],
         },
         {
+          # GN: //content/shell/android:content_shell_browsertests_java
           'target_name': 'content_shell_browsertests_java',
           'type': 'none',
           'dependencies': [
@@ -1900,7 +1909,7 @@
           'includes': [ '../build/java.gypi' ],
         },
         {
-          # TODO(GN)
+          # GN: //content/test:content_browsertests_manifest
           'target_name': 'content_browsertests_manifest',
           'type': 'none',
           'variables': {
@@ -1910,7 +1919,7 @@
           'includes': [ '../build/android/jinja_template.gypi' ],
         },
         {
-          # TODO(GN)
+          # GN: //content/test:content_browsertests_apk
           'target_name': 'content_browsertests_apk',
           'type': 'none',
           'dependencies': [

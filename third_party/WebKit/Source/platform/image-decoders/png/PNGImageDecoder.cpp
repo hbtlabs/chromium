@@ -105,17 +105,12 @@ public:
 
     ~PNGImageReader()
     {
-        close();
-    }
-
-    void close()
-    {
-        if (m_png && m_info)
-            // This will zero the pointers.
-            png_destroy_read_struct(&m_png, &m_info, 0);
 #if USE(QCMSLIB)
         clearColorTransform();
 #endif
+        png_destroy_read_struct(m_png ? &m_png : 0, m_info ? &m_info : 0, 0);
+        ASSERT(!m_png && !m_info);
+
         m_readOffset = 0;
     }
 

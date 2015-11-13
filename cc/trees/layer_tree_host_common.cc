@@ -445,14 +445,22 @@ static bool IsRootLayerOfNewRenderingContext(LayerImpl* layer) {
   return layer->Is3dSorted();
 }
 
-static bool IsLayerBackFaceVisible(LayerImpl* layer) {
+static bool IsLayerBackFaceVisible(LayerImpl* layer,
+                                   bool use_property_trees,
+                                   const TransformTree& transform_tree) {
   // The current W3C spec on CSS transforms says that backface visibility should
   // be determined differently depending on whether the layer is in a "3d
   // rendering context" or not. For Chromium code, we can determine whether we
   // are in a 3d rendering context by checking if the parent preserves 3d.
 
-  if (LayerIsInExisting3DRenderingContext(layer))
-    return layer->draw_transform().IsBackFaceVisible();
+  if (LayerIsInExisting3DRenderingContext(layer)) {
+    if (use_property_trees) {
+      return DrawTransformFromPropertyTrees(layer, transform_tree)
+          .IsBackFaceVisible();
+    } else {
+      return layer->draw_transform().IsBackFaceVisible();
+    }
+  }
 
   // In this case, either the layer establishes a new 3d rendering context, or
   // is not in a 3d rendering context at all.
@@ -489,6 +497,10 @@ static gfx::Rect CalculateVisibleLayerRect(
       layer->drawable_content_rect().IsEmpty())
     return gfx::Rect();
 
+  // The layer is fully visible if it has copy requests.
+  if (layer->HasCopyRequest())
+    return gfx::Rect(layer->bounds());
+
   // Compute visible bounds in target surface space.
   gfx::Rect visible_rect_in_target_surface_space =
       layer->drawable_content_rect();
@@ -515,7 +527,10 @@ static gfx::Rect CalculateVisibleLayerRect(
       layer_rect_in_target_space, layer->draw_transform());
 }
 
-static bool LayerShouldBeSkipped(LayerImpl* layer, bool layer_is_drawn) {
+static bool LayerShouldBeSkipped(LayerImpl* layer,
+                                 bool layer_is_drawn,
+                                 bool use_property_trees,
+                                 const TransformTree& transform_tree) {
   // Layers can be skipped if any of these conditions are met.
   //   - is not drawn due to it or one of its ancestors being hidden (or having
   //     no copy requests).
@@ -549,7 +564,8 @@ static bool LayerShouldBeSkipped(LayerImpl* layer, bool layer_is_drawn) {
   // The layer should not be drawn if (1) it is not double-sided and (2) the
   // back of the layer is known to be facing the screen.
   if (!backface_test_layer->double_sided() &&
-      IsLayerBackFaceVisible(backface_test_layer))
+      IsLayerBackFaceVisible(backface_test_layer, use_property_trees,
+                             transform_tree))
     return true;
 
   return false;
@@ -1760,12 +1776,15 @@ static void CalculateDrawPropertiesInternal(
     DCHECK(layer->render_surface());
     // Check back-face visibility before continuing with this surface and its
     // subtree
+    RenderSurfaceImpl* render_surface = layer->render_surface();
     if (!layer->double_sided() &&
         IsSurfaceBackFaceVisible(layer, combined_transform)) {
+      gfx::Transform draw_transform = combined_transform;
+      draw_transform.Scale(1.0 / combined_transform_scales.x(),
+                           1.0 / combined_transform_scales.y());
+      render_surface->SetDrawTransform(draw_transform);
       return;
     }
-
-    RenderSurfaceImpl* render_surface = layer->render_surface();
 
     if (IsRootLayer(layer)) {
       // The root layer's render surface size is predetermined and so the root
@@ -2050,8 +2069,8 @@ static void CalculateDrawPropertiesInternal(
     gfx::Rect clipped_content_rect = local_drawable_content_rect_of_subtree;
 
     // Don't clip if the layer is reflected as the reflection shouldn't be
-    // clipped.
-    if (!layer->replica_layer()) {
+    // clipped. Also, don't clip if the layer has copy requests.
+    if (!layer->replica_layer() && !layer->HasCopyRequest()) {
       // Note, it is correct to use data_from_ancestor.ancestor_clips_subtree
       // here, because we are looking at this layer's render_surface, not the
       // layer itself.
@@ -2478,12 +2497,6 @@ void CalculateRenderSurfaceLayerListInternal(
 
   if (render_to_separate_surface) {
     DCHECK(layer->render_surface());
-    if (!layer->double_sided() &&
-        IsSurfaceBackFaceVisible(layer, layer->draw_transform())) {
-      layer->ClearRenderSurfaceLayerList();
-      layer->draw_properties().render_target = nullptr;
-      return;
-    }
 
     if (use_property_trees) {
       RenderSurfaceDrawProperties draw_properties;
@@ -2502,6 +2515,14 @@ void CalculateRenderSurfaceLayerListInternal(
       layer->render_surface()->SetReplicaScreenSpaceTransform(
           draw_properties.replica_screen_space_transform);
       layer->render_surface()->SetClipRect(draw_properties.clip_rect);
+    }
+
+    if (!layer->double_sided() &&
+        IsSurfaceBackFaceVisible(layer,
+                                 layer->render_surface()->draw_transform())) {
+      layer->ClearRenderSurfaceLayerList();
+      layer->draw_properties().render_target = nullptr;
+      return;
     }
 
     if (IsRootLayer(layer)) {
@@ -2538,7 +2559,9 @@ void CalculateRenderSurfaceLayerListInternal(
 
   size_t descendants_size = descendants->size();
 
-  bool layer_should_be_skipped = LayerShouldBeSkipped(layer, layer_is_drawn);
+  bool layer_should_be_skipped =
+      LayerShouldBeSkipped(layer, layer_is_drawn, use_property_trees,
+                           property_trees->transform_tree);
   if (!layer_should_be_skipped) {
     MarkLayerWithRenderSurfaceLayerListId(layer,
                                           current_render_surface_layer_list_id);
@@ -2596,7 +2619,8 @@ void CalculateRenderSurfaceLayerListInternal(
         if (layer->DrawsContent())
           surface_content_rect.Union(layer->drawable_content_rect());
 
-        if (!layer->replica_layer() && layer->render_surface()->is_clipped()) {
+        if (!layer->replica_layer() && !layer->HasCopyRequest() &&
+            layer->render_surface()->is_clipped()) {
           // Here, we clip the render surface's content rect with its clip rect.
           // As the clip rect of render surface is in the surface's target
           // space, we first map the content rect into the target space,

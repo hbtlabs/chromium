@@ -18,6 +18,10 @@ per-file autofill_strings.grdp=isherman@chromium.org
 per-file bookmark_bar_strings.grdp=sky@chromium.org
 per-file bookmarks.gypi=sky@chromium.org
 
+per-file browser_sync.gypi=pavely@chromium.org
+per-file browser_sync.gypi=stanisc@chromium.org
+per-file browser_sync.gypi=zea@chromium.org
+
 per-file browsing_data.gypi=markusheintz@chromium.org
 per-file browsing_data.gypi=mkwst@chromium.org
 per-file browsing_data.gypi=bauerb@chromium.org
@@ -64,10 +68,12 @@ per-file cronet*=pauljensen@chromium.org
 per-file cronet*=xunjieli@chromium.org
 
 per-file data_reduction_proxy*=bengr@chromium.org
-per-file data_reduction_proxy*=marq@chromium.org
 per-file data_reduction_proxy*=bolian@chromium.org
-per-file data_reduction_proxy*=sclittle@chromium.org
+per-file data_reduction_proxy*=kundaji@chromium.org
+per-file data_reduction_proxy*=marq@chromium.org
 per-file data_reduction_proxy*=megjablon@chromium.org
+per-file data_reduction_proxy*=sclittle@chromium.org
+per-file data_reduction_proxy*=tbansal@chromium.org
 
 per-file data_usage*=bengr@chromium.org
 per-file data_usage*=sclittle@chromium.org
@@ -266,6 +272,11 @@ per-file search_engines.gypi=stevet@chromium.org
 per-file search_provider_logos*=newt@chromium.org
 per-file search_provider_logos*=justincohen@chromium.org
 
+per-file security_interstitials*=estark@chromium.org
+per-file security_interstitials*=felt@chromium.org
+per-file security_interstitials*=meacer@chromium.org
+per-file security_interstitials*=palmer@chromium.org
+
 per-file session_manager.gypi=antrim@chromium.org
 per-file session_manager.gypi=dzhioev@chromium.org
 per-file session_manager.gypi=nkostylev@chromium.org
@@ -275,6 +286,9 @@ per-file sessions.gypi=sky@chromium.org
 
 per-file signin*=atwilson@chromium.org
 per-file signin*=rogerta@chromium.org
+
+per-file ssl_errors*=estark@chromium.org
+per-file ssl_errors*=felt@chromium.org
 
 per-file storage_monitor.gypi=gbillock@chromium.org
 per-file storage_monitor.gypi=thestig@chromium.org
@@ -330,7 +344,6 @@ per-file variations.gypi=stevet@chromium.org
 per-file version_ui.gypi=bauerb@chromium.org
 per-file version_ui.gypi=dbeam@chromium.org
 per-file version_ui.gypi=estade@chromium.org
-per-file version_ui.gypi=jhawkins@chromium.org
 per-file version_ui.gypi=nkostylev@chromium.org
 per-file version_ui.gypi=pam@chromium.org
 per-file version_ui.gypi=xiyuan@chromium.org

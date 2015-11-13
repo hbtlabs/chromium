@@ -39,12 +39,12 @@ source_set("browser") {
     "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/package_manager",
+    "//mojo/public/cpp/bindings",
     "//mojo/shell",
     "//net",
     "//net:extras",
     "//skia",
     "//sql",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
     "//third_party/npapi",
     "//third_party/re2",
     "//third_party/WebKit/public:blink_headers",
@@ -120,6 +120,8 @@ source_set("browser") {
       "//mojo/application/public/interfaces",
       "//mojo/common:url_type_converters",
       "//mojo/converters/geometry",
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/js",
       "//skia/public",
       "//storage/browser",
       "//storage/common",
@@ -129,8 +131,6 @@ source_set("browser") {
       "//third_party/icu",
       "//third_party/leveldatabase",
       "//third_party/libyuv",
-      "//third_party/mojo/src/mojo/public/cpp/bindings",
-      "//third_party/mojo/src/mojo/public/js",
       "//ui/events/blink",
       "//ui/resources",
       "//ui/surface",
@@ -328,10 +328,6 @@ source_set("browser") {
     sources += rebase_path(content_browser_gypi_values.android_browser_sources,
                            ".",
                            "//content")
-    sources += rebase_path(
-            content_browser_gypi_values.android_in_process_browser_sources,
-            ".",
-            "//content")
     sources -= [
       "browser_ipc_logging.cc",
       "device_sensors/data_fetcher_shared_memory_default.cc",
@@ -341,7 +337,6 @@ source_set("browser") {
       "geolocation/network_location_request.h",
       "power_usage_monitor_impl.cc",
       "power_usage_monitor_impl.h",
-      "renderer_host/begin_frame_observer_proxy.cc",
       "tracing/tracing_ui.cc",
       "tracing/tracing_ui.h",
 
@@ -367,6 +362,19 @@ source_set("browser") {
       "speech/speech_recognizer_impl.cc",
       "speech/speech_recognizer_impl.h",
     ]
+
+    if (!use_aura) {
+      sources += rebase_path(
+              content_browser_gypi_values.android_non_aura_browser_sources,
+              ".",
+              "//content")
+      sources += rebase_path(
+              content_browser_gypi_values.android_in_process_browser_sources,
+              ".",
+              "//content")
+      sources -= [ "renderer_host/begin_frame_observer_proxy.cc" ]
+    }
+
     deps -= [ "//device/battery" ]
     deps += [
       "//content/public/android:jni",
@@ -413,6 +421,8 @@ source_set("browser") {
     ]
   } else {  # Not aura.
     sources -= [
+      "media/capture/cursor_renderer_aura.cc",
+      "media/capture/cursor_renderer_aura.h",
       "renderer_host/compositor_resize_lock_aura.cc",
       "renderer_host/compositor_resize_lock_aura.h",
       "renderer_host/input/synthetic_gesture_target_aura.cc",

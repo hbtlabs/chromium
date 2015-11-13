@@ -26,25 +26,29 @@ class Compositor;
 namespace views {
 
 class InputMethodMUS;
+class NativeWidgetMus;
+class PlatformWindowMus;
 class SurfaceContextFactory;
 
 class WindowTreeHostMus : public aura::WindowTreeHostPlatform {
  public:
   WindowTreeHostMus(mojo::Shell* shell,
+                    NativeWidgetMus* native_widget_,
                     mus::Window* window,
                     mus::mojom::SurfaceType surface_type);
   ~WindowTreeHostMus() override;
 
-  using WindowTreeHostPlatform::platform_window;
+  PlatformWindowMus* platform_window();
   ui::PlatformWindowState show_state() const { return show_state_; }
 
  private:
   // aura::WindowTreeHostPlatform:
+  void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnActivationChanged(bool active) override;
 
-  mus::Window* mus_window_;
+  NativeWidgetMus* native_widget_;
   scoped_ptr<InputMethodMUS> input_method_;
   scoped_ptr<SurfaceContextFactory> context_factory_;
   ui::PlatformWindowState show_state_;

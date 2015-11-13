@@ -23,13 +23,13 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -2287,6 +2287,47 @@ TEST_F(SearchProviderTest, DontInlineAutocompleteAsynchronously) {
     RunTillProviderDone();
     CheckMatches(description, arraysize(cases[i].second_async_matches),
                  cases[i].second_async_matches, provider_->matches());
+  }
+}
+
+TEST_F(SearchProviderTest, DontCacheCalculatorSuggestions) {
+  // This test sends two separate queries and checks that at each stage of
+  // processing (receiving first asynchronous response, handling new keystroke
+  // synchronously) we have the expected matches.  The new keystroke should
+  // immediately invalidate old calculator suggestions.
+  struct {
+    const std::string json;
+    const ExpectedMatch async_matches[4];
+    const ExpectedMatch sync_matches[4];
+  } cases[] = {
+    { "[\"1+2\",[\"3\", \"1+2+3+4+5\"],[],[],"
+       "{\"google:verbatimrelevance\":1300,"
+        "\"google:suggesttype\":[\"CALCULATOR\", \"QUERY\"],"
+        "\"google:suggestrelevance\":[1200, 900]}]",
+      { { "1+2", true }, { "3", false }, { "1+2+3+4+5", false },
+        kEmptyExpectedMatch },
+      { { "1+23", true }, { "1+2+3+4+5", false }, kEmptyExpectedMatch,
+        kEmptyExpectedMatch } },
+  };
+
+  for (size_t i = 0; i < arraysize(cases); ++i) {
+    // First, send the query "1+2" and receive the JSON response |first_json|.
+    ClearAllResults();
+    QueryForInputAndWaitForFetcherResponses(
+        ASCIIToUTF16("1+2"), false, cases[i].json, std::string());
+
+    // Verify that the matches after the asynchronous results are as expected.
+    std::string description = "first asynchronous response for input with "
+        "json=" + cases[i].json;
+    CheckMatches(description, arraysize(cases[i].async_matches),
+                 cases[i].async_matches, provider_->matches());
+
+    // Then, send the query "1+23" and check the synchronous matches.
+    description = "synchronous response after the first keystroke after input "
+        "with json=" + cases[i].json;
+    QueryForInput(ASCIIToUTF16("1+23"), false, false);
+    CheckMatches(description, arraysize(cases[i].sync_matches),
+                 cases[i].sync_matches, provider_->matches());
   }
 }
 

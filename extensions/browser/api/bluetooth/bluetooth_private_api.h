@@ -6,6 +6,7 @@
 #define EXTENSIONS_BROWSER_API_BLUETOOTH_BLUETOOTH_PRIVATE_API_H_
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "extensions/browser/api/bluetooth/bluetooth_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -111,6 +112,25 @@ class BluetoothPrivateDisconnectAllFunction
   DISALLOW_COPY_AND_ASSIGN(BluetoothPrivateDisconnectAllFunction);
 };
 
+class BluetoothPrivateForgetDeviceFunction : public BluetoothExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bluetoothPrivate.forgetDevice",
+                             BLUETOOTHPRIVATE_FORGETDEVICE);
+  BluetoothPrivateForgetDeviceFunction();
+
+  // BluetoothExtensionFunction overrides:
+  bool DoWork(scoped_refptr<device::BluetoothAdapter> adapter) override;
+
+ private:
+  ~BluetoothPrivateForgetDeviceFunction() override;
+
+  void OnSuccessCallback();
+  void OnErrorCallback(scoped_refptr<device::BluetoothAdapter> adapter,
+                       const std::string& device_address);
+
+  DISALLOW_COPY_AND_ASSIGN(BluetoothPrivateForgetDeviceFunction);
+};
+
 class BluetoothPrivateSetDiscoveryFilterFunction
     : public BluetoothExtensionFunction {
  public:
@@ -126,6 +146,24 @@ class BluetoothPrivateSetDiscoveryFilterFunction
  private:
   void OnSuccessCallback();
   void OnErrorCallback();
+};
+
+class BluetoothPrivateConnectFunction : public BluetoothExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bluetoothPrivate.connect",
+                             BLUETOOTHPRIVATE_CONNECT)
+  BluetoothPrivateConnectFunction();
+
+  // BluetoothExtensionFunction:
+  bool DoWork(scoped_refptr<device::BluetoothAdapter> adapter) override;
+
+ private:
+  ~BluetoothPrivateConnectFunction() override;
+
+  void OnSuccessCallback();
+  void OnErrorCallback(device::BluetoothDevice::ConnectErrorCode error);
+
+  DISALLOW_COPY_AND_ASSIGN(BluetoothPrivateConnectFunction);
 };
 
 class BluetoothPrivatePairFunction : public BluetoothExtensionFunction {

@@ -14,7 +14,7 @@
 #define MOJO_GPU_MOJO_GLES2_IMPL_AUTOGEN_H_
 
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "third_party/mojo/src/mojo/public/c/gles2/gles2.h"
+#include "mojo/public/c/gles2/gles2.h"
 
 namespace mojo {
 
@@ -783,6 +783,12 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
                                     GLfloat uv_y,
                                     GLfloat uv_width,
                                     GLfloat uv_height) override;
+  void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
+                               const GLfloat* contents_rect,
+                               GLfloat opacity,
+                               const GLuint background_color,
+                               const GLfloat* bounds_size,
+                               const GLfloat* transform) override;
   void SwapInterval(GLint interval) override;
   void FlushDriverCachesCHROMIUM() override;
   void MatrixLoadfCHROMIUM(GLenum matrixMode, const GLfloat* m) override;

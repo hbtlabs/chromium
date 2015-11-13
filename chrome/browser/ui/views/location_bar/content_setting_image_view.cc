@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
@@ -15,6 +14,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -33,7 +33,7 @@ const int ContentSettingImageView::kAnimationDurationMS =
     (kOpenTimeMS * 2) + kStayOpenTimeMS;
 
 ContentSettingImageView::ContentSettingImageView(
-    ContentSettingsType content_type,
+    ContentSettingImageModel* image_model,
     LocationBarView* parent,
     const gfx::FontList& font_list,
     SkColor text_color,
@@ -44,20 +44,12 @@ ContentSettingImageView::ContentSettingImageView(
                           parent_background_color,
                           false),
       parent_(parent),
-      content_setting_image_model_(
-          ContentSettingImageModel::CreateContentSettingImageModel(
-              content_type)),
+      content_setting_image_model_(image_model),
       slide_animator_(this),
       pause_animation_(false),
       pause_animation_state_(0.0),
       bubble_widget_(NULL) {
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    // The insets for IDR_OMNIBOX_CONTENT_SETTING_BUBBLE for which to perfom
-    // nine-slicing.
-    static const int kImageInset = 4;
-    gfx::Insets insets(kImageInset, kImageInset, kImageInset, kImageInset);
-    SetBackgroundImageWithInsets(IDR_OMNIBOX_CONTENT_SETTING_BUBBLE, insets);
-  } else {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
     static const int kBackgroundImages[] =
         IMAGE_GRID(IDR_OMNIBOX_CONTENT_SETTING_BUBBLE);
     SetBackgroundImageGrid(kBackgroundImages);
@@ -91,12 +83,9 @@ void ContentSettingImageView::Update(content::WebContents* web_contents) {
       base::UTF8ToUTF16(content_setting_image_model_->get_tooltip()));
   SetVisible(true);
 
-  // If the content blockage should be indicated to the user, start the
-  // animation and record that we indicated the blockage.
-  TabSpecificContentSettings* content_settings = web_contents ?
-      TabSpecificContentSettings::FromWebContents(web_contents) : NULL;
-  if (!content_settings || content_settings->IsBlockageIndicated(
-      content_setting_image_model_->get_content_settings_type()))
+  // If the content usage or blockage should be indicated to the user, start the
+  // animation and record that the icon has been shown.
+  if (!content_setting_image_model_->ShouldRunAnimation(web_contents))
     return;
 
   // We just ignore this blockage if we're already showing some other string to
@@ -109,8 +98,16 @@ void ContentSettingImageView::Update(content::WebContents* web_contents) {
     slide_animator_.Show();
   }
 
-  content_settings->SetBlockageHasBeenIndicated(
-      content_setting_image_model_->get_content_settings_type());
+  content_setting_image_model_->SetAnimationHasRun(web_contents);
+}
+
+SkColor ContentSettingImageView::GetTextColor() const {
+  return GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_TextfieldDefaultColor);
+}
+
+SkColor ContentSettingImageView::GetBorderColor() const {
+  return gfx::kGoogleYellow700;
 }
 
 bool ContentSettingImageView::ShouldShowBackground() const {
@@ -202,10 +199,9 @@ void ContentSettingImageView::OnClick() {
   if (web_contents && !bubble_widget_) {
     bubble_widget_ =
         parent_->delegate()->CreateViewsBubble(new ContentSettingBubbleContents(
-            ContentSettingBubbleModel::CreateContentSettingBubbleModel(
+            content_setting_image_model_->CreateBubbleModel(
                 parent_->delegate()->GetContentSettingBubbleModelDelegate(),
-                web_contents, parent_->profile(),
-                content_setting_image_model_->get_content_settings_type()),
+                web_contents, parent_->profile()),
             web_contents, this, views::BubbleBorder::TOP_RIGHT));
     bubble_widget_->AddObserver(this);
     bubble_widget_->Show();

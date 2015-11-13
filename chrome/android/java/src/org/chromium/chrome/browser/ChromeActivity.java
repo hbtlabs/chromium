@@ -40,6 +40,9 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener;
 import android.view.accessibility.AccessibilityManager.TouchExplorationStateChangeListener;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.InputMethodSubtype;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BaseSwitches;
@@ -51,14 +54,13 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.IntentHandler.IntentHandlerDelegate;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
 import org.chromium.chrome.browser.appmenu.AppMenu;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.appmenu.ChromeAppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmark.ManageBookmarkActivity;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -70,6 +72,7 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager.ContextualSearchTabPromotionDelegate;
+import org.chromium.chrome.browser.datausage.DataUseTabUIManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.dom_distiller.DistilledPagePrefsView;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeActivityDelegate;
@@ -90,12 +93,14 @@ import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.nfc.BeamController;
 import org.chromium.chrome.browser.nfc.BeamProvider;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.pageinfo.WebsiteSettingsPopup;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.share.ShareHelper;
+import org.chromium.chrome.browser.snackbar.DataUseSnackbarController;
 import org.chromium.chrome.browser.snackbar.LoFiBarPopupController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
@@ -132,6 +137,8 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -149,8 +156,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         /**
          * @return AppMenuHandler for the given activity and menu resource id.
          */
-        public AppMenuHandler get(Activity activity,
-                AppMenuPropertiesDelegate delegate, int menuResourceId);
+        public AppMenuHandler get(Activity activity, AppMenuPropertiesDelegate delegate,
+                int menuResourceId);
     }
 
     /**
@@ -204,7 +211,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private ReaderModeActivityDelegate mReaderModeActivityDelegate;
     private SnackbarManager mSnackbarManager;
     private LoFiBarPopupController mLoFiBarPopupController;
-    private ChromeAppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
+    private DataUseSnackbarController mDataUseSnackbarController;
+    private AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
     private AppMenuHandler mAppMenuHandler;
     private ToolbarManager mToolbarManager;
     private BookmarkModelObserver mBookmarkObserver;
@@ -253,6 +261,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mWindowAndroid.restoreInstanceState(getSavedInstanceState());
         mSnackbarManager = new SnackbarManager(getWindow());
         mLoFiBarPopupController = new LoFiBarPopupController(this, getSnackbarManager());
+        mDataUseSnackbarController = new DataUseSnackbarController(this, getSnackbarManager());
 
         mAssistStatusHandler = createAssistStatusHandler();
         if (mAssistStatusHandler != null) {
@@ -381,11 +390,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
-     * @return {@link ChromeAppMenuPropertiesDelegate} instance that the {@link AppMenuHandler}
+     * @return {@link AppMenuPropertiesDelegate} instance that the {@link AppMenuHandler}
      *         should be using in this activity.
      */
-    protected ChromeAppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
-        return new ChromeAppMenuPropertiesDelegate(this);
+    protected AppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
+        return new AppMenuPropertiesDelegate(this);
     }
 
     /**
@@ -454,6 +463,17 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (mTabModelSelectorTabObserver != null) mTabModelSelectorTabObserver.destroy();
         mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(tabModelSelector) {
             @Override
+            public void onPageLoadStarted(Tab tab, String url) {
+                if (DataUseTabUIManager.checkDataUseTrackingStarted(tab)) {
+                    mDataUseSnackbarController.showDataUseTrackingStartedBar();
+                } else if (DataUseTabUIManager.checkDataUseTrackingEnded(tab)
+                        && DataUseTabUIManager
+                                .getOptedOutOfDataUseDialog(getApplicationContext())) {
+                    mDataUseSnackbarController.showDataUseTrackingEndedBar();
+                }
+            }
+
+            @Override
             public void didFirstVisuallyNonEmptyPaint(Tab tab) {
                 if (!tab.isNativePage() && !tab.isIncognito()
                         && DataReductionProxySettings.getInstance().wasLoFiModeActiveOnMainFrame()
@@ -482,11 +502,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             @Override
             public void onHidden(Tab tab) {
                 mLoFiBarPopupController.dismissLoFiBar();
+                mDataUseSnackbarController.dismissDataUseBar();
             }
 
             @Override
             public void onDestroyed(Tab tab) {
                 mLoFiBarPopupController.dismissLoFiBar();
+                mDataUseSnackbarController.dismissDataUseBar();
             }
 
             @Override
@@ -661,6 +683,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                     mInflateInitialLayoutDurationMs, TimeUnit.MILLISECONDS);
             mToolbarManager.onDeferredStartup(getOnCreateTimestampMs(), simpleName);
         }
+        recordKeyboardLocaleUma();
     }
 
     @Override
@@ -1327,7 +1350,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return The {@link AppMenuPropertiesDelegate} associated with this activity.
      */
     @VisibleForTesting
-    public ChromeAppMenuPropertiesDelegate getAppMenuPropertiesDelegate() {
+    public AppMenuPropertiesDelegate getAppMenuPropertiesDelegate() {
         return mAppMenuPropertiesDelegate;
     }
 
@@ -1518,6 +1541,34 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    private void recordKeyboardLocaleUma() {
+        InputMethodManager imm =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        List<InputMethodInfo> ims = imm.getEnabledInputMethodList();
+        ArrayList<String> uniqueLanguages = new ArrayList<String>();
+        for (InputMethodInfo method : ims) {
+            List<InputMethodSubtype> submethods =
+                    imm.getEnabledInputMethodSubtypeList(method, true);
+            for (InputMethodSubtype submethod : submethods) {
+                if (submethod.getMode().equals("keyboard")) {
+                    String language = submethod.getLocale().split("_")[0];
+                    if (!uniqueLanguages.contains(language)) {
+                        uniqueLanguages.add(language);
+                    }
+                }
+            }
+        }
+        RecordHistogram.recordCountHistogram("InputMethod.ActiveCount", uniqueLanguages.size());
+
+        InputMethodSubtype current = imm.getCurrentInputMethodSubtype();
+        Locale currentSystemLocale = Locale.getDefault();
+        if (current.getLocale() != null && Locale.getDefault() != null) {
+            boolean match = currentSystemLocale.getLanguage().equalsIgnoreCase(
+                    current.getLocale().split("_")[0]);
+            RecordHistogram.recordBooleanHistogram("InputMethod.MatchesSystemLanguage", match);
+        }
     }
 
     @Override

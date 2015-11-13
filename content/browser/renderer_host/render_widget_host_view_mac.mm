@@ -653,10 +653,12 @@ void RenderWidgetHostViewMac::DestroyBrowserCompositorView() {
 
   // Destroy the BrowserCompositorView to transition Suspended -> Destroyed.
   if (browser_compositor_state_ == BrowserCompositorSuspended) {
-    browser_compositor_->accelerated_widget_mac()->ResetNSView();
-    browser_compositor_->compositor()->SetScaleAndSize(1.0, gfx::Size(0, 0));
-    browser_compositor_->compositor()->SetRootLayer(nullptr);
-    BrowserCompositorMac::Recycle(browser_compositor_.Pass());
+    if (browser_compositor_) {
+      browser_compositor_->accelerated_widget_mac()->ResetNSView();
+      browser_compositor_->compositor()->SetScaleAndSize(1.0, gfx::Size(0, 0));
+      browser_compositor_->compositor()->SetRootLayer(nullptr);
+      BrowserCompositorMac::Recycle(browser_compositor_.Pass());
+    }
     browser_compositor_state_ = BrowserCompositorDestroyed;
   }
 }
@@ -891,7 +893,7 @@ void RenderWidgetHostViewMac::WasOccluded() {
   // occur in this specific order. However, because thumbnail generation is
   // asychronous, that operation won't run before SuspendBrowserCompositorView()
   // completes. As a result you won't get a thumbnail for the page unless you
-  // happen to switch back to it. See http://crbug.com/530707 .
+  // execute these two statements in this specific order.
   render_widget_host_->WasHidden();
   SuspendBrowserCompositorView();
 }
@@ -1250,9 +1252,9 @@ void RenderWidgetHostViewMac::CopyFromCompositingSurface(
 }
 
 void RenderWidgetHostViewMac::CopyFromCompositingSurfaceToVideoFrame(
-      const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) {
+    const gfx::Rect& src_subrect,
+    const scoped_refptr<media::VideoFrame>& target,
+    const base::Callback<void(const gfx::Rect&, bool)>& callback) {
   DCHECK(delegated_frame_host_);
   delegated_frame_host_->CopyFromCompositingSurfaceToVideoFrame(
       src_subrect, target, callback);

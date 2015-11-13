@@ -254,7 +254,6 @@ DirectoryItem.prototype.handleClick = function(e) {
     return;
   }
 
-  cr.dispatchSimpleEvent(this, 'click-tree-item', true);
   this.directoryModel_.activateDirectoryEntry(this.entry);
 };
 
@@ -785,8 +784,6 @@ ShortcutItem.prototype.handleClick = function(e) {
   // Do not activate with right click.
   if (e.button === 2)
     return;
-
-  cr.dispatchSimpleEvent(this, 'click-tree-item', true);
 
   this.activate();
   // Resets file selection when a volume is clicked.

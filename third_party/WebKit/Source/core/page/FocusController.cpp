@@ -720,7 +720,7 @@ bool FocusController::advanceFocusInDocumentOrder(WebFocusType type, bool initia
     if (!element) {
         // We didn't find an element to focus, so we should try to pass focus to Chrome.
         if (!initialFocus && m_page->chromeClient().canTakeFocus(type)) {
-            document->setFocusedElement(nullptr);
+            document->clearFocusedElement();
             setFocusedFrame(nullptr);
             m_page->chromeClient().takeFocus(type);
             return true;
@@ -750,7 +750,7 @@ bool FocusController::advanceFocusInDocumentOrder(WebFocusType type, bool initia
         if (!owner->contentFrame())
             return false;
 
-        document->setFocusedElement(nullptr);
+        document->clearFocusedElement();
         setFocusedFrame(owner->contentFrame());
         return true;
     }
@@ -762,7 +762,7 @@ bool FocusController::advanceFocusInDocumentOrder(WebFocusType type, bool initia
 
     if (&newDocument != document) {
         // Focus is going away from this document, so clear the focused node.
-        document->setFocusedElement(nullptr);
+        document->clearFocusedElement();
     }
 
     setFocusedFrame(newDocument.frame());
@@ -773,7 +773,7 @@ bool FocusController::advanceFocusInDocumentOrder(WebFocusType type, bool initia
         frame->selection().setSelection(newSelection);
     }
 
-    element->focus(false, type, sourceCapabilities);
+    element->focus(FocusParams(SelectionBehaviorOnFocus::Reset, type, sourceCapabilities));
     return true;
 }
 
@@ -820,7 +820,12 @@ static void clearSelectionIfNeeded(LocalFrame* oldFocusedFrame, LocalFrame* newF
     selection.clear();
 }
 
-bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr<Frame> newFocusedFrame, WebFocusType type, InputDeviceCapabilities* sourceCapabilities)
+bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr<Frame> newFocusedFrame)
+{
+    return setFocusedElement(element, newFocusedFrame, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
+}
+
+bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr<Frame> newFocusedFrame, const FocusParams& params)
 {
     RefPtrWillBeRawPtr<LocalFrame> oldFocusedFrame = focusedFrame();
     RefPtrWillBeRawPtr<Document> oldDocument = oldFocusedFrame ? oldFocusedFrame->document() : nullptr;
@@ -848,7 +853,7 @@ bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr
         clearSelectionIfNeeded(oldFocusedFrame.get(), toLocalFrame(newFocusedFrame.get()), element);
 
     if (oldDocument && oldDocument != newDocument)
-        oldDocument->setFocusedElement(nullptr);
+        oldDocument->clearFocusedElement();
 
     if (newFocusedFrame && !newFocusedFrame->page()) {
         setFocusedFrame(nullptr);
@@ -860,7 +865,7 @@ bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr
     RefPtrWillBeRawPtr<Element> protect = element;
     ALLOW_UNUSED_LOCAL(protect);
     if (newDocument) {
-        bool successfullyFocused = newDocument->setFocusedElement(element, type, sourceCapabilities);
+        bool successfullyFocused = newDocument->setFocusedElement(element, params);
         if (!successfullyFocused)
             return false;
     }
@@ -1026,7 +1031,7 @@ bool FocusController::advanceFocusDirectionallyInContainer(Node* container, cons
     Element* element = toElement(focusCandidate.focusableNode);
     ASSERT(element);
 
-    element->focus(false, type);
+    element->focus(FocusParams(SelectionBehaviorOnFocus::Reset, type, nullptr));
     return true;
 }
 

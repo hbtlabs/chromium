@@ -13,21 +13,27 @@ import android.accounts.Account;
 import android.app.Activity;
 import android.os.Bundle;
 
+import org.chromium.base.ActivityState;
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BaseChromiumApplication;
+import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
+import org.robolectric.util.ActivityController;
 
 /**
  * Tests FirstRunFlowSequencer which contains the core logic of what should be shown during the
  * first run.
  */
 @RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, application = BaseChromiumApplication.class)
+@Config(manifest = Config.NONE, application = BaseChromiumApplication.class,
+        shadows = {ShadowMultiDex.class})
 public class FirstRunFlowSequencerTest {
     /** Information for Google OS account */
     private static final String GOOGLE_ACCOUNT_TYPE = "com.google";
@@ -118,12 +124,23 @@ public class FirstRunFlowSequencerTest {
         }
     }
 
+    ActivityController<Activity> mActivityController;
     TestFirstRunFlowSequencer mSequencer;
 
     @Before
     public void setUp() throws Exception {
-        Activity activity = Robolectric.setupActivity(Activity.class);
-        mSequencer = new TestFirstRunFlowSequencer(activity, new Bundle());
+        mActivityController = Robolectric.buildActivity(Activity.class);
+        mSequencer = new TestFirstRunFlowSequencer(mActivityController.setup().get(), new Bundle());
+    }
+
+    @After
+    public void tearDown() {
+        mActivityController.pause().stop().destroy();
+
+        // TODO(jbudorick): Remove this once we roll to Robolectric 3.0, which should contain
+        //  https://github.com/robolectric/robolectric/pull/1479
+        ApplicationStatus.onStateChangeForTesting(mActivityController.get(),
+                ActivityState.DESTROYED);
     }
 
     @Test

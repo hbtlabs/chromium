@@ -30,6 +30,7 @@ import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.BindingManager;
 import org.chromium.content.browser.ChildProcessConnection;
 import org.chromium.content.browser.ChildProcessLauncher;
@@ -588,11 +589,15 @@ public class AwContentsTest extends AwTestBase {
         public void releaseAllModerateBindings() {}
     }
 
+    /**
+     * Verifies that a child process is actually gets created with WEBVIEW_SANDBOXED_RENDERER flag.
+     */
     @Feature({"AndroidWebView"})
     @SmallTest
     @CommandLineFlags.Add({
             AwSwitches.WEBVIEW_SANDBOXED_RENDERER,
             ContentSwitches.IPC_SYNC_COMPOSITING})
+    @ParameterizedTest.Set
     public void testSandboxedRendererWorks() throws Throwable {
         MockBindingManager bindingManager = new MockBindingManager();
         ChildProcessLauncher.setBindingManagerForTesting(bindingManager);

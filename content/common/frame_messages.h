@@ -154,6 +154,7 @@ IPC_STRUCT_END()
 IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(page_id)
   IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
+  IPC_STRUCT_TRAITS_MEMBER(frame_unique_name)
   IPC_STRUCT_TRAITS_MEMBER(item_sequence_number)
   IPC_STRUCT_TRAITS_MEMBER(document_sequence_number)
   IPC_STRUCT_TRAITS_MEMBER(url)
@@ -656,7 +657,7 @@ IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateOrigin, url::Origin /* origin */)
 
 // Notifies this frame or proxy that it is now focused.  This is used to
 // support cross-process focused frame changes.
-IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame);
+IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame)
 
 // Send to the RenderFrame to set text tracks state and style settings.
 // Sent for top-level frames.
@@ -1214,7 +1215,7 @@ IPC_MESSAGE_ROUTED2(FrameHostMsg_DidRunInsecureContent,
 IPC_MESSAGE_ROUTED3(FrameHostMsg_SavableResourceLinksResponse,
                     std::vector<GURL> /* savable resource links */,
                     content::Referrer /* referrer for all the links above */,
-                    std::vector<content::SavableSubframe> /* subframes */);
+                    std::vector<content::SavableSubframe> /* subframes */)
 
 // Response to FrameMsg_GetSavableResourceLinks in case the frame contains
 // non-savable content (i.e. from a non-savable scheme) or if there were

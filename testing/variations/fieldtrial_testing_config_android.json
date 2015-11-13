@@ -88,6 +88,14 @@
             "group_name": "Enabled"
         }
     ],
+    "DisableAutoHidingToolbar": [
+        {
+            "group_name": "Enabled",
+            "params": {
+                "disable_auto_hiding_toolbar_threshold": "800"
+            }
+        }
+    ],
     "EnableMediaThreadForMediaPlayback": [
         {
             "group_name": "Enabled"
@@ -176,6 +184,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ProgressBarAnimationAndroid": [
+        {
+            "group_name": "SmoothAnimation",
+            "params": {
+                "progress-bar-animation": "smooth"
+            }
+        }
+    ],
     "QUIC": [
         {
             "group_name": "Enabled",
@@ -225,7 +241,8 @@
         {
             "group_name": "Enabled",
             "params": {
-                "enabled": "true"
+                "enabled": "true",
+                "types_to_check": "0,1,3,6,7,8,9,10,11,13,14,15"
             }
         },
         {
@@ -300,6 +317,11 @@
             "params": {
                 "fetch_period_min": "30"
             }
+        }
+    ],
+    "WebRTC-LocalIPPermissionCheck": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "WebRTC-PeerConnectionDTLS1.2": [

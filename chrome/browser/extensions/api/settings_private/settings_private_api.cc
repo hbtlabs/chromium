@@ -9,7 +9,9 @@
 #include "chrome/browser/extensions/api/settings_private/settings_private_delegate_factory.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/settings_private.h"
+#include "content/public/common/page_zoom.h"
 #include "extensions/browser/extension_function_registry.h"
 
 namespace extensions {
@@ -84,6 +86,43 @@ ExtensionFunction::ResponseAction SettingsPrivateGetPrefFunction::Run() {
     return RespondNow(Error("Pref * does not exist", parameters->name));
   else
     return RespondNow(OneArgument(value.release()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SettingsPrivateGetDefaultZoomPercentFunction
+////////////////////////////////////////////////////////////////////////////////
+
+SettingsPrivateGetDefaultZoomPercentFunction::
+    ~SettingsPrivateGetDefaultZoomPercentFunction() {
+}
+
+ExtensionFunction::ResponseAction
+    SettingsPrivateGetDefaultZoomPercentFunction::Run() {
+  SettingsPrivateDelegate* delegate =
+      SettingsPrivateDelegateFactory::GetForBrowserContext(browser_context());
+
+  return RespondNow(OneArgument(delegate->GetDefaultZoomPercent().release()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SettingsPrivateSetDefaultZoomPercentFunction
+////////////////////////////////////////////////////////////////////////////////
+
+SettingsPrivateSetDefaultZoomPercentFunction::
+    ~SettingsPrivateSetDefaultZoomPercentFunction() {
+}
+
+ExtensionFunction::ResponseAction
+    SettingsPrivateSetDefaultZoomPercentFunction::Run() {
+  scoped_ptr<api::settings_private::SetDefaultZoomPercent::Params> parameters =
+      api::settings_private::SetDefaultZoomPercent::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters.get());
+
+  SettingsPrivateDelegate* delegate =
+      SettingsPrivateDelegateFactory::GetForBrowserContext(browser_context());
+
+  delegate->SetDefaultZoomPercent(parameters->percent);
+  return RespondNow(OneArgument(new base::FundamentalValue(true)));
 }
 
 }  // namespace extensions

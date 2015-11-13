@@ -39,6 +39,7 @@
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/wake_lock/wake_lock_service_context.h"
@@ -208,6 +209,12 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
   } else {
     rfh_state_ = STATE_DEFAULT;
     GetSiteInstance()->increment_active_frame_count();
+  }
+
+  // New child frames should inherit the nav_entry_id of their parent.
+  if (frame_tree_node_->parent()) {
+    set_nav_entry_id(
+        frame_tree_node_->parent()->current_frame_host()->nav_entry_id());
   }
 
   SetUpMojoIfNeeded();
@@ -436,6 +443,21 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     }
   }
 
+  // This message map is for handling internal IPC messages which should not
+  // be dispatched to other objects.
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(RenderFrameHostImpl, msg)
+    // This message is synthetic and doesn't come from RenderFrame, but from
+    // RenderProcessHost.
+    IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+
+  // Internal IPCs should not be leaked outside of this object, so return
+  // early.
+  if (handled)
+    return true;
+
   if (delegate_->OnMessageReceived(this, msg))
     return true;
 
@@ -445,7 +467,7 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
       proxy->cross_process_frame_connector()->OnMessageReceived(msg))
     return true;
 
-  bool handled = true;
+  handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameHostImpl, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_AddMessageToConsole, OnAddMessageToConsole)
     IPC_MESSAGE_HANDLER(FrameHostMsg_Detach, OnDetach)
@@ -498,9 +520,6 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(AccessibilityHostMsg_SnapshotResponse,
                         OnAccessibilitySnapshotResponse)
     IPC_MESSAGE_HANDLER(FrameHostMsg_ToggleFullscreen, OnToggleFullscreen)
-    // The following message is synthetic and doesn't come from RenderFrame, but
-    // from RenderProcessHost.
-    IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidChangeLoadProgress,
@@ -1583,6 +1602,7 @@ void RenderFrameHostImpl::OnAccessibilitySnapshotResponse(
     if (snapshot.has_tree_data) {
       AXContentTreeDataToAXTreeData(snapshot.tree_data,
                                     &dst_snapshot.tree_data);
+      dst_snapshot.has_tree_data = true;
     }
     it->second.Run(dst_snapshot);
     ax_tree_snapshot_callbacks_.erase(it);
@@ -1941,8 +1961,10 @@ void RenderFrameHostImpl::JavaScriptDialogClosed(
   // continuing to run its script and dragging out the process.
   // This must be done after sending the reply since RenderView can't close
   // correctly while waiting for a response.
-  if (is_waiting && dialog_was_suppressed)
-    render_view_host_->delegate_->RendererUnresponsive(render_view_host_);
+  if (is_waiting && dialog_was_suppressed) {
+    render_view_host_->GetWidget()->delegate()->RendererUnresponsive(
+        render_view_host_->GetWidget());
+  }
 }
 
 // PlzNavigate

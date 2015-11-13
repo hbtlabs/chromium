@@ -5,7 +5,11 @@
 #ifndef UI_VIEWS_MUS_NATIVE_WIDGET_MUS_H_
 #define UI_VIEWS_MUS_NATIVE_WIDGET_MUS_H_
 
+#include <map>
+#include <string>
+
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -14,6 +18,7 @@
 namespace aura {
 namespace client {
 class DefaultCaptureClient;
+class WindowTreeClient;
 }
 class Window;
 }
@@ -58,16 +63,20 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   static void SetWindowManagerClientAreaInsets(
       const WindowManagerClientAreaInsets& insets);
 
+  // Configures the set of properties supplied to the window manager when
+  // creating a new Window for a Widget.
+  static void ConfigurePropertiesForNewWindow(
+      const Widget::InitParams& init_params,
+      std::map<std::string, std::vector<uint8_t>>* properties);
+
   mus::Window* window() { return window_; }
+
+  void OnPlatformWindowClosed();
+  void OnActivationChanged(bool active);
 
  protected:
   // internal::NativeWidgetPrivate:
   NonClientFrameView* CreateNonClientFrameView() override;
-
- private:
-  void UpdateClientAreaInWindowManager();
-
-  // internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
@@ -178,6 +187,9 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   void OnScrollEvent(ui::ScrollEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
+ private:
+  void UpdateClientAreaInWindowManager();
+
   mus::Window* window_;
 
   mojo::Shell* shell_;
@@ -187,11 +199,16 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   const mus::mojom::SurfaceType surface_type_;
   ui::PlatformWindowState show_state_before_fullscreen_;
 
+  // See class documentation for Widget in widget.h for a note about ownership.
+  Widget::InitParams::Ownership ownership_;
+
   // Aura configuration.
   scoped_ptr<WindowTreeHostMus> window_tree_host_;
   aura::Window* content_;
   scoped_ptr<wm::FocusController> focus_client_;
   scoped_ptr<aura::client::DefaultCaptureClient> capture_client_;
+  scoped_ptr<aura::client::WindowTreeClient> window_tree_client_;
+  base::WeakPtrFactory<NativeWidgetMus> close_widget_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMus);
 };

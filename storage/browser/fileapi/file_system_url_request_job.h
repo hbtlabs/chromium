@@ -11,7 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "net/base/net_errors.h"
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request_job.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -31,8 +30,7 @@ namespace storage {
 class FileSystemContext;
 
 // A request job that handles reading filesystem: URLs
-class STORAGE_EXPORT_PRIVATE FileSystemURLRequestJob
-    : public net::URLRequestJob {
+class STORAGE_EXPORT FileSystemURLRequestJob : public net::URLRequestJob {
  public:
   FileSystemURLRequestJob(
       net::URLRequest* request,
@@ -43,7 +41,7 @@ class STORAGE_EXPORT_PRIVATE FileSystemURLRequestJob
   // URLRequestJob methods:
   void Start() override;
   void Kill() override;
-  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
+  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
   bool IsRedirectResponse(GURL* location, int* http_status_code) override;
   void SetExtraRequestHeaders(const net::HttpRequestHeaders& headers) override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
@@ -62,6 +60,7 @@ class STORAGE_EXPORT_PRIVATE FileSystemURLRequestJob
   void DidGetMetadata(base::File::Error error_code,
                       const base::File::Info& file_info);
   void DidRead(int result);
+  void NotifyFailed(int rv);
 
   const std::string storage_domain_;
   FileSystemContext* file_system_context_;
@@ -70,7 +69,6 @@ class STORAGE_EXPORT_PRIVATE FileSystemURLRequestJob
   bool is_directory_;
   scoped_ptr<net::HttpResponseInfo> response_info_;
   int64 remaining_bytes_;
-  net::Error range_parse_result_;
   net::HttpByteRange byte_range_;
   base::WeakPtrFactory<FileSystemURLRequestJob> weak_factory_;
 

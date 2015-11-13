@@ -42,7 +42,7 @@ WebInspector.TimelineTreeView = function(model)
 
     if (Runtime.experiments.isEnabled("timelineEventsTreeView")) {
         this._detailsView = new WebInspector.VBox();
-        this._detailsView.element.classList.add("timeline-tree-view-details");
+        this._detailsView.element.classList.add("timeline-tree-view-details", "timeline-details-view-body");
         this._splitWidget.setSidebarWidget(this._detailsView);
         this._showBannerInDetails();
         this._dataGrid.addEventListener(WebInspector.DataGrid.Events.SelectedNode, onSelectionChanged, this);
@@ -91,15 +91,12 @@ WebInspector.TimelineTreeView.prototype = {
     _populateToolbar: function(parent) { },
 
     /**
-     * @param {?string} scriptId
-     * @param {string} url
-     * @param {number} lineNumber
-     * @param {number=} columnNumber
+     * @param {!ConsoleAgent.CallFrame} frame
      * @return {!Element}
      */
-    linkifyLocation: function(scriptId, url, lineNumber, columnNumber)
+    linkifyLocation: function(frame)
     {
-        return this._linkifier.linkifyScriptLocation(this._model.target(), scriptId, url, lineNumber, columnNumber);
+        return this._linkifier.linkifyConsoleCallFrame(this._model.target(), frame);
     },
 
     _refreshTree: function()
@@ -360,12 +357,10 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
                 ? WebInspector.beautifyFunctionName(event.args["data"]["functionName"])
                 : WebInspector.TimelineUIUtils.eventTitle(event);
             var frame = WebInspector.TimelineTreeView.eventStackFrame(event);
-            var scriptId = frame && frame["scriptId"];
-            var url = frame && frame["url"];
-            var lineNumber = frame && frame["lineNumber"] || 1;
-            var columnNumber = frame && frame["columnNumber"];
-            if (url)
-                container.createChild("div", "activity-link").appendChild(this._treeView.linkifyLocation(scriptId, url, lineNumber, columnNumber));
+            if (frame && frame["url"]) {
+                var callFrame = /** @type {!ConsoleAgent.CallFrame} */ (frame);
+                container.createChild("div", "activity-link").appendChild(this._treeView.linkifyLocation(callFrame));
+            }
             icon.style.backgroundColor = WebInspector.TimelineUIUtils.eventColor(event);
         } else {
             name.textContent = this._profileNode.name;
@@ -764,7 +759,7 @@ WebInspector.EventsTimelineTreeView.prototype = {
         var traceEvent = node.event;
         if (!traceEvent)
             return false;
-        WebInspector.TimelineUIUtils.buildTraceEventDetails(traceEvent, this._model, this._linkifier, showDetails.bind(this));
+        WebInspector.TimelineUIUtils.buildTraceEventDetails(traceEvent, this._model, this._linkifier, false, showDetails.bind(this));
         return true;
 
         /**

@@ -8,12 +8,14 @@ import android.content.Context;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanelAnimation;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.common.TopControlsState;
+import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -21,6 +23,11 @@ import org.chromium.ui.resources.ResourceManager;
  */
 public class OverlayPanel extends ContextualSearchPanelAnimation
         implements OverlayPanelContentFactory {
+
+    /**
+     * The extra dp added around the close button touch target.
+     */
+    private static final int CLOSE_BUTTON_TOUCH_SLOP_DP = 5;
 
     /**
      * State of the Overlay Panel.
@@ -55,7 +62,9 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
         FLING,
         OPTIN,
         OPTOUT,
-        CLOSE_BUTTON;
+        CLOSE_BUTTON,
+        SUPPRESS,
+        UNSUPPRESS;
     }
 
     /**
@@ -88,6 +97,11 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      */
     private OverlayPanelHost mOverlayPanelHost;
 
+    /**
+     * OverlayPanel manager handle for notifications of opening and closing.
+     */
+    protected OverlayPanelManager mPanelManager;
+
     // ============================================================================================
     // Constructor
     // ============================================================================================
@@ -95,10 +109,15 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     /**
      * @param context The current Android {@link Context}.
      * @param updateHost The {@link LayoutUpdateHost} used to request updates in the Layout.
+     * @param panelManager The {@link OverlayPanelManager} responsible for showing panels.
      */
-    public OverlayPanel(Context context, LayoutUpdateHost updateHost) {
+    public OverlayPanel(Context context, LayoutUpdateHost updateHost,
+                OverlayPanelManager panelManager) {
         super(context, updateHost);
         mContentFactory = this;
+
+        mPanelManager = panelManager;
+        mPanelManager.registerPanel(this);
     }
 
     /**
@@ -110,6 +129,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
 
     @Override
     protected void onClosed(StateChangeReason reason) {
+        mPanelManager.notifyPanelClosed(this, reason);
         destroy();
     }
 
@@ -144,10 +164,36 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     }
 
     /**
+     * Request that this panel be shown.
+     * @param reason The reason the panel is being shown.
+     */
+    public void requestPanelShow(StateChangeReason reason) {
+        if (mPanelManager != null) {
+            mPanelManager.requestPanelShow(this, reason);
+        }
+    }
+
+    @Override
+    public void peekPanel(StateChangeReason reason) {
+        // TODO(mdjones): This is making a protected API public and should be removed. Animation
+        // should only be controlled by the OverlayPanelManager.
+        super.peekPanel(reason);
+    }
+
+    /**
      * @param url The URL that the panel should load.
      */
     public void loadUrlInPanel(String url) {
-        getOverlayPanelContent().loadUrl(url);
+        getOverlayPanelContent().loadUrl(url, true);
+    }
+
+    /**
+     * @param url The URL that the panel should load.
+     * @param shouldLoadImmediately If the URL should be loaded immediately when this method is
+     *                              called.
+     */
+    public void loadUrlInPanel(String url, boolean shouldLoadImmediately) {
+        getOverlayPanelContent().loadUrl(url, shouldLoadImmediately);
     }
 
     /**
@@ -162,6 +208,37 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      */
     public void setChromeActivity(ChromeActivity activity) {
         mActivity = activity;
+    }
+
+    /**
+     * Notify the panel's content that it has been touched.
+     */
+    public void notifyPanelTouched() {
+        getOverlayPanelContent().notifyPanelTouched();
+    }
+
+    /**
+     * Acknowledges that there was a touch in the search content view, though no immediate action
+     * needs to be taken. This should be overridden by child classes.
+     * TODO(mdjones): Get a better name for this.
+     */
+    public void onTouchSearchContentViewAck() {
+    }
+
+    /**
+     * Get a panel's display priority. This has a default to MEDIUM and should be overridden by
+     * child classes.
+     * @return The panel's display priority.
+     */
+    public PanelPriority getPriority() {
+        return PanelPriority.MEDIUM;
+    }
+
+    /**
+     * @return True if a panel can be suppressed. This should be overridden by each panel.
+     */
+    public boolean canBeSuppressed() {
+        return false;
     }
 
     // ============================================================================================
@@ -332,6 +409,16 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     public void updateSceneLayer(ResourceManager resourceManager) {
     }
 
+    /**
+     * Determine if using a second layout for showing the overlay panel is possible. This should
+     * be overridden by each panel and returns true by default.
+     * @return True if the layout is supported.
+     * TODO(mdjones): Rename to supportsOverlayPanelLayout once the corresponding class is renamed.
+     */
+    public boolean supportsContextualSearchLayout() {
+        return true;
+    }
+
     // ============================================================================================
     // Generic Event Handling
     // ============================================================================================
@@ -391,6 +478,18 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     }
 
     /**
+     * @param x The x coordinate in dp.
+     * @return Whether the given |x| coordinate is inside the close button.
+     */
+    protected boolean isCoordinateInsideCloseButton(float x) {
+        if (LocalizationUtils.isLayoutRtl()) {
+            return x <= (getCloseIconX() + getCloseIconDimension() + CLOSE_BUTTON_TOUCH_SLOP_DP);
+        } else {
+            return x >= (getCloseIconX() - CLOSE_BUTTON_TOUCH_SLOP_DP);
+        }
+    }
+
+    /**
      * Handles the click gesture.
      *
      * @param time The timestamp of the gesture.
@@ -424,6 +523,15 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      * @return True if the click on the bar was intercepted by this function.
      */
     protected boolean onInterceptBarClick() {
+        return false;
+    }
+
+    /**
+     * If the panel is intercepting the initial bar swipe event. This should be overridden per
+     * panel.
+     * @return True if the panel intercepted the initial bar swipe.
+     */
+    public boolean onInterceptBarSwipe() {
         return false;
     }
 

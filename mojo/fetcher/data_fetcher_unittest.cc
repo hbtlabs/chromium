@@ -11,9 +11,8 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/runner/context.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
 
 namespace mojo {
 namespace fetcher {
@@ -57,9 +56,6 @@ class DataFetcherTest : public testing::Test {
   ~DataFetcherTest() override {}
 
  protected:
-  // Overridden from testing::Test:
-  void SetUp() override { runner::Context::EnsureEmbedderIsInitialized(); }
-
   void TestFetchURL(const std::string& url,
                     uint32_t expected_status_code,
                     const std::string& expected_mime_type,

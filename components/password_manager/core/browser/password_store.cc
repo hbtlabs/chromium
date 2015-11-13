@@ -15,6 +15,7 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_syncable_service.h"
+#include "components/password_manager/core/browser/statistics_table.h"
 #include "url/origin.h"
 
 using autofill::PasswordForm;
@@ -131,6 +132,15 @@ void PasswordStore::RemoveLoginsSyncedBetween(base::Time delete_begin,
                                               base::Time delete_end) {
   ScheduleTask(base::Bind(&PasswordStore::RemoveLoginsSyncedBetweenInternal,
                           this, delete_begin, delete_end));
+}
+
+void PasswordStore::RemoveStatisticsCreatedBetween(
+    base::Time delete_begin,
+    base::Time delete_end,
+    const base::Closure& completion) {
+  ScheduleTask(
+      base::Bind(&PasswordStore::RemoveStatisticsCreatedBetweenInternal, this,
+                 delete_begin, delete_end, completion));
 }
 
 void PasswordStore::TrimAffiliationCache() {
@@ -371,6 +381,15 @@ void PasswordStore::RemoveLoginsSyncedBetweenInternal(base::Time delete_begin,
   PasswordStoreChangeList changes =
       RemoveLoginsSyncedBetweenImpl(delete_begin, delete_end);
   NotifyLoginsChanged(changes);
+}
+
+void PasswordStore::RemoveStatisticsCreatedBetweenInternal(
+    base::Time delete_begin,
+    base::Time delete_end,
+    const base::Closure& completion) {
+  RemoveStatisticsCreatedBetweenImpl(delete_begin, delete_end);
+  if (!completion.is_null())
+    main_thread_runner_->PostTask(FROM_HERE, completion);
 }
 
 void PasswordStore::GetAutofillableLoginsImpl(

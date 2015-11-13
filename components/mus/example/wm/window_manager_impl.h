@@ -33,12 +33,11 @@ class WindowManagerImpl : public mus::mojom::WindowManager,
       mus::Id window_id,
       mojo::SizePtr size,
       const WindowManagerErrorCodeCallback& callback) override;
-  void SetBounds(mus::Id window_id,
-                 mojo::RectPtr bounds,
-                 const WindowManagerErrorCodeCallback& callback) override;
   void SetShowState(mus::Id window_id,
                     mus::mojom::ShowState show_state,
                     const WindowManagerErrorCodeCallback& callback) override;
+  void SetResizeBehavior(uint32_t window_id,
+                         mus::mojom::ResizeBehavior resize_behavior) override;
   void GetConfig(const GetConfigCallback& callback) override;
 
   // mus::WindowObserver:

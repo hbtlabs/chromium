@@ -79,8 +79,8 @@
 #include "storage/browser/fileapi/isolated_context.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/touch/touch_device.h"
-#include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_switches.h"
@@ -830,16 +830,6 @@ void RenderViewHostImpl::GotFocus() {
     view->GotFocus();
 }
 
-void RenderViewHostImpl::LostCapture() {
-  RenderWidgetHostImpl::LostCapture();
-  delegate_->LostCapture();
-}
-
-void RenderViewHostImpl::LostMouseLock() {
-  RenderWidgetHostImpl::LostMouseLock();
-  delegate_->LostMouseLock();
-}
-
 void RenderViewHostImpl::SetInitialFocus(bool reverse) {
   Send(new ViewMsg_SetInitialFocus(GetRoutingID(), reverse));
 }
@@ -964,8 +954,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ClosePage_ACK, OnClosePageACK)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidZoomURL, OnDidZoomURL)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_PageScaleFactorIsOneChanged,
-                        OnPageScaleFactorIsOneChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_RunFileChooser, OnRunFileChooser)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
     // Have the super handle all other messages.
@@ -1130,10 +1118,6 @@ void RenderViewHostImpl::OnDidContentsPreferredSizeChange(
   delegate_->UpdatePreferredSize(new_size);
 }
 
-void RenderViewHostImpl::OnRenderAutoResized(const gfx::Size& new_size) {
-  delegate_->ResizeDueToAutoResize(new_size);
-}
-
 void RenderViewHostImpl::OnRouteCloseEvent() {
   // Have the delegate route this to the active RenderViewHost.
   delegate_->RouteCloseEvent(this);
@@ -1235,44 +1219,15 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
                                          Details<FocusedNodeDetails>(&details));
 }
 
-void RenderViewHostImpl::OnUserGesture() {
-  delegate_->OnUserGesture();
-}
-
 void RenderViewHostImpl::OnClosePageACK() {
   GetWidget()->decrement_in_flight_event_count();
   ClosePageIgnoringUnloadEvents();
-}
-
-void RenderViewHostImpl::NotifyRendererUnresponsive() {
-  delegate_->RendererUnresponsive(this);
-}
-
-void RenderViewHostImpl::NotifyRendererResponsive() {
-  delegate_->RendererResponsive(this);
-}
-
-void RenderViewHostImpl::RequestToLockMouse(bool user_gesture,
-                                            bool last_unlocked_by_target) {
-  delegate_->RequestToLockMouse(user_gesture, last_unlocked_by_target);
-}
-
-bool RenderViewHostImpl::IsFullscreenGranted() const {
-  return delegate_->IsFullscreenForCurrentTab();
-}
-
-blink::WebDisplayMode RenderViewHostImpl::GetDisplayMode() const {
-  return delegate_->GetDisplayMode();
 }
 
 void RenderViewHostImpl::OnFocus() {
   // Note: We allow focus and blur from swapped out RenderViewHosts, even when
   // the active RenderViewHost is in a different BrowsingInstance (e.g., WebUI).
   delegate_->Activate();
-}
-
-gfx::Rect RenderViewHostImpl::GetRootWindowResizerRect() const {
-  return delegate_->GetRootWindowResizerRect();
 }
 
 void RenderViewHostImpl::ForwardMouseEvent(
@@ -1392,19 +1347,6 @@ void RenderViewHostImpl::OnDidZoomURL(double zoom_level,
                                      GetRoutingID(),
                                      zoom_level,
                                      net::GetHostOrSpecFromURL(url));
-}
-
-void RenderViewHostImpl::OnPageScaleFactorIsOneChanged(bool is_one) {
-  if (!GetSiteInstance())
-    return;
-  HostZoomMapImpl* host_zoom_map =
-      static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()));
-  if (!host_zoom_map)
-    return;
-  if (!GetProcess())
-    return;
-  host_zoom_map->SetPageScaleFactorIsOneForView(GetProcess()->GetID(),
-                                                GetRoutingID(), is_one);
 }
 
 void RenderViewHostImpl::OnRunFileChooser(const FileChooserParams& params) {

@@ -168,8 +168,9 @@ class TransformSource;
 class TreeWalker;
 class VisitedLinkState;
 class WebGLRenderingContext;
-
+enum class SelectionBehaviorOnFocus;
 struct AnnotatedRegionValue;
+struct FocusParams;
 struct IconURL;
 
 using MouseEventWithHitTestResults = EventWithHitTestResults<PlatformMouseEvent>;
@@ -330,6 +331,7 @@ public:
     KURL baseURI() const final;
 
     String origin() const { return securityOrigin()->toString(); }
+    String suborigin() const { return securityOrigin()->suboriginName(); }
 
     String visibilityState() const;
     PageVisibilityState pageVisibilityState() const;
@@ -582,7 +584,8 @@ public:
     String selectedStylesheetSet() const;
     void setSelectedStylesheetSet(const String&);
 
-    bool setFocusedElement(PassRefPtrWillBeRawPtr<Element>, WebFocusType = WebFocusTypeNone, InputDeviceCapabilities* sourceCapabilities = nullptr);
+    bool setFocusedElement(PassRefPtrWillBeRawPtr<Element>, const FocusParams&);
+    void clearFocusedElement();
     Element* focusedElement() const { return m_focusedElement.get(); }
     UserActionElementSet& userActionElements()  { return m_userActionElements; }
     const UserActionElementSet& userActionElements() const { return m_userActionElements; }
@@ -803,7 +806,7 @@ public:
     void setUseSecureKeyboardEntryWhenActive(bool);
     bool useSecureKeyboardEntryWhenActive() const;
 
-    void updateFocusAppearanceSoon(bool restorePreviousSelection);
+    void updateFocusAppearanceSoon(SelectionBehaviorOnFocus);
     void cancelFocusAppearanceUpdate();
 
     bool isDNSPrefetchEnabled() const { return m_isDNSPrefetchEnabled; }
@@ -1044,9 +1047,6 @@ public:
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
 
-    // TODO(bokan): Temporary to help track down crash in crbug.com/519752.
-    bool m_detachingDocumentLoader;
-
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
 
@@ -1153,10 +1153,6 @@ private:
 
     const OriginAccessEntry& accessEntryFromURL();
 
-    // TODO(bokan): Temporarily moved this to the top of memebers so it's likely
-    // to be included in a minidump memory region. crbug.com/519752
-    LoadEventProgress m_loadEventProgress;
-
     DocumentLifecycle m_lifecycle;
 
     bool m_hasNodesWithPlaceholderStyle;
@@ -1246,8 +1242,8 @@ private:
     bool m_isDNSPrefetchEnabled;
     bool m_haveExplicitlyDisabledDNSPrefetch;
     bool m_containsValidityStyleRules;
-    bool m_updateFocusAppearanceRestoresSelection;
     bool m_containsPlugins;
+    SelectionBehaviorOnFocus m_updateFocusAppearanceSelectionBahavior;
 
     // http://www.whatwg.org/specs/web-apps/current-work/#ignore-destructive-writes-counter
     unsigned m_ignoreDestructiveWriteCount;
@@ -1262,6 +1258,8 @@ private:
     Timer<Document> m_updateFocusAppearanceTimer;
 
     RawPtrWillBeMember<Element> m_cssTarget;
+
+    LoadEventProgress m_loadEventProgress;
 
     double m_startTime;
 

@@ -26,7 +26,6 @@
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/update_active_setup_version_work_item.h"
-#include "chrome/installer/util/auto_launch_util.h"
 #include "chrome/installer/util/beacons.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/create_reg_key_work_item.h"
@@ -278,17 +277,15 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
     //   - Localized display name for the product.
     //   - Relative path to the VisualElements directory, three times.
     static const char kManifestTemplate[] =
-        "<Application>\r\n"
+        "<Application "
+            "xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>\r\n"
         "  <VisualElements\r\n"
-        "      DisplayName='%ls'\r\n"
-        "      Logo='%ls\\Logo.png'\r\n"
-        "      SmallLogo='%ls\\SmallLogo.png'\r\n"
-        "      ForegroundText='light'\r\n"
-        "      BackgroundColor='#323232'>\r\n"
-        "    <DefaultTile ShowName='allLogos'/>\r\n"
-        "    <SplashScreen Image='%ls\\splash-620x300.png'/>\r\n"
-        "  </VisualElements>\r\n"
-        "</Application>";
+        "      ShowNameOnSquare150x150Logo='on'\r\n"
+        "      Square150x150Logo='%ls\\Logo.png'\r\n"
+        "      Square70x70Logo='%ls\\SmallLogo.png'\r\n"
+        "      ForegroundText='light'>\r\n"
+        "      BackgroundColor='#323232'/>\r\n"
+        "</Application>\r\n";
 
     const base::string16 manifest_template(
         base::ASCIIToUTF16(kManifestTemplate));
@@ -302,8 +299,7 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
 
     // Fill the manifest with the desired values.
     base::string16 manifest16(base::StringPrintf(
-        manifest_template.c_str(), display_name.c_str(), elements_dir.c_str(),
-        elements_dir.c_str(), elements_dir.c_str()));
+        manifest_template.c_str(), elements_dir.c_str(), elements_dir.c_str()));
 
     // Write the manifest to |src_path|.
     const std::string manifest(base::UTF16ToUTF8(manifest16));
@@ -553,22 +549,6 @@ InstallStatus InstallOrUpdateProduct(
 
       RegisterChromeOnMachine(installer_state, *chrome_product,
           make_chrome_default || force_chrome_default_for_user);
-
-      // Configure auto-launch.
-      if (result == FIRST_INSTALL_SUCCESS) {
-        installer_state.UpdateStage(installer::CONFIGURE_AUTO_LAUNCH);
-
-        // Add auto-launch key if specified in master_preferences.
-        bool auto_launch_chrome = false;
-        prefs.GetBool(
-            installer::master_preferences::kAutoLaunchChrome,
-            &auto_launch_chrome);
-        if (auto_launch_chrome) {
-          auto_launch_util::EnableForegroundStartAtLogin(
-              base::ASCIIToUTF16(chrome::kInitialProfile),
-              installer_state.target_path());
-        }
-      }
 
       if (!installer_state.system_install()) {
         DCHECK_EQ(chrome_product->distribution(),

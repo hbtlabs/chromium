@@ -1053,6 +1053,7 @@ interface Document : Node
     getter scrollingElement
     getter selectedStylesheetSet
     getter styleSheets
+    getter suborigin
     getter timeline
     getter title
     getter visibilityState
@@ -2302,6 +2303,7 @@ interface HTMLLegendElement : HTMLElement
     method constructor
     setter align
 interface HTMLLinkElement : HTMLElement
+    getter as
     getter charset
     getter crossOrigin
     getter disabled
@@ -2317,6 +2319,7 @@ interface HTMLLinkElement : HTMLElement
     getter target
     getter type
     method constructor
+    setter as
     setter charset
     setter crossOrigin
     setter disabled
@@ -3336,6 +3339,7 @@ interface MessageEvent : Event
     getter origin
     getter ports
     getter source
+    getter suborigin
     method constructor
     method initMessageEvent
 interface MessagePort : EventTarget
@@ -3731,20 +3735,6 @@ interface PerformanceTiming
     getter unloadEventStart
     method constructor
     method toJSON
-interface PeriodicSyncManager
-    getter minPossiblePeriod
-    method constructor
-    method getRegistration
-    method getRegistrations
-    method permissionState
-    method register
-interface PeriodicSyncRegistration
-    getter minPeriod
-    getter networkState
-    getter powerState
-    getter tag
-    method constructor
-    method unregister
 interface PeriodicWave
     method constructor
 interface PermissionStatus : EventTarget
@@ -3843,7 +3833,6 @@ interface PushSubscription
     method toJSON
     method unsubscribe
 interface RTCCertificate
-    getter expires
     method constructor
 interface RTCIceCandidate
     getter candidate
@@ -5056,7 +5045,6 @@ interface ServiceWorkerMessageEvent : Event
 interface ServiceWorkerRegistration : EventTarget
     getter geofencing
     getter onupdatefound
-    getter periodicSync
     getter pushManager
     getter scope
     getter sync

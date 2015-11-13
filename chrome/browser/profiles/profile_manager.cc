@@ -46,7 +46,6 @@
 #include "chrome/browser/signin/cross_device_promo_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
@@ -61,6 +60,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -466,7 +466,7 @@ void ProfileManager::CreateProfileAsync(
   }
 }
 
-bool ProfileManager::IsValidProfile(Profile* profile) {
+bool ProfileManager::IsValidProfile(void* profile) {
   for (ProfilesInfoMap::iterator iter = profiles_info_.begin();
        iter != profiles_info_.end(); ++iter) {
     if (iter->second->created) {
@@ -1125,7 +1125,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
       invalidation_provider ? invalidation_provider->GetInvalidationService()
                             : nullptr;
   AccountFetcherServiceFactory::GetForProfile(profile)
-      ->SetupInvalidations(invalidation_service);
+      ->SetupInvalidationsOnProfileLoad(invalidation_service);
   AccountReconcilorFactory::GetForProfile(profile);
 
   // Service is responsible for migration of the legacy password manager

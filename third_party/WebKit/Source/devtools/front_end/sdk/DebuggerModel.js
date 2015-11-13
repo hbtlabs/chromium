@@ -39,7 +39,6 @@ WebInspector.DebuggerModel = function(target)
 
     target.registerDebuggerDispatcher(new WebInspector.DebuggerDispatcher(this));
     this._agent = target.debuggerAgent();
-    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.SuspendStateChanged, this._suspendStateChanged, this);
     WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.TargetDisposed, this._targetDisposed, this);
 
     /** @type {?WebInspector.DebuggerPausedDetails} */
@@ -121,23 +120,35 @@ WebInspector.DebuggerModel.prototype = {
         return !!this._debuggerEnabled;
     },
 
-    enableDebugger: function()
+    /**
+     * @param {function()=} callback
+     */
+    enableDebugger: function(callback)
     {
-        if (this._debuggerEnabled)
+        if (this._debuggerEnabled) {
+            if (callback)
+                callback();
             return;
-        this._agent.enable();
+        }
+        this._agent.enable(callback);
         this._debuggerEnabled = true;
         this._pauseOnExceptionStateChanged();
         this.asyncStackTracesStateChanged();
         this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerWasEnabled);
     },
 
-    disableDebugger: function()
+    /**
+     * @param {function()=} callback
+     */
+    disableDebugger: function(callback)
     {
-        if (!this._debuggerEnabled)
+        if (!this._debuggerEnabled) {
+            if (callback)
+                callback();
             return;
+        }
 
-        this._agent.disable();
+        this._agent.disable(callback);
         this._debuggerEnabled = false;
         this._isPausing = false;
         this.asyncStackTracesStateChanged();
@@ -185,7 +196,7 @@ WebInspector.DebuggerModel.prototype = {
     asyncStackTracesStateChanged: function()
     {
         const maxAsyncStackChainDepth = 4;
-        var enabled = WebInspector.moduleSetting("enableAsyncStackTraces").get() && !WebInspector.targetManager.allTargetsSuspended();
+        var enabled = WebInspector.moduleSetting("enableAsyncStackTraces").get() && this._debuggerEnabled;
         this._agent.setAsyncCallStackDepth(enabled ? maxAsyncStackChainDepth : 0);
     },
 
@@ -574,14 +585,15 @@ WebInspector.DebuggerModel.prototype = {
      * @param {number} endColumn
      * @param {boolean} isContentScript
      * @param {boolean} isInternalScript
+     * @param {boolean} isLiveEdit
      * @param {string=} sourceMapURL
      * @param {boolean=} hasSourceURL
      * @param {boolean=} hasSyntaxError
      * @return {!WebInspector.Script}
      */
-    _parsedScriptSource: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, sourceMapURL, hasSourceURL, hasSyntaxError)
+    _parsedScriptSource: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL, hasSyntaxError)
     {
-        var script = new WebInspector.Script(this, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, sourceMapURL, hasSourceURL);
+        var script = new WebInspector.Script(this, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL);
         this._registerScript(script);
         if (!hasSyntaxError)
             this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.ParsedScriptSource, script);
@@ -903,12 +915,40 @@ WebInspector.DebuggerModel.prototype = {
         WebInspector.moduleSetting("enableAsyncStackTraces").removeChangeListener(this.asyncStackTracesStateChanged, this);
     },
 
-    _suspendStateChanged: function()
+    /**
+     * @override
+     * @return {!Promise}
+     */
+    suspendModel: function()
     {
-        if (WebInspector.targetManager.allTargetsSuspended())
-            this.disableDebugger();
-        else
-            this.enableDebugger();
+        return new Promise(promiseBody.bind(this));
+
+        /**
+         * @param {function()} fulfill
+         * @this {WebInspector.DebuggerModel}
+         */
+        function promiseBody(fulfill)
+        {
+            this.disableDebugger(fulfill);
+        }
+    },
+
+    /**
+     * @override
+     * @return {!Promise}
+     */
+    resumeModel: function()
+    {
+        return new Promise(promiseBody.bind(this));
+
+        /**
+         * @param {function()} fulfill
+         * @this {WebInspector.DebuggerModel}
+         */
+        function promiseBody(fulfill)
+        {
+            this.enableDebugger(fulfill);
+        }
     },
 
     __proto__: WebInspector.SDKModel.prototype
@@ -970,12 +1010,13 @@ WebInspector.DebuggerDispatcher.prototype = {
      * @param {number} endColumn
      * @param {boolean=} isContentScript
      * @param {boolean=} isInternalScript
+     * @param {boolean=} isLiveEdit
      * @param {string=} sourceMapURL
      * @param {boolean=} hasSourceURL
      */
-    scriptParsed: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, sourceMapURL, hasSourceURL)
+    scriptParsed: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL)
     {
-        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, !!isContentScript, !!isInternalScript, sourceMapURL, hasSourceURL, false);
+        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, !!isContentScript, !!isInternalScript, !!isLiveEdit, sourceMapURL, hasSourceURL, false);
     },
 
     /**
@@ -993,7 +1034,7 @@ WebInspector.DebuggerDispatcher.prototype = {
      */
     scriptFailedToParse: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, sourceMapURL, hasSourceURL)
     {
-        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, !!isContentScript, !!isInternalScript, sourceMapURL, hasSourceURL, true);
+        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, !!isContentScript, !!isInternalScript, false, sourceMapURL, hasSourceURL, true);
     },
 
     /**

@@ -26,6 +26,7 @@ source_set("sources") {
     "application_impl.h",
     "application_runner.h",
     "connect.h",
+    "initialize_base_and_icu.cc",
     "interface_factory.h",
     "interface_factory_impl.h",
     "lib/app_lifetime_helper.cc",
@@ -44,12 +45,13 @@ source_set("sources") {
 
   deps = [
     "//base",
+    "//base:i18n",
     "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
     "//mojo/message_pump",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
-    "//third_party/mojo/src/mojo/public/cpp/system",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
   ]
 }
 
@@ -92,9 +94,9 @@ source_set("test_support") {
     "//base/test:test_support",
     "//mojo/application/public/interfaces:interfaces_cpp_sources",
     "//mojo/logging",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
-    "//third_party/mojo/src/mojo/public/cpp/environment",
-    "//third_party/mojo/src/mojo/public/cpp/system",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/environment",
+    "//mojo/public/cpp/system",
     "//testing/gtest",
   ]
 

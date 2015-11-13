@@ -22,7 +22,8 @@ function rafWidth(resolve, reject)
         resolve(node.offsetWidth);
     }
 
-    requestAnimationFrame(frameCallback);
+    if (window.testRunner)
+        testRunner.layoutAndPaintAsyncThen(frameCallback);
 }
 
 window.debugTest = true;
@@ -35,7 +36,6 @@ function test()
     function onStarted(response)
     {
         InspectorTest.log("Animation started");
-        InspectorTest.evaluateInPage("logPaused()");
         InspectorTest.sendCommand("Animation.setPaused", { animations: [ response.params.animation.id ], paused: true }, animPaused);
     }
 

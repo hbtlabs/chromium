@@ -323,6 +323,18 @@ void ResourceFetcher::preCacheData(const FetchRequest& request, const ResourceFa
     scheduleDocumentResourcesGC();
 }
 
+void ResourceFetcher::moveCachedNonBlockingResourceToBlocking(Resource* resource)
+{
+    // TODO(yoav): Test that non-blocking resources (video/audio/track) continue to not-block even after being preloaded and discovered.
+    if (resource && resource->loader() && resource->isNonBlockingResourceType() && resource->avoidBlockingOnLoad()) {
+        if (m_nonBlockingLoaders)
+            m_nonBlockingLoaders->remove(resource->loader());
+        if (!m_loaders)
+            m_loaders = ResourceLoaderSet::create();
+        m_loaders->add(resource->loader());
+    }
+}
+
 ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, const ResourceFactory& factory, const SubstituteData& substituteData)
 {
     ASSERT(request.options().synchronousPolicy == RequestAsynchronously || factory.type() == Resource::Raw || factory.type() == Resource::XSLStyleSheet);
@@ -364,8 +376,9 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, co
         }
     }
 
-    // See if we can use an existing resource from the cache.
+    // See if we can use an existing resource from the cache. If so, we need to move it to be load blocking.
     ResourcePtr<Resource> resource = memoryCache()->resourceForURL(url, getCacheIdentifier());
+    moveCachedNonBlockingResourceToBlocking(resource.get());
 
     const RevalidationPolicy policy = determineRevalidationPolicy(factory.type(), request, resource.get(), isStaticData);
     switch (policy) {
@@ -472,6 +485,8 @@ void ResourceFetcher::initializeResourceRequest(ResourceRequest& request, Resour
     if (type == Resource::LinkPrefetch || type == Resource::LinkSubresource)
         request.setHTTPHeaderField("Purpose", "prefetch");
 
+    request.setURL(MemoryCache::removeFragmentIdentifierIfNeeded(request.url()));
+
     context().addAdditionalRequestHeaders(request, (type == Resource::MainResource) ? FetchMainResource : FetchSubresource);
 }
 
@@ -517,6 +532,7 @@ ResourcePtr<Resource> ResourceFetcher::createResourceForLoading(FetchRequest& re
 
     initializeResourceRequest(request.mutableResourceRequest(), factory.type());
     ResourcePtr<Resource> resource = factory.create(request.resourceRequest(), charset);
+    resource->setAvoidBlockingOnLoad(request.avoidBlockingOnLoad());
     resource->setCacheIdentifier(cacheIdentifier);
 
     memoryCache()->add(resource.get());
@@ -977,7 +993,7 @@ void ResourceFetcher::willTerminateResourceLoader(ResourceLoader* loader)
 
 void ResourceFetcher::willStartLoadingResource(Resource* resource, ResourceRequest& request)
 {
-    context().willStartLoadingResource(request);
+    context().willStartLoadingResource(request, resource->type() == Resource::MainResource ? FetchMainResource : FetchSubresource);
     storeResourceTimingInitiatorInformation(resource);
     TRACE_EVENT_ASYNC_BEGIN2("blink.net", "Resource", resource, "url", resource->url().string().ascii(), "priority", resource->resourceRequest().priority());
 }

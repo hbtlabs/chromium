@@ -113,6 +113,9 @@ public:
 
     void setNeedsSynchronousCacheHit(bool needsSynchronousCacheHit) { m_needsSynchronousCacheHit = needsSynchronousCacheHit; }
 
+    void setAvoidBlockingOnLoad(bool doNotBlock) { m_avoidBlockingOnLoad = doNotBlock; }
+    bool avoidBlockingOnLoad() { return m_avoidBlockingOnLoad; }
+
     void setResourceError(const ResourceError& error) { m_error = error; }
     const ResourceError& resourceError() const { return m_error; }
 
@@ -171,14 +174,8 @@ public:
     ResourceLoader* loader() const { return m_loader.get(); }
 
     virtual bool isImage() const { return false; }
-    bool shouldBlockLoadEvent() const
-    {
-        return type() != LinkPrefetch
-            && type() != LinkSubresource
-            && type() != Media
-            && type() != Raw
-            && type() != TextTrack;
-    }
+    bool shouldBlockLoadEvent() const;
+    bool isNonBlockingResourceType() const;
 
     // Computes the status of an object after loading.
     // Updates the expire date on the cache entry file
@@ -198,7 +195,6 @@ public:
 
     virtual void willFollowRedirect(ResourceRequest&, const ResourceResponse&);
 
-    virtual void updateRequest(const ResourceRequest&) { }
     virtual void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>);
     void setResponse(const ResourceResponse& response) { m_response = response; }
     const ResourceResponse& response() const { return m_response; }
@@ -213,6 +209,7 @@ public:
 
     bool hasOneHandle() const;
     bool canDelete() const;
+    String reasonNotDeletable() const;
 
     // List of acceptable MIME types separated by ",".
     // A MIME type may contain a wildcard, e.g. "text/*".
@@ -286,6 +283,7 @@ protected:
     // (ResourcePtrs and ResourceClients registering themselves) don't work in this case, so
     // have a separate internal protector).
     class InternalResourcePtr {
+        STACK_ALLOCATED();
     public:
         explicit InternalResourcePtr(Resource* resource)
             : m_resource(resource)
@@ -299,7 +297,7 @@ protected:
             m_resource->deleteIfPossible();
         }
     private:
-        Resource* m_resource;
+        RawPtrWillBeMember<Resource> m_resource;
     };
 
     void incrementProtectorCount() { m_protectorCount++; }
@@ -381,8 +379,6 @@ private:
     void clearCachedMetadata(CachedMetadataHandler::CacheType);
     CachedMetadata* cachedMetadata(unsigned dataTypeID) const;
 
-    String m_fragmentIdentifierForRequest;
-
     RefPtr<CachedMetadata> m_cachedMetadata;
     OwnPtrWillBeMember<CacheHandler> m_cacheHandler;
 
@@ -413,6 +409,7 @@ private:
     unsigned m_wasPurged : 1;
 
     unsigned m_needsSynchronousCacheHit : 1;
+    unsigned m_avoidBlockingOnLoad : 1;
 
 #ifdef ENABLE_RESOURCE_IS_DELETED_CHECK
     bool m_deleted;

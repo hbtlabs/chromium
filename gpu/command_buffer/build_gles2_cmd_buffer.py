@@ -3413,16 +3413,16 @@ _FUNCTION_INFO = {
   'SwapBuffers': {
     'impl_func': False,
     'decoder_func': 'DoSwapBuffers',
-    'unit_test': False,
     'client_test': False,
+    'expectation': False,
     'extension': True,
     'trace_level': 1,
   },
   'SwapInterval': {
     'impl_func': False,
     'decoder_func': 'DoSwapInterval',
-    'unit_test': False,
     'client_test': False,
+    'expectation': False,
     'extension': True,
     'trace_level': 1,
   },
@@ -4163,12 +4163,21 @@ _FUNCTION_INFO = {
     'trace_level': 2,
   },
   'ScheduleOverlayPlaneCHROMIUM': {
-      'type': 'Custom',
-      'impl_func': True,
-      'unit_test': False,
-      'client_test': False,
-      'extension': 'CHROMIUM_schedule_overlay_plane',
-      'chromium': True,
+    'type': 'Custom',
+    'impl_func': True,
+    'unit_test': False,
+    'client_test': False,
+    'extension': 'CHROMIUM_schedule_overlay_plane',
+    'chromium': True,
+  },
+  'ScheduleCALayerCHROMIUM': {
+    'type': 'Custom',
+    'impl_func': False,
+    'client_test': False,
+    'cmd_args': 'GLuint contents_texture_id, GLfloat opacity, '
+                'GLuint background_color, GLuint shm_id, GLuint shm_offset',
+    'extension': 'CHROMIUM_schedule_ca_layer',
+    'chromium': True,
   },
   'MatrixLoadfCHROMIUM': {
     'type': 'PUT',
@@ -10531,7 +10540,7 @@ extern const NameToFunc g_gles2_function_table[] = {
                "// GL api functions.\n")
     code = """
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "third_party/mojo/src/mojo/public/c/gles2/gles2.h"
+#include "mojo/public/c/gles2/gles2.h"
 
 namespace mojo {
 
@@ -10562,8 +10571,8 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
 #include "mojo/gpu/mojo_gles2_impl_autogen.h"
 
 #include "base/logging.h"
-#include "third_party/mojo/src/mojo/public/c/gles2/chromium_extension.h"
-#include "third_party/mojo/src/mojo/public/c/gles2/gles2.h"
+#include "mojo/public/c/gles2/chromium_extension.h"
+#include "mojo/public/c/gles2/gles2.h"
 
 namespace mojo {
 
@@ -11105,8 +11114,7 @@ def main(argv):
   gen.WriteCommonUtilsImpl(
     "gpu/command_buffer/common/gles2_cmd_utils_implementation_autogen.h")
   gen.WriteGLES2Header("gpu/GLES2/gl2chromium_autogen.h")
-  mojo_gles2_prefix = ("third_party/mojo/src/mojo/public/c/gles2/"
-                       "gles2_call_visitor")
+  mojo_gles2_prefix = ("mojo/public/c/gles2/gles2_call_visitor")
   gen.WriteMojoGLCallVisitor(mojo_gles2_prefix + "_autogen.h")
   gen.WriteMojoGLCallVisitorForExtension(
       mojo_gles2_prefix + "_chromium_extension_autogen.h")

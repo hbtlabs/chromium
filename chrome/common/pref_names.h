@@ -262,6 +262,8 @@ extern const char kTimeOnOobe[];
 extern const char kCurrentWallpaperAppName[];
 extern const char kFileSystemProviderMounted[];
 extern const char kTouchVirtualKeyboardEnabled[];
+extern const char kTouchScreenEnabled[];
+extern const char kTouchPadEnabled[];
 extern const char kWakeOnWifiDarkConnect[];
 extern const char kCaptivePortalAuthenticationIgnoresProxy[];
 extern const char kForceMaximizeOnFirstRun[];
@@ -407,6 +409,7 @@ extern const char kToolbarIconSurfacingBubbleLastShowTime[];
 #if defined(ENABLE_WEBRTC)
 extern const char kWebRTCMultipleRoutesEnabled[];
 extern const char kWebRTCNonProxiedUdpEnabled[];
+extern const char kWebRTCIPHandlingPolicy[];
 #endif
 
 extern const char kGLVendorString[];
@@ -650,7 +653,6 @@ extern const char kRegisteredBackgroundContents[];
 
 #if defined(OS_WIN)
 extern const char kLastWelcomedOSVersion[];
-extern const char kShownAutoLaunchInfobar[];
 extern const char kWelcomePageOnOSUpgradeEnabled[];
 #endif
 

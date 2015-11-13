@@ -79,6 +79,10 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
   void OnClientAreaChanged(uint32_t window_id,
                            mojo::InsetsPtr old_client_area,
                            mojo::InsetsPtr new_client_area) override {}
+  void OnTransientWindowAdded(uint32_t window_id,
+                              uint32_t transient_window_id) override {}
+  void OnTransientWindowRemoved(uint32_t window_id,
+                                uint32_t transient_window_id) override {}
   void OnWindowViewportMetricsChanged(
       mojom::ViewportMetricsPtr old_metrics,
       mojom::ViewportMetricsPtr new_metrics) override {
@@ -119,6 +123,14 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
   void OnWindowFocused(uint32_t focused_window_id) override {
     tracker_.OnWindowFocused(focused_window_id);
   }
+  void OnChangeCompleted(uint32_t change_id, bool success) override {}
+  void WmSetBounds(uint32_t change_id,
+                   Id window_id,
+                   mojo::RectPtr bounds) override {}
+  void WmSetProperty(uint32_t change_id,
+                     Id window_id,
+                     const mojo::String& name,
+                     mojo::Array<uint8_t> transit_data) override {}
 
   TestChangeTracker tracker_;
 
@@ -229,6 +241,7 @@ class TestDisplayManager : public DisplayManager {
   }
   void UpdateTextInputState(const ui::TextInputState& state) override {}
   void SetImeVisibility(bool visible) override {}
+  bool IsFramePending() const override { return false; }
 
  private:
   mojom::ViewportMetrics display_metrices_;
@@ -341,7 +354,7 @@ class WindowTreeTest : public testing::Test {
 // Verifies focus correctly changes on pointer events.
 TEST_F(WindowTreeTest, FocusOnPointer) {
   const WindowId embed_window_id(wm_connection()->id(), 1);
-  EXPECT_EQ(ERROR_CODE_NONE, wm_connection()->NewWindow(embed_window_id));
+  EXPECT_TRUE(wm_connection()->NewWindow(embed_window_id));
   EXPECT_TRUE(wm_connection()->SetWindowVisibility(embed_window_id, true));
   EXPECT_TRUE(
       wm_connection()->AddWindow(*(wm_connection()->root()), embed_window_id));
@@ -366,7 +379,7 @@ TEST_F(WindowTreeTest, FocusOnPointer) {
       ->SetBounds(gfx::Rect(0, 0, 50, 50));
 
   const WindowId child1(connection1->id(), 1);
-  EXPECT_EQ(ERROR_CODE_NONE, connection1->NewWindow(child1));
+  EXPECT_TRUE(connection1->NewWindow(child1));
   EXPECT_TRUE(connection1->AddWindow(embed_window_id, child1));
   ServerWindow* v1 = connection1->GetWindow(child1);
   v1->SetVisible(true);
@@ -423,7 +436,7 @@ TEST_F(WindowTreeTest, FocusOnPointer) {
 
 TEST_F(WindowTreeTest, BasicInputEventTarget) {
   const WindowId embed_window_id(wm_connection()->id(), 1);
-  EXPECT_EQ(ERROR_CODE_NONE, wm_connection()->NewWindow(embed_window_id));
+  EXPECT_TRUE(wm_connection()->NewWindow(embed_window_id));
   EXPECT_TRUE(wm_connection()->SetWindowVisibility(embed_window_id, true));
   EXPECT_TRUE(
       wm_connection()->AddWindow(*(wm_connection()->root()), embed_window_id));
@@ -448,7 +461,7 @@ TEST_F(WindowTreeTest, BasicInputEventTarget) {
       ->SetBounds(gfx::Rect(0, 0, 50, 50));
 
   const WindowId child1(connection1->id(), 1);
-  EXPECT_EQ(ERROR_CODE_NONE, connection1->NewWindow(child1));
+  EXPECT_TRUE(connection1->NewWindow(child1));
   EXPECT_TRUE(connection1->AddWindow(embed_window_id, child1));
   ServerWindow* v1 = connection1->GetWindow(child1);
   v1->SetVisible(true);

@@ -11,7 +11,7 @@
 #include "mojo/gles2/gles2_context.h"
 // Even though this isn't used here, we need to include it to get the symbols to
 // be exported in component build.
-#include "third_party/mojo/src/mojo/public/c/gles2/chromium_extension.h"
+#include "mojo/public/c/gles2/chromium_extension.h"
 
 using gles2::GLES2Context;
 

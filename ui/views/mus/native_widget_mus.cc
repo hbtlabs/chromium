@@ -4,9 +4,12 @@
 
 #include "ui/views/mus/native_widget_mus.h"
 
+#include "base/thread_task_runner_handle.h"
+#include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "ui/aura/client/default_capture_client.h"
+#include "ui/aura/client/window_tree_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -14,6 +17,7 @@
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
 #include "ui/native_theme/native_theme_aura.h"
+#include "ui/views/mus/platform_window_mus.h"
 #include "ui/views/mus/window_manager_client_area_insets.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -66,6 +70,29 @@ class ContentWindowLayoutManager : public aura::LayoutManager {
   aura::Window* inner_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentWindowLayoutManager);
+};
+
+class NativeWidgetMusWindowTreeClient : public aura::client::WindowTreeClient {
+ public:
+  explicit NativeWidgetMusWindowTreeClient(aura::Window* root_window)
+      : root_window_(root_window) {
+    aura::client::SetWindowTreeClient(root_window_, this);
+  }
+  ~NativeWidgetMusWindowTreeClient() override {
+    aura::client::SetWindowTreeClient(root_window_, nullptr);
+  }
+
+  // Overridden from client::WindowTreeClient:
+  aura::Window* GetDefaultParent(aura::Window* context,
+                                 aura::Window* window,
+                                 const gfx::Rect& bounds) override {
+    return root_window_;
+  }
+
+ private:
+  aura::Window* root_window_;
+
+  DISALLOW_COPY_AND_ASSIGN(NativeWidgetMusWindowTreeClient);
 };
 
 // As the window manager renderers the non-client decorations this class does
@@ -122,6 +149,18 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
   DISALLOW_COPY_AND_ASSIGN(ClientSideNonClientFrameView);
 };
 
+mus::mojom::ResizeBehavior ResizeBehaviorFromDelegate(
+    WidgetDelegate* delegate) {
+  int32_t behavior = mus::mojom::RESIZE_BEHAVIOR_NONE;
+  if (delegate->CanResize())
+    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_RESIZE;
+  if (delegate->CanMaximize())
+    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_MAXIMIZE;
+  if (delegate->CanMinimize())
+    behavior |= mus::mojom::RESIZE_BEHAVIOR_CAN_MINIMIZE;
+  return static_cast<mus::mojom::ResizeBehavior>(behavior);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -136,8 +175,16 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
       native_widget_delegate_(delegate),
       surface_type_(surface_type),
       show_state_before_fullscreen_(ui::PLATFORM_WINDOW_STATE_UNKNOWN),
-      content_(new aura::Window(this)) {}
-NativeWidgetMus::~NativeWidgetMus() {}
+      ownership_(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET),
+      content_(new aura::Window(this)),
+      close_widget_factory_(this) {}
+
+NativeWidgetMus::~NativeWidgetMus() {
+  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
+    delete native_widget_delegate_;
+  else
+    CloseNow();
+}
 
 // static
 void NativeWidgetMus::SetWindowManagerClientAreaInsets(
@@ -148,20 +195,35 @@ void NativeWidgetMus::SetWindowManagerClientAreaInsets(
   window_manager_client_area_insets = new WindowManagerClientAreaInsets(insets);
 }
 
+void NativeWidgetMus::OnPlatformWindowClosed() {
+  GetWidget()->Close();
+}
+
+void NativeWidgetMus::OnActivationChanged(bool active) {
+  if (!native_widget_delegate_)
+    return;
+  if (active) {
+    native_widget_delegate_->OnNativeFocus();
+    GetWidget()->GetFocusManager()->RestoreFocusedView();
+  } else {
+    native_widget_delegate_->OnNativeBlur();
+    GetWidget()->GetFocusManager()->StoreFocusedView(true);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMus, private:
 
-void NativeWidgetMus::UpdateClientAreaInWindowManager() {
-  NonClientView* non_client_view =
-      native_widget_delegate_->AsWidget()->non_client_view();
-  if (!non_client_view || !non_client_view->client_view())
+// static
+void NativeWidgetMus::ConfigurePropertiesForNewWindow(
+    const Widget::InitParams& init_params,
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  if (!Widget::RequiresNonClientView(init_params.type))
     return;
 
-  const gfx::Rect client_area_rect(non_client_view->client_view()->bounds());
-  window_->SetClientArea(gfx::Insets(
-      client_area_rect.y(), client_area_rect.x(),
-      non_client_view->bounds().height() - client_area_rect.bottom(),
-      non_client_view->bounds().width() - client_area_rect.right()));
+  (*properties)[mus::mojom::WindowManager::kResizeBehavior_Property] =
+      mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
+          ResizeBehaviorFromDelegate(init_params.delegate));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,8 +234,9 @@ NonClientFrameView* NativeWidgetMus::CreateNonClientFrameView() {
 }
 
 void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
+  ownership_ = params.ownership;
   window_tree_host_.reset(
-      new WindowTreeHostMus(shell_, window_, surface_type_));
+      new WindowTreeHostMus(shell_, this, window_, surface_type_));
   window_tree_host_->InitHost();
 
   focus_client_.reset(new wm::FocusController(new FocusRulesImpl));
@@ -182,6 +245,8 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
                                focus_client_.get());
   aura::client::SetActivationClient(window_tree_host_->window(),
                                     focus_client_.get());
+  window_tree_client_.reset(
+      new NativeWidgetMusWindowTreeClient(window_tree_host_->window()));
   window_tree_host_->window()->AddPreTargetHandler(focus_client_.get());
   window_tree_host_->window()->SetLayoutManager(
       new ContentWindowLayoutManager(window_tree_host_->window(), content_));
@@ -190,11 +255,14 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
 
   content_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
   content_->Init(ui::LAYER_TEXTURED);
+  content_->Show();
   content_->SetTransparent(true);
   content_->SetFillsBoundsCompletely(false);
 
   window_tree_host_->window()->AddChild(content_);
   // TODO(beng): much else, see [Desktop]NativeWidgetAura.
+
+  native_widget_delegate_->OnNativeWidgetCreated(false);
 }
 
 bool NativeWidgetMus::ShouldUseNativeFrame() const {
@@ -347,11 +415,18 @@ void NativeWidgetMus::SetShape(SkRegion* shape) {
 }
 
 void NativeWidgetMus::Close() {
-  // NOTIMPLEMENTED();
+  Hide();
+  if (!close_widget_factory_.HasWeakPtrs()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&NativeWidgetMus::CloseNow,
+                              close_widget_factory_.GetWeakPtr()));
+  }
 }
 
 void NativeWidgetMus::CloseNow() {
-  // NOTIMPLEMENTED();
+  // Note: Deleting |content_| triggers the |OnWindowDestroyed()| callback,
+  // which can delete |this|.
+  delete content_;
 }
 
 void NativeWidgetMus::Show() {
@@ -371,15 +446,18 @@ void NativeWidgetMus::ShowMaximizedWithBounds(
 void NativeWidgetMus::ShowWithWindowState(ui::WindowShowState state) {
   window_tree_host_->Show();
   GetNativeWindow()->Show();
+  if (state != ui::SHOW_STATE_INACTIVE)
+    Activate();
+  GetWidget()->SetInitialFocus(state);
 }
 
 bool NativeWidgetMus::IsVisible() const {
-  // NOTIMPLEMENTED();
-  return true;
+  // TODO(beng): this should probably be wired thru PlatformWindow.
+  return window_->visible();
 }
 
 void NativeWidgetMus::Activate() {
-  // NOTIMPLEMENTED();
+  window_tree_host_->platform_window()->Activate();
 }
 
 void NativeWidgetMus::Deactivate() {
@@ -536,7 +614,8 @@ bool NativeWidgetMus::IsTranslucentWindowOpacitySupported() const {
 }
 
 void NativeWidgetMus::OnSizeConstraintsChanged() {
-  // NOTIMPLEMENTED();
+  window_->SetResizeBehavior(
+      ResizeBehaviorFromDelegate(GetWidget()->widget_delegate()));
 }
 
 void NativeWidgetMus::RepostNativeEvent(gfx::NativeEvent native_event) {
@@ -601,13 +680,12 @@ void NativeWidgetMus::OnDeviceScaleFactorChanged(float device_scale_factor) {
 }
 
 void NativeWidgetMus::OnWindowDestroying(aura::Window* window) {
-  // Cleanup happens in OnHostClosed().
 }
 
 void NativeWidgetMus::OnWindowDestroyed(aura::Window* window) {
-  // Cleanup happens in OnHostClosed(). We own |content_window_| (indirectly by
-  // way of |dispatcher_|) so there should be no need to do any processing
-  // here.
+  native_widget_delegate_->OnNativeWidgetDestroyed();
+  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
+    delete this;
 }
 
 void NativeWidgetMus::OnWindowTargetVisibilityChanged(bool visible) {
@@ -668,6 +746,22 @@ void NativeWidgetMus::OnScrollEvent(ui::ScrollEvent* event) {
 
 void NativeWidgetMus::OnGestureEvent(ui::GestureEvent* event) {
   native_widget_delegate_->OnGestureEvent(event);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// NativeWidgetMus, private:
+
+void NativeWidgetMus::UpdateClientAreaInWindowManager() {
+  NonClientView* non_client_view =
+      native_widget_delegate_->AsWidget()->non_client_view();
+  if (!non_client_view || !non_client_view->client_view())
+    return;
+
+  const gfx::Rect client_area_rect(non_client_view->client_view()->bounds());
+  window_->SetClientArea(gfx::Insets(
+      client_area_rect.y(), client_area_rect.x(),
+      non_client_view->bounds().height() - client_area_rect.bottom(),
+      non_client_view->bounds().width() - client_area_rect.right()));
 }
 
 }  // namespace views

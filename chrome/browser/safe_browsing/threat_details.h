@@ -20,8 +20,8 @@
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/safe_browsing/report.pb.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
+#include "chrome/common/safe_browsing/csd.pb.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/completion_callback.h"
 
@@ -29,19 +29,20 @@ namespace net {
 class URLRequestContextGetter;
 }
 
+class Profile;
+struct SafeBrowsingHostMsg_ThreatDOMDetails_Node;
+
+namespace safe_browsing {
+
+// Maps a URL to its Resource.
 class ThreatDetailsCacheCollector;
 class ThreatDetailsRedirectsCollector;
 class ThreatDetailsFactory;
-class Profile;
-struct SafeBrowsingHostMsg_MalwareDOMDetails_Node;
 
-namespace safe_browsing {
-// Maps a URL to its Resource.
 typedef base::hash_map<
     std::string,
-    linked_ptr<safe_browsing::ClientMalwareReportRequest::Resource>>
+    linked_ptr<ClientSafeBrowsingReportRequest::Resource>>
     ResourceMap;
-}
 
 class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
                       public content::WebContentsObserver {
@@ -85,12 +86,12 @@ class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
 
   // Called on the IO thread with the DOM details.
   virtual void AddDOMDetails(
-      const std::vector<SafeBrowsingHostMsg_MalwareDOMDetails_Node>& params);
+      const std::vector<SafeBrowsingHostMsg_ThreatDOMDetails_Node>& params);
 
   Profile* profile_;
 
   // The report protocol buffer.
-  scoped_ptr<safe_browsing::ClientMalwareReportRequest> report_;
+  scoped_ptr<ClientSafeBrowsingReportRequest> report_;
 
   // Used to get a pointer to the HTTP cache.
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
@@ -107,7 +108,7 @@ class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
   // Finds an existing Resource for the given url, or creates a new
   // one if not found, and adds it to |resources_|. Returns the
   // found/created resource.
-  safe_browsing::ClientMalwareReportRequest::Resource* FindOrCreateResource(
+  ClientSafeBrowsingReportRequest::Resource* FindOrCreateResource(
       const GURL& url);
 
   // Adds a Resource to resources_ with the given parent-child
@@ -119,7 +120,7 @@ class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
 
   // Message handler.
   void OnReceivedThreatDOMDetails(
-      const std::vector<SafeBrowsingHostMsg_MalwareDOMDetails_Node>& params);
+      const std::vector<SafeBrowsingHostMsg_ThreatDOMDetails_Node>& params);
 
   void AddRedirectUrlList(const std::vector<GURL>& urls);
 
@@ -129,7 +130,7 @@ class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
 
   // For every Url we collect we create a Resource message. We keep
   // them in a map so we can avoid duplicates.
-  safe_browsing::ResourceMap resources_;
+  ResourceMap resources_;
 
   // Result from the cache extractor.
   bool cache_result_;
@@ -152,7 +153,7 @@ class ThreatDetails : public base::RefCountedThreadSafe<ThreatDetails>,
   // Used to collect redirect urls from the history service
   scoped_refptr<ThreatDetailsRedirectsCollector> redirects_collector_;
 
-  FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, MalwareDOMDetails);
+  FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, ThreatDOMDetails);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, HTTPCache);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, HTTPCacheNoEntries);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, HistoryServiceUrls);
@@ -170,5 +171,7 @@ class ThreatDetailsFactory {
       content::WebContents* web_contents,
       const SafeBrowsingUIManager::UnsafeResource& unsafe_resource) = 0;
 };
+
+}  // namespace safe_browsing
 
 #endif  // CHROME_BROWSER_SAFE_BROWSING_THREAT_DETAILS_H_

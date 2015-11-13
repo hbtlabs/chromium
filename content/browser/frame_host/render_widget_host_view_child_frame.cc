@@ -4,6 +4,9 @@
 
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_manager.h"
@@ -417,11 +420,11 @@ void RenderWidgetHostViewChildFrame::CopyFromCompositingSurface(
 }
 
 void RenderWidgetHostViewChildFrame::CopyFromCompositingSurfaceToVideoFrame(
-      const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) {
+    const gfx::Rect& src_subrect,
+    const scoped_refptr<media::VideoFrame>& target,
+    const base::Callback<void(const gfx::Rect&, bool)>& callback) {
   NOTIMPLEMENTED();
-  callback.Run(false);
+  callback.Run(gfx::Rect(), false);
 }
 
 bool RenderWidgetHostViewChildFrame::CanCopyToVideoFrame() const {
@@ -472,8 +475,13 @@ void RenderWidgetHostViewChildFrame::SetBeginFrameSource(
 BrowserAccessibilityManager*
 RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
     BrowserAccessibilityDelegate* delegate) {
+  // TODO(mfomitchev): Accessibility on Android Aura: crbug.com/543262
+#if defined(OS_ANDROID) && defined(USE_AURA)
+  return nullptr;
+#else
   return BrowserAccessibilityManager::Create(
       BrowserAccessibilityManager::GetEmptyDocument(), delegate);
+#endif
 }
 
 void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {

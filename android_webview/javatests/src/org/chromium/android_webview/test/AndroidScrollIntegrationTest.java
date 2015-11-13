@@ -16,6 +16,7 @@ import org.chromium.android_webview.test.util.JavascriptEventObserver;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.net.test.util.TestWebServer;
@@ -147,7 +148,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
             + "      margin: 0px; "
             + "   } "
             + "   div { "
-            + "      width:1000px; "
+            + "      width:10000px; "
             + "      height:10000px; "
             + "      background-color: blue; "
             + "   } "
@@ -374,6 +375,8 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Flaky with sandboxed renderer crbug.com/554529.
+    @ParameterizedTest.Set
     public void testJsScrollFromBody() throws Throwable {
         final TestAwContentsClient contentsClient = new TestAwContentsClient();
         final ScrollTestContainerView testContainerView =
@@ -519,6 +522,8 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testOverScrollX() throws Throwable {
         final TestAwContentsClient contentsClient = new TestAwContentsClient();
         final ScrollTestContainerView testContainerView =
@@ -552,6 +557,8 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testOverScrollY() throws Throwable {
         final TestAwContentsClient contentsClient = new TestAwContentsClient();
         final ScrollTestContainerView testContainerView =
@@ -614,6 +621,8 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by multiple RVHs crbug.com/533516.
+    @ParameterizedTest.Set
     public void testFlingScrollOnPopup() throws Throwable {
         final TestAwContentsClient parentContentsClient = new TestAwContentsClient();
         final ScrollTestContainerView parentContainerView =

@@ -218,7 +218,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Called to notify the RenderWidget that its associated native window
   // got/lost focused.
   virtual void GotFocus();
-  virtual void LostCapture();
+  void LostCapture();
 
   // Indicates whether the RenderWidgetHost thinks it is focused.
   // This is different from RenderWidgetHostView::HasFocus() in the sense that
@@ -230,7 +230,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool is_focused() const { return is_focused_; }
 
   // Called to notify the RenderWidget that it has lost the mouse lock.
-  virtual void LostMouseLock();
+  void LostMouseLock();
 
   // Noifies the RenderWidget of the current mouse cursor visibility state.
   void SendCursorVisibilityState(bool is_visible);
@@ -347,10 +347,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Cancels an ongoing composition.
   void ImeCancelComposition();
 
-  // This is for derived classes to give us access to the resizer rect.
-  // And to also expose it to the RenderWidgetHostView.
-  virtual gfx::Rect GetRootWindowResizerRect() const;
-
   bool ignore_input_events() const {
     return ignore_input_events_;
   }
@@ -360,10 +356,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool IgnoreInputEvents() const;
 
   bool has_touch_handler() const { return has_touch_handler_; }
-
-  // Notification that the user has made some kind of input that could
-  // perform an action. See OnUserGesture for more details.
-  void StartUserGesture();
 
   // Set the RenderView background transparency.
   void SetBackgroundOpaque(bool opaque);
@@ -391,8 +383,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool GotResponseToLockMouseRequest(bool allowed);
 
   // Tells the RenderWidget about the latest vsync parameters.
-  virtual void UpdateVSyncParameters(base::TimeTicks timebase,
-                                     base::TimeDelta interval);
+  void UpdateVSyncParameters(base::TimeTicks timebase,
+                             base::TimeDelta interval);
 
   // Called by the view in response to OnSwapCompositorFrame.
   static void SendSwapCompositorFrameAck(
@@ -514,45 +506,16 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   gfx::NativeViewId GetNativeViewId() const;
 
   // ---------------------------------------------------------------------------
-  // The following methods are overridden by RenderViewHost to send upwards to
+  // The following method is overridden by RenderViewHost to send upwards to
   // its delegate.
-
-  // Called when a mousewheel event was not processed by the renderer.
-  virtual void UnhandledWheelEvent(const blink::WebMouseWheelEvent& event) {}
-
-  // Notification that the user has made some kind of input that could
-  // perform an action. The gestures that count are 1) any mouse down
-  // event and 2) enter or space key presses.
-  virtual void OnUserGesture() {}
-
-  // Callbacks for notification when the renderer becomes unresponsive to user
-  // input events, and subsequently responsive again.
-  virtual void NotifyRendererUnresponsive() {}
-  virtual void NotifyRendererResponsive() {}
 
   // Callback for notification that we failed to receive any rendered graphics
   // from a newly loaded page. Used for testing.
   virtual void NotifyNewContentRenderingTimeoutForTesting() {}
 
-  // Called when auto-resize resulted in the renderer size changing.
-  virtual void OnRenderAutoResized(const gfx::Size& new_size) {}
-
   // ---------------------------------------------------------------------------
 
-  // RenderViewHost overrides this method to impose further restrictions on when
-  // to allow mouse lock.
-  // Once the request is approved or rejected, GotResponseToLockMouseRequest()
-  // will be called.
-  virtual void RequestToLockMouse(bool user_gesture,
-                                  bool last_unlocked_by_target);
-
   bool IsMouseLocked() const;
-
-  // RenderViewHost overrides this method to report whether tab-initiated
-  // fullscreen was granted.
-  virtual bool IsFullscreenGranted() const;
-
-  virtual blink::WebDisplayMode GetDisplayMode() const;
 
   // The View associated with the RenderViewHost. The lifetime of this object
   // is associated with the lifetime of the Render process. If the Renderer
@@ -626,7 +589,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                           const gfx::Range& range);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
-  void OnSnapshot(bool success, const SkBitmap& bitmap);
 
   // Called (either immediately or asynchronously) after we're done with our
   // BackingStore and can send an ACK to the renderer so it can paint onto it

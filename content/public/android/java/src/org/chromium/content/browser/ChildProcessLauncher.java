@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @JNINamespace("content")
 public class ChildProcessLauncher {
-    private static final String TAG = "cr.ChildProcessLaunch";
+    private static final String TAG = "cr.ChildProcLauncher";
 
     static final int CALLBACK_FOR_UNKNOWN_PROCESS = 0;
     static final int CALLBACK_FOR_GPU_PROCESS = 1;
@@ -411,6 +411,8 @@ public class ChildProcessLauncher {
 
     @CalledByNative
     private static void registerViewSurface(int surfaceId, Surface surface) {
+        if (!surface.isValid())
+            throw new RuntimeException("Attempting to register invalid Surface.");
         sViewSurfaceMap.put(surfaceId, surface);
     }
 
@@ -722,7 +724,10 @@ public class ChildProcessLauncher {
                     Log.e(TAG, "Invalid surfaceId.");
                     return null;
                 }
-                assert surface.isValid();
+                if (!surface.isValid()) {
+                    Log.e(TAG, "Requested surface is not valid.");
+                    return null;
+                }
                 return new SurfaceWrapper(surface);
             }
 

@@ -31,6 +31,7 @@
 #include "chrome/browser/android/contextualsearch/contextual_search_manager.h"
 #include "chrome/browser/android/contextualsearch/contextual_search_tab_helper.h"
 #include "chrome/browser/android/cookies/cookies_fetcher.h"
+#include "chrome/browser/android/data_usage/data_use_tab_ui_manager_android.h"
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/dev_tools_server.h"
 #include "chrome/browser/android/document/document_web_contents_delegate.h"
@@ -91,6 +92,7 @@
 #include "chrome/browser/interests/android/interests_service.h"
 #include "chrome/browser/invalidation/invalidation_service_factory_android.h"
 #include "chrome/browser/lifetime/application_lifetime_android.h"
+#include "chrome/browser/media/android/cdm/media_drm_credential_manager.h"
 #include "chrome/browser/media/android/remote/record_cast_action.h"
 #include "chrome/browser/media/android/remote/remote_media_player_bridge.h"
 #include "chrome/browser/media/android/router/media_router_android.h"
@@ -153,6 +155,7 @@
 #include "components/service_tab_launcher/component_jni_registrar.h"
 #include "components/signin/core/browser/android/component_jni_registrar.h"
 #include "components/variations/android/component_jni_registrar.h"
+#include "components/variations/android/variations_seed_bridge.h"
 #include "components/web_contents_delegate_android/component_jni_registrar.h"
 #include "sync/android/sync_jni_registrar.h"
 
@@ -238,6 +241,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"CreditCardScanner", autofill::CreditCardScannerViewAndroid::Register},
     {"DataReductionProxyInfoBarDelegate", DataReductionProxyInfoBar::Register},
     {"DataReductionProxySettings", DataReductionProxySettingsAndroid::Register},
+    {"DataUseTabUIManager", RegisterDataUseTabUIManager},
     {"DevToolsServer", RegisterDevToolsServer},
     {"DocumentWebContentsDelegate", DocumentWebContentsDelegate::Register},
     {"DomDistillerServiceFactory",
@@ -276,6 +280,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"LayerTitleCache", chrome::android::RegisterLayerTitleCache},
     {"LocationSettings", LocationSettingsImpl::Register},
     {"LogoBridge", RegisterLogoBridge},
+    {"MediaDrmCredentialManager",
+     MediaDrmCredentialManager::RegisterMediaDrmCredentialManager},
     {"MostVisitedSites", MostVisitedSites::Register},
     {"NativeInfoBar", RegisterNativeInfoBar},
     {"ExternalEstimateProviderAndroid",
@@ -342,6 +348,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"UmaSessionStats", RegisterUmaSessionStats},
     {"UrlUtilities", RegisterUrlUtilities},
     {"Variations", variations::android::RegisterVariations},
+    {"VariationsSeedBridge", variations::android::RegisterVariationsSeedBridge},
     {"VariationsSession", chrome::android::RegisterVariationsSession},
     {"WarmupManager", RegisterWarmupManager},
     {"WebappRegistry", WebappRegistry::RegisterWebappRegistry},

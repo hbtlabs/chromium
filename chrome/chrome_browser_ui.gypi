@@ -644,6 +644,14 @@
       'browser/ui/views/frame/web_app_left_header_view_ash.cc',
       'browser/ui/views/frame/web_app_left_header_view_ash.h',
       'browser/ui/views/tabs/window_finder_ash.cc',
+      'browser/ui/views/tabs/window_finder_impl.h',
+      'browser/ui/views/tabs/window_finder_impl.cc',
+    ],
+    # Used when Android + Views.
+    'chrome_browser_ui_views_android_sources': [
+      'browser/ui/views/tabs/window_finder_android.cc',
+      'browser/ui/views/tabs/window_finder_impl.h',
+      'browser/ui/views/tabs/window_finder_impl.cc',
     ],
     # Used when ash is disabled.
     'chrome_browser_ui_non_ash_sources': [
@@ -721,6 +729,8 @@
       'browser/ui/cocoa/animatable_image.mm',
       'browser/ui/cocoa/animatable_view.h',
       'browser/ui/cocoa/animatable_view.mm',
+      'browser/ui/cocoa/app_menu/app_menu_controller.h',
+      'browser/ui/cocoa/app_menu/app_menu_controller.mm',
       'browser/ui/cocoa/applescript/apple_event_util.h',
       'browser/ui/cocoa/applescript/apple_event_util.mm',
       'browser/ui/cocoa/applescript/bookmark_folder_applescript.h',
@@ -1070,8 +1080,6 @@
       'browser/ui/cocoa/location_bar/location_icon_decoration.mm',
       'browser/ui/cocoa/location_bar/manage_passwords_decoration.h',
       'browser/ui/cocoa/location_bar/manage_passwords_decoration.mm',
-      'browser/ui/cocoa/location_bar/mic_search_decoration.h',
-      'browser/ui/cocoa/location_bar/mic_search_decoration.mm',
       'browser/ui/cocoa/location_bar/page_action_decoration.h',
       'browser/ui/cocoa/location_bar/page_action_decoration.mm',
       'browser/ui/cocoa/location_bar/selected_keyword_decoration.h',
@@ -1274,8 +1282,6 @@
       'browser/ui/cocoa/wrench_menu/recent_tabs_menu_model_delegate.mm',
       'browser/ui/cocoa/wrench_menu/wrench_menu_button_cell.h',
       'browser/ui/cocoa/wrench_menu/wrench_menu_button_cell.mm',
-      'browser/ui/cocoa/wrench_menu/wrench_menu_controller.h',
-      'browser/ui/cocoa/wrench_menu/wrench_menu_controller.mm',
     ],
     # Files used only on desktop systems (not iOS, Android, ChromeOS).
     'chrome_browser_ui_desktop_sources': [
@@ -1336,7 +1342,6 @@
     'chrome_browser_ui_linux_sources': [
       'browser/ui/certificate_dialogs.cc',
       'browser/ui/certificate_dialogs.h',
-      'browser/ui/startup/autolaunch_prompt.cc',
       'browser/ui/views/apps/chrome_app_window_client_views.cc',
       'browser/ui/webui/certificate_viewer_ui.cc',
       'browser/ui/webui/certificate_viewer_ui.h',
@@ -1438,7 +1443,6 @@
       # manage_passwords_decoration.mm
       'browser/ui/passwords/manage_passwords_icon.cc',
       'browser/ui/passwords/manage_passwords_icon.h',
-      'browser/ui/startup/autolaunch_prompt.cc',
       'browser/ui/web_contents_sizer.mm',
     ],
     'chrome_browser_ui_media_router_sources': [
@@ -1658,8 +1662,6 @@
       'browser/ui/settings_window_manager_observer.h',
       'browser/ui/singleton_tabs.cc',
       'browser/ui/singleton_tabs.h',
-      'browser/ui/startup/autolaunch_prompt.h',
-      'browser/ui/startup/autolaunch_prompt_win.cc',
       'browser/ui/startup/bad_flags_prompt.cc',
       'browser/ui/startup/bad_flags_prompt.h',
       'browser/ui/startup/google_api_keys_infobar_delegate.cc',
@@ -1951,6 +1953,8 @@
       'browser/ui/webui/settings/md_settings_localized_strings_provider.h',
       'browser/ui/webui/settings/md_settings_ui.cc',
       'browser/ui/webui/settings/md_settings_ui.h',
+      'browser/ui/webui/settings/reset_settings_handler.cc',
+      'browser/ui/webui/settings/reset_settings_handler.h',
       'browser/ui/webui/settings/settings_clear_browsing_data_handler.cc',
       'browser/ui/webui/settings/settings_clear_browsing_data_handler.h',
       'browser/ui/webui/settings/settings_default_browser_handler.cc',
@@ -2112,6 +2116,8 @@
       'browser/ui/views/autofill/password_generation_popup_view_views.h',
       'browser/ui/views/autofill/save_card_bubble_views.cc',
       'browser/ui/views/autofill/save_card_bubble_views.h',
+      'browser/ui/views/autofill/save_card_icon_view.cc',
+      'browser/ui/views/autofill/save_card_icon_view.h',
       'browser/ui/views/autofill/tooltip_icon.cc',
       'browser/ui/views/autofill/tooltip_icon.h',
       'browser/ui/views/bar_control_button.cc',
@@ -2294,14 +2300,10 @@
       'browser/ui/views/location_bar/page_action_with_badge_view.h',
       'browser/ui/views/location_bar/page_info_helper.cc',
       'browser/ui/views/location_bar/page_info_helper.h',
-      'browser/ui/views/location_bar/save_credit_card_icon_view.cc',
-      'browser/ui/views/location_bar/save_credit_card_icon_view.h',
       'browser/ui/views/location_bar/selected_keyword_view.cc',
       'browser/ui/views/location_bar/selected_keyword_view.h',
       'browser/ui/views/location_bar/star_view.cc',
       'browser/ui/views/location_bar/star_view.h',
-      'browser/ui/views/location_bar/translate_icon_view.cc',
-      'browser/ui/views/location_bar/translate_icon_view.h',
       'browser/ui/views/location_bar/zoom_bubble_view.cc',
       'browser/ui/views/location_bar/zoom_bubble_view.h',
       'browser/ui/views/location_bar/zoom_view.cc',
@@ -2428,6 +2430,8 @@
       'browser/ui/views/touch_uma/touch_uma.h',
       'browser/ui/views/translate/translate_bubble_view.cc',
       'browser/ui/views/translate/translate_bubble_view.h',
+      'browser/ui/views/translate/translate_icon_view.cc',
+      'browser/ui/views/translate/translate_icon_view.h',
       'browser/ui/views/update_recommended_message_box.cc',
       'browser/ui/views/update_recommended_message_box.h',
       'browser/ui/views/validation_message_bubble_delegate.cc',
@@ -2917,7 +2921,6 @@
           'dependencies': [
             'safe_browsing_chunk_proto',
             'safe_browsing_proto',
-            'safe_browsing_report_proto',
           ],
         }],
         ['buildtype!="Official" and chromeos==1', {
@@ -2976,6 +2979,9 @@
                   'sources': [ '<@(chrome_browser_ui_views_extensions_non_mac_sources)' ],
                 }],
               ],
+            }],
+            ['OS=="android"', {
+              'sources': [ '<@(chrome_browser_ui_views_android_sources)' ],
             }],
             ['enable_extensions==1', {
               'dependencies': [

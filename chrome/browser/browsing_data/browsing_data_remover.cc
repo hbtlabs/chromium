@@ -495,7 +495,7 @@ void BrowsingDataRemover::RemoveImpl(int remove_mask,
     // hours/days to the safebrowsing cookies since they aren't the result of
     // any user action.
     if (delete_begin_ == base::Time()) {
-      SafeBrowsingService* sb_service =
+      safe_browsing::SafeBrowsingService* sb_service =
           g_browser_process->safe_browsing_service();
       if (sb_service) {
         net::URLRequestContextGetter* sb_context =
@@ -599,6 +599,20 @@ void BrowsingDataRemover::RemoveImpl(int remove_mask,
       password_store->RemoveLoginsCreatedBetween(
           delete_begin_, delete_end_,
           base::Bind(&BrowsingDataRemover::OnClearedPasswords,
+                     base::Unretained(this)));
+    }
+  }
+
+  if (remove_mask & REMOVE_HISTORY) {
+    password_manager::PasswordStore* password_store =
+        PasswordStoreFactory::GetForProfile(
+            profile_, ServiceAccessType::EXPLICIT_ACCESS).get();
+
+    if (password_store) {
+      waiting_for_clear_passwords_stats_ = true;
+      password_store->RemoveStatisticsCreatedBetween(
+          delete_begin_, delete_end_,
+          base::Bind(&BrowsingDataRemover::OnClearedPasswordsStats,
                      base::Unretained(this)));
     }
   }
@@ -876,6 +890,7 @@ bool BrowsingDataRemover::AllDone() {
          !waiting_for_clear_network_predictor_ &&
          !waiting_for_clear_networking_history_ &&
          !waiting_for_clear_passwords_ &&
+         !waiting_for_clear_passwords_stats_ &&
          !waiting_for_clear_platform_keys_ &&
          !waiting_for_clear_plugin_data_ &&
          !waiting_for_clear_pnacl_cache_ &&
@@ -1084,6 +1099,12 @@ void BrowsingDataRemover::OnClearPlatformKeys(
 void BrowsingDataRemover::OnClearedPasswords() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_passwords_ = false;
+  NotifyAndDeleteIfDone();
+}
+
+void BrowsingDataRemover::OnClearedPasswordsStats() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  waiting_for_clear_passwords_stats_ = false;
   NotifyAndDeleteIfDone();
 }
 

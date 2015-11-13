@@ -134,7 +134,7 @@ public:
     void getMatchedStylesForNode(ErrorString*, int nodeId, RefPtr<TypeBuilder::CSS::CSSStyle>& inlineStyle, RefPtr<TypeBuilder::CSS::CSSStyle>& attributesStyle, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::RuleMatch>>& matchedCSSRules, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::PseudoElementMatches>>&, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::InheritedStyleEntry>>& inheritedEntries) override;
     void getCSSAnimationsForNode(ErrorString*, int nodeId, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSKeyframesRule>>& cssKeyframesRules) override;
     void getStyleSheetText(ErrorString*, const String& styleSheetId, String* result) override;
-    void setStyleSheetText(ErrorString*, const String& styleSheetId, const String& text) override;
+    void setStyleSheetText(ErrorString*, const String& styleSheetId, const String& text, TypeBuilder::OptOutput<String>* sourceMapURL) override;
     void setRuleSelector(ErrorString*, const String& styleSheetId, const RefPtr<JSONObject>& range, const String& selector, RefPtr<TypeBuilder::CSS::SelectorList>& result) override;
     void setStyleText(ErrorString*, const String& styleSheetId, const RefPtr<JSONObject>& range, const String& text, RefPtr<TypeBuilder::CSS::CSSStyle>& result) override;
     void setMediaText(ErrorString*, const String& styleSheetId, const RefPtr<JSONObject>& range, const String& text, RefPtr<TypeBuilder::CSS::CSSMedia>& result) override;
@@ -143,6 +143,8 @@ public:
     void forcePseudoState(ErrorString*, int nodeId, const RefPtr<JSONArray>& forcedPseudoClasses) override;
     void getMediaQueries(ErrorString*, RefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSMedia>>& medias) override;
     void setEffectivePropertyValueForNode(ErrorString*, int nodeId, const String& propertyName, const String& value) override;
+    void getBackgroundColors(ErrorString*, int nodeId, RefPtr<TypeBuilder::Array<String>>& result) override;
+
     void collectMediaQueriesFromRule(CSSRule*, TypeBuilder::Array<TypeBuilder::CSS::CSSMedia>* mediaArray);
     void collectMediaQueriesFromStyleSheet(CSSStyleSheet*, TypeBuilder::Array<TypeBuilder::CSS::CSSMedia>* mediaArray);
     PassRefPtr<TypeBuilder::CSS::CSSMedia> buildMediaObject(const MediaList*, MediaListSource, const String&, CSSStyleSheet*);

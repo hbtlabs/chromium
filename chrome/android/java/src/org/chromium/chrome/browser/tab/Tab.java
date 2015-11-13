@@ -32,7 +32,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.AccessibilityUtil;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.FrozenNativePage;
@@ -53,6 +52,7 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeActivityDelegate;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.download.ChromeDownloadDelegate;
+import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
@@ -72,6 +72,7 @@ import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
+import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.content.browser.ActivityContentVideoViewClient;
@@ -1061,8 +1062,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      *         {@link java.util.Iterator#remove()} will throw an
      *         {@link UnsupportedOperationException}.
      */
-    @VisibleForTesting
-    public ObserverList.RewindableIterator<TabObserver> getTabObservers() {
+    protected ObserverList.RewindableIterator<TabObserver> getTabObservers() {
         return mObservers.rewindableIterator();
     }
 
@@ -2435,6 +2435,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         enableHidingTopControls &= !webContents.isShowingInterstitialPage();
         enableHidingTopControls &= (mFullscreenManager != null);
         enableHidingTopControls &= DeviceClassManager.enableFullscreen();
+        enableHidingTopControls &= !DeviceClassManager.isAutoHidingToolbarDisabled(mActivity);
         enableHidingTopControls &= !mIsFullscreenWaitingForLoad;
 
         return enableHidingTopControls;
@@ -2580,6 +2581,17 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     public String getOfflinePageOriginalUrl() {
         return isFrozen() ? null : nativeGetOfflinePageOriginalUrl(mNativeTabAndroid);
+    }
+
+    /**
+     * Shows the list of offline pages. This should only be hit when offline pages feature is
+     * enabled.
+     */
+    @CalledByNative
+    public void showOfflinePages() {
+        // The offline pages filter view will be loaded by default when offline.
+        boolean shown = EnhancedBookmarkUtils.showEnhancedBookmarkIfEnabled(mActivity);
+        assert shown;
     }
 
     /**

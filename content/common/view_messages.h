@@ -242,8 +242,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(use_custom_colors)
   IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
   IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
-  IPC_STRUCT_TRAITS_MEMBER(enable_webrtc_multiple_routes)
-  IPC_STRUCT_TRAITS_MEMBER(enable_webrtc_nonproxied_udp)
+  IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
   IPC_STRUCT_TRAITS_MEMBER(default_zoom_level)
   IPC_STRUCT_TRAITS_MEMBER(user_agent_override)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
@@ -700,8 +699,8 @@ IPC_MESSAGE_ROUTED2(ViewMsg_PluginActionAt,
                     gfx::Point, /* location */
                     blink::WebPluginAction)
 
-// Resets the page scale for the current main frame to the default page scale.
-IPC_MESSAGE_ROUTED0(ViewMsg_ResetPageScale)
+// Sets the page scale for the current main frame to the given page scale.
+IPC_MESSAGE_ROUTED1(ViewMsg_SetPageScale, float /* page_scale_factor */)
 
 // Change the zoom level for the current main frame.  If the level actually
 // changes, a ViewHostMsg_DidZoomURL message will be sent back to the browser
@@ -892,7 +891,7 @@ IPC_MESSAGE_CONTROL1(ViewMsg_UpdateScrollbarTheme,
 IPC_MESSAGE_CONTROL3(ViewMsg_SystemColorsChanged,
                      int /* AppleAquaColorVariant */,
                      std::string /* AppleHighlightedTextColor */,
-                     std::string /* AppleHighlightColor */);
+                     std::string /* AppleHighlightColor */)
 #endif
 
 #if defined(OS_ANDROID)
@@ -1252,9 +1251,9 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_DidZoomURL,
                     double /* zoom_level */,
                     GURL /* url */)
 
-// Sent when the renderer changes its page scale factor and whether or not the
-// page scale factor is one changes.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_PageScaleFactorIsOneChanged, bool /* is_one */)
+// Sent when the renderer changes its page scale factor.
+IPC_MESSAGE_ROUTED1(ViewHostMsg_PageScaleFactorChanged,
+                    float /* page_scale_factor */)
 
 // Updates the minimum/maximum allowed zoom percent for this tab from the
 // default values.  If |remember| is true, then the zoom setting is applied to
@@ -1400,7 +1399,7 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_PluginFocusChanged,
 IPC_MESSAGE_ROUTED0(ViewHostMsg_StartPluginIme)
 
 // Receives content of a web page as plain text.
-IPC_MESSAGE_ROUTED1(ViewMsg_GetRenderedTextCompleted, std::string);
+IPC_MESSAGE_ROUTED1(ViewMsg_GetRenderedTextCompleted, std::string)
 #endif
 
 // Adding a new message? Stick to the sort order above: first platform

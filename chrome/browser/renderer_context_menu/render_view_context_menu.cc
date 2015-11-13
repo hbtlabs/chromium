@@ -159,6 +159,20 @@ using extensions::MenuManager;
 
 namespace {
 
+// State of the profile that is activated via "Open Link as User".
+enum UmaEnumOpenLinkAsUser {
+  OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID,
+  OPEN_LINK_AS_USER_INACTIVE_PROFILE_MULTI_PROFILE_SESSION_ENUM_ID,
+  OPEN_LINK_AS_USER_INACTIVE_PROFILE_SINGLE_PROFILE_SESSION_ENUM_ID,
+  OPEN_LINK_AS_USER_LAST_ENUM_ID,
+};
+
+#if !defined(OS_CHROMEOS)
+// We report the number of "Open Link as User" entries shown in the context
+// menu via UMA, differentiating between at most that many profiles.
+const int kOpenLinkAsUserMaxProfilesReported = 10;
+#endif  // !defined(OS_CHROMEOS)
+
 // Whether to return the general enum_id or context_specific_enum_id
 // in the FindUMAEnumValueForCommand lookup function.
 enum UmaEnumIdLookupType {
@@ -465,6 +479,7 @@ RenderViewContextMenu::RenderViewContextMenu(
                        &menu_model_,
                        base::Bind(MenuItemMatchesParams, params_)),
       profile_link_submenu_model_(this),
+      multiple_profiles_open_(false),
       protocol_handler_submenu_model_(this),
       protocol_handler_registry_(
           ProtocolHandlerRegistryFactory::GetForBrowserContext(GetProfile())),
@@ -879,6 +894,9 @@ void RenderViewContextMenu::AppendLinkItems() {
       ProfileManager* profile_manager = g_browser_process->profile_manager();
       const ProfileInfoCache& profile_info_cache =
           profile_manager->GetProfileInfoCache();
+      chrome::HostDesktopType desktop_type =
+          chrome::GetHostDesktopTypeForNativeView(
+              source_web_contents_->GetNativeView());
 
       // Find all regular profiles other than the current one which have at
       // least one open window.
@@ -893,7 +911,15 @@ void RenderViewContextMenu::AppendLinkItems() {
             !profile_info_cache.IsOmittedProfileAtIndex(profile_index) &&
             !profile_info_cache.ProfileIsSigninRequiredAtIndex(profile_index)) {
           target_profiles.push_back(profile_index);
+          if (chrome::FindLastActiveWithProfile(profile, desktop_type))
+            multiple_profiles_open_ = true;
         }
+      }
+
+      if (!target_profiles.empty()) {
+        UMA_HISTOGRAM_ENUMERATION("RenderViewContextMenu.OpenLinkAsUserShown",
+                                  target_profiles.size(),
+                                  kOpenLinkAsUserMaxProfilesReported);
       }
 
       if (target_profiles.size() == 1) {
@@ -1074,8 +1100,8 @@ void RenderViewContextMenu::AppendPrintItem() {
 }
 
 void RenderViewContextMenu::AppendMediaRouterItem() {
-  if (media_router::MediaRouterEnabled() &&
-      !browser_context_->IsOffTheRecord()) {
+  if (!browser_context_->IsOffTheRecord() &&
+      media_router::MediaRouterEnabled(browser_context_)) {
     menu_model_.AddItemWithStringId(IDC_ROUTE_MEDIA,
                                     IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
   }
@@ -1543,14 +1569,18 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return true;
 
     case IDC_ROUTE_MEDIA: {
-      DCHECK(media_router::MediaRouterEnabled());
+      if (!media_router::MediaRouterEnabled(browser_context_))
+        return false;
 
-      // Disable the command if there is an active modal dialog.
       Browser* browser =
           chrome::FindBrowserWithWebContents(source_web_contents_);
       if (!browser || browser->profile()->IsOffTheRecord())
         return false;
 
+      // Disable the command if there is an active modal dialog.
+      // We don't use |source_web_contents_| here because it could be the
+      // WebContents for something that's not the current tab (e.g., WebUI
+      // modal dialog).
       WebContents* web_contents =
           browser->tab_strip_model()->GetActiveWebContents();
       if (!web_contents)
@@ -1630,6 +1660,20 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     chrome::HostDesktopType desktop_type =
         chrome::GetHostDesktopTypeForNativeView(
             source_web_contents_->GetNativeView());
+
+    Profile* profile = profile_manager->GetProfileByPath(profile_path);
+    UmaEnumOpenLinkAsUser profile_state;
+    if (chrome::FindLastActiveWithProfile(profile, desktop_type)) {
+      profile_state = OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID;
+    } else if (multiple_profiles_open_) {
+      profile_state =
+          OPEN_LINK_AS_USER_INACTIVE_PROFILE_MULTI_PROFILE_SESSION_ENUM_ID;
+    } else {
+      profile_state =
+          OPEN_LINK_AS_USER_INACTIVE_PROFILE_SINGLE_PROFILE_SESSION_ENUM_ID;
+    }
+    UMA_HISTOGRAM_ENUMERATION("RenderViewContextMenu.OpenLinkAsUser",
+                              profile_state, OPEN_LINK_AS_USER_LAST_ENUM_ID);
 
     profiles::SwitchToProfile(
         profile_path, desktop_type, false,
@@ -1861,8 +1905,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     }
 
     case IDC_ROUTE_MEDIA: {
-      DCHECK(media_router::MediaRouterEnabled());
 #if defined(ENABLE_MEDIA_ROUTER)
+      if (!media_router::MediaRouterEnabled(browser_context_))
+        return;
+
       Browser* browser =
           chrome::FindBrowserWithWebContents(source_web_contents_);
       DCHECK(browser && !browser->profile()->IsOffTheRecord());

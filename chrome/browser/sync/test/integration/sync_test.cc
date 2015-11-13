@@ -32,7 +32,6 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/fake_server_invalidation_service.h"
 #include "chrome/browser/sync/test/integration/p2p_invalidation_forwarder.h"
@@ -45,7 +44,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_constants.h"
@@ -55,6 +53,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_url_tracker.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/p2p_invalidation_service.h"
@@ -330,14 +329,20 @@ void SyncTest::CreateProfileCallback(const base::Closure& quit_closure,
 // ProfileManager::CreateProfileAsync() for proper profile creation.
 // static
 Profile* SyncTest::MakeProfileForUISignin(
-    const base::FilePath::StringType name) {
+    const base::FilePath::StringType name,
+    bool path_outside_user_data_dir) {
   // For multi profile UI signin, profile paths should be outside user data dir.
   // Otherwise, we get an error that the profile has already signed in on this
   // device.
   // Note that prefix |name| is implemented only on Win. On other platforms the
   // com.google.Chrome.XXXXXX prefix is used.
   base::FilePath profile_path;
-  CHECK(base::CreateNewTempDirectory(name, &profile_path));
+  if (path_outside_user_data_dir) {
+    CHECK(base::CreateNewTempDirectory(name, &profile_path));
+  } else {
+    PathService::Get(chrome::DIR_USER_DATA, &profile_path);
+    profile_path = profile_path.Append(name);
+  }
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   base::RunLoop run_loop;
@@ -471,7 +476,9 @@ void SyncTest::InitializeInstance(int index) {
   // If running against an EXTERNAL_LIVE_SERVER, we need to signin profiles
   // using real GAIA server. This requires creating profiles with no test hooks.
   if (UsingExternalServers()) {
-    profiles_[index] = MakeProfileForUISignin(profile_name);
+    bool path_outside_user_data_dir = (num_clients_ > 1);
+    profiles_[index] =
+        MakeProfileForUISignin(profile_name, path_outside_user_data_dir);
   } else {
     // Without need of real GAIA authentication, we create new test profiles.
     profiles_[index] = MakeProfile(profile_name);
@@ -617,17 +624,6 @@ bool SyncTest::SetupSync() {
       LoginUIServiceFactory::GetForProfile(GetProfile(i))->
           SyncConfirmationUIClosed(false /* configure_sync_first */);
     }
-
-    // With external servers, profile paths are created outside user_data_dir.
-    // This causes the ProfileManager to show an avatar bubble without an anchor
-    // view. The bubble is then not destroyed at shutdown, crbug.com/527505.
-    // This is a fix to explicitly close the bubble early on.
-    // ProfileChooserView is available on few platforms including Linux which is
-    // the only supported platform for ExternalServers.
-#if defined(OS_LINUX)
-    // TODO(shadi): Remove this hack once crbug.com/527505 is fixed.
-    ProfileChooserView::Hide();
-#endif  // defined(OS_LINUX)
   }
 
   return true;
@@ -638,16 +634,15 @@ void SyncTest::TearDownOnMainThread() {
     clients_[i]->service()->RequestStop(ProfileSyncService::CLEAR_DATA);
   }
 
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseAllBrowsers();
-
-  // Waiting for a single notification mitigates flakiness (related to not all
-  // browsers being closed). If further flakiness is seen
-  // (GetTotalBrowserCount() > 0 after this call), GetTotalBrowserCount()
-  // notifications should be waited on.
-  observer.Wait();
+  // Closing all browsers created by this test. The calls here block until
+  // they are closed. Other browsers created outside SyncTest setup should be
+  // closed by the creator of that browser.
+  size_t init_browser_count = chrome::GetTotalBrowserCount();
+  for (size_t i = 0; i < browsers_.size(); ++i) {
+    CloseBrowserSynchronously(browsers_[i]);
+  }
+  CHECK_EQ(chrome::GetTotalBrowserCount(),
+           init_browser_count - browsers_.size());
 
   if (fake_server_.get()) {
     std::vector<fake_server::FakeServerInvalidationService*>::const_iterator it;
@@ -657,9 +652,6 @@ void SyncTest::TearDownOnMainThread() {
     }
   }
 
-  // All browsers should be closed at this point, or else we could see memory
-  // corruption in QuitBrowser().
-  CHECK_EQ(0U, chrome::GetTotalBrowserCount());
   invalidation_forwarders_.clear();
   sync_refreshers_.clear();
   fake_server_invalidation_services_.clear();
@@ -958,7 +950,8 @@ bool SyncTest::IsTestServerRunning() {
 }
 
 bool SyncTest::TestUsesSelfNotifications() {
-  return true;
+  // Default is True unless we are running against external servers.
+  return !UsingExternalServers();
 }
 
 bool SyncTest::EnableEncryption(int index) {

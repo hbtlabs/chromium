@@ -66,41 +66,6 @@ using extensions::Extension;
 
 namespace {
 
-// Records histogram about which auto-launch pattern (if any) was used to launch
-// the current process based on |command_line|.
-void RecordAutoLaunchState(const base::CommandLine& command_line) {
-  enum AutoLaunchState {
-    AUTO_LAUNCH_NONE = 0,
-    AUTO_LAUNCH_BACKGROUND = 1,
-    AUTO_LAUNCH_FOREGROUND = 2,
-    AUTO_LAUNCH_FOREGROUND_USELESS = 3,
-    AUTO_LAUNCH_NUM_STATES
-  } auto_launch_state = AUTO_LAUNCH_NONE;
-
-  if (command_line.HasSwitch(switches::kNoStartupWindow))
-    auto_launch_state = AUTO_LAUNCH_BACKGROUND;
-
-  if (command_line.HasSwitch(switches::kAutoLaunchAtStartup)) {
-    // The only purpose of kAutoLaunchAtStartup is to override a background
-    // auto-launch from kNoStartupWindow into a foreground auto-launch. It's a
-    // meaningless switch on its own.
-    if (auto_launch_state == AUTO_LAUNCH_BACKGROUND) {
-      auto_launch_state = AUTO_LAUNCH_FOREGROUND;
-    } else {
-      auto_launch_state = AUTO_LAUNCH_FOREGROUND_USELESS;
-    }
-  }
-
-  // Observe the AutoLaunchStates in the wild. According to the platform-
-  // specific implementations of EnableLaunchOnStartup(), we'd expect only Mac
-  // and Windows to have any sort of AutoLaunchState and only Windows should use
-  // FOREGROUND if at all (it was only used by a deprecated experiment and a
-  // master pref which may not be used much). Tighten up auto-launch settings
-  // based on the result of usage in the wild.
-  UMA_HISTOGRAM_ENUMERATION("BackgroundMode.OnStartup.AutoLaunchState",
-                            auto_launch_state, AUTO_LAUNCH_NUM_STATES);
-}
-
 // Enum for recording menu item clicks in UMA.
 // NOTE: Do not renumber these as that would confuse interpretation of
 // previously logged data. When making changes, also update histograms.xml.
@@ -320,7 +285,8 @@ BackgroundModeManager::BackgroundModeManager(
   // are deleted and their names change.
   profile_cache_->AddObserver(this);
 
-  RecordAutoLaunchState(command_line);
+  UMA_HISTOGRAM_BOOLEAN("BackgroundMode.OnStartup.AutoLaunchState",
+                        command_line.HasSwitch(switches::kNoStartupWindow));
   UMA_HISTOGRAM_BOOLEAN("BackgroundMode.OnStartup.IsBackgroundModePrefEnabled",
                         IsBackgroundModePrefEnabled());
 
@@ -963,11 +929,12 @@ void BackgroundModeManager::UpdateStatusTrayIconContextMenu() {
       }
     }
     // We should only be displaying the status tray icon if there is at least
-    // one profile using background mode.
-    DCHECK_GT(profiles_using_background_mode, 0);
+    // one profile using background mode. If |keep_alive_for_test_| is set,
+    // there may not be any profiles and that is okay.
+    DCHECK(profiles_using_background_mode > 0 || keep_alive_for_test_);
   } else {
     // We should only have one profile in the cache if we are not
-    // using multi-profiles. If keep_alive_for_test_ is set, then we may not
+    // using multi-profiles. If |keep_alive_for_test_| is set, then we may not
     // have any profiles in the cache.
     DCHECK(profile_cache_->GetNumberOfProfiles() == size_t(1) ||
            keep_alive_for_test_);

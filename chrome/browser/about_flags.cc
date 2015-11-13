@@ -37,7 +37,6 @@
 #include "components/offline_pages/offline_page_switches.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
-#include "components/plugins/common/plugins_switches.h"
 #include "components/proximity_auth/switches.h"
 #include "components/search/search_switches.h"
 #include "components/signin/core/common/signin_switches.h"
@@ -79,6 +78,10 @@
 #include "extensions/common/switches.h"
 #endif
 
+#if defined(ENABLE_PRINT_PREVIEW)
+#include "chrome/browser/ui/webui/print_preview/print_preview_distiller.h"
+#endif
+
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_switches.h"
 #endif
@@ -109,7 +112,7 @@ namespace about_flags {
       choices, arraysize(choices)
 #define FEATURE_VALUE_TYPE(feature)                                \
   FeatureEntry::FEATURE_VALUE, nullptr, nullptr, nullptr, nullptr, \
-      feature.name, nullptr, 3
+      &feature, nullptr, 3
 
 namespace {
 
@@ -1236,13 +1239,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_DEFAULT_TILE_HEIGHT_DESCRIPTION,
      kOsAll,
      MULTI_VALUE_TYPE(kDefaultTileHeightChoices)},
-#if defined(OS_ANDROID)
     {"disable-gesture-requirement-for-media-playback",
      IDS_FLAGS_DISABLE_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK_NAME,
      IDS_FLAGS_DISABLE_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK_DESCRIPTION,
-     kOsAndroid,
+     kOsAll,
      SINGLE_VALUE_TYPE(switches::kDisableGestureRequirementForMediaPlayback)},
-#endif
 #if defined(OS_CHROMEOS)
     {"enable-virtual-keyboard",
      IDS_FLAGS_ENABLE_VIRTUAL_KEYBOARD_NAME,
@@ -1340,11 +1341,11 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(switches::kEnablePrivetV3)},
 #endif  // ENABLE_SERVICE_DISCOVERY
 #if defined(ENABLE_PRINT_PREVIEW)
-    {"disable-print-preview-simplify",
-     IDS_FLAGS_DISABLE_DISTILLER_IN_PRINT_PREVIEW_NAME,
-     IDS_FLAGS_DISABLE_DISTILLER_IN_PRINT_PREVIEW_DESCRIPTION,
+    {"enable-print-preview-simplify",
+     IDS_FLAGS_ENABLE_DISTILLER_IN_PRINT_PREVIEW_NAME,
+     IDS_FLAGS_ENABLE_DISTILLER_IN_PRINT_PREVIEW_DESCRIPTION,
      kOsDesktop,
-     SINGLE_VALUE_TYPE(switches::kDisablePrintPreviewSimplify)},
+     FEATURE_VALUE_TYPE(PrintPreviewDistiller::kFeature)},
 #endif
 #if defined(OS_WIN)
     {"enable-cloud-print-xps",
@@ -1726,14 +1727,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_REDUCED_REFERRER_GRANULARITY_DESCRIPTION,
      kOsAll,
      SINGLE_VALUE_TYPE(switches::kReducedReferrerGranularity)},
-#if defined(ENABLE_PLUGINS)
-    {"enable-plugin-power-saver",
-     IDS_FLAGS_ENABLE_PLUGIN_POWER_SAVER_NAME,
-     IDS_FLAGS_ENABLE_PLUGIN_POWER_SAVER_DESCRIPTION,
-     kOsDesktop,
-     ENABLE_DISABLE_VALUE_TYPE(plugins::switches::kEnablePluginPowerSaver,
-                               plugins::switches::kDisablePluginPowerSaver)},
-#endif
 #if defined(OS_CHROMEOS)
     {"disable-new-zip-unpacker",
      IDS_FLAGS_DISABLE_NEW_ZIP_UNPACKER_NAME,
@@ -1880,11 +1873,12 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kV8PacMojoOutOfProcess,
                                switches::kDisableOutOfProcessPac)},
 #if defined(ENABLE_MEDIA_ROUTER) && !defined(OS_ANDROID)
-    {"enable-media-router",
+    {"media-router",
      IDS_FLAGS_ENABLE_MEDIA_ROUTER_NAME,
      IDS_FLAGS_ENABLE_MEDIA_ROUTER_DESCRIPTION,
      kOsDesktop,
-     SINGLE_VALUE_TYPE(switches::kEnableMediaRouter)},
+     ENABLE_DISABLE_VALUE_TYPE_AND_VALUE(
+         switches::kMediaRouter, "1", switches::kMediaRouter, "0")},
 #endif  // defined(ENABLE_MEDIA_ROUTER) && !defined(OS_ANDROID)
 // Since Drive Search is not available when app list is disabled, flag guard
 // enable-drive-search-in-chrome-launcher flag.
@@ -2006,18 +2000,12 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableMaterialDesignDownloads,
                                switches::kDisableMaterialDesignDownloads)},
 #endif
-#if defined(OS_WIN) || defined(OS_MACOSX)
-    {"enable-tab-discarding",
-     IDS_FLAGS_ENABLE_TAB_DISCARDING_NAME,
-     IDS_FLAGS_ENABLE_TAB_DISCARDING_DESCRIPTION,
-     kOsWin | kOsMac,
-     SINGLE_VALUE_TYPE(switches::kEnableTabDiscarding)},
-#endif
     {"enable-clear-browsing-data-counters",
      IDS_FLAGS_ENABLE_CLEAR_BROWSING_DATA_COUNTERS_NAME,
      IDS_FLAGS_ENABLE_CLEAR_BROWSING_DATA_COUNTERS_DESCRIPTION,
      kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableClearBrowsingDataCounters)
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableClearBrowsingDataCounters,
+                               switches::kDisableClearBrowsingDataCounters)
     },
 #if defined(ENABLE_TASK_MANAGER)
     {"disable-new-task-manager",
@@ -2040,14 +2028,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_PROGRESS_BAR_ANIMATION_DESCRIPTION,
      kOsAndroid,
      MULTI_VALUE_TYPE(kProgressBarAnimationChoices)},
-#endif  // defined(OS_ANDROID)
-#if defined(OS_ANDROID)
-    {"enable-theme-color-in-tabbed-mode",
-     IDS_FLAGS_THEME_COLOR_IN_TABBED_MODE_NAME,
-     IDS_FLAGS_THEME_COLOR_IN_TABBED_MODE_DESCRIPTION,
-     kOsAndroid,
-     SINGLE_VALUE_TYPE(switches::kEnableThemeColorInTabbedMode)
-    },
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)
     {"offline-pages",
@@ -2136,6 +2116,14 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableAppContainer,
                                switches::kDisableAppContainer)},
 #endif  // defined(OS_WIN)
+#if defined(OS_ANDROID)
+    {"disable-auto-hiding-toolbar-threshold",
+     IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_NAME,
+     IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_DESCRIPTION,
+     kOsAndroid,
+     SINGLE_VALUE_TYPE_AND_VALUE(switches::kDisableAutoHidingToolbarThreshold,
+                                 "0")},
+#endif
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.
@@ -2295,7 +2283,7 @@ bool ValidateFeatureEntry(const FeatureEntry& e) {
     case FeatureEntry::FEATURE_VALUE:
       DCHECK_EQ(3, e.num_choices);
       DCHECK(!e.choices);
-      DCHECK(e.feature_name);
+      DCHECK(e.feature);
       return true;
   }
   NOTREACHED();
@@ -2561,10 +2549,9 @@ void FlagsState::GetFlagFeatureEntries(flags_ui::FlagsStorage* flags_storage,
         break;
       case FeatureEntry::MULTI_VALUE:
       case FeatureEntry::ENABLE_DISABLE_VALUE:
+      case FeatureEntry::FEATURE_VALUE:
         data->Set("choices", CreateChoiceData(entry, enabled_entries));
         break;
-      default:
-        NOTREACHED();
     }
 
     bool supported = (entry.supported_platforms & current_platform) != 0;
@@ -2714,9 +2701,9 @@ void FlagsState::ConvertFlagsToSwitches(flags_ui::FlagsStorage* flags_storage,
       case FeatureEntry::FEATURE_VALUE:
         AddFeatureMapping(e.NameForChoice(0), std::string(), false,
                           &name_to_switch_map);
-        AddFeatureMapping(e.NameForChoice(1), e.feature_name, true,
+        AddFeatureMapping(e.NameForChoice(1), e.feature->name, true,
                           &name_to_switch_map);
-        AddFeatureMapping(e.NameForChoice(2), e.feature_name, false,
+        AddFeatureMapping(e.NameForChoice(2), e.feature->name, false,
                           &name_to_switch_map);
         break;
     }

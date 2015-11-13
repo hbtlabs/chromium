@@ -23,13 +23,6 @@ public class ContextualSearchFieldTrial {
     private static final String ENABLED_PARAM = "enabled";
     private static final String ENABLED_VALUE = "true";
 
-    static final String PROMO_ON_LIMITED_TAPS = "promo_on_limited_taps";
-    static final String TAP_TRIGGERED_PROMO_LIMIT = "tap_triggered_promo_limit";
-    static final String TAP_RESOLVE_LIMIT_FOR_DECIDED = "tap_resolve_limit_for_decided";
-    static final String TAP_PREFETCH_LIMIT_FOR_DECIDED = "tap_prefetch_limit_for_decided";
-    static final String TAP_RESOLVE_LIMIT_FOR_UNDECIDED = "tap_resolve_limit_for_undecided";
-    static final String TAP_PREFETCH_LIMIT_FOR_UNDECIDED = "tap_prefetch_limit_for_undecided";
-
     static final String PEEK_PROMO_FORCED = "peek_promo_forced";
     static final String PEEK_PROMO_ENABLED = "peek_promo_enabled";
     static final String PEEK_PROMO_MAX_SHOW_COUNT = "peek_promo_max_show_count";
@@ -39,20 +32,13 @@ public class ContextualSearchFieldTrial {
 
     // Translation.
     @VisibleForTesting
-    static final String TRANSLATION_ONEBOX_ENABLED = "translation_onebox_enabled";
-
-    // Tap handling.
-    private static final int UNLIMITED_TAPS = -1;
-    private static final int DEFAULT_TAP_RESOLVE_LIMIT_FOR_DECIDED = UNLIMITED_TAPS;
-    private static final int DEFAULT_TAP_PREFETCH_LIMIT_FOR_DECIDED = UNLIMITED_TAPS;
-    private static final int DEFAULT_TAP_RESOLVE_LIMIT_FOR_UNDECIDED = 100;
-    private static final int DEFAULT_TAP_PREFETCH_LIMIT_FOR_UNDECIDED = 10;
+    static final String DISABLE_FORCE_TRANSLATION_ONEBOX = "disable_force_translation_onebox";
 
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
     private static Boolean sIsPeekPromoEnabled;
     private static Integer sPeekPromoMaxCount;
-    private static Boolean sIsTranslationOneboxEnabled;
+    private static Boolean sDisableForceTranslationOnebox;
 
     /**
      * Don't instantiate.
@@ -105,84 +91,6 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether the promo should be triggered by a limited number of taps.
-     */
-    public static boolean isPromoLimitedByTapCounts() {
-        return getBooleanParam(PROMO_ON_LIMITED_TAPS);
-    }
-
-    /**
-     * @return The maximum number of times the promo can be triggered by a tap, or
-     * {@code ContextualSearchUma#PROMO_TAPS_REMAINING_INVALID} if no value is present in the finch
-     * configuration.
-     */
-    static int getPromoTapTriggeredLimit() {
-        return getIntParamValueOrDefault(TAP_TRIGGERED_PROMO_LIMIT, UNLIMITED_TAPS);
-    }
-
-    /**
-     * @return Whether Search Term Resolution in response to a Tap gesture is limited for decided
-     *         users.
-     */
-    static boolean isTapResolveLimitedForDecided() {
-        return getTapResolveLimitForDecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether prefetch in response to a Tap gesture is limited for decided users.
-     */
-    static boolean isTapPrefetchLimitedForDecided() {
-        return getTapPrefetchLimitForDecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether Search Term Resolution in response to a Tap gesture is limited for undecided
-     *         users.
-     */
-    static boolean isTapResolveLimitedForUndecided() {
-        return getTapResolveLimitForUndecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-
-    /**
-     * @return Whether prefetch in response to a Tap gesture is limited for undecided users.
-     */
-    static boolean isTapPrefetchLimitedForUndecided() {
-        return getTapPrefetchLimitForUndecided() != ContextualSearchFieldTrial.UNLIMITED_TAPS;
-    }
-    /**
-     * @return The limit on the number of taps to resolve for decided users, or the default if no
-     *         value is present in the Finch configuration.
-     */
-    static int getTapResolveLimitForDecided() {
-        return getIntParamValueOrDefault(TAP_RESOLVE_LIMIT_FOR_DECIDED,
-                DEFAULT_TAP_RESOLVE_LIMIT_FOR_DECIDED);
-    }
-
-    /**
-     * @return The limit on the number of prefetches to issue for decided users, or the default
-     *         if no value is present.
-     */
-    static int getTapPrefetchLimitForDecided() {
-        return getIntParamValueOrDefault(TAP_PREFETCH_LIMIT_FOR_DECIDED,
-                DEFAULT_TAP_PREFETCH_LIMIT_FOR_DECIDED);
-    }
-
-    /**
-     * @return The limit on the number of taps to resolve for undecided users, or the default if no
-     *         value is present in the Finch configuration.
-     */
-    static int getTapResolveLimitForUndecided() {
-        return getIntParamValueOrDefault(TAP_RESOLVE_LIMIT_FOR_UNDECIDED,
-                DEFAULT_TAP_RESOLVE_LIMIT_FOR_UNDECIDED);
-    }
-
-    /**
-     * @return The limit on the number of prefetches to issue for undecided users, or the default
-     *         if no value is present.
-     */
-    static int getTapPrefetchLimitForUndecided() {
-        return getIntParamValueOrDefault(TAP_PREFETCH_LIMIT_FOR_UNDECIDED,
-                DEFAULT_TAP_PREFETCH_LIMIT_FOR_UNDECIDED);
     }
 
     /**
@@ -222,13 +130,13 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether triggering a translation Onebox in the SERP is enabled.
+     * @return Whether forcing a translation Onebox is disabled.
      */
-    static boolean isTranslationOneboxEnabled() {
-        if (sIsTranslationOneboxEnabled == null) {
-            sIsTranslationOneboxEnabled = getBooleanParam(TRANSLATION_ONEBOX_ENABLED);
+    static boolean disableForceTranslationOnebox() {
+        if (sDisableForceTranslationOnebox == null) {
+            sDisableForceTranslationOnebox = getBooleanParam(DISABLE_FORCE_TRANSLATION_ONEBOX);
         }
-        return sIsTranslationOneboxEnabled.booleanValue();
+        return sDisableForceTranslationOnebox.booleanValue();
     }
 
     // --------------------------------------------------------------------------------------------

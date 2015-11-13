@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/message_loop/message_loop.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_message.h"
@@ -162,7 +163,6 @@ bool ChannelReader::TranslateInputData(const char* input_data,
 bool ChannelReader::HandleTranslatedMessage(
     Message* translated_message,
     const AttachmentIdVector& attachment_ids) {
-
   // Immediately handle internal messages.
   if (IsInternalMessage(*translated_message)) {
     EmitLogBeforeDispatch(*translated_message);
@@ -311,7 +311,8 @@ void ChannelReader::ReceivedBrokerableAttachmentWithId(
 
 void ChannelReader::StartObservingAttachmentBroker() {
 #if USE_ATTACHMENT_BROKER
-  GetAttachmentBroker()->AddObserver(this);
+  GetAttachmentBroker()->AddObserver(
+      this, base::MessageLoopForIO::current()->task_runner());
 #endif  // USE_ATTACHMENT_BROKER
 }
 

@@ -477,6 +477,7 @@
           'process/memory_linux.cc',
           'process/memory_mac.mm',
           'process/memory_win.cc',
+          'process/port_provider_mac.cc',
           'process/port_provider_mac.h',
           'process/process.h',
           'process/process_handle.cc',
@@ -864,9 +865,6 @@
             ],
           }],
           ['OS == "android" and _toolset == "host" and host_os == "linux"', {
-            'defines': [
-              'OS_ANDROID_HOST=Linux',
-            ],
             'sources/': [
               # Pull in specific files for host builds.
               ['include', '^threading/platform_thread_linux\\.cc$'],

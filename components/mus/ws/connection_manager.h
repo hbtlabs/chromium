@@ -16,12 +16,13 @@
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/focus_controller_delegate.h"
 #include "components/mus/ws/ids.h"
+#include "components/mus/ws/operation.h"
 #include "components/mus/ws/server_window_delegate.h"
 #include "components/mus/ws/server_window_observer.h"
 #include "components/mus/ws/window_tree_host_impl.h"
 #include "mojo/converters/surfaces/custom_surface_converter.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace mus {
 
@@ -38,39 +39,6 @@ class WindowTreeImpl;
 class ConnectionManager : public ServerWindowDelegate,
                           public ServerWindowObserver {
  public:
-  // Create when a WindowTreeImpl is about to make a change. Ensures clients are
-  // notified correctly.
-  class ScopedChange {
-   public:
-    ScopedChange(WindowTreeImpl* connection,
-                 ConnectionManager* connection_manager,
-                 bool is_delete_window);
-    ~ScopedChange();
-
-    ConnectionSpecificId connection_id() const { return connection_id_; }
-    bool is_delete_window() const { return is_delete_window_; }
-
-    // Marks the connection with the specified id as having seen a message.
-    void MarkConnectionAsMessaged(ConnectionSpecificId connection_id) {
-      message_ids_.insert(connection_id);
-    }
-
-    // Returns true if MarkConnectionAsMessaged(connection_id) was invoked.
-    bool DidMessageConnection(ConnectionSpecificId connection_id) const {
-      return message_ids_.count(connection_id) > 0;
-    }
-
-   private:
-    ConnectionManager* connection_manager_;
-    const ConnectionSpecificId connection_id_;
-    const bool is_delete_window_;
-
-    // See description of MarkConnectionAsMessaged/DidMessageConnection.
-    std::set<ConnectionSpecificId> message_ids_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedChange);
-  };
-
   ConnectionManager(ConnectionManagerDelegate* delegate,
                     const scoped_refptr<mus::SurfacesState>& surfaces_state);
   ~ConnectionManager() override;
@@ -115,10 +83,9 @@ class ConnectionManager : public ServerWindowDelegate,
   // Schedules a paint for the specified region in the coordinates of |window|.
   void SchedulePaint(const ServerWindow* window, const gfx::Rect& bounds);
 
-  bool IsProcessingChange() const { return current_change_ != nullptr; }
-
-  bool is_processing_delete_window() const {
-    return current_change_ && current_change_->is_delete_window();
+  OperationType current_operation_type() const {
+    return current_operation_ ? current_operation_->type()
+                              : OperationType::NONE;
   }
 
   // Invoked when the WindowTreeHostImpl's display is closed.
@@ -150,8 +117,18 @@ class ConnectionManager : public ServerWindowDelegate,
   // Returns the first ancestor of |service| that is marked as an embed root.
   WindowTreeImpl* GetEmbedRoot(WindowTreeImpl* service);
 
-  // WindowTreeHost implementation helper; see mojom for details.
-  bool CloneAndAnimate(const WindowId& window_id);
+  // Returns a change id for the window manager that is associated with
+  // |source| and |client_change_id|. When the window manager replies
+  // WindowManagerChangeCompleted() is called to obtain the original source
+  // and client supplied change_id that initiated the called.
+  uint32_t GenerateWindowManagerChangeId(WindowTreeImpl* source,
+                                         uint32_t client_change_id);
+
+  // Called when a response from the window manager is obtained. Calls to
+  // the client that initiated the change with the change id originally
+  // supplied by the client.
+  void WindowManagerChangeCompleted(uint32_t window_manager_change_id,
+                                    bool success);
 
   // These functions trivially delegate to all WindowTreeImpls, which in
   // term notify their clients.
@@ -176,24 +153,38 @@ class ConnectionManager : public ServerWindowDelegate,
   void ProcessWindowDeleted(const WindowId& window);
 
  private:
+  friend class Operation;
+
   using ConnectionMap = std::map<ConnectionSpecificId, ClientConnection*>;
   using HostConnectionMap =
       std::map<WindowTreeHostImpl*, WindowTreeHostConnection*>;
 
-  // Invoked when a connection is about to make a change. Subsequently followed
-  // by FinishChange() once the change is done.
+  struct InFlightWindowManagerChange {
+    // Identifies the client that initiated the change.
+    ConnectionSpecificId connection_id;
+
+    // Change id supplied by the client.
+    uint32_t client_change_id;
+  };
+
+  using InFlightWindowManagerChangeMap =
+      std::map<uint32_t, InFlightWindowManagerChange>;
+
+  // Invoked when a connection is about to execute a window server operation.
+  // Subsequently followed by FinishOperation() once the change is done.
   //
-  // Changes should never nest, meaning each PrepareForChange() must be
-  // balanced with a call to FinishChange() with no PrepareForChange()
+  // Changes should never nest, meaning each PrepareForOperation() must be
+  // balanced with a call to FinishOperation() with no PrepareForOperation()
   // in between.
-  void PrepareForChange(ScopedChange* change);
+  void PrepareForOperation(Operation* op);
 
-  // Balances a call to PrepareForChange().
-  void FinishChange();
+  // Balances a call to PrepareForOperation().
+  void FinishOperation();
 
-  // Returns true if the specified connection originated the current change.
-  bool IsChangeSource(ConnectionSpecificId connection_id) const {
-    return current_change_ && current_change_->connection_id() == connection_id;
+  // Returns true if the specified connection issued the current operation.
+  bool IsOperationSource(ConnectionSpecificId connection_id) const {
+    return current_operation_ &&
+           current_operation_->source_connection_id() == connection_id;
   }
 
   // Adds |connection| to internal maps.
@@ -203,6 +194,7 @@ class ConnectionManager : public ServerWindowDelegate,
   mus::SurfacesState* GetSurfacesState() override;
   void OnScheduleWindowPaint(const ServerWindow* window) override;
   const ServerWindow* GetRootWindow(const ServerWindow* window) const override;
+  void ScheduleSurfaceDestruction(ServerWindow* window) override;
 
   // Overridden from ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
@@ -228,6 +220,10 @@ class ConnectionManager : public ServerWindowDelegate,
       const std::vector<uint8_t>* new_data) override;
   void OnWindowTextInputStateChanged(ServerWindow* window,
                                      const ui::TextInputState& state) override;
+  void OnTransientWindowAdded(ServerWindow* window,
+                              ServerWindow* transient_child) override;
+  void OnTransientWindowRemoved(ServerWindow* window,
+                                ServerWindow* transient_child) override;
 
   ConnectionManagerDelegate* delegate_;
 
@@ -246,11 +242,18 @@ class ConnectionManager : public ServerWindowDelegate,
   // Set of WindowTreeHostImpls.
   HostConnectionMap host_connection_map_;
 
-  // If non-null we're processing a change. The ScopedChange is not owned by us
-  // (it's created on the stack by WindowTreeImpl).
-  ScopedChange* current_change_;
+  // If non-null then we're processing a client operation. The Operation is
+  // not owned by us (it's created on the stack by WindowTreeImpl).
+  Operation* current_operation_;
 
   bool in_destructor_;
+
+  // Maps from window manager change id to the client that initiated the
+  // request.
+  InFlightWindowManagerChangeMap in_flight_wm_change_map_;
+
+  // Next id supplied to the window manager.
+  uint32_t next_wm_change_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectionManager);
 };

@@ -24,9 +24,9 @@
 
 namespace blink {
 
-class InspectorResourceContentLoader::ResourceClient final : private RawResourceClient, private StyleSheetResourceClient {
+class InspectorResourceContentLoader::ResourceClient final : public NoBaseWillBeGarbageCollectedFinalized<InspectorResourceContentLoader::ResourceClient>, private RawResourceClient, private StyleSheetResourceClient {
 public:
-    ResourceClient(InspectorResourceContentLoader* loader)
+    explicit ResourceClient(InspectorResourceContentLoader* loader)
         : m_loader(loader)
     {
     }
@@ -39,11 +39,17 @@ public:
             resource->addClient(static_cast<StyleSheetResourceClient*>(this));
     }
 
+    DEFINE_INLINE_TRACE()
+    {
+        visitor->trace(m_loader);
+    }
+
 private:
-    InspectorResourceContentLoader* m_loader;
+    RawPtrWillBeMember<InspectorResourceContentLoader> m_loader;
 
     void setCSSStyleSheet(const String&, const KURL&, const String&, const CSSStyleSheetResource*) override;
     void notifyFinished(Resource*) override;
+    String debugName() const override { return "InspectorResourceContentLoader::ResourceClient"; }
     void resourceFinished(Resource*);
 
     friend class InspectorResourceContentLoader;
@@ -59,7 +65,9 @@ void InspectorResourceContentLoader::ResourceClient::resourceFinished(Resource* 
     else
         resource->removeClient(static_cast<StyleSheetResourceClient*>(this));
 
+#if !ENABLE(OILPAN)
     delete this;
+#endif
 }
 
 void InspectorResourceContentLoader::ResourceClient::setCSSStyleSheet(const String&, const KURL& url, const String&, const CSSStyleSheetResource* resource)
@@ -157,7 +165,10 @@ InspectorResourceContentLoader::~InspectorResourceContentLoader()
 
 DEFINE_TRACE(InspectorResourceContentLoader)
 {
+#if ENABLE(OILPAN)
     visitor->trace(m_inspectedFrame);
+    visitor->trace(m_pendingResourceClients);
+#endif
 }
 
 void InspectorResourceContentLoader::didCommitLoadForLocalFrame(LocalFrame* frame)
@@ -173,7 +184,7 @@ void InspectorResourceContentLoader::dispose()
 
 void InspectorResourceContentLoader::stop()
 {
-    HashSet<ResourceClient*> pendingResourceClients;
+    WillBeHeapHashSet<RawPtrWillBeMember<ResourceClient>> pendingResourceClients;
     m_pendingResourceClients.swap(pendingResourceClients);
     for (const auto& client : pendingResourceClients)
         client->m_loader = nullptr;

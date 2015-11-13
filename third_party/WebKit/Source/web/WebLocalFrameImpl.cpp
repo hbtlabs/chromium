@@ -156,6 +156,7 @@
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "modules/app_banner/AppBannerController.h"
+#include "modules/audio_output_devices/AudioOutputDeviceClient.h"
 #include "modules/bluetooth/BluetoothSupplement.h"
 #include "modules/geolocation/GeolocationController.h"
 #include "modules/notifications/NotificationPermissionClient.h"
@@ -219,6 +220,7 @@
 #include "public/web/WebTreeScopeType.h"
 #include "skia/ext/platform_device.h"
 #include "web/AssociatedURLLoader.h"
+#include "web/AudioOutputDeviceClientImpl.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/FindInPageCoordinates.h"
 #include "web/GeolocationClientProxy.h"
@@ -1237,11 +1239,7 @@ WebString WebLocalFrameImpl::selectionAsText() const
     if (pluginContainer)
         return pluginContainer->plugin()->selectionAsText();
 
-    const EphemeralRange range = frame()->selection().selection().toNormalizedEphemeralRange();
-    if (range.isNull())
-        return WebString();
-
-    String text = plainText(range, TextIteratorEmitsObjectReplacementCharacter);
+    String text = frame()->selection().selectedText(TextIteratorEmitsObjectReplacementCharacter);
 #if OS(WIN)
     replaceNewlinesWithWindowsStyleNewlines(text);
 #endif
@@ -1718,6 +1716,8 @@ void WebLocalFrameImpl::setCoreFrame(PassRefPtrWillBeRawPtr<LocalFrame> frame)
             VRController::provideTo(*m_frame, m_client ? m_client->webVRClient() : nullptr);
         if (RuntimeEnabledFeatures::wakeLockEnabled())
             ScreenWakeLock::provideTo(*m_frame, m_client ? m_client->wakeLockClient() : nullptr);
+        if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
+            provideAudioOutputDeviceClientTo(*m_frame, AudioOutputDeviceClientImpl::create());
     }
 }
 
@@ -1880,7 +1880,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
                 // Found a focusable parent node. Set the active match as the
                 // selection and focus to the focusable node.
                 frame()->selection().setSelection(VisibleSelection(EphemeralRange(activeMatch)));
-                frame()->document()->setFocusedElement(element);
+                frame()->document()->setFocusedElement(element, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
                 return;
             }
         }
@@ -1894,7 +1894,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
                 continue;
             Element* element = toElement(node);
             if (element->isFocusable()) {
-                frame()->document()->setFocusedElement(element);
+                frame()->document()->setFocusedElement(element, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
                 return;
             }
         }
@@ -1905,7 +1905,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
         // we have nothing focused (otherwise you might have text selected but
         // a link focused, which is weird).
         frame()->selection().setSelection(VisibleSelection(EphemeralRange(activeMatch)));
-        frame()->document()->setFocusedElement(nullptr);
+        frame()->document()->clearFocusedElement();
 
         // Finally clear the active match, for two reasons:
         // We just finished the find 'session' and we don't want future (potentially

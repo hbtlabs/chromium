@@ -130,6 +130,7 @@
 #include "media/base/media.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "mojo/common/common_type_converters.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
 #include "net/base/port_util.h"
@@ -152,7 +153,6 @@
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_switches.h"
@@ -455,6 +455,8 @@ RenderThreadImpl::HistogramCustomizer::HistogramCustomizer() {
   custom_histograms_.insert("V8.MemoryExternalFragmentationTotal");
   custom_histograms_.insert("V8.MemoryHeapSampleTotalCommitted");
   custom_histograms_.insert("V8.MemoryHeapSampleTotalUsed");
+  custom_histograms_.insert("V8.MemoryHeapUsed");
+  custom_histograms_.insert("V8.MemoryHeapCommitted");
 }
 
 RenderThreadImpl::HistogramCustomizer::~HistogramCustomizer() {}
@@ -1226,8 +1228,13 @@ void RenderThreadImpl::EnsureWebKitInitialized() {
 
   v8_sampling_profiler_.reset(new V8SamplingProfiler());
 
-  if (GetContentClient()->renderer()->RunIdleHandlerWhenWidgetsHidden())
+  if (GetContentClient()->renderer()->RunIdleHandlerWhenWidgetsHidden()) {
     ScheduleIdleHandler(kLongIdleHandlerDelayMs);
+  } else {
+    // If we do not track widget visibility, then assume conservatively that
+    // the isolate is in background. This reduces memory usage.
+    isolate->IsolateInBackgroundNotification();
+  }
 
   renderer_scheduler_->SetTimerQueueSuspensionWhenBackgroundedEnabled(
       GetContentClient()
@@ -1422,7 +1429,7 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
         base::StringToUint(image_texture_target_string, &image_texture_target);
     DCHECK(parsed_image_texture_target);
     gpu_factories_ = RendererGpuVideoAcceleratorFactories::Create(
-        gpu_channel_host.get(), main_thread_compositor_task_runner_,
+        gpu_channel_host.get(), base::ThreadTaskRunnerHandle::Get(),
         media_task_runner, shared_context_provider,
         enable_gpu_memory_buffer_video_frames, image_texture_target,
         enable_video_accelerator);
@@ -1994,18 +2001,19 @@ void RenderThreadImpl::WidgetRestored() {
 }
 
 void RenderThreadImpl::OnRendererHidden() {
-  blink::mainThreadIsolate()->IsolateInBackgroundNotification();
   // TODO(rmcilroy): Remove IdleHandler and replace it with an IdleTask
   // scheduled by the RendererScheduler - http://crbug.com/469210.
-  if (GetContentClient()->renderer()->RunIdleHandlerWhenWidgetsHidden())
-    ScheduleIdleHandler(kInitialIdleHandlerDelayMs);
+  if (!GetContentClient()->renderer()->RunIdleHandlerWhenWidgetsHidden())
+    return;
+  ScheduleIdleHandler(kInitialIdleHandlerDelayMs);
+  blink::mainThreadIsolate()->IsolateInBackgroundNotification();
 }
 
 void RenderThreadImpl::OnRendererVisible() {
-  blink::mainThreadIsolate()->IsolateInForegroundNotification();
   if (!GetContentClient()->renderer()->RunIdleHandlerWhenWidgetsHidden())
     return;
   ScheduleIdleHandler(kLongIdleHandlerDelayMs);
+  blink::mainThreadIsolate()->IsolateInForegroundNotification();
 }
 
 void RenderThreadImpl::ReleaseFreeMemory() {

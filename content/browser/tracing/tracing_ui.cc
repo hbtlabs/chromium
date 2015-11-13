@@ -111,7 +111,7 @@ bool BeginRecording(const std::string& data64,
   if (!GetTracingOptions(data64, &trace_config))
     return false;
 
-  return TracingController::GetInstance()->EnableRecording(
+  return TracingController::GetInstance()->StartTracing(
       trace_config,
       base::Bind(&OnRecordingEnabledAck, callback));
 }
@@ -145,13 +145,13 @@ void OnTraceBufferStatusResult(const WebUIDataSource::GotDataCallback& callback,
 
 void OnMonitoringEnabledAck(const WebUIDataSource::GotDataCallback& callback);
 
-bool EnableMonitoring(const std::string& data64,
+bool StartMonitoring(const std::string& data64,
                       const WebUIDataSource::GotDataCallback& callback) {
   base::trace_event::TraceConfig trace_config("", "");
   if (!GetTracingOptions(data64, &trace_config))
     return false;
 
-  return TracingController::GetInstance()->EnableMonitoring(
+  return TracingController::GetInstance()->StartMonitoring(
       trace_config,
       base::Bind(OnMonitoringEnabledAck, callback));
 }
@@ -194,24 +194,19 @@ void GetMonitoringStatus(const WebUIDataSource::GotDataCallback& callback) {
 
 void TracingCallbackWrapperBase64(
     const WebUIDataSource::GotDataCallback& callback,
+    scoped_ptr<const base::DictionaryValue> metadata,
     base::RefCountedString* data) {
   base::RefCountedString* data_base64 = new base::RefCountedString();
   base::Base64Encode(data->data(), &data_base64->data());
   callback.Run(data_base64);
 }
 
-std::string GenerateMetadataJSON() {
-  // Serialize metadata to json.
-  scoped_ptr<base::DictionaryValue> metadata_dict(new base::DictionaryValue());
-  metadata_dict->SetString("version", GetContentClient()->GetProduct());
-  metadata_dict->SetString(
+void AddCustomMetadata(TracingControllerImpl::TraceDataSink* trace_data_sink) {
+  base::DictionaryValue metadata_dict;
+  metadata_dict.SetString(
       "command_line",
       base::CommandLine::ForCurrentProcess()->GetCommandLineString());
-
-  std::string results;
-  if (base::JSONWriter::Write(*metadata_dict.get(), &results))
-    return results;
-  return std::string();
+  trace_data_sink->AddMetadata(metadata_dict);
 }
 
 bool OnBeginJSONRequest(const std::string& path,
@@ -240,17 +235,17 @@ bool OnBeginJSONRequest(const std::string& path,
         TracingController::CreateCompressedStringSink(
             TracingController::CreateCallbackEndpoint(
                 base::Bind(TracingCallbackWrapperBase64, callback)));
-    data_sink->SetMetadata(GenerateMetadataJSON());
-    return TracingController::GetInstance()->DisableRecording(data_sink);
+    AddCustomMetadata(data_sink.get());
+    return TracingController::GetInstance()->StopTracing(data_sink);
   }
 
-  const char* enableMonitoringPath = "json/begin_monitoring?";
-  if (path.find(enableMonitoringPath) == 0) {
-    std::string data = path.substr(strlen(enableMonitoringPath));
-    return EnableMonitoring(data, callback);
+  const char* StartMonitoringPath = "json/begin_monitoring?";
+  if (path.find(StartMonitoringPath) == 0) {
+    std::string data = path.substr(strlen(StartMonitoringPath));
+    return StartMonitoring(data, callback);
   }
   if (path == "json/end_monitoring") {
-    return TracingController::GetInstance()->DisableMonitoring(
+    return TracingController::GetInstance()->StopMonitoring(
         base::Bind(OnMonitoringDisabled, callback));
   }
   if (path == "json/capture_monitoring_compressed") {
@@ -258,7 +253,7 @@ bool OnBeginJSONRequest(const std::string& path,
         TracingController::CreateCompressedStringSink(
             TracingController::CreateCallbackEndpoint(
                 base::Bind(TracingCallbackWrapperBase64, callback)));
-    data_sink->SetMetadata(GenerateMetadataJSON());
+    AddCustomMetadata(data_sink.get());
     TracingController::GetInstance()->CaptureMonitoringSnapshot(data_sink);
     return true;
   }

@@ -95,6 +95,8 @@ remoting.ChromotingEvent = function(type) {
   this.auth_method;
   /** @type {string} */
   this.raw_plugin_error;
+  /** @type {remoting.ChromotingEvent.SessionSummary} */
+  this.previous_session;
 
   this.init_();
 };
@@ -119,6 +121,29 @@ remoting.ChromotingEvent.prototype.init_ = function() {
   // App Info.
   this.webapp_version = chrome.runtime.getManifest().version;
   this.application_id = chrome.runtime.id;
+};
+
+/**
+ * Populates the corresponding fields in the logEntry based on |error|.
+ *
+ * @param {remoting.Error} error
+ */
+remoting.ChromotingEvent.prototype.setError = function(error) {
+  var Tag = remoting.Error.Tag;
+  var detail = /** @type {string} */ (error.getDetail());
+
+  switch (error.getTag()) {
+    case Tag.HOST_IS_OFFLINE:
+      if (detail) {
+        this.xmpp_error = new remoting.ChromotingEvent.XmppError(detail);
+      }
+      break;
+    case Tag.MISSING_PLUGIN:
+      console.assert(detail, 'Missing PNaCl plugin last error string.');
+      this.raw_plugin_error = detail;
+  }
+
+  this.connection_error = error.toConnectionError();
 };
 
 /**
@@ -150,6 +175,27 @@ remoting.ChromotingEvent.isEndOfSession = function(event) {
 remoting.ChromotingEvent.XmppError = function(stanza) {
   /** @type {string} */
   this.raw_stanza = stanza;
+};
+
+/**
+ * See class comments on logs/proto/chromoting/chromoting_extensions.proto.
+ *
+ * @struct
+ * @constructor
+ */
+remoting.ChromotingEvent.SessionSummary = function() {
+  /** @type {string} */
+  this.session_id;
+  /** @type {remoting.ChromotingEvent.SessionState} */
+  this.last_state;
+  /** @type {remoting.ChromotingEvent.ConnectionError} */
+  this.last_error;
+  /** @type {number} */
+  this.duration;
+  /** @type {number} */
+  this.session_end_elapsed_time;
+  /** @type {remoting.ChromotingEvent.SessionEntryPoint} */
+  this.entry_point;
 };
 
 })();

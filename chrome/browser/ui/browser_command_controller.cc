@@ -19,7 +19,6 @@
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -33,6 +32,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -778,9 +778,6 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_SHOW_SIGNIN:
       ShowBrowserSigninOrSettings(browser_, signin_metrics::SOURCE_MENU);
       break;
-    case IDC_TOGGLE_SPEECH_INPUT:
-      ToggleSpeechInput(browser_);
-      break;
     case IDC_DISTILL_PAGE:
       DistillCurrentPage(browser_);
       break;
@@ -1035,9 +1032,6 @@ void BrowserCommandController::InitCommandState() {
   // These are always enabled; the menu determines their menu item visibility.
   command_updater_.UpdateCommandEnabled(IDC_UPGRADE_DIALOG, true);
   command_updater_.UpdateCommandEnabled(IDC_VIEW_INCOMPATIBILITIES, true);
-
-  // Toggle speech input
-  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_SPEECH_INPUT, true);
 
   // Distill current page.
   command_updater_.UpdateCommandEnabled(

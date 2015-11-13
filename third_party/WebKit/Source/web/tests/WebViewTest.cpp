@@ -243,7 +243,6 @@ protected:
 
     std::string m_baseURL;
     FrameTestHelpers::WebViewHelper m_webViewHelper;
-    FrameTestHelpers::UseMockScrollbarSettings m_mockScrollbarSettings;
 };
 
 TEST_F(WebViewTest, SaveImageAt)
@@ -2439,7 +2438,7 @@ TEST_F(WebViewTest, TextInputFlags)
     // (A.1) Verifies autocorrect/autocomplete/spellcheck flags are Off and
     // autocapitalize is set to none.
     HTMLInputElement* inputElement = toHTMLInputElement(document->getElementById("input"));
-    document->setFocusedElement(inputElement);
+    document->setFocusedElement(inputElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
     webViewImpl->setFocus(true);
     WebTextInputInfo info = webViewImpl->textInputInfo();
     EXPECT_EQ(
@@ -2449,7 +2448,7 @@ TEST_F(WebViewTest, TextInputFlags)
     // (A.2) Verifies autocorrect/autocomplete/spellcheck flags are On and
     // autocapitalize is set to sentences.
     inputElement = toHTMLInputElement(document->getElementById("input2"));
-    document->setFocusedElement(inputElement);
+    document->setFocusedElement(inputElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
     webViewImpl->setFocus(true);
     info = webViewImpl->textInputInfo();
     EXPECT_EQ(
@@ -2459,7 +2458,7 @@ TEST_F(WebViewTest, TextInputFlags)
     // (B) <textarea> Verifies the default text input flags are
     // WebTextInputFlagAutocapitalizeSentences.
     HTMLTextAreaElement* textAreaElement = toHTMLTextAreaElement(document->getElementById("textarea"));
-    document->setFocusedElement(textAreaElement);
+    document->setFocusedElement(textAreaElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
     webViewImpl->setFocus(true);
     info = webViewImpl->textInputInfo();
     EXPECT_EQ(WebTextInputFlagAutocapitalizeSentences, info.flags);
@@ -2487,7 +2486,7 @@ TEST_F(WebViewTest, NonUserInputTextUpdate)
     EXPECT_FALSE(client.textIsUpdated());
 
     HTMLInputElement* inputElement = toHTMLInputElement(document->getElementById("input"));
-    document->setFocusedElement(inputElement);
+    document->setFocusedElement(inputElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
     webViewImpl->setFocus(true);
     EXPECT_EQ(document->focusedElement(), static_cast<Element*>(inputElement));
 
@@ -2511,7 +2510,7 @@ TEST_F(WebViewTest, NonUserInputTextUpdate)
     // (A.3) Unfocused and value is changed by script.
     client.reset();
     EXPECT_FALSE(client.textIsUpdated());
-    document->setFocusedElement(nullptr);
+    document->clearFocusedElement();
     webViewImpl->setFocus(false);
     EXPECT_NE(document->focusedElement(), static_cast<Element*>(inputElement));
     inputElement->setValue("testA3");
@@ -2522,7 +2521,7 @@ TEST_F(WebViewTest, NonUserInputTextUpdate)
     client.reset();
     EXPECT_FALSE(client.textIsUpdated());
     HTMLTextAreaElement* textAreaElement = toHTMLTextAreaElement(document->getElementById("textarea"));
-    document->setFocusedElement(textAreaElement);
+    document->setFocusedElement(textAreaElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
     webViewImpl->setFocus(true);
     EXPECT_EQ(document->focusedElement(), static_cast<Element*>(textAreaElement));
     textAreaElement->setValue("testB");
@@ -2541,7 +2540,7 @@ TEST_F(WebViewTest, NonUserInputTextUpdate)
     // (B.3) Unfocused and value is changed by script.
     client.reset();
     EXPECT_FALSE(client.textIsUpdated());
-    document->setFocusedElement(nullptr);
+    document->clearFocusedElement();
     webViewImpl->setFocus(false);
     EXPECT_NE(document->focusedElement(), static_cast<Element*>(textAreaElement));
     inputElement->setValue("testB3");

@@ -8,12 +8,14 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "blimp/net/blimp_net_export.h"
 #include "blimp/net/blimp_transport.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
 
 namespace net {
 class NetLog;
+class StreamSocket;
 }  // namespace net
 
 namespace blimp {
@@ -22,7 +24,7 @@ class BlimpConnection;
 
 // BlimpTransport which creates a TCP connection to one of the specified
 // |addresses| on each call to Connect().
-class TCPClientTransport : public BlimpTransport {
+class BLIMP_NET_EXPORT TCPClientTransport : public BlimpTransport {
  public:
   TCPClientTransport(const net::AddressList& addresses, net::NetLog* net_log);
   ~TCPClientTransport() override;
@@ -36,7 +38,7 @@ class TCPClientTransport : public BlimpTransport {
 
   net::AddressList addresses_;
   net::NetLog* net_log_;
-  scoped_ptr<BlimpConnection> connection_;
+  scoped_ptr<net::StreamSocket> socket_;
   net::CompletionCallback connect_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(TCPClientTransport);

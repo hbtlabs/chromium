@@ -145,6 +145,19 @@ public class DocumentModeManager {
             "SM-N7505", // Galaxy Note3 Neo
             "SM-N7505L", // Galaxy Note3 Neo
             "SM-N7507", // Galaxy Note3 Neo
+            "HTC ONE DUAL SIM", // HTC ONE
+            "HTC 801E", // HTC One
+            "HTC ONE", // HTC One
+            "HTC ONE 801E", // HTC One
+            "HTC_PN071", // HTC One
+            "HTC 802T", // HTC One
+            "HTC 802T 16GB", // HTC One
+            "HTC 802W", // HTC One
+            "HTC 802D", // HTC One
+            "HTC ONE DUAL 802D", // HTC One
+            "HTCONE", // HTC One
+            "HTC ONE 801E", // HTC One 801e
+            "HTC ONE 801S", // HTC One 801e
     };
 
     private static DocumentModeManager sManager;

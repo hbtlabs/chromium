@@ -12,14 +12,15 @@
 #include "base/value_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/webui/options/options_handlers_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -86,11 +87,16 @@ void CreateProfileHandler::CreateProfile(const base::ListValue* args) {
   profile_creation_start_time_ = base::TimeTicks::Now();
 
   base::string16 name;
-  std::string icon;
+  std::string icon_url;
   bool create_shortcut = false;
-  if (args->GetString(0, &name) && args->GetString(1, &icon)) {
+  if (args->GetString(0, &name) && args->GetString(1, &icon_url)) {
+    DCHECK(base::IsStringASCII(icon_url));
     base::TrimWhitespace(name, base::TRIM_ALL, &name);
     CHECK(!name.empty());
+#ifndef NDEBUG
+    size_t icon_index;
+    DCHECK(profiles::IsDefaultAvatarIconUrl(icon_url, &icon_index));
+#endif
     args->GetBoolean(2, &create_shortcut);
   }
   std::string supervised_user_id;
@@ -102,7 +108,7 @@ void CreateProfileHandler::CreateProfile(const base::ListValue* args) {
   ProfileMetrics::LogProfileAddNewUser(ProfileMetrics::ADD_NEW_USER_DIALOG);
 
   profile_path_being_created_ = ProfileManager::CreateMultiProfileAsync(
-      name, icon,
+      name, icon_url,
       base::Bind(&CreateProfileHandler::OnProfileCreated,
                  weak_ptr_factory_.GetWeakPtr(),
                  create_shortcut,

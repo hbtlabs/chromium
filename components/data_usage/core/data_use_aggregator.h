@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -22,6 +22,9 @@ class URLRequest;
 }
 
 namespace data_usage {
+
+class DataUseAmortizer;
+class DataUseAnnotator;
 struct DataUse;
 
 // Class that collects and aggregates network usage, reporting the usage to
@@ -38,15 +41,19 @@ class DataUseAggregator
         const std::vector<const DataUse*>& data_use_sequence) = 0;
   };
 
-  DataUseAggregator();
+  // Constructs a new DataUseAggregator with the given |annotator| and
+  // |amortizer|. A NULL |annotator| will be treated as a no-op annotator, and a
+  // NULL |amortizer| will be treated as a no-op amortizer.
+  DataUseAggregator(scoped_ptr<DataUseAnnotator> annotator,
+                    scoped_ptr<DataUseAmortizer> amortizer);
+
   ~DataUseAggregator() override;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
   // Virtual for testing.
-  virtual void ReportDataUse(const net::URLRequest& request,
-                             int32_t tab_id,
+  virtual void ReportDataUse(net::URLRequest* request,
                              int64_t tx_bytes,
                              int64_t rx_bytes);
 
@@ -69,14 +76,17 @@ class DataUseAggregator
   void SetMccMncForTests(const std::string& mcc_mnc);
 
  private:
-  // Flush any buffered data use and notify observers.
-  void FlushBufferedDataUse();
+  // Passes |data_use| to |amortizer_| if it exists, or calls
+  // OnAmortizationComplete directly if |amortizer_| doesn't exist.
+  void PassDataUseToAmortizer(scoped_ptr<DataUse> data_use);
+
+  // Notifies observers with the data use from |amortized_data_use|.
+  void OnAmortizationComplete(scoped_ptr<DataUse> amortized_data_use);
 
   base::ThreadChecker thread_checker_;
+  scoped_ptr<DataUseAnnotator> annotator_;
+  scoped_ptr<DataUseAmortizer> amortizer_;
   base::ObserverList<Observer> observer_list_;
-
-  // Buffer of unreported data use.
-  ScopedVector<DataUse> buffered_data_use_;
 
   // Current connection type as notified by NetworkChangeNotifier.
   net::NetworkChangeNotifier::ConnectionType connection_type_;
@@ -85,15 +95,6 @@ class DataUseAggregator
   // provider.  Set to empty string if SIM is not present. |mcc_mnc_| is set
   // even if the current active network is not a cellular network.
   std::string mcc_mnc_;
-
-  // The total amount of off-the-record data usage that has happened since the
-  // last time the buffer was flushed.
-  int64_t off_the_record_tx_bytes_since_last_flush_;
-  int64_t off_the_record_rx_bytes_since_last_flush_;
-
-  // Indicates if a FlushBufferedDataUse() callback has been posted to run later
-  // on the IO thread.
-  bool is_flush_pending_;
 
   base::WeakPtrFactory<DataUseAggregator> weak_ptr_factory_;
 

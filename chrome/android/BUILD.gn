@@ -235,8 +235,8 @@ junit_binary("chrome_junit_tests") {
     "junit/src/org/chromium/chrome/browser/SSLClientCertificateRequestTest.java",
     "junit/src/org/chromium/chrome/browser/crash/LogcatExtractionCallableTest.java",
     "junit/src/org/chromium/chrome/browser/externalauth/ExternalAuthUtilsTest.java",
+    "junit/src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
     "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientConnectionHelperTest.java",
-
     "junit/src/org/chromium/chrome/browser/invalidations/InvalidationControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/AbstractMediaRouteControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/MediaUrlResolverTest.java",
@@ -347,26 +347,17 @@ android_resources("chrome_public_apk_resources") {
   ]
 }
 
-copy_ex("chrome_public_apk_assets") {
-  clear_dir = true
-  dest = "$root_build_dir/chrome_public_apk_assets"
+android_assets("chrome_public_apk_assets") {
   sources = chrome_android_paks_gypi.chrome_android_pak_input_resources
-  if (icu_use_data_file) {
-    sources += [ "$root_build_dir/icudtl.dat" ]
-  }
+  sources += [ "$root_build_dir/resources.pak" ]
+  disable_compression = true
+
   deps = [
     "//chrome:packed_extra_resources",
     "//chrome:packed_resources",
-    "//third_party/icu:icudata",
+    "//third_party/icu:icu_assets",
+    "//v8:v8_external_startup_data_assets",
   ]
-
-  if (v8_use_external_startup_data) {
-    renaming_sources = v8_external_startup_data_renaming_sources
-    renaming_destinations = v8_external_startup_data_renaming_destinations
-    deps += [ "//v8" ]
-  }
-
-  sources += [ "$root_build_dir/resources.pak" ]
 }
 
 # GYP: //chrome/android/chrome_apk.gyp:chrome_apk_manifest
@@ -420,7 +411,7 @@ chrome_public_apk_tmpl("chrome_public_apk") {
   android_manifest = get_target_outputs(":chrome_public_apk_manifest")
   android_manifest = android_manifest[1]
   apk_name = "ChromePublic"
-  native_libs = [ "$root_build_dir/lib.stripped/libchrome_public.so" ]
+  native_libs = [ "libchrome_public.so" ]
   native_lib_version_rule = "//build/util:chrome_version_json"
 
   # Only attempt loading the library from the APK for 64 bit devices
@@ -428,7 +419,7 @@ chrome_public_apk_tmpl("chrome_public_apk") {
   # approach falls to a minimal level -  http://crbug.com/390618.
   if (chromium_linker_supported &&
       (target_cpu == "arm64" || target_cpu == "x64")) {
-    load_library_from_apk = true
+    load_library_from_apk = chrome_public_apk_load_library_from_apk
   }
 
   deps = [
@@ -455,7 +446,6 @@ jinja_template("chrome_public_test_apk_manifest") {
 
 # GYP: //chrome/android/chrome_apk.gyp:chrome_public_test_apk
 instrumentation_test_apk("chrome_public_test_apk") {
-  # TODO(GYP,cjhopman): Does this need version code/name?
   apk_name = "ChromePublicTest"
   apk_under_test = ":chrome_public_apk"
   android_manifest = chrome_public_test_apk_manifest
@@ -464,4 +454,5 @@ instrumentation_test_apk("chrome_public_test_apk") {
     "//chrome/android:chrome_shared_test_java",
   ]
   isolate_file = "../chrome_public_test_apk.isolate"
+  proguard_enabled = !is_debug
 }

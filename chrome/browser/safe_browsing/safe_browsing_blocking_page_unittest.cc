@@ -30,6 +30,8 @@ static const char* kBadURL = "http://www.badguys.com/";
 static const char* kBadURL2 = "http://www.badguys2.com/";
 static const char* kBadURL3 = "http://www.badguys3.com/";
 
+namespace safe_browsing {
+
 namespace {
 
 // A SafeBrowingBlockingPage class that does not create windows.
@@ -230,7 +232,7 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
         web_contents()->GetRenderProcessHost()->GetID();
     resource->render_view_id =
         web_contents()->GetRenderViewHost()->GetRoutingID();
-    resource->threat_source = SafeBrowsingUIManager::FROM_DEVICE;
+    resource->threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
   }
 
   UserResponse user_response_;
@@ -684,3 +686,5 @@ TEST_F(SafeBrowsingBlockingPageTest, MalwareReportsToggling) {
   EXPECT_FALSE(profile->GetPrefs()->GetBoolean(
       prefs::kSafeBrowsingExtendedReportingEnabled));
 }
+
+}  // namespace safe_browsing

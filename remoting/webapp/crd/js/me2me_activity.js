@@ -31,8 +31,8 @@ remoting.Me2MeActivity = function(host, hostList) {
   /** @private */
   this.retryOnHostOffline_ = true;
 
-  /** @private {remoting.NetworkConnectivityDetector} */
-  this.networkDetector_ = null;
+  /** @private {remoting.AutoReconnector} */
+  this.reconnector_ = null;
 
   /** @private {remoting.SessionLogger} */
   this.logger_ = null;
@@ -44,8 +44,8 @@ remoting.Me2MeActivity = function(host, hostList) {
 remoting.Me2MeActivity.prototype.dispose = function() {
   base.dispose(this.desktopActivity_);
   this.desktopActivity_ = null;
-  base.dispose(this.networkDetector_);
-  this.networkDetector_ = null;
+  base.dispose(this.reconnector_);
+  this.reconnector_ = null;
 };
 
 remoting.Me2MeActivity.prototype.start = function() {
@@ -54,19 +54,16 @@ remoting.Me2MeActivity.prototype.start = function() {
 
   var Event = remoting.ChromotingEvent;
   this.logger_ = this.createLogger_(Event.SessionEntryPoint.CONNECT_BUTTON);
-  this.logger_.logSessionStateChange(Event.SessionState.STARTED,
-                                     Event.ConnectionError.NONE);
-
-  var errorTag = Event.ConnectionError.NONE;
+  this.logger_.logSessionStateChange(Event.SessionState.STARTED);
 
   function handleError(/** remoting.Error */ error) {
     if (error.isCancel()) {
       remoting.setMode(remoting.AppMode.HOME);
-      that.logger_.logSessionStateChange(Event.SessionState.CONNECTION_CANCELED,
-                                         errorTag);
+      that.logger_.logSessionStateChange(
+          Event.SessionState.CONNECTION_CANCELED);
     } else {
-      that.logger_.logSessionStateChange(Event.SessionState.CONNECTION_FAILED,
-                                         error.toConnectionError());
+      that.logger_.logSessionStateChange(
+          Event.SessionState.CONNECTION_FAILED, error);
       that.showErrorMessage_(error);
     }
   }
@@ -75,8 +72,7 @@ remoting.Me2MeActivity.prototype.start = function() {
     return that.host_.options.load();
   }).catch(remoting.Error.handler(function(/** remoting.Error */ error) {
     // User cancels out of the Host upgrade dialog.  Report it as bad version.
-    errorTag = Event.ConnectionError.BAD_VERSION;
-    throw error;
+    throw new remoting.Error(remoting.Error.Tag.BAD_VERSION);
   })).then(
     this.connect_.bind(this)
   ).catch(remoting.Error.handler(handleError));
@@ -116,10 +112,12 @@ remoting.Me2MeActivity.prototype.createLogger_ = function(entryPoint) {
  * @private
  */
 remoting.Me2MeActivity.prototype.reconnect_ = function(entryPoint) {
+  console.assert(this.logger_, 'Reconnecting without a previous session.');
+  var previousSessionSummary = this.logger_.createSummary();
   this.logger_ = this.createLogger_(entryPoint);
+  this.logger_.setPreviousSessionSummary(previousSessionSummary);
   var Event = remoting.ChromotingEvent;
-  this.logger_.logSessionStateChange(Event.SessionState.STARTED,
-                                     Event.ConnectionError.NONE);
+  this.logger_.logSessionStateChange(Event.SessionState.STARTED);
   this.connect_();
 };
 
@@ -162,12 +160,12 @@ remoting.Me2MeActivity.prototype.createCredentialsProvider_ = function() {
    */
   var requestPin = function(supportsPairing, onPinFetched) {
     // Set time when PIN was requested.
-    var authStartTime = new Date().getTime();
+    var authStartTime = Date.now();
     that.desktopActivity_.getConnectingDialog().hide();
     that.pinDialog_.show(supportsPairing).then(function(/** string */ pin) {
       remoting.setMode(remoting.AppMode.CLIENT_CONNECTING);
       // Done obtaining PIN information. Log time taken for PIN entry.
-      that.logger_.setAuthTotalTime(new Date().getTime() - authStartTime);
+      that.logger_.setAuthTotalTime(Date.now() - authStartTime);
       onPinFetched(pin);
     }).catch(remoting.Error.handler(function(/** remoting.Error */ error) {
       console.assert(error.hasTag(remoting.Error.Tag.CANCELLED),
@@ -259,14 +257,13 @@ remoting.Me2MeActivity.prototype.onDisconnected = function(error) {
 
   if (error.isNone()) {
     this.showFinishDialog_(remoting.AppMode.CLIENT_SESSION_FINISHED_ME2ME);
-  } else {
-    this.showErrorMessage_(error);
+  } else if (remoting.AutoReconnector.shouldAutoReconnect(error)) {
     var SessionEntryPoint = remoting.ChromotingEvent.SessionEntryPoint;
-    base.dispose(this.networkDetector_);
-    this.networkDetector_ = remoting.NetworkConnectivityDetector.create();
-    this.networkDetector_.waitForOnline().then(
+    this.reconnector_ = new remoting.AutoReconnector(
       this.reconnect_.bind(
           this, SessionEntryPoint.AUTO_RECONNECT_ON_CONNECTION_DROPPED));
+  } else {
+    this.showErrorMessage_(error);
   }
 };
 
@@ -295,8 +292,8 @@ remoting.Me2MeActivity.prototype.showFinishDialog_ = function(mode) {
   var that = this;
 
   dialog.show().then(function(/** Result */result) {
-    base.dispose(that.networkDetector_);
-    that.networkDetector_ = null;
+    base.dispose(that.reconnector_);
+    that.reconnector_ = null;
 
     if (result === Result.PRIMARY) {
       remoting.setMode(remoting.AppMode.HOME);
@@ -421,6 +418,47 @@ remoting.PinDialog.prototype.requestPairingIfNecessary = function(plugin) {
     }
     plugin.requestPairing(clientName, onPairingComplete);
   }
+};
+
+/**
+ * A helper class to handle auto reconnect when the connection is dropped due to
+ * client connectivity issues.
+ *
+ * @param {Function} reconnectCallback callback to initiate the reconnect
+ *
+ * @constructor
+ * @implements {base.Disposable}
+ *
+ * @private
+ */
+remoting.AutoReconnector = function(reconnectCallback) {
+  /** @private */
+  this.reconnectCallback_ = reconnectCallback;
+  /** @private */
+  this.networkDetector_ =  remoting.NetworkConnectivityDetector.create();
+  /** @private */
+  this.connectingDialog_ = remoting.modalDialogFactory.createConnectingDialog(
+      this.dispose.bind(this));
+
+  var that = this;
+  this.connectingDialog_.show();
+  this.networkDetector_.waitForOnline().then(function() {
+    if (that.reconnectCallback_) {
+      that.connectingDialog_.hide();
+      that.reconnectCallback_();
+    }
+  });
+};
+
+remoting.AutoReconnector.shouldAutoReconnect = function(error) {
+  return error.hasTag(remoting.Error.Tag.CLIENT_SUSPENDED);
+};
+
+remoting.AutoReconnector.prototype.dispose = function() {
+  base.dispose(this.networkDetector_);
+  this.networkDetector_ = null;
+  this.reconnectCallback_ = null;
+  this.connectingDialog_.hide();
 };
 
 })();

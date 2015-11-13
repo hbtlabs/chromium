@@ -33,10 +33,12 @@
   <command id="undo-command" shortcut="Ctrl-U+005A"><!-- Ctrl+Z -->
 </if>
   <link rel="import" href="chrome://resources/html/polymer_config.html">
-  <link rel="import" href="chrome://resources/html/load_time_data.html">
-  <link rel="import" href="chrome://downloads/strings.html">
-  <link rel="import" href="chrome://resources/html/i18n_template.html">
+  <link rel="import" href="chrome://downloads/i18n_setup.html">
   <link rel="import" href="chrome://downloads/manager.html">
+  <!-- i18n_template.html actually does i18n-* attribute substitutions.
+       It should be imported last and only once. TODO(dbeam): figure out a good
+       solution for each individual element to do this as well. -->
+  <link rel="import" href="chrome://resources/html/i18n_template.html">
   <script src="chrome://downloads/downloads.js"></script>
 </body>
 </html>

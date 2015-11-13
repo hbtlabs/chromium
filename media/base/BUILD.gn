@@ -238,13 +238,6 @@ source_set("base") {
     deps += [ "//third_party/ffmpeg" ]
   }
 
-  if (enable_browser_cdms) {
-    sources += [
-      "browser_cdm_factory.cc",
-      "browser_cdm_factory.h",
-    ]
-  }
-
   if (is_android) {
     public_deps = [
       "//media/base/android",
@@ -366,6 +359,7 @@ source_set("test_support") {
   configs += [ "//media:media_config" ]
   deps = [
     "//testing/gmock",
+    "//media:shared_memory_support",
   ]
 }
 
@@ -474,6 +468,7 @@ source_set("perftests") {
     "//media",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/libyuv",
   ]
 
   if (media_use_ffmpeg) {

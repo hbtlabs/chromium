@@ -454,6 +454,8 @@ public:
         const ComputedStyle* styleToUse = overrideStyle ? overrideStyle : style();
         return m_marginBoxOutsets.end(styleToUse->writingMode(), styleToUse->direction());
     }
+    LayoutUnit marginOver() const final { return m_marginBoxOutsets.over(style()->writingMode()); }
+    LayoutUnit marginUnder() const final { return m_marginBoxOutsets.under(style()->writingMode()); }
     void setMarginBefore(LayoutUnit value, const ComputedStyle* overrideStyle = nullptr) { m_marginBoxOutsets.setBefore((overrideStyle ? overrideStyle : style())->writingMode(), value); }
     void setMarginAfter(LayoutUnit value, const ComputedStyle* overrideStyle = nullptr) { m_marginBoxOutsets.setAfter((overrideStyle ? overrideStyle : style())->writingMode(), value); }
     void setMarginStart(LayoutUnit value, const ComputedStyle* overrideStyle = nullptr)
@@ -860,7 +862,7 @@ protected:
     void computePositionedLogicalWidth(LogicalExtentComputedValues&) const;
 
     LayoutUnit computeIntrinsicLogicalWidthUsing(const Length& logicalWidthLength, LayoutUnit availableLogicalWidth, LayoutUnit borderAndPadding) const;
-    LayoutUnit computeIntrinsicLogicalContentHeightUsing(const Length& logicalHeightLength, LayoutUnit intrinsicContentHeight, LayoutUnit borderAndPadding) const;
+    virtual LayoutUnit computeIntrinsicLogicalContentHeightUsing(const Length& logicalHeightLength, LayoutUnit intrinsicContentHeight, LayoutUnit borderAndPadding) const;
 
     virtual bool shouldComputeSizeAsReplaced() const { return isReplaced() && !isInlineBlockOrInlineTable(); }
 

@@ -14,7 +14,6 @@
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/common/content_export.h"
 #include "net/base/load_states.h"
-#include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -33,7 +32,6 @@ class Message;
 }
 
 namespace gfx {
-class Point;
 class Rect;
 class Size;
 }
@@ -83,10 +81,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // jam as reviewers before you use this method. http://crbug.com/82582
   virtual WebContents* GetAsWebContents();
 
-  // Return the rect where to display the resize corner, if any, otherwise
-  // an empty rect.
-  virtual gfx::Rect GetRootWindowResizerRect() const = 0;
-
   // The RenderView is being constructed (message sent to the renderer process
   // to construct a RenderView).  Now is a good time to send other setup events
   // to the RenderView.  This precedes any other commands to the RenderView.
@@ -135,25 +129,11 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   virtual RendererPreferences GetRendererPrefs(
       BrowserContext* browser_context) const = 0;
 
-  // Notification the user has made a gesture while focus was on the
-  // page. This is used to avoid uninitiated user downloads (aka carpet
-  // bombing), see DownloadRequestLimiter for details.
-  virtual void OnUserGesture() {}
-
   // Notification from the renderer host that blocked UI event occurred.
   // This happens when there are tab-modal dialogs. In this case, the
   // notification is needed to let us draw attention to the dialog (i.e.
   // refocus on the modal dialog, flash title etc).
   virtual void OnIgnoredUIEvent() {}
-
-  // Notification that the renderer has become unresponsive. The
-  // delegate can use this notification to show a warning to the user.
-  virtual void RendererUnresponsive(RenderViewHost* render_view_host) {}
-
-  // Notification that a previously unresponsive renderer has become
-  // responsive again. The delegate can use this notification to end the
-  // warning shown to the user.
-  virtual void RendererResponsive(RenderViewHost* render_view_host) {}
 
   // Notification that the RenderViewHost's load state changed.
   virtual void LoadStateChanged(const GURL& url,
@@ -165,34 +145,13 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // JavaScript window.focus() method).
   virtual void Activate() {}
 
-  // Notification that the view has lost capture.
-  virtual void LostCapture() {}
-
   // Called when a file selection is to be done.
   virtual void RunFileChooser(
       RenderViewHost* render_view_host,
       const FileChooserParams& params) {}
 
-  // Returns whether the associated tab is in fullscreen mode.
-  virtual bool IsFullscreenForCurrentTab() const;
-
-  // Returns the display mode for the view.
-  virtual blink::WebDisplayMode GetDisplayMode() const;
-
   // The contents' preferred size changed.
   virtual void UpdatePreferredSize(const gfx::Size& pref_size) {}
-
-  // The contents auto-resized and the container should match it.
-  virtual void ResizeDueToAutoResize(const gfx::Size& new_size) {}
-
-  // Requests to lock the mouse. Once the request is approved or rejected,
-  // GotResponseToLockMouseRequest() will be called on the requesting render
-  // view host.
-  virtual void RequestToLockMouse(bool user_gesture,
-                                  bool last_unlocked_by_target) {}
-
-  // Notification that the view has lost the mouse lock.
-  virtual void LostMouseLock() {}
 
   // The page is trying to open a new page (e.g. a popup window). The window
   // should be created associated with the given |route_id| in the process of

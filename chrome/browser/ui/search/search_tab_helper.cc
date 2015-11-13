@@ -16,7 +16,6 @@
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
@@ -269,10 +269,6 @@ void SearchTabHelper::OnTabDeactivated() {
   ipc_router_.OnTabDeactivated();
 }
 
-void SearchTabHelper::ToggleVoiceSearch() {
-  ipc_router_.ToggleVoiceSearch();
-}
-
 bool SearchTabHelper::IsSearchResultsPage() {
   return model_.mode().is_origin_search();
 }
@@ -371,7 +367,6 @@ void SearchTabHelper::NavigationEntryCommitted(
   }
 
   model_.SetInstantSupportState(INSTANT_SUPPORT_UNKNOWN);
-  model_.SetVoiceSearchSupported(false);
   search::SetInstantSupportStateInNavigationEntry(model_.instant_support(),
                                                   entry);
 
@@ -381,10 +376,6 @@ void SearchTabHelper::NavigationEntryCommitted(
 
 void SearchTabHelper::OnInstantSupportDetermined(bool supports_instant) {
   InstantSupportChanged(supports_instant);
-}
-
-void SearchTabHelper::OnSetVoiceSearchSupport(bool supports_voice_search) {
-  model_.SetVoiceSearchSupported(supports_voice_search);
 }
 
 void SearchTabHelper::ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) {

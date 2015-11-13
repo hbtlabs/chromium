@@ -322,6 +322,8 @@
       'renderer/media/renderer_gpu_video_accelerator_factories.h',
       'renderer/media/renderer_webaudiodevice_impl.cc',
       'renderer/media/renderer_webaudiodevice_impl.h',
+      'renderer/media/renderer_webmediaplayer_delegate.cc',
+      'renderer/media/renderer_webmediaplayer_delegate.h',
       'renderer/media/renderer_webmidiaccessor_impl.cc',
       'renderer/media/renderer_webmidiaccessor_impl.h',
       'renderer/media/video_capture_impl.cc',
@@ -623,6 +625,8 @@
     # WebRTC-specific sources. Put WebRTC plugin-related stuff in the
     # Plugin+WebRTC section below.
     'private_renderer_webrtc_sources': [
+      'renderer/media/audio_repetition_detector.cc',
+      'renderer/media/audio_repetition_detector.h',
       'renderer/media/media_recorder_handler.cc',
       'renderer/media/media_recorder_handler.h',
       'renderer/media/media_stream.cc',

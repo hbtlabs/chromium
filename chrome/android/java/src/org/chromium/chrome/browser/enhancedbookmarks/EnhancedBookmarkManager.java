@@ -20,9 +20,9 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
@@ -300,7 +301,8 @@ public class EnhancedBookmarkManager implements EnhancedBookmarkDelegate {
             // page and there is no network connection.
             if (mEnhancedBookmarksModel.getOfflinePageBridge() != null
                     && !mEnhancedBookmarksModel.getOfflinePageBridge().getAllPages().isEmpty()
-                    && !OfflinePageUtils.isConnected(ApplicationStatus.getApplicationContext())) {
+                    && !OfflinePageUtils.isConnected(mActivity.getApplicationContext())
+                    && !DeviceFormFactor.isTablet(mActivity.getApplicationContext())) {
                 UIState filterState = UIState.createFilterState(
                         EnhancedBookmarkFilter.OFFLINE_PAGES, mEnhancedBookmarksModel);
                 if (state.mState != UIState.STATE_LOADING) {

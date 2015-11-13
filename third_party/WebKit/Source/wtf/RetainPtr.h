@@ -23,7 +23,6 @@
 
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/HashTraits.h"
-#include "wtf/NullPtr.h"
 #include "wtf/TypeTraits.h"
 #include <algorithm>
 #include <utility>
@@ -104,9 +103,6 @@ public:
 
     PtrType get() const { return m_ptr; }
     PtrType operator->() const { return m_ptr; }
-#if COMPILER_SUPPORTS(CXX_EXPLICIT_CONVERSIONS)
-    explicit operator PtrType() const { return m_ptr; }
-#endif
 
     bool operator!() const { return !m_ptr; }
 
@@ -123,13 +119,11 @@ public:
     RetainPtr& operator=(RetainPtr&&);
     template <typename U> RetainPtr& operator=(RetainPtr<U>&&);
 
-#if !COMPILER_SUPPORTS(CXX_NULLPTR)
     RetainPtr& operator=(std::nullptr_t)
     {
         clear();
         return *this;
     }
-#endif
 
     void adoptCF(PtrType);
     void adoptNS(PtrType);

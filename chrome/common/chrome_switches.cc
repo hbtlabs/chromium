@@ -49,12 +49,6 @@ const char kAllowNaClFileHandleAPI[]        = "allow-nacl-file-handle-api";
 // Specifies comma-separated list of extension ids or hosts to grant
 // access to TCP/UDP socket APIs.
 const char kAllowNaClSocketAPI[]            = "allow-nacl-socket-api";
-
-// Disables forcing on the experimental Plugin Power Saver feature.
-const char kDisablePluginPowerSaver[] = "disable-plugin-power-saver";
-
-// Enables forcing on the experimental Plugin Power Saver feature.
-const char kEnablePluginPowerSaver[] = "enable-plugin-power-saver";
 #endif
 
 #if defined(FULL_SAFE_BROWSING)
@@ -110,10 +104,6 @@ const char kAuthExtensionPath[]             = "auth-ext-path";
 
 // Whitelist for Negotiate Auth servers
 const char kAuthServerWhitelist[]           = "auth-server-whitelist";
-
-// A flag that is used to tell Chrome that it was launched automatically at
-// computer startup and not by some user action.
-const char kAutoLaunchAtStartup[]           = "auto-launch-at-startup";
 
 // This flag makes Chrome auto-select the provided choice when an extension asks
 // permission to start desktop capture. Should only be used for tests. For
@@ -232,6 +222,10 @@ const char kDisableCastStreamingHWEncoding[] =
 const char kDisableChildAccountDetection[] =
     "disable-child-account-detection";
 
+// Disables data volume counters in the Clear Browsing Data dialog.
+const char kDisableClearBrowsingDataCounters[] =
+    "disable-clear-browsing-data-counters";
+
 // Disables the client-side phishing detection feature. Note that even if
 // client-side phishing detection is enabled, it will only be active if the
 // user has opted in to UMA stats and SafeBrowsing is enabled in the
@@ -317,9 +311,6 @@ const char kDisablePreconnect[]             = "disable-preconnect";
 // Disables print preview (For testing, and for users who don't like us. :[ )
 const char kDisablePrintPreview[]           = "disable-print-preview";
 
-// Switch to disable simplify page on the print preview dialog.
-const char kDisablePrintPreviewSimplify[] = "disable-print-preview-simplify";
-
 // Normally when the user attempts to navigate to a page that was the result of
 // a post we prompt to make sure they want to. This switch may be used to
 // disable that check. This switch is used during automated testing.
@@ -390,8 +381,7 @@ const char kEnableBookmarkUndo[]            = "enable-bookmark-undo";
 const char kEnableChildAccountDetection[] =
     "enable-child-account-detection";
 
-// If true, the clear browsing data dialog will show data volume counters,
-// where available.
+// Enables data volume counters in the Clear Browsing Data dialog.
 const char kEnableClearBrowsingDataCounters[] =
     "enable-clear-browsing-data-counters";
 
@@ -435,9 +425,6 @@ const char kEnableMaterialDesignExtensions[] = "enable-md-extensions";
 
 // Enables the Material Design policy page at chrome://md-policy.
 const char kEnableMaterialDesignPolicyPage[]  = "enable-md-policy-page";
-
-// Enables Media Router.
-const char kEnableMediaRouter[]             = "enable-media-router";
 
 // Runs the Native Client inside the renderer process and enables GPU plugin
 // (internally adds lEnableGpuPlugin to the command line).
@@ -719,6 +706,9 @@ const char kMarkNonSecureAsNonSecure[]      = "non-secure";
 
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
+
+// Enables Media Router.
+const char kMediaRouter[]                   = "media-router";
 
 // Enables histograming of tasks served by MessageLoop. See
 // about:histograms/Loop for results, which show frequency of messages on each
@@ -1162,10 +1152,6 @@ const char kEnablePhysicalWeb[] = "enable-physical-web";
 
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
-
-// Enabled theme-color in tabbed mode of Chrome for Android.
-const char kEnableThemeColorInTabbedMode[]
-    = "enable-theme-color-in-tabbed-mode";
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -1308,11 +1294,6 @@ const char kWaitForMutex[]                  = "wait-for-mutex";
 const char kWindows8Search[]                = "windows8-search";
 #endif  // defined(OS_WIN)
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-// Enable tab discarding when system is under memory pressure.
-const char kEnableTabDiscarding[] = "enable-tab-discarding";
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
-
 #if defined(ENABLE_IPC_FUZZER)
 // Specifies the testcase used by the IPC fuzzer.
 const char kIpcFuzzerTestcase[]             = "ipc-fuzzer-testcase";
@@ -1327,6 +1308,15 @@ const char kDebugPrint[] = "debug-print";
 // Disables the new implementation of the task manager.
 const char kDisableNewTaskManager[]   = "disable-new-task-manager";
 #endif  // defined(ENABLE_TASK_MANAGER)
+
+#if defined(OS_ANDROID)
+// Sets the threshold for when to disable auto-hiding the toolbar. If the
+// device's width and height are above the threshold, the toolbar will never
+// be hidden due to scrolling. It will still be hidden if page contents go
+// fullscreen.
+const char kDisableAutoHidingToolbarThreshold[] =
+    "disable-auto-hiding-toolbar-threshold";
+#endif // defined(OS_ANDROID)
 
 bool AboutInSettingsEnabled() {
   return SettingsWindowEnabled() &&

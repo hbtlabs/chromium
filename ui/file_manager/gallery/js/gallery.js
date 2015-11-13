@@ -428,6 +428,7 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
         // Do the initialization for each mode.
         if (shouldShowThumbnail) {
           self.thumbnailMode_.show();
+          self.thumbnailMode_.focus();
         } else {
           self.slideMode_.enter(
               null,
@@ -896,6 +897,8 @@ Gallery.prototype.updateSelectionAndState_ = function() {
  */
 Gallery.prototype.onFilenameFocus_ = function() {
   ImageUtil.setAttribute(this.filenameSpacer_, 'renaming', true);
+  this.dimmableUIController_.setRenaming(true);
+
   this.filenameEdit_.originalValue = this.filenameEdit_.value;
   setTimeout(this.filenameEdit_.select.bind(this.filenameEdit_), 0);
   this.onUserAction_();
@@ -935,6 +938,7 @@ Gallery.prototype.onFilenameEditBlur_ = function(event) {
   }
 
   ImageUtil.setAttribute(this.filenameSpacer_, 'renaming', false);
+  this.dimmableUIController_.setRenaming(false);
   this.onUserAction_();
 };
 

@@ -7,7 +7,7 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "media/base/media_export.h"
+#include "media/blink/media_blink_export.h"
 #include "media/filters/context_3d.h"
 
 namespace base {
@@ -22,13 +22,13 @@ class WebMediaPlayerClient;
 
 namespace media {
 
-class AudioRendererSink;
+class RestartableAudioRendererSink;
 class MediaLog;
 class MediaPermission;
 
 // Holds parameters for constructing WebMediaPlayerImpl without having
 // to plumb arguments through various abstraction layers.
-class MEDIA_EXPORT WebMediaPlayerParams {
+class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
  public:
   typedef base::Callback<void(const base::Closure&)> DeferLoadCB;
   typedef base::Callback<Context3D()> Context3DCB;
@@ -44,7 +44,7 @@ class MEDIA_EXPORT WebMediaPlayerParams {
   // |context_3d_cb| may be null.
   WebMediaPlayerParams(
       const DeferLoadCB& defer_load_cb,
-      const scoped_refptr<AudioRendererSink>& audio_renderer_sink,
+      const scoped_refptr<RestartableAudioRendererSink>& audio_renderer_sink,
       const scoped_refptr<MediaLog>& media_log,
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
@@ -58,7 +58,8 @@ class MEDIA_EXPORT WebMediaPlayerParams {
 
   DeferLoadCB defer_load_cb() const { return defer_load_cb_; }
 
-  const scoped_refptr<AudioRendererSink>& audio_renderer_sink() const {
+  const scoped_refptr<RestartableAudioRendererSink>& audio_renderer_sink()
+      const {
     return audio_renderer_sink_;
   }
 
@@ -93,7 +94,7 @@ class MEDIA_EXPORT WebMediaPlayerParams {
 
  private:
   DeferLoadCB defer_load_cb_;
-  scoped_refptr<AudioRendererSink> audio_renderer_sink_;
+  scoped_refptr<RestartableAudioRendererSink> audio_renderer_sink_;
   scoped_refptr<MediaLog> media_log_;
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;

@@ -10,9 +10,17 @@
 
 #include "base/logging.h"
 
+namespace safe_browsing {
+
 bool TestSafeBrowsingDatabaseManager::IsSupported() const {
   NOTIMPLEMENTED();
   return false;
+}
+
+safe_browsing::ThreatSource TestSafeBrowsingDatabaseManager::GetThreatSource()
+    const {
+  NOTIMPLEMENTED();
+  return safe_browsing::ThreatSource::UNKNOWN;
 }
 
 bool TestSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
@@ -104,3 +112,5 @@ void TestSafeBrowsingDatabaseManager::StartOnIOThread() {
 
 void TestSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
 }
+
+}  // namespace safe_browsing

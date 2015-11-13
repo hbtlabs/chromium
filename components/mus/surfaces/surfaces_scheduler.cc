@@ -59,8 +59,9 @@ void SurfacesScheduler::WillBeginImplFrame(const cc::BeginFrameArgs& args) {}
 
 void SurfacesScheduler::DidFinishImplFrame() {}
 
-void SurfacesScheduler::ScheduledActionSendBeginMainFrame() {
-  scheduler_->NotifyBeginMainFrameStarted();
+void SurfacesScheduler::ScheduledActionSendBeginMainFrame(
+    const cc::BeginFrameArgs& args) {
+  scheduler_->NotifyBeginMainFrameStarted(base::TimeTicks());
   scheduler_->NotifyReadyToCommit();
 }
 

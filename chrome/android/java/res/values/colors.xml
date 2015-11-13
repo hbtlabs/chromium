@@ -20,6 +20,7 @@
     <color name="infobar_background_separator">#afafaf</color>
     <color name="infobar_accent_blue">#4285f4</color>
     <color name="infobar_tertiary_button_text">#969696</color>
+    <color name="infobar_descriptive_text_color">#646464</color>
 
     <!-- Snackbar colors -->
     <color name="snackbar_background_color">#282C32</color>
@@ -96,6 +97,11 @@
     <color name="ntp_list_header_text">#333</color>
     <color name="ntp_list_header_subtext">#969696</color>
     <color name="ntp_list_header_subtext_active">#7cadff</color>
+    <color name="snippets_publisher_name_color">#7f7f7f</color>
+    <color name="snippets_text_color">#7f7f7f</color>
+    <color name="snippets_list_header_text_color">#7f7f7f</color>
+    <color name="snippets_headline_text_color">#000000</color>
+    <color name="snippets_read_more_link_color">@color/light_active_color</color>
 
     <!-- Signin promo screen colors -->
     <color name="illustration_background_color">#4FC3F7</color>
@@ -161,9 +167,9 @@
     <color name="smart_lock_auto_signin_snackbar_background_color">#2196F3</color>
 
     <!-- Physical Web Nearby URLs colors -->
-    <color name="nearby_urls_header_color">#1c47c1</color>
-    <color name="nearby_urls_url_color">#099f39</color>
-    <color name="nearby_urls_description_color">#545454</color>
+    <color name="nearby_urls_header_color">#444</color>
+    <color name="nearby_urls_subheader_color">#777</color>
     <color name="nearby_urls_background_color">#fff</color>
+    <color name="physical_web_no_urls_text_color">#5a5a5a</color>
 
 </resources>

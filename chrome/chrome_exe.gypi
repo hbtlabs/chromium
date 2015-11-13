@@ -366,7 +366,7 @@
             # "chrome" etc.; should we try to extract from there instead?
           ],
           'dependencies': [
-            '../components/components.gyp:startup_metric_utils',
+            '../components/components.gyp:startup_metric_utils_browser',
             'chrome_resources.gyp:packed_extra_resources',
             'chrome_resources.gyp:packed_resources',
             # Copy Flash Player files to PRODUCT_DIR if applicable. Let the .gyp
@@ -410,7 +410,7 @@
             'chrome_process_finder',
             'chrome_version_resources',
             'installer_util',
-            'image_pre_reader',
+            'file_pre_reader',
             '../base/base.gyp:base',
             '../crypto/crypto.gyp:crypto',
             '../breakpad/breakpad.gyp:breakpad_handler',
@@ -509,11 +509,11 @@
     ['OS=="win"', {
       'targets': [
         {
-          'target_name': 'image_pre_reader',
+          'target_name': 'file_pre_reader',
           'type': 'static_library',
           'sources': [
-            'app/image_pre_reader_win.cc',
-            'app/image_pre_reader_win.h',
+            'app/file_pre_reader_win.cc',
+            'app/file_pre_reader_win.h',
           ],
           'dependencies': [
              '../base/base.gyp:base',

@@ -72,7 +72,6 @@ group("both_gn_and_gyp") {
     "//skia:skia_unittests",
     "//sql:sql_unittests",
     "//sync:sync_unit_tests",
-    "//third_party/openh264/tests:openh264_unittests",
     "//ui/base:ui_base_unittests",
     "//ui/gfx:gfx_unittests",
     "//url:url_unittests",
@@ -287,7 +286,7 @@ group("both_gn_and_gyp") {
 
     if (!is_chromecast) {
       deps += [
-        "//android_webview:system_webview_apk",
+        "//android_webview",
         "//chrome/android:chrome_junit_tests",
         "//chrome/android:chrome_public_apk",
         "//chrome/android:chrome_public_test_apk",
@@ -400,7 +399,6 @@ group("both_gn_and_gyp") {
       "//ppapi:pepper_hash_for_uma",
       "//ppapi:ppapi_perftests",
       "//sync:run_sync_testserver",
-      "//third_party/angle/src/tests:angle_end2end_tests",
       "//third_party/angle/src/tests:angle_unittests",
       "//third_party/codesighs:maptsvdifftool",
       "//third_party/leveldatabase:env_chromium_unittests",
@@ -408,6 +406,13 @@ group("both_gn_and_gyp") {
       "//third_party/libphonenumber:libphonenumber_unittests",
       "//ui/compositor:compositor_unittests",
     ]
+
+    if (!is_linux) {
+      # TODO(dpranke): Re-enable this once
+      # https://chromium-review.googlesource.com/#/c/312298/1 is rolled
+      # into chromium.
+      deps += [ "//third_party/angle/src/tests:angle_end2end_tests" ]
+    }
 
     if (enable_extensions) {
       deps += [ "//extensions/shell:app_shell" ]
@@ -653,7 +658,7 @@ group("gn_only") {
     }
   }
 
-  if (is_android) {
+  if (is_android || is_linux || is_chromeos) {
     deps += [ "//blimp" ]
   }
 

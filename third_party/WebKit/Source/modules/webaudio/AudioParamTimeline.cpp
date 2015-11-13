@@ -118,6 +118,31 @@ String AudioParamTimeline::eventToString(const ParamEvent& event)
     return s + "(" + args + ")";
 }
 
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createSetValueEvent(float value, double time)
+{
+    return ParamEvent(ParamEvent::SetValue, value, time, 0, 0, nullptr);
+}
+
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createLinearRampEvent(float value, double time)
+{
+    return ParamEvent(ParamEvent::LinearRampToValue, value, time, 0, 0, nullptr);
+}
+
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createExponentialRampEvent(float value, double time)
+{
+    return ParamEvent(ParamEvent::ExponentialRampToValue, value, time, 0, 0, nullptr);
+}
+
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createSetTargetEvent(float value, double time, double timeConstant)
+{
+    return ParamEvent(ParamEvent::SetTarget, value, time, timeConstant, 0, nullptr);
+}
+
+AudioParamTimeline::ParamEvent AudioParamTimeline::ParamEvent::createSetValueCurveEvent(DOMFloat32Array* curve, double time, double duration)
+{
+    return ParamEvent(ParamEvent::SetValueCurve, 0, time, 0, duration, curve);
+}
+
 void AudioParamTimeline::setValueAtTime(float value, double time, ExceptionState& exceptionState)
 {
     ASSERT(isMainThread());
@@ -125,7 +150,7 @@ void AudioParamTimeline::setValueAtTime(float value, double time, ExceptionState
     if (!isNonNegativeAudioParamTime(time, exceptionState))
         return;
 
-    insertEvent(ParamEvent(ParamEvent::SetValue, value, time, 0, 0, nullptr), exceptionState);
+    insertEvent(ParamEvent::createSetValueEvent(value, time), exceptionState);
 }
 
 void AudioParamTimeline::linearRampToValueAtTime(float value, double time, ExceptionState& exceptionState)
@@ -135,7 +160,7 @@ void AudioParamTimeline::linearRampToValueAtTime(float value, double time, Excep
     if (!isNonNegativeAudioParamTime(time, exceptionState))
         return;
 
-    insertEvent(ParamEvent(ParamEvent::LinearRampToValue, value, time, 0, 0, nullptr), exceptionState);
+    insertEvent(ParamEvent::createLinearRampEvent(value, time), exceptionState);
 }
 
 void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, ExceptionState& exceptionState)
@@ -146,7 +171,7 @@ void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, 
         || !isNonNegativeAudioParamTime(time, exceptionState))
         return;
 
-    insertEvent(ParamEvent(ParamEvent::ExponentialRampToValue, value, time, 0, 0, nullptr), exceptionState);
+    insertEvent(ParamEvent::createExponentialRampEvent(value, time), exceptionState);
 }
 
 void AudioParamTimeline::setTargetAtTime(float target, double time, double timeConstant, ExceptionState& exceptionState)
@@ -157,7 +182,7 @@ void AudioParamTimeline::setTargetAtTime(float target, double time, double timeC
         || !isNonNegativeAudioParamTime(timeConstant, exceptionState, "Time constant"))
         return;
 
-    insertEvent(ParamEvent(ParamEvent::SetTarget, target, time, timeConstant, 0, nullptr), exceptionState);
+    insertEvent(ParamEvent::createSetTargetEvent(target, time, timeConstant), exceptionState);
 }
 
 void AudioParamTimeline::setValueCurveAtTime(DOMFloat32Array* curve, double time, double duration, ExceptionState& exceptionState)
@@ -168,7 +193,7 @@ void AudioParamTimeline::setValueCurveAtTime(DOMFloat32Array* curve, double time
         || !isPositiveAudioParamTime(duration, exceptionState, "Duration"))
         return;
 
-    insertEvent(ParamEvent(ParamEvent::SetValueCurve, 0, time, 0, duration, curve), exceptionState);
+    insertEvent(ParamEvent::createSetValueCurveEvent(curve, time, duration), exceptionState);
 }
 
 void AudioParamTimeline::insertEvent(const ParamEvent& event, ExceptionState& exceptionState)
@@ -569,21 +594,9 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
 
                     // Curve events have duration, so don't just use next event time.
                     double duration = event.duration();
-                    double durationFrames = duration * sampleRate;
-                    // How much to step the curve index for each frame.  We want the curve index to
-                    // be exactly equal to the last index (numberOfCurvePoints - 1) after
-                    // durationFrames - 1 frames.  In this way, the last output value will equal the
-                    // last value in the curve array.
-                    double curvePointsPerFrame;
-
-                    // If the duration is less than a frame, we want to just output the last curve
-                    // value.  Do this by setting curvePointsPerFrame to be more than number of
-                    // points in the curve.  Then the curveVirtualIndex will always exceed the last
-                    // curve index, so that the last curve value will be used.
-                    if (durationFrames > 1)
-                        curvePointsPerFrame = (numberOfCurvePoints - 1) / (durationFrames - 1);
-                    else
-                        curvePointsPerFrame = numberOfCurvePoints + 1;
+                    // How much to step the curve index for each frame.  This is basically the term
+                    // (N - 1)/Td in the specification.
+                    double curvePointsPerFrame = (numberOfCurvePoints - 1) / duration / sampleRate;
 
                     if (!curve || !curveData || !numberOfCurvePoints || duration <= 0 || sampleRate <= 0) {
                         // Error condition - simply propagate previous value.

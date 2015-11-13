@@ -17,6 +17,7 @@
 #include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/base/switches.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
@@ -79,6 +80,7 @@
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/internal_document_state_data.h"
 #include "content/renderer/manifest/manifest_manager.h"
+#include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
 #include "content/renderer/media/crypto/render_cdm_factory.h"
 #include "content/renderer/media/media_permission_dispatcher_impl.h"
@@ -87,6 +89,7 @@
 #include "content/renderer/media/media_stream_renderer_factory_impl.h"
 #include "content/renderer/media/midi_dispatcher.h"
 #include "content/renderer/media/render_media_log.h"
+#include "content/renderer/media/renderer_webmediaplayer_delegate.h"
 #include "content/renderer/media/user_media_client_impl.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/memory_benchmarking_extension.h"
@@ -114,8 +117,10 @@
 #include "content/renderer/web_ui_extension.h"
 #include "content/renderer/websharedworker_proxy.h"
 #include "gin/modules/module_registry.h"
+#include "media/audio/audio_output_device.h"
 #include "media/base/audio_renderer_mixer_input.h"
 #include "media/base/media_log.h"
+#include "media/base/media_switches.h"
 #include "media/blink/webencryptedmediaclient_impl.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
@@ -195,7 +200,7 @@
 #include "media/mojo/services/mojo_cdm_factory.h"
 #include "mojo/application/public/cpp/connect.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA) && !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
@@ -455,28 +460,28 @@ WebURLRequest CreateURLRequestForNavigation(
   return request;
 }
 
-void UpdateFrameNavigationTiming(WebFrame* frame,
-                                 base::TimeTicks browser_navigation_start,
-                                 base::TimeTicks renderer_navigation_start) {
-  // The browser provides the navigation_start time to bootstrap the
-  // Navigation Timing information for the browser-initiated navigations. In
-  // case of cross-process navigations, this carries over the time of
-  // finishing the onbeforeunload handler of the previous page.
+// Sanitizes the navigation_start timestamp for browser-initiated navigations,
+// where the browser possibly has a better notion of start time than the
+// renderer. In the case of cross-process navigations, this carries over the
+// time of finishing the onbeforeunload handler of the previous page.
+// TimeTicks is sometimes not monotonic across processes, and because
+// |browser_navigation_start| is likely before this process existed,
+// InterProcessTimeTicksConverter won't help. The timestamp is sanitized by
+// clamping it to renderer_navigation_start, initialized earlier in the call
+// stack.
+base::TimeTicks SanitizeNavigationTiming(
+    blink::WebFrameLoadType load_type,
+    const base::TimeTicks& browser_navigation_start,
+    const base::TimeTicks& renderer_navigation_start) {
+  if (load_type != blink::WebFrameLoadType::Standard)
+    return base::TimeTicks();
   DCHECK(!browser_navigation_start.is_null());
-  if (frame->provisionalDataSource()) {
-    // |browser_navigation_start| is likely before this process existed, so we
-    // can't use InterProcessTimeTicksConverter. We need at least to ensure
-    // that the browser-side navigation start we set is not later than the one
-    // on the renderer side.
-    base::TimeTicks navigation_start = std::min(
-        browser_navigation_start, renderer_navigation_start);
-    double navigation_start_seconds =
-        (navigation_start - base::TimeTicks()).InSecondsF();
-    frame->provisionalDataSource()->setNavigationStartTime(
-        navigation_start_seconds);
-    // TODO(clamy): We need to provide additional timing values for the
-    // Navigation Timing API to work with browser-side navigations.
-  }
+  base::TimeTicks navigation_start =
+      std::min(browser_navigation_start, renderer_navigation_start);
+  // TODO(csharrison) Investigate how big a problem the cross process
+  // monotonicity really is and on what platforms. Log UMA for:
+  // |renderer_navigation_start - browser_navigation_start|
+  return navigation_start;
 }
 
 // PlzNavigate
@@ -748,7 +753,6 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
 #if defined(VIDEO_HOLE)
       contains_media_player_(false),
 #endif
-      has_played_media_(false),
       devtools_agent_(nullptr),
       wakelock_dispatcher_(nullptr),
       geolocation_dispatcher_(NULL),
@@ -758,6 +762,7 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       manifest_manager_(NULL),
       accessibility_mode_(AccessibilityModeOff),
       renderer_accessibility_(NULL),
+      media_player_delegate_(NULL),
       is_using_lofi_(false),
       weak_factory_(this) {
   std::pair<RoutingIDFrameMap::iterator, bool> result =
@@ -2150,10 +2155,10 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
 
 #if defined(OS_ANDROID) && !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
-  scoped_refptr<media::AudioRendererSink> audio_renderer_sink;
+  scoped_refptr<media::RestartableAudioRendererSink> audio_renderer_sink;
   media::WebMediaPlayerParams::Context3DCB context_3d_cb;
 #else
-  scoped_refptr<media::AudioRendererSink> audio_renderer_sink =
+  scoped_refptr<media::RestartableAudioRendererSink> audio_renderer_sink =
       render_thread->GetAudioRendererMixerManager()->CreateInput(
           routing_id_, sink_id.utf8(), frame->securityOrigin());
   media::WebMediaPlayerParams::Context3DCB context_3d_cb =
@@ -2164,7 +2169,8 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
   media::WebMediaPlayerParams params(
       base::Bind(&ContentRendererClient::DeferMediaLoad,
                  base::Unretained(GetContentClient()->renderer()),
-                 static_cast<RenderFrame*>(this), has_played_media_),
+                 static_cast<RenderFrame*>(this),
+                 GetWebMediaPlayerDelegate()->has_played_media()),
       audio_renderer_sink, media_log, render_thread->GetMediaThreadTaskRunner(),
       render_thread->GetWorkerTaskRunner(),
       render_thread->compositor_task_runner(), context_3d_cb,
@@ -2176,6 +2182,13 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
 #if defined(OS_ANDROID) && !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
   return CreateAndroidWebMediaPlayer(client, encrypted_client, params);
 #else
+#if defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableUnifiedMediaPipeline)) {
+    return CreateAndroidWebMediaPlayer(client, encrypted_client, params);
+  }
+#endif  // defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
+
 #if defined(ENABLE_MOJO_MEDIA) && !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
   scoped_ptr<media::RendererFactory> media_renderer_factory(
       new media::MojoRendererFactory(GetMediaServiceFactory()));
@@ -2190,10 +2203,10 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
         *render_thread->GetAudioHardwareConfig()));
   }
 #endif  // defined(ENABLE_MOJO_MEDIA) &&
-  // !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
+        // !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
 
   return new media::WebMediaPlayerImpl(
-      frame, client, encrypted_client, weak_factory_.GetWeakPtr(),
+      frame, client, encrypted_client, GetWebMediaPlayerDelegate()->AsWeakPtr(),
       media_renderer_factory.Pass(), GetCdmFactory(), params);
 #endif  // defined(OS_ANDROID) && !defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
 }
@@ -2605,13 +2618,7 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
 
   // The rest of RenderView assumes that a WebDataSource will always have a
   // non-null NavigationState.
-  if (content_initiated) {
-    document_state->set_navigation_state(
-        NavigationStateImpl::CreateContentInitiated());
-  } else {
-    document_state->set_navigation_state(CreateNavigationStateFromPending());
-    pending_navigation_params_.reset();
-  }
+  UpdateNavigationState(document_state);
 
   // DocumentState::referred_by_prefetcher_ is true if we are
   // navigating from a page that used prefetching using a link on that
@@ -2661,15 +2668,23 @@ void RenderFrameImpl::didCreateDataSource(blink::WebLocalFrame* frame,
     }
   }
 
+  NavigationStateImpl* navigation_state = static_cast<NavigationStateImpl*>(
+      document_state->navigation_state());
+
+  // Set the navigation start time in blink.
+  base::TimeTicks navigation_start =
+      navigation_state->common_params().navigation_start;
+  datasource->setNavigationStartTime(
+      (navigation_start - base::TimeTicks()).InSecondsF());
+  // TODO(clamy) We need to provide additional timing values for the Navigation
+  // Timing API to work with browser-side navigations.
+
   // Create the serviceworker's per-document network observing object if it
   // does not exist (When navigation happens within a page, the provider already
   // exists).
   if (ServiceWorkerNetworkProvider::FromDocumentState(
           DocumentState::FromDataSource(datasource)))
     return;
-
-  NavigationStateImpl* navigation_state = static_cast<NavigationStateImpl*>(
-      DocumentState::FromDataSource(datasource)->navigation_state());
 
   ServiceWorkerNetworkProvider::AttachToDocumentState(
       DocumentState::FromDataSource(datasource),
@@ -3155,11 +3170,10 @@ void RenderFrameImpl::didNavigateWithinPage(blink::WebLocalFrame* frame,
   // ExtraData will get the new NavigationState.  Similarly, if we did not
   // initiate this navigation, then we need to take care to reset any pre-
   // existing navigation state to a content-initiated navigation state.
-  // didCreateDataSource conveniently takes care of this for us.
-  didCreateDataSource(frame, frame->dataSource());
-
+  // UpdateNavigationState conveniently takes care of this for us.
   DocumentState* document_state =
       DocumentState::FromDataSource(frame->dataSource());
+  UpdateNavigationState(document_state);
   static_cast<NavigationStateImpl*>(document_state->navigation_state())
       ->set_was_within_same_page(true);
 
@@ -3987,22 +4001,6 @@ blink::WebVRClient* RenderFrameImpl::webVRClient() {
 }
 #endif
 
-void RenderFrameImpl::DidPlay(WebMediaPlayer* player) {
-  has_played_media_ = true;
-  Send(new FrameHostMsg_MediaPlayingNotification(
-      routing_id_, reinterpret_cast<int64>(player), player->hasVideo(),
-      player->hasAudio(), player->isRemote()));
-}
-
-void RenderFrameImpl::DidPause(WebMediaPlayer* player) {
-  Send(new FrameHostMsg_MediaPausedNotification(
-      routing_id_, reinterpret_cast<int64>(player)));
-}
-
-void RenderFrameImpl::PlayerGone(WebMediaPlayer* player) {
-  DidPause(player);
-}
-
 void RenderFrameImpl::didSerializeDataForFrame(
     const WebCString& data,
     WebPageSerializerClient::PageSerializationStatus status) {
@@ -4158,6 +4156,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     params.page_state = SingleHistoryItemToPageState(item);
     post_id = ExtractPostId(item);
   }
+  params.frame_unique_name = item.target().utf8();
   params.item_sequence_number = item.itemSequenceNumber();
   params.document_sequence_number = item.documentSequenceNumber();
 
@@ -4399,18 +4398,6 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
       info.extraData ||
       (pending_navigation_params_ &&
        !pending_navigation_params_->request_params.redirects.empty());
-
-#ifdef OS_ANDROID
-  // The handlenavigation API is deprecated and will be removed once
-  // crbug.com/325351 is resolved.
-  if (info.urlRequest.url() != GURL(kSwappedOutURL) &&
-      GetContentClient()->renderer()->HandleNavigation(
-          this, is_content_initiated, render_view_->opener_id_, frame_,
-          info.urlRequest, info.navigationType, info.defaultPolicy,
-          is_redirect)) {
-    return blink::WebNavigationPolicyIgnore;
-  }
-#endif
 
   Referrer referrer(
       RenderViewImpl::GetReferrerFromRequest(frame_, info.urlRequest));
@@ -4657,6 +4644,9 @@ void RenderFrameImpl::NavigateInternal(
   bool browser_side_navigation =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableBrowserSideNavigation);
+
+  // Lower bound for browser initiated navigation start time.
+  base::TimeTicks renderer_navigation_start = base::TimeTicks::Now();
   bool is_reload = IsReload(common_params.navigation_type);
   bool is_history_navigation = request_params.page_state.IsValid();
   WebURLRequest::CachePolicy cache_policy =
@@ -4686,6 +4676,14 @@ void RenderFrameImpl::NavigateInternal(
 
   pending_navigation_params_.reset(
       new NavigationParams(common_params, start_params, request_params));
+
+  // Unless the load is a WebFrameLoadType::Standard, this should remain
+  // uninitialized. It will be updated when the load type is determined to be
+  // Standard, or after the previous document's unload handler has been
+  // triggered. This occurs in UpdateNavigationState.
+  // TODO(csharrison) See if we can always use the browser timestamp.
+  pending_navigation_params_->common_params.navigation_start =
+      base::TimeTicks();
 
   // Create parameters for a standard navigation.
   blink::WebFrameLoadType load_type = blink::WebFrameLoadType::Standard;
@@ -4811,10 +4809,10 @@ void RenderFrameImpl::NavigateInternal(
   }
 
   if (should_load_request) {
-    // Record this before starting the load. We need a lower bound of this
-    // time to sanitize the navigationStart override set below.
-    base::TimeTicks renderer_navigation_start = base::TimeTicks::Now();
-
+    // Sanitize navigation start now that we know the load_type.
+    pending_navigation_params_->common_params.navigation_start =
+        SanitizeNavigationTiming(load_type, common_params.navigation_start,
+                                 renderer_navigation_start);
     // Perform a navigation to a data url if needed.
     if (!common_params.base_url_for_data_url.is_empty() ||
         (browser_side_navigation &&
@@ -4824,12 +4822,6 @@ void RenderFrameImpl::NavigateInternal(
       // Load the request.
       frame_->toWebLocalFrame()->load(request, load_type,
                                       item_for_history_navigation);
-    }
-
-    if (load_type == blink::WebFrameLoadType::Standard) {
-      UpdateFrameNavigationTiming(frame_,
-                                  common_params.navigation_start,
-                                  renderer_navigation_start);
     }
   }
 
@@ -4933,8 +4925,8 @@ WebMediaPlayer* RenderFrameImpl::CreateWebMediaPlayerForMediaStream(
     compositor_task_runner = base::MessageLoop::current()->task_runner();
 
   return new WebMediaPlayerMS(
-      frame_, client, weak_factory_.GetWeakPtr(), new RenderMediaLog(),
-      CreateRendererFactory(), compositor_task_runner,
+      frame_, client, GetWebMediaPlayerDelegate()->AsWeakPtr(),
+      new RenderMediaLog(), CreateRendererFactory(), compositor_task_runner,
       render_thread->GetMediaThreadTaskRunner(),
       render_thread->GetWorkerTaskRunner(), render_thread->GetGpuFactories(),
       sink_id, security_origin);
@@ -5200,6 +5192,22 @@ NavigationState* RenderFrameImpl::CreateNavigationStateFromPending() {
   return NavigationStateImpl::CreateContentInitiated();
 }
 
+void RenderFrameImpl::UpdateNavigationState(DocumentState* document_state) {
+  if (pending_navigation_params_) {
+    // If this is a browser-initiated load that doesn't override
+    // navigation_start, set it here.
+    if (pending_navigation_params_->common_params.navigation_start.is_null()) {
+      pending_navigation_params_->common_params.navigation_start =
+          base::TimeTicks::Now();
+    }
+    document_state->set_navigation_state(CreateNavigationStateFromPending());
+    pending_navigation_params_.reset();
+  } else {
+    document_state->set_navigation_state(
+        NavigationStateImpl::CreateContentInitiated());
+  }
+}
+
 #if defined(OS_ANDROID)
 WebMediaPlayer* RenderFrameImpl::CreateAndroidWebMediaPlayer(
     WebMediaPlayerClient* client,
@@ -5231,9 +5239,10 @@ WebMediaPlayer* RenderFrameImpl::CreateAndroidWebMediaPlayer(
         context_provider, gpu_channel_host, routing_id_);
   }
 
-  return new WebMediaPlayerAndroid(
-      frame_, client, encrypted_client, weak_factory_.GetWeakPtr(),
-      GetMediaPlayerManager(), GetCdmFactory(), stream_texture_factory, params);
+  return new WebMediaPlayerAndroid(frame_, client, encrypted_client,
+                                   GetWebMediaPlayerDelegate()->AsWeakPtr(),
+                                   GetMediaPlayerManager(), GetCdmFactory(),
+                                   stream_texture_factory, params);
 }
 
 RendererMediaPlayerManager* RenderFrameImpl::GetMediaPlayerManager() {
@@ -5334,6 +5343,27 @@ mojo::ServiceProviderPtr RenderFrameImpl::ConnectToApplication(
                                     nullptr, nullptr,
                                     base::Bind(&OnGotContentHandlerID));
   return service_provider.Pass();
+}
+
+media::RendererWebMediaPlayerDelegate*
+RenderFrameImpl::GetWebMediaPlayerDelegate() {
+  if (!media_player_delegate_)
+    media_player_delegate_ = new media::RendererWebMediaPlayerDelegate(this);
+  return media_player_delegate_;
+}
+
+void RenderFrameImpl::checkIfAudioSinkExistsAndIsAuthorized(
+    const blink::WebString& sink_id,
+    const blink::WebSecurityOrigin& security_origin,
+    blink::WebSetSinkIdCallbacks* web_callbacks) {
+  media::SwitchOutputDeviceCB callback =
+      media::ConvertToSwitchOutputDeviceCB(web_callbacks);
+  scoped_refptr<media::AudioOutputDevice> device =
+      AudioDeviceFactory::NewOutputDevice(routing_id_, 0, sink_id.utf8(),
+                                          security_origin);
+  media::OutputDeviceStatus status = device->GetDeviceStatus();
+  device->Stop();
+  callback.Run(status);
 }
 
 }  // namespace content

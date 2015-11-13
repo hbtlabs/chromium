@@ -7,6 +7,7 @@
 #include "cc/output/compositor_frame_ack.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
+#include "content/common/input/did_overscroll_params.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -105,23 +106,27 @@ IPC_SYNC_MESSAGE_ROUTED2_2(SyncCompositorMsg_HandleInputEvent,
                            content::SyncCompositorCommonBrowserParams,
                            IPC::WebInputEventPointer,
                            content::SyncCompositorCommonRendererParams,
-                           content::InputEventAckState);
+                           content::InputEventAckState)
 
 IPC_SYNC_MESSAGE_ROUTED2_1(SyncCompositorMsg_BeginFrame,
                            content::SyncCompositorCommonBrowserParams,
                            cc::BeginFrameArgs,
-                           content::SyncCompositorCommonRendererParams);
+                           content::SyncCompositorCommonRendererParams)
 
 IPC_SYNC_MESSAGE_ROUTED2_1(SyncCompositorMsg_ComputeScroll,
                            content::SyncCompositorCommonBrowserParams,
                            base::TimeTicks,
-                           content::SyncCompositorCommonRendererParams);
+                           content::SyncCompositorCommonRendererParams)
 
 IPC_SYNC_MESSAGE_ROUTED2_2(SyncCompositorMsg_DemandDrawHw,
                            content::SyncCompositorCommonBrowserParams,
                            content::SyncCompositorDemandDrawHwParams,
                            content::SyncCompositorCommonRendererParams,
-                           cc::CompositorFrame);
+                           cc::CompositorFrame)
 
 IPC_MESSAGE_ROUTED1(SyncCompositorHostMsg_UpdateState,
-                    content::SyncCompositorCommonRendererParams);
+                    content::SyncCompositorCommonRendererParams)
+
+IPC_MESSAGE_ROUTED2(SyncCompositorHostMsg_OverScroll,
+                    content::SyncCompositorCommonRendererParams,
+                    content::DidOverscrollParams)

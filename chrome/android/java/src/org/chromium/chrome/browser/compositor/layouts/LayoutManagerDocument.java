@@ -14,7 +14,9 @@ import android.view.ViewGroup;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContentViewDelegate;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
@@ -74,12 +76,13 @@ public class LayoutManagerDocument extends LayoutManager
     // Event Filter Handlers
     /** A {@link GestureHandler} that will delegate all events to {@link #getActiveLayout()}. */
     protected final GestureHandler mGestureHandler;
-    private final EdgeSwipeHandler mContextualSearchEdgeSwipeHandler;
+    private final EdgeSwipeHandler mOverlayPanelEdgeSwipeHandler;
     private final EdgeSwipeHandler mReaderModeEdgeSwipeHandler;
 
     // Internal State
     private final SparseArray<LayoutTab> mTabCache = new SparseArray<LayoutTab>();
     private final ContextualSearchPanel mContextualSearchPanel;
+    private final OverlayPanelManager mOverlayPanelManager;
     /** A delegate for interacting with the Contextual Search manager. */
     protected ContextualSearchManagementDelegate mContextualSearchDelegate;
 
@@ -95,7 +98,8 @@ public class LayoutManagerDocument extends LayoutManager
         Context context = host.getContext();
         LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
-        mContextualSearchPanel = new ContextualSearchPanel(context, this);
+        mOverlayPanelManager = new OverlayPanelManager();
+        mContextualSearchPanel = new ContextualSearchPanel(context, this, mOverlayPanelManager);
 
         mReaderModePanelSelector = new ReaderModePanelSelector() {
             @Override
@@ -109,7 +113,7 @@ public class LayoutManagerDocument extends LayoutManager
         };
 
         // Build Event Filter Handlers
-        mContextualSearchEdgeSwipeHandler = new ContextualSearchEdgeSwipeHandler(this);
+        mOverlayPanelEdgeSwipeHandler = new OverlayPanelEdgeSwipeHandler(this);
         mReaderModeEdgeSwipeHandler = new ReaderModeEdgeSwipeHandler(
                 mReaderModePanelSelector, this);
         mGestureHandler = new GestureHandlerLayoutDelegate(this);
@@ -119,9 +123,9 @@ public class LayoutManagerDocument extends LayoutManager
         mStaticEdgeEventFilter =
                 new EdgeSwipeEventFilter(context, this, new StaticEdgeSwipeHandler());
         mContextualSearchEventFilter = new ContextualSearchEventFilter(
-                context, this, mGestureHandler, mContextualSearchPanel);
+                context, this, mGestureHandler, mOverlayPanelManager);
         EventFilter contextualSearchStaticEventFilter = new ContextualSearchStaticEventFilter(
-                context, this, mContextualSearchPanel, mContextualSearchEdgeSwipeHandler, this);
+                context, this, mOverlayPanelManager, mOverlayPanelEdgeSwipeHandler, this);
         EventFilter readerModeStaticEventFilter = new ReaderModeStaticEventFilter(
                 context, this, mReaderModePanelSelector, mReaderModeEdgeSwipeHandler, this);
         EventFilter staticCascadeEventFilter = new CascadeEventFilter(context, this,
@@ -130,9 +134,9 @@ public class LayoutManagerDocument extends LayoutManager
 
         // Build Layouts
         mStaticLayout = new StaticLayout(
-                context, this, renderHost, staticCascadeEventFilter, mContextualSearchPanel);
+                context, this, renderHost, staticCascadeEventFilter, mOverlayPanelManager);
         mContextualSearchLayout = new ContextualSearchLayout(
-                context, this, renderHost, mContextualSearchEventFilter, mContextualSearchPanel);
+                context, this, renderHost, mContextualSearchEventFilter, mOverlayPanelManager);
 
         // Set up layout parameters
         mStaticLayout.setLayoutHandlesTabLifecycles(true);
@@ -191,7 +195,7 @@ public class LayoutManagerDocument extends LayoutManager
 
         if (mStaticLayout != null) mStaticLayout.destroy();
         if (mContextualSearchLayout != null) mContextualSearchLayout.destroy();
-        if (mContextualSearchPanel != null) mContextualSearchPanel.destroy();
+        if (mOverlayPanelManager != null) mOverlayPanelManager.destroy();
         if (mTabModelSelectorTabObserver != null) mTabModelSelectorTabObserver.destroy();
     }
 
@@ -314,7 +318,8 @@ public class LayoutManagerDocument extends LayoutManager
     @Override
     public void handleTapContextualSearchBar(long time, float x, float y) {
         if (getActiveLayout() == mContextualSearchLayout) return;
-        if (mContextualSearchDelegate == null) return;
+
+        OverlayPanel panel = mOverlayPanelManager.getActivePanel();
 
         // When not in compatibility mode, tapping on the Search Bar will expand the Panel,
         // therefore we must start showing the ContextualSearchLayout.
@@ -323,11 +328,11 @@ public class LayoutManagerDocument extends LayoutManager
         // ContextualSearchLayout. Coordinate with dtrainor@ to solve this. It might be
         // necessary for the ContextualSearchPanel to be able to trigger the display of the
         // ContextualSearchLayout.
-        if (!mContextualSearchDelegate.isRunningInCompatibilityMode()) {
+        if (panel != null && panel.supportsContextualSearchLayout()) {
             showContextualSearchLayout(true);
         }
 
-        mContextualSearchPanel.handleClick(time, x, y);
+        mOverlayPanelManager.getActivePanel().handleClick(time, x, y);
     }
 
     @Override
@@ -360,35 +365,28 @@ public class LayoutManagerDocument extends LayoutManager
         }
     }
 
-    private class ContextualSearchEdgeSwipeHandler extends EdgeSwipeHandlerLayoutDelegate {
-        public ContextualSearchEdgeSwipeHandler(LayoutProvider provider) {
+    private class OverlayPanelEdgeSwipeHandler extends EdgeSwipeHandlerLayoutDelegate {
+        public OverlayPanelEdgeSwipeHandler(LayoutProvider provider) {
             super(provider);
         }
 
         @Override
         public void swipeStarted(ScrollDirection direction, float x, float y) {
-            if (isCompatabilityMode()) {
-                mContextualSearchDelegate.openResolvedSearchUrlInNewTab();
-                return;
-            }
-
-            if (getActiveLayout() != mContextualSearchLayout) {
+            OverlayPanel panel = mOverlayPanelManager.getActivePanel();
+            if (getActiveLayout() != mContextualSearchLayout && panel != null
+                    && panel.supportsContextualSearchLayout()) {
                 showContextualSearchLayout(false);
             }
 
-            super.swipeStarted(direction, x, y);
+            if (panel != null && !panel.onInterceptBarSwipe()) {
+                super.swipeStarted(direction, x, y);
+            }
         }
 
         @Override
         public boolean isSwipeEnabled(ScrollDirection direction) {
-            return direction == ScrollDirection.UP
-                    && mContextualSearchDelegate != null
-                    && mContextualSearchDelegate.isShowingSearchPanel();
-        }
-
-        private boolean isCompatabilityMode() {
-            return mContextualSearchDelegate != null
-                    && mContextualSearchDelegate.isRunningInCompatibilityMode();
+            OverlayPanel panel = mOverlayPanelManager.getActivePanel();
+            return direction == ScrollDirection.UP && panel != null && panel.isShowing();
         }
     }
 

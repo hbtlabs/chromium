@@ -11,9 +11,11 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
+import org.chromium.android_webview.test.util.JavascriptEventObserver;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
@@ -25,6 +27,7 @@ import org.chromium.net.test.util.TestWebServer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -720,12 +723,16 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
         assertEquals(redirectTarget,
                 mShouldOverrideUrlLoadingHelper.getShouldOverrideUrlLoadingUrl());
         assertEquals(serverSideRedirect, mShouldOverrideUrlLoadingHelper.isRedirect());
-        assertFalse(mShouldOverrideUrlLoadingHelper.hasUserGesture());
+        // We keep the user gesture from the initial navigation for serverside redirects but drop
+        // the user gesture for browser initiated redirects.
+        assertEquals(serverSideRedirect, mShouldOverrideUrlLoadingHelper.hasUserGesture());
         assertTrue(mShouldOverrideUrlLoadingHelper.isMainFrame());
     }
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOn302Redirect() throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
         final String redirectUrl = mWebServer.setRedirect("/302.html", redirectTargetUrl);
@@ -734,6 +741,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOnMetaRefreshRedirect() throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
         final String redirectUrl = addPageToTestServer("/meta_refresh.html",
@@ -744,6 +753,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOnJavaScriptLocationImmediateAssignRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
@@ -754,6 +765,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOnJavaScriptLocationImmediateReplaceRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
@@ -764,6 +777,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOnJavaScriptLocationDelayedAssignRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
@@ -774,6 +789,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testCalledOnJavaScriptLocationDelayedReplaceRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
@@ -890,6 +907,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testNullContentsClientOpenLink() throws Throwable {
         try {
             // The test will fire real intents through the test activity.
@@ -940,6 +959,8 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testNullContentsClientClickableContent() throws Throwable {
         try {
             // The test will fire real intents through the test activity.
@@ -1023,13 +1044,101 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testClickableContent() throws Throwable {
         doTestClickableContent(true);
     }
 
     @SmallTest
     @Feature({"AndroidWebView"})
+    // Run in single-process mode only. Blocked by software draws support crbug.com/545611.
+    @ParameterizedTest.Set
     public void testClickableContentInIframe() throws Throwable {
         doTestClickableContent(false);
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testXhrInLink() throws Throwable {
+        standardSetup();
+        final CountDownLatch shouldOverrideUrlLoadingSignal = new CountDownLatch(1);
+
+        final String xhrPath = "/xhrPath.html";
+        final String xhrUrl = mWebServer.setResponseWithRunnableAction(
+                xhrPath, CommonResources.makeHtmlPageFrom("", ""), null, new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            shouldOverrideUrlLoadingSignal.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                });
+
+        final String xhrJs = "function xhrFunction() {"
+                + "  var xhr = new XMLHttpRequest();"
+                + "  xhr.onload=function() {"
+                + "     console.info('xhr loaded');"
+                + "     window.jsInterface.setValue(true);"
+                + "  };"
+                + "  xhr.onerror=function() {"
+                + "     console.info('xhr failed, status ' + xhr.status);"
+                + "     window.jsInterface.setValue(false);"
+                + "  };"
+                + "  xhr.open('GET', '" + xhrUrl + "', true);"
+                + "  xhr.send();"
+                + "};";
+
+        String pageWithXhrLink = makeHtmlPageFrom(
+                "<script>" + xhrJs + "</script>", "<img onclick=\"xhrFunction(); location.href='"
+                        + "thiswillbe://intercepted/"
+                        + "'\" class=\"big\" id=\"link\" />");
+
+        final String startPath = "/startPath.html";
+        final String startUrl = addPageToTestServer(startPath, pageWithXhrLink);
+
+        enableJavaScriptOnUiThread(mAwContents);
+        final BooleanValueJavascriptObserver jsInterface = new BooleanValueJavascriptObserver();
+
+        // add javascript interface
+        getInstrumentation().runOnMainSync(new Runnable() {
+            @Override
+            public void run() {
+                jsInterface.register(mAwContents.getContentViewCore(), "jsInterface");
+            }
+        });
+
+        loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), startUrl);
+
+        setShouldOverrideUrlLoadingReturnValueOnUiThread(true);
+        final int shouldOverrideUrlLoadingCallCount =
+                mShouldOverrideUrlLoadingHelper.getCallCount();
+
+        assertEquals(0, mWebServer.getRequestCount(xhrPath));
+
+        clickOnLinkUsingJs();
+
+        // Make the server xhr response wait until the navigation request is intercepted.
+        mShouldOverrideUrlLoadingHelper.waitForCallback(shouldOverrideUrlLoadingCallCount);
+        shouldOverrideUrlLoadingSignal.countDown();
+
+        jsInterface.waitForEvent(WAIT_TIMEOUT_MS);
+        assertTrue(jsInterface.getValue());
+        assertEquals(1, mWebServer.getRequestCount(xhrPath));
+    }
+
+    private static class BooleanValueJavascriptObserver extends JavascriptEventObserver {
+        private boolean mValue = false;
+
+        public void setValue(boolean value) {
+            mValue = value;
+            notifyJava();
+        }
+
+        public boolean getValue() {
+            return mValue;
+        }
     }
 }

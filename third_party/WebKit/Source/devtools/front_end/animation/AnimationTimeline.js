@@ -14,21 +14,14 @@ WebInspector.AnimationTimeline = function()
     this.element.classList.add("animations-timeline");
 
     this._grid = this.contentElement.createSVGChild("svg", "animation-timeline-grid");
-    this.contentElement.appendChild(this._createScrubber());
-    WebInspector.installDragHandle(this._timelineScrubberHead, this._scrubberDragStart.bind(this), this._scrubberDragMove.bind(this), this._scrubberDragEnd.bind(this), "move");
-    this._timelineScrubberHead.textContent = WebInspector.UIString(Number.millisToString(0));
 
     this._underlyingPlaybackRate = 1;
-    this.contentElement.appendChild(this._createHeader());
+    this._createHeader();
     this._animationsContainer = this.contentElement.createChild("div", "animation-timeline-rows");
 
-    this._emptyTimelineMessage = this._animationsContainer.createChild("div", "animation-timeline-empty-message");
-    var message = this._emptyTimelineMessage.createChild("div");
-    message.textContent = WebInspector.UIString("Trigger animations on the page to view and tweak them on the animation timeline.");
-
     this._duration = this._defaultDuration();
-    this._scrubberRadius = 30;
-    this._timelineControlsWidth = 230;
+    this._scrubberRadius = 25;
+    this._timelineControlsWidth = 175;
     /** @type {!Map.<!DOMAgent.BackendNodeId, !WebInspector.AnimationTimeline.NodeUI>} */
     this._nodesMap = new Map();
     this._groupBuffer = [];
@@ -121,9 +114,6 @@ WebInspector.AnimationTimeline.prototype = {
         return this._timelineScrubber;
     },
 
-    /**
-     * @return {!Element}
-     */
     _createHeader: function()
     {
         /**
@@ -136,9 +126,9 @@ WebInspector.AnimationTimeline.prototype = {
             this._updatePlaybackControls();
         }
 
-        var container = createElementWithClass("div", "animation-timeline-header");
+        this._previewContainer = this.contentElement.createChild("div", "animation-timeline-buffer");
+        var container = this.contentElement.createChild("div", "animation-timeline-header");
         var controls = container.createChild("div", "animation-controls");
-        this._previewContainer = container.createChild("div", "animation-timeline-buffer");
 
         var toolbar = new WebInspector.Toolbar(controls);
         toolbar.element.classList.add("animation-controls-toolbar");
@@ -158,6 +148,12 @@ WebInspector.AnimationTimeline.prototype = {
         this._playbackSlider.value = this._playbackSlider.max;
         this._playbackSlider.addEventListener("input", playbackSliderInputHandler.bind(this));
         this._updateAnimationsPlaybackRate();
+
+        var gridHeader = container.createChild("div", "animation-grid-header");
+        WebInspector.installDragHandle(gridHeader, this._repositionScrubber.bind(this), this._scrubberDragMove.bind(this), this._scrubberDragEnd.bind(this), "pointer");
+        container.appendChild(this._createScrubber());
+        WebInspector.installDragHandle(this._timelineScrubberHead, this._scrubberDragStart.bind(this), this._scrubberDragMove.bind(this), this._scrubberDragEnd.bind(this), "move");
+        this._timelineScrubberHead.textContent = WebInspector.UIString(Number.millisToString(0));
 
         return container;
     },
@@ -198,8 +194,6 @@ WebInspector.AnimationTimeline.prototype = {
 
     _controlButtonToggle: function()
     {
-        if (this._emptyTimelineMessage)
-            return;
         if (this._controlButton.element.classList.contains("play-outline-toolbar-item"))
             this._togglePause(false);
         else if (this._controlButton.element.classList.contains("replay-outline-toolbar-item"))
@@ -270,6 +264,7 @@ WebInspector.AnimationTimeline.prototype = {
             return;
         this._selectedGroup.seekTo(0);
         this._animateTime(0);
+        this._updateControlButton();
     },
 
     /**
@@ -363,7 +358,8 @@ WebInspector.AnimationTimeline.prototype = {
         if (this._previewMap.get(group)) {
             if (this._selectedGroup === group)
                 this._syncScrubber();
-            this._previewMap.get(group).element.animate([{ opacity: "0.3", transform: "scale(0.7)" }, { opacity: "1", transform: "scale(1)" }], { duration : 150, easing: "cubic-bezier(0, 0, 0.2, 1)" });
+            else
+                this._previewMap.get(group).replay();
             return;
         }
         this._groupBuffer.push(group);
@@ -401,8 +397,10 @@ WebInspector.AnimationTimeline.prototype = {
             ui.element.classList.toggle("selected", this._selectedGroup === group);
         }
 
-        if (this._selectedGroup === group)
+        if (this._selectedGroup === group) {
+            this._replay();
             return;
+        }
         this._selectedGroup = group;
         this._previewMap.forEach(applySelectionClass, this);
         this._reset();
@@ -410,7 +408,7 @@ WebInspector.AnimationTimeline.prototype = {
             this._addAnimation(anim);
         this.scheduleRedraw();
         this._timelineScrubber.classList.remove("hidden");
-        this._syncScrubber();
+        this._replay();
     },
 
     /**
@@ -429,15 +427,6 @@ WebInspector.AnimationTimeline.prototype = {
             uiAnimation.setNode(node);
             node[this._symbol] = nodeUI;
         }
-
-        if (this._emptyTimelineMessage) {
-            this._emptyTimelineMessage.remove();
-            delete this._emptyTimelineMessage;
-        }
-
-        // Ignore Web Animations custom effects & groups
-        if (animation.type() === "WebAnimation" && animation.source().keyframesRule().keyframes().length === 0)
-            return;
 
         this._resizeWindow(animation);
 
@@ -468,14 +457,14 @@ WebInspector.AnimationTimeline.prototype = {
     {
         const gridSize = 250;
         this._grid.setAttribute("width", this.width());
-        this._grid.setAttribute("height", this._animationsContainer.offsetHeight + 43);
+        this._grid.setAttribute("height", this._animationsContainer.offsetHeight + 30);
         this._grid.setAttribute("shape-rendering", "crispEdges");
         this._grid.removeChildren();
         var lastDraw = undefined;
         for (var time = 0; time < this.duration(); time += gridSize) {
             var line = this._grid.createSVGChild("rect", "animation-timeline-grid-line");
             line.setAttribute("x", time * this.pixelMsRatio());
-            line.setAttribute("y", 0);
+            line.setAttribute("y", 23);
             line.setAttribute("height", "100%");
             line.setAttribute("width", 1);
         }
@@ -485,7 +474,7 @@ WebInspector.AnimationTimeline.prototype = {
                 lastDraw = gridWidth;
                 var label = this._grid.createSVGChild("text", "animation-timeline-grid-label");
                 label.setAttribute("x", gridWidth + 5);
-                label.setAttribute("y", 15);
+                label.setAttribute("y", 16);
                 label.textContent = WebInspector.UIString(Number.millisToString(time));
             }
         }
@@ -602,6 +591,30 @@ WebInspector.AnimationTimeline.prototype = {
      * @param {!Event} event
      * @return {boolean}
      */
+    _repositionScrubber: function(event)
+    {
+        if (!this._selectedGroup)
+            return false;
+
+        // Seek to current mouse position.
+        if (!this._gridOffsetLeft)
+            this._gridOffsetLeft = this._grid.totalOffsetLeft();
+        var seekTime = Math.max(0, event.x - this._gridOffsetLeft) / this.pixelMsRatio();
+        this._selectedGroup.seekTo(seekTime);
+        this._togglePause(true);
+        this._animateTime(seekTime);
+        this._updateControlButton();
+
+        // Interface with scrubber drag.
+        this._originalScrubberTime = seekTime;
+        this._originalMousePosition = event.x;
+        return true;
+    },
+
+    /**
+     * @param {!Event} event
+     * @return {boolean}
+     */
     _scrubberDragStart: function(event)
     {
         if (!this._scrubberPlayer || !this._selectedGroup)
@@ -610,7 +623,7 @@ WebInspector.AnimationTimeline.prototype = {
         this._originalScrubberTime = this._scrubberPlayer.currentTime;
         this._timelineScrubber.classList.remove("animation-timeline-end");
         this._scrubberPlayer.pause();
-        this._originalMousePosition = new WebInspector.Geometry.Point(event.x, event.y);
+        this._originalMousePosition = event.x;
 
         this._togglePause(true);
         this._updateControlButton();
@@ -622,10 +635,10 @@ WebInspector.AnimationTimeline.prototype = {
      */
     _scrubberDragMove: function(event)
     {
-        var delta = event.x - this._originalMousePosition.x;
-        this._scrubberPlayer.currentTime = Math.min(this._originalScrubberTime + delta / this.pixelMsRatio(), this.duration() - this._scrubberRadius / this.pixelMsRatio());
-        var currentTime = Math.max(0, Math.round(this._scrubberPlayer.currentTime));
-        this._timelineScrubberHead.textContent = WebInspector.UIString(Number.millisToString(currentTime));
+        var delta = event.x - this._originalMousePosition;
+        var currentTime = Math.max(0, Math.min(this._originalScrubberTime + delta / this.pixelMsRatio(), this.duration() - this._scrubberRadius / this.pixelMsRatio()));
+        this._scrubberPlayer.currentTime = currentTime;
+        this._timelineScrubberHead.textContent = WebInspector.UIString(Number.millisToString(Math.round(currentTime)));
         this._selectedGroup.seekTo(currentTime);
     },
 

@@ -66,6 +66,7 @@
 #include "core/page/SpatialNavigation.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/PopupMenu.h"
+#include "platform/TraceEvent.h"
 #include "platform/text/PlatformLocale.h"
 
 using namespace WTF::Unicode;
@@ -797,6 +798,7 @@ void HTMLSelectElement::setRecalcListItems()
 
 void HTMLSelectElement::recalcListItems(bool updateSelectedStates) const
 {
+    TRACE_EVENT0("blink", "HTMLSelectElement::recalcListItems");
     m_listItems.clear();
 
     m_shouldRecalcListItems = false;
@@ -962,6 +964,7 @@ void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
 // operations.
 void HTMLSelectElement::selectOption(int optionIndex, SelectOptionFlags flags)
 {
+    TRACE_EVENT0("blink", "HTMLSelectElement::selectOption");
     bool shouldDeselect = !m_multiple || (flags & DeselectOtherOptions);
 
     const WillBeHeapVector<RawPtrWillBeMember<HTMLElement>>& items = listItems();
@@ -1068,6 +1071,7 @@ void HTMLSelectElement::dispatchBlurEvent(Element* newFocusedElement, WebFocusTy
     // This matches other browsers' behavior.
     if (usesMenuList())
         dispatchInputAndChangeEventForMenuList();
+    m_lastOnChangeSelection.clear();
     HTMLFormControlElementWithState::dispatchBlurEvent(newFocusedElement, type, sourceCapabilities);
 }
 
@@ -1335,7 +1339,7 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
 
     if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton) {
         InputDeviceCapabilities* sourceCapabilities = toMouseEvent(event)->fromTouch() ? InputDeviceCapabilities::firesTouchEventsSourceCapabilities() : InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities();
-        focus(true, WebFocusTypeNone, sourceCapabilities);
+        focus(FocusParams(SelectionBehaviorOnFocus::Restore, WebFocusTypeNone, sourceCapabilities));
         if (layoutObject() && layoutObject()->isMenuList() && !isDisabledFormControl()) {
             if (popupIsVisible()) {
                 hidePopup();
@@ -1494,6 +1498,9 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
 
         if (Page* page = document().page())
             page->autoscrollController().startAutoscrollForSelection(layoutObject());
+        // Mousedown didn't happen in this element.
+        if (m_lastOnChangeSelection.isEmpty())
+            return;
 
         int listIndex = listIndexForEventTargetOption(*mouseEvent);
         if (listIndex >= 0) {

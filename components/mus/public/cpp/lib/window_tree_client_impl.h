@@ -5,11 +5,12 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 
+#include "base/containers/scoped_ptr_map.h"
 #include "components/mus/public/cpp/types.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace gfx {
 class Insets;
@@ -17,22 +18,26 @@ class Size;
 }
 
 namespace mus {
+class InFlightChange;
+class WindowTreeClientImplPrivate;
 class WindowTreeConnection;
 class WindowTreeDelegate;
 
+enum class ChangeType;
+
 // Manages the connection with the Window Server service.
 class WindowTreeClientImpl : public WindowTreeConnection,
-                             public mus::mojom::WindowTreeClient {
+                             public mojom::WindowTreeClient {
  public:
-  WindowTreeClientImpl(
-      WindowTreeDelegate* delegate,
-      mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request);
+  WindowTreeClientImpl(WindowTreeDelegate* delegate,
+                       WindowManagerDelegate* window_manager_delegate,
+                       mojo::InterfaceRequest<mojom::WindowTreeClient> request);
   ~WindowTreeClientImpl() override;
 
   // Wait for OnEmbed(), returning when done.
   void WaitForEmbed();
 
-  bool connected() const { return tree_; }
+  bool connected() const { return tree_ != nullptr; }
   ConnectionSpecificId connection_id() const { return connection_id_; }
 
   // API exposed to the window implementations that pushes local changes to the
@@ -45,6 +50,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void AddChild(Id child_id, Id parent_id);
   void RemoveChild(Id child_id, Id parent_id);
 
+  void AddTransientWindow(Window* window, Id transient_window_id);
+  void RemoveTransientWindowFromParent(Window* window);
+
   void Reorder(Id window_id,
                Id relative_window_id,
                mojom::OrderDirection direction);
@@ -52,22 +60,24 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // Returns true if the specified window was created by this connection.
   bool OwnsWindow(Id id) const;
 
-  void SetBounds(Id window_id, const gfx::Rect& bounds);
+  void SetBounds(Window* window,
+                 const gfx::Rect& old_bounds,
+                 const gfx::Rect& bounds);
   void SetClientArea(Id window_id, const gfx::Insets& client_area);
   void SetFocus(Id window_id);
   void SetVisible(Id window_id, bool visible);
-  void SetProperty(Id window_id,
+  void SetProperty(Window* window,
                    const std::string& name,
-                   const std::vector<uint8_t>& data);
+                   mojo::Array<uint8_t> data);
   void SetWindowTextInputState(Id window_id, mojo::TextInputStatePtr state);
   void SetImeVisibility(Id window_id,
                         bool visible,
                         mojo::TextInputStatePtr state);
 
   void Embed(Id window_id,
-             mus::mojom::WindowTreeClientPtr client,
+             mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
-             const mus::mojom::WindowTree::EmbedCallback& callback);
+             const mojom::WindowTree::EmbedCallback& callback);
 
   void RequestSurface(Id window_id,
                       mojom::SurfaceType type,
@@ -93,16 +103,31 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   void SetPreferredSize(Id window_id, const gfx::Size& size);
   void SetShowState(Id window_id, mojom::ShowState show_state);
+  void SetResizeBehavior(Id window_id, mojom::ResizeBehavior resize_behavior);
 
  private:
+  friend class WindowTreeClientImplPrivate;
+
   typedef std::map<Id, Window*> IdToWindowMap;
 
-  Id CreateWindowOnServer();
+  using InFlightMap = base::ScopedPtrMap<uint32_t, scoped_ptr<InFlightChange>>;
 
-  void OnSetBoundsResponse(Id window_id,
-                           const gfx::Rect& requested_bounds,
-                           const gfx::Rect& real_bounds,
-                           bool success);
+  // Returns the oldest InFlightChange that matches |change|.
+  InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
+
+  uint32_t ScheduleInFlightChange(scoped_ptr<InFlightChange> change);
+
+  // Returns true if there is an InFlightChange that matches |change|. If there
+  // is an existing change SetRevertValueFrom() is invoked on it. Returns false
+  // if there is no InFlightChange matching |change|.
+  bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
+
+  // OnEmbed() calls into this. Exposed as a separate function for testing.
+  void OnEmbedImpl(mojom::WindowTree* window_tree,
+                   ConnectionSpecificId connection_id,
+                   mojom::WindowDataPtr root_data,
+                   Id focused_window_id,
+                   uint32 access_policy);
 
   // Overridden from WindowTreeConnection:
   Window* GetRoot() override;
@@ -126,6 +151,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnClientAreaChanged(uint32_t window_id,
                            mojo::InsetsPtr old_client_area,
                            mojo::InsetsPtr new_client_area) override;
+  void OnTransientWindowAdded(uint32_t window_id,
+                              uint32_t transient_window_id) override;
+  void OnTransientWindowRemoved(uint32_t window_id,
+                                uint32_t transient_window_id) override;
   void OnWindowViewportMetricsChanged(
       mojom::ViewportMetricsPtr old_metrics,
       mojom::ViewportMetricsPtr new_metrics) override;
@@ -147,30 +176,47 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                           mojom::EventPtr event,
                           const mojo::Callback<void()>& callback) override;
   void OnWindowFocused(Id focused_window_id) override;
-
-  void RootDestroyed(Window* root);
+  void OnChangeCompleted(uint32_t change_id, bool success) override;
+  void WmSetBounds(uint32_t change_id,
+                   Id window_id,
+                   mojo::RectPtr transit_bounds) override;
+  void WmSetProperty(uint32_t change_id,
+                     Id window_id,
+                     const mojo::String& name,
+                     mojo::Array<uint8_t> transit_data) override;
 
   void OnActionCompleted(bool success);
 
   mojo::Callback<void(bool)> ActionCompletedCallback();
 
+  // This is set once and only once when we get OnEmbed(). It gives the unique
+  // id for this connection.
   ConnectionSpecificId connection_id_;
-  ConnectionSpecificId next_id_;
+
+  // Id assigned to the next window created.
+  ConnectionSpecificId next_window_id_;
+
+  // Id used for the next change id supplied to the server.
+  uint32_t next_change_id_;
+  InFlightMap in_flight_map_;
 
   mojo::Callback<void(void)> change_acked_callback_;
 
   WindowTreeDelegate* delegate_;
 
+  WindowManagerDelegate* window_manager_delegate_;
+
   Window* root_;
 
   IdToWindowMap windows_;
 
-  Window* capture_window_;
   Window* focused_window_;
-  Window* activated_window_;
 
   mojo::Binding<WindowTreeClient> binding_;
-  mus::mojom::WindowTreePtr tree_;
+  mojom::WindowTreePtr tree_ptr_;
+  // Typically this is the value contained in |tree_ptr_|, but tests may
+  // directly set this.
+  mojom::WindowTree* tree_;
 
   bool is_embed_root_;
 

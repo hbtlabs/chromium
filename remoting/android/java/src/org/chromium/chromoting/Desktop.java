@@ -14,17 +14,23 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.support.v7.app.ActionBar.OnMenuVisibilityListener;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnLayoutChangeListener;
+import android.view.View.OnTouchListener;
 import android.view.inputmethod.InputMethodManager;
 
 import org.chromium.chromoting.cardboard.DesktopActivity;
+import org.chromium.chromoting.help.HelpContext;
+import org.chromium.chromoting.help.HelpSingleton;
 import org.chromium.chromoting.jni.JniInterface;
 
 import java.util.Set;
@@ -34,10 +40,6 @@ import java.util.TreeSet;
  * A simple screen that does nothing except display a DesktopView and notify it of rotations.
  */
 public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibilityChangeListener {
-    /** Web page to be displayed in the Help screen when launched from this activity. */
-    private static final String HELP_URL =
-            "https://support.google.com/chrome/?p=mobile_crd_connecthost";
-
     /**
      * Preference used for displaying an interestitial dialog only when the user first accesses the
      * Cardboard function.
@@ -64,14 +66,17 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
     /** Holds the scheduled task object which will be called to hide the ActionBar. */
     private Runnable mActionBarAutoHideTask;
 
+    /** The Toolbar instance backing our SupportActionBar. */
+    private Toolbar mToolbar;
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.desktop);
 
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+        mToolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(mToolbar);
 
         mRemoteHostDesktop = (DesktopView) findViewById(R.id.desktop_view);
         mRemoteHostDesktop.setDesktop(this);
@@ -104,9 +109,22 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
             // the experience for them.
             mActionBarAutoHideTask = new Runnable() {
                 public void run() {
-                    hideActionBar();
+                    if (!mToolbar.isOverflowMenuShowing()) {
+                        hideActionBar();
+                    }
                 }
             };
+
+            // Suspend the ActionBar timer when the user interacts with the options menu.
+            getSupportActionBar().addOnMenuVisibilityListener(new OnMenuVisibilityListener() {
+                public void onMenuVisibilityChanged(boolean isVisible) {
+                    if (isVisible) {
+                        stopActionBarAutoHideTimer();
+                    } else {
+                        startActionBarAutoHideTimer();
+                    }
+                }
+            });
         } else {
             mRemoteHostDesktop.setFitsSystemWindows(true);
         }
@@ -172,6 +190,28 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             // We don't need to show a hide ActionBar button if immersive fullscreen is supported.
             menu.findItem(R.id.actionbar_hide).setVisible(false);
+
+            // Although the MenuItems are being created here, they do not have any backing Views yet
+            // as those are created just after this method exits.  We post an async task to the UI
+            // thread here so that we can attach our interaction listeners shortly after the views
+            // have been created.
+            final Menu menuFinal = menu;
+            new Handler().post(new Runnable() {
+                @Override
+                public void run() {
+                    // Attach a listener to the toolbar itself then attach one to each menu item
+                    // which has a backing view object.
+                    attachToolbarInteractionListenerToView(mToolbar);
+                    int items = menuFinal.size();
+                    for (int i = 0; i < items; i++) {
+                        int itemId = menuFinal.getItem(i).getItemId();
+                        View menuItemView = findViewById(itemId);
+                        if (menuItemView != null) {
+                            attachToolbarInteractionListenerToView(menuItemView);
+                        }
+                    }
+                }
+            });
         }
 
         // TODO(joedow): Remove this line when touch input mode has been implemented.
@@ -180,6 +220,33 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
         ChromotingUtil.tintMenuIcons(this, menu);
 
         return super.onCreateOptionsMenu(menu);
+    }
+
+    // Any time an onTouchListener is attached, a lint warning about filtering touch events is
+    // generated.  Since the function below is only used to listen to, not intercept, the events,
+    // the lint warning can be safely suppressed.
+    @SuppressLint("ClickableViewAccessibility")
+    private void attachToolbarInteractionListenerToView(View view) {
+        view.setOnTouchListener(new OnTouchListener() {
+            @Override
+            public boolean onTouch(View view, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        stopActionBarAutoHideTimer();
+                        break;
+
+                    case MotionEvent.ACTION_UP:
+                        startActionBarAutoHideTimer();
+                        break;
+
+                    default:
+                        // Ignore.
+                        break;
+                }
+
+                return false;
+            }
+        });
     }
 
     // Posts a deplayed task to hide the ActionBar.  If an existing task has already been scheduled,
@@ -307,9 +374,6 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
 
         mActivityLifecycleListener.onActivityOptionsItemSelected(this, item);
 
-        // Whenever a user selects an option from the ActionBar, reset the auto-hide timer.
-        startActionBarAutoHideTimer();
-
         if (id == R.id.actionbar_cardboard) {
             onCardboardItemSelected();
             return true;
@@ -341,7 +405,7 @@ public class Desktop extends AppCompatActivity implements View.OnSystemUiVisibil
             return true;
         }
         if (id == R.id.actionbar_help) {
-            HelpActivity.launch(this, HELP_URL);
+            HelpSingleton.getInstance().launchHelp(this, HelpContext.DESKTOP);
             return true;
         }
         return super.onOptionsItemSelected(item);

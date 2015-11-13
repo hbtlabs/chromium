@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/common/sandbox_type.h"
+#include "media/base/cdm_factory.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
@@ -111,6 +112,10 @@ bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
     const GURL& current_url,
     const GURL& new_url) {
   return false;
+}
+
+scoped_ptr<media::CdmFactory> ContentBrowserClient::CreateCdmFactory() {
+  return nullptr;
 }
 
 bool ContentBrowserClient::ShouldSwapProcessesForRedirect(
@@ -385,6 +390,10 @@ ContentBrowserClient::CreateThrottlesForNavigation(
 #if defined(OS_WIN)
 const wchar_t* ContentBrowserClient::GetResourceDllName() {
   return nullptr;
+}
+
+bool ContentBrowserClient::PreSpawnRenderer(sandbox::TargetPolicy* policy) {
+  return true;
 }
 
 base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(

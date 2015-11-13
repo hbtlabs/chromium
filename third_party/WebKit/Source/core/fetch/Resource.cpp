@@ -163,6 +163,7 @@ Resource::Resource(const ResourceRequest& request, Type type)
     , m_status(Pending)
     , m_wasPurged(false)
     , m_needsSynchronousCacheHit(false)
+    , m_avoidBlockingOnLoad(false)
 #ifdef ENABLE_RESOURCE_IS_DELETED_CHECK
     , m_deleted(false)
 #endif
@@ -175,13 +176,8 @@ Resource::Resource(const ResourceRequest& request, Type type)
     if (m_resourceRequest.url().protocolIsInHTTPFamily())
         m_cacheHandler = CacheHandler::create(this);
 
-    if (!m_resourceRequest.url().hasFragmentIdentifier())
-        return;
-    KURL urlForCache = MemoryCache::removeFragmentIdentifierIfNeeded(m_resourceRequest.url());
-    if (urlForCache.hasFragmentIdentifier())
-        return;
-    m_fragmentIdentifierForRequest = m_resourceRequest.url().fragmentIdentifier();
-    m_resourceRequest.setURL(urlForCache);
+    if (!accept().isEmpty())
+        m_resourceRequest.setHTTPAccept(accept());
 }
 
 Resource::~Resource()
@@ -213,28 +209,23 @@ void Resource::load(ResourceFetcher* fetcher, const ResourceLoaderOptions& optio
 {
     m_options = options;
     m_loading = true;
-
-    ResourceRequest request(m_revalidatingRequest.isNull() ? m_resourceRequest : m_revalidatingRequest);
-    if (!accept().isEmpty())
-        request.setHTTPAccept(accept());
-
-    // FIXME: It's unfortunate that the cache layer and below get to know anything about fragment identifiers.
-    // We should look into removing the expectation of that knowledge from the platform network stacks.
-    if (!m_fragmentIdentifierForRequest.isNull()) {
-        KURL url = request.url();
-        url.setFragmentIdentifier(m_fragmentIdentifierForRequest);
-        request.setURL(url);
-        m_fragmentIdentifierForRequest = String();
-    }
     m_status = Pending;
+
     if (m_loader) {
         ASSERT(m_revalidatingRequest.isNull());
         RELEASE_ASSERT(m_options.synchronousPolicy == RequestSynchronously);
         m_loader->changeToSynchronous();
         return;
     }
-    m_loader = ResourceLoader::create(fetcher, this, request, options);
+
+    ResourceRequest& request(m_revalidatingRequest.isNull() ? m_resourceRequest : m_revalidatingRequest);
+    ResourceRequest requestCopy(m_revalidatingRequest.isNull() ? m_resourceRequest : m_revalidatingRequest);
+    m_loader = ResourceLoader::create(fetcher, this, requestCopy, options);
     m_loader->start();
+
+    // Headers might have been modified during load start. Copy them over so long as the url didn't change.
+    if (request.url() == requestCopy.url())
+        request = requestCopy;
 }
 
 void Resource::checkNotify()
@@ -521,6 +512,56 @@ bool Resource::canDelete() const
         && !m_protectorCount;
 }
 
+String Resource::reasonNotDeletable() const
+{
+    StringBuilder builder;
+    if (hasClients()) {
+        builder.append("hasClients(");
+        builder.appendNumber(m_clients.size());
+        if (!m_clientsAwaitingCallback.isEmpty()) {
+            builder.append(", AwaitingCallback=");
+            builder.appendNumber(m_clientsAwaitingCallback.size());
+        }
+        if (!m_finishedClients.isEmpty()) {
+            builder.append(", Finished=");
+            builder.appendNumber(m_finishedClients.size());
+        }
+        builder.append(")");
+    }
+    if (m_loader) {
+        if (!builder.isEmpty())
+            builder.append(' ');
+        builder.append("m_loader");
+    }
+    if (m_preloadCount) {
+        if (!builder.isEmpty())
+            builder.append(' ');
+        builder.append("m_preloadCount(");
+        builder.appendNumber(m_preloadCount);
+        builder.append(")");
+    }
+    if (!hasRightHandleCountApartFromCache(0)) {
+        if (!builder.isEmpty())
+            builder.append(' ');
+        builder.append("m_handleCount(");
+        builder.appendNumber(m_handleCount);
+        builder.append(")");
+    }
+    if (m_protectorCount) {
+        if (!builder.isEmpty())
+            builder.append(' ');
+        builder.append("m_protectorCount(");
+        builder.appendNumber(m_protectorCount);
+        builder.append(")");
+    }
+    if (memoryCache()->contains(this)) {
+        if (!builder.isEmpty())
+            builder.append(' ');
+        builder.append("in_memory_cache");
+    }
+    return builder.toString();
+}
+
 bool Resource::hasOneHandle() const
 {
     return hasRightHandleCountApartFromCache(1);
@@ -738,6 +779,7 @@ void Resource::prune()
 void Resource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail, WebProcessMemoryDump* memoryDump) const
 {
     static const size_t kMaxURLReportLength = 128;
+    static const int kMaxResourceClientToShowInMemoryInfra = 10;
 
     const String dumpName = getMemoryDumpName();
     WebMemoryAllocatorDump* dump = memoryDump->createMemoryAllocatorDump(dumpName);
@@ -760,6 +802,33 @@ void Resource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail, WebProcess
             urlToReport = urlToReport + "...";
         }
         dump->addString("url", "", urlToReport);
+
+        dump->addString("reason_not_deletable", "", reasonNotDeletable());
+
+        Vector<String> clientNames;
+        ResourceClientWalker<ResourceClient> walker(m_clients);
+        while (ResourceClient* client = walker.next())
+            clientNames.append(client->debugName());
+        ResourceClientWalker<ResourceClient> walker2(m_clientsAwaitingCallback);
+        while (ResourceClient* client = walker2.next())
+            clientNames.append("(awaiting) " + client->debugName());
+        ResourceClientWalker<ResourceClient> walker3(m_finishedClients);
+        while (ResourceClient* client = walker3.next())
+            clientNames.append("(finished) " + client->debugName());
+        std::sort(clientNames.begin(), clientNames.end(), codePointCompareLessThan);
+
+        StringBuilder builder;
+        for (size_t i = 0; i < clientNames.size() && i < kMaxResourceClientToShowInMemoryInfra; ++i) {
+            if (i > 0)
+                builder.append(" / ");
+            builder.append(clientNames[i]);
+        }
+        if (clientNames.size() > kMaxResourceClientToShowInMemoryInfra) {
+            builder.append(" / and ");
+            builder.appendNumber(clientNames.size() - kMaxResourceClientToShowInMemoryInfra);
+            builder.append(" more");
+        }
+        dump->addString("ResourceClient", "", builder.toString());
     }
 
     const String overheadName = dumpName + "/metadata";
@@ -1030,6 +1099,20 @@ const char* Resource::resourceTypeToString(Type type, const FetchInitiatorInfo& 
     }
     ASSERT_NOT_REACHED();
     return initatorTypeNameToString(initiatorInfo.name);
+}
+
+bool Resource::shouldBlockLoadEvent() const
+{
+    return !m_avoidBlockingOnLoad && isNonBlockingResourceType();
+}
+
+bool Resource::isNonBlockingResourceType() const
+{
+    return type() != LinkPrefetch
+        && type() != LinkSubresource
+        && type() != Media
+        && type() != Raw
+        && type() != TextTrack;
 }
 
 #if !LOG_DISABLED

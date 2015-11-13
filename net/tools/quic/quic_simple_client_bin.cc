@@ -19,7 +19,7 @@
 //   quic_client https://www.google.com --port=443  --host=${IP}
 //
 // Use a specific version:
-//   quic_client http://www.google.com --version=23  --host=${IP}
+//   quic_client http://www.google.com --quic_version=23  --host=${IP}
 //
 // Send a POST instead of a GET:
 //   quic_client http://www.google.com --body="this is a POST body" --host=${IP}
@@ -216,17 +216,16 @@ int main(int argc, char *argv[]) {
     versions.clear();
     versions.push_back(static_cast<net::QuicVersion>(FLAGS_quic_version));
   }
-  scoped_ptr<CertVerifier> cert_verifier;
-  scoped_ptr<TransportSecurityState> transport_security_state;
+  // For secure QUIC we need to verify the cert chain.
+  scoped_ptr<CertVerifier> cert_verifier(CertVerifier::CreateDefault());
+  scoped_ptr<TransportSecurityState> transport_security_state(
+      new TransportSecurityState);
   ProofVerifierChromium* proof_verifier = new ProofVerifierChromium(
       cert_verifier.get(), nullptr, transport_security_state.get());
   net::tools::QuicSimpleClient client(net::IPEndPoint(ip_addr, port), server_id,
                                       versions, proof_verifier);
   client.set_initial_max_packet_length(
       FLAGS_initial_mtu != 0 ? FLAGS_initial_mtu : net::kDefaultMaxPacketSize);
-  // For secure QUIC we need to verify the cert chain.
-  cert_verifier = CertVerifier::CreateDefault();
-  transport_security_state.reset(new TransportSecurityState);
   if (!client.Initialize()) {
     cerr << "Failed to initialize client." << endl;
     return 1;

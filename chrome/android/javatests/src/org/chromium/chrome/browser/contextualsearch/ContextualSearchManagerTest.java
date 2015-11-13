@@ -380,7 +380,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      */
     private void fakeContentViewDidNavigate(boolean isFailure) {
         String url = mFakeServer.getLoadedUrl();
-        mManager.getOverlayContentDelegate().onMainFrameNavigation(url, isFailure);
+        mManager.getOverlayContentDelegate().onMainFrameNavigation(url, false, isFailure);
     }
 
     /**
@@ -455,12 +455,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         String message = "but there was no loaded URL!";
         if (mFakeServer != null) {
             doesMatch = mFakeServer.getLoadedUrl().contains("q=" + searchTerm);
-            // TODO(donnd): remove the following line once the Translate API is updated!
-            // The current Translate API requires a change to the query parameter so
-            // checking it for the search term does not work.  We plan to fix this very
-            // soon, and this workaround allows tests to work until then, but needs to be
-            // removed when we switch to the new API.  See crbug.com/413717.
-            doesMatch = doesMatch || mFakeServer.getLoadedUrl().contains("tlitetxt=" + searchTerm);
             message = "in URL: " + mFakeServer.getLoadedUrl();
         }
         assertTrue("Expected to find searchTerm " + searchTerm + ", " + message, doesMatch);
@@ -1516,8 +1510,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TAP_RESOLVE_LIMIT_FOR_DECIDED + "=2")
     public void testTapResolveLimitForDecided() throws InterruptedException, TimeoutException {
+        mPolicy.setTapResolveLimitForDecidedForTesting(2);
         clickToTriggerSearchTermResolution();
         assertSearchTermRequested();
         clickToTriggerSearchTermResolution();
@@ -1540,8 +1534,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TAP_RESOLVE_LIMIT_FOR_UNDECIDED + "=2")
     public void testTapResolveLimitForUndecided() throws InterruptedException, TimeoutException {
+        mPolicy.setTapResolveLimitForUndecidedForTesting(2);
         mPolicy.overrideDecidedStateForTesting(false);
 
         clickToTriggerSearchTermResolution();
@@ -1566,8 +1560,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TAP_PREFETCH_LIMIT_FOR_DECIDED + "=2")
     public void testTapPrefetchLimitForDecided() throws InterruptedException, TimeoutException {
+        mPolicy.setTapPrefetchLimitForDecidedForTesting(2);
         clickToTriggerPrefetch();
         assertLoadedLowPriorityUrl();
         clickToTriggerPrefetch();
@@ -1590,8 +1584,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TAP_PREFETCH_LIMIT_FOR_UNDECIDED + "=2")
     public void testTapPrefetchLimitForUndecided() throws InterruptedException, TimeoutException {
+        mPolicy.setTapPrefetchLimitForUndecidedForTesting(2);
         mPolicy.overrideDecidedStateForTesting(false);
 
         clickToTriggerPrefetch();
@@ -1616,12 +1610,10 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @Feature({"ContextualSearch"})
      */
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add({
-            ContextualSearchFieldTrial.PROMO_ON_LIMITED_TAPS + "=true",
-            ContextualSearchFieldTrial.TAP_TRIGGERED_PROMO_LIMIT + "=2"})
     @FlakyTest
     public void testTapTriggeredPromoLimitForOptOut()
             throws InterruptedException, TimeoutException {
+        mPolicy.setPromoTapTriggeredLimitForTesting(2);
         mPolicy.overrideDecidedStateForTesting(false);
 
         clickWordNode("states");
@@ -1665,9 +1657,9 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @Feature({"ContextualSearch"})
      */
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TAP_PREFETCH_LIMIT_FOR_DECIDED + "=2")
     @FlakyTest
     public void testDisembodiedBar() throws InterruptedException, TimeoutException {
+        mPolicy.setTapPrefetchLimitForDecidedForTesting(2);
         clickToTriggerPrefetch();
         assertLoadedLowPriorityUrl();
         clickToTriggerPrefetch();
@@ -1863,11 +1855,9 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @Feature({"ContextualSearch"})
      */
     @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @CommandLineFlags.Add({
-            ContextualSearchFieldTrial.PROMO_ON_LIMITED_TAPS + "=true",
-            ContextualSearchFieldTrial.TAP_TRIGGERED_PROMO_LIMIT + "=2"})
     @FlakyTest
     public void testPromoTapCount() throws InterruptedException, TimeoutException {
+        mPolicy.setPromoTapTriggeredLimitForTesting(2);
         // Note that this tests the basic underlying counter used by
         // testTapTriggeredPromoLimitForOptOut.
         // TODO(donnd): consider removing either this test or testTapTriggeredPromoLimitForOptOut.
@@ -2098,11 +2088,11 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * of selection bounds, so this helps prevent a regression with that.
      */
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add({ContextualSearchFieldTrial.TAP_RESOLVE_LIMIT_FOR_DECIDED + "=200",
-            ContextualSearchFieldTrial.TAP_RESOLVE_LIMIT_FOR_UNDECIDED + "=200",
-            ContextualSearchFieldTrial.TAP_PREFETCH_LIMIT_FOR_DECIDED + "=200",
-            ContextualSearchFieldTrial.TAP_PREFETCH_LIMIT_FOR_UNDECIDED + "=200"})
     public void testTapALot() throws InterruptedException, TimeoutException {
+        mPolicy.setTapPrefetchLimitForDecidedForTesting(200);
+        mPolicy.setTapResolveLimitForDecidedForTesting(200);
+        mPolicy.setTapPrefetchLimitForUndecidedForTesting(200);
+        mPolicy.setTapResolveLimitForUndecidedForTesting(200);
         for (int i = 0; i < 50; i++) {
             clickToTriggerSearchTermResolution();
             waitForSelectionDissolved();
@@ -2572,13 +2562,14 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TRANSLATION_ONEBOX_ENABLED + "=true")
     public void testTapWithLanguage() throws InterruptedException, TimeoutException {
-        // Tapping a german word should trigger translation.
+        // Tapping a German word should trigger translation.
         simulateTapSearch("german");
 
         // Make sure we tried to trigger translate.
-        assertTrue(mManager.getRequest().isTranslationForced());
+        assertTrue("Translation was not forced with the current request URL: "
+                        + mManager.getRequest().getSearchUrl(),
+                mManager.getRequest().isTranslationForced());
     }
 
     /**
@@ -2587,7 +2578,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.TRANSLATION_ONEBOX_ENABLED + "=true")
     public void testTapWithoutLanguage() throws InterruptedException, TimeoutException {
         // Tapping an English word should NOT trigger translation.
         simulateTapSearch("search");

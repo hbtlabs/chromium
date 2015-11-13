@@ -367,7 +367,7 @@ class RendererSandboxedProcessLauncherDelegate
   ~RendererSandboxedProcessLauncherDelegate() override {}
 
 #if defined(OS_WIN)
-  void PreSpawnTarget(sandbox::TargetPolicy* policy, bool* success) override {
+  bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
     AddBaseHandleClosePolicy(policy);
 
     const base::string16& sid =
@@ -376,7 +376,7 @@ class RendererSandboxedProcessLauncherDelegate
     if (!sid.empty())
       AddAppContainerPolicy(policy, sid.c_str());
 
-    GetContentClient()->browser()->PreSpawnRenderer(policy, success);
+    return GetContentClient()->browser()->PreSpawnRenderer(policy);
   }
 
 #elif defined(OS_POSIX)
@@ -991,7 +991,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(new MemoryMessageFilter());
   AddFilter(new PushMessagingMessageFilter(
       GetID(), storage_partition_impl_->GetServiceWorkerContext()));
-#if defined(OS_ANDROID)
+  // TODO(mfomitchev): Screen Orientation APIs on Aura - crbug.com/546719.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   AddFilter(new ScreenOrientationMessageFilterAndroid());
 #endif
   AddFilter(new GeofencingDispatcherHost(
@@ -1298,6 +1299,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableEncryptedMedia,
     switches::kDisableFeatures,
     switches::kDisableFileSystem,
+    switches::kDisableGestureRequirementForMediaPlayback,
     switches::kDisableGpuCompositing,
     switches::kDisableGpuMemoryBufferVideoFrames,
     switches::kDisableGpuVsync,
@@ -1452,8 +1454,8 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableLowEndDeviceMode,
     switches::kDisableLowEndDeviceMode,
 #if defined(OS_ANDROID)
-    switches::kDisableGestureRequirementForMediaPlayback,
     switches::kDisableWebAudio,
+    switches::kEnableUnifiedMediaPipeline,
     switches::kIPCSyncCompositing,
     switches::kRendererWaitForJavaDebugger,
 #endif

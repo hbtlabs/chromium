@@ -577,8 +577,8 @@ class WebContents : public PageNavigator,
   virtual int GetMinimumZoomPercent() const = 0;
   virtual int GetMaximumZoomPercent() const = 0;
 
-  // Set the renderer's page scale back to one.
-  virtual void ResetPageScale() = 0;
+  // Set the renderer's page scale to the given factor.
+  virtual void SetPageScale(float page_scale_factor) = 0;
 
   // Gets the preferred size of the contents.
   virtual gfx::Size GetPreferredSize() const = 0;
@@ -640,7 +640,7 @@ class WebContents : public PageNavigator,
   // removed since we can then embed iframes in different processes.
   virtual bool IsSubframe() const = 0;
 
-  // Finds text on a page.
+  // Finds text on a page. |search_text| should not be empty.
   virtual void Find(int request_id,
                     const base::string16& search_text,
                     const blink::WebFindOptions& options) = 0;
@@ -684,10 +684,11 @@ class WebContents : public PageNavigator,
   virtual void SuspendMediaSession() = 0;
   // Requests to stop the current media session.
   virtual void StopMediaSession() = 0;
-
+#if !defined(USE_AURA)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(
       jobject jweb_contents_android);
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() = 0;
+#endif  // !USE_AURA
 #elif defined(OS_MACOSX)
   // Allowing other views disables optimizations which assume that only a single
   // WebContents is present.

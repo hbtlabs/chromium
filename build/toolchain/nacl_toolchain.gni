@@ -42,7 +42,6 @@ template("nacl_toolchain") {
                              "is_nacl_glibc",
                              "ld",
                              "link_outputs",
-                             "postlink",
                              "symbol_level",
                              "strip",
                              "toolchain_cpu",
@@ -52,7 +51,6 @@ template("nacl_toolchain") {
     is_component_build = false
     clear_sanitizers = true
     use_ccache = false
-    use_goma = false
 
     rebuild_define = "NACL_TC_REV=" + invoker.toolchain_revision
   }

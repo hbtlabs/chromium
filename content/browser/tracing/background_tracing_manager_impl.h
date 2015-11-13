@@ -52,14 +52,16 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   BackgroundTracingManagerImpl();
   ~BackgroundTracingManagerImpl() override;
 
-  void EnableRecording(std::string, base::trace_event::TraceRecordMode);
-  void EnableRecordingIfConfigNeedsIt();
-  void OnFinalizeStarted(base::RefCountedString*);
+  void StartTracing(std::string, base::trace_event::TraceRecordMode);
+  void StartTracingIfConfigNeedsIt();
+  void OnFinalizeStarted(
+      scoped_ptr<const base::DictionaryValue> metadata,
+      base::RefCountedString*);
   void OnFinalizeComplete();
   void BeginFinalizing(StartedFinalizingCallback);
   void ValidateStartupScenario();
 
-  scoped_ptr<base::DictionaryValue> GenerateMetadataDict() const;
+  void AddCustomMetadata(TracingControllerImpl::TraceDataSink*) const;
 
   std::string GetTriggerNameFromHandle(TriggerHandle handle) const;
   bool IsTriggerHandleValid(TriggerHandle handle) const;

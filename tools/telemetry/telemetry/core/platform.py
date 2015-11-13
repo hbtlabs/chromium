@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 import logging as real_logging
 import os
+import sys
 
 from telemetry.core import discover
 from telemetry.core import local_server
@@ -63,8 +64,9 @@ def GetPlatformForDevice(device, finder_options, logging=real_logging):
         return _remote_platforms[device.guid]
     return None
   except Exception:
+    current_exception = sys.exc_info()
     logging.error('Fail to create platform instance for %s.', device.name)
-    raise
+    raise current_exception[0], current_exception[1], current_exception[2]
 
 
 class Platform(object):
@@ -289,6 +291,8 @@ class Platform(object):
 
   def IsMonitoringPower(self):
     """Returns true if power is currently being monitored, false otherwise."""
+    # TODO(rnephew): Remove when crbug.com/553601 is solved.
+    real_logging.info('IsMonitoringPower: %s', self._is_monitoring_power)
     return self._is_monitoring_power
 
   def CanMonitorNetworkData(self):

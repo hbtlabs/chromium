@@ -19,8 +19,8 @@
       'autofill/content/browser/content_autofill_driver_unittest.cc',
       'autofill/content/browser/request_autocomplete_manager_unittest.cc',
       'autofill/content/browser/wallet/full_wallet_unittest.cc',
-      'autofill/content/browser/wallet/real_pan_wallet_client_unittest.cc',
       'autofill/content/browser/wallet/wallet_address_unittest.cc',
+      'autofill/content/browser/wallet/payments_client_unittest.cc',
       'autofill/content/browser/wallet/wallet_service_url_unittest.cc',
       'autofill/content/renderer/renderer_save_password_progress_logger_unittest.cc',
       'autofill/core/browser/address_field_unittest.cc',
@@ -650,6 +650,9 @@
     'ssl_config_unittest_sources': [
       'ssl_config/ssl_config_service_manager_pref_unittest.cc',
     ],
+    'ssl_errors_unittest_sources': [
+      'ssl_errors/error_classification_unittest.cc'
+    ],
     'storage_monitor_unittest_sources': [
       'storage_monitor/image_capture_device_manager_unittest.mm',
       'storage_monitor/media_storage_util_unittest.cc',
@@ -900,6 +903,7 @@
         '<@(sessions_unittest_sources)',
         '<@(signin_unittest_sources)',
         '<@(ssl_config_unittest_sources)',
+        '<@(ssl_errors_unittest_sources)',
         '<@(suggestions_unittest_sources)',
         '<@(sync_bookmarks_unittest_sources)',
         '<@(sync_driver_unittest_sources)',
@@ -1025,6 +1029,7 @@
         'components.gyp:signin_core_browser',
         'components.gyp:signin_core_browser_test_support',
         'components.gyp:ssl_config',
+        'components.gyp:ssl_errors',
         'components.gyp:suggestions',
         'components.gyp:sync_bookmarks',
         'components.gyp:sync_driver_test_support',
@@ -1278,6 +1283,7 @@
             'data_reduction_proxy/content/browser/data_reduction_proxy_debug_blocking_page_unittest.cc',
             'data_reduction_proxy/content/browser/data_reduction_proxy_debug_resource_throttle_unittest.cc',
             'data_reduction_proxy/content/browser/data_reduction_proxy_debug_ui_manager_unittest.cc',
+            'data_usage/android/traffic_stats_amortizer_unittest.cc',
             'invalidation/impl/invalidation_logger_unittest.cc',
             'invalidation/impl/invalidation_service_android_unittest.cc',
           ],
@@ -1298,6 +1304,7 @@
           'dependencies': [
             'components.gyp:cronet_static',
             'components.gyp:data_reduction_proxy_content',
+            'components.gyp:data_usage_android',
             'components.gyp:safe_json_java',
             '../content/content.gyp:content_java',
             '../testing/android/native_test.gyp:native_test_native_code',
@@ -1409,7 +1416,6 @@
           ],
           'sources': [
             '<@(policy_unittest_sources)',
-            'search_engines/default_search_policy_handler_unittest.cc',
             'sync_driver/sync_policy_handler_unittest.cc',
           ],
           'conditions': [
@@ -1448,6 +1454,11 @@
                 'policy/core/common/mac_util_unittest.cc',
               ],
             }],
+          ],
+        }, {  # configuration_policy!=1
+          'sources!': [
+            'search_engines/default_search_policy_handler_unittest.cc',
+            'sync_driver/sync_policy_handler_unittest.cc',
           ],
         }],
         ['enable_plugins == 1', {
@@ -1514,7 +1525,7 @@
           'includes': [ '../build/android/jinja_template.gypi' ],
         },
         {
-          # TODO(GN)
+          # GN: //components:components_browsertests_apk
           'target_name': 'components_browsertests_apk',
           'type': 'none',
           'dependencies': [
@@ -1567,16 +1578,11 @@
           'type': 'none',
           'dependencies': [
             'components.gyp:invalidation_java',
+            'components.gyp:policy_java',
+            'components.gyp:policy_java_test_support',
             '../base/base.gyp:base_java',
             '../base/base.gyp:base_java_test_support',
             '../testing/android/junit/junit_test.gyp:junit_test_support',
-          ],
-          'conditions': [
-            ['configuration_policy == 1', {
-              'dependencies': [
-                'components.gyp:policy_java',
-              ],
-            }],
           ],
           'variables': {
             'main_class': 'org.chromium.testing.local.JunitTestMain',

@@ -816,7 +816,7 @@ void SaveCreditCard(Browser* browser) {
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
   DCHECK(controller);
-  controller->ShowBubble();
+  controller->ShowBubble(true);
 }
 #endif
 
@@ -932,8 +932,8 @@ bool CanBasicPrint(Browser* browser) {
 #endif  // ENABLE_BASIC_PRINTING
 
 bool CanRouteMedia(Browser* browser) {
-  if (!media_router::MediaRouterEnabled() ||
-      browser->profile()->IsOffTheRecord())
+  Profile* profile = browser->profile();
+  if (profile->IsOffTheRecord() || !media_router::MediaRouterEnabled(profile))
     return false;
 
   // Do not allow user to open Media Router dialog when there is already an
@@ -1129,15 +1129,6 @@ void OpenUpdateChromeDialog(Browser* browser) {
     content::RecordAction(UserMetricsAction("UpdateChrome"));
     browser->window()->ShowUpdateChromeDialog();
   }
-}
-
-void ToggleSpeechInput(Browser* browser) {
-  SearchTabHelper* search_tab_helper =
-      SearchTabHelper::FromWebContents(
-          browser->tab_strip_model()->GetActiveWebContents());
-  // |search_tab_helper| can be null in unit tests.
-  if (search_tab_helper)
-    search_tab_helper->ToggleVoiceSearch();
 }
 
 void DistillCurrentPage(Browser* browser) {

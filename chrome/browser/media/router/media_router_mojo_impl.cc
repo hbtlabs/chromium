@@ -17,6 +17,7 @@
 #include "chrome/browser/media/router/media_router_type_converters.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
+#include "chrome/browser/media/router/presentation_connection_state_observer.h"
 #include "chrome/browser/media/router/presentation_session_messages_observer.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "extensions/browser/process_manager.h"
@@ -91,14 +92,12 @@ void MediaRouterMojoImpl::MediaRouterMediaRoutesObserver::OnRoutesUpdated(
   router_->UpdateHasLocalRoute(has_local_route);
 }
 
-// TODO(mfoltz): Flip the default sink availability to UNAVAILABLE, once the
-// MRPM sends initial availability status.
 MediaRouterMojoImpl::MediaRouterMojoImpl(
     extensions::EventPageTracker* event_page_tracker)
     : event_page_tracker_(event_page_tracker),
       instance_id_(base::GenerateGUID()),
       has_local_route_(false),
-      availability_(interfaces::MediaRouter::SINK_AVAILABILITY_AVAILABLE),
+      availability_(interfaces::MediaRouter::SINK_AVAILABILITY_UNAVAILABLE),
       wakeup_attempt_count_(0),
       weak_factory_(this) {
   DCHECK(event_page_tracker_);
@@ -376,7 +375,10 @@ bool MediaRouterMojoImpl::RegisterMediaSinksObserver(
   if (availability_ != interfaces::MediaRouter::SINK_AVAILABILITY_UNAVAILABLE) {
     RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoStartObservingMediaSinks,
                           base::Unretained(this), source_id));
+  } else {
+    observer->OnSinksReceived(std::vector<MediaSink>());
   }
+
   return true;
 }
 
@@ -499,6 +501,40 @@ void MediaRouterMojoImpl::UnregisterLocalMediaRoutesObserver(
   if (!local_routes_observers_.HasObserver(observer))
     return;
   local_routes_observers_.RemoveObserver(observer);
+}
+
+void MediaRouterMojoImpl::RegisterPresentationConnectionStateObserver(
+    PresentationConnectionStateObserver* observer) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(observer);
+
+  const MediaRoute::Id route_id = observer->route_id();
+  auto* observers = presentation_connection_state_observers_.get(route_id);
+  if (!observers) {
+    observers = new PresentationConnectionStateObserverList;
+    presentation_connection_state_observers_.add(route_id,
+                                                 make_scoped_ptr(observers));
+  }
+
+  if (observers->HasObserver(observer))
+    return;
+
+  observers->AddObserver(observer);
+}
+
+void MediaRouterMojoImpl::UnregisterPresentationConnectionStateObserver(
+    PresentationConnectionStateObserver* observer) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(observer);
+
+  const MediaRoute::Id route_id = observer->route_id();
+  auto* observers = presentation_connection_state_observers_.get(route_id);
+  if (!observers)
+    return;
+
+  observers->RemoveObserver(observer);
+  if (!observers->might_have_observers())
+    presentation_connection_state_observers_.erase(route_id);
 }
 
 void MediaRouterMojoImpl::DoCreateRoute(
@@ -644,6 +680,25 @@ void MediaRouterMojoImpl::OnSinkAvailabilityUpdated(
                             base::Unretained(this), source_and_query.first));
     }
   }
+}
+
+void MediaRouterMojoImpl::OnPresentationConnectionStateChanged(
+    const mojo::String& route_id,
+    interfaces::MediaRouter::PresentationConnectionState state) {
+  if (!interfaces::MediaRouter::PresentationConnectionState_IsValidValue(
+          state)) {
+    DLOG(WARNING) << "Unknown PresentationConnectionState value " << state;
+    return;
+  }
+
+  auto* observers = presentation_connection_state_observers_.get(route_id);
+  if (!observers)
+    return;
+
+  content::PresentationConnectionState converted_state =
+      mojo::PresentationConnectionStateFromMojo(state);
+  FOR_EACH_OBSERVER(PresentationConnectionStateObserver, *observers,
+                    OnStateChanged(converted_state));
 }
 
 void MediaRouterMojoImpl::DoOnPresentationSessionDetached(

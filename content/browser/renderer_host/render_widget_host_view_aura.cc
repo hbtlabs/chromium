@@ -1124,9 +1124,9 @@ void RenderWidgetHostViewAura::CopyFromCompositingSurface(
 }
 
 void RenderWidgetHostViewAura::CopyFromCompositingSurfaceToVideoFrame(
-      const gfx::Rect& src_subrect,
-      const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) {
+    const gfx::Rect& src_subrect,
+    const scoped_refptr<media::VideoFrame>& target,
+    const base::Callback<void(const gfx::Rect&, bool)>& callback) {
   delegated_frame_host_->CopyFromCompositingSurfaceToVideoFrame(
       src_subrect, target, callback);
 }
@@ -1392,6 +1392,8 @@ RenderWidgetHostViewAura::CreateBrowserAccessibilityManager(
 #if defined(OS_WIN)
   manager = new BrowserAccessibilityManagerWin(
       BrowserAccessibilityManagerWin::GetEmptyDocument(), delegate);
+#elif defined (OS_ANDROID)
+  // TODO(mfomitchev): Accessibility on Android Aura: crbug.com/543262
 #else
   manager = BrowserAccessibilityManager::Create(
       BrowserAccessibilityManager::GetEmptyDocument(), delegate);

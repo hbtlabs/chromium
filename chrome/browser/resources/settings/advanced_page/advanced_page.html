@@ -1,6 +1,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://md-settings/downloads_page/downloads_page.html">
 <link rel="import" href="chrome://md-settings/languages_page/languages_page.html">
+<link rel="import" href="chrome://md-settings/passwords_and_forms_page/passwords_and_forms_page.html">
 <link rel="import" href="chrome://md-settings/privacy_page/privacy_page.html">
 <link rel="import" href="chrome://md-settings/reset_page/reset_page.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_section.html">
@@ -9,6 +10,7 @@
 
 <if expr="chromeos">
 <link rel="import" href="chrome://md-settings/a11y_page/a11y_page.html">
+<link rel="import" href="chrome://md-settings/bluetooth_page/bluetooth_page.html">
 <link rel="import" href="chrome://md-settings/date_time_page/date_time_page.html">
 </if>
 
@@ -34,6 +36,22 @@
       <settings-privacy-page prefs="{{prefs}}"
         current-route="{{currentRoute}}">
       </settings-privacy-page>
+    </settings-section>
+
+<if expr="chromeos">
+    <settings-section i18n-values="page-title:bluetoothPageTitle"
+        current-route="[[currentRoute]]" section="bluetooth">
+      <settings-bluetooth-page current-route="{{currentRoute}}">
+      </settings-bluetooth-page>
+    </settings-section>
+</if>
+
+    <settings-section
+        i18n-values="page-title:passwordsAndAutofillPageTitle"
+        current-route="[[currentRoute]]" section="passwordsAndForms">
+      <settings-passwords-and-forms-page prefs="{{prefs}}"
+          current-route="{{currentRoute}}">
+      </settings-passwords-and-forms-page>
     </settings-section>
 
     <settings-section i18n-values="page-title:languagesPageTitle"

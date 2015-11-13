@@ -5,8 +5,10 @@
 #include "components/mus/public/cpp/lib/window_tree_client_impl.h"
 
 #include "base/bind.h"
+#include "components/mus/public/cpp/lib/in_flight_change.h"
 #include "components/mus/public/cpp/lib/window_private.h"
 #include "components/mus/public/cpp/util.h"
+#include "components/mus/public/cpp/window_manager_delegate.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
@@ -21,7 +23,7 @@
 namespace mus {
 namespace {
 
-void WindowManagerCallback(mus::mojom::WindowManagerErrorCode error_code) {}
+void WindowManagerCallback(mojom::WindowManagerErrorCode error_code) {}
 
 }  // namespace
 
@@ -81,10 +83,22 @@ Window* BuildWindowTree(WindowTreeClientImpl* client,
 
 WindowTreeConnection* WindowTreeConnection::Create(
     WindowTreeDelegate* delegate,
-    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request,
+    mojo::InterfaceRequest<mojom::WindowTreeClient> request,
     CreateType create_type) {
   WindowTreeClientImpl* client =
-      new WindowTreeClientImpl(delegate, request.Pass());
+      new WindowTreeClientImpl(delegate, nullptr, request.Pass());
+  if (create_type == CreateType::WAIT_FOR_EMBED)
+    client->WaitForEmbed();
+  return client;
+}
+
+WindowTreeConnection* WindowTreeConnection::CreateForWindowManager(
+    WindowTreeDelegate* delegate,
+    mojo::InterfaceRequest<mojom::WindowTreeClient> request,
+    CreateType create_type,
+    WindowManagerDelegate* window_manager_delegate) {
+  WindowTreeClientImpl* client = new WindowTreeClientImpl(
+      delegate, window_manager_delegate, request.Pass());
   if (create_type == CreateType::WAIT_FOR_EMBED)
     client->WaitForEmbed();
   return client;
@@ -92,17 +106,23 @@ WindowTreeConnection* WindowTreeConnection::Create(
 
 WindowTreeClientImpl::WindowTreeClientImpl(
     WindowTreeDelegate* delegate,
-    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request)
+    WindowManagerDelegate* window_manager_delegate,
+    mojo::InterfaceRequest<mojom::WindowTreeClient> request)
     : connection_id_(0),
-      next_id_(1),
+      next_window_id_(1),
+      next_change_id_(1),
       delegate_(delegate),
+      window_manager_delegate_(window_manager_delegate),
       root_(nullptr),
-      capture_window_(nullptr),
       focused_window_(nullptr),
-      activated_window_(nullptr),
-      binding_(this, request.Pass()),
+      binding_(this),
+      tree_(nullptr),
       is_embed_root_(false),
-      in_destructor_(false) {}
+      in_destructor_(false) {
+  // Allow for a null request in tests.
+  if (request.is_pending())
+    binding_.Bind(request.Pass());
+}
 
 WindowTreeClientImpl::~WindowTreeClientImpl() {
   in_destructor_ = true;
@@ -150,6 +170,22 @@ void WindowTreeClientImpl::RemoveChild(Id child_id, Id parent_id) {
   tree_->RemoveWindowFromParent(child_id, ActionCompletedCallback());
 }
 
+void WindowTreeClientImpl::AddTransientWindow(Window* window,
+                                              Id transient_window_id) {
+  DCHECK(tree_);
+  const uint32_t change_id = ScheduleInFlightChange(make_scoped_ptr(
+      new CrashInFlightChange(window, ChangeType::ADD_TRANSIENT_WINDOW)));
+  tree_->AddTransientWindow(change_id, window->id(), transient_window_id);
+}
+
+void WindowTreeClientImpl::RemoveTransientWindowFromParent(Window* window) {
+  DCHECK(tree_);
+  const uint32_t change_id =
+      ScheduleInFlightChange(make_scoped_ptr(new CrashInFlightChange(
+          window, ChangeType::REMOVE_TRANSIENT_WINDOW_FROM_PARENT)));
+  tree_->RemoveTransientWindowFromParent(change_id, window->id());
+}
+
 void WindowTreeClientImpl::Reorder(Id window_id,
                                    Id relative_window_id,
                                    mojom::OrderDirection direction) {
@@ -162,24 +198,13 @@ bool WindowTreeClientImpl::OwnsWindow(Id id) const {
   return HiWord(id) == connection_id_;
 }
 
-void WindowTreeClientImpl::SetBounds(Id window_id, const gfx::Rect& bounds) {
+void WindowTreeClientImpl::SetBounds(Window* window,
+                                     const gfx::Rect& old_bounds,
+                                     const gfx::Rect& bounds) {
   DCHECK(tree_);
-  Window* window = GetWindowById(window_id);
-  tree_->SetWindowBounds(
-      window_id, mojo::Rect::From(bounds),
-      base::Bind(&WindowTreeClientImpl::OnSetBoundsResponse,
-                 base::Unretained(this), window_id, bounds, window->bounds()));
-}
-
-void WindowTreeClientImpl::OnSetBoundsResponse(
-    Id window_id,
-    const gfx::Rect& requested_bounds,
-    const gfx::Rect& real_bounds,
-    bool success) {
-  if (success)
-    return;
-  Window* window = GetWindowById(window_id);
-  WindowPrivate(window).LocalSetBounds(requested_bounds, real_bounds);
+  const uint32_t change_id = ScheduleInFlightChange(
+      make_scoped_ptr(new InFlightBoundsChange(window, old_bounds)));
+  tree_->SetWindowBounds(change_id, window->id(), mojo::Rect::From(bounds));
 }
 
 void WindowTreeClientImpl::SetClientArea(Id window_id,
@@ -200,13 +225,19 @@ void WindowTreeClientImpl::SetVisible(Id window_id, bool visible) {
   tree_->SetWindowVisibility(window_id, visible, ActionCompletedCallback());
 }
 
-void WindowTreeClientImpl::SetProperty(Id window_id,
+void WindowTreeClientImpl::SetProperty(Window* window,
                                        const std::string& name,
-                                       const std::vector<uint8_t>& data) {
+                                       mojo::Array<uint8_t> data) {
   DCHECK(tree_);
-  tree_->SetWindowProperty(window_id, mojo::String(name),
-                           mojo::Array<uint8_t>::From(data),
-                           ActionCompletedCallback());
+
+  mojo::Array<uint8_t> old_value;
+  if (window->HasSharedProperty(name))
+    old_value = mojo::Array<uint8_t>::From(window->properties_[name]);
+
+  const uint32_t change_id = ScheduleInFlightChange(
+      make_scoped_ptr(new InFlightPropertyChange(window, name, old_value)));
+  tree_->SetWindowProperty(change_id, window->id(), mojo::String(name),
+                           data.Pass());
 }
 
 void WindowTreeClientImpl::SetWindowTextInputState(
@@ -225,9 +256,9 @@ void WindowTreeClientImpl::SetImeVisibility(Id window_id,
 
 void WindowTreeClientImpl::Embed(
     Id window_id,
-    mus::mojom::WindowTreeClientPtr client,
+    mojom::WindowTreeClientPtr client,
     uint32_t policy_bitmask,
-    const mus::mojom::WindowTree::EmbedCallback& callback) {
+    const mojom::WindowTree::EmbedCallback& callback) {
   DCHECK(tree_);
   tree_->Embed(window_id, client.Pass(), policy_bitmask, callback);
 }
@@ -253,6 +284,15 @@ void WindowTreeClientImpl::RemoveWindow(Id window_id) {
   IdToWindowMap::iterator it = windows_.find(window_id);
   if (it != windows_.end())
     windows_.erase(it);
+
+  // Remove any InFlightChanges associated with the window.
+  std::set<uint32_t> in_flight_change_ids;
+  for (const auto& pair : in_flight_map_) {
+    if (pair.second->window()->id() == window_id)
+      in_flight_change_ids.insert(pair.first);
+  }
+  for (auto change_id : in_flight_change_ids)
+    in_flight_map_.erase(change_id);
 }
 
 void WindowTreeClientImpl::OnRootDestroyed(Window* root) {
@@ -276,17 +316,61 @@ void WindowTreeClientImpl::SetShowState(Id window_id,
                       base::Bind(&WindowManagerCallback));
 }
 
+void WindowTreeClientImpl::SetResizeBehavior(
+    Id window_id,
+    mojom::ResizeBehavior resize_behavior) {
+  tree_->SetResizeBehavior(window_id, resize_behavior);
+}
+
+InFlightChange* WindowTreeClientImpl::GetOldestInFlightChangeMatching(
+    const InFlightChange& change) {
+  for (auto& pair : in_flight_map_) {
+    if (pair.second->window() == change.window() &&
+        pair.second->change_type() == change.change_type() &&
+        pair.second->Matches(change)) {
+      return pair.second;
+    }
+  }
+  return nullptr;
+}
+
+uint32_t WindowTreeClientImpl::ScheduleInFlightChange(
+    scoped_ptr<InFlightChange> change) {
+  const uint32_t change_id = next_change_id_++;
+  in_flight_map_.set(change_id, change.Pass());
+  return change_id;
+}
+
+bool WindowTreeClientImpl::ApplyServerChangeToExistingInFlightChange(
+    const InFlightChange& change) {
+  InFlightChange* existing_change = GetOldestInFlightChangeMatching(change);
+  if (!existing_change)
+    return false;
+
+  existing_change->SetRevertValueFrom(change);
+  return true;
+}
+
+void WindowTreeClientImpl::OnEmbedImpl(mojom::WindowTree* window_tree,
+                                       ConnectionSpecificId connection_id,
+                                       mojom::WindowDataPtr root_data,
+                                       Id focused_window_id,
+                                       uint32 access_policy) {
+  tree_ = window_tree;
+  connection_id_ = connection_id;
+  is_embed_root_ =
+      (access_policy & mojom::WindowTree::ACCESS_POLICY_EMBED_ROOT) != 0;
+
+  DCHECK(!root_);
+  root_ = AddWindowToConnection(this, nullptr, root_data);
+
+  focused_window_ = GetWindowById(focused_window_id);
+
+  delegate_->OnEmbed(root_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeClientImpl, WindowTreeConnection implementation:
-
-Id WindowTreeClientImpl::CreateWindowOnServer() {
-  DCHECK(tree_);
-  const Id window_id = MakeTransportId(connection_id_, next_id_++);
-  tree_->NewWindow(window_id, [this](mojom::ErrorCode code) {
-    OnActionCompleted(code == mojom::ERROR_CODE_NONE);
-  });
-  return window_id;
-}
 
 Window* WindowTreeClientImpl::GetRoot() {
   return root_;
@@ -302,8 +386,14 @@ Window* WindowTreeClientImpl::GetFocusedWindow() {
 }
 
 Window* WindowTreeClientImpl::NewWindow() {
-  Window* window = new Window(this, CreateWindowOnServer());
+  DCHECK(tree_);
+  Window* window =
+      new Window(this, MakeTransportId(connection_id_, next_window_id_++));
   AddWindow(window);
+
+  const uint32_t change_id = ScheduleInFlightChange(
+      make_scoped_ptr(new CrashInFlightChange(window, ChangeType::NEW_WINDOW)));
+  tree_->NewWindow(change_id, window->id());
   return window;
 }
 
@@ -320,24 +410,14 @@ ConnectionSpecificId WindowTreeClientImpl::GetConnectionId() {
 
 void WindowTreeClientImpl::OnEmbed(ConnectionSpecificId connection_id,
                                    mojom::WindowDataPtr root_data,
-                                   mus::mojom::WindowTreePtr tree,
+                                   mojom::WindowTreePtr tree,
                                    Id focused_window_id,
                                    uint32 access_policy) {
-  if (tree) {
-    DCHECK(!tree_);
-    tree_ = tree.Pass();
-    tree_.set_connection_error_handler([this]() { delete this; });
-  }
-  connection_id_ = connection_id;
-  is_embed_root_ =
-      (access_policy & mus::mojom::WindowTree::ACCESS_POLICY_EMBED_ROOT) != 0;
-
-  DCHECK(!root_);
-  root_ = AddWindowToConnection(this, nullptr, root_data);
-
-  focused_window_ = GetWindowById(focused_window_id);
-
-  delegate_->OnEmbed(root_);
+  DCHECK(!tree_ptr_);
+  tree_ptr_ = tree.Pass();
+  tree_ptr_.set_connection_error_handler([this]() { delete this; });
+  OnEmbedImpl(tree_ptr_.get(), connection_id, root_data.Pass(),
+              focused_window_id, access_policy);
 }
 
 void WindowTreeClientImpl::OnEmbeddedAppDisconnected(Id window_id) {
@@ -358,6 +438,13 @@ void WindowTreeClientImpl::OnWindowBoundsChanged(Id window_id,
                                                  mojo::RectPtr old_bounds,
                                                  mojo::RectPtr new_bounds) {
   Window* window = GetWindowById(window_id);
+  if (!window)
+    return;
+
+  InFlightBoundsChange new_change(window, new_bounds.To<gfx::Rect>());
+  if (ApplyServerChangeToExistingInFlightChange(new_change))
+    return;
+
   WindowPrivate(window)
       .LocalSetBounds(old_bounds.To<gfx::Rect>(), new_bounds.To<gfx::Rect>());
 }
@@ -369,6 +456,28 @@ void WindowTreeClientImpl::OnClientAreaChanged(
   Window* window = GetWindowById(window_id);
   if (window)
     WindowPrivate(window).LocalSetClientArea(new_client_area.To<gfx::Insets>());
+}
+
+void WindowTreeClientImpl::OnTransientWindowAdded(
+    uint32_t window_id,
+    uint32_t transient_window_id) {
+  Window* window = GetWindowById(window_id);
+  Window* transient_window = GetWindowById(transient_window_id);
+  // window or transient_window or both may be null if a local delete occurs
+  // with an in flight add from the server.
+  if (window && transient_window)
+    WindowPrivate(window).LocalAddTransientWindow(transient_window);
+}
+
+void WindowTreeClientImpl::OnTransientWindowRemoved(
+    uint32_t window_id,
+    uint32_t transient_window_id) {
+  Window* window = GetWindowById(window_id);
+  Window* transient_window = GetWindowById(transient_window_id);
+  // window or transient_window or both may be null if a local delete occurs
+  // with an in flight delete from the server.
+  if (window && transient_window)
+    WindowPrivate(window).LocalRemoveTransientWindow(transient_window);
 }
 
 namespace {
@@ -453,15 +562,14 @@ void WindowTreeClientImpl::OnWindowSharedPropertyChanged(
     const mojo::String& name,
     mojo::Array<uint8_t> new_data) {
   Window* window = GetWindowById(window_id);
-  if (window) {
-    std::vector<uint8_t> data;
-    std::vector<uint8_t>* data_ptr = NULL;
-    if (!new_data.is_null()) {
-      data = new_data.To<std::vector<uint8_t>>();
-      data_ptr = &data;
-    }
-    WindowPrivate(window).LocalSetSharedProperty(name, data_ptr);
-  }
+  if (!window)
+    return;
+
+  InFlightPropertyChange new_change(window, name, new_data);
+  if (ApplyServerChangeToExistingInFlightChange(new_change))
+    return;
+
+  WindowPrivate(window).LocalSetSharedProperty(name, new_data.Pass());
 }
 
 void WindowTreeClientImpl::OnWindowInputEvent(
@@ -491,6 +599,65 @@ void WindowTreeClientImpl::OnWindowFocused(Id focused_window_id) {
     FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(focused).observers(),
                       OnWindowFocusChanged(focused, blurred));
   }
+}
+
+void WindowTreeClientImpl::OnChangeCompleted(uint32 change_id, bool success) {
+  scoped_ptr<InFlightChange> change(in_flight_map_.take_and_erase(change_id));
+  if (!change)
+    return;
+
+  if (!success)
+    change->ChangeFailed();
+
+  InFlightChange* next_change = GetOldestInFlightChangeMatching(*change);
+  if (next_change) {
+    if (!success)
+      next_change->SetRevertValueFrom(*change);
+  } else if (!success) {
+    change->Revert();
+  }
+}
+
+void WindowTreeClientImpl::WmSetBounds(uint32_t change_id,
+                                       Id window_id,
+                                       mojo::RectPtr transit_bounds) {
+  Window* window = GetWindowById(window_id);
+  bool result = false;
+  if (window) {
+    DCHECK(window_manager_delegate_);
+    gfx::Rect bounds = transit_bounds.To<gfx::Rect>();
+    result = window_manager_delegate_->OnWmSetBounds(window, &bounds);
+    if (result) {
+      // If the resulting bounds differ return false. Returning false ensures
+      // the client applies the bounds we set below.
+      result = bounds == transit_bounds.To<gfx::Rect>();
+      window->SetBounds(bounds);
+    }
+  }
+  tree_->WmResponse(change_id, result);
+}
+
+void WindowTreeClientImpl::WmSetProperty(uint32_t change_id,
+                                         Id window_id,
+                                         const mojo::String& name,
+                                         mojo::Array<uint8_t> transit_data) {
+  Window* window = GetWindowById(window_id);
+  bool result = false;
+  if (window) {
+    DCHECK(window_manager_delegate_);
+    scoped_ptr<std::vector<uint8_t>> data;
+    if (!transit_data.is_null()) {
+      data.reset(
+          new std::vector<uint8_t>(transit_data.To<std::vector<uint8_t>>()));
+    }
+    result = window_manager_delegate_->OnWmSetProperty(window, name, &data);
+    if (result) {
+      // If the resulting bounds differ return false. Returning false ensures
+      // the client applies the bounds we set below.
+      window->SetSharedPropertyInternal(name, data.get());
+    }
+  }
+  tree_->WmResponse(change_id, result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

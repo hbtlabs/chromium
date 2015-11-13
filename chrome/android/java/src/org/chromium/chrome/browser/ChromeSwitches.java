@@ -94,6 +94,11 @@ public abstract class ChromeSwitches {
      */
     public static final String DISABLE_LOFI_SNACKBAR = "disable-lo-fi-snackbar";
 
+    /**
+     * Enable content snippets on the NTP
+     */
+    public static final String ENABLE_NTP_SNIPPETS = "enable-ntp-snippets";
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Native Switches
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -114,9 +119,6 @@ public abstract class ChromeSwitches {
     /** Enable Reader Mode button animation. */
     public static final String ENABLE_READER_MODE_BUTTON_ANIMATION =
             "enable-dom-distiller-button-animation";
-
-    /** Enable the native app banners. */
-    public static final String ENABLE_APP_INSTALL_ALERTS = "enable-app-install-alerts";
 
     /**
      * Use sandbox Wallet environment for requestAutocomplete.
@@ -166,11 +168,6 @@ public abstract class ChromeSwitches {
      */
     public static final String ENABLE_OFFLINE_PAGES = "enable-offline-pages";
 
-    /**
-     * Enable theme-color support in ChromeTabbedActivity.
-     */
-    public static final String ENABLE_THEME_COLOR_IN_TABBED_MODE =
-            "enable-theme-color-in-tabbed-mode";
     /**
      * Enable keyboard accessory view that shows autofill suggestions on top of the keyboard.
      * Native switch - autofill::switches::kEnableAccessorySuggestionView

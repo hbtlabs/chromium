@@ -301,6 +301,7 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       overall_connection_timeout_(QuicTime::Delta::Infinite()),
       time_of_last_received_packet_(clock_->ApproximateNow()),
       time_of_last_sent_new_packet_(clock_->ApproximateNow()),
+      last_send_for_timeout_(clock_->ApproximateNow()),
       packet_number_of_last_sent_packet_(0),
       sent_packet_manager_(
           perspective,
@@ -1002,6 +1003,7 @@ void QuicConnection::OnPacketComplete() {
 
   ClearLastFrames();
   MaybeCloseIfTooManyOutstandingPackets();
+  MaybeProcessRevivedPacket();
 }
 
 void QuicConnection::MaybeQueueAck() {
@@ -1160,6 +1162,12 @@ void QuicConnection::SendRstStream(QuicStreamId id,
   packet_generator_.AddControlFrame(QuicFrame(new QuicRstStreamFrame(
       id, AdjustErrorForVersion(error, version()), bytes_written)));
 
+  if (error == QUIC_STREAM_NO_ERROR && version() > QUIC_VERSION_28) {
+    // All data for streams which are reset with QUIC_STREAM_NO_ERROR must
+    // be received by the peer.
+    return;
+  }
+
   sent_packet_manager_.CancelRetransmissionsForStream(id);
   // Remove all queued packets which only contain data for the reset stream.
   QueuedPacketList::iterator packet_iterator = queued_packets_.begin();
@@ -1256,7 +1264,6 @@ void QuicConnection::ProcessUdpPacket(const IPEndPoint& self_address,
 
   ++stats_.packets_processed;
   MaybeProcessUndecryptablePackets();
-  MaybeProcessRevivedPacket();
   MaybeSendInResponseToPacket();
   SetPingAlarm();
 }
@@ -1362,6 +1369,7 @@ bool QuicConnection::ProcessValidatedPacket() {
              << peer_address_.ToString() << ", migrating connection.";
 
     visitor_->OnConnectionMigration();
+    sent_packet_manager_.OnConnectionMigration(type);
   }
 
   time_of_last_received_packet_ = clock_->Now();
@@ -1466,6 +1474,11 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
     return false;
   }
 
+  // If the send alarm is set, wait for it to fire.
+  if (FLAGS_respect_send_alarm && send_alarm_->IsSet()) {
+    return false;
+  }
+
   QuicTime now = clock_->Now();
   QuicTime::Delta delay = sent_packet_manager_.TimeUntilSend(
       now, retransmittable);
@@ -1481,7 +1494,9 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
              << "ms";
     return false;
   }
-  send_alarm_->Cancel();
+  if (!FLAGS_respect_send_alarm) {
+    send_alarm_->Cancel();
+  }
   return true;
 }
 
@@ -1577,11 +1592,15 @@ bool QuicConnection::WritePacketInner(QueuedPacket* packet) {
     // Pass the write result to the visitor.
     debug_visitor_->OnPacketSent(
         packet->serialized_packet, packet->original_packet_number,
-        packet->encryption_level, packet->transmission_type, *encrypted,
-        packet_send_time);
+        packet->encryption_level, packet->transmission_type,
+        encrypted->length(), packet_send_time);
   }
   if (packet->transmission_type == NOT_RETRANSMISSION) {
     time_of_last_sent_new_packet_ = packet_send_time;
+    if (IsRetransmittable(*packet) == HAS_RETRANSMITTABLE_DATA &&
+        last_send_for_timeout_ <= time_of_last_received_packet_) {
+      last_send_for_timeout_ = packet_send_time;
+    }
   }
   SetPingAlarm();
   MaybeSetFecAlarm(packet_number);
@@ -1974,11 +1993,11 @@ void QuicConnection::CloseConnection(QuicErrorCode error, bool from_peer) {
     return;
   }
   connected_ = false;
+  DCHECK(visitor_ != nullptr);
+  visitor_->OnConnectionClosed(error, from_peer);
   if (debug_visitor_ != nullptr) {
     debug_visitor_->OnConnectionClosed(error, from_peer);
   }
-  DCHECK(visitor_ != nullptr);
-  visitor_->OnConnectionClosed(error, from_peer);
   // Cancel the alarms so they don't trigger any action now that the
   // connection is closed.
   ack_alarm_->Cancel();
@@ -2083,8 +2102,14 @@ void QuicConnection::SetNetworkTimeouts(QuicTime::Delta overall_timeout,
 
 void QuicConnection::CheckForTimeout() {
   QuicTime now = clock_->ApproximateNow();
-  QuicTime time_of_last_packet = max(time_of_last_received_packet_,
-                                     time_of_last_sent_new_packet_);
+  QuicTime time_of_last_packet = QuicTime::Zero();
+  if (!FLAGS_quic_use_new_idle_timeout) {
+    time_of_last_packet =
+        max(time_of_last_received_packet_, time_of_last_sent_new_packet_);
+  } else {
+    time_of_last_packet =
+        max(time_of_last_received_packet_, last_send_for_timeout_);
+  }
 
   // |delta| can be < 0 as |now| is approximate time but |time_of_last_packet|
   // is accurate time. However, this should not change the behavior of

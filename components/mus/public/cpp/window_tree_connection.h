@@ -9,11 +9,12 @@
 
 #include "components/mus/public/cpp/types.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace mus {
 
 class Window;
+class WindowManagerDelegate;
 class WindowTreeDelegate;
 
 // Encapsulates a connection to a window tree. A unique connection is made
@@ -36,6 +37,12 @@ class WindowTreeConnection {
       WindowTreeDelegate* delegate,
       mojo::InterfaceRequest<mojom::WindowTreeClient> request,
       CreateType create_type);
+
+  static WindowTreeConnection* CreateForWindowManager(
+      WindowTreeDelegate* delegate,
+      mojo::InterfaceRequest<mojom::WindowTreeClient> request,
+      CreateType create_type,
+      WindowManagerDelegate* window_manager_delegate);
 
   // Returns the root of this connection.
   virtual Window* GetRoot() = 0;

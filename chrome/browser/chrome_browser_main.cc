@@ -63,6 +63,7 @@
 #include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/metrics/field_trial_synchronizer.h"
 #include "chrome/browser/metrics/thread_watcher.h"
+#include "chrome/browser/mojo_runner_util.h"
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
 #include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/performance_monitor/performance_monitor.h"
@@ -117,7 +118,7 @@
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/rappor/rappor_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/startup_metric_utils/startup_metric_utils.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/tracing/tracing_switches.h"
 #include "components/translate/content/browser/browser_cld_utils.h"
 #include "components/translate/content/common/cld_data_source.h"
@@ -245,6 +246,10 @@
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "chrome/browser/chrome_webusb_browser_client.h"
 #include "components/webusb/webusb_detector.h"
+#endif
+
+#if defined(MOJO_RUNNER_CLIENT)
+#include "chrome/browser/mojo_runner_state.h"
 #endif
 
 using content::BrowserThread;
@@ -656,13 +661,6 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
                   << " list specified.";
   }
 
-#if defined(FIELDTRIAL_TESTING_ENABLED)
-  if (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
-      !command_line->HasSwitch(switches::kForceFieldTrials) &&
-      !command_line->HasSwitch(variations::switches::kVariationsServerURL))
-    chrome_variations::AssociateDefaultFieldTrialConfig();
-#endif  // defined(FIELDTRIAL_TESTING_ENABLED)
-
   if (command_line->HasSwitch(switches::kForceVariationIds)) {
     // Create default variation ids which will always be included in the
     // X-Client-Data request header.
@@ -679,6 +677,14 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
   feature_list->InitializeFromCommandLine(
       command_line->GetSwitchValueASCII(switches::kEnableFeatures),
       command_line->GetSwitchValueASCII(switches::kDisableFeatures));
+
+#if defined(FIELDTRIAL_TESTING_ENABLED)
+  if (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
+      !command_line->HasSwitch(switches::kForceFieldTrials) &&
+      !command_line->HasSwitch(variations::switches::kVariationsServerURL)) {
+    chrome_variations::AssociateDefaultFieldTrialConfig(feature_list.get());
+  }
+#endif  // defined(FIELDTRIAL_TESTING_ENABLED)
 
   variations::VariationsService* variations_service =
       browser_process_->variations_service();
@@ -760,8 +766,8 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
 #endif  // defined(OS_ANDROID)
 
   // Record collected startup metrics.
-  startup_metric_utils::RecordBrowserMainMessageLoopStart(base::Time::Now(),
-                                                          is_first_run);
+  startup_metric_utils::RecordBrowserMainMessageLoopStart(
+      base::TimeTicks::Now(), is_first_run);
 }
 
 // -----------------------------------------------------------------------------
@@ -1158,8 +1164,7 @@ void ChromeBrowserMainParts::PreBrowserStart() {
 #elif defined(OS_WIN) || defined(OS_MACOSX)
   const std::string group_name =
       base::FieldTrialList::FindFullName("AutomaticTabDiscarding");
-  if (parsed_command_line().HasSwitch(switches::kEnableTabDiscarding) ||
-      base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE)) {
+  if (base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE)) {
     bool enabled_once = base::StartsWith(group_name, "Enabled_Once",
                                          base::CompareCase::SENSITIVE);
     g_browser_process->GetTabManager()->Start(enabled_once);
@@ -1211,6 +1216,13 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
   const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
+
+#if defined(MOJO_RUNNER_CLIENT)
+  if (IsRunningInMojoRunner()) {
+    mojo_runner_state_.reset(new MojoRunnerState);
+    mojo_runner_state_->WaitForConnection();
+  }
+#endif  // defined(MOJO_RUNNER_CLIENT)
 
 #if defined(OS_WIN)
   // Windows parental controls calls can be slow, so we do an early init here

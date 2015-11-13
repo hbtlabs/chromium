@@ -375,7 +375,7 @@ class LayerTreeHostTestReadyToDrawVisibility : public LayerTreeHostTest {
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (!toggled_visibility_) {
       {
-        DebugScopedSetMainThread main(proxy());
+        DebugScopedSetMainThread main(task_runner_provider());
         layer_tree_host()->SetVisible(false);
       }
       toggled_visibility_ = true;
@@ -399,7 +399,7 @@ class LayerTreeHostTestReadyToDrawVisibility : public LayerTreeHostTest {
   void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) override {
     if (!host_impl->visible()) {
       {
-        DebugScopedSetMainThread main(proxy());
+        DebugScopedSetMainThread main(task_runner_provider());
         layer_tree_host()->SetVisible(true);
       }
       EXPECT_TRUE(host_impl->visible());
@@ -4776,8 +4776,11 @@ class LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime
   int will_begin_impl_frame_count_;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime);
+// TODO(mithro): Re-enable the multi-threaded version of this test
+// http://crbug.com/537621
+// SINGLE_AND_MULTI_THREAD_TEST_F(
+//    LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime);
+SINGLE_THREAD_TEST_F(LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime);
 
 class LayerTreeHostTestSendBeginFramesToChildren : public LayerTreeHostTest {
  public:

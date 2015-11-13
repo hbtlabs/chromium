@@ -1054,16 +1054,8 @@ bool FrameLoader::prepareForCommit()
     if (pdl != m_provisionalDocumentLoader)
         return false;
     if (m_documentLoader) {
-        // TODO(bokan): Temporarily added this flag to help track down how we're attaching
-        // new frames during the DocumentLoader detachment. crbug.com/519752.
-        if (m_frame->document())
-            m_frame->document()->m_detachingDocumentLoader = true;
-
         FrameNavigationDisabler navigationDisabler(m_frame);
         detachDocumentLoader(m_documentLoader);
-
-        if (m_frame->document())
-            m_frame->document()->m_detachingDocumentLoader = false;
     }
     // detachFromFrame() will abort XHRs that haven't completed, which can
     // trigger event listeners for 'abort'. These event listeners might detach
@@ -1330,6 +1322,10 @@ bool FrameLoader::shouldContinueForNavigationPolicy(const ResourceRequest& reque
         m_frame->owner()->dispatchLoad();
         return false;
     }
+
+    bool isFormSubmission = type == NavigationTypeFormSubmitted || type == NavigationTypeFormResubmitted;
+    if (isFormSubmission && !m_frame->document()->contentSecurityPolicy()->allowFormAction(request.url()))
+        return false;
 
     policy = client()->decidePolicyForNavigation(request, loader, type, policy, replacesCurrentHistoryItem);
     if (policy == NavigationPolicyCurrentTab)

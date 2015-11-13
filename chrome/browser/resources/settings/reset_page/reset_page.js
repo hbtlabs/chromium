@@ -21,25 +21,36 @@
 Polymer({
   is: 'settings-reset-page',
 
-  /** @private */
-  onShowDialog_: function() {
-    this.$.resetDialog.open();
+  properties: {
+    allowPowerwash_: {
+      type: Boolean,
+      value: loadTimeData.getBoolean('allowPowerwash')
+    },
   },
 
   /** @private */
-  onCancelTap_: function() {
-    this.$.resetDialog.close();
+  onShowResetProfileDialog_: function() {
+     this.showDialog_('settings-reset-profile-dialog');
   },
 
   /** @private */
-  onResetTap_: function() {
-    // TODO(dpapad): Set up C++ handlers and figure out when it is OK to close
-    // the dialog.
-    this.$.resetDialog.close();
+  onShowPowerwashDialog_: function() {
+     this.showDialog_('settings-powerwash-dialog');
   },
 
-  /** @private */
-  onLearnMoreTap_: function() {
-    window.open(loadTimeData.getString('resetPageLearnMoreUrl'));
-  }
+
+  /**
+   * Creates and shows the specified dialog.
+   * @param {string} dialogName
+   * @private
+   */
+  showDialog_: function(dialogName) {
+     var dialog = document.createElement(dialogName);
+     this.shadowRoot.appendChild(dialog);
+     dialog.open();
+
+     dialog.addEventListener('iron-overlay-closed', function(event) {
+       dialog.remove();
+     });
+  },
 });

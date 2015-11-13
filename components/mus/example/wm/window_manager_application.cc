@@ -37,7 +37,8 @@ void WindowManagerApplication::Initialize(mojo::ApplicationImpl* app) {
   mus::mojom::WindowManagerPtr window_manager;
   requests_.push_back(new mojo::InterfaceRequest<mus::mojom::WindowManager>(
       mojo::GetProxy(&window_manager)));
-  mus::CreateSingleWindowTreeHost(app, this, &host_, window_manager.Pass());
+  mus::CreateSingleWindowTreeHost(app, this, &host_, window_manager.Pass(),
+                                  this);
 }
 
 bool WindowManagerApplication::ConfigureIncomingConnection(
@@ -91,6 +92,21 @@ void WindowManagerApplication::OnWindowDestroyed(mus::Window* window) {
   // worry about the possibility of |root_| being null.
   window_manager_.reset();
   root_ = nullptr;
+}
+
+bool WindowManagerApplication::OnWmSetBounds(mus::Window* window,
+                                             gfx::Rect* bounds) {
+  // By returning true the bounds of |window| is updated.
+  return true;
+}
+
+bool WindowManagerApplication::OnWmSetProperty(
+    mus::Window* window,
+    const std::string& name,
+    scoped_ptr<std::vector<uint8_t>>* new_data) {
+  // TODO(sky): constrain this to set of keys we know about and return false
+  // otherwise.
+  return true;
 }
 
 void WindowManagerApplication::CreateContainers() {

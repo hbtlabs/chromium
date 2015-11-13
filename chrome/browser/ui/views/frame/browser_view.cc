@@ -26,6 +26,7 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/mojo_runner_util.h"
 #include "chrome/browser/native_window_notification_source.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
@@ -335,8 +336,8 @@ class BrowserViewLayoutDelegateImpl : public BrowserViewLayoutDelegate {
     return gfx::ToEnclosingRect(bounds_f);
   }
 
-  int GetTopInsetInBrowserView() const override {
-    return browser_view_->frame()->GetTopInset() -
+  int GetTopInsetInBrowserView(bool restored) const override {
+    return browser_view_->frame()->GetTopInset(restored) -
         browser_view_->y();
   }
 
@@ -594,7 +595,7 @@ gfx::Point BrowserView::OffsetPointForToolbarBackgroundImage(
   // be).  We expect our parent's origin to be the window origin.
   gfx::Point window_point(point + GetMirroredPosition().OffsetFromOrigin());
   window_point.Offset(frame_->GetThemeBackgroundXInset(),
-                      -frame_->GetTopInset());
+                      -frame_->GetTopInset(false));
   return window_point;
 }
 
@@ -855,7 +856,7 @@ void BrowserView::SetStarredState(bool is_starred) {
 }
 
 void BrowserView::SetTranslateIconToggled(bool is_lit) {
-  GetLocationBarView()->SetTranslateIconToggled(is_lit);
+  // Translate icon is never active on Views.
 }
 
 void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
@@ -1280,11 +1281,13 @@ void BrowserView::ShowBookmarkAppBubble(
 
 autofill::SaveCardBubbleView* BrowserView::ShowSaveCreditCardBubble(
     content::WebContents* web_contents,
-    autofill::SaveCardBubbleController* controller) {
-  autofill::SaveCardBubbleView* view = new autofill::SaveCardBubbleViews(
+    autofill::SaveCardBubbleController* controller,
+    bool is_user_gesture) {
+  autofill::SaveCardBubbleViews* view = new autofill::SaveCardBubbleViews(
       GetToolbarView()->GetSaveCreditCardBubbleAnchor(), web_contents,
       controller);
-  view->Show();
+  view->Show(is_user_gesture ? autofill::SaveCardBubbleViews::USER_GESTURE
+                             : autofill::SaveCardBubbleViews::AUTOMATIC);
   return view;
 }
 
@@ -1311,7 +1314,8 @@ void BrowserView::ShowTranslateBubble(
 
   TranslateBubbleView::ShowBubble(
       GetToolbarView()->GetTranslateBubbleAnchor(), web_contents, step,
-      error_type, is_user_gesture);
+      error_type, is_user_gesture ? TranslateBubbleView::USER_GESTURE
+                                  : TranslateBubbleView::AUTOMATIC);
 }
 
 bool BrowserView::IsProfileResetBubbleSupported() const {
@@ -2382,6 +2386,12 @@ bool BrowserView::ShouldUseImmersiveFullscreenForUrl(const GURL& url) const {
 }
 
 void BrowserView::LoadAccelerators() {
+  // TODO(beng): for some reason GetFocusManager() returns null in this case,
+  //             investigate, but for now just disable accelerators in this
+  //             mode.
+  if (IsRunningInMojoRunner())
+    return;
+
   views::FocusManager* focus_manager = GetFocusManager();
   DCHECK(focus_manager);
 

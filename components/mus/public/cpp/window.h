@@ -15,8 +15,8 @@
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/application/public/interfaces/service_provider.mojom.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/macros.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/system/macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -30,6 +30,10 @@ class ServiceProviderImpl;
 class WindowObserver;
 class WindowSurface;
 class WindowTreeConnection;
+
+namespace {
+class OrderChangedNotifier;
+}
 
 // Defined in window_property.h (which we do not include)
 template <typename T>
@@ -49,10 +53,10 @@ class Window {
   using EmbedCallback = base::Callback<void(bool, ConnectionSpecificId)>;
 
   // Destroys this window and all its children. Destruction is allowed for
-  // windows
-  // that were created by this connection. For windows from other connections
-  // (such as the root) Destroy() does nothing. If the destruction is allowed
-  // observers are notified and the Window is immediately deleted.
+  // windows that were created by this connection, or the root window. For
+  // windows from other connections (except the root), Destroy() does nothing.
+  // If the destruction is allowed observers are notified and the Window is
+  // immediately deleted.
   void Destroy();
 
   WindowTreeConnection* connection() { return connection_; }
@@ -133,6 +137,14 @@ class Window {
   Window* parent() { return parent_; }
   const Window* parent() const { return parent_; }
   const Children& children() const { return children_; }
+
+  // TODO(fsamuel): Figure out if we want to refactor transient window
+  // management into a separate class.
+  // Transient tree.
+  Window* transient_parent() { return transient_parent_; }
+  const Window* transient_parent() const { return transient_parent_; }
+  const Children& transient_children() const { return transient_children_; }
+
   Window* GetRoot() {
     return const_cast<Window*>(const_cast<const Window*>(this)->GetRoot());
   }
@@ -140,6 +152,9 @@ class Window {
 
   void AddChild(Window* child);
   void RemoveChild(Window* child);
+
+  void AddTransientWindow(Window* transient_window);
+  void RemoveTransientWindow(Window* transient_window);
 
   void Reorder(Window* relative, mojom::OrderDirection direction);
   void MoveToFront();
@@ -156,6 +171,7 @@ class Window {
   // window_manager.mojom for details.
   void SetPreferredSize(const gfx::Size& size);
   void SetShowState(mojom::ShowState show_state);
+  void SetResizeBehavior(mojom::ResizeBehavior resize_behavior);
 
   // Focus.
   void SetFocus();
@@ -197,6 +213,8 @@ class Window {
   void LocalDestroy();
   void LocalAddChild(Window* child);
   void LocalRemoveChild(Window* child);
+  void LocalAddTransientWindow(Window* transient_window);
+  void LocalRemoveTransientWindow(Window* transient_window);
   // Returns true if the order actually changed.
   bool LocalReorder(Window* relative, mojom::OrderDirection direction);
   void LocalSetBounds(const gfx::Rect& old_bounds, const gfx::Rect& new_bounds);
@@ -208,6 +226,8 @@ class Window {
   void LocalSetSharedProperty(const std::string& name,
                               const std::vector<uint8_t>* data);
 
+  // Notifies this winodw that its stacking position has changed.
+  void NotifyWindowStackingChanged();
   // Methods implementing visibility change notifications. See WindowObserver
   // for more details.
   void NotifyWindowVisibilityChanged(Window* target);
@@ -224,10 +244,27 @@ class Window {
   // the children are removed.
   bool PrepareForEmbed();
 
+  void RemoveTransientWindowImpl(Window* child);
+  static void ReorderWithoutNotification(Window* window,
+                                         Window* relative,
+                                         mojom::OrderDirection direction);
+  static bool ReorderImpl(Window* window,
+                          Window* relative,
+                          mojom::OrderDirection direction,
+                          OrderChangedNotifier* notifier);
+
+  // Returns a pointer to the stacking target that can be used by
+  // RestackTransientDescendants.
+  static Window** GetStackingTarget(Window* window);
+
   WindowTreeConnection* connection_;
   Id id_;
   Window* parent_;
   Children children_;
+
+  Window* stacking_target_;
+  Window* transient_parent_;
+  Children transient_children_;
 
   base::ObserverList<WindowObserver> observers_;
 
