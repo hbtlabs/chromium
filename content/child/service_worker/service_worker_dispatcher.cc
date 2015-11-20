@@ -60,8 +60,6 @@ ServiceWorkerDispatcher::~ServiceWorkerDispatcher() {
 void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ServiceWorkerDispatcher, msg)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_AssociateRegistrationWithServiceWorker,
-                        OnAssociateRegistrationWithServiceWorker)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_AssociateRegistration,
                         OnAssociateRegistration)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DisassociateRegistration,
@@ -350,30 +348,23 @@ ServiceWorkerDispatcher::GetOrAdoptRegistration(
   return registration.Pass();
 }
 
-// We can assume that this message handler is called before the worker context
-// starts because script loading happens after this association.
-void ServiceWorkerDispatcher::OnAssociateRegistrationWithServiceWorker(
-    int thread_id,
-    int provider_id,
-    const ServiceWorkerRegistrationObjectInfo& info,
-    const ServiceWorkerVersionAttributes& attrs) {
-  DCHECK_EQ(kDocumentMainThreadId, thread_id);
-
-  ProviderContextMap::iterator context = provider_contexts_.find(provider_id);
-  if (context == provider_contexts_.end())
-    return;
-  context->second->OnAssociateRegistration(info, attrs);
-}
-
 void ServiceWorkerDispatcher::OnAssociateRegistration(
     int thread_id,
     int provider_id,
     const ServiceWorkerRegistrationObjectInfo& info,
     const ServiceWorkerVersionAttributes& attrs) {
-  ProviderContextMap::iterator provider = provider_contexts_.find(provider_id);
-  if (provider == provider_contexts_.end())
-    return;
-  provider->second->OnAssociateRegistration(info, attrs);
+  // Adopt the references sent from the browser process and pass them to the
+  // provider context if it exists.
+  scoped_ptr<ServiceWorkerRegistrationHandleReference> registration =
+      Adopt(info);
+  scoped_ptr<ServiceWorkerHandleReference> installing = Adopt(attrs.installing);
+  scoped_ptr<ServiceWorkerHandleReference> waiting = Adopt(attrs.waiting);
+  scoped_ptr<ServiceWorkerHandleReference> active = Adopt(attrs.active);
+  ProviderContextMap::iterator context = provider_contexts_.find(provider_id);
+  if (context != provider_contexts_.end()) {
+    context->second->OnAssociateRegistration(
+        registration.Pass(), installing.Pass(), waiting.Pass(), active.Pass());
+  }
 }
 
 void ServiceWorkerDispatcher::OnDisassociateRegistration(
@@ -774,6 +765,18 @@ void ServiceWorkerDispatcher::RemoveServiceWorkerRegistration(
     int registration_handle_id) {
   DCHECK(ContainsKey(registrations_, registration_handle_id));
   registrations_.erase(registration_handle_id);
+}
+
+scoped_ptr<ServiceWorkerRegistrationHandleReference>
+ServiceWorkerDispatcher::Adopt(
+    const ServiceWorkerRegistrationObjectInfo& info) {
+  return ServiceWorkerRegistrationHandleReference::Adopt(
+      info, thread_safe_sender_.get());
+}
+
+scoped_ptr<ServiceWorkerHandleReference> ServiceWorkerDispatcher::Adopt(
+    const ServiceWorkerObjectInfo& info) {
+  return ServiceWorkerHandleReference::Adopt(info, thread_safe_sender_.get());
 }
 
 }  // namespace content

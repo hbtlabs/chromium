@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef TOOLS_BATTOR_AGENT_BATTOR_AGENT_H_
+#define TOOLS_BATTOR_AGENT_BATTOR_AGENT_H_
+
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "device/serial/serial_io_handler.h"
+#include "tools/battor_agent/battor_connection.h"
+#include "tools/battor_agent/battor_error.h"
 
 namespace battor {
 
@@ -30,12 +32,6 @@ namespace battor {
 // This class is NOT thread safe.
 class BattOrAgent {
  public:
-  enum BattOrError {
-    BATTOR_ERROR_NONE,
-    BATTOR_ERROR_CONNECTION_FAILED,
-    BATTOR_ERROR_TIMEOUT,
-  };
-
   explicit BattOrAgent(const std::string& path);
   virtual ~BattOrAgent();
 
@@ -68,10 +64,12 @@ class BattOrAgent {
   // The path of the BattOr (e.g. "/dev/tty.battor_serial").
   std::string path_;
 
-  // IO handler capable of reading from and writing to the serial connection.
-  scoped_refptr<device::SerialIoHandler> io_handler_;
+  // Serial connection the BattOr.
+  scoped_ptr<BattOrConnection> connection_;
 
   DISALLOW_COPY_AND_ASSIGN(BattOrAgent);
 };
 
 }  // namespace battor
+
+#endif  // TOOLS_BATTOR_AGENT_BATTOR_AGENT_H_

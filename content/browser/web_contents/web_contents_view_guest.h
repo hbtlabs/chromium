@@ -30,7 +30,7 @@ class WebContentsViewGuest : public WebContentsView,
   WebContentsViewGuest(WebContentsImpl* web_contents,
                        BrowserPluginGuest* guest,
                        scoped_ptr<WebContentsView> platform_view,
-                       RenderViewHostDelegateView* platform_view_delegate_view);
+                       RenderViewHostDelegateView** delegate_view);
   ~WebContentsViewGuest() override;
 
   WebContents* web_contents();

@@ -25,8 +25,11 @@ source_set("sync_core") {
     "api/attachments/attachment_store.h",
     "api/attachments/attachment_store_backend.cc",
     "api/attachments/attachment_store_backend.h",
+    "api/data_batch.h",
     "api/entity_data.cc",
     "api/entity_data.h",
+    "api/metadata_batch.h",
+    "api/metadata_changes.h",
     "api/model_type_change_processor.cc",
     "api/model_type_change_processor.h",
     "api/model_type_service.cc",
@@ -434,10 +437,10 @@ source_set("sync_core") {
     "//google_apis",
     "//net",
     "//sql",
+    "//sync/protocol",
     "//third_party/leveldatabase",
     "//third_party/zlib",
     "//url",
-    "//sync/protocol",
   ]
 
   if (is_android) {
@@ -529,9 +532,9 @@ static_library("test_support_sync_core") {
 
   public_deps = [
     "//base",
+    "//sync",
     "//testing/gmock",
     "//testing/gtest",
-    "//sync",
   ]
 
   defines = [ "SYNC_TEST" ]
@@ -559,10 +562,10 @@ static_library("test_support_sync_internal_api") {
   ]
 
   public_deps = [
-    "//base",
-    "//testing/gtest",
-    "//sync",
     ":test_support_sync_core",
+    "//base",
+    "//sync",
+    "//testing/gtest",
   ]
 
   defines = [ "SYNC_TEST" ]
@@ -772,8 +775,8 @@ static_library("test_support_sync_fake_server") {
   deps = [
     "//base",
     "//net",
-    "//testing/gtest",
     "//sync",
+    "//testing/gtest",
     "//url",
   ]
 
@@ -840,10 +843,10 @@ if (is_android) {
   android_library("sync_java_test_support") {
     testonly = true
     deps = [
-      "android:sync_java",
       "//base:base_java",
       "//base:base_java_test_support",
       "//third_party/jsr-305:jsr_305_javalib",
+      "android:sync_java",
     ]
     DEPRECATED_java_in_dir = "test/android/javatests/src"
   }

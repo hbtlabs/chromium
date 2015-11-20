@@ -91,7 +91,6 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   void NotifyNetworkBytesSent(URLRequest* request, int64_t bytes_sent);
   void NotifyCompleted(URLRequest* request, bool started);
   void NotifyURLRequestDestroyed(URLRequest* request);
-  void NotifyURLRequestJobOrphaned(URLRequest* request);
   void NotifyPACScriptError(int line_number, const base::string16& error);
   AuthRequiredResponse NotifyAuthRequired(URLRequest* request,
                                           const AuthChallengeInfo& auth_info,
@@ -108,8 +107,9 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
                             const GURL& first_party_for_cookies) const;
 
   // TODO(mkwst): Remove this once we decide whether or not we wish to ship
-  // first-party cookies and cookie prefixes. https://crbug.com/459154,
-  // https://crbug.com/541511
+  // first-party cookies, cookie prefixes, and setting secure cookies require
+  // secure scheme. https://crbug.com/459154, https://crbug.com/541511,
+  // https://crbug.com/546820
   bool AreExperimentalCookieFeaturesEnabled() const;
 
   bool CancelURLRequestWithPolicyViolatingReferrerHeader(
@@ -233,13 +233,6 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
   // a virtual method call.
   virtual void OnURLRequestDestroyed(URLRequest* request) = 0;
 
-  // Called when the current job for |request| is orphaned. This is a temporary
-  // callback to diagnose https://crbug.com/289715 and may not be used for other
-  // purposes. Note that it may be called after OnURLRequestDestroyed.
-  //
-  // TODO(davidben): Remove this once data has been gathered.
-  virtual void OnURLRequestJobOrphaned(URLRequest* request) = 0;
-
   // Corresponds to ProxyResolverJSBindings::OnError.
   virtual void OnPACScriptError(int line_number,
                                 const base::string16& error) = 0;
@@ -293,12 +286,13 @@ class NET_EXPORT NetworkDelegate : public base::NonThreadSafe {
       const GURL& url,
       const GURL& first_party_for_cookies) const = 0;
 
-  // Returns true if the embedder has enabled the experimental features,
-  // and false otherwise.
+  // Returns true if the embedder has enabled the experimental features, and
+  // false otherwise.
   //
   // TODO(mkwst): Remove this once we decide whether or not we wish to ship
-  // first-party cookies and cookie prefixes. https://crbug.com/459154,
-  // https://crbug.com/541511
+  // first-party cookies, cookie prefixes, and setting secure cookies require
+  // secure scheme. https://crbug.com/459154, https://crbug.com/541511,
+  // https://crbug.com/546820
   virtual bool OnAreExperimentalCookieFeaturesEnabled() const = 0;
 
   // Called when the |referrer_url| for requesting |target_url| during handling

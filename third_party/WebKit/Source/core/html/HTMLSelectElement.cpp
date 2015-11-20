@@ -649,8 +649,15 @@ void HTMLSelectElement::setActiveSelectionAnchorIndex(int index)
 
     // Cache the selection state so we can restore the old selection as the new
     // selection pivots around this anchor index.
+    // Example:
+    // 1. Press the mouse button on the second OPTION
+    //   m_activeSelectionAnchorIndex = 1
+    // 2. Drag the mouse pointer onto the fifth OPTION
+    //   m_activeSelectionEndIndex = 4, options at 1-4 indices are selected.
+    // 3. Drag the mouse pointer onto the fourth OPTION
+    //   m_activeSelectionEndIndex = 3, options at 1-3 indices are selected.
+    //   updateListBoxSelection needs to clear selection of the fifth OPTION.
     m_cachedStateForActiveSelection.clear();
-
     const WillBeHeapVector<RawPtrWillBeMember<HTMLElement>>& items = listItems();
     for (unsigned i = 0; i < items.size(); ++i) {
         HTMLElement* element = items[i];
@@ -780,8 +787,10 @@ void HTMLSelectElement::setRecalcListItems()
     // is in the document or not.
 
     m_shouldRecalcListItems = true;
-    // Manual selection anchor is reset when manipulating the select programmatically.
+    // Manual selection anchor is reset when manipulating the select
+    // programmatically.
     m_activeSelectionAnchorIndex = -1;
+    m_activeSelectionEndIndex = -1;
     setOptionsChangedOnLayoutObject();
     if (!inDocument()) {
         if (HTMLOptionsCollection* collection = cachedCollection<HTMLOptionsCollection>(SelectOptions))
@@ -920,6 +929,11 @@ void HTMLSelectElement::scrollToIndex(int listIndex)
     int listSize = static_cast<int>(items.size());
     if (listIndex >= listSize)
         return;
+    // TODO(tkent): The following isHTMLOptionElement check should be
+    // unnecessary. The specified listIndex must point an HTMLOptionElement, but
+    // our code about activeSelection{Anchor,End}Index is not reliable.
+    if (!isHTMLOptionElement(*items[listIndex]))
+        return;
     bool hasPendingTask = m_optionToScrollTo;
     // We'd like to keep an HTMLOptionElement reference rather than |listIndex|
     // because the task should work even if unselected option is inserted before
@@ -958,24 +972,19 @@ void HTMLSelectElement::optionSelectionStateChanged(HTMLOptionElement* option, b
 void HTMLSelectElement::optionInserted(const HTMLOptionElement& option, bool optionIsSelected)
 {
     ASSERT(option.ownerSelectElement() == this);
+    setRecalcListItems();
     if (optionIsSelected)
         selectOption(option.index());
 }
 
 void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
 {
+    setRecalcListItems();
     if (m_lastOnChangeOption == &option)
         m_lastOnChangeOption.clear();
     if (m_optionToScrollTo == &option)
         m_optionToScrollTo.clear();
-    if (m_activeSelectionAnchorIndex < 0 && m_activeSelectionEndIndex < 0)
-        return;
-    int listIndex = optionToListIndex(option.index());
-    if (listIndex <= m_activeSelectionAnchorIndex)
-        m_activeSelectionAnchorIndex--;
-    if (listIndex <= m_activeSelectionEndIndex)
-        m_activeSelectionEndIndex--;
-    if (listIndex == selectedIndex())
+    if (option.selected())
         setAutofilled(false);
 }
 
@@ -999,17 +1008,22 @@ void HTMLSelectElement::selectOption(int optionIndex, SelectOptionFlags flags)
         // listIndex must point an HTMLOptionElement if listIndex is not -1
         // because optionToListIndex() returned it.
         element = toHTMLOptionElement(items[listIndex]);
-        // setActiveSelectionAnchorIndex is O(N).
-        if (m_activeSelectionAnchorIndex < 0 || shouldDeselect)
-            setActiveSelectionAnchorIndex(listIndex);
-        if (m_activeSelectionEndIndex < 0 || shouldDeselect)
-            setActiveSelectionEndIndex(listIndex);
         element->setSelectedState(true);
     }
 
     // deselectItemsWithoutValidation() is O(N).
     if (shouldDeselect)
         deselectItemsWithoutValidation(element);
+
+    // We should update active selection after finishing OPTION state change
+    // because setActiveSelectionAnchorIndex() stores OPTION's selection state.
+    if (listIndex >= 0) {
+        // setActiveSelectionAnchorIndex is O(N).
+        if (m_activeSelectionAnchorIndex < 0 || shouldDeselect)
+            setActiveSelectionAnchorIndex(listIndex);
+        if (m_activeSelectionEndIndex < 0 || shouldDeselect)
+            setActiveSelectionEndIndex(listIndex);
+    }
 
     // For the menu list case, this is what makes the selected element appear.
     if (LayoutObject* layoutObject = this->layoutObject())
@@ -1773,8 +1787,11 @@ void HTMLSelectElement::finishParsingChildren()
 {
     HTMLFormControlElementWithState::finishParsingChildren();
     updateListItemSelectedStates();
-    if (!usesMenuList())
-        scrollToSelection();
+    if (usesMenuList())
+        return;
+    scrollToIndex(optionToListIndex(selectedIndex()));
+    if (AXObjectCache* cache = document().existingAXObjectCache())
+        cache->listboxActiveIndexChanged(this);
 }
 
 bool HTMLSelectElement::anonymousIndexedSetter(unsigned index, PassRefPtrWillBeRawPtr<HTMLOptionElement> value, ExceptionState& exceptionState)

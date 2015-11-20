@@ -351,14 +351,14 @@ void ExternalDataUseObserver::RegisterURLRegexes(
 
   for (size_t i = 0; i < domain_path_regex.size(); ++i) {
     const std::string& url_regex = domain_path_regex[i];
-    if (url_regex.empty())
+    if (url_regex.empty() && app_package_name[i].empty())
       continue;
     scoped_ptr<re2::RE2> pattern(new re2::RE2(url_regex, options));
     if (!pattern->ok())
       continue;
     DCHECK(!label[i].empty());
-    matching_rules_.push_back(
-        new MatchingRule(app_package_name[i], pattern.Pass(), label[i]));
+    matching_rules_.push_back(make_scoped_ptr(
+        new MatchingRule(app_package_name[i], pattern.Pass(), label[i])));
 
     removed_matching_rule_labels.erase(label[i]);
   }
@@ -385,7 +385,7 @@ bool ExternalDataUseObserver::Matches(const GURL& gurl,
   if (!gurl.is_valid() || gurl.is_empty())
     return false;
 
-  for (const auto* matching_rule : matching_rules_) {
+  for (const auto& matching_rule : matching_rules_) {
     const re2::RE2* pattern = matching_rule->pattern();
     if (re2::RE2::FullMatch(gurl.spec(), *pattern)) {
       *label = matching_rule->label();
@@ -405,7 +405,7 @@ bool ExternalDataUseObserver::MatchesAppPackageName(
   if (app_package_name.empty())
     return false;
 
-  for (const auto* matching_rule : matching_rules_) {
+  for (const auto& matching_rule : matching_rules_) {
     if (app_package_name == matching_rule->app_package_name()) {
       *label = matching_rule->label();
       return true;

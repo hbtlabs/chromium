@@ -107,9 +107,20 @@ Polymer({
 
   ready: function() {
     CrSettingsPrefs.initialized.then(function() {
-      this.setUpActionMenu_();
-      this.populateList_();
+      this.initialize_();
     }.bind(this));
+  },
+
+  /**
+   * One-time initialization routines for this class.
+   * @private
+   */
+  initialize_: function() {
+    this.setUpActionMenu_();
+    this.populateList_();
+
+    if (this.categoryEnabled)
+      this.$.category.opened = true;
   },
 
   /**
@@ -143,7 +154,8 @@ Polymer({
         this.computeCategoryExceptionsPrefName(this.category));
     var sites = pref.value;
     for (var origin in sites) {
-      if (sites[origin].setting == this.categorySubtype) {
+      var site = /** @type {{setting: number}} */(sites[origin]);
+      if (site.setting == this.categorySubtype) {
         var tokens = origin.split(',');
         newList.push({url: tokens[0]});
       }
@@ -166,6 +178,7 @@ Polymer({
 
   /**
    * A handler for selecting a site (by clicking on the origin).
+   * @param {!{model: !{item: !{url: string}}}} event
    * @private
    */
   onOriginTap_: function(event) {
@@ -182,7 +195,7 @@ Polymer({
 
   /**
    * Returns the appropriate header value for display.
-   * @param {array<string>} siteList The list of all sites to display for this
+   * @param {Array<string>} siteList The list of all sites to display for this
    *     category subtype.
    * @param {boolean} toggleState The state of the global toggle for this
    *     category.
@@ -213,7 +226,7 @@ Polymer({
 
   /**
    * Returns whether to show the site list.
-   * @param {array} siteList The list of all sites to display for this category
+   * @param {Array} siteList The list of all sites to display for this category
    *     subtype.
    * @param {boolean} toggleState The state of the global toggle for this
    *     category.

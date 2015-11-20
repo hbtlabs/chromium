@@ -938,8 +938,8 @@ template("junit_binary") {
       "//testing/android/junit:junit_test_support",
       "//third_party/junit",
       "//third_party/mockito:mockito_java",
-      "//third_party/robolectric:robolectric_java",
       "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
+      "//third_party/robolectric:robolectric_java",
     ]
   }
 }
@@ -1071,6 +1071,8 @@ template("java_prebuilt") {
 #   alternative_android_sdk_ijar_dep: the target that generates
 #      alternative_android_sdk_ijar, must be set if alternative_android_sdk_ijar
 #      is used.
+#
+#   emma_never_instrument: Disables EMMA Java code coverage for this target.
 #
 # Example
 #   android_library("foo_java") {
@@ -1238,7 +1240,12 @@ template("android_apk") {
   _rebased_lib_dex_path = rebase_path(_lib_dex_path, root_build_dir)
   _template_name = target_name
 
-  final_dex_path = "$gen_dir/classes.dex"
+  enable_multidex = defined(invoker.enable_multidex) && invoker.enable_multidex
+  if (enable_multidex) {
+    final_dex_path = "$gen_dir/classes.dex.zip"
+  } else {
+    final_dex_path = "$gen_dir/classes.dex"
+  }
   final_dex_target_name = "${_template_name}__final_dex"
 
   _final_apk_path = ""
@@ -1365,12 +1372,15 @@ template("android_apk") {
     _proguard_jar_path = "$base_path.proguard.jar"
   }
 
+  _emma_never_instrument = defined(invoker.testonly) && invoker.testonly
+
   build_config_target = "${_template_name}__build_config"
   write_build_config(build_config_target) {
     forward_variables_from(invoker, [ "apk_under_test" ])
     type = "android_apk"
     jar_path = _jar_path
     dex_path = final_dex_path
+    apk_path = _final_apk_path
     resources_zip = resources_zip_path
     build_config = _build_config
     android_manifest = _android_manifest
@@ -1478,6 +1488,7 @@ template("android_apk") {
     srcjar_deps = _srcjar_deps
     jar_path = _jar_path
     dex_path = _lib_dex_path
+    emma_never_instrument = _emma_never_instrument
 
     if (defined(invoker.deps)) {
       deps += invoker.deps
@@ -1527,8 +1538,8 @@ template("android_apk") {
     proguard(_proguard_target) {
       deps = [
         ":$build_config_target",
-        ":$process_resources_target",
         ":$java_target",
+        ":$process_resources_target",
       ]
       inputs = [
                  _build_config,
@@ -1546,19 +1557,33 @@ template("android_apk") {
     _dex_sources = [ _proguard_jar_path ]
     _dex_deps = [ ":$_proguard_target" ]
   } else {
-    _dex_sources = [ _lib_dex_path ]
+    if (enable_multidex) {
+      _dex_sources = [ _jar_path ]
+    } else {
+      _dex_sources = [ _lib_dex_path ]
+    }
     _dex_deps = [ ":$java_target" ]
   }
 
   dex("$final_dex_target_name") {
+    forward_variables_from(invoker, [ "enable_multidex" ])
     deps = _dex_deps + [ ":$build_config_target" ]
     inputs = [
       _build_config,
     ]
     sources = _dex_sources
     output = final_dex_path
-    _dex_arg_key = "${_rebased_build_config}:final_dex:dependency_dex_files"
+    if (enable_multidex) {
+      _dex_arg_key = "${_rebased_build_config}:dist_jar:dependency_jars"
+    } else {
+      _dex_arg_key = "${_rebased_build_config}:final_dex:dependency_dex_files"
+    }
     args = [ "--inputs=@FileArg($_dex_arg_key)" ]
+
+    if (emma_coverage && !_emma_never_instrument) {
+      no_locals = true
+      sources += [ "$android_sdk_root/tools/lib/emma_device.jar" ]
+    }
   }
 
   if (_native_libs != []) {
@@ -1638,6 +1663,7 @@ template("android_apk") {
     dex_path = final_dex_path
     load_library_from_apk = _load_library_from_apk
     create_density_splits = _create_density_splits
+    emma_instrument = emma_coverage && !_emma_never_instrument
 
     if (!defined(extensions_to_not_compress)) {
       # Allow icu data, v8 snapshots, and pak files to be loaded directly from
@@ -1669,8 +1695,7 @@ template("android_apk") {
     if (_native_libs != [] && !_create_abi_split) {
       native_libs_dir = _native_libs_dir
 
-      # Placeholders are not necessary for L+, so add them here, but don't
-      # bother to create them in the case of splits.
+      # Placeholders necessary for some older devices.
       # http://crbug.com/395038
       forward_variables_from(invoker, [ "native_lib_placeholders" ])
 
@@ -1707,9 +1732,14 @@ template("android_apk") {
       keystore_password = _keystore_password
 
       native_libs_dir = _native_libs_dir
+
+      # Placeholders necessary for some older devices.
+      # http://crbug.com/395038
+      forward_variables_from(invoker, [ "native_lib_placeholders" ])
+
       deps = [
-        ":${_prepare_native_target_name}",
         ":${_manifest_rule}",
+        ":${_prepare_native_target_name}",
       ]
       incremental_deps = deps
     }
@@ -1770,8 +1800,8 @@ template("android_apk") {
     # actual target, but instead loads them at runtime, we need to explicitly
     # depend on them here.
     public_deps = [
-      ":${_template_name}__create_incremental",
       ":${_create_incremental_script_rule_name}",
+      ":${_template_name}__create_incremental",
       ":${java_target}",
     ]
     if (_native_libs != []) {
@@ -1824,34 +1854,35 @@ template("android_apk") {
 #     ]
 #   }
 template("instrumentation_test_apk") {
-  set_sources_assignment_filter([])
   testonly = true
-  _template_name = target_name
+  _apk_target_name = "${target_name}__apk"
+  _test_runner_target_name = "${target_name}__test_runner_script"
 
-  if (defined(invoker.apk_name)) {
-    test_runner_data_dep = [ ":${_template_name}__test_runner_script" ]
-    test_runner_script("${_template_name}__test_runner_script") {
-      forward_variables_from(invoker, [ "isolate_file" ])
-      test_name = invoker.target_name
-      test_type = "instrumentation"
-      test_apk = invoker.apk_name
-    }
+  test_runner_script(_test_runner_target_name) {
+    forward_variables_from(invoker, [ "isolate_file" ])
+    test_name = invoker.target_name
+    test_type = "instrumentation"
+    apk_target = ":$_apk_target_name"
   }
 
-  android_apk(target_name) {
+  android_apk(_apk_target_name) {
     deps = []
     data_deps = []
     forward_variables_from(invoker, "*")
+    deps += [ "//testing/android/broker:broker_java" ]
     data_deps += [
       "//testing/android/driver:driver_apk",
       "//tools/android/forwarder2",
       "//tools/android/md5sum",
     ]
-    if (defined(test_runner_data_dep)) {
-      data_deps += test_runner_data_dep
-    }
-    deps += [ "//testing/android/broker:broker_java" ]
     run_findbugs = false
+  }
+
+  group(target_name) {
+    public_deps = [
+      ":$_apk_target_name",
+      ":$_test_runner_target_name",
+    ]
   }
 }
 

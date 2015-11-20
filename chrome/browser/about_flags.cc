@@ -1312,11 +1312,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_PRINT_PREVIEW_REGISTER_PROMOS_DESCRIPTION,
      kOsDesktop,
      SINGLE_VALUE_TYPE(switches::kEnablePrintPreviewRegisterPromos)},
-    {"enable-privet-v3",
-     IDS_FLAGS_ENABLE_WEAVE_PAIRING_NAME,
-     IDS_FLAGS_ENABLE_WEAVE_PAIRING_DESCRIPTION,
-     kOsDesktop,
-     SINGLE_VALUE_TYPE(switches::kEnablePrivetV3)},
 #endif  // ENABLE_SERVICE_DISCOVERY
 #if defined(ENABLE_PRINT_PREVIEW)
     {"enable-print-preview-simplify",
@@ -2100,7 +2095,7 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_DESCRIPTION,
      kOsAndroid,
      SINGLE_VALUE_TYPE_AND_VALUE(switches::kDisableAutoHidingToolbarThreshold,
-                                 "0")},
+                                 "800")},
 #endif
 #if defined(TOOLKIT_VIEWS)
     {"enable-autofill-credit-card-upload",

@@ -1,12 +1,13 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/api/gcd_private/privet_v3_context_getter.h"
 
+#include "base/atomicops.h"
 #include "base/command_line.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/chrome_switches.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
@@ -15,6 +16,11 @@
 #include "net/url_request/url_request_context_builder.h"
 
 namespace extensions {
+
+namespace {
+// TODO(vitalybuka): crbug.com/458365 Move into URLRequestContextBuilder
+base::subtle::Atomic32 g_ssl_shard_counter = 0;
+}
 
 // Class verifies certificate by its fingerprint received using different
 // channel. It's the only know information about device with self-signed
@@ -87,8 +93,6 @@ class PrivetV3ContextGetter::CertVerifier : public net::CertVerifier {
 PrivetV3ContextGetter::PrivetV3ContextGetter(
     const scoped_refptr<base::SingleThreadTaskRunner>& net_task_runner)
     : net_task_runner_(net_task_runner), weak_ptr_factory_(this) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnablePrivetV3));
 }
 
 net::URLRequestContext* PrivetV3ContextGetter::GetURLRequestContext() {
@@ -105,6 +109,10 @@ void PrivetV3ContextGetter::InitOnNetThread() {
   DCHECK(net_task_runner_->BelongsToCurrentThread());
   if (!context_) {
     net::URLRequestContextBuilder builder;
+    std::string shard_name = "privet_v3_context_getter/";
+    shard_name += base::IntToString(
+        base::subtle::Barrier_AtomicIncrement(&g_ssl_shard_counter, 1));
+    builder.set_ssl_session_cache_shard(shard_name);
     builder.set_proxy_service(net::ProxyService::CreateDirect());
     builder.SetSpdyAndQuicEnabled(false, false);
     builder.DisableHttpCache();

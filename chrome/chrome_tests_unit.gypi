@@ -541,6 +541,7 @@
     'chrome_unit_tests_non_mobile_sources': [
       'browser/renderer_context_menu/render_view_context_menu_test_util.cc',
       'browser/renderer_context_menu/render_view_context_menu_test_util.h',
+      'browser/ui/autofill/save_card_bubble_controller_impl_unittest.cc',
       'browser/ui/website_settings/mock_permission_bubble_view.cc',
       'browser/ui/website_settings/mock_permission_bubble_view.h',
     ],
@@ -1446,7 +1447,6 @@
       'browser/media/router/presentation_media_sinks_observer_unittest.cc',
       'browser/media/router/presentation_request_unittest.cc',
       'browser/media/router/presentation_service_delegate_impl_unittest.cc',
-      'browser/media/router/presentation_session_state_observer_unittest.cc',
     ],
     'chrome_unit_tests_media_router_non_android_sources': [
       'browser/media/router/media_router_mojo_impl_unittest.cc',

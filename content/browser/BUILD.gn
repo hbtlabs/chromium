@@ -48,9 +48,9 @@ source_set("browser") {
     "//net:extras",
     "//skia",
     "//sql",
+    "//third_party/WebKit/public:blink_headers",
     "//third_party/npapi",
     "//third_party/re2",
-    "//third_party/WebKit/public:blink_headers",
     "//third_party/zlib",
     "//third_party/zlib:zip",
     "//ui/accessibility",
@@ -381,6 +381,7 @@ source_set("browser") {
               ".",
               "//content")
       sources -= [ "renderer_host/begin_frame_observer_proxy.cc" ]
+      deps += [ "//ui/android" ]
     }
 
     deps -= [ "//device/battery" ]
@@ -388,7 +389,6 @@ source_set("browser") {
       "//content/public/android:jni",
       "//media",
       "//mojo/android:libsystem_java",
-      "//ui/android",
     ]
     defines += [ "APPCACHE_USE_SIMPLE_CACHE" ]
     libs += [ "jnigraphics" ]
@@ -422,16 +422,20 @@ source_set("browser") {
 
   if (use_aura) {
     deps += [
+      "//components/bitmap_uploader",
       "//ui/aura",
       "//ui/aura_extra",
       "//ui/strings",
       "//ui/views/mus:for_component",
       "//ui/wm",
-      "//components/bitmap_uploader",
     ]
     sources += [
       "compositor/software_output_device_mus.cc",
       "compositor/software_output_device_mus.h",
+      "frame_host/render_widget_host_view_mus.cc",
+      "frame_host/render_widget_host_view_mus.h",
+      "web_contents/web_contents_view_mus.cc",
+      "web_contents/web_contents_view_mus.h",
     ]
     defines += [ "MOJO_RUNNER_CLIENT" ]
   } else {  # Not aura.

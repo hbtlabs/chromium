@@ -420,7 +420,7 @@ class SchedulerTest : public testing::Test {
 
   void CheckMainFrameSkippedAfterLateCommit(bool expect_send_begin_main_frame);
   void ImplFrameSkippedAfterLateSwapAck(bool swap_ack_before_deadline);
-  void ImplFrameIsNotSkippedAfterLateSwapAck();
+  void ImplFrameNotSkippedAfterLateSwapAck();
   void BeginFramesNotFromClient(bool use_external_begin_frame_source,
                                 bool throttle_frame_production);
   void BeginFramesNotFromClient_SwapThrottled(
@@ -779,7 +779,7 @@ TEST_F(SchedulerTest, RequestRedrawInsideDraw) {
   SchedulerClientThatsetNeedsDrawInsideDraw* client =
       new SchedulerClientThatsetNeedsDrawInsideDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
   client->SetRequestRedrawsInsideDraw(true);
 
   scheduler_->SetNeedsRedraw();
@@ -815,7 +815,7 @@ TEST_F(SchedulerTest, RequestRedrawInsideFailedDraw) {
   SchedulerClientThatsetNeedsDrawInsideDraw* client =
       new SchedulerClientThatsetNeedsDrawInsideDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   client->SetRequestRedrawsInsideDraw(true);
   client->SetDrawWillHappen(false);
@@ -891,7 +891,7 @@ TEST_F(SchedulerTest, RequestCommitInsideDraw) {
       new SchedulerClientThatSetNeedsBeginMainFrameInsideDraw;
 
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   EXPECT_FALSE(client->needs_begin_frames());
   scheduler_->SetNeedsRedraw();
@@ -933,7 +933,7 @@ TEST_F(SchedulerTest, RequestCommitInsideFailedDraw) {
   SchedulerClientThatsetNeedsDrawInsideDraw* client =
       new SchedulerClientThatsetNeedsDrawInsideDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   client->SetDrawWillHappen(false);
 
@@ -976,7 +976,7 @@ TEST_F(SchedulerTest, NoSwapWhenDrawFails) {
   SchedulerClientThatSetNeedsBeginMainFrameInsideDraw* client =
       new SchedulerClientThatSetNeedsBeginMainFrameInsideDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   scheduler_->SetNeedsRedraw();
   EXPECT_TRUE(scheduler_->RedrawPending());
@@ -1014,7 +1014,7 @@ TEST_F(SchedulerTest, PrepareTiles) {
   SchedulerClientNeedsPrepareTilesInDraw* client =
       new SchedulerClientNeedsPrepareTilesInDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   // Request both draw and prepare tiles. PrepareTiles shouldn't
   // be trigged until BeginImplFrame.
@@ -1268,7 +1268,7 @@ TEST_F(SchedulerTest, TriggerBeginFrameDeadlineEarly) {
   SchedulerClientNeedsPrepareTilesInDraw* client =
       new SchedulerClientNeedsPrepareTilesInDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   scheduler_->SetNeedsRedraw();
   EXPECT_SCOPED(AdvanceFrame());
@@ -1283,7 +1283,7 @@ TEST_F(SchedulerTest, WaitForReadyToDrawDoNotPostDeadline) {
       new SchedulerClientNeedsPrepareTilesInDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
   scheduler_settings_.commit_to_active_tree = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   // SetNeedsBeginMainFrame should begin the frame on the next BeginImplFrame.
   scheduler_->SetNeedsBeginMainFrame();
@@ -1323,7 +1323,7 @@ TEST_F(SchedulerTest, WaitForReadyToDrawCancelledWhenLostOutputSurface) {
       new SchedulerClientNeedsPrepareTilesInDraw;
   scheduler_settings_.use_external_begin_frame_source = true;
   scheduler_settings_.commit_to_active_tree = true;
-  SetUpScheduler(make_scoped_ptr(client).Pass(), true);
+  SetUpScheduler(make_scoped_ptr(client), true);
 
   // SetNeedsBeginMainFrame should begin the frame on the next BeginImplFrame.
   scheduler_->SetNeedsBeginMainFrame();
@@ -1404,9 +1404,8 @@ TEST_F(SchedulerTest, MainFrameSkippedAfterLateCommit) {
 
 // Response times of BeginMainFrame's without the critical path flag set
 // should not affect whether we recover latency or not.
-TEST_F(
-    SchedulerTest,
-    MainFrameSkippedAfterLateCommit_LongBeginMainFrameQueueDurationNotCritical) {
+TEST_F(SchedulerTest,
+       MainFrameSkippedAfterLateCommit_LongMainFrameQueueDurationNotCritical) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
@@ -1420,9 +1419,8 @@ TEST_F(
 
 // Response times of BeginMainFrame's with the critical path flag set
 // should affect whether we recover latency or not.
-TEST_F(
-    SchedulerTest,
-    MainFrameNotSkippedAfterLateCommit_LongBeginMainFrameQueueDurationCritical) {
+TEST_F(SchedulerTest,
+       MainFrameNotSkippedAfterLateCommit_LongMainFrameQueueDurationCritical) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
@@ -1596,9 +1594,8 @@ TEST_F(SchedulerTest,
   EXPECT_SCOPED(ImplFrameSkippedAfterLateSwapAck(swap_ack_before_deadline));
 }
 
-TEST_F(
-    SchedulerTest,
-    ImplFrameSkippedAfterLateSwapAck_LongBeginMainFrameQueueDurationNotCritical) {
+TEST_F(SchedulerTest,
+       ImplFrameSkippedAfterLateSwapAck_LongMainFrameQueueDurationNotCritical) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
@@ -1693,7 +1690,7 @@ TEST_F(SchedulerTest,
   }
 }
 
-void SchedulerTest::ImplFrameIsNotSkippedAfterLateSwapAck() {
+void SchedulerTest::ImplFrameNotSkippedAfterLateSwapAck() {
   // To get into a high latency state, this test disables automatic swap acks.
   client_->SetAutomaticSwapAck(false);
 
@@ -1748,7 +1745,7 @@ void SchedulerTest::ImplFrameIsNotSkippedAfterLateSwapAck() {
 
 TEST_F(
     SchedulerTest,
-    ImplFrameIsNotSkippedAfterLateSwapAck_BeginMainFrameQueueDurationCriticalTooLong) {
+    ImplFrameNotSkippedAfterLateSwapAck_MainFrameQueueDurationCriticalTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
@@ -1756,45 +1753,44 @@ TEST_F(
       ->SetBeginMainFrameQueueDurationCriticalEstimate(kSlowDuration);
   fake_compositor_timing_history_
       ->SetBeginMainFrameQueueDurationNotCriticalEstimate(kSlowDuration);
-  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+  EXPECT_SCOPED(ImplFrameNotSkippedAfterLateSwapAck());
 }
 
 TEST_F(SchedulerTest,
-       ImplFrameIsNotSkippedAfterLateSwapAck_CommitEstimateTooLong) {
+       ImplFrameNotSkippedAfterLateSwapAck_CommitEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_
       ->SetBeginMainFrameStartToCommitDurationEstimate(kSlowDuration);
-  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+  EXPECT_SCOPED(ImplFrameNotSkippedAfterLateSwapAck());
 }
 
 TEST_F(SchedulerTest,
-       ImplFrameIsNotSkippedAfterLateSwapAck_ReadyToActivateEstimateTooLong) {
+       ImplFrameNotSkippedAfterLateSwapAck_ReadyToActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_->SetCommitToReadyToActivateDurationEstimate(
       kSlowDuration);
-  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+  EXPECT_SCOPED(ImplFrameNotSkippedAfterLateSwapAck());
 }
 
 TEST_F(SchedulerTest,
-       ImplFrameIsNotSkippedAfterLateSwapAck_ActivateEstimateTooLong) {
+       ImplFrameNotSkippedAfterLateSwapAck_ActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_->SetActivateDurationEstimate(kSlowDuration);
-  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+  EXPECT_SCOPED(ImplFrameNotSkippedAfterLateSwapAck());
 }
 
-TEST_F(SchedulerTest,
-       ImplFrameIsNotSkippedAfterLateSwapAck_DrawEstimateTooLong) {
+TEST_F(SchedulerTest, ImplFrameNotSkippedAfterLateSwapAck_DrawEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_->SetDrawDurationEstimate(kSlowDuration);
-  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+  EXPECT_SCOPED(ImplFrameNotSkippedAfterLateSwapAck());
 }
 
 TEST_F(SchedulerTest,

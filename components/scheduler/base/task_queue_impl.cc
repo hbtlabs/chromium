@@ -165,8 +165,8 @@ bool TaskQueueImpl::PostDelayedTaskLocked(
           FROM_HERE, base::Bind(&TaskQueueImpl::ScheduleDelayedWorkTask, this,
                                 any_thread().time_domain, desired_run_time),
           any_thread().task_queue_manager->GetNextSequenceNumber(), true);
+      thread_hop_task.set_enqueue_order(thread_hop_task.sequence_num);
       any_thread().task_queue_manager->DidQueueTask(thread_hop_task);
-      pending_task.set_enqueue_order(thread_hop_task.sequence_num);
       EnqueueTaskLocked(thread_hop_task);
     }
     return true;
