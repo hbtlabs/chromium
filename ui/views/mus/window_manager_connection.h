@@ -8,6 +8,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "ui/views/mus/mus_export.h"
 #include "ui/views/widget/widget.h"
 
 namespace mojo {
@@ -28,10 +29,10 @@ class NativeWidgetDelegate;
 
 // Establishes a connection to the window manager for use by views within an
 // application, and performs Aura initialization.
-class WindowManagerConnection : public mus::WindowTreeDelegate {
+class VIEWS_MUS_EXPORT WindowManagerConnection
+    : public NON_EXPORTED_BASE(mus::WindowTreeDelegate) {
  public:
-  static void Create(mus::mojom::WindowManagerPtr window_manager,
-                     mojo::ApplicationImpl* app);
+  static void Create(mojo::ApplicationImpl* app);
   static WindowManagerConnection* Get();
 
   mojo::ApplicationImpl* app() { return app_; }
@@ -44,8 +45,7 @@ class WindowManagerConnection : public mus::WindowTreeDelegate {
   }
 
  private:
-  WindowManagerConnection(mus::mojom::WindowManagerPtr window_manager,
-                          mojo::ApplicationImpl* app);
+  explicit WindowManagerConnection(mojo::ApplicationImpl* app);
   ~WindowManagerConnection() override;
 
   // mus::WindowTreeDelegate:

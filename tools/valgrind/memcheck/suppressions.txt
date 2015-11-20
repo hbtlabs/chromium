@@ -538,10 +538,10 @@
    fun:_ZN7content45ManifestParserTest_IconDensityParseRules_Test8TestBodyEv
 }
 {
-   bug_512466
+   bug_415092
    Memcheck:Leak
    fun:_Znw*
-   fun:_ZN4base22PosixDynamicThreadPool13AddTaskNoLockEPNS_11PendingTaskE
+   fun:_ZN4base22PosixDynamicThreadPool7AddTaskEPNS_11PendingTaskE
    fun:_ZN4base22PosixDynamicThreadPool8PostTaskERKN15tracked_objects8LocationERKNS_8CallbackIFvvEEE
    fun:_ZN4base12_GLOBAL__N_114WorkerPoolImpl8PostTaskERKN15tracked_objects8LocationERKNS_8CallbackIFvvEEEb
    fun:_ZN4base10WorkerPool8PostTaskERKN15tracked_objects8LocationERKNS_8CallbackIFvvEEEb
@@ -2757,20 +2757,6 @@
    fun:_ZN3net16HostResolverImpl*
 }
 {
-   bug_387993
-   Memcheck:Uninitialized
-   fun:_ZN11SkBaseMutex7acquireEv
-   fun:_ZN18SkAutoMutexAcquireC2EP11SkBaseMutex
-   fun:_ZN18SkAutoMutexAcquireC1EP11SkBaseMutex
-   fun:_ZN12SkGlyphCache10VisitCacheEP10SkTypefacePK12SkDescriptorPFbPKS_PvES7_
-   fun:_ZN12SkGlyphCache11DetachCacheEP10SkTypefacePK12SkDescriptor
-   fun:_ZL14DetachDescProcP10SkTypefacePK12SkDescriptorPv
-   fun:_ZNK7SkPaint14descriptorProcEPK18SkDevicePropertiesPK8SkMatrixPFvP10SkTypefacePK12SkDescriptorPvESB_b
-   fun:_ZNK7SkPaint11detachCacheEPK18SkDevicePropertiesPK8SkMatrixb
-   fun:_ZN16SkAutoGlyphCacheC2ERK7SkPaintPK18SkDevicePropertiesPK8SkMatrix
-   fun:_ZN16SkAutoGlyphCacheC1ERK7SkPaintPK18SkDevicePropertiesPK8SkMatrix
-}
-{
    bug_388013
    Memcheck:Leak
    fun:_Znw*
@@ -3434,4 +3420,20 @@
    fun:_ZN7content21RenderProcessHostImpl20CreateMessageFiltersEv
    fun:_ZN7content21RenderProcessHostImpl4InitEv
    fun:_ZN7content22RenderFrameHostManager14InitRenderViewEPNS_18RenderViewHostImplEPNS_20RenderFrameProxyHostE
+}
+{
+   bug_557778
+   Memcheck:Uninitialized
+   fun:vp9_pick_inter_mode
+   fun:nonrd_pick_sb_modes
+}
+{
+   bug_558179
+   Memcheck:Leak
+   fun:_Znw*
+   fun:_ZN7content27ServiceWorkerContextWrapperC1EPNS_14BrowserContextE
+   fun:_ZN7content20StoragePartitionImpl6CreateEPNS_14BrowserContextEbRKN4base8FilePathE
+   fun:_ZN7content23StoragePartitionImplMap3GetERKSsS2_b
+   fun:_ZN7content12_GLOBAL__N_129GetStoragePartitionFromConfigEPNS_14BrowserContextERKSsS4_b
+   fun:_ZN7content14BrowserContext26GetStoragePartitionForSiteEPS0_RK4GURL
 }

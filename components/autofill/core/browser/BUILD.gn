@@ -142,12 +142,22 @@ source_set("browser") {
     "webdata/autofill_webdata_service_observer.h",
   ]
 
+  if (is_ios) {
+    sources += [
+      "autofill_field_trial_ios.cc",
+      "autofill_field_trial_ios.h",
+      "keyboard_accessory_metrics_logger.h",
+      "keyboard_accessory_metrics_logger.mm",
+    ]
+  }
+
   configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
     "//base",
     "//base:i18n",
     "//base:prefs",
+    "//third_party/re2",
     "//components/autofill/core/common",
     "//components/compression",
     "//components/data_use_measurement/core",
@@ -208,11 +218,10 @@ source_set("test_support") {
   ]
 
   deps = [
-    ":browser",
     "//base",
+    "//base/test:test_support",
     "//base:prefs",
     "//base:prefs_test_support",
-    "//base/test:test_support",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/os_crypt",
@@ -225,6 +234,8 @@ source_set("test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/gfx/geometry",
+    "//ui/gfx:test_support",
+    ":browser",
   ]
 }
 

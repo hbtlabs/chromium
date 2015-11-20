@@ -149,7 +149,6 @@ public:
     void dispatchWillSendRequest(WebURLRequest&) override;
     WebURLLoader* createAssociatedURLLoader(const WebURLLoaderOptions&) override;
     unsigned unloadListenerCount() const override;
-    void replaceSelection(const WebString&) override;
     void insertText(const WebString&) override;
     void setMarkedText(const WebString&, unsigned location, unsigned length) override;
     void unmarkText() override;
@@ -255,6 +254,7 @@ public:
     void requestRunTask(WebSuspendableTask*) const override;
     void didCallAddSearchProvider() override;
     void didCallIsSearchProviderInstalled() override;
+    void replaceSelection(const WebString&) override;
 
     void willBeDetached();
     void willDetachParent();
@@ -287,7 +287,7 @@ public:
 
     FrameView* frameView() const { return frame() ? frame()->view() : 0; }
 
-    WebDevToolsAgentImpl* devToolsAgentImpl() const { return m_devToolsAgent.get(); }
+    WebDevToolsAgentImpl* devToolsAgentImpl() const;
 
     // Getters for the impls corresponding to Get(Provisional)DataSource. They
     // may return 0 if there is no corresponding data source.

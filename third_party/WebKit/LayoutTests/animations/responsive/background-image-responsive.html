@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <script src="resources/responsive-test.js"></script>
 <script>
-assertResponsive({
+assertCSSResponsive({
   property: 'background-image',
-  from: '',
   to: 'url("test://to")',
   configurations: [{
     state: {underlying: 'url("test://a")'},
@@ -26,7 +25,7 @@ assertResponsive({
   }],
 });
 
-assertResponsive({
+assertCSSResponsive({
   property: 'background-image',
   from: 'inherit',
   to: 'url("test://to")',

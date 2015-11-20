@@ -207,7 +207,7 @@
           # until the number of 32 bit devices which don't support this
           # approach falls to a minimal level -  http://crbug.com/390618.
           ['chrome_apk_use_chromium_linker==1 and profiling==0 and (target_arch == "arm64" or target_arch == "x86_64")', {
-            'load_library_from_zip': 1,
+            'load_library_from_zip': '<(chrome_apk_load_library_from_zip)',
           }],
         ],
       },
@@ -240,12 +240,14 @@
         'apk_name': 'ChromeSyncShell',
         'native_lib_target': 'libchrome_sync_shell',
         'java_in_dir': 'java',
+        'enable_multidex': 1,
+        'enable_multidex_configurations': ['Debug'],
         'conditions': [
           # Only attempt loading the library from the APK for 64 bit devices
           # until the number of 32 bit devices which don't support this
           # approach falls to a minimal level -  http://crbug.com/390618.
           ['chrome_apk_use_chromium_linker==1 and profiling==0 and (target_arch == "arm64" or target_arch == "x86_64")', {
-            'load_library_from_zip': 1,
+            'load_library_from_zip': '<(chrome_apk_load_library_from_zip)',
           }],
         ],
       },

@@ -121,6 +121,22 @@ WebGLRenderingContextBaseMap& forciblyEvictedContexts()
 
 } // namespace
 
+WebGLRenderingContextBase::ScopedDrawingBufferBinder::ScopedDrawingBufferBinder(DrawingBuffer* drawingBuffer, WebGLFramebuffer* framebufferBinding)
+    : m_drawingBuffer(drawingBuffer)
+    , m_readFramebufferBinding(framebufferBinding)
+{
+    // Commit DrawingBuffer if needed (e.g., for multisampling)
+    if (!m_readFramebufferBinding && m_drawingBuffer)
+        m_drawingBuffer->commit();
+}
+
+WebGLRenderingContextBase::ScopedDrawingBufferBinder::~ScopedDrawingBufferBinder()
+{
+    // Restore DrawingBuffer if needed
+    if (!m_readFramebufferBinding && m_drawingBuffer)
+        m_drawingBuffer->restoreFramebufferBindings();
+}
+
 void WebGLRenderingContextBase::forciblyLoseOldestContext(const String& reason)
 {
     WebGLRenderingContextBase* candidate = oldestContext();
@@ -1226,7 +1242,7 @@ void WebGLRenderingContextBase::markContextChanged(ContentChangeType changeType)
     } else {
         if (!m_markedCanvasDirty) {
             m_markedCanvasDirty = true;
-            canvas()->didDraw(FloatRect(FloatPoint(0, 0), clampedCanvasSize()));
+            canvas()->didDraw(FloatRect(FloatPoint(0, 0), FloatSize(clampedCanvasSize())));
         }
     }
 }
@@ -4350,7 +4366,7 @@ void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum in
         type = GL_FLOAT;
     }
 
-    RefPtr<Image> imageForRender = image->cachedImage()->imageForLayoutObject(image->layoutObject());
+    RefPtr<Image> imageForRender = image->cachedImage()->image();
     if (imageForRender && imageForRender->isSVGImage())
         imageForRender = drawImageIntoBuffer(imageForRender.release(), image->width(), image->height(), "texImage2D");
 
@@ -4676,7 +4692,7 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint 
         type = GL_FLOAT;
     }
 
-    RefPtr<Image> imageForRender = image->cachedImage()->imageForLayoutObject(image->layoutObject());
+    RefPtr<Image> imageForRender = image->cachedImage()->image();
     if (imageForRender && imageForRender->isSVGImage())
         imageForRender = drawImageIntoBuffer(imageForRender.release(), image->width(), image->height(), "texSubImage2D");
 
@@ -6848,13 +6864,13 @@ void WebGLRenderingContextBase::preserveObjectWrapper(ScriptState* scriptState, 
         name.length()).ToLocalChecked();
     if (targetObject) {
         V8HiddenValue::setHiddenValue(
-            isolate,
+            scriptState,
             sourceObject->newLocalWrapper(isolate),
             jsName,
             targetObject->newLocalWrapper(isolate));
     } else {
         V8HiddenValue::deleteHiddenValue(
-            isolate,
+            scriptState,
             sourceObject->newLocalWrapper(isolate),
             jsName);
     }

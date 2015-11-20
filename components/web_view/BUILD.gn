@@ -54,6 +54,7 @@ source_set("lib") {
     "//components/clipboard/public/interfaces",
     "//components/devtools_service/public/cpp",
     "//components/devtools_service/public/interfaces",
+    "//components/mus/common",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
     "//components/resource_provider/public/interfaces",
@@ -65,6 +66,7 @@ source_set("lib") {
     "//mojo/converters/geometry",
     "//mojo/public/cpp/bindings",
     "//mojo/services/network/public/interfaces",
+    "//mojo/services/tracing/public/cpp",
     "//mojo/services/tracing/public/interfaces",
     "//url",
   ]

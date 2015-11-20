@@ -43,6 +43,8 @@
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
+#include "core/events/ProgressEvent.h"
+#include "core/events/ResourceProgressEvent.h"
 #include "core/events/TouchEvent.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
@@ -389,6 +391,17 @@ bool WebPluginContainerImpl::executeEditCommand(const WebString& name, const Web
 WebElement WebPluginContainerImpl::element()
 {
     return WebElement(m_element);
+}
+
+void WebPluginContainerImpl::dispatchProgressEvent(const WebString& type, bool lengthComputable, unsigned long long loaded, unsigned long long total, const WebString& url)
+{
+    RefPtrWillBeRawPtr<ProgressEvent> event;
+    if (url.isEmpty()) {
+        event = ProgressEvent::create(type, lengthComputable, loaded, total);
+    } else {
+        event = ResourceProgressEvent::create(type, lengthComputable, loaded, total, url);
+    }
+    m_element->dispatchEvent(event.release());
 }
 
 void WebPluginContainerImpl::invalidate()
@@ -974,8 +987,9 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
     LayoutRect unclippedAbsoluteRect(frameRectInOwnerElementSpace);
     box->mapRectToPaintInvalidationBacking(rootView, unclippedAbsoluteRect, nullptr);
 
-    // The frameRect is already in absolute space.
+    // The frameRect is already in absolute space, except for scrolling of the root frame.
     windowRect = frameRect();
+    windowRect.moveBy(roundedIntPoint(-rootView->viewRect().location()));
 
     clippedLocalRect = enclosingIntRect(unclippedAbsoluteRect);
     unclippedIntLocalRect = clippedLocalRect;
@@ -988,7 +1002,7 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
 
 void WebPluginContainerImpl::calculateGeometry(IntRect& windowRect, IntRect& clipRect, IntRect& unobscuredRect, Vector<IntRect>& cutOutRects)
 {
-    // document().layoutView() can be 0 when we receive messages from the
+    // document().layoutView() can be null when we receive messages from the
     // plugins while we are destroying a frame.
     // FIXME: Can we just check m_element->document().isActive() ?
     if (m_element->layoutObject()->document().layoutView()) {

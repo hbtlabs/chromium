@@ -6,20 +6,70 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/android/data_usage/external_data_use_observer.h"
+#include "components/variations/variations_associated_data.h"
 
 namespace {
 
-// Indicates the maximum number of tracking session history to maintain per tab.
-const size_t kMaxSessionsPerTab = 5;
+// Indicates the default maximum number of tracking session history to maintain
+// per tab. May be overridden by the field trial.
+const size_t kDefaultMaxSessionsPerTab = 5;
 
-// Indicates the expiration duration in seconds for a closed tab entry, after
-// which it can be sweeped from history.
-const unsigned int kClosedTabExpirationDurationSeconds = 30;  // 30 seconds.
-
-// Indicates the expiration duration in seconds for an open tab entry, after
-// which it can be sweeped from history.
-const unsigned int kOpenTabExpirationDurationSeconds =
+// Indicates the default expiration duration in seconds, after which it can be
+// sweeped from history for a closed tab entry and an open tab entry
+// respectively. May be overridden by the field trial.
+const unsigned int kDefaultClosedTabExpirationDurationSeconds =
+    30;  // 30 seconds.
+const unsigned int kDefaultOpenTabExpirationDurationSeconds =
     60 * 60 * 24 * 5;  // 5 days.
+
+const char kUMATrackingSessionLifetimeSecondsHistogram[] =
+    "DataUse.TabModel.TrackingSessionLifetime";
+const char kUMAOldInactiveSessionRemovalDurationSecondsHistogram[] =
+    "DataUse.TabModel.OldInactiveSessionRemovalDuration";
+
+// Returns various parameters from the values specified in the field trial.
+size_t GetMaxSessionsPerTab() {
+  size_t max_sessions_per_tab = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "max_sessions_per_tab");
+  if (!variation_value.empty() &&
+      base::StringToSizeT(variation_value, &max_sessions_per_tab)) {
+    return max_sessions_per_tab;
+  }
+  return kDefaultMaxSessionsPerTab;
+}
+
+base::TimeDelta GetClosedTabExpirationDuration() {
+  uint32_t duration_seconds = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "closed_tab_expiration_duration_seconds");
+  if (!variation_value.empty() &&
+      base::StringToUint(variation_value, &duration_seconds)) {
+    return base::TimeDelta::FromSeconds(duration_seconds);
+  }
+  return base::TimeDelta::FromSeconds(
+      kDefaultClosedTabExpirationDurationSeconds);
+}
+
+base::TimeDelta GetOpenTabExpirationDuration() {
+  uint32_t duration_seconds = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "open_tab_expiration_duration_seconds");
+  if (!variation_value.empty() &&
+      base::StringToUint(variation_value, &duration_seconds)) {
+    return base::TimeDelta::FromSeconds(duration_seconds);
+  }
+  return base::TimeDelta::FromSeconds(kDefaultOpenTabExpirationDurationSeconds);
+}
 
 }  // namespace
 
@@ -27,19 +77,10 @@ namespace chrome {
 
 namespace android {
 
-size_t TabDataUseEntry::GetMaxSessionsPerTabForTests() {
-  return kMaxSessionsPerTab;
-}
-
-unsigned int TabDataUseEntry::GetClosedTabExpirationDurationSecondsForTests() {
-  return kClosedTabExpirationDurationSeconds;
-}
-
-unsigned int TabDataUseEntry::GetOpenTabExpirationDurationSecondsForTests() {
-  return kOpenTabExpirationDurationSeconds;
-}
-
-TabDataUseEntry::TabDataUseEntry() {}
+TabDataUseEntry::TabDataUseEntry()
+    : max_sessions_per_tab_(GetMaxSessionsPerTab()),
+      closed_tab_expiration_duration_(GetClosedTabExpirationDuration()),
+      open_tab_expiration_duration_(GetOpenTabExpirationDuration()) {}
 
 TabDataUseEntry::TabDataUseEntry(const TabDataUseEntry& other) = default;
 
@@ -75,7 +116,19 @@ bool TabDataUseEntry::EndTracking() {
     return false;
 
   back_iterator->end_time = Now();
+
+  UMA_HISTOGRAM_CUSTOM_TIMES(
+      kUMATrackingSessionLifetimeSecondsHistogram,
+      back_iterator->end_time - back_iterator->start_time,
+      base::TimeDelta::FromSeconds(1), base::TimeDelta::FromHours(1), 50);
+
   return true;
+}
+
+bool TabDataUseEntry::EndTrackingWithLabel(const std::string& label) {
+  if (!sessions_.empty() && sessions_.back().label == label)
+    return EndTracking();
+  return false;
 }
 
 void TabDataUseEntry::OnTabCloseEvent() {
@@ -88,16 +141,12 @@ bool TabDataUseEntry::IsExpired() const {
 
   if (!tab_close_time_.is_null()) {
     // Closed tab entry.
-    return ((now - tab_close_time_) >
-            base::TimeDelta::FromSeconds(kClosedTabExpirationDurationSeconds));
+    return ((now - tab_close_time_) > closed_tab_expiration_duration_);
   }
 
   const base::TimeTicks latest_session_time = GetLatestStartOrEndTime();
   if (latest_session_time.is_null() ||
-      ((now - latest_session_time) >
-       base::TimeDelta::FromSeconds(kOpenTabExpirationDurationSeconds))) {
-    // TODO(rajendrant): Add UMA to track deletion of entries corresponding to
-    // existing tabs.
+      ((now - latest_session_time) > open_tab_expiration_duration_)) {
     return true;
   }
   return false;
@@ -146,9 +195,16 @@ const base::TimeTicks TabDataUseEntry::GetLatestStartOrEndTime() const {
 }
 
 void TabDataUseEntry::CompactSessionHistory() {
-  // TODO(rajendrant): Add UMA to track how often old sessions are lost.
-  while (sessions_.size() > kMaxSessionsPerTab)
+  while (sessions_.size() > max_sessions_per_tab_) {
+    const auto& front = sessions_.front();
+    DCHECK(!front.end_time.is_null());
+    // Track how often old sessions are lost.
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        kUMAOldInactiveSessionRemovalDurationSecondsHistogram,
+        Now() - front.end_time, base::TimeDelta::FromSeconds(1),
+        base::TimeDelta::FromHours(1), 50);
     sessions_.pop_front();
+  }
 }
 
 }  // namespace android

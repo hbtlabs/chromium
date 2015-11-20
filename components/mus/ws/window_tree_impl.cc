@@ -819,31 +819,10 @@ void WindowTreeImpl::SetFocus(uint32_t window_id) {
   }
 }
 
-void WindowTreeImpl::SetPreferredSize(
-    uint32_t window_id,
-    mojo::SizePtr size,
-    const SetPreferredSizeCallback& callback) {
-  ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
-  if (window && ShouldRouteToWindowManager(window)) {
-    GetHost()->window_manager()->SetPreferredSize(window_id, size.Pass(),
-                                                  callback);
-  }
-}
-
-void WindowTreeImpl::SetShowState(uint32_t window_id,
-                                  mojom::ShowState show_state,
-                                  const SetShowStateCallback& callback) {
+void WindowTreeImpl::SetCanFocus(uint32_t window_id, bool can_focus) {
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   if (window && ShouldRouteToWindowManager(window))
-    GetHost()->window_manager()->SetShowState(window_id, show_state, callback);
-}
-
-void WindowTreeImpl::SetResizeBehavior(
-    uint32_t window_id,
-    mus::mojom::ResizeBehavior resize_behavior) {
-  ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
-  if (window && ShouldRouteToWindowManager(window))
-    GetHost()->window_manager()->SetResizeBehavior(window_id, resize_behavior);
+    window->set_can_focus(can_focus);
 }
 
 void WindowTreeImpl::WmResponse(uint32 change_id, bool response) {

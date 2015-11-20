@@ -146,6 +146,11 @@ EditorClient& Editor::client() const
     return emptyEditorClient();
 }
 
+CompositeEditCommand* Editor::lastEditCommand() const
+{
+    return m_lastEditCommand.get();
+}
+
 UndoStack* Editor::undoStack() const
 {
     if (Page* page = frame().page())
@@ -435,7 +440,7 @@ static PassRefPtr<Image> imageFromNode(const Node& node)
         ImageResource* cachedImage = layoutImage->cachedImage();
         if (!cachedImage || cachedImage->errorOccurred())
             return nullptr;
-        return cachedImage->imageForLayoutObject(layoutImage);
+        return cachedImage->image();
     }
 
     return nullptr;

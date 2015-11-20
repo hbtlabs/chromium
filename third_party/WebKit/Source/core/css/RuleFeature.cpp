@@ -288,18 +288,24 @@ InvalidationSet* RuleFeatureSet::invalidationSetForSelector(const CSSSelector& s
         case CSSSelector::PseudoAnyLink:
         case CSSSelector::PseudoAutofill:
         case CSSSelector::PseudoHover:
+        case CSSSelector::PseudoDrag:
         case CSSSelector::PseudoFocus:
         case CSSSelector::PseudoActive:
         case CSSSelector::PseudoChecked:
         case CSSSelector::PseudoEnabled:
+        // TODO(rune@opera.com): crbug.com/557683 :default is currently not updated dynamically.
+        // case CSSSelector::Default:
         case CSSSelector::PseudoDisabled:
         case CSSSelector::PseudoOptional:
         case CSSSelector::PseudoPlaceholderShown:
         case CSSSelector::PseudoRequired:
+        case CSSSelector::PseudoReadOnly:
+        case CSSSelector::PseudoReadWrite:
         case CSSSelector::PseudoValid:
         case CSSSelector::PseudoInvalid:
         case CSSSelector::PseudoIndeterminate:
         case CSSSelector::PseudoTarget:
+        case CSSSelector::PseudoUnresolved:
             return &ensurePseudoInvalidationSet(selector.pseudoType(), type);
         default:
             break;

@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "chrome/browser/android/data_usage/tab_data_use_entry.h"
 #include "components/data_usage/core/data_use.h"
 #include "url/gurl.h"
@@ -77,7 +78,7 @@ class DataUseTabModel {
   DataUseTabModel(const ExternalDataUseObserver* data_use_observer,
                   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner);
 
-  ~DataUseTabModel();
+  virtual ~DataUseTabModel();
 
   base::WeakPtr<DataUseTabModel> GetWeakPtr();
 
@@ -95,12 +96,16 @@ class DataUseTabModel {
   // closed.
   void OnTabCloseEvent(int32_t tab_id);
 
+  // Notifies the DataUseTabModel that tracking label |label| is removed. Any
+  // active tracking sessions with the label are ended.
+  virtual void OnTrackingLabelRemoved(std::string label);
+
   // Gets the label for the |data_use| object. |output_label| must not be null.
   // If a tab tracking session is found that was active at the time of request
   // start of |data_use|, returns true and |output_label| is populated with its
   // label. Otherwise returns false and |output_label| is set to empty string.
-  bool GetLabelForDataUse(const data_usage::DataUse& data_use,
-                          std::string* output_label) const;
+  virtual bool GetLabelForDataUse(const data_usage::DataUse& data_use,
+                                  std::string* output_label) const;
 
   // Adds or removes observers from the observer list. These functions are
   // thread-safe and can be called from any thread.
@@ -110,6 +115,7 @@ class DataUseTabModel {
  private:
   friend class DataUseTabModelTest;
   friend class MockTabDataUseEntryTest;
+  friend class TestDataUseTabModel;
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, SingleTabTracking);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, MultipleTabTracking);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, ObserverStartEndEvents);
@@ -118,14 +124,20 @@ class DataUseTabModel {
                            MultipleObserverMultipleStartEndEvents);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEvent);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEventEndsTracking);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, OnTrackingLabelRemoved);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
                            CompactTabEntriesWithinMaxLimit);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
+                           UnexpiredTabEntryRemovaltimeHistogram);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
+                           ExpiredInactiveTabEntryRemovaltimeHistogram);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
+                           ExpiredActiveTabEntryRemovaltimeHistogram);
 
   typedef base::hash_map<int32_t, TabDataUseEntry> TabEntryMap;
 
-  // Returns the maximum number of tab entries to maintain session information
-  // about.
-  static size_t GetMaxTabEntriesForTests();
+  // Virtualized for unit test support.
+  virtual base::TimeTicks Now() const;
 
   // Notifies the observers that a data usage tracking session started for
   // |tab_id|.
@@ -157,6 +169,9 @@ class DataUseTabModel {
 
   // Maintains the tracking sessions of multiple tabs.
   TabEntryMap active_tabs_;
+
+  // Maximum number of tab entries to maintain session information about.
+  const size_t max_tab_entries_;
 
   base::ThreadChecker thread_checker_;
 

@@ -21,6 +21,7 @@
 #include "cc/blink/web_to_cc_animation_delegate_adapter.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_position_constraint.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
@@ -206,6 +207,10 @@ void WebLayerImpl::setDrawsContent(bool draws_content) {
 
 bool WebLayerImpl::drawsContent() const {
   return layer_->DrawsContent();
+}
+
+void WebLayerImpl::setDoubleSided(bool double_sided) {
+  layer_->SetDoubleSided(double_sided);
 }
 
 void WebLayerImpl::setShouldFlattenTransform(bool flatten) {

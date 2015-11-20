@@ -432,6 +432,11 @@
       'fonts/shaping/RunSegmenter.h',
       'fonts/shaping/RunSegmenter.cpp',
       'fonts/shaping/ShapeCache.h',
+      'fonts/shaping/ShapeResult.cpp',
+      'fonts/shaping/ShapeResult.h',
+      'fonts/shaping/ShapeResultInlineHeaders.h',
+      'fonts/shaping/ShapeResultTestInfo.cpp',
+      'fonts/shaping/ShapeResultTestInfo.h',
       'fonts/shaping/Shaper.cpp',
       'fonts/shaping/Shaper.h',
       'fonts/shaping/SimpleShaper.cpp',
@@ -796,8 +801,6 @@
       'network/HTTPHeaderMap.h',
       'network/HTTPParsers.cpp',
       'network/HTTPParsers.h',
-      'network/HTTPRequest.cpp',
-      'network/HTTPRequest.h',
       'network/NetworkHints.cpp',
       'network/NetworkHints.h',
       'network/ParsedContentType.cpp',
@@ -1095,6 +1098,13 @@
         {
           'platform_test_files': [
             'text/LocaleICUTest.cpp',
+          ],
+        }
+      ],
+      ['OS!="mac"',
+        {
+          'platform_test_files': [
+            'scroll/ScrollAnimatorTest.cpp',
           ],
         }
       ],

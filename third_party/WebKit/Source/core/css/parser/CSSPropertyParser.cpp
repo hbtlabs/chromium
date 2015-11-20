@@ -1606,6 +1606,244 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeTextStrokeWidth(CSSParse
     return consumeLineWidth(range, cssParserMode);
 }
 
+static bool consumeTranslate3d(CSSParserTokenRange& args, CSSParserMode cssParserMode, RefPtrWillBeRawPtr<CSSFunctionValue>& transformValue)
+{
+    unsigned numberOfArguments = 2;
+    RefPtrWillBeRawPtr<CSSValue> parsedValue;
+    do {
+        parsedValue = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+        if (!parsedValue)
+            return false;
+        transformValue->append(parsedValue);
+        if (!consumeCommaIncludingWhitespace(args))
+            return false;
+    } while (--numberOfArguments);
+    parsedValue = consumeLength(args, cssParserMode, ValueRangeAll);
+    if (!parsedValue)
+        return false;
+    transformValue->append(parsedValue);
+    return true;
+}
+
+static bool consumeNumbers(CSSParserTokenRange& args, RefPtrWillBeRawPtr<CSSFunctionValue>& transformValue, unsigned numberOfArguments)
+{
+    do {
+        RefPtrWillBeRawPtr<CSSValue> parsedValue = consumeNumber(args, ValueRangeAll);
+        if (!parsedValue)
+            return false;
+        transformValue->append(parsedValue);
+        if (--numberOfArguments && !consumeCommaIncludingWhitespace(args))
+            return false;
+    } while (numberOfArguments);
+    return true;
+}
+
+static bool consumePerspective(CSSParserTokenRange& args, CSSParserMode cssParserMode, RefPtrWillBeRawPtr<CSSFunctionValue>& transformValue, bool useLegacyParsing)
+{
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> parsedValue = consumeLength(args, cssParserMode, ValueRangeNonNegative);
+    if (!parsedValue && useLegacyParsing) {
+        double perspective;
+        if (!consumeNumberRaw(args, perspective) || perspective < 0)
+            return false;
+        parsedValue = cssValuePool().createValue(perspective, CSSPrimitiveValue::UnitType::Pixels);
+    }
+    if (!parsedValue)
+        return false;
+    transformValue->append(parsedValue);
+    return true;
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeTransformValue(CSSParserTokenRange& range, CSSParserMode cssParserMode, bool useLegacyParsing)
+{
+    CSSValueID functionId = range.peek().functionId();
+    if (functionId == CSSValueInvalid)
+        return nullptr;
+    CSSParserTokenRange args = consumeFunction(range);
+    if (args.atEnd())
+        return nullptr;
+    RefPtrWillBeRawPtr<CSSFunctionValue> transformValue = CSSFunctionValue::create(functionId);
+    RefPtrWillBeRawPtr<CSSValue> parsedValue = nullptr;
+    switch (functionId) {
+    case CSSValueRotate:
+    case CSSValueRotateX:
+    case CSSValueRotateY:
+    case CSSValueRotateZ:
+    case CSSValueSkewX:
+    case CSSValueSkewY:
+    case CSSValueSkew:
+        parsedValue = consumeAngle(args, cssParserMode);
+        if (!parsedValue)
+            return nullptr;
+        if (functionId == CSSValueSkew && consumeCommaIncludingWhitespace(args)) {
+            transformValue->append(parsedValue);
+            parsedValue = consumeAngle(args, cssParserMode);
+        }
+        break;
+    case CSSValueScaleX:
+    case CSSValueScaleY:
+    case CSSValueScaleZ:
+    case CSSValueScale:
+        parsedValue = consumeNumber(args, ValueRangeAll);
+        if (!parsedValue)
+            return nullptr;
+        if (functionId == CSSValueScale && consumeCommaIncludingWhitespace(args)) {
+            transformValue->append(parsedValue);
+            parsedValue = consumeNumber(args, ValueRangeAll);
+        }
+        break;
+    case CSSValuePerspective:
+        if (!consumePerspective(args, cssParserMode, transformValue, useLegacyParsing))
+            return nullptr;
+        break;
+    case CSSValueTranslateX:
+    case CSSValueTranslateY:
+    case CSSValueTranslate:
+        parsedValue = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+        if (!parsedValue)
+            return nullptr;
+        if (functionId == CSSValueTranslate && consumeCommaIncludingWhitespace(args)) {
+            transformValue->append(parsedValue);
+            parsedValue = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+        }
+        break;
+    case CSSValueTranslateZ:
+        parsedValue = consumeLength(args, cssParserMode, ValueRangeAll);
+        break;
+    case CSSValueMatrix:
+    case CSSValueMatrix3d:
+        if (!consumeNumbers(args, transformValue, (functionId == CSSValueMatrix3d) ? 16 : 6))
+            return nullptr;
+        break;
+    case CSSValueScale3d:
+        if (!consumeNumbers(args, transformValue, 3))
+            return nullptr;
+        break;
+    case CSSValueRotate3d:
+        if (!consumeNumbers(args, transformValue, 3) || !consumeCommaIncludingWhitespace(args))
+            return nullptr;
+        parsedValue = consumeAngle(args, cssParserMode);
+        break;
+    case CSSValueTranslate3d:
+        if (!consumeTranslate3d(args, cssParserMode, transformValue))
+            return nullptr;
+        break;
+    default:
+        return nullptr;
+    }
+    if (parsedValue)
+        transformValue->append(parsedValue);
+    if (!args.atEnd())
+        return nullptr;
+    return transformValue.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeTransform(CSSParserTokenRange& range, CSSParserMode cssParserMode, bool useLegacyParsing)
+{
+    if (range.peek().id() == CSSValueNone)
+        return consumeIdent(range);
+
+    RefPtrWillBeRawPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    do {
+        RefPtrWillBeRawPtr<CSSValue> parsedTransformValue = consumeTransformValue(range, cssParserMode, useLegacyParsing);
+        if (!parsedTransformValue)
+            return nullptr;
+        list->append(parsedTransformValue.release());
+    } while (!range.atEnd());
+
+    return list.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumePaint(CSSParserTokenRange& range, CSSParserContext context)
+{
+    if (range.peek().id() == CSSValueNone)
+        return consumeIdent(range);
+    String url = consumeUrl(range);
+    if (!url.isNull()) {
+        RefPtrWillBeRawPtr<CSSValue> parsedValue = nullptr;
+        if (range.peek().id() == CSSValueNone)
+            parsedValue = consumeIdent(range);
+        else
+            parsedValue = consumeColor(range, context);
+        if (parsedValue) {
+            RefPtrWillBeRawPtr<CSSValueList> values = CSSValueList::createSpaceSeparated();
+            values->append(CSSURIValue::create(url));
+            values->append(parsedValue);
+            return values.release();
+        }
+        return CSSURIValue::create(url);
+    }
+    return consumeColor(range, context);
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumePaintOrder(CSSParserTokenRange& range)
+{
+    if (range.peek().id() == CSSValueNormal)
+        return consumeIdent(range);
+
+    Vector<CSSValueID, 3> paintTypeList;
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> fill = nullptr;
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> stroke = nullptr;
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> markers = nullptr;
+    do {
+        CSSValueID id = range.peek().id();
+        if (id == CSSValueFill && !fill)
+            fill = consumeIdent(range);
+        else if (id == CSSValueStroke && !stroke)
+            stroke = consumeIdent(range);
+        else if (id == CSSValueMarkers && !markers)
+            markers = consumeIdent(range);
+        else
+            return nullptr;
+        paintTypeList.append(id);
+    } while (!range.atEnd());
+
+    // After parsing we serialize the paint-order list. Since it is not possible to
+    // pop a last list items from CSSValueList without bigger cost, we create the
+    // list after parsing.
+    CSSValueID firstPaintOrderType = paintTypeList.at(0);
+    RefPtrWillBeRawPtr<CSSValueList> paintOrderList = CSSValueList::createSpaceSeparated();
+    switch (firstPaintOrderType) {
+    case CSSValueFill:
+    case CSSValueStroke:
+        paintOrderList->append(firstPaintOrderType == CSSValueFill ? fill.release() : stroke.release());
+        if (paintTypeList.size() > 1) {
+            if (paintTypeList.at(1) == CSSValueMarkers)
+                paintOrderList->append(markers.release());
+        }
+        break;
+    case CSSValueMarkers:
+        paintOrderList->append(markers.release());
+        if (paintTypeList.size() > 1) {
+            if (paintTypeList.at(1) == CSSValueStroke)
+                paintOrderList->append(stroke.release());
+        }
+        break;
+    default:
+        ASSERT_NOT_REACHED();
+    }
+
+    return paintOrderList.release();
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeNoneOrURI(CSSParserTokenRange& range)
+{
+    if (range.peek().id() == CSSValueNone)
+        return consumeIdent(range);
+
+    String url = consumeUrl(range);
+    if (url.isNull())
+        return nullptr;
+    return CSSURIValue::create(url);
+}
+
+static PassRefPtrWillBeRawPtr<CSSValue> consumeFlexBasis(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    // FIXME: Support intrinsic dimensions too.
+    if (range.peek().id() == CSSValueAuto)
+        return consumeIdent(range);
+    return consumeLengthOrPercent(range, cssParserMode, ValueRangeNonNegative);
+}
+
 PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID unresolvedProperty)
 {
     CSSPropertyID property = resolveCSSPropertyID(unresolvedProperty);
@@ -1716,6 +1954,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyWebkitBorderBeforeColor:
     case CSSPropertyWebkitBorderAfterColor:
     case CSSPropertyWebkitTextStrokeColor:
+    case CSSPropertyStopColor:
+    case CSSPropertyFloodColor:
+    case CSSPropertyLightingColor:
         return consumeColor(m_range, m_context);
     case CSSPropertyColor:
         return consumeColor(m_range, m_context, inQuirksMode());
@@ -1752,6 +1993,22 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
         return consumeLength(m_range, m_context.mode(), ValueRangeAll);
     case CSSPropertyOutlineWidth:
         return consumeLineWidth(m_range, m_context.mode());
+    case CSSPropertyTransform:
+        return consumeTransform(m_range, m_context.mode(), unresolvedProperty == CSSPropertyAliasWebkitTransform);
+    case CSSPropertyFill:
+    case CSSPropertyStroke:
+        return consumePaint(m_range, m_context);
+    case CSSPropertyPaintOrder:
+        return consumePaintOrder(m_range);
+    case CSSPropertyMarkerStart:
+    case CSSPropertyMarkerMid:
+    case CSSPropertyMarkerEnd:
+        return consumeNoneOrURI(m_range);
+    case CSSPropertyFlexBasis:
+        return consumeFlexBasis(m_range, m_context.mode());
+    case CSSPropertyFlexGrow:
+    case CSSPropertyFlexShrink:
+        return consumeNumber(m_range, ValueRangeNonNegative);
     default:
         return nullptr;
     }
@@ -2148,6 +2405,60 @@ bool CSSPropertyParser::consumeShorthandGreedily(const StylePropertyShorthand& s
     return true;
 }
 
+bool CSSPropertyParser::consumeFlex(bool important)
+{
+    ShorthandScope scope(this, CSSPropertyFlex);
+    static const double unsetValue = -1;
+    double flexGrow = unsetValue;
+    double flexShrink = unsetValue;
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> flexBasis = nullptr;
+
+    if (m_range.peek().id() == CSSValueNone) {
+        flexGrow = 0;
+        flexShrink = 0;
+        flexBasis = cssValuePool().createIdentifierValue(CSSValueAuto);
+        m_range.consumeIncludingWhitespace();
+    } else {
+        unsigned index = 0;
+        while (!m_range.atEnd() && index++ < 3) {
+            double num;
+            if (consumeNumberRaw(m_range, num)) {
+                if (num < 0)
+                    return false;
+                if (flexGrow == unsetValue)
+                    flexGrow = num;
+                else if (flexShrink == unsetValue)
+                    flexShrink = num;
+                else if (!num) // flex only allows a basis of 0 (sans units) if flex-grow and flex-shrink values have already been set.
+                    flexBasis = cssValuePool().createValue(0, CSSPrimitiveValue::UnitType::Pixels);
+                else
+                    return false;
+            } else if (!flexBasis) {
+                if (m_range.peek().id() == CSSValueAuto)
+                    flexBasis = consumeIdent(m_range);
+                if (!flexBasis)
+                    flexBasis = consumeLengthOrPercent(m_range, m_context.mode(), ValueRangeNonNegative);
+                if (index == 2 && !m_range.atEnd())
+                    return false;
+            }
+        }
+    }
+    if (!m_range.atEnd())
+        return false;
+
+    if (flexGrow == unsetValue)
+        flexGrow = 1;
+    if (flexShrink == unsetValue)
+        flexShrink = 1;
+    if (!flexBasis)
+        flexBasis = cssValuePool().createValue(0, CSSPrimitiveValue::UnitType::Percentage);
+
+    addProperty(CSSPropertyFlexGrow, cssValuePool().createValue(clampTo<float>(flexGrow), CSSPrimitiveValue::UnitType::Number), important);
+    addProperty(CSSPropertyFlexShrink, cssValuePool().createValue(clampTo<float>(flexShrink), CSSPrimitiveValue::UnitType::Number), important);
+    addProperty(CSSPropertyFlexBasis, flexBasis, important);
+    return true;
+}
+
 bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool important)
 {
     CSSPropertyID property = resolveCSSPropertyID(unresolvedProperty);
@@ -2242,6 +2553,20 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool im
         return consumeShorthandGreedily(webkitBorderAfterShorthand(), important);
     case CSSPropertyWebkitTextStroke:
         return consumeShorthandGreedily(webkitTextStrokeShorthand(), important);
+    case CSSPropertyMarker: {
+        ImplicitScope implicitScope(this);
+        RefPtrWillBeRawPtr<CSSValue> marker = parseSingleValue(CSSPropertyMarkerStart);
+        if (!marker || !m_range.atEnd())
+            return false;
+        addProperty(CSSPropertyMarkerStart, marker, important);
+        addProperty(CSSPropertyMarkerMid, marker, important);
+        addProperty(CSSPropertyMarkerEnd, marker.release(), important);
+        return true;
+    }
+    case CSSPropertyFlex:
+        return consumeFlex(important);
+    case CSSPropertyFlexFlow:
+        return consumeShorthandGreedily(flexFlowShorthand(), important);
     default:
         m_currentShorthand = oldShorthand;
         return false;

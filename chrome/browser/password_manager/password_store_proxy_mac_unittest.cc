@@ -61,7 +61,7 @@ class MockPasswordStoreConsumer
 class MockPasswordStoreObserver
     : public password_manager::PasswordStore::Observer {
  public:
-  MockPasswordStoreObserver(PasswordStoreProxyMac* password_store)
+  explicit MockPasswordStoreObserver(PasswordStoreProxyMac* password_store)
       : guard_(this) {
     guard_.Add(password_store);
   }
@@ -163,7 +163,7 @@ void PasswordStoreProxyMacTest::CreateAndInitPasswordStore(
 void PasswordStoreProxyMacTest::ClosePasswordStore() {
   if (!store_)
     return;
-  store_->Shutdown();
+  store_->ShutdownOnUIThread();
   EXPECT_FALSE(store_->GetBackgroundTaskRunner());
   store_ = nullptr;
 }
@@ -257,9 +257,9 @@ void PasswordStoreProxyMacTest::CheckRemoveLoginsBetween(bool check_created) {
 // ----------- Tests -------------
 
 TEST_P(PasswordStoreProxyMacTest, StartAndStop) {
-  // PasswordStore::Shutdown() immediately follows PasswordStore::Init(). The
-  // message loop isn't running in between. Anyway, PasswordStore should end up
-  // in the right state.
+  // PasswordStore::ShutdownOnUIThread() immediately follows
+  // PasswordStore::Init(). The message loop isn't running in between. Anyway,
+  // PasswordStore should end up in the right state.
   ClosePasswordStore();
 
   int status = testing_prefs_.GetInteger(

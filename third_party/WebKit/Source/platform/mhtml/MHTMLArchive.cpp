@@ -227,21 +227,9 @@ void MHTMLArchive::generateMHTMLFooter(
     outputBuffer.append(asciiString.data(), asciiString.length());
 }
 
-PassRefPtr<SharedBuffer> MHTMLArchive::generateMHTMLData(
-    const Vector<SerializedResource>& resources,
-    EncodingPolicy encodingPolicy,
-    const String& title, const String& mimeType)
+ArchiveResource* MHTMLArchive::mainResource() const
 {
-    String boundary = MHTMLArchive::generateMHTMLBoundary();
-
-    RefPtr<SharedBuffer> mhtmlData = SharedBuffer::create();
-    MHTMLArchive::generateMHTMLHeader(boundary, title, mimeType, *mhtmlData);
-    for (const auto& resource : resources) {
-        MHTMLArchive::generateMHTMLPart(
-            boundary, encodingPolicy, resource, *mhtmlData);
-    }
-    MHTMLArchive::generateMHTMLFooter(boundary, *mhtmlData);
-    return mhtmlData.release();
+    return m_mainResource.get();
 }
 
 #if !ENABLE(OILPAN)

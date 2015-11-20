@@ -85,24 +85,14 @@ void TestWindowTree::Embed(uint32_t window_id,
 
 void TestWindowTree::SetFocus(uint32_t window_id) {}
 
+void TestWindowTree::SetCanFocus(uint32_t window_id, bool can_focus) {}
+
 void TestWindowTree::SetWindowTextInputState(uint32_t window_id,
                                              mojo::TextInputStatePtr state) {}
 
 void TestWindowTree::SetImeVisibility(uint32_t window_id,
                                       bool visible,
                                       mojo::TextInputStatePtr state) {}
-
-void TestWindowTree::SetPreferredSize(
-    uint32_t window_id,
-    mojo::SizePtr size,
-    const SetPreferredSizeCallback& callback) {}
-
-void TestWindowTree::SetShowState(uint32_t window_id,
-                                  mojom::ShowState show_state,
-                                  const SetShowStateCallback& callback) {}
-
-void TestWindowTree::SetResizeBehavior(uint32_t window_id,
-                                       mojom::ResizeBehavior resize_behavior) {}
 
 void TestWindowTree::WmResponse(uint32_t change_id, bool response) {}
 

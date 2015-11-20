@@ -5,8 +5,9 @@
 #ifndef CONTENT_BROWSER_BLUETOOTH_BLUETOOTH_DISPATCHER_HOST_H_
 #define CONTENT_BROWSER_BLUETOOTH_BLUETOOTH_DISPATCHER_HOST_H_
 
+#include <map>
+
 #include "base/basictypes.h"
-#include "base/containers/scoped_ptr_map.h"
 #include "base/id_map.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -207,20 +208,17 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // was already recorded and since there renderer crashed there is no need to
   // send a response.
 
-  // Queries the platform cache for a Device with |device_id|. If
-  // successful the device will be in result.device
-  void QueryCacheForDevice(const std::string& device_id,
-                           CacheQueryResult& result);
-  // Queries the platform cache for a Service with |service_instance_id|.
-  // If successfull the service will be in result.service.
-  void QueryCacheForService(const std::string& service_instance_id,
-                            CacheQueryResult& result);
+  // Queries the platform cache for a Device with |device_id|. Fills in the
+  // |outcome| field and the |device| field if successful.
+  CacheQueryResult QueryCacheForDevice(const std::string& device_id);
+  // Queries the platform cache for a Service with |service_instance_id|. Fills
+  // in the |outcome| field, and |device| and |service| fields if successful.
+  CacheQueryResult QueryCacheForService(const std::string& service_instance_id);
   // Queries the platform cache for a characteristic with
-  // |characteristic_instance_id|. If successfull the characteristic will be in
-  // result.characteristic.
-  void QueryCacheForCharacteristic(
-      const std::string& characteristic_instance_id,
-      CacheQueryResult& result);
+  // |characteristic_instance_id|. Fills in the |outcome| field, and |device|,
+  // |service| and |characteristic| fields if successful.
+  CacheQueryResult QueryCacheForCharacteristic(
+      const std::string& characteristic_instance_id);
 
   // Returns true if all services have been discovered for the device.
   // When the host gets a ServiceChanged indication, it automatically
@@ -257,8 +255,7 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // Map that matches characteristic_instance_id to notify session.
   // TODO(ortuno): Also key by thread_id once support for web workers,
   // is added: http://crbug.com/537372
-  base::ScopedPtrMap<std::string,
-                     scoped_ptr<device::BluetoothGattNotifySession>>
+  std::map<std::string, scoped_ptr<device::BluetoothGattNotifySession>>
       characteristic_id_to_notify_session_;
 
   // Map of characteristic_instance_id to a set of thread ids.

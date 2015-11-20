@@ -125,7 +125,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                        const base::Closure& callback) override;
   void SignalQuery(uint32 query_id, const base::Closure& callback) override;
   void SetSurfaceVisible(bool visible) override;
-  uint32 CreateStreamTexture(uint32 texture_id) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   CommandBufferNamespace GetNamespaceID() const override;
@@ -177,6 +176,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
 #if defined(OS_ANDROID)
   scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture(
       uint32 stream_id);
+  uint32 CreateStreamTexture(uint32 texture_id);
 #endif
 
  private:
@@ -224,6 +224,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool WaitFenceSyncOnGpuThread(gpu::CommandBufferNamespace namespace_id,
                                 uint64_t command_buffer_id,
                                 uint64_t release);
+  void SignalSyncTokenOnGpuThread(const SyncToken& sync_token,
+                                  const base::Closure& callback);
   void SignalQueryOnGpuThread(unsigned query_id, const base::Closure& callback);
   void DestroyTransferBufferOnGpuThread(int32 id);
   void CreateImageOnGpuThread(int32 id,

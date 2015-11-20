@@ -127,7 +127,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               true,
                               false,
                               true,
-                              false,
+                              true,
                               render_surface_layer_list,
                               0,
                               GetPropertyTrees(root_layer)) {
@@ -2574,23 +2574,23 @@ void CalculateRenderSurfaceLayerListInternal(
   if (compute_content_rects && render_to_separate_surface)
     layer->render_surface()->SetAccumulatedContentRect(gfx::Rect());
 
-  for (auto& child_layer : layer->children()) {
+  for (const auto& child_layer : layer->children()) {
     CalculateRenderSurfaceLayerListInternal(
-        child_layer, property_trees, render_surface_layer_list, descendants,
-        nearest_occlusion_immune_ancestor, layer_is_drawn,
+        child_layer.get(), property_trees, render_surface_layer_list,
+        descendants, nearest_occlusion_immune_ancestor, layer_is_drawn,
         can_render_to_separate_surface, current_render_surface_layer_list_id,
         max_texture_size, verify_property_trees, use_property_trees);
 
     // If the child is its own render target, then it has a render surface.
-    if (child_layer->render_target() == child_layer &&
+    if (child_layer->render_target() == child_layer.get() &&
         !child_layer->render_surface()->layer_list().empty() &&
         !child_layer->render_surface()->content_rect().IsEmpty()) {
       // This child will contribute its render surface, which means
       // we need to mark just the mask layer (and replica mask layer)
       // with the id.
       MarkMasksWithRenderSurfaceLayerListId(
-          child_layer, current_render_surface_layer_list_id);
-      descendants->push_back(child_layer);
+          child_layer.get(), current_render_surface_layer_list_id);
+      descendants->push_back(child_layer.get());
     }
 
     if (child_layer->layer_or_descendant_is_drawn()) {
@@ -2759,6 +2759,13 @@ void CalculateDrawPropertiesAndVerify(
             inputs->can_render_to_separate_surface, inputs->property_trees,
             &visible_layer_list);
 
+        // Property trees are normally constructed on the main thread and
+        // passed to compositor thread. Source to parent updates on them are not
+        // allowed in the compositor thread. Some tests build them on the
+        // compositor thread, so we need to explicitly disallow source to parent
+        // updates when they are built on compositor thread.
+        inputs->property_trees->transform_tree
+            .set_source_to_parent_updates_allowed(false);
         if (should_measure_property_tree_performance) {
           TRACE_EVENT_END0(
               TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"),

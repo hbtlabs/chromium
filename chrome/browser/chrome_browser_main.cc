@@ -63,7 +63,6 @@
 #include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/metrics/field_trial_synchronizer.h"
 #include "chrome/browser/metrics/thread_watcher.h"
-#include "chrome/browser/mojo_runner_util.h"
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
 #include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/performance_monitor/performance_monitor.h"
@@ -246,10 +245,6 @@
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "chrome/browser/chrome_webusb_browser_client.h"
 #include "components/webusb/webusb_detector.h"
-#endif
-
-#if defined(MOJO_RUNNER_CLIENT)
-#include "chrome/browser/mojo_runner_state.h"
 #endif
 
 using content::BrowserThread;
@@ -1217,13 +1212,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
   const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
 
-#if defined(MOJO_RUNNER_CLIENT)
-  if (IsRunningInMojoRunner()) {
-    mojo_runner_state_.reset(new MojoRunnerState);
-    mojo_runner_state_->WaitForConnection();
-  }
-#endif  // defined(MOJO_RUNNER_CLIENT)
-
 #if defined(OS_WIN)
   // Windows parental controls calls can be slow, so we do an early init here
   // that calculates this value off of the UI thread.
@@ -1231,16 +1219,13 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
-  if (!variations::GetVariationParamValue(
-      "LightSpeed", "EarlyInitStartup").empty()) {
-    // Try to compute this early on another thread so that we don't spend time
-    // during profile load initializing the extensions APIs.
-    BrowserThread::PostTask(
-        BrowserThread::FILE_USER_BLOCKING,
-        FROM_HERE,
-        base::Bind(
-            base::IgnoreResult(&extensions::FeatureProvider::GetAPIFeatures)));
-  }
+  // Try to compute this early on another thread so that we don't spend time
+  // during profile load initializing the extensions APIs.
+  BrowserThread::PostTask(
+      BrowserThread::FILE_USER_BLOCKING,
+      FROM_HERE,
+      base::Bind(
+          base::IgnoreResult(&extensions::FeatureProvider::GetAPIFeatures)));
 #endif
 
   // Android updates the metrics service dynamically depending on whether the

@@ -54,7 +54,7 @@ Display::~Display() {
 
 bool Display::Initialize(scoped_ptr<OutputSurface> output_surface,
                          DisplayScheduler* scheduler) {
-  output_surface_ = output_surface.Pass();
+  output_surface_ = std::move(output_surface);
   scheduler_ = scheduler;
   return output_surface_->BindToClient(this);
 }
@@ -118,16 +118,16 @@ void Display::InitializeRenderer() {
         texture_mailbox_deleter_.get(), settings_.highp_threshold_min);
     if (!renderer)
       return;
-    renderer_ = renderer.Pass();
+    renderer_ = std::move(renderer);
   } else {
     scoped_ptr<SoftwareRenderer> renderer = SoftwareRenderer::Create(
         this, &settings_, output_surface_.get(), resource_provider.get());
     if (!renderer)
       return;
-    renderer_ = renderer.Pass();
+    renderer_ = std::move(renderer);
   }
 
-  resource_provider_ = resource_provider.Pass();
+  resource_provider_ = std::move(resource_provider);
   // TODO(jbauman): Outputting an incomplete quad list doesn't work when using
   // overlays.
   bool output_partial_list = renderer_->Capabilities().using_partial_swap &&
@@ -212,7 +212,7 @@ bool Display::DrawAndSwap() {
                                       stored_latency_info_.end());
   stored_latency_info_.clear();
   bool have_copy_requests = false;
-  for (const auto* pass : frame_data->render_pass_list) {
+  for (const auto& pass : frame_data->render_pass_list) {
     have_copy_requests |= !pass->copy_requests.empty();
   }
 

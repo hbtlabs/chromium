@@ -4,19 +4,43 @@
 
 #include "chrome/browser/android/data_usage/data_use_tab_model.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 #include "chrome/browser/android/data_usage/tab_data_use_entry.h"
+#include "components/variations/variations_associated_data.h"
 
 namespace {
 
-// TODO(rajendrant): To be changeable via field trial.
-// Indicates the maximum number of tabs to maintain session information about.
-const size_t kMaxTabEntries = 200;
+// Indicates the default maximum number of tabs to maintain session information
+// about. May be overridden by the field trial.
+const size_t kDefaultMaxTabEntries = 200;
+
+const char kUMAExpiredInactiveTabEntryRemovalDurationSecondsHistogram[] =
+    "DataUse.TabModel.ExpiredInactiveTabEntryRemovalDuration";
+const char kUMAExpiredActiveTabEntryRemovalDurationHoursHistogram[] =
+    "DataUse.TabModel.ExpiredActiveTabEntryRemovalDuration";
+const char kUMAUnexpiredTabEntryRemovalDurationMinutesHistogram[] =
+    "DataUse.TabModel.UnexpiredTabEntryRemovalDuration";
 
 // Returns true if |tab_id| is a valid tab ID.
 bool IsValidTabID(int32_t tab_id) {
   return tab_id >= 0;
+}
+
+// Returns various parameters from the values specified in the field trial.
+size_t GetMaxTabEntries() {
+  size_t max_tab_entries = -1;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "max_tab_entries");
+  if (!variation_value.empty() &&
+      base::StringToSizeT(variation_value, &max_tab_entries)) {
+    return max_tab_entries;
+  }
+  return kDefaultMaxTabEntries;
 }
 
 }  // namespace
@@ -25,15 +49,12 @@ namespace chrome {
 
 namespace android {
 
-size_t DataUseTabModel::GetMaxTabEntriesForTests() {
-  return kMaxTabEntries;
-}
-
 DataUseTabModel::DataUseTabModel(
     const ExternalDataUseObserver* data_use_observer,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
     : data_use_observer_(data_use_observer),
       observer_list_(new base::ObserverListThreadSafe<TabDataUseObserver>),
+      max_tab_entries_(GetMaxTabEntries()),
       weak_factory_(this) {}
 
 DataUseTabModel::~DataUseTabModel() {
@@ -58,6 +79,12 @@ void DataUseTabModel::OnNavigationEvent(int32_t tab_id,
     case TRANSITION_FROM_EXTERNAL_APP: {
       // Enter events.
       std::string label;
+      TabEntryMap::const_iterator tab_entry_iterator =
+          active_tabs_.find(tab_id);
+      if (tab_entry_iterator != active_tabs_.end() &&
+          tab_entry_iterator->second.IsTrackingDataUse()) {
+        break;
+      }
       if (data_use_observer_->Matches(url, &label)) {
         // TODO(rajendrant): Need to handle scenarios where these labels change
         // in the middle of a tab session. Should |data_use_observer_| notify us
@@ -97,6 +124,13 @@ void DataUseTabModel::OnTabCloseEvent(int32_t tab_id) {
   tab_entry.OnTabCloseEvent();
 }
 
+void DataUseTabModel::OnTrackingLabelRemoved(std::string label) {
+  for (auto& tab_entry : active_tabs_) {
+    if (tab_entry.second.EndTrackingWithLabel(label))
+      NotifyObserversOfTrackingEnding(tab_entry.first);
+  }
+}
+
 bool DataUseTabModel::GetLabelForDataUse(const data_usage::DataUse& data_use,
                                          std::string* output_label) const {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -123,6 +157,10 @@ void DataUseTabModel::AddObserver(TabDataUseObserver* observer) {
 
 void DataUseTabModel::RemoveObserver(TabDataUseObserver* observer) {
   observer_list_->RemoveObserver(observer);
+}
+
+base::TimeTicks DataUseTabModel::Now() const {
+  return base::TimeTicks::Now();
 }
 
 void DataUseTabModel::NotifyObserversOfTrackingStarting(int32_t tab_id) {
@@ -168,17 +206,33 @@ void DataUseTabModel::CompactTabEntries() {
   // Remove expired tab entries.
   for (TabEntryMap::iterator tab_entry_iterator = active_tabs_.begin();
        tab_entry_iterator != active_tabs_.end();) {
-    if (tab_entry_iterator->second.IsExpired())
+    const auto& tab_entry = tab_entry_iterator->second;
+    if (tab_entry.IsExpired()) {
+      // Track the lifetime of expired tab entry.
+      const base::TimeDelta removal_time =
+          Now() - tab_entry.GetLatestStartOrEndTime();
+      if (!tab_entry.IsTrackingDataUse()) {
+        UMA_HISTOGRAM_CUSTOM_TIMES(
+            kUMAExpiredInactiveTabEntryRemovalDurationSecondsHistogram,
+            removal_time, base::TimeDelta::FromSeconds(1),
+            base::TimeDelta::FromHours(1), 50);
+      } else {
+        UMA_HISTOGRAM_CUSTOM_TIMES(
+            kUMAExpiredActiveTabEntryRemovalDurationHoursHistogram,
+            removal_time, base::TimeDelta::FromHours(1),
+            base::TimeDelta::FromDays(5), 50);
+      }
       active_tabs_.erase(tab_entry_iterator++);
-    else
+    } else {
       ++tab_entry_iterator;
+    }
   }
 
-  if (active_tabs_.size() <= kMaxTabEntries)
+  if (active_tabs_.size() <= max_tab_entries_)
     return;
 
   // Remove oldest unexpired tab entries.
-  while (active_tabs_.size() > kMaxTabEntries) {
+  while (active_tabs_.size() > max_tab_entries_) {
     // Find oldest tab entry.
     TabEntryMap::iterator oldest_tab_entry_iterator = active_tabs_.begin();
     for (TabEntryMap::iterator tab_entry_iterator = active_tabs_.begin();
@@ -189,6 +243,10 @@ void DataUseTabModel::CompactTabEntries() {
       }
     }
     DCHECK(oldest_tab_entry_iterator != active_tabs_.end());
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        kUMAUnexpiredTabEntryRemovalDurationMinutesHistogram,
+        Now() - oldest_tab_entry_iterator->second.GetLatestStartOrEndTime(),
+        base::TimeDelta::FromMinutes(1), base::TimeDelta::FromHours(1), 50);
     active_tabs_.erase(oldest_tab_entry_iterator);
   }
 }

@@ -31,13 +31,12 @@ WebInspector.AnimationTimeline = function()
     this._symbol = Symbol("animationTimeline");
     /** @type {!Map.<string, !WebInspector.AnimationModel.Animation>} */
     this._animationsMap = new Map();
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.NodeRemoved, this._nodeRemoved, this);
 
     WebInspector.targetManager.observeTargets(this, WebInspector.Target.Type.Page);
 }
 
-WebInspector.AnimationTimeline.GlobalPlaybackRates = [0.1, 0.25, 0.5, 1.0];
+WebInspector.AnimationTimeline.GlobalPlaybackRates = [1, 0.25, 0.1];
 
 WebInspector.AnimationTimeline.prototype = {
     wasShown: function()
@@ -60,6 +59,8 @@ WebInspector.AnimationTimeline.prototype = {
     {
         if (this.isShowing())
             this._addEventListeners(target);
+        if (target === WebInspector.targetManager.mainTarget())
+            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
     },
 
     /**
@@ -90,13 +91,10 @@ WebInspector.AnimationTimeline.prototype = {
         animationModel.removeEventListener(WebInspector.AnimationModel.Events.AnimationGroupStarted, this._animationGroupStarted, this);
     },
 
-    /**
-     * @param {?WebInspector.DOMNode} node
-     */
-    setNode: function(node)
+    _nodeChanged: function()
     {
         for (var nodeUI of this._nodesMap.values())
-            nodeUI.setNode(node);
+            nodeUI._nodeChanged();
     },
 
     /**
@@ -116,38 +114,25 @@ WebInspector.AnimationTimeline.prototype = {
 
     _createHeader: function()
     {
-        /**
-         * @param {!Event} event
-         * @this {WebInspector.AnimationTimeline}
-         */
-        function playbackSliderInputHandler(event)
-        {
-            this._underlyingPlaybackRate = WebInspector.AnimationTimeline.GlobalPlaybackRates[event.target.value];
-            this._updatePlaybackControls();
-        }
-
         this._previewContainer = this.contentElement.createChild("div", "animation-timeline-buffer");
         var container = this.contentElement.createChild("div", "animation-timeline-header");
         var controls = container.createChild("div", "animation-controls");
 
-        var toolbar = new WebInspector.Toolbar(controls);
-        toolbar.element.classList.add("animation-controls-toolbar");
+        var toolbar = new WebInspector.Toolbar("animation-controls-toolbar", controls);
         this._controlButton = new WebInspector.ToolbarButton(WebInspector.UIString("Replay timeline"), "replay-outline-toolbar-item");
         this._controlButton.addEventListener("click", this._controlButtonToggle.bind(this));
         toolbar.appendToolbarItem(this._controlButton);
 
-        this._playbackLabel = controls.createChild("span", "animation-playback-label");
-        this._playbackLabel.createTextChild("1x");
-        this._playbackLabel.addEventListener("keydown", this._playbackLabelInput.bind(this));
-        this._playbackLabel.addEventListener("focusout", this._playbackLabelInput.bind(this));
-
-        this._playbackSlider = controls.createChild("input", "animation-playback-slider");
-        this._playbackSlider.type = "range";
-        this._playbackSlider.min = 0;
-        this._playbackSlider.max = WebInspector.AnimationTimeline.GlobalPlaybackRates.length - 1;
-        this._playbackSlider.value = this._playbackSlider.max;
-        this._playbackSlider.addEventListener("input", playbackSliderInputHandler.bind(this));
-        this._updateAnimationsPlaybackRate();
+        var playbackRateControl = controls.createChild("div", "animation-playback-rate-control");
+        this._playbackRateButtons = [];
+        for (var playbackRate of WebInspector.AnimationTimeline.GlobalPlaybackRates) {
+            var button = playbackRateControl.createChild("div", "animation-playback-rate-button");
+            button.textContent = WebInspector.UIString(playbackRate * 100 + "%");
+            button.playbackRate = playbackRate;
+            button.addEventListener("click", this._setPlaybackRate.bind(this, playbackRate));
+            this._playbackRateButtons.push(button);
+        }
+        this._updatePlaybackControls();
 
         var gridHeader = container.createChild("div", "animation-grid-header");
         WebInspector.installDragHandle(gridHeader, this._repositionScrubber.bind(this), this._scrubberDragMove.bind(this), this._scrubberDragEnd.bind(this), "pointer");
@@ -159,37 +144,27 @@ WebInspector.AnimationTimeline.prototype = {
     },
 
     /**
-     * @param {!Event} event
+     * @param {number} playbackRate
      */
-    _playbackLabelInput: function(event)
+    _setPlaybackRate: function(playbackRate)
     {
-        var element = /** @type {!Element} */(event.currentTarget);
-        if (event.type !== "focusout" && !WebInspector.handleElementValueModifications(event, element) && !isEnterKey(event))
-            return;
-
-        var value = parseFloat(this._playbackLabel.textContent);
-        if (!isNaN(value))
-            this._underlyingPlaybackRate = Math.max(0, value);
-        this._updatePlaybackControls();
-        event.consume(true);
-    },
-
-    _updatePlaybackControls: function()
-    {
-        this._playbackLabel.textContent = this._underlyingPlaybackRate + "x";
-        var playbackSliderValue = 0;
-        for (var rate of WebInspector.AnimationTimeline.GlobalPlaybackRates) {
-            if (this._underlyingPlaybackRate > rate)
-                playbackSliderValue++;
-        }
-        this._playbackSlider.value = playbackSliderValue;
-
+        this._underlyingPlaybackRate = playbackRate;
         var target = WebInspector.targetManager.mainTarget();
         if (target)
             WebInspector.AnimationModel.fromTarget(target).setPlaybackRate(this._underlyingPlaybackRate);
         WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.AnimationsPlaybackRateChanged);
         if (this._scrubberPlayer)
             this._scrubberPlayer.playbackRate = this._effectivePlaybackRate();
+
+        this._updatePlaybackControls();
+    },
+
+    _updatePlaybackControls: function()
+    {
+        for (var button of this._playbackRateButtons) {
+            var selected = this._underlyingPlaybackRate === button.playbackRate;
+            button.classList.toggle("selected", selected);
+        }
     },
 
     _controlButtonToggle: function()
@@ -200,7 +175,6 @@ WebInspector.AnimationTimeline.prototype = {
             this._replay();
         else
             this._togglePause(true);
-        this._updateControlButton();
     },
 
     _updateControlButton: function()
@@ -232,7 +206,7 @@ WebInspector.AnimationTimeline.prototype = {
          */
         function syncPlaybackRate(playbackRate)
         {
-            this._underlyingPlaybackRate = playbackRate;
+            this._underlyingPlaybackRate = playbackRate || 1;
             this._updatePlaybackControls();
         }
 
@@ -256,6 +230,8 @@ WebInspector.AnimationTimeline.prototype = {
         this._selectedGroup.togglePause(pause);
         if (this._scrubberPlayer)
             this._scrubberPlayer.playbackRate = this._effectivePlaybackRate();
+        this._previewMap.get(this._selectedGroup).element.classList.toggle("paused", pause);
+        this._updateControlButton();
     },
 
     _replay: function()
@@ -319,10 +295,6 @@ WebInspector.AnimationTimeline.prototype = {
     {
         this._reset();
         this._updateAnimationsPlaybackRate();
-        if (this._underlyingPlaybackRate === 0) {
-            this._underlyingPlaybackRate = 1;
-            this._updatePlaybackControls();
-        }
         if (this._scrubberPlayer)
             this._scrubberPlayer.cancel();
         delete this._scrubberPlayer;
@@ -408,6 +380,7 @@ WebInspector.AnimationTimeline.prototype = {
             this._addAnimation(anim);
         this.scheduleRedraw();
         this._timelineScrubber.classList.remove("hidden");
+        this._togglePause(false);
         this._replay();
     },
 
@@ -603,7 +576,6 @@ WebInspector.AnimationTimeline.prototype = {
         this._selectedGroup.seekTo(seekTime);
         this._togglePause(true);
         this._animateTime(seekTime);
-        this._updateControlButton();
 
         // Interface with scrubber drag.
         this._originalScrubberTime = seekTime;
@@ -626,7 +598,6 @@ WebInspector.AnimationTimeline.prototype = {
         this._originalMousePosition = event.x;
 
         this._togglePause(true);
-        this._updateControlButton();
         return true;
     },
 
@@ -671,8 +642,8 @@ WebInspector.AnimationTimeline.NodeUI = function(animationEffect)
         if (!node)
             return;
         this._node = node;
-        WebInspector.DOMPresentationUtils.decorateNodeLabel(node, this._description);
-        this.element.addEventListener("click", WebInspector.Revealer.reveal.bind(WebInspector.Revealer, node, undefined), false);
+        this._nodeChanged();
+        this._description.appendChild(WebInspector.DOMPresentationUtils.linkifyNodeReference(node));
     }
 
     this._rows = [];
@@ -735,12 +706,9 @@ WebInspector.AnimationTimeline.NodeUI.prototype = {
         this.element.classList.add("animation-node-removed");
     },
 
-    /**
-     * @param {?WebInspector.DOMNode} node
-     */
-    setNode: function(node)
+    _nodeChanged: function()
     {
-        this.element.classList.toggle("animation-node-selected", node === this._node);
+        this.element.classList.toggle("animation-node-selected", this._node && this._node === WebInspector.context.flavor(WebInspector.DOMNode));
     }
 }
 

@@ -275,25 +275,29 @@ class Desktop:
         "/usr/lib/%(arch)s-linux-gnu/gallium-pipe" %
         { "arch": platform.machine() })
 
-    # Read from /etc/environment if it exists, as it is a standard place to
-    # store system-wide environment settings. During a normal login, this would
-    # typically be done by the pam_env PAM module, depending on the local PAM
-    # configuration.
-    env_filename = "/etc/environment"
-    try:
-      with open(env_filename, "r") as env_file:
-        for line in env_file:
-          line = line.rstrip("\n")
-          # Split at the first "=", leaving any further instances in the value.
-          key_value_pair = line.split("=", 1)
-          if len(key_value_pair) == 2:
-            key, value = tuple(key_value_pair)
-            # The file stores key=value assignments, but the value may be
-            # quoted, so strip leading & trailing quotes from it.
-            value = value.strip("'\"")
-            self.child_env[key] = value
-    except IOError:
-      logging.info("Failed to read %s, skipping." % env_filename)
+    # Initialize the environment from files that would normally be read in a
+    # PAM-authenticated session.
+    for env_filename in [
+      "/etc/environment",
+      "/etc/default/locale",
+      os.path.expanduser("~/.pam_environment")]:
+      if not os.path.exists(env_filename):
+        continue
+      try:
+        with open(env_filename, "r") as env_file:
+          for line in env_file:
+            line = line.rstrip("\n")
+            # Split at the first "=", leaving any further instances in the
+            # value.
+            key_value_pair = line.split("=", 1)
+            if len(key_value_pair) == 2:
+              key, value = tuple(key_value_pair)
+              # The file stores key=value assignments, but the value may be
+              # quoted, so strip leading & trailing quotes from it.
+              value = value.strip("'\"")
+              self.child_env[key] = value
+      except IOError:
+        logging.error("Failed to read file: %s" % env_filename)
 
   def _setup_pulseaudio(self):
     self.pulseaudio_pipe = None
@@ -762,7 +766,9 @@ def daemonize():
         '%Y%m%d_%H%M%S', time.localtime(time.time()))
     log_file = tempfile.NamedTemporaryFile(prefix=log_file_prefix, delete=False)
     os.environ[LOG_FILE_ENV_VAR] = log_file.name
-    log_fd = log_file.file.fileno()
+
+    # The file-descriptor in this case is owned by the tempfile object.
+    log_fd = os.dup(log_file.file.fileno())
   else:
     log_fd = os.open(os.environ[LOG_FILE_ENV_VAR],
                      os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)

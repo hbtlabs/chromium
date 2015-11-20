@@ -90,15 +90,10 @@ public:
         const String& boundary,
         SharedBuffer& outputBuffer);
 
-    // Generates and returns a full MHTML document.
-    static PassRefPtr<SharedBuffer> generateMHTMLData(
-        const Vector<SerializedResource>&, EncodingPolicy,
-        const String& title, const String& mimeType);
-
     typedef WillBeHeapVector<RefPtrWillBeMember<ArchiveResource>> SubArchiveResources;
     typedef WillBeHeapVector<RefPtrWillBeMember<MHTMLArchive>> SubFrameArchives;
 
-    ArchiveResource* mainResource() { return m_mainResource.get(); }
+    ArchiveResource* mainResource() const;
     const SubArchiveResources& subresources() const { return m_subresources; }
     const SubFrameArchives& subframeArchives() const { return m_subframeArchives; }
 

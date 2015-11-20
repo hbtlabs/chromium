@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
@@ -31,10 +32,12 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/output/swap_promise.h"
+#include "cc/proto/compositor_message.pb.h"
 #include "cc/resources/single_release_callback.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/trees/latency_info_swap_promise_monitor.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/remote_proto_channel.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
@@ -215,6 +218,7 @@ RenderWidgetCompositor::RenderWidgetCompositor(
       compositor_deps_(compositor_deps),
       never_visible_(false),
       layout_and_paint_async_callback_(nullptr),
+      remote_proto_channel_receiver_(nullptr),
       weak_factory_(this) {
 }
 
@@ -327,8 +331,8 @@ void RenderWidgetCompositor::Initialize() {
 
   settings.verify_property_trees =
       cmd->HasSwitch(cc::switches::kEnablePropertyTreeVerification);
-  settings.use_property_trees =
-      cmd->HasSwitch(cc::switches::kEnableCompositorPropertyTrees);
+  if (cmd->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
+    settings.use_property_trees = false;
   settings.renderer_settings.allow_antialiasing &=
       !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
   // The means the renderer compositor has 2 possible modes:
@@ -692,7 +696,7 @@ void RenderWidgetCompositor::registerViewportLayers(
     const blink::WebLayer* outerViewportScrollLayer) {
   layer_tree_host_->RegisterViewportLayers(
       // TODO(bokan): This check can probably be removed now, but it looks
-      // like overscroll elasticity may still be NULL until PinchViewport
+      // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
       // The scroll elasticity layer will only exist when using pinch virtual
       // viewports.
@@ -704,7 +708,7 @@ void RenderWidgetCompositor::registerViewportLayers(
       static_cast<const cc_blink::WebLayerImpl*>(innerViewportScrollLayer)
           ->layer(),
       // TODO(bokan): This check can probably be removed now, but it looks
-      // like overscroll elasticity may still be NULL until PinchViewport
+      // like overscroll elasticity may still be NULL until VisualViewport
       // registers its layers.
       // The outer viewport layer will only exist when using pinch virtual
       // viewports.
@@ -968,6 +972,19 @@ void RenderWidgetCompositor::DidAbortSwapBuffers() {
   widget_->OnSwapBuffersAborted();
 }
 
+void RenderWidgetCompositor::SetProtoReceiver(ProtoReceiver* receiver) {
+  remote_proto_channel_receiver_ = receiver;
+}
+
+void RenderWidgetCompositor::SendCompositorProto(
+    const cc::proto::CompositorMessage& proto) {
+  int signed_size = proto.ByteSize();
+  size_t unsigned_size = base::checked_cast<size_t>(signed_size);
+  std::vector<uint8_t> serialized(unsigned_size);
+  proto.SerializeToArray(serialized.data(), signed_size);
+  widget_->ForwardCompositorProto(serialized);
+}
+
 void RenderWidgetCompositor::RecordFrameTimingEvents(
     scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
     scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
@@ -1003,6 +1020,21 @@ void RenderWidgetCompositor::RecordFrameTimingEvents(
 void RenderWidgetCompositor::SetSurfaceIdNamespace(
     uint32_t surface_id_namespace) {
   layer_tree_host_->set_surface_id_namespace(surface_id_namespace);
+}
+
+void RenderWidgetCompositor::OnHandleCompositorProto(
+    const std::vector<uint8_t>& proto) {
+  DCHECK(remote_proto_channel_receiver_);
+
+  scoped_ptr<cc::proto::CompositorMessage> deserialized(
+      new cc::proto::CompositorMessage);
+  int signed_size = base::checked_cast<int>(proto.size());
+  if (!deserialized->ParseFromArray(proto.data(), signed_size)) {
+    LOG(ERROR) << "Unable to parse compositor proto.";
+    return;
+  }
+
+  remote_proto_channel_receiver_->OnProtoReceived(deserialized.Pass());
 }
 
 cc::ManagedMemoryPolicy RenderWidgetCompositor::GetGpuMemoryPolicy(

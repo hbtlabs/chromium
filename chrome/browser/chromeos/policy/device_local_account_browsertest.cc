@@ -121,10 +121,12 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "net/base/url_util.h"
@@ -371,13 +373,6 @@ void DictionaryPrefValueWaiter::QuitLoopIfExpectedValueFound() {
       actual_value == expected_value_) {
     run_loop_.Quit();
   }
-}
-
-bool DoesInstallSuccessReferToId(const std::string& id,
-                                 const content::NotificationSource& source,
-                                 const content::NotificationDetails& details) {
-  return content::Details<const extensions::InstalledExtensionInfo>(details)->
-      extension->id() == id;
 }
 
 bool DoesInstallFailureReferToId(const std::string& id,
@@ -693,7 +688,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
             "    document.getElementById('pod-row').getPodWithUsername_('%s');"
             "pod.click();"
             "domAutomationController.send(pod.classList.contains('advanced'));",
-            account_id_1_.GetUserEmail().c_str()),
+            account_id_1_.Serialize().c_str()),
         &advanced));
     // Verify that the pod expanded to its basic/advanced form, as expected.
     EXPECT_EQ(expect_advanced, advanced);
@@ -811,6 +806,71 @@ static bool IsKnownUser(const AccountId& account_id) {
   return user_manager::UserManager::Get()->IsKnownUser(account_id);
 }
 
+// Helper that listen extension installation when new profile is created.
+class ExtensionInstallObserver : public content::NotificationObserver,
+                                 public extensions::ExtensionRegistryObserver {
+ public:
+  explicit ExtensionInstallObserver(const std::string& extension_id)
+      : registry_(nullptr),
+        waiting_extension_id_(extension_id),
+        observed_(false) {
+    registrar_.Add(this, chrome::NOTIFICATION_PROFILE_CREATED,
+                   content::NotificationService::AllSources());
+  }
+
+  ~ExtensionInstallObserver() override {
+    if (registry_ != nullptr)
+      registry_->RemoveObserver(this);
+  }
+
+  // Wait until an extension with |extension_id| is installed.
+  void Wait() {
+    if (!observed_)
+      run_loop_.Run();
+  }
+
+ private:
+  // extensions::ExtensionRegistryObserver:
+  void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
+                                  const extensions::Extension* extension,
+                                  bool is_update,
+                                  bool from_ephemeral,
+                                  const std::string& old_name) override {
+    if (waiting_extension_id_ == extension->id()) {
+      observed_ = true;
+      run_loop_.Quit();
+    }
+  }
+
+  // content::NotificationObserver:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    DCHECK_EQ(chrome::NOTIFICATION_PROFILE_CREATED, type);
+
+    Profile* profile = content::Source<Profile>(source).ptr();
+    registry_ = extensions::ExtensionRegistry::Get(profile);
+
+    // Check if extension is already installed with newly created profile.
+    if (registry_->GetInstalledExtension(waiting_extension_id_)) {
+      observed_ = true;
+      run_loop_.Quit();
+      return;
+    }
+
+    // Start listening for extension installation.
+    registry_->AddObserver(this);
+  }
+
+  extensions::ExtensionRegistry* registry_;
+  base::RunLoop run_loop_;
+  content::NotificationRegistrar registrar_;
+  std::string waiting_extension_id_;
+  bool observed_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionInstallObserver);
+};
+
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LoginScreen) {
   AddPublicSessionToDevicePolicy(kAccountId1);
   AddPublicSessionToDevicePolicy(kAccountId2);
@@ -835,7 +895,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DISABLED_DisplayName) {
   const std::string get_compact_pod_display_name = base::StringPrintf(
       "domAutomationController.send(document.getElementById('pod-row')"
       "    .getPodWithUsername_('%s').nameElement.textContent);",
-      account_id_1_.GetUserEmail().c_str());
+      account_id_1_.Serialize().c_str());
   std::string display_name;
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
       contents_,
@@ -846,7 +906,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DISABLED_DisplayName) {
       "domAutomationController.send(document.getElementById('pod-row')"
       "    .getPodWithUsername_('%s').querySelector('.expanded-pane-name')"
       "        .textContent);",
-      account_id_1_.GetUserEmail().c_str());
+      account_id_1_.Serialize().c_str());
   display_name.clear();
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
       contents_,
@@ -860,7 +920,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DISABLED_DisplayName) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .click();",
-          account_id_1_.GetUserEmail().c_str())));
+          account_id_1_.Serialize().c_str())));
 
   // Change the display name.
   device_local_account_policy_.payload().mutable_userdisplayname()->set_value(
@@ -897,7 +957,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DISABLED_DisplayName) {
       base::StringPrintf(
           "domAutomationController.send(document.getElementById('pod-row')"
           "    .getPodWithUsername_('%s').expanded);",
-          account_id_1_.GetUserEmail().c_str()),
+          account_id_1_.Serialize().c_str()),
       &expanded));
   EXPECT_TRUE(expanded);
 }
@@ -1015,7 +1075,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
   // Make it possible to force-install a hosted app and an extension.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_refptr<TestingUpdateManifestProvider> testing_update_manifest_provider(
       new TestingUpdateManifestProvider(kRelativeUpdateURL));
   testing_update_manifest_provider->AddUpdate(
@@ -1046,19 +1106,16 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
   WaitForPolicy();
 
   // Start listening for app/extension installation results.
-  content::WindowedNotificationObserver hosted_app_observer(
-      extensions::NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED,
-      base::Bind(DoesInstallSuccessReferToId, kHostedAppID));
+  ExtensionInstallObserver install_observer(kHostedAppID);
   content::WindowedNotificationObserver extension_observer(
       extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
       base::Bind(DoesInstallFailureReferToId, kGoodExtensionID));
-
   ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
 
   // Wait for the hosted app installation to succeed and the extension
   // installation to fail (because hosted apps are whitelisted for use in
   // device-local accounts and extensions are not).
-  hosted_app_observer.Wait();
+  install_observer.Wait();
   extension_observer.Wait();
 
   // Verify that the hosted app was installed.
@@ -1093,7 +1150,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Pre-populate the device local account's extension cache with a hosted app
   // and an extension.
@@ -1127,9 +1184,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
   WaitForPolicy();
 
   // Start listening for app/extension installation results.
-  content::WindowedNotificationObserver hosted_app_observer(
-      extensions::NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED,
-      base::Bind(DoesInstallSuccessReferToId, kHostedAppID));
+  ExtensionInstallObserver install_observer(kHostedAppID);
   content::WindowedNotificationObserver extension_observer(
       extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
       base::Bind(DoesInstallFailureReferToId, kGoodExtensionID));
@@ -1138,7 +1193,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
 
   // Wait for the hosted app installation to succeed and the extension
   // installation to fail.
-  hosted_app_observer.Wait();
+  install_observer.Wait();
   extension_observer.Wait();
 
   // Verify that the hosted app was installed.
@@ -1190,7 +1245,7 @@ static void CreateFile(const base::FilePath& file,
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   // Make it possible to force-install a hosted app and an extension.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_refptr<TestingUpdateManifestProvider> testing_update_manifest_provider(
       new TestingUpdateManifestProvider(kRelativeUpdateURL));
   testing_update_manifest_provider->AddUpdate(
@@ -1258,9 +1313,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   WaitForPolicy();
 
   // Start listening for app/extension installation results.
-  content::WindowedNotificationObserver hosted_app_observer(
-      extensions::NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED,
-      base::Bind(DoesInstallSuccessReferToId, kHostedAppID));
+  ExtensionInstallObserver install_observer(kHostedAppID);
   content::WindowedNotificationObserver extension_observer(
       extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
       base::Bind(DoesInstallFailureReferToId, kGoodExtensionID));
@@ -1270,7 +1323,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   // Wait for the hosted app installation to succeed and the extension
   // installation to fail (because hosted apps are whitelisted for use in
   // device-local accounts and extensions are not).
-  hosted_app_observer.Wait();
+  install_observer.Wait();
   extension_observer.Wait();
 
   // Verify that the extension was kept in the local cache.
@@ -1378,7 +1431,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, UserAvatarImage) {
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   UploadDeviceLocalAccountPolicy();
   AddPublicSessionToDevicePolicy(kAccountId1);
@@ -1624,7 +1677,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleNoSwitch) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str())));
+          account_id_1_.Serialize().c_str())));
 
   WaitForSessionStart();
 
@@ -1653,7 +1706,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
           "    document.getElementById('pod-row').getPodWithUsername_('%s');"
           "pod.querySelector('.language-and-input').click();"
           "domAutomationController.send(pod.classList.contains('advanced'));",
-          account_id_1_.GetUserEmail().c_str()),
+          account_id_1_.Serialize().c_str()),
       &advanced));
   EXPECT_FALSE(advanced);
 
@@ -1667,7 +1720,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
           "var event = document.createEvent('HTMLEvents');"
           "event.initEvent('change', false, true);"
           "languageSelect.dispatchEvent(event);",
-          account_id_1_.GetUserEmail().c_str(), kPublicSessionLocale)));
+          account_id_1_.Serialize().c_str(), kPublicSessionLocale)));
 
   // The UI will have requested an updated list of keyboard layouts at this
   // point. Wait for the constructions of this list to finish.
@@ -1682,7 +1735,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
           "    document.getElementById('pod-row').getPodWithUsername_('%s');"
           "pod.querySelector('.keyboard-select').value = '%s';"
           "pod.querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str(),
+          account_id_1_.Serialize().c_str(),
           public_session_input_method_id_.c_str())));
 
   WaitForSessionStart();
@@ -1715,7 +1768,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, OneRecommendedLocale) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str())));
+          account_id_1_.Serialize().c_str())));
 
   WaitForSessionStart();
 
@@ -1748,7 +1801,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
       "for (var i = 0; i < languageSelect.length; ++i)"
       "  locales.push(languageSelect.options[i].value);"
       "domAutomationController.send(JSON.stringify(locales));",
-      account_id_1_.GetUserEmail().c_str());
+      account_id_1_.Serialize().c_str());
   std::string json;
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(contents_,
                                                      get_locale_list,
@@ -1783,7 +1836,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
       "domAutomationController.send(document.getElementById('pod-row')"
       "    .getPodWithUsername_('%s').querySelector('.language-select')"
       "        .value);",
-      account_id_1_.GetUserEmail().c_str());
+      account_id_1_.Serialize().c_str());
   std::string selected_locale;
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(contents_,
                                                      get_selected_locale,
@@ -1838,7 +1891,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
           "var event = document.createEvent('HTMLEvents');"
           "event.initEvent('change', false, true);"
           "languageSelect.dispatchEvent(event);",
-          account_id_1_.GetUserEmail().c_str(), kPublicSessionLocale)));
+          account_id_1_.Serialize().c_str(), kPublicSessionLocale)));
 
   // Change the list of recommended locales.
   SetRecommendedLocales(kRecommendedLocales2, arraysize(kRecommendedLocales2));
@@ -1864,7 +1917,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .querySelector('.keyboard-select').value = '%s';",
-          account_id_1_.GetUserEmail().c_str(),
+          account_id_1_.Serialize().c_str(),
           public_session_input_method_id_.c_str())));
 
   // Click on a different pod, causing focus to shift away and the pod to
@@ -1874,7 +1927,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .click();",
-          account_id_2_.GetUserEmail().c_str())));
+          account_id_2_.Serialize().c_str())));
 
   // Click on the pod again, causing it to expand again. Verify that the pod has
   // kept all its state (the advanced form is being shown, the manually selected
@@ -1891,7 +1944,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
           "state.keyboardLayout = pod.querySelector('.keyboard-select').value;"
           "console.log(JSON.stringify(state));"
           "domAutomationController.send(JSON.stringify(state));",
-          account_id_1_.GetUserEmail().c_str()),
+          account_id_1_.Serialize().c_str()),
       &json));
   LOG(ERROR) << json;
   value_ptr = base::JSONReader::Read(json);
@@ -1913,7 +1966,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str())));
+          account_id_1_.Serialize().c_str())));
 
   WaitForSessionStart();
 
@@ -1947,7 +2000,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, InvalidRecommendedLocale) {
           "    document.getElementById('pod-row').getPodWithUsername_('%s');"
           "pod.click();"
           "domAutomationController.send(pod.classList.contains('advanced'));",
-          account_id_1_.GetUserEmail().c_str()),
+          account_id_1_.Serialize().c_str()),
       &advanced));
   EXPECT_FALSE(advanced);
   EXPECT_EQ(l10n_util::GetLanguage(initial_locale_),
@@ -1959,7 +2012,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, InvalidRecommendedLocale) {
       base::StringPrintf(
           "document.getElementById('pod-row').getPodWithUsername_('%s')"
           "    .querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str())));
+          account_id_1_.Serialize().c_str())));
 
   WaitForSessionStart();
 
@@ -2033,7 +2086,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest,
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
   // Specify Terms of Service URL.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   device_local_account_policy_.payload().mutable_termsofserviceurl()->set_value(
       embedded_test_server()->GetURL(
           std::string("/") + kExistentTermsOfServicePath).spec());
@@ -2052,7 +2105,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
           "var event = document.createEvent('HTMLEvents');"
           "event.initEvent('change', false, true);"
           "languageSelect.dispatchEvent(event);",
-          account_id_1_.GetUserEmail().c_str(), kPublicSessionLocale)));
+          account_id_1_.Serialize().c_str(), kPublicSessionLocale)));
 
   // The UI will have requested an updated list of keyboard layouts at this
   // point. Wait for the constructions of this list to finish.
@@ -2078,7 +2131,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
           "    document.getElementById('pod-row').getPodWithUsername_('%s');"
           "pod.querySelector('.keyboard-select').value = '%s';"
           "pod.querySelector('.enter-button').click();",
-          account_id_1_.GetUserEmail().c_str(),
+          account_id_1_.Serialize().c_str(),
           public_session_input_method_id_.c_str())));
 
   // Spin the loop until the login observer fires. Then, unregister the
@@ -2160,7 +2213,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
   // Set up a test update server for the Show Managed Storage app.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   scoped_refptr<TestingUpdateManifestProvider> testing_update_manifest_provider(
       new TestingUpdateManifestProvider(kRelativeUpdateURL));
   testing_update_manifest_provider->AddUpdate(
@@ -2199,12 +2252,10 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
   WaitForPolicy();
 
   // Observe the app installation after login.
-  content::WindowedNotificationObserver extension_observer(
-      extensions::NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED,
-      base::Bind(DoesInstallSuccessReferToId, kShowManagedStorageID));
+  ExtensionInstallObserver install_observer(kShowManagedStorageID);
   ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
   WaitForSessionStart();
-  extension_observer.Wait();
+  install_observer.Wait();
 
   // Verify that the app was installed.
   Profile* profile = GetProfileForTest();
@@ -2266,7 +2317,7 @@ class TermsOfServiceDownloadTest : public DeviceLocalAccountTest,
 
 IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   // Specify Terms of Service URL.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   device_local_account_policy_.payload().mutable_termsofserviceurl()->set_value(
       embedded_test_server()->GetURL(
             std::string("/") +

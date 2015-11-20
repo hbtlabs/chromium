@@ -22,6 +22,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
+#include "components/password_manager/core/browser/log_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
@@ -124,12 +125,20 @@ void ShowLoginPrompt(const GURL& request_url,
 
   base::string16 authority =
       url_formatter::FormatUrlForSecurityDisplay(request_url, languages);
-  base::string16 explanation =
-      elided_realm.empty()
-          ? l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_DESCRIPTION_NO_REALM,
-                                       authority)
-          : l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_DESCRIPTION, authority,
-                                       elided_realm);
+  base::string16 explanation;
+  if (auth_info->is_proxy) {
+    explanation = elided_realm.empty()
+        ? l10n_util::GetStringFUTF16(
+            IDS_LOGIN_DIALOG_DESCRIPTION_PROXY_NO_REALM, authority)
+        : l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_DESCRIPTION_PROXY,
+                                     authority, elided_realm);
+  } else {
+    explanation = elided_realm.empty()
+        ? l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_DESCRIPTION_NO_REALM,
+                                     authority)
+        : l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_DESCRIPTION, authority,
+                                     elided_realm);
+  }
 
   password_manager::PasswordManager* password_manager =
       handler->GetPasswordManagerForLogin();
@@ -147,9 +156,10 @@ void ShowLoginPrompt(const GURL& request_url,
     return;
   }
 
-  if (password_manager && password_manager->client()->IsLoggingActive()) {
+  if (password_manager &&
+      password_manager->client()->GetLogManager()->IsLoggingActive()) {
     password_manager::BrowserSavePasswordProgressLogger logger(
-        password_manager->client());
+        password_manager->client()->GetLogManager());
     logger.LogMessage(
         autofill::SavePasswordProgressLogger::STRING_SHOW_LOGIN_PROMPT_METHOD);
   }
@@ -246,9 +256,10 @@ void LoginHandler::SetAuth(const base::string16& username,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   scoped_ptr<password_manager::BrowserSavePasswordProgressLogger> logger;
-  if (password_manager_ && password_manager_->client()->IsLoggingActive()) {
+  if (password_manager_ &&
+      password_manager_->client()->GetLogManager()->IsLoggingActive()) {
     logger.reset(new password_manager::BrowserSavePasswordProgressLogger(
-        password_manager_->client()));
+        password_manager_->client()->GetLogManager()));
     logger->LogMessage(
         autofill::SavePasswordProgressLogger::STRING_SET_AUTH_METHOD);
   }
@@ -447,18 +458,13 @@ void LoginHandler::NotifyAuthCancelled(bool dismiss_navigation) {
   NavigationController* controller = NULL;
 
   WebContents* requesting_contents = GetWebContentsForLogin();
-  if (requesting_contents) {
+  if (requesting_contents)
     controller = &requesting_contents->GetController();
-    if (dismiss_navigation) {
-      content::InterstitialPage* interstitial_page =
-          requesting_contents->GetInterstitialPage();
-      if (interstitial_page)
-        interstitial_page->DontProceed();
-    }
-  }
+
+  if (dismiss_navigation && interstitial_delegate_)
+    interstitial_delegate_->DontProceed();
 
   LoginNotificationDetails details(this);
-
   service->Notify(chrome::NOTIFICATION_AUTH_CANCELLED,
                   content::Source<NavigationController>(controller),
                   content::Details<LoginNotificationDetails>(&details));
@@ -518,18 +524,9 @@ void LoginHandler::CancelAuthDeferred() {
 // Closes the view_contents from the UI loop.
 void LoginHandler::CloseContentsDeferred() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   CloseDialog();
-
-  WebContents* requesting_contents = GetWebContentsForLogin();
-  if (!requesting_contents)
-    return;
-  // If a (blank) login interstitial was displayed, proceed so that the
-  // navigation is committed.
-  content::InterstitialPage* interstitial_page =
-      requesting_contents->GetInterstitialPage();
-  if (interstitial_page)
-    interstitial_page->Proceed();
+  if (interstitial_delegate_)
+    interstitial_delegate_->Proceed();
 }
 
 // This callback is run on the UI thread and creates a constrained window with
@@ -577,15 +574,13 @@ void LoginDialogCallback(const GURL& request_url,
                                         request_url,
                                         make_scoped_refptr(auth_info),
                                         make_scoped_refptr(handler));
-    // This is owned by the interstitial it creates. It cancels any existing
-    // interstitial.
-    new LoginInterstitialDelegate(parent_contents,
-                                  request_url,
-                                  callback);
+    // The interstitial delegate is owned by the interstitial that it creates.
+    // This cancels any existing interstitial.
+    handler->SetInterstitialDelegate(
+        (new LoginInterstitialDelegate(parent_contents, request_url, callback))
+            ->GetWeakPtr());
   } else {
-    ShowLoginPrompt(request_url,
-                    auth_info,
-                    handler);
+    ShowLoginPrompt(request_url, auth_info, handler);
   }
 }
 

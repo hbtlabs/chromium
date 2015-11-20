@@ -16,7 +16,7 @@ WebInspector.AnimationControlPane = function(toolbarItem)
     this.element.createChild("div").createTextChild("Animations");
     var container = this.element.createChild("div", "animations-controls");
 
-    var toolbar = new WebInspector.Toolbar();
+    var toolbar = new WebInspector.Toolbar("");
     this._animationsPauseButton = new WebInspector.ToolbarButton("", "pause-toolbar-item");
     toolbar.appendToolbarItem(this._animationsPauseButton);
     this._animationsPauseButton.addEventListener("click", this._pauseButtonHandler.bind(this));
@@ -34,7 +34,6 @@ WebInspector.AnimationControlPane = function(toolbarItem)
 }
 
 WebInspector.AnimationControlPane.prototype = {
-
     /**
      * @param {!Event} event
      */
@@ -56,10 +55,14 @@ WebInspector.AnimationControlPane.prototype = {
     },
 
     /**
-     * @param {!WebInspector.Event=} event
+     * @override
+     * @return {!Promise<?>}
      */
-    _updateAnimationsPlaybackRate: function(event)
+    doUpdate: function()
     {
+        if (!this._target)
+            return Promise.resolve();
+
         /**
          * @param {number} playbackRate
          * @this {WebInspector.AnimationControlPane}
@@ -70,8 +73,7 @@ WebInspector.AnimationControlPane.prototype = {
             this._animationsPlaybackLabel.textContent = playbackRate + "x";
         }
 
-        if (this._target)
-            WebInspector.AnimationModel.fromTarget(this._target).playbackRatePromise().then(setPlaybackRate.bind(this));
+        return WebInspector.AnimationModel.fromTarget(this._target).playbackRatePromise().then(setPlaybackRate.bind(this));
     },
 
     /**
@@ -84,11 +86,11 @@ WebInspector.AnimationControlPane.prototype = {
             return;
 
         if (this._target)
-            this._target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._updateAnimationsPlaybackRate, this);
+            this._target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this.update, this);
 
         this._target = node.target();
-        this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._updateAnimationsPlaybackRate, this);
-        this._updateAnimationsPlaybackRate();
+        this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this.update, this);
+        this.update();
     },
 
     __proto__: WebInspector.ElementsPanel.BaseToolbarPaneWidget.prototype
@@ -110,18 +112,6 @@ WebInspector.AnimationControlPane.ButtonProvider.prototype = {
     /**
      * @param {boolean} toggleOn
      */
-    _toggleAnimationTimelineMode: function(toggleOn)
-    {
-        if (!this._animationTimeline)
-            this._animationTimeline = new WebInspector.AnimationTimeline();
-        this._button.setToggled(toggleOn);
-        var elementsPanel = WebInspector.ElementsPanel.instance();
-        elementsPanel.setWidgetBelowDOM(toggleOn ? this._animationTimeline : null);
-    },
-
-    /**
-     * @param {boolean} toggleOn
-     */
     _toggleAnimationControlPaneMode: function(toggleOn)
     {
         if (!this._animationsControlPane)
@@ -132,7 +122,7 @@ WebInspector.AnimationControlPane.ButtonProvider.prototype = {
     _clicked: function()
     {
         if (Runtime.experiments.isEnabled("animationInspection"))
-            this._toggleAnimationTimelineMode(!this._button.toggled());
+            WebInspector.inspectorView.showViewInDrawer("animations");
         else
             this._toggleAnimationControlPaneMode(!this._button.toggled());
     },
@@ -140,10 +130,7 @@ WebInspector.AnimationControlPane.ButtonProvider.prototype = {
     _nodeChanged: function()
     {
         var node = WebInspector.context.flavor(WebInspector.DOMNode);
-        if (Runtime.experiments.isEnabled("animationInspection")) {
-            if (this._animationTimeline)
-                this._animationTimeline.setNode(node);
-        } else {
+        if (!Runtime.experiments.isEnabled("animationInspection")) {
             this._button.setEnabled(!!node);
             if (!node)
                 this._toggleAnimationControlPaneMode(false);

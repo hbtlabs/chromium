@@ -6,6 +6,10 @@
 
 /* Media query bars */
 
+.media-inspector-view {
+    height: 50px;
+}
+
 .media-inspector-marker-container {
     position: relative;
     height: 14px;
@@ -17,30 +21,32 @@
     top: 1px;
     bottom: 1px;
     white-space: nowrap;
-    border-radius: 2px;
-}
-
-.media-inspector-marker-inactive {
-    -webkit-filter: brightness(80%);
+    z-index: auto;
 }
 
 .media-inspector-marker:hover {
     top: -1px;
     bottom: -1px;
-    -webkit-filter: brightness(115%) !important;
+    opacity: 1;
 }
 
 .media-inspector-marker-max-width {
-    background: linear-gradient(to left, rgba(255, 255, 255, 0.27), rgba(0,0,0,0) 30px), linear-gradient(to bottom, rgb(72, 139, 249), rgb(26, 113, 233));
-    border-radius: 0 2px 2px 0;
-    border-right: 2px solid rgb(171, 207, 255);
+    background-color: hsl(207, 90%, 77%);
+    border-right: 2px solid hsl(207, 90%, 61%);
+}
+
+.media-inspector-marker-max-width.media-inspector-marker-inactive:not(:hover) {
+    background-color: hsl(199, 94%, 94%);
 }
 
 .media-inspector-marker-min-max-width {
-    background: linear-gradient(to right, rgba(255, 255, 255, 0.27), rgba(0,0,0,0) 30px), linear-gradient(to left, rgba(255, 255, 255, 0.27), rgba(0,0,0,0) 30px), linear-gradient(to bottom, rgb(112, 174, 7), rgb(3, 131, 0));
-    border-radius: 2px;
-    border-left: 2px solid rgb(80, 226, 40);
-    border-right: 2px solid rgb(80, 226, 40);
+    background-color: hsl(88, 50%, 76%);
+    border-left: 2px solid #689F38;
+    border-right: 2px solid hsl(92, 48%, 42%);
+}
+
+.media-inspector-marker-min-max-width.media-inspector-marker-inactive:not(:hover) {
+    background-color: hsl(125, 39%, 94%);
 }
 
 .media-inspector-marker-min-max-width:hover {
@@ -48,9 +54,12 @@
 }
 
 .media-inspector-marker-min-width {
-    background: linear-gradient(to right, rgba(255, 255, 255, 0.27), rgba(0,0,0,0) 30px), linear-gradient(to bottom, rgb(222, 129, 30), rgb(204, 104, 31));
-    border-radius: 2px 0 0 2px;
-    border-left: 2px solid rgb(255, 181, 142);
+    background-color: hsl(36, 100%, 75%);
+    border-left: 2px solid hsl(30, 100%, 48%);
+}
+
+.media-inspector-marker-min-width.media-inspector-marker-inactive:not(:hover) {
+    background-color: hsl(37, 100%, 94%);
 }
 
 /* Media query labels */
@@ -61,6 +70,7 @@
 
 .media-inspector-marker-label-container {
     position: absolute;
+    z-index: 1;
 }
 
 .media-inspector-marker-label-container-left {
@@ -72,12 +82,11 @@
 }
 
 .media-inspector-marker-label {
-    color: #eee;
+    color: #222;
     position: absolute;
     top: 1px;
     bottom: 0;
-    font-size: 10px;
-    text-shadow: rgba(0, 0, 0, 0.6) 1px 1px;
+    font-size: 12px;
     pointer-events: none;
 }
 

@@ -17,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/container_util.h"
 #include "cc/base/math_util.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_metadata.h"
@@ -376,7 +377,8 @@ GLRenderer::GLRenderer(RendererClient* client,
 
 GLRenderer::~GLRenderer() {
   while (!pending_async_read_pixels_.empty()) {
-    PendingAsyncReadPixels* pending_read = pending_async_read_pixels_.back();
+    PendingAsyncReadPixels* pending_read =
+        pending_async_read_pixels_.back().get();
     pending_read->finished_read_pixels_callback.Cancel();
     pending_async_read_pixels_.pop_back();
   }
@@ -474,12 +476,12 @@ void GLRenderer::BeginDrawingFrame(DrawingFrame* frame) {
       if (pending_sync_queries_.front()->IsPending())
         break;
 
-      available_sync_queries_.push_back(pending_sync_queries_.take_front());
+      available_sync_queries_.push_back(PopFront(&pending_sync_queries_));
     }
 
     current_sync_query_ = available_sync_queries_.empty()
                               ? make_scoped_ptr(new SyncQuery(gl_))
-                              : available_sync_queries_.take_front();
+                              : PopFront(&available_sync_queries_);
 
     read_lock_fence = current_sync_query_->Begin();
   } else {
@@ -845,7 +847,7 @@ scoped_ptr<ScopedResource> GLRenderer::GetBackdropTexture(
                                              device_background_texture->id());
     GetFramebufferTexture(lock.texture_id(), RGBA_8888, bounding_rect);
   }
-  return device_background_texture.Pass();
+  return device_background_texture;
 }
 
 skia::RefPtr<SkImage> GLRenderer::ApplyBackgroundFilters(
@@ -2442,7 +2444,7 @@ void GLRenderer::FinishDrawingFrame(DrawingFrame* frame) {
   if (use_sync_query_) {
     DCHECK(current_sync_query_);
     current_sync_query_->End();
-    pending_sync_queries_.push_back(current_sync_query_.Pass());
+    pending_sync_queries_.push_back(std::move(current_sync_query_));
   }
 
   current_framebuffer_lock_ = nullptr;
@@ -2451,6 +2453,7 @@ void GLRenderer::FinishDrawingFrame(DrawingFrame* frame) {
   gl_->Disable(GL_BLEND);
   blend_shadow_ = false;
 
+  ScheduleCALayers(frame);
   ScheduleOverlays(frame);
 }
 
@@ -2494,7 +2497,7 @@ void GLRenderer::CopyCurrentRenderPassToBitmap(
   gfx::Rect copy_rect = frame->current_render_pass->output_rect;
   if (request->has_area())
     copy_rect.Intersect(request->area());
-  GetFramebufferPixelsAsync(frame, copy_rect, request.Pass());
+  GetFramebufferPixelsAsync(frame, copy_rect, std::move(request));
 }
 
 void GLRenderer::ToGLMatrix(float* gl_matrix, const gfx::Transform& transform) {
@@ -2723,17 +2726,17 @@ void GLRenderer::GetFramebufferPixelsAsync(
       gl_->DeleteTextures(1, &texture_id);
     }
 
-    request->SendTextureResult(
-        window_rect.size(), texture_mailbox, release_callback.Pass());
+    request->SendTextureResult(window_rect.size(), texture_mailbox,
+                               std::move(release_callback));
     return;
   }
 
   DCHECK(request->force_bitmap_result());
 
   scoped_ptr<PendingAsyncReadPixels> pending_read(new PendingAsyncReadPixels);
-  pending_read->copy_request = request.Pass();
+  pending_read->copy_request = std::move(request);
   pending_async_read_pixels_.insert(pending_async_read_pixels_.begin(),
-                                    pending_read.Pass());
+                                    std::move(pending_read));
 
   bool do_workaround = NeedsIOSurfaceReadbackWorkaround();
 
@@ -2831,7 +2834,7 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
     ++iter;
 
   DCHECK(iter != reverse_end);
-  PendingAsyncReadPixels* current_read = *iter;
+  PendingAsyncReadPixels* current_read = iter->get();
 
   uint8* src_pixels = NULL;
   scoped_ptr<SkBitmap> bitmap;
@@ -2873,7 +2876,7 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
   }
 
   if (bitmap)
-    current_read->copy_request->SendBitmapResult(bitmap.Pass());
+    current_read->copy_request->SendBitmapResult(std::move(bitmap));
 
   // Conversion from reverse iterator to iterator:
   // Iterator |iter.base() - 1| points to the same element with reverse iterator
@@ -3524,6 +3527,32 @@ void GLRenderer::RestoreFramebuffer(DrawingFrame* frame) {
 
 bool GLRenderer::IsContextLost() {
   return gl_->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
+}
+
+void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
+  for (const CALayerOverlay& ca_layer_overlay : frame->ca_layer_overlay_list) {
+    unsigned texture_id = 0;
+    if (ca_layer_overlay.contents_resource_id) {
+      pending_overlay_resources_.push_back(
+          make_scoped_ptr(new ResourceProvider::ScopedReadLockGL(
+              resource_provider_, ca_layer_overlay.contents_resource_id)));
+      texture_id = pending_overlay_resources_.back()->texture_id();
+    }
+    GLfloat contents_rect[4] = {
+        ca_layer_overlay.contents_rect.x(), ca_layer_overlay.contents_rect.y(),
+        ca_layer_overlay.contents_rect.width(),
+        ca_layer_overlay.contents_rect.height(),
+    };
+    GLfloat bounds_size[2] = {
+        ca_layer_overlay.bounds_size.width(),
+        ca_layer_overlay.bounds_size.height(),
+    };
+    GLfloat transform[16];
+    ca_layer_overlay.transform.asColMajorf(transform);
+    gl_->ScheduleCALayerCHROMIUM(
+        texture_id, contents_rect, ca_layer_overlay.opacity,
+        ca_layer_overlay.background_color, bounds_size, transform);
+  }
 }
 
 void GLRenderer::ScheduleOverlays(DrawingFrame* frame) {

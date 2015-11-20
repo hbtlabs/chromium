@@ -230,7 +230,6 @@ class ProfileSyncService : public sync_driver::SyncService,
     ROLLBACK    // Backend for rollback.
   };
 
-  // Takes ownership of |factory| and |signin_wrapper|.
   ProfileSyncService(
       scoped_ptr<sync_driver::SyncClient> sync_client,
       scoped_ptr<SigninManagerWrapper> signin_wrapper,
@@ -565,6 +564,10 @@ class ProfileSyncService : public sync_driver::SyncService,
   // It should be used to persist data to disk when the process might be
   // killed in the near future.
   void FlushDirectory() const;
+
+  // Returns a serialized NigoriKey proto generated from the bootstrap token in
+  // SyncPrefs. Will return the empty string if no bootstrap token exists.
+  std::string GetCustomPassphraseKey() const;
 
   // Needed to test whether the directory is deleted properly.
   base::FilePath GetDirectoryPathForTest() const;
@@ -948,6 +951,7 @@ class ProfileSyncService : public sync_driver::SyncService,
 
   scoped_ptr<syncer::NetworkResources> network_resources_;
 
+  browser_sync::ProfileSyncServiceStartBehavior start_behavior_;
   scoped_ptr<browser_sync::StartupController> startup_controller_;
 
   scoped_ptr<sync_driver::BackupRollbackController> backup_rollback_controller_;

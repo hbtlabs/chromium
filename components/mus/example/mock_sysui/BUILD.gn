@@ -15,15 +15,15 @@ mojo_native_application("mock_sysui") {
 
   deps = [
     "//base",
-    "//components/mus/example/wm/public/interfaces",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
+    "//mash/wm/public/interfaces",
     "//mojo/application/public/cpp",
     "//mojo/common:common_base",
-    "//mojo/converters/network",
+    "//mojo/services/tracing/public/cpp",
     "//skia",
     "//ui/views",
-    "//ui/views/mus",
+    "//ui/views/mus:for_mojo_application",
   ]
 
   resources = [ "$root_out_dir/views_mus_resources.pak" ]

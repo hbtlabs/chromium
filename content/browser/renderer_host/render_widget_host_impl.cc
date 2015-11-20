@@ -43,6 +43,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
+#include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/cursors/webcursor.h"
@@ -413,6 +414,9 @@ void RenderWidgetHostImpl::Init() {
 
   SendScreenRects();
   WasResized();
+
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidInit();
 }
 
 void RenderWidgetHostImpl::InitForFrame() {
@@ -473,6 +477,8 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnImeCompositionRangeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidFirstPaintAfterLoad,
                         OnFirstPaintAfterLoad)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_ForwardCompositorProto,
+                        OnForwardCompositorProto)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -493,15 +499,20 @@ bool RenderWidgetHostImpl::Send(IPC::Message* msg) {
 }
 
 void RenderWidgetHostImpl::SetIsLoading(bool is_loading) {
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetWillSetIsLoading(is_loading);
+
   is_loading_ = is_loading;
-  if (!view_)
-    return;
-  view_->SetIsLoading(is_loading);
+  if (view_)
+    view_->SetIsLoading(is_loading);
 }
 
 void RenderWidgetHostImpl::WasHidden() {
   if (is_hidden_)
     return;
+
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetWillBeHidden();
 
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::WasHidden");
   is_hidden_ = true;
@@ -526,6 +537,9 @@ void RenderWidgetHostImpl::WasHidden() {
 void RenderWidgetHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
   if (!is_hidden_)
     return;
+
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetWillBeShown();
 
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::WasShown");
   is_hidden_ = false;
@@ -700,6 +714,8 @@ void RenderWidgetHostImpl::ResizeRectChanged(const gfx::Rect& new_rect) {
 
 void RenderWidgetHostImpl::GotFocus() {
   Focus();
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetGotFocus();
   if (delegate_)
     delegate_->RenderWidgetGotFocus(this);
 }
@@ -956,6 +972,8 @@ void RenderWidgetHostImpl::OnFirstPaintAfterLoad() {
 
 void RenderWidgetHostImpl::ForwardMouseEvent(const WebMouseEvent& mouse_event) {
   ForwardMouseEventWithLatencyInfo(mouse_event, ui::LatencyInfo());
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidForwardMouseEvent(mouse_event);
 }
 
 void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
@@ -1097,6 +1115,11 @@ void RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(
 void RenderWidgetHostImpl::ForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardKeyboardEvent");
+  if (owner_delegate_ &&
+      !owner_delegate_->MayRenderWidgetForwardKeyboardEvent(key_event)) {
+    return;
+  }
+
   if (IgnoreInputEvents())
     return;
 
@@ -1253,6 +1276,12 @@ bool RenderWidgetHostImpl::GetScreenColorProfile(
   return false;
 }
 
+void RenderWidgetHostImpl::HandleCompositorProto(
+    const std::vector<uint8_t>& proto) {
+  DCHECK(!proto.empty());
+  Send(new ViewMsg_HandleCompositorProto(GetRoutingID(), proto));
+}
+
 void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
   color_profile_out_of_date_ = true;
 
@@ -1289,6 +1318,12 @@ void RenderWidgetHostImpl::OnSelectionBoundsChanged(
   if (view_) {
     view_->SelectionBoundsChanged(params);
   }
+}
+
+void RenderWidgetHostImpl::OnForwardCompositorProto(
+    const std::vector<uint8_t>& proto) {
+  if (delegate_)
+    delegate_->ForwardCompositorProto(this, proto);
 }
 
 void RenderWidgetHostImpl::UpdateVSyncParameters(base::TimeTicks timebase,

@@ -150,10 +150,11 @@ public:
     PassRefPtr<TypeBuilder::CSS::CSSMedia> buildMediaObject(const MediaList*, MediaListSource, const String&, CSSStyleSheet*);
     PassRefPtr<TypeBuilder::Array<TypeBuilder::CSS::CSSMedia> > buildMediaListChain(CSSRule*);
 
-    PassRefPtrWillBeRawPtr<CSSStyleDeclaration> findEffectiveDeclaration(CSSPropertyID, CSSRuleList* matchedRulesList, CSSStyleDeclaration* inlineStyle);
-    void setCSSPropertyValue(ErrorString*, Element*, RefPtrWillBeRawPtr<CSSStyleDeclaration>, CSSPropertyID, const String& value, bool forceImportant = false);
+    PassRefPtrWillBeRawPtr<CSSStyleDeclaration> findEffectiveDeclaration(CSSPropertyID, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleDeclaration>>& styles);
+    void setLayoutEditorValue(ErrorString*, Element*, RefPtrWillBeRawPtr<CSSStyleDeclaration>, CSSPropertyID, const String& value, bool forceImportant = false);
+    void layoutEditorItemSelected(Element*, RefPtrWillBeRawPtr<CSSStyleDeclaration>);
 
-    PassRefPtrWillBeRawPtr<CSSRuleList> matchedRulesList(Element*);
+    WillBeHeapVector<RefPtrWillBeMember<CSSStyleDeclaration>> matchingStyles(Element*);
     String styleSheetId(CSSStyleSheet*);
 private:
     class StyleSheetAction;
@@ -210,7 +211,7 @@ private:
     void resetPseudoStates();
 
     RawPtrWillBeMember<InspectorDOMAgent> m_domAgent;
-    InspectedFrames* m_inspectedFrames;
+    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
     RawPtrWillBeMember<InspectorResourceAgent> m_resourceAgent;
     RawPtrWillBeMember<InspectorResourceContentLoader> m_resourceContentLoader;
 

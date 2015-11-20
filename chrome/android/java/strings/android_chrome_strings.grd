@@ -1471,7 +1471,7 @@ You are signing in with a managed account and giving its administrator control o
         <ph name="FILE_NAME">%1$s<ex>http://abc.com/test.pdf</ex></ph> download failed due to missing SD Card.
       </message>
       <message name="IDS_DOWNLOAD_FAILED_REASON_UNKNOWN_ERROR" desc="Message to explain that the download failed because unkown error.">
-        <ph name="FILE_NAME">%1$s<ex>http://abc.com/test.pdf</ex></ph> download failed due to an unknwon error.
+        <ph name="FILE_NAME">%1$s<ex>http://abc.com/test.pdf</ex></ph> download failed due to an unknown error.
       </message>
       <message name="IDS_DOWNLOAD_PENDING" desc="Message in the list of items which have received download requests telling their status. This message states that the download has not yet begun [CHAR LIMIT=30]">
         Downloading…
@@ -1829,10 +1829,10 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
 
       <!-- Enhanced bookmark strings -->
       <message name="IDS_ENHANCED_BOOKMARK_SIGN_IN_PROMO_TITLE" desc="Promo title encouraging the user to sign in to Chrome to improve their bookmarks experience. It means that after signing-in, bookmarks will become synced across devices and possible to search.">
-        Back up and sync your bookmarks
+        Sync your bookmarks
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_SIGN_IN_PROMO_DESCRIPTION" desc="Description for enhanced bookmark UI sign-in promotion.">
-        Sign in to Chrome to access your bookmarks from any device
+        To get your bookmarks on all your devices, sign in to Chrome
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_SIGN_IN_PROMO_NO_THANKS" desc="Text for the decline button in the enhanced bookmark UI">
         No, thanks

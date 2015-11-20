@@ -211,6 +211,7 @@ ProfileSyncService::ProfileSyncService(
       connection_status_(syncer::CONNECTION_NOT_ATTEMPTED),
       last_get_token_error_(GoogleServiceAuthError::AuthErrorNone()),
       network_resources_(new syncer::HttpBridgeNetworkResources),
+      start_behavior_(start_behavior),
       backend_mode_(IDLE),
       need_backup_(false),
       backup_finished_(false),
@@ -220,42 +221,6 @@ ProfileSyncService::ProfileSyncService(
       startup_controller_weak_factory_(this) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(sync_client_);
-  startup_controller_.reset(new browser_sync::StartupController(
-      start_behavior,
-      oauth2_token_service,
-      &sync_prefs_,
-      signin_.get(),
-      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
-                 startup_controller_weak_factory_.GetWeakPtr(),
-                 SYNC)));
-  backup_rollback_controller_.reset(new sync_driver::BackupRollbackController(
-      &sync_prefs_,
-      signin_.get(),
-      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
-                 startup_controller_weak_factory_.GetWeakPtr(),
-                 BACKUP),
-      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
-                 startup_controller_weak_factory_.GetWeakPtr(),
-                 ROLLBACK)));
-  scoped_ptr<browser_sync::LocalSessionEventRouter> router(
-      sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter());
-  local_device_ = sync_client_->GetSyncApiComponentFactory()
-                      ->CreateLocalDeviceInfoProvider();
-  sync_stopped_reporter_.reset(new browser_sync::SyncStoppedReporter(
-      sync_service_url_, local_device_->GetSyncUserAgent(),
-      url_request_context_,
-      browser_sync::SyncStoppedReporter::ResultCallback()));
-  sessions_sync_manager_.reset(new SessionsSyncManager(
-      sync_client_->GetSyncSessionsClient(), &sync_prefs_, local_device_.get(),
-      router.Pass(),
-      base::Bind(&ProfileSyncService::NotifyForeignSessionUpdated,
-                 weak_factory_.GetWeakPtr()),
-      base::Bind(&ProfileSyncService::TriggerRefresh,
-                 weak_factory_.GetWeakPtr(),
-                 syncer::ModelTypeSet(syncer::SESSIONS))));
-  device_info_sync_service_.reset(
-      new DeviceInfoSyncService(local_device_.get()));
-
   std::string last_version = sync_prefs_.GetLastRunVersion();
   std::string current_version = PRODUCT_VERSION;
   sync_prefs_.SetLastRunVersion(current_version);
@@ -288,6 +253,41 @@ bool ProfileSyncService::IsOAuthRefreshTokenAvailable() {
 
 void ProfileSyncService::Initialize() {
   sync_client_->Initialize(this);
+
+  startup_controller_.reset(new browser_sync::StartupController(
+      start_behavior_, oauth2_token_service_, &sync_prefs_, signin_.get(),
+      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
+                 startup_controller_weak_factory_.GetWeakPtr(), SYNC)));
+  backup_rollback_controller_.reset(new sync_driver::BackupRollbackController(
+      &sync_prefs_, signin_.get(),
+      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
+                 startup_controller_weak_factory_.GetWeakPtr(), BACKUP),
+      base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
+                 startup_controller_weak_factory_.GetWeakPtr(), ROLLBACK)));
+  scoped_ptr<browser_sync::LocalSessionEventRouter> router(
+      sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter());
+  local_device_ = sync_client_->GetSyncApiComponentFactory()
+                      ->CreateLocalDeviceInfoProvider();
+  sync_stopped_reporter_.reset(new browser_sync::SyncStoppedReporter(
+      sync_service_url_, local_device_->GetSyncUserAgent(),
+      url_request_context_,
+      browser_sync::SyncStoppedReporter::ResultCallback()));
+  sessions_sync_manager_.reset(new SessionsSyncManager(
+      sync_client_->GetSyncSessionsClient(), &sync_prefs_, local_device_.get(),
+      router.Pass(),
+      base::Bind(&ProfileSyncService::NotifyForeignSessionUpdated,
+                 weak_factory_.GetWeakPtr()),
+      base::Bind(&ProfileSyncService::TriggerRefresh,
+                 weak_factory_.GetWeakPtr(),
+                 syncer::ModelTypeSet(syncer::SESSIONS))));
+  device_info_sync_service_.reset(
+      new DeviceInfoSyncService(local_device_.get()));
+
+  sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod
+      register_platform_types_callback =
+          sync_client_->GetRegisterPlatformTypesCallback();
+  sync_client_->GetSyncApiComponentFactory()->RegisterDataTypes(
+      register_platform_types_callback);
 
   // We clear this here (vs Shutdown) because we want to remember that an error
   // happened on shutdown so we can display details (message, location) about it
@@ -460,14 +460,14 @@ void ProfileSyncService::GetDataTypeControllerStates(
 }
 
 void ProfileSyncService::OnSessionRestoreComplete() {
-  scoped_refptr<DataTypeController> session_data_type_controller =
-      data_type_controllers_[syncer::SESSIONS];
-
-  if (!session_data_type_controller)
+  DataTypeController::TypeMap::const_iterator iter =
+      data_type_controllers_.find(syncer::SESSIONS);
+  if (iter == data_type_controllers_.end()) {
     return;
+  }
+  DCHECK(iter->second);
 
-  static_cast<browser_sync::SessionDataTypeController*>(
-      session_data_type_controller.get())
+  static_cast<browser_sync::SessionDataTypeController*>(iter->second.get())
       ->OnSessionRestoreComplete();
 }
 
@@ -672,8 +672,8 @@ void ProfileSyncService::StartUpSlowBackendComponents(
 
   backend_.reset(
       sync_client_->GetSyncApiComponentFactory()->CreateSyncBackendHost(
-          debug_identifier_, sync_client_.get(), invalidator,
-          sync_prefs_.AsWeakPtr(), directory_path_));
+          debug_identifier_, invalidator, sync_prefs_.AsWeakPtr(),
+          directory_path_));
 
   // Initialize the backend.  Every time we start up a new SyncBackendHost,
   // we'll want to start from a fresh SyncDB, so delete any old one that might
@@ -689,7 +689,7 @@ void ProfileSyncService::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
     const std::string& access_token,
     const base::Time& expiration_time) {
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   access_token_request_.reset();
   access_token_ = access_token;
   token_receive_time_ = base::Time::Now();
@@ -711,7 +711,7 @@ void ProfileSyncService::OnGetTokenSuccess(
 void ProfileSyncService::OnGetTokenFailure(
     const OAuth2TokenService::Request* request,
     const GoogleServiceAuthError& error) {
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   DCHECK_NE(error.state(), GoogleServiceAuthError::NONE);
   access_token_request_.reset();
   last_get_token_error_ = error;
@@ -1861,6 +1861,13 @@ bool ProfileSyncService::IsUsingSecondaryPassphrase() const {
   syncer::PassphraseType passphrase_type = GetPassphraseType();
   return passphrase_type == syncer::FROZEN_IMPLICIT_PASSPHRASE ||
          passphrase_type == syncer::CUSTOM_PASSPHRASE;
+}
+
+std::string ProfileSyncService::GetCustomPassphraseKey() const {
+  sync_driver::SystemEncryptor encryptor;
+  syncer::Cryptographer cryptographer(&encryptor);
+  cryptographer.Bootstrap(sync_prefs_.GetEncryptionBootstrapToken());
+  return cryptographer.GetDefaultNigoriKeyData();
 }
 
 syncer::PassphraseType ProfileSyncService::GetPassphraseType() const {

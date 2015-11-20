@@ -45,6 +45,9 @@
 namespace cc {
 namespace {
 
+base::TimeDelta kSlowDuration = base::TimeDelta::FromSeconds(1);
+base::TimeDelta kFastDuration = base::TimeDelta::FromMilliseconds(1);
+
 class FakeSchedulerClient : public SchedulerClient {
  public:
   FakeSchedulerClient()
@@ -271,13 +274,12 @@ class SchedulerTest : public testing::Test {
     scheduler_ = TestScheduler::Create(
         now_src_.get(), client_.get(), scheduler_settings_, 0,
         task_runner_.get(), fake_external_begin_frame_source_.get(),
-        fake_compositor_timing_history.Pass());
+        std::move(fake_compositor_timing_history));
     DCHECK(scheduler_);
     client_->set_scheduler(scheduler_.get());
 
     // Use large estimates by default to avoid latency recovery in most tests.
-    base::TimeDelta slow_duration = base::TimeDelta::FromSeconds(1);
-    fake_compositor_timing_history_->SetAllEstimatesTo(slow_duration);
+    fake_compositor_timing_history_->SetAllEstimatesTo(kSlowDuration);
 
     return scheduler_.get();
   }
@@ -293,7 +295,7 @@ class SchedulerTest : public testing::Test {
 
   void SetUpScheduler(scoped_ptr<FakeSchedulerClient> client,
                       bool initSurface) {
-    client_ = client.Pass();
+    client_ = std::move(client);
     if (initSurface)
       CreateSchedulerAndInitSurface();
     else
@@ -424,6 +426,9 @@ class SchedulerTest : public testing::Test {
   void BeginFramesNotFromClient_SwapThrottled(
       bool use_external_begin_frame_source,
       bool throttle_frame_production);
+  bool BeginMainFrameOnCriticalPath(TreePriority tree_priority,
+                                    ScrollHandlerState scroll_handler_state,
+                                    base::TimeDelta durations);
 
   scoped_ptr<base::SimpleTestTickClock> now_src_;
   scoped_refptr<OrderedSimpleTaskRunner> task_runner_;
@@ -485,8 +490,9 @@ TEST_F(SchedulerTest, SendBeginFramesToChildrenDeadlineNotAdjusted) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
 
-  fake_compositor_timing_history_->SetBeginMainFrameToCommitDurationEstimate(
-      base::TimeDelta::FromMilliseconds(2));
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameStartToCommitDurationEstimate(
+          base::TimeDelta::FromMilliseconds(2));
   fake_compositor_timing_history_->SetCommitToReadyToActivateDurationEstimate(
       base::TimeDelta::FromMilliseconds(4));
   fake_compositor_timing_history_->SetDrawDurationEstimate(
@@ -1228,7 +1234,7 @@ TEST_F(SchedulerTest, PrepareTilesFunnelResetOnVisibilityChange) {
   scoped_ptr<SchedulerClientNeedsPrepareTilesInDraw> client =
       make_scoped_ptr(new SchedulerClientNeedsPrepareTilesInDraw);
   scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(client.Pass(), true);
+  SetUpScheduler(std::move(client), true);
 
   // Simulate a few visibility changes and associated PrepareTiles.
   for (int i = 0; i < 10; i++) {
@@ -1381,6 +1387,7 @@ void SchedulerTest::CheckMainFrameSkippedAfterLateCommit(
   task_runner().RunTasksWhile(client_->ImplFrameDeadlinePending(true));
   EXPECT_EQ(expect_send_begin_main_frame,
             scheduler_->MainThreadMissedLastDeadline());
+  EXPECT_TRUE(client_->HasAction("WillBeginImplFrame"));
   EXPECT_EQ(expect_send_begin_main_frame,
             client_->HasAction("ScheduledActionSendBeginMainFrame"));
 }
@@ -1388,11 +1395,43 @@ void SchedulerTest::CheckMainFrameSkippedAfterLateCommit(
 TEST_F(SchedulerTest, MainFrameSkippedAfterLateCommit) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
   bool expect_send_begin_main_frame = false;
+  EXPECT_SCOPED(
+      CheckMainFrameSkippedAfterLateCommit(expect_send_begin_main_frame));
+}
+
+// Response times of BeginMainFrame's without the critical path flag set
+// should not affect whether we recover latency or not.
+TEST_F(
+    SchedulerTest,
+    MainFrameSkippedAfterLateCommit_LongBeginMainFrameQueueDurationNotCritical) {
+  scheduler_settings_.use_external_begin_frame_source = true;
+  SetUpScheduler(true);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationNotCriticalEstimate(kSlowDuration);
+
+  bool expect_send_begin_main_frame = false;
+  EXPECT_SCOPED(
+      CheckMainFrameSkippedAfterLateCommit(expect_send_begin_main_frame));
+}
+
+// Response times of BeginMainFrame's with the critical path flag set
+// should affect whether we recover latency or not.
+TEST_F(
+    SchedulerTest,
+    MainFrameNotSkippedAfterLateCommit_LongBeginMainFrameQueueDurationCritical) {
+  scheduler_settings_.use_external_begin_frame_source = true;
+  SetUpScheduler(true);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationCriticalEstimate(kSlowDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationNotCriticalEstimate(kSlowDuration);
+
+  bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
       CheckMainFrameSkippedAfterLateCommit(expect_send_begin_main_frame));
 }
@@ -1401,10 +1440,10 @@ TEST_F(SchedulerTest,
        MainFrameNotSkippedAfterLateCommitInPreferImplLatencyMode) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  scheduler_->SetImplLatencyTakesPriority(true);
-
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
   bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
@@ -1415,11 +1454,9 @@ TEST_F(SchedulerTest,
        MainFrameNotSkippedAfterLateCommit_CommitEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetBeginMainFrameToCommitDurationEstimate(
-      slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameStartToCommitDurationEstimate(kSlowDuration);
 
   bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
@@ -1430,11 +1467,9 @@ TEST_F(SchedulerTest,
        MainFrameNotSkippedAfterLateCommit_ReadyToActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_->SetCommitToReadyToActivateDurationEstimate(
-      slow_duration);
+      kSlowDuration);
 
   bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
@@ -1445,10 +1480,8 @@ TEST_F(SchedulerTest,
        MainFrameNotSkippedAfterLateCommit_ActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetActivateDurationEstimate(slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_->SetActivateDurationEstimate(kSlowDuration);
 
   bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
@@ -1458,10 +1491,8 @@ TEST_F(SchedulerTest,
 TEST_F(SchedulerTest, MainFrameNotSkippedAfterLateCommit_DrawEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetDrawDurationEstimate(slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_->SetDrawDurationEstimate(kSlowDuration);
 
   bool expect_send_begin_main_frame = true;
   EXPECT_SCOPED(
@@ -1471,7 +1502,6 @@ TEST_F(SchedulerTest, MainFrameNotSkippedAfterLateCommit_DrawEstimateTooLong) {
 void SchedulerTest::ImplFrameSkippedAfterLateSwapAck(
     bool swap_ack_before_deadline) {
   // To get into a high latency state, this test disables automatic swap acks.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Draw and swap for first BeginFrame
@@ -1550,9 +1580,7 @@ TEST_F(SchedulerTest,
        ImplFrameSkippedAfterLateSwapAck_FastEstimates_SwapAckThenDeadline) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
   bool swap_ack_before_deadline = true;
   EXPECT_SCOPED(ImplFrameSkippedAfterLateSwapAck(swap_ack_before_deadline));
@@ -1562,9 +1590,20 @@ TEST_F(SchedulerTest,
        ImplFrameSkippedAfterLateSwapAck_FastEstimates_DeadlineThenSwapAck) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
+  bool swap_ack_before_deadline = false;
+  EXPECT_SCOPED(ImplFrameSkippedAfterLateSwapAck(swap_ack_before_deadline));
+}
+
+TEST_F(
+    SchedulerTest,
+    ImplFrameSkippedAfterLateSwapAck_LongBeginMainFrameQueueDurationNotCritical) {
+  scheduler_settings_.use_external_begin_frame_source = true;
+  SetUpScheduler(true);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationNotCriticalEstimate(kSlowDuration);
 
   bool swap_ack_before_deadline = false;
   EXPECT_SCOPED(ImplFrameSkippedAfterLateSwapAck(swap_ack_before_deadline));
@@ -1578,11 +1617,11 @@ TEST_F(SchedulerTest,
   // Even if every estimate related to the main thread is slow, we should
   // still expect to recover impl thread latency if the draw is fast and we
   // are in impl latency takes priority.
-  scheduler_->SetImplLatencyTakesPriority(true);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(slow_duration);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetDrawDurationEstimate(fast_duration);
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kSlowDuration);
+  fake_compositor_timing_history_->SetDrawDurationEstimate(kFastDuration);
 
   bool swap_ack_before_deadline = false;
   EXPECT_SCOPED(ImplFrameSkippedAfterLateSwapAck(swap_ack_before_deadline));
@@ -1595,16 +1634,13 @@ TEST_F(SchedulerTest,
   SetUpScheduler(true);
 
   // To get into a high latency state, this test disables automatic swap acks.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Even if every estimate related to the main thread is slow, we should
   // still expect to recover impl thread latency if there are no commits from
   // the main thread.
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(slow_duration);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetDrawDurationEstimate(fast_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kSlowDuration);
+  fake_compositor_timing_history_->SetDrawDurationEstimate(kFastDuration);
 
   // Draw and swap for first BeginFrame
   client_->Reset();
@@ -1659,7 +1695,6 @@ TEST_F(SchedulerTest,
 
 void SchedulerTest::ImplFrameIsNotSkippedAfterLateSwapAck() {
   // To get into a high latency state, this test disables automatic swap acks.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Draw and swap for first BeginFrame
@@ -1711,15 +1746,26 @@ void SchedulerTest::ImplFrameIsNotSkippedAfterLateSwapAck() {
   }
 }
 
+TEST_F(
+    SchedulerTest,
+    ImplFrameIsNotSkippedAfterLateSwapAck_BeginMainFrameQueueDurationCriticalTooLong) {
+  scheduler_settings_.use_external_begin_frame_source = true;
+  SetUpScheduler(true);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationCriticalEstimate(kSlowDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameQueueDurationNotCriticalEstimate(kSlowDuration);
+  EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
+}
+
 TEST_F(SchedulerTest,
        ImplFrameIsNotSkippedAfterLateSwapAck_CommitEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetBeginMainFrameToCommitDurationEstimate(
-      slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_
+      ->SetBeginMainFrameStartToCommitDurationEstimate(kSlowDuration);
   EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
 }
 
@@ -1727,11 +1773,9 @@ TEST_F(SchedulerTest,
        ImplFrameIsNotSkippedAfterLateSwapAck_ReadyToActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
   fake_compositor_timing_history_->SetCommitToReadyToActivateDurationEstimate(
-      slow_duration);
+      kSlowDuration);
   EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
 }
 
@@ -1739,10 +1783,8 @@ TEST_F(SchedulerTest,
        ImplFrameIsNotSkippedAfterLateSwapAck_ActivateEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetActivateDurationEstimate(slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_->SetActivateDurationEstimate(kSlowDuration);
   EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
 }
 
@@ -1750,10 +1792,8 @@ TEST_F(SchedulerTest,
        ImplFrameIsNotSkippedAfterLateSwapAck_DrawEstimateTooLong) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetDrawDurationEstimate(slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+  fake_compositor_timing_history_->SetDrawDurationEstimate(kSlowDuration);
   EXPECT_SCOPED(ImplFrameIsNotSkippedAfterLateSwapAck());
 }
 
@@ -1765,12 +1805,9 @@ TEST_F(SchedulerTest,
   // and impl threads are in a high latency mode.
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-
-  auto slow_duration = base::TimeDelta::FromSeconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(slow_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kSlowDuration);
 
   // To get into a high latency state, this test disables automatic swap acks.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Impl thread hits deadline before commit finishes to make
@@ -1829,8 +1866,7 @@ TEST_F(SchedulerTest,
   EXPECT_TRUE(scheduler_->MainThreadMissedLastDeadline());
 
   // Lower estimates so that the scheduler will attempt latency recovery.
-  auto fast_duration = base::TimeDelta::FromMilliseconds(1);
-  fake_compositor_timing_history_->SetAllEstimatesTo(fast_duration);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
   // Now that both threads are in a high latency mode, make sure we
   // skip the BeginMainFrame, then the BeginImplFrame, but not both
@@ -1899,7 +1935,6 @@ TEST_F(
 
   // Disables automatic swap acks so this test can force swap ack throttling
   // to simulate a blocked Browser ui thread.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Get a new active tree in main-thread high latency mode and put us
@@ -1970,7 +2005,6 @@ TEST_F(SchedulerTest,
 
   // Disables automatic swap acks so this test can force swap ack throttling
   // to simulate a blocked Browser ui thread.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Start a new commit in main-thread high latency mode and hold off on
@@ -2051,7 +2085,6 @@ TEST_F(
 
   // Disables automatic swap acks so this test can force swap ack throttling
   // to simulate a blocked Browser ui thread.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // Start a new commit in main-thread high latency mode and hold off on
@@ -2447,7 +2480,6 @@ void SchedulerTest::BeginFramesNotFromClient_SwapThrottled(
   fake_compositor_timing_history_->SetDrawDurationEstimate(base::TimeDelta());
 
   // To test swap ack throttling, this test disables automatic swap acks.
-  scheduler_->SetMaxSwapsPending(1);
   client_->SetAutomaticSwapAck(false);
 
   // SetNeedsBeginMainFrame should begin the frame on the next BeginImplFrame.
@@ -3339,7 +3371,7 @@ TEST_F(SchedulerTest, SynchronousCompositorPrepareTilesOnDraw) {
 
   scoped_ptr<FakeSchedulerClient> client =
       make_scoped_ptr(new SchedulerClientSetNeedsPrepareTilesOnDraw);
-  SetUpScheduler(client.Pass(), true);
+  SetUpScheduler(std::move(client), true);
 
   scheduler_->SetNeedsRedraw();
   EXPECT_SINGLE_ACTION("SetNeedsBeginFrames(true)", client_);
@@ -3486,39 +3518,112 @@ TEST_F(SchedulerTest, AuthoritativeVSyncInterval) {
 
 TEST_F(SchedulerTest, ImplLatencyTakesPriority) {
   SetUpScheduler(true);
-  scheduler_->SetImplLatencyTakesPriority(true);
+
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER);
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(true);
+  EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(false);
   EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
 
-  scheduler_->SetImplLatencyTakesPriority(false);
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER);
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(true);
+  EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(false);
+  EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
+
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER);
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(true);
+  EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(false);
+  EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
+
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER);
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(true);
+  EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
+  scheduler_->SetCriticalBeginMainFrameToActivateIsFast(false);
   EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
 }
 
-TEST_F(SchedulerTest, BeginMainFrameArgs_OnCriticalPath) {
+// The three letters appeneded to each version of this test mean the following:s
+// tree_priority: B = both trees same priority; A = active tree priority;
+// scroll_handler_state: H = affects scroll handler; N = does not affect scroll
+// handler;
+// durations: F = fast durations; S = slow durations
+bool SchedulerTest::BeginMainFrameOnCriticalPath(
+    TreePriority tree_priority,
+    ScrollHandlerState scroll_handler_state,
+    base::TimeDelta durations) {
   scheduler_settings_.use_external_begin_frame_source = true;
   SetUpScheduler(true);
-
-  scheduler_->SetImplLatencyTakesPriority(false);
-  scheduler_->SetNeedsBeginMainFrame();
-
+  fake_compositor_timing_history_->SetAllEstimatesTo(durations);
   client_->Reset();
+  scheduler_->SetTreePrioritiesAndScrollState(tree_priority,
+                                              scroll_handler_state);
+  scheduler_->SetNeedsBeginMainFrame();
   EXPECT_FALSE(client_->last_begin_main_frame_args().IsValid());
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_TRUE(client_->last_begin_main_frame_args().IsValid());
-  EXPECT_TRUE(client_->last_begin_main_frame_args().on_critical_path);
+  return client_->last_begin_main_frame_args().on_critical_path;
 }
 
-TEST_F(SchedulerTest, BeginMainFrameArgs_NotOnCriticalPath) {
-  scheduler_settings_.use_external_begin_frame_source = true;
-  SetUpScheduler(true);
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_BNF) {
+  EXPECT_TRUE(BeginMainFrameOnCriticalPath(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER,
+      kFastDuration));
+}
 
-  scheduler_->SetImplLatencyTakesPriority(true);
-  scheduler_->SetNeedsBeginMainFrame();
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_BNS) {
+  EXPECT_TRUE(BeginMainFrameOnCriticalPath(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER,
+      kSlowDuration));
+}
 
-  client_->Reset();
-  EXPECT_FALSE(client_->last_begin_main_frame_args().IsValid());
-  EXPECT_SCOPED(AdvanceFrame());
-  EXPECT_TRUE(client_->last_begin_main_frame_args().IsValid());
-  EXPECT_FALSE(client_->last_begin_main_frame_args().on_critical_path);
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_BHF) {
+  EXPECT_TRUE(BeginMainFrameOnCriticalPath(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER, kFastDuration));
+}
+
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_BHS) {
+  EXPECT_TRUE(BeginMainFrameOnCriticalPath(
+      SAME_PRIORITY_FOR_BOTH_TREES,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER, kSlowDuration));
+}
+
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_ANF) {
+  EXPECT_FALSE(BeginMainFrameOnCriticalPath(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER,
+      kFastDuration));
+}
+
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_ANS) {
+  EXPECT_FALSE(BeginMainFrameOnCriticalPath(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER,
+      kSlowDuration));
+}
+
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_AHF) {
+  EXPECT_TRUE(BeginMainFrameOnCriticalPath(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER, kFastDuration));
+}
+
+TEST_F(SchedulerTest, BeginMainFrameOnCriticalPath_AHS) {
+  EXPECT_FALSE(BeginMainFrameOnCriticalPath(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER, kSlowDuration));
 }
 
 }  // namespace

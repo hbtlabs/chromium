@@ -249,7 +249,7 @@ void CopyFromCompositingSurfaceFinished(
   if (result) {
     GLHelper* gl_helper = GetPostReadbackGLHelper();
     if (gl_helper)
-      sync_token = gpu::SyncToken(gl_helper->InsertSyncPoint());
+      gl_helper->GenerateSyncToken(&sync_token);
   }
   const bool lost_resource = !sync_token.HasData();
   release_callback->Run(sync_token, lost_resource);
@@ -1146,7 +1146,7 @@ void RenderWidgetHostViewAndroid::InternalSwapCompositorFrame(
   DCHECK(!frame->delegated_frame_data->render_pass_list.empty());
 
   cc::RenderPass* root_pass =
-      frame->delegated_frame_data->render_pass_list.back();
+      frame->delegated_frame_data->render_pass_list.back().get();
   texture_size_in_layer_ = root_pass->output_rect.size();
 
   cc::CompositorFrameMetadata metadata = frame->metadata;

@@ -13,6 +13,7 @@
 #include "cc/animation/layer_animation_controller.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -187,8 +188,8 @@ void ExpectTreesAreIdentical(Layer* layer,
 
   for (size_t i = 0; i < layer_children.size(); ++i) {
     SCOPED_TRACE(base::StringPrintf("child layer %" PRIuS, i).c_str());
-    ExpectTreesAreIdentical(
-        layer_children[i].get(), layer_impl_children[i], tree_impl);
+    ExpectTreesAreIdentical(layer_children[i].get(),
+                            layer_impl_children[i].get(), tree_impl);
   }
 }
 
@@ -267,10 +268,9 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeReusingLayers) {
 
   // Synchronize again. After the sync the trees should be equivalent and we
   // should have created and destroyed one LayerImpl.
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
@@ -312,10 +312,9 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeAndTrackStackingOrderChange) {
   // re-insert the layer and sync again.
   child2->RemoveFromParent();
   layer_tree_root->AddChild(child2);
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
@@ -429,10 +428,9 @@ TEST_F(TreeSynchronizerTest, ReuseLayerImplsAfterStructuralChange) {
 
   // After another synchronize our trees should match and we should not have
   // destroyed any LayerImpls
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
@@ -476,10 +474,9 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeThenDestroy) {
   // be deleted.
   scoped_refptr<Layer> new_layer_tree_root = Layer::Create(layer_settings_);
   host_->SetRootLayer(new_layer_tree_root);
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(new_layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      new_layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(new_layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
@@ -534,30 +531,27 @@ TEST_F(TreeSynchronizerTest, SyncMaskReplicaAndReplicaMaskLayers) {
 
   // Remove the mask layer.
   layer_tree_root->children()[0]->SetMaskLayer(NULL);
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
 
   // Remove the replica layer.
   layer_tree_root->children()[1]->SetReplicaLayer(NULL);
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
 
   // Remove the replica mask.
   replica_layer_with_mask->SetMaskLayer(NULL);
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
   ExpectTreesAreIdentical(layer_tree_root.get(),
                           layer_impl_tree_root.get(),
                           host_->active_tree());
@@ -587,10 +581,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeAnimations) {
           layer_tree_root.get(), nullptr, host_->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_->active_tree());
 
   EXPECT_TRUE(static_cast<FakeLayerAnimationController*>(
       layer_tree_root->layer_animation_controller())->SynchronizedAnimations());
@@ -632,10 +625,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollParent) {
 
   // Remove the first scroll child.
   layer_tree_root->children()[1]->RemoveFromParent();
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_impl->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_impl->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
   {
@@ -649,10 +641,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollParent) {
   scoped_refptr<Layer> additional_scroll_child = Layer::Create(layer_settings_);
   layer_tree_root->AddChild(additional_scroll_child);
   additional_scroll_child->SetScrollParent(scroll_parent.get());
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_impl->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_impl->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
   {
@@ -702,10 +693,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeClipParent) {
   clip_child1->RemoveFromParent();
   clip_child1 = NULL;
 
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_impl->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_impl->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
   ExpectTreesAreIdentical(layer_tree_root.get(),
@@ -716,10 +706,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeClipParent) {
   scoped_refptr<Layer> additional_clip_child = Layer::Create(layer_settings_);
   intervening->AddChild(additional_clip_child);
   additional_clip_child->SetClipParent(clip_parent.get());
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_impl->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_impl->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
   ExpectTreesAreIdentical(layer_tree_root.get(),
@@ -729,10 +718,9 @@ TEST_F(TreeSynchronizerTest, SynchronizeClipParent) {
   // Remove the nearest clipping ancestor.
   clip_parent->RemoveFromParent();
   clip_parent = NULL;
-  layer_impl_tree_root =
-      TreeSynchronizer::SynchronizeTrees(layer_tree_root.get(),
-                                         layer_impl_tree_root.Pass(),
-                                         host_impl->active_tree());
+  layer_impl_tree_root = TreeSynchronizer::SynchronizeTrees(
+      layer_tree_root.get(), std::move(layer_impl_tree_root),
+      host_impl->active_tree());
   TreeSynchronizer::PushProperties(layer_tree_root.get(),
                                    layer_impl_tree_root.get());
   ExpectTreesAreIdentical(layer_tree_root.get(),

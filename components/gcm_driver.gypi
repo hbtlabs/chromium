@@ -81,6 +81,8 @@
         'gcm_driver/gcm_driver_desktop.h',
         'gcm_driver/gcm_internals_constants.cc',
         'gcm_driver/gcm_internals_constants.h',
+        'gcm_driver/gcm_internals_helper.cc',
+        'gcm_driver/gcm_internals_helper.h',
         'gcm_driver/gcm_profile_service.cc',
         'gcm_driver/gcm_profile_service.h',
         'gcm_driver/gcm_stats_recorder_impl.cc',
@@ -233,11 +235,16 @@
         'gcm_driver/crypto/gcm_message_cryptographer.h',
         'gcm_driver/crypto/gcm_message_cryptographer_nss.cc',
         'gcm_driver/crypto/gcm_message_cryptographer_openssl.cc',
+        'gcm_driver/crypto/p256_key_util.cc',
+        'gcm_driver/crypto/p256_key_util.h',
+        'gcm_driver/crypto/p256_key_util_nss.cc',
+        'gcm_driver/crypto/p256_key_util_openssl.cc',
       ],
       'conditions': [
         ['use_openssl==1', {
           'sources!': [
             'gcm_driver/crypto/gcm_message_cryptographer_nss.cc',
+            'gcm_driver/crypto/p256_key_util_nss.cc',
           ],
           'dependencies': [
             '../third_party/boringssl/boringssl.gyp:boringssl',
@@ -245,6 +252,7 @@
         }, {
           'sources!': [
             'gcm_driver/crypto/gcm_message_cryptographer_openssl.cc',
+            'gcm_driver/crypto/p256_key_util_openssl.cc',
           ],
         }],
       ],

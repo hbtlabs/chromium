@@ -20,32 +20,28 @@
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/public/browser/navigation_handle.h"
 
-scoped_ptr<FirstWebContentsProfiler>
-FirstWebContentsProfiler::CreateProfilerForFirstWebContents(
-    Delegate* delegate) {
-  DCHECK(delegate);
-  for (chrome::BrowserIterator iterator; !iterator.done(); iterator.Next()) {
-    Browser* browser = *iterator;
+// static
+void FirstWebContentsProfiler::Start() {
+  for (chrome::BrowserIterator browser_it; !browser_it.done();
+       browser_it.Next()) {
     content::WebContents* web_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
+        browser_it->tab_strip_model()->GetActiveWebContents();
     if (web_contents) {
-      return scoped_ptr<FirstWebContentsProfiler>(
-          new FirstWebContentsProfiler(web_contents, delegate));
+      // FirstWebContentsProfiler owns itself and is also bound to
+      // |web_contents|'s lifetime by observing WebContentsDestroyed().
+      new FirstWebContentsProfiler(web_contents);
+      return;
     }
   }
-  return nullptr;
 }
 
 FirstWebContentsProfiler::FirstWebContentsProfiler(
-    content::WebContents* web_contents,
-    Delegate* delegate)
+    content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       collected_paint_metric_(false),
       collected_load_metric_(false),
       collected_main_navigation_start_metric_(false),
-      collected_main_navigation_finished_metric_(false),
-      finished_(false),
-      delegate_(delegate) {}
+      collected_main_navigation_finished_metric_(false) {}
 
 void FirstWebContentsProfiler::DidFirstVisuallyNonEmptyPaint() {
   if (collected_paint_metric_)
@@ -56,11 +52,8 @@ void FirstWebContentsProfiler::DidFirstVisuallyNonEmptyPaint() {
   }
 
   collected_paint_metric_ = true;
-  const base::TimeTicks now = base::TimeTicks::Now();
-  // Record the old metric unconditionally.
-  startup_metric_utils::RecordDeprecatedFirstWebContentsNonEmptyPaint(now);
-  if (!finished_)
-    startup_metric_utils::RecordFirstWebContentsNonEmptyPaint(now);
+  startup_metric_utils::RecordFirstWebContentsNonEmptyPaint(
+      base::TimeTicks::Now());
 
   metrics::TrackingSynchronizer::OnProfilingPhaseCompleted(
       metrics::ProfilerEventProto::EVENT_FIRST_NONEMPTY_PAINT);
@@ -78,11 +71,8 @@ void FirstWebContentsProfiler::DocumentOnLoadCompletedInMainFrame() {
   }
 
   collected_load_metric_ = true;
-  const base::TimeTicks now = base::TimeTicks::Now();
-  // Record the old metric unconditionally.
-  startup_metric_utils::RecordDeprecatedFirstWebContentsMainFrameLoad(now);
-  if (!finished_)
-    startup_metric_utils::RecordFirstWebContentsMainFrameLoad(now);
+  startup_metric_utils::RecordFirstWebContentsMainFrameLoad(
+      base::TimeTicks::Now());
 
   if (IsFinishedCollectingMetrics())
     FinishedCollectingMetrics(FinishReason::DONE);
@@ -157,22 +147,18 @@ bool FirstWebContentsProfiler::IsFinishedCollectingMetrics() {
 
 void FirstWebContentsProfiler::FinishedCollectingMetrics(
     FinishReason finish_reason) {
-  if (!finished_) {
-    UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason",
+  UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason",
+                            finish_reason, FinishReason::ENUM_MAX);
+  if (!collected_paint_metric_) {
+    UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason_NoPaint",
                               finish_reason, FinishReason::ENUM_MAX);
-    if (!collected_paint_metric_) {
-      UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason_NoPaint",
-                                finish_reason, FinishReason::ENUM_MAX);
-    }
-    if (!collected_load_metric_) {
-      UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason_NoLoad",
-                                finish_reason, FinishReason::ENUM_MAX);
-    }
-    finished_ = true;
   }
-  // TODO(gab): Delete right away when getting rid of |finished_|.
-  if (IsFinishedCollectingMetrics())
-    delegate_->ProfilerFinishedCollectingMetrics();
+  if (!collected_load_metric_) {
+    UMA_HISTOGRAM_ENUMERATION("Startup.FirstWebContents.FinishReason_NoLoad",
+                              finish_reason, FinishReason::ENUM_MAX);
+  }
+
+  delete this;
 }
 
 #endif  // !defined(OS_ANDROID)

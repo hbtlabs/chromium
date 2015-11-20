@@ -199,8 +199,6 @@ private:
     bool parseSVGValue(CSSPropertyID propId, bool important);
     PassRefPtrWillBeRawPtr<CSSValue> parseSVGStrokeDasharray();
 
-    PassRefPtrWillBeRawPtr<CSSValue> parsePaintOrder() const;
-
     // CSS3 Parsing Routines (for properties specific to CSS3)
     bool parseBorderImageShorthand(CSSPropertyID, bool important);
     PassRefPtrWillBeRawPtr<CSSValue> parseBorderImage(CSSPropertyID);
@@ -212,7 +210,7 @@ private:
 
     PassRefPtrWillBeRawPtr<CSSValue> parseReflect();
 
-    bool parseFlex(CSSParserValueList* args, bool important);
+    bool consumeFlex(bool important);
 
     PassRefPtrWillBeRawPtr<CSSValue> parsePosition(CSSParserValueList*);
     PassRefPtrWillBeRawPtr<CSSValueList> parsePositionList(CSSParserValueList*);
@@ -233,8 +231,6 @@ private:
     PassRefPtrWillBeRawPtr<CSSFunctionValue> parseBuiltinFilterArguments(CSSParserValueList*, CSSValueID);
 
     PassRefPtrWillBeRawPtr<CSSValueList> parseTransformOrigin();
-    PassRefPtrWillBeRawPtr<CSSValueList> parseTransform(bool useLegacyParsing);
-    PassRefPtrWillBeRawPtr<CSSValue> parseTransformValue(bool useLegacyParsing, CSSParserValue*);
 
     bool parseCalculation(CSSParserValue*, ValueRange);
 

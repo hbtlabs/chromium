@@ -119,6 +119,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
      */
     private boolean mShouldLoadDelayedSearch;
 
+    private boolean mIsShowingPeekPromo;
+    private boolean mWouldShowPeekPromo;
     private boolean mIsShowingPromo;
     private boolean mDidLogPromoOutcome;
 
@@ -384,6 +386,10 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
         mSearchRequest = null;
 
+        if (mIsShowingPeekPromo || mWouldShowPeekPromo) {
+            mPolicy.logPeekPromoMetrics(mIsShowingPeekPromo, mWouldShowPeekPromo);
+        }
+
         if (mIsShowingPromo && !mDidLogPromoOutcome) {
             logPromoOutcome();
         }
@@ -403,7 +409,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
                 && (reason == StateChangeReason.BACK_PRESS
                 || reason == StateChangeReason.BASE_PAGE_SCROLL
                 || reason == StateChangeReason.SWIPE
-                || reason == StateChangeReason.FLING);
+                || reason == StateChangeReason.FLING
+                || reason == StateChangeReason.CLOSE_BUTTON);
     }
 
     /**
@@ -473,7 +480,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
             // If the user action was not a long-press, immediately start loading content.
             mShouldLoadDelayedSearch = false;
         }
-
         if (isTap && mPolicy.shouldPreviousTapResolve(
                 mNetworkCommunicator.getBasePageUrl())) {
             mNetworkCommunicator.startSearchTermResolutionRequest(
@@ -507,8 +513,9 @@ public class ContextualSearchManager extends ContextualSearchObservable
         // Show the Peek Promo only when the Panel wasn't previously visible, provided
         // the policy allows it.
         if (!mSearchPanel.isShowing()) {
-            boolean isPeekPromoAvailable = mPolicy.isPeekPromoAvailable(mSelectionController);
-            if (isPeekPromoAvailable) {
+            mWouldShowPeekPromo = mPolicy.isPeekPromoConditionSatisfied(mSelectionController);
+            mIsShowingPeekPromo = mPolicy.isPeekPromoAvailable(mSelectionController);
+            if (mIsShowingPeekPromo) {
                 mSearchPanel.showPeekPromo();
                 mPolicy.registerPeekPromoSeen();
             }
@@ -518,7 +525,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
         // peekPanel(). If the sprite should be animated, the animation will begin after the panel
         // finishes peeking. If it should not be animated, the icon will be drawn right away.
         mSearchPanel.setShouldAnimateIconSprite(mPolicy.shouldAnimateSearchProviderIcon(
-                mSelectionController.getSelectionType(), mSearchPanel.isShowing()));
+                mSelectionController.getSelectionType(), mSearchPanel.isShowing()),
+                ContextualSearchFieldTrial.areExtraSearchBarAnimationsDisabled());
 
         // Note: now that the contextual search has properly started, set the promo involvement.
         if (mPolicy.isPromoAvailable()) {
@@ -697,7 +705,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
     public void handleSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, boolean doPreventPreload,
             int selectionStartAdjust, int selectionEndAdjust, String contextLanguage) {
-        if (!mSearchPanel.isShowing()) return;
 
         // Show an appropriate message for what to search for.
         String message;
@@ -881,6 +888,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
         @Override
         public void onMainFrameLoadStarted(String url, boolean isExternalUrl) {
+            mSearchPanel.updateTopControlsState();
+
             if (isExternalUrl) {
                 onExternalNavigation(url);
             }
@@ -1081,8 +1090,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
      * @param url The URL we are navigating to.
      */
     public void onExternalNavigation(String url) {
-        mSearchPanel.updateTopControlsState();
-
         if (!mDidPromoteSearchNavigation
                 && !BLACKLISTED_URL.equals(url)
                 && !url.startsWith(INTENT_URL_PREFIX)

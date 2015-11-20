@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_DEFAULT_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_DEFAULT_H_
 
+#include <string>
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
@@ -26,7 +27,7 @@ class PasswordStoreDefault : public PasswordStore {
 
   bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
 
-  void Shutdown() override;
+  void ShutdownOnUIThread() override;
 
   // To be used only for testing.
   LoginDatabase* login_db() const { return login_db_.get(); }

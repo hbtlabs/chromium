@@ -4,11 +4,10 @@
 
 #include "components/mus/example/mock_sysui/mock_sysui.h"
 
-#include "components/mus/example/wm/public/interfaces/container.mojom.h"
 #include "components/mus/public/cpp/property_type_converters.h"
+#include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/application/public/cpp/application_connection.h"
 #include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/converters/network/network_type_converters.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/native_widget_mus.h"
@@ -26,9 +25,9 @@ class DesktopBackground : public views::WidgetDelegateView {
     params.delegate = new DesktopBackground;
 
     std::map<std::string, std::vector<uint8_t>> properties;
-    properties[ash::mojom::kWindowContainer_Property] =
+    properties[mash::wm::mojom::kWindowContainer_Property] =
         mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-            ash::mojom::CONTAINER_USER_BACKGROUND);
+            mash::wm::mojom::CONTAINER_USER_BACKGROUND);
     mus::Window* window =
         views::WindowManagerConnection::Get()->NewWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
@@ -61,9 +60,9 @@ class Shelf : public views::WidgetDelegateView {
     params.delegate = new Shelf;
 
     std::map<std::string, std::vector<uint8_t>> properties;
-    properties[ash::mojom::kWindowContainer_Property] =
+    properties[mash::wm::mojom::kWindowContainer_Property] =
         mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-            ash::mojom::CONTAINER_USER_SHELF);
+            mash::wm::mojom::CONTAINER_USER_SHELF);
     mus::Window* window =
         views::WindowManagerConnection::Get()->NewWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
@@ -96,11 +95,10 @@ MockSysUI::~MockSysUI() {
 }
 
 void MockSysUI::Initialize(mojo::ApplicationImpl* app) {
+  tracing_.Initialize(app);
+
   aura_init_.reset(new views::AuraInit(app, "views_mus_resources.pak"));
-  mus::mojom::WindowManagerPtr window_manager;
-  app->ConnectToService(mojo::URLRequest::From(std::string("mojo:example_wm")),
-                        &window_manager);
-  views::WindowManagerConnection::Create(window_manager.Pass(), app);
+  views::WindowManagerConnection::Create(app);
 
   DesktopBackground::Create(app->shell());
   Shelf::Create(app->shell());

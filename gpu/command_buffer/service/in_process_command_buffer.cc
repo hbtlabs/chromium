@@ -927,6 +927,24 @@ bool InProcessCommandBuffer::WaitFenceSyncOnGpuThread(
   return true;
 }
 
+void InProcessCommandBuffer::SignalSyncTokenOnGpuThread(
+    const SyncToken& sync_token, const base::Closure& callback) {
+  gpu::SyncPointManager* sync_point_manager = service_->sync_point_manager();
+  DCHECK(sync_point_manager);
+
+  scoped_refptr<gpu::SyncPointClientState> release_state =
+      sync_point_manager->GetSyncPointClientState(
+          sync_token.namespace_id(), sync_token.command_buffer_id());
+
+  if (!release_state) {
+    callback.Run();
+    return;
+  }
+
+  sync_point_client_->Wait(release_state.get(), sync_token.release_count(),
+                           WrapCallback(callback));
+}
+
 void InProcessCommandBuffer::SignalQuery(unsigned query_id,
                                          const base::Closure& callback) {
   CheckSequencedThread();
@@ -950,19 +968,6 @@ void InProcessCommandBuffer::SignalQueryOnGpuThread(
 }
 
 void InProcessCommandBuffer::SetSurfaceVisible(bool visible) {}
-
-uint32 InProcessCommandBuffer::CreateStreamTexture(uint32 texture_id) {
-  base::WaitableEvent completion(true, false);
-  uint32 stream_id = 0;
-  base::Callback<uint32(void)> task =
-      base::Bind(&InProcessCommandBuffer::CreateStreamTextureOnGpuThread,
-                 base::Unretained(this),
-                 texture_id);
-  QueueTask(
-      base::Bind(&RunTaskWithResult<uint32>, task, &stream_id, &completion));
-  completion.Wait();
-  return stream_id;
-}
 
 void InProcessCommandBuffer::SetLock(base::Lock*) {
 }
@@ -999,20 +1004,11 @@ bool InProcessCommandBuffer::IsFenceSyncFlushReceived(uint64_t release) {
 
 void InProcessCommandBuffer::SignalSyncToken(const SyncToken& sync_token,
                                              const base::Closure& callback) {
-  gpu::SyncPointManager* sync_point_manager = service_->sync_point_manager();
-  DCHECK(sync_point_manager);
-
-  scoped_refptr<gpu::SyncPointClientState> release_state =
-      sync_point_manager->GetSyncPointClientState(
-          sync_token.namespace_id(), sync_token.command_buffer_id());
-
-  if (!release_state) {
-    callback.Run();
-    return;
-  }
-
-  sync_point_client_->Wait(release_state.get(), sync_token.release_count(),
-                           WrapCallback(callback));
+  CheckSequencedThread();
+  QueueTask(base::Bind(&InProcessCommandBuffer::SignalSyncTokenOnGpuThread,
+                       base::Unretained(this),
+                       sync_token,
+                       WrapCallback(callback)));
 }
 
 bool InProcessCommandBuffer::CanWaitUnverifiedSyncToken(
@@ -1081,6 +1077,18 @@ scoped_refptr<gfx::SurfaceTexture>
 InProcessCommandBuffer::GetSurfaceTexture(uint32 stream_id) {
   DCHECK(stream_texture_manager_);
   return stream_texture_manager_->GetSurfaceTexture(stream_id);
+}
+
+uint32 InProcessCommandBuffer::CreateStreamTexture(uint32 texture_id) {
+  base::WaitableEvent completion(true, false);
+  uint32 stream_id = 0;
+  base::Callback<uint32(void)> task =
+      base::Bind(&InProcessCommandBuffer::CreateStreamTextureOnGpuThread,
+                 base::Unretained(this), texture_id);
+  QueueTask(
+      base::Bind(&RunTaskWithResult<uint32>, task, &stream_id, &completion));
+  completion.Wait();
+  return stream_id;
 }
 #endif
 

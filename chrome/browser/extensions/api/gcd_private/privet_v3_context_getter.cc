@@ -19,11 +19,9 @@ namespace extensions {
 // Class verifies certificate by its fingerprint received using different
 // channel. It's the only know information about device with self-signed
 // certificate.
-class FingerprintVerifier : public net::CertVerifier {
+class PrivetV3ContextGetter::CertVerifier : public net::CertVerifier {
  public:
-  explicit FingerprintVerifier(
-      const net::SHA256HashValue& certificate_fingerprint)
-      : certificate_fingerprint_(certificate_fingerprint) {}
+  CertVerifier() {}
 
   int Verify(net::X509Certificate* cert,
              const std::string& hostname,
@@ -34,50 +32,105 @@ class FingerprintVerifier : public net::CertVerifier {
              const net::CompletionCallback& callback,
              scoped_ptr<Request>* out_req,
              const net::BoundNetLog& net_log) override {
-    // Mark certificate as invalid as we didn't check it.
     verify_result->Reset();
     verify_result->verified_cert = cert;
-    verify_result->cert_status = net::CERT_STATUS_INVALID;
 
-    auto fingerprint =
-        net::X509Certificate::CalculateFingerprint256(cert->os_cert_handle());
+    // Because no trust anchor checking is being performed, don't indicate that
+    // it came from an OS-trusted root.
+    verify_result->is_issued_by_known_root = false;
+    // Because no trust anchor checking is being performed, don't indicate that
+    // it came from a supplemental trust anchor.
+    verify_result->is_issued_by_additional_trust_anchor = false;
+    // Because no name checking is being performed, don't indicate that it the
+    // common name was used.
+    verify_result->common_name_fallback_used = false;
+    // Because the signature is not checked, do not indicate any deprecated
+    // signature algorithms were used, even if they might be present.
+    verify_result->has_md2 = false;
+    verify_result->has_md4 = false;
+    verify_result->has_md5 = false;
+    verify_result->has_sha1 = false;
+    verify_result->has_sha1_leaf = false;
+    // Because no chain hashes calculation is being performed, keep hashes
+    // container clean.
+    verify_result->public_key_hashes.clear();
 
-    return certificate_fingerprint_.Equals(fingerprint) ? net::OK
-                                                        : net::ERR_CERT_INVALID;
+    verify_result->cert_status = CheckFingerprint(cert, hostname)
+                                     ? 0
+                                     : net::CERT_STATUS_AUTHORITY_INVALID;
+    return net::IsCertStatusError(verify_result->cert_status)
+               ? net::MapCertStatusToNetError(verify_result->cert_status)
+               : net::OK;
+  }
+
+  void AddPairedHost(const std::string& host,
+                     const net::SHA256HashValue& certificate_fingerprint) {
+    fingerprints_[host] = certificate_fingerprint;
   }
 
  private:
-  net::SHA256HashValue certificate_fingerprint_;
+  bool CheckFingerprint(net::X509Certificate* cert,
+                        const std::string& hostname) const {
+    auto it = fingerprints_.find(hostname);
+    if (it == fingerprints_.end())
+      return false;
 
-  DISALLOW_COPY_AND_ASSIGN(FingerprintVerifier);
+    return it->second.Equals(
+        net::X509Certificate::CalculateFingerprint256(cert->os_cert_handle()));
+  }
+
+  std::map<std::string, net::SHA256HashValue> fingerprints_;
+
+  DISALLOW_COPY_AND_ASSIGN(CertVerifier);
 };
 
 PrivetV3ContextGetter::PrivetV3ContextGetter(
-    const scoped_refptr<base::SingleThreadTaskRunner>& net_task_runner,
-    const net::SHA256HashValue& certificate_fingerprint)
-    : verifier_(new FingerprintVerifier(certificate_fingerprint)),
-      net_task_runner_(net_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& net_task_runner)
+    : net_task_runner_(net_task_runner), weak_ptr_factory_(this) {
   CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnablePrivetV3));
 }
 
 net::URLRequestContext* PrivetV3ContextGetter::GetURLRequestContext() {
-  DCHECK(net_task_runner_->BelongsToCurrentThread());
-  if (!context_) {
-    net::URLRequestContextBuilder builder;
-    builder.set_proxy_service(net::ProxyService::CreateDirect());
-    builder.SetSpdyAndQuicEnabled(false, false);
-    builder.DisableHttpCache();
-    builder.SetCertVerifier(verifier_.Pass());
-    builder.set_user_agent(::GetUserAgent());
-    context_ = builder.Build();
-  }
+  InitOnNetThread();
   return context_.get();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
 PrivetV3ContextGetter::GetNetworkTaskRunner() const {
   return net_task_runner_;
+}
+
+void PrivetV3ContextGetter::InitOnNetThread() {
+  DCHECK(net_task_runner_->BelongsToCurrentThread());
+  if (!context_) {
+    net::URLRequestContextBuilder builder;
+    builder.set_proxy_service(net::ProxyService::CreateDirect());
+    builder.SetSpdyAndQuicEnabled(false, false);
+    builder.DisableHttpCache();
+    cert_verifier_ = new CertVerifier();
+    builder.SetCertVerifier(make_scoped_ptr(cert_verifier_));
+    builder.set_user_agent(::GetUserAgent());
+    context_ = builder.Build();
+  }
+}
+
+void PrivetV3ContextGetter::AddPairedHost(
+    const std::string& host,
+    const net::SHA256HashValue& certificate_fingerprint,
+    const base::Closure& callback) {
+  net_task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::Bind(&PrivetV3ContextGetter::AddPairedHostOnNetThread,
+                 weak_ptr_factory_.GetWeakPtr(), host, certificate_fingerprint),
+      callback);
+}
+
+void PrivetV3ContextGetter::AddPairedHostOnNetThread(
+    const std::string& host,
+    const net::SHA256HashValue& certificate_fingerprint) {
+  InitOnNetThread();
+  cert_verifier_->AddPairedHost(host, certificate_fingerprint);
 }
 
 PrivetV3ContextGetter::~PrivetV3ContextGetter() {

@@ -658,11 +658,21 @@ void Document::setDoctype(PassRefPtrWillBeRawPtr<DocumentType> docType)
     styleEngine().clearResolver();
 }
 
+DocumentType* Document::doctype() const
+{
+    return m_docType.get();
+}
+
 DOMImplementation& Document::implementation()
 {
     if (!m_implementation)
         m_implementation = DOMImplementation::create(*this);
     return *m_implementation;
+}
+
+Element* Document::documentElement() const
+{
+    return m_documentElement.get();
 }
 
 bool Document::hasAppCacheManifest() const
@@ -779,6 +789,11 @@ ScriptValue Document::registerElement(ScriptState* scriptState, const AtomicStri
     CustomElementConstructorBuilder constructorBuilder(scriptState, options);
     registrationContext()->registerElement(this, &constructorBuilder, name, validNames, exceptionState);
     return constructorBuilder.bindingsReturnValue();
+}
+
+CustomElementRegistrationContext* Document::registrationContext() const
+{
+    return m_registrationContext.get();
 }
 
 CustomElementMicrotaskRunQueue* Document::customElementMicrotaskRunQueue()
@@ -1317,6 +1332,11 @@ void Document::setTitleElement(Element* titleElement)
         updateTitle(toHTMLTitleElement(m_titleElement)->text());
     else if (isSVGTitleElement(m_titleElement))
         updateTitle(toSVGTitleElement(m_titleElement)->textContent());
+}
+
+Element* Document::titleElement() const
+{
+    return m_titleElement.get();
 }
 
 void Document::removeTitle(Element* titleElement)
@@ -1982,6 +2002,11 @@ void Document::clearFocusedElementSoon()
         m_clearFocusedElementTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
+Element* Document::focusedElement() const
+{
+    return m_focusedElement.get();
+}
+
 void Document::clearFocusedElementTimerFired(Timer<Document>*)
 {
     updateLayoutTreeIfNeeded();
@@ -2182,7 +2207,17 @@ void Document::detach(const AttachContext& context)
     if (!isActive())
         return;
 
+    // Frame navigation can cause a new Document to be attached. Don't allow that, since that will
+    // cause a situation where LocalFrame still has a Document attached after this finishes!
+    // Normally, it shouldn't actually be possible to trigger navigation here. However, plugins
+    // (see below) can cause lots of crazy things to happen, since plugin detach involves nested
+    // message loops.
+    FrameNavigationDisabler navigationDisabler(*m_frame);
+    // Defer widget updates to avoid plugins trying to run script inside ScriptForbiddenScope,
+    // which will crash the renderer after https://crrev.com/200984
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
+    // Don't allow script to run in the middle of detach() because a detaching Document is not in a
+    // consistent state.
     ScriptForbiddenScope forbidScript;
     view()->dispose();
     m_markers->prepareForDestruction();
@@ -2236,6 +2271,18 @@ void Document::detach(const AttachContext& context)
 
     m_layoutView = nullptr;
     ContainerNode::detach(context);
+
+    if (this != &axObjectCacheOwner()) {
+        if (AXObjectCache* cache = existingAXObjectCache()) {
+            // Documents that are not a root document use the AXObjectCache in
+            // their root document. Node::removedFrom is called after the
+            // document has been detached so it can't find the root document.
+            // We do the removals here instead.
+            for (Node& node : NodeTraversal::descendantsOf(*this)) {
+                cache->remove(&node);
+            }
+        }
+    }
 
     styleEngine().didDetach();
 
@@ -2997,6 +3044,10 @@ void Document::disableEval(const String& errorMessage)
     frame()->script().disableEval(errorMessage);
 }
 
+ElementDataCache* Document::elementDataCache() const
+{
+    return m_elementDataCache.get();
+}
 
 void Document::didLoadAllImports()
 {
@@ -3316,6 +3367,12 @@ StyleSheetList* Document::styleSheets()
     return m_styleSheetList.get();
 }
 
+StyleEngine& Document::styleEngine()
+{
+    ASSERT(m_styleEngine.get());
+    return *m_styleEngine.get();
+}
+
 String Document::preferredStylesheetSet() const
 {
     return m_styleEngine->preferredStylesheetSetName();
@@ -3389,6 +3446,16 @@ void Document::setActiveHoverElement(PassRefPtrWillBeRawPtr<Element> newActiveEl
     }
 
     m_activeHoverElement = newActiveElement;
+}
+
+Element* Document::activeHoverElement() const
+{
+    return m_activeHoverElement.get();
+}
+
+Node* Document::hoverNode() const
+{
+    return m_hoverNode.get();
 }
 
 void Document::removeFocusedElementOfSubtree(Node* node, bool amongChildrenOnly)
@@ -3526,6 +3593,8 @@ bool Document::setFocusedElement(PassRefPtrWillBeRawPtr<Element> prpNewFocusedEl
         m_focusedElement = newFocusedElement;
 
         m_focusedElement->setFocus(true);
+        cancelFocusAppearanceUpdate();
+        m_focusedElement->updateFocusAppearance(params.selectionBehavior);
 
         // Dispatch the focus event and let the node do any other focus related activities (important for text fields)
         // If page lost focus, event will be dispatched on page focus, don't duplicate
@@ -4423,6 +4492,11 @@ KURL Document::openSearchDescriptionURL()
     return KURL();
 }
 
+HTMLScriptElement* Document::currentScript() const
+{
+    return !m_currentScriptStack.isEmpty() ? m_currentScriptStack.last().get() : nullptr;
+}
+
 void Document::pushCurrentScript(PassRefPtrWillBeRawPtr<HTMLScriptElement> newCurrentScript)
 {
     ASSERT(newCurrentScript);
@@ -4492,6 +4566,11 @@ WeakPtrWillBeRawPtr<Document> Document::contextDocument()
 #endif
     }
     return nullptr;
+}
+
+ScriptRunner* Document::scriptRunner() const
+{
+    return m_scriptRunner.get();
 }
 
 PassRefPtrWillBeRawPtr<Attr> Document::createAttribute(const AtomicString& name, ExceptionState& exceptionState)
@@ -5562,6 +5641,11 @@ void Document::setAutofocusElement(Element* element)
     m_taskRunner->postTask(BLINK_FROM_HERE, AutofocusTask::create());
 }
 
+Element* Document::autofocusElement() const
+{
+    return m_autofocusElement.get();
+}
+
 Element* Document::activeElement() const
 {
     if (Element* element = adjustedFocusedElement())
@@ -5571,17 +5655,7 @@ Element* Document::activeElement() const
 
 bool Document::hasFocus() const
 {
-    Page* page = this->page();
-    if (!page)
-        return false;
-    if (!page->focusController().isActive() || !page->focusController().isFocused())
-        return false;
-    Frame* focusedFrame = page->focusController().focusedFrame();
-    if (focusedFrame && focusedFrame->isLocalFrame()) {
-        if (toLocalFrame(focusedFrame)->tree().isDescendantOf(frame()))
-            return true;
-    }
-    return false;
+    return page() && page()->focusController().isDocumentFocused(*this);
 }
 
 #if ENABLE(OILPAN)

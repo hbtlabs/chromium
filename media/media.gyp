@@ -718,6 +718,15 @@
             'capture/webm_muxer.cc',
             'capture/webm_muxer.h',
           ],
+        }, {  # media_use_libwebm==0
+          'defines': [
+            'MEDIA_DISABLE_LIBWEBM',
+          ],
+          'direct_dependent_settings': {
+            'defines': [
+              'MEDIA_DISABLE_LIBWEBM',
+            ],
+          },
         }],
         ['OS=="android"', {
           'dependencies': [
@@ -1892,6 +1901,7 @@
             'base/android/media_task_runner.cc',
             'base/android/media_task_runner.h',
             'base/android/media_url_interceptor.h',
+            'base/android/provision_fetcher.h',
             'base/android/video_decoder_job.cc',
             'base/android/video_decoder_job.h',
             'base/android/webaudio_media_codec_bridge.cc',

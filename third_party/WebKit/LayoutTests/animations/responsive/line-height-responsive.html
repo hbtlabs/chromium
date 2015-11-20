@@ -6,7 +6,7 @@
 </style>
 <script src="resources/responsive-test.js"></script>
 <script>
-assertResponsive({
+assertCSSResponsive({
   property: 'line-height',
   from: 'inherit',
   to: '200px',
@@ -25,9 +25,8 @@ assertResponsive({
   }],
 });
 
-assertResponsive({
+assertCSSResponsive({
   property: 'line-height',
-  from: '',
   to: '200px',
   configurations: [{
     state: {underlying: '10'},
@@ -68,9 +67,8 @@ assertResponsive({
   }],
 });
 
-assertResponsive({
+assertCSSResponsive({
   property: 'line-height',
-  from: '',
   to: '20',
   configurations: [{
     state: {underlying: '10'},

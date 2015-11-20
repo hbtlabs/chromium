@@ -13,6 +13,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/append_quads_data.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
@@ -248,7 +249,8 @@ class PictureLayerImplTest : public testing::Test {
       pending_layer->SetDrawsContent(true);
     } else {
       pending_layer.reset(static_cast<FakePictureLayerImpl*>(
-          pending_root->RemoveChild(pending_root->children()[0]).release()));
+          pending_root->RemoveChild(pending_root->children()[0].get())
+              .release()));
       if (!tile_size.IsEmpty())
         pending_layer->set_fixed_tile_size(tile_size);
     }
@@ -257,8 +259,8 @@ class PictureLayerImplTest : public testing::Test {
     pending_layer->SetBounds(raster_source->GetSize());
     pending_layer->SetRasterSourceOnPending(raster_source, invalidation);
 
-    pending_root->AddChild(pending_layer.Pass());
-    pending_tree->SetRootLayer(pending_root.Pass());
+    pending_root->AddChild(std::move(pending_layer));
+    pending_tree->SetRootLayer(std::move(pending_root));
 
     pending_layer_ = static_cast<FakePictureLayerImpl*>(
         host_impl_.pending_tree()->LayerById(id_));
@@ -1362,7 +1364,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
           host_impl_.pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);
-  pending_layer_->SetMaskLayer(mask_ptr.Pass());
+  pending_layer_->SetMaskLayer(std::move(mask_ptr));
   pending_layer_->SetHasRenderSurface(true);
 
   RebuildPropertyTreesOnPendingTree();
@@ -1491,7 +1493,7 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
           host_impl_.pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);
-  pending_layer_->SetMaskLayer(mask_ptr.Pass());
+  pending_layer_->SetMaskLayer(std::move(mask_ptr));
   pending_layer_->SetHasRenderSurface(true);
 
   RebuildPropertyTreesOnPendingTree();
@@ -1579,10 +1581,10 @@ TEST_F(PictureLayerImplTest, ClampTilesToMaxTileSize) {
   context->set_max_texture_size(140);
   host_impl_.DidLoseOutputSurface();
   scoped_ptr<OutputSurface> new_output_surface =
-      FakeOutputSurface::Create3d(context.Pass());
+      FakeOutputSurface::Create3d(std::move(context));
   host_impl_.SetVisible(true);
   host_impl_.InitializeRenderer(new_output_surface.get());
-  output_surface_ = new_output_surface.Pass();
+  output_surface_ = std::move(new_output_surface);
 
   SetupDrawPropertiesAndUpdateTiles(pending_layer_, 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -1619,10 +1621,10 @@ TEST_F(PictureLayerImplTest, ClampSingleTileToToMaxTileSize) {
   context->set_max_texture_size(140);
   host_impl_.DidLoseOutputSurface();
   scoped_ptr<OutputSurface> new_output_surface =
-      FakeOutputSurface::Create3d(context.Pass());
+      FakeOutputSurface::Create3d(std::move(context));
   host_impl_.SetVisible(true);
   host_impl_.InitializeRenderer(new_output_surface.get());
-  output_surface_ = new_output_surface.Pass();
+  output_surface_ = std::move(new_output_surface);
 
   SetupDrawPropertiesAndUpdateTiles(active_layer_, 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -2286,7 +2288,7 @@ TEST_F(PictureLayerImplTest, ActivateUninitializedLayer) {
       FakePictureLayerImpl::CreateWithRasterSource(pending_tree, id_,
                                                    pending_raster_source);
   pending_layer->SetDrawsContent(true);
-  pending_tree->SetRootLayer(pending_layer.Pass());
+  pending_tree->SetRootLayer(std::move(pending_layer));
 
   pending_layer_ = static_cast<FakePictureLayerImpl*>(
       host_impl_.pending_tree()->LayerById(id_));
@@ -3974,7 +3976,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   // Partial occlusion.
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer_->children()[0];
+  LayerImpl* layer1 = pending_layer_->children()[0].get();
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -4068,7 +4070,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   // Partial occlusion.
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer_->children()[0];
+  LayerImpl* layer1 = pending_layer_->children()[0].get();
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -4164,7 +4166,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, OcclusionForDifferentScales) {
   ASSERT_TRUE(pending_layer_->CanHaveTilings());
 
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer_->children()[0];
+  LayerImpl* layer1 = pending_layer_->children()[0].get();
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -4239,7 +4241,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, DifferentOcclusionOnTrees) {
 
   // Partially occlude the active layer.
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 2));
-  LayerImpl* layer1 = pending_layer_->children()[0];
+  LayerImpl* layer1 = pending_layer_->children()[0].get();
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -4332,7 +4334,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   // Partially occlude the active layer.
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 2));
-  LayerImpl* active_occluding_layer = pending_layer_->children()[0];
+  LayerImpl* active_occluding_layer = pending_layer_->children()[0].get();
   active_occluding_layer->SetBounds(layer_bounds);
   active_occluding_layer->SetDrawsContent(true);
   active_occluding_layer->SetContentsOpaque(true);
@@ -4347,7 +4349,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   // Partially occlude the pending layer in a different way.
   pending_layer_->AddChild(LayerImpl::Create(host_impl_.pending_tree(), 3));
-  LayerImpl* pending_occluding_layer = pending_layer_->children()[0];
+  LayerImpl* pending_occluding_layer = pending_layer_->children()[0].get();
   pending_occluding_layer->SetBounds(layer_bounds);
   pending_occluding_layer->SetDrawsContent(true);
   pending_occluding_layer->SetContentsOpaque(true);

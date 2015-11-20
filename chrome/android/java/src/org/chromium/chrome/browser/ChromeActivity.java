@@ -75,7 +75,6 @@ import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager.Cont
 import org.chromium.chrome.browser.datausage.DataUseTabUIManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.dom_distiller.DistilledPagePrefsView;
-import org.chromium.chrome.browser.dom_distiller.ReaderModeActivityDelegate;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarksModel;
@@ -124,10 +123,10 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.webapps.AddToHomescreenDialog;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.content.browser.ContentReadbackHandler;
 import org.chromium.content.browser.ContentVideoView;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.common.ContentSwitches;
+import org.chromium.content_public.browser.ContentBitmapCallback;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.readback_types.ReadbackResponse;
 import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
@@ -178,6 +177,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      */
     private static final int PARTNER_BROWSER_CUSTOMIZATIONS_TIMEOUT_MS = 10000;
     private static final String TAG = "cr.ChromeActivity";
+    private static final Rect EMPTY_RECT = new Rect();
 
     private TabModelSelector mTabModelSelector;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
@@ -208,7 +208,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private ChromeFullscreenManager mFullscreenManager;
     private CompositorViewHolder mCompositorViewHolder;
     private ContextualSearchManager mContextualSearchManager;
-    private ReaderModeActivityDelegate mReaderModeActivityDelegate;
+    private ReaderModeManager mReaderModeManager;
     private SnackbarManager mSnackbarManager;
     private LoFiBarPopupController mLoFiBarPopupController;
     private DataUseSnackbarController mDataUseSnackbarController;
@@ -259,7 +259,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mWindowAndroid = ((ChromeApplication) getApplicationContext())
                 .createActivityWindowAndroid(this);
         mWindowAndroid.restoreInstanceState(getSavedInstanceState());
-        mSnackbarManager = new SnackbarManager(getWindow());
+        mSnackbarManager = new SnackbarManager(this);
         mLoFiBarPopupController = new LoFiBarPopupController(this, getSnackbarManager());
         mDataUseSnackbarController = new DataUseSnackbarController(this, getSnackbarManager());
 
@@ -447,7 +447,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
 
         if (ReaderModeManager.isEnabled(this)) {
-            mReaderModeActivityDelegate = new ReaderModeActivityDelegate(this);
+            mReaderModeManager = new ReaderModeManager(getTabModelSelector(), this);
         }
 
         TraceEvent.end("ChromeActivity:CompositorInitialization");
@@ -753,9 +753,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @SuppressLint("NewApi")
     @Override
     protected final void onDestroy() {
-        if (mReaderModeActivityDelegate != null) {
-            mReaderModeActivityDelegate.destroy();
-            mReaderModeActivityDelegate = null;
+        if (mReaderModeManager != null) {
+            mReaderModeManager.destroy();
+            mReaderModeManager = null;
         }
 
         if (mContextualSearchManager != null) {
@@ -904,10 +904,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (currentTab == null) return;
 
         final Activity mainActivity = this;
-        ContentReadbackHandler.GetBitmapCallback bitmapCallback =
-                new ContentReadbackHandler.GetBitmapCallback() {
+        ContentBitmapCallback callback = new ContentBitmapCallback() {
                     @Override
-                    public void onFinishGetBitmap(Bitmap bitmap, int reponse) {
+                    public void onFinishGetBitmap(Bitmap bitmap, int response) {
                         ShareHelper.share(shareDirectly, mainActivity, currentTab.getTitle(),
                                 currentTab.getUrl(), bitmap);
                         if (shareDirectly) {
@@ -917,12 +916,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                         }
                     }
                 };
-        ContentReadbackHandler readbackHandler = getContentReadbackHandler();
-        if (isIncognito || readbackHandler == null || currentTab.getContentViewCore() == null) {
-            bitmapCallback.onFinishGetBitmap(null, ReadbackResponse.SURFACE_UNAVAILABLE);
+        if (isIncognito || currentTab.getWebContents() == null) {
+            callback.onFinishGetBitmap(null, ReadbackResponse.SURFACE_UNAVAILABLE);
         } else {
-            readbackHandler.getContentBitmapAsync(1, new Rect(), currentTab.getContentViewCore(),
-                    Bitmap.Config.ARGB_8888, bitmapCallback);
+            currentTab.getWebContents().getContentBitmapAsync(
+                    Bitmap.Config.ARGB_8888, 1.f, EMPTY_RECT, callback);
         }
     }
 
@@ -1186,25 +1184,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
-     * @return The content readback handler, may be null.
-     */
-    public ContentReadbackHandler getContentReadbackHandler() {
-        return mCompositorViewHolder.getContentReadbackHandler();
-    }
-
-    /**
      * @return The {@code ContextualSearchManager} or {@code null} if none;
      */
     public ContextualSearchManager getContextualSearchManager() {
         return mContextualSearchManager;
-    }
-
-    /**
-     * @return A {@link ReaderModeActivityDelegate} instance or {@code null} if reader mode is
-     *         not enabled.
-     */
-    public ReaderModeActivityDelegate getReaderModeActivityDelegate() {
-        return mReaderModeActivityDelegate;
     }
 
     /**
@@ -1259,12 +1242,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mContextualSearchManager.setSearchContentViewDelegate(layoutManager);
         }
 
-        if (mReaderModeActivityDelegate != null) {
-            mReaderModeActivityDelegate.initialize(contentContainer);
-            mReaderModeActivityDelegate.setDynamicResourceLoader(
-                    mCompositorViewHolder.getDynamicResourceLoader());
-        }
-
         layoutManager.addSceneChangeObserver(this);
         mCompositorViewHolder.setLayoutManager(layoutManager);
         mCompositorViewHolder.setFocusable(false);
@@ -1272,7 +1249,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mCompositorViewHolder.setFullscreenHandler(mFullscreenManager);
         mCompositorViewHolder.setUrlBar(urlBar);
         mCompositorViewHolder.onFinishNativeInitialization(getTabModelSelector(), this,
-                getTabContentManager(), contentContainer, mContextualSearchManager);
+                getTabContentManager(), contentContainer, mContextualSearchManager,
+                mReaderModeManager);
 
         if (controlContainer != null
                 && DeviceClassManager.enableToolbarSwipe(FeatureUtilities.isDocumentMode(this))) {
@@ -1289,7 +1267,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     public void onOrientationChange(int orientation) {
+        // TODO(mdjones): Orientation change for panels should not be handled here. The event
+        // should probably be passed to the OverlayPanelManager.
         if (mContextualSearchManager != null) mContextualSearchManager.onOrientationChange();
+        if (mReaderModeManager != null) mReaderModeManager.onOrientationChange();
         if (mToolbarManager != null) mToolbarManager.onOrientationChange();
     }
 

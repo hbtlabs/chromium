@@ -25,16 +25,14 @@ void CollectExistingLayerImplRecursive(ScopedPtrLayerImplMap* old_layers,
     return;
 
   OwnedLayerImplList& children = layer_impl->children();
-  for (OwnedLayerImplList::iterator it = children.begin();
-       it != children.end();
-       ++it)
-    CollectExistingLayerImplRecursive(old_layers, children.take(it));
+  for (auto& child : children)
+    CollectExistingLayerImplRecursive(old_layers, std::move(child));
 
   CollectExistingLayerImplRecursive(old_layers, layer_impl->TakeMaskLayer());
   CollectExistingLayerImplRecursive(old_layers, layer_impl->TakeReplicaLayer());
 
   int id = layer_impl->id();
-  old_layers->set(id, layer_impl.Pass());
+  old_layers->set(id, std::move(layer_impl));
 }
 
 template <typename LayerType>
@@ -48,28 +46,29 @@ scoped_ptr<LayerImpl> SynchronizeTreesInternal(
   ScopedPtrLayerImplMap old_layers;
   RawPtrLayerImplMap new_layers;
 
-  CollectExistingLayerImplRecursive(&old_layers, old_layer_impl_root.Pass());
+  CollectExistingLayerImplRecursive(&old_layers,
+                                    std::move(old_layer_impl_root));
 
   scoped_ptr<LayerImpl> new_tree = SynchronizeTreesRecursive(
       &new_layers, &old_layers, layer_root, tree_impl);
 
-  return new_tree.Pass();
+  return new_tree;
 }
 
 scoped_ptr<LayerImpl> TreeSynchronizer::SynchronizeTrees(
     Layer* layer_root,
     scoped_ptr<LayerImpl> old_layer_impl_root,
     LayerTreeImpl* tree_impl) {
-  return SynchronizeTreesInternal(
-      layer_root, old_layer_impl_root.Pass(), tree_impl);
+  return SynchronizeTreesInternal(layer_root, std::move(old_layer_impl_root),
+                                  tree_impl);
 }
 
 scoped_ptr<LayerImpl> TreeSynchronizer::SynchronizeTrees(
     LayerImpl* layer_root,
     scoped_ptr<LayerImpl> old_layer_impl_root,
     LayerTreeImpl* tree_impl) {
-  return SynchronizeTreesInternal(
-      layer_root, old_layer_impl_root.Pass(), tree_impl);
+  return SynchronizeTreesInternal(layer_root, std::move(old_layer_impl_root),
+                                  tree_impl);
 }
 
 template <typename LayerType>
@@ -83,7 +82,7 @@ scoped_ptr<LayerImpl> ReuseOrCreateLayerImpl(RawPtrLayerImplMap* new_layers,
     layer_impl = layer->CreateLayerImpl(tree_impl);
 
   (*new_layers)[layer->id()] = layer_impl.get();
-  return layer_impl.Pass();
+  return layer_impl;
 }
 
 template <typename LayerType>
@@ -109,7 +108,7 @@ scoped_ptr<LayerImpl> SynchronizeTreesRecursiveInternal(
   layer_impl->SetReplicaLayer(SynchronizeTreesRecursiveInternal(
       new_layers, old_layers, layer->replica_layer(), tree_impl));
 
-  return layer_impl.Pass();
+  return layer_impl;
 }
 
 scoped_ptr<LayerImpl> SynchronizeTreesRecursive(
@@ -163,8 +162,7 @@ void TreeSynchronizer::PushPropertiesInternal(
     DCHECK_EQ(layer->children().size(), impl_children.size());
 
     for (size_t i = 0; i < layer->children().size(); ++i) {
-      PushPropertiesInternal(layer->child_at(i),
-                             impl_children[i],
+      PushPropertiesInternal(layer->child_at(i), impl_children[i].get(),
                              &num_dependents_need_push_properties);
     }
 

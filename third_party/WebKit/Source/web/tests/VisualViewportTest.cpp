@@ -31,10 +31,10 @@
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <string>
 
@@ -459,7 +459,7 @@ TEST_P(ParameterizedVisualViewportTest, TestVisibleRect)
     visualViewport.setSize(size);
 
     // Scale the viewport to 2X; size should not change.
-    FloatRect expectedRect(FloatPoint(0, 0), size);
+    FloatRect expectedRect(FloatPoint(0, 0), FloatSize(size));
     expectedRect.scale(0.5);
     visualViewport.setScale(2);
     EXPECT_EQ(2, visualViewport.scale());
@@ -477,7 +477,7 @@ TEST_P(ParameterizedVisualViewportTest, TestVisibleRect)
 
     // Scale the viewport to 3X to introduce some non-int values.
     FloatPoint oldLocation = expectedRect.location();
-    expectedRect = FloatRect(FloatPoint(), size);
+    expectedRect = FloatRect(FloatPoint(), FloatSize(size));
     expectedRect.scale(1 / 3.0f);
     expectedRect.setLocation(oldLocation);
     visualViewport.setScale(3);
@@ -1509,7 +1509,9 @@ TEST_P(ParameterizedVisualViewportTest, AccessibilityHitTestWhileZoomedIn)
     // Because of where the visual viewport is located, this should hit the bottom right
     // target (target 4).
     WebAXObject hitNode = webDoc.accessibilityObject().hitTest(WebPoint(154, 165));
-    EXPECT_EQ(std::string("Target4"), hitNode.title().utf8());
+    WebAXNameFrom nameFrom;
+    WebVector<WebAXObject> nameObjects;
+    EXPECT_EQ(std::string("Target4"), hitNode.name(nameFrom, nameObjects).utf8());
 }
 
 // Tests that the maximum scroll offset of the viewport can be fractional.

@@ -359,6 +359,7 @@ void AXTable::clearChildren()
 
 void AXTable::addChildren()
 {
+    ASSERT(!isDetached());
     if (!isAXTable()) {
         AXLayoutObject::addChildren();
         return;
@@ -566,30 +567,6 @@ bool AXTable::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReasons) cons
         return AXLayoutObject::computeAccessibilityIsIgnored(ignoredReasons);
 
     return false;
-}
-
-String AXTable::deprecatedTitle(TextUnderElementMode mode) const
-{
-    if (!isAXTable())
-        return AXLayoutObject::deprecatedTitle(mode);
-
-    String title;
-    if (!m_layoutObject)
-        return title;
-
-    // see if there is a caption
-    Node* tableElement = m_layoutObject->node();
-    if (isHTMLTableElement(tableElement)) {
-        HTMLTableCaptionElement* caption = toHTMLTableElement(tableElement)->caption();
-        if (caption)
-            title = caption->innerText();
-    }
-
-    // try the standard
-    if (title.isEmpty())
-        title = AXLayoutObject::deprecatedTitle(mode);
-
-    return title;
 }
 
 DEFINE_TRACE(AXTable)

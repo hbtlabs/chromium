@@ -33,13 +33,16 @@ void UpdateThrottleCheckResult(
 // static
 scoped_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     const GURL& url,
-    FrameTreeNode* frame_tree_node) {
+    FrameTreeNode* frame_tree_node,
+    const base::TimeTicks& navigation_start) {
   return scoped_ptr<NavigationHandleImpl>(
-      new NavigationHandleImpl(url, frame_tree_node));
+      new NavigationHandleImpl(url, frame_tree_node, navigation_start));
 }
 
-NavigationHandleImpl::NavigationHandleImpl(const GURL& url,
-                                           FrameTreeNode* frame_tree_node)
+NavigationHandleImpl::NavigationHandleImpl(
+    const GURL& url,
+    FrameTreeNode* frame_tree_node,
+    const base::TimeTicks& navigation_start)
     : url_(url),
       is_post_(false),
       has_user_gesture_(false),
@@ -51,7 +54,9 @@ NavigationHandleImpl::NavigationHandleImpl(const GURL& url,
       state_(INITIAL),
       is_transferring_(false),
       frame_tree_node_(frame_tree_node),
-      next_index_(0) {
+      next_index_(0),
+      navigation_start_(navigation_start) {
+  DCHECK(!navigation_start.is_null());
   // PlzNavigate
   // Initialize the ServiceWorkerNavigationHandle if it can be created for this
   // frame.
@@ -80,6 +85,14 @@ NavigationHandleImpl::NavigationHandleImpl(const GURL& url,
 
 NavigationHandleImpl::~NavigationHandleImpl() {
   GetDelegate()->DidFinishNavigation(this);
+
+  // Cancel the navigation on the IO thread if the NavigationHandle is being
+  // destroyed in the middle of the NavigationThrottles checks.
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kEnableBrowserSideNavigation) &&
+      !complete_callback_.is_null()) {
+    RunCompleteCallback(NavigationThrottle::CANCEL_AND_IGNORE);
+  }
 }
 
 NavigatorDelegate* NavigationHandleImpl::GetDelegate() const {
@@ -92,6 +105,10 @@ const GURL& NavigationHandleImpl::GetURL() {
 
 bool NavigationHandleImpl::IsInMainFrame() {
   return frame_tree_node_->IsMainFrame();
+}
+
+const base::TimeTicks& NavigationHandleImpl::NavigationStart() {
+  return navigation_start_;
 }
 
 bool NavigationHandleImpl::IsPost() {
@@ -160,7 +177,16 @@ void NavigationHandleImpl::Resume() {
   }
 
   if (result != NavigationThrottle::DEFER)
-    complete_callback_.Run(result);
+    RunCompleteCallback(result);
+}
+
+void NavigationHandleImpl::CancelDeferredNavigation(
+    NavigationThrottle::ThrottleCheckResult result) {
+  DCHECK(state_ == DEFERRING_START || state_ == DEFERRING_REDIRECT);
+  DCHECK(result == NavigationThrottle::CANCEL_AND_IGNORE ||
+         result == NavigationThrottle::CANCEL);
+  state_ = CANCELING;
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::RegisterThrottleForTesting(
@@ -235,7 +261,7 @@ void NavigationHandleImpl::WillStartRequest(
 
   // If the navigation is not deferred, run the callback.
   if (result != NavigationThrottle::DEFER)
-    callback.Run(result);
+    RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::WillRedirectRequest(
@@ -259,7 +285,7 @@ void NavigationHandleImpl::WillRedirectRequest(
 
   // If the navigation is not deferred, run the callback.
   if (result != NavigationThrottle::DEFER)
-    callback.Run(result);
+    RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::DidRedirectNavigation(const GURL& new_url) {
@@ -296,7 +322,9 @@ NavigationHandleImpl::CheckWillStartRequest() {
       case NavigationThrottle::PROCEED:
         continue;
 
+      case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
+        state_ = CANCELING;
         return result;
 
       case NavigationThrottle::DEFER:
@@ -325,7 +353,9 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
       case NavigationThrottle::PROCEED:
         continue;
 
+      case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
+        state_ = CANCELING;
         return result;
 
       case NavigationThrottle::DEFER:
@@ -340,6 +370,15 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
   next_index_ = 0;
   state_ = WILL_REDIRECT_REQUEST;
   return NavigationThrottle::PROCEED;
+}
+
+void NavigationHandleImpl::RunCompleteCallback(
+    NavigationThrottle::ThrottleCheckResult result) {
+  DCHECK(result != NavigationThrottle::DEFER);
+  if (!complete_callback_.is_null())
+    complete_callback_.Run(result);
+
+  complete_callback_.Reset();
 }
 
 }  // namespace content

@@ -618,8 +618,13 @@ void LayoutBlock::makeChildrenInlineIfPossible()
         return;
 
     Vector<LayoutBlock*, 3> blocksToRemove;
+    Vector<LayoutBox*, 16> floatsToRemoveFromFloatLists;
     for (LayoutObject* child = firstChild(); child; child = child->nextSibling()) {
-        if (child->isFloatingOrOutOfFlowPositioned())
+        if (child->isFloating()) {
+            floatsToRemoveFromFloatLists.append(toLayoutBox(child));
+            continue;
+        }
+        if (child->isOutOfFlowPositioned())
             continue;
 
         // There are still block children in the container, so any anonymous wrappers are still needed.
@@ -641,6 +646,12 @@ void LayoutBlock::makeChildrenInlineIfPossible()
 
         blocksToRemove.append(toLayoutBlock(child));
     }
+
+    // If we make an object's children inline we are going to frustrate any future attempts to remove
+    // floats from its children's float-lists before the next layout happens so remove them proactively here.
+    // TODO(rhogan): We need to understand if intruding floats in this object's float list need to be removed also.
+    for (size_t i = 0; i < floatsToRemoveFromFloatLists.size(); i++)
+        toLayoutBlockFlow(this)->markAllDescendantsWithFloatsForLayout(floatsToRemoveFromFloatLists[i]);
 
     for (size_t i = 0; i < blocksToRemove.size(); i++)
         collapseAnonymousBlockChild(this, blocksToRemove[i]);
@@ -876,17 +887,11 @@ void LayoutBlock::updateScrollInfoAfterLayout()
         }
 
         if (gDelayUpdateScrollInfo) {
-            LayoutUnit logicalWidthExcludingScrollbar = logicalWidth() - scrollbarLogicalWidth();
-            LayoutUnit logicalHeightExcludingScrollbar = logicalHeight() - scrollbarLogicalHeight();
             ScrollInfo scrollInfo;
             layer()->scrollableArea()->updateScrollDimensions(scrollInfo.scrollOffset, scrollInfo.autoHorizontalScrollBarChanged, scrollInfo.autoVerticalScrollBarChanged);
             DelayedUpdateScrollInfoMap::AddResult scrollInfoIterator = gDelayedUpdateScrollInfoMap->add(this, scrollInfo);
             if (!scrollInfoIterator.isNewEntry)
                 scrollInfoIterator.storedValue->value.merge(scrollInfo);
-            if (scrollInfo.autoHorizontalScrollBarChanged)
-                setLogicalHeight(logicalHeightExcludingScrollbar + scrollbarLogicalHeight());
-            if (scrollInfo.autoVerticalScrollBarChanged)
-                setLogicalWidth(logicalWidthExcludingScrollbar + scrollbarLogicalWidth());
         } else {
             layer()->scrollableArea()->updateAfterLayout();
         }
@@ -1774,19 +1779,19 @@ static inline bool isEditingBoundary(LayoutObject* ancestor, LayoutObject* child
 // FIXME: This function should go on LayoutObject as an instance method. Then
 // all cases in which positionForPoint recurs could call this instead to
 // prevent crossing editable boundaries. This would require many tests.
-static PositionWithAffinity positionForPointRespectingEditingBoundaries(LayoutBlock* parent, LayoutBox* child, const LayoutPoint& pointInParentCoordinates)
+static PositionWithAffinity positionForPointRespectingEditingBoundaries(LayoutBlock* parent, LineLayoutBox child, const LayoutPoint& pointInParentCoordinates)
 {
-    LayoutPoint childLocation = child->location();
-    if (child->isInFlowPositioned())
-        childLocation += child->offsetForInFlowPosition();
+    LayoutPoint childLocation = child.location();
+    if (child.isInFlowPositioned())
+        childLocation += child.offsetForInFlowPosition();
 
     // FIXME: This is wrong if the child's writing-mode is different from the parent's.
     LayoutPoint pointInChildCoordinates(toLayoutPoint(pointInParentCoordinates - childLocation));
 
     // If this is an anonymous layoutObject, we just recur normally
-    Node* childNode = child->nonPseudoNode();
+    Node* childNode = child.nonPseudoNode();
     if (!childNode)
-        return child->positionForPoint(pointInChildCoordinates);
+        return child.positionForPoint(pointInChildCoordinates);
 
     // Otherwise, first make sure that the editability of the parent and child agree.
     // If they don't agree, then we return a visible position just before or after the child
@@ -1796,10 +1801,10 @@ static PositionWithAffinity positionForPointRespectingEditingBoundaries(LayoutBl
 
     // If we can't find an ancestor to check editability on, or editability is unchanged, we recur like normal
     if (isEditingBoundary(ancestor, child))
-        return child->positionForPoint(pointInChildCoordinates);
+        return child.positionForPoint(pointInChildCoordinates);
 
     // Otherwise return before or after the child, depending on if the click was to the logical left or logical right of the child
-    LayoutUnit childMiddle = parent->logicalWidthForChild(*child) / 2;
+    LayoutUnit childMiddle = parent->logicalWidthForChildSize(child.size()) / 2;
     LayoutUnit logicalLeft = parent->isHorizontalWritingMode() ? pointInChildCoordinates.x() : pointInChildCoordinates.y();
     if (logicalLeft < childMiddle)
         return ancestor->createPositionWithAffinity(childNode->nodeIndex());
@@ -1876,7 +1881,7 @@ PositionWithAffinity LayoutBlock::positionForPointWithInlineChildren(const Layou
         if (!isHorizontalWritingMode())
             point = point.transposedPoint();
         if (closestBox->lineLayoutItem().isReplaced())
-            return positionForPointRespectingEditingBoundaries(this, &toLayoutBox(closestBox->layoutObject()), point);
+            return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(closestBox->lineLayoutItem()), point);
         return closestBox->lineLayoutItem().positionForPoint(point);
     }
 
@@ -1936,7 +1941,7 @@ PositionWithAffinity LayoutBlock::positionForPoint(const LayoutPoint& point)
     if (lastCandidateBox) {
         if (pointInLogicalContents.y() > logicalTopForChild(*lastCandidateBox)
             || (!blocksAreFlipped && pointInLogicalContents.y() == logicalTopForChild(*lastCandidateBox)))
-            return positionForPointRespectingEditingBoundaries(this, lastCandidateBox, pointInContents);
+            return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(lastCandidateBox), pointInContents);
 
         for (LayoutBox* childBox = firstChildBox(); childBox; childBox = childBox->nextSiblingBox()) {
             if (!isChildHitTestCandidate(childBox))
@@ -1945,7 +1950,7 @@ PositionWithAffinity LayoutBlock::positionForPoint(const LayoutPoint& point)
             // We hit child if our click is above the bottom of its padding box (like IE6/7 and FF3).
             if (isChildHitTestCandidate(childBox) && (pointInLogicalContents.y() < childLogicalBottom
                 || (blocksAreFlipped && pointInLogicalContents.y() == childLogicalBottom)))
-                return positionForPointRespectingEditingBoundaries(this, childBox, pointInContents);
+                return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(childBox), pointInContents);
         }
     }
 

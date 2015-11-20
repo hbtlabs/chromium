@@ -131,6 +131,8 @@ enum IPCMessageStart {
   IPCTestMsgStart,
   ArcInstanceMsgStart,
   ArcInstanceHostMsgStart,
+  DistillerMsgStart,
+  StartupMetricMsgStart,
   LastIPCMsgStart  // Must come last.
 };
 

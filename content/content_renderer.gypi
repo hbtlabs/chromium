@@ -7,7 +7,9 @@
     '../base/base.gyp:base',
     '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
     '../cc/cc.gyp:cc',
+    '../cc/cc.gyp:cc_proto',
     '../cc/blink/cc_blink.gyp:cc_blink',
+    '../components/components.gyp:startup_metric_utils_common',
     '../components/components.gyp:webusb',
     '../components/scheduler/scheduler.gyp:scheduler',
     '../components/url_formatter/url_formatter.gyp:url_formatter',
@@ -503,6 +505,8 @@
       'renderer/pepper/host_var_tracker.h',
       'renderer/pepper/message_channel.cc',
       'renderer/pepper/message_channel.h',
+      'renderer/pepper/pepper_audio_encoder_host.cc',
+      'renderer/pepper/pepper_audio_encoder_host.h',
       'renderer/pepper/pepper_audio_input_host.cc',
       'renderer/pepper/pepper_audio_input_host.h',
       'renderer/pepper/pepper_broker.cc',
@@ -627,6 +631,8 @@
     'private_renderer_webrtc_sources': [
       'renderer/media/audio_repetition_detector.cc',
       'renderer/media/audio_repetition_detector.h',
+      'renderer/media/audio_track_recorder.cc',
+      'renderer/media/audio_track_recorder.h',
       'renderer/media/media_recorder_handler.cc',
       'renderer/media/media_recorder_handler.h',
       'renderer/media/media_stream.cc',
@@ -799,6 +805,8 @@
     ['OS=="android"', {
       'sources!': [
         'renderer/media/audio_decoder.cc',
+        'renderer/media/audio_track_recorder.cc',
+        'renderer/media/audio_track_recorder.h',
         'renderer/media/media_recorder_handler.cc',
         'renderer/media/media_recorder_handler.h',
         'renderer/media/video_track_recorder.cc',
@@ -892,6 +900,7 @@
         '../ppapi/ppapi_internal.gyp:ppapi_host',
         '../ppapi/ppapi_internal.gyp:ppapi_proxy',
         '../ppapi/ppapi_internal.gyp:ppapi_shared',
+        '../third_party/opus/opus.gyp:opus',
       ],
     }],
     ['enable_pepper_cdms != 1', {

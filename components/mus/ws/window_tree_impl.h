@@ -231,20 +231,13 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
              uint32_t policy_bitmask,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t window_id) override;
+  void SetCanFocus(uint32_t window_id, bool can_focus) override;
   void SetWindowTextInputState(uint32_t window_id,
                                mojo::TextInputStatePtr state) override;
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
   void SetClientArea(Id transport_window_id, mojo::InsetsPtr insets) override;
-  void SetPreferredSize(uint32_t window_id,
-                        mojo::SizePtr size,
-                        const SetPreferredSizeCallback& callback) override;
-  void SetShowState(uint32_t window_id,
-                    mus::mojom::ShowState show_state,
-                    const SetShowStateCallback& callback) override;
-  void SetResizeBehavior(uint32_t window_id,
-                         mus::mojom::ResizeBehavior resize_behavior) override;
   void WmResponse(uint32 change_id, bool response) override;
 
   // AccessPolicyDelegate:

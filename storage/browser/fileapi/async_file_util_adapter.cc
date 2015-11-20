@@ -116,8 +116,6 @@ void ReadDirectoryHelper(FileSystemFileUtil* file_util,
     DirectoryEntry entry;
     entry.is_directory = file_enum->IsDirectory();
     entry.name = VirtualPath::BaseName(current).value();
-    entry.size = file_enum->Size();
-    entry.last_modified_time = file_enum->LastModifiedTime();
     entries.push_back(entry);
 
     if (entries.size() == kResultChunkSize) {
@@ -197,6 +195,7 @@ void AsyncFileUtilAdapter::CreateDirectory(
 void AsyncFileUtilAdapter::GetFileInfo(
     scoped_ptr<FileSystemOperationContext> context,
     const FileSystemURL& url,
+    int /* fields */,
     const GetFileInfoCallback& callback) {
   FileSystemOperationContext* context_ptr = context.release();
   GetFileInfoHelper* helper = new GetFileInfoHelper;

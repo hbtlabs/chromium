@@ -4,7 +4,9 @@
 
 import("//tools/grit/repack.gni")
 
-source_set("mus") {
+component("mus") {
+  output_name = "ui_views_mus_lib"
+
   sources = [
     "aura_init.cc",
     "aura_init.h",
@@ -12,6 +14,7 @@ source_set("mus") {
     "display_converter.h",
     "input_method_mus.cc",
     "input_method_mus.h",
+    "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
     "platform_window_mus.cc",
@@ -27,6 +30,8 @@ source_set("mus") {
     "window_tree_host_mus.h",
   ]
 
+  defines = [ "VIEWS_MUS_IMPLEMENTATION" ]
+
   public_deps = [
     ":resources",
     "//components/mus/public/cpp",
@@ -37,6 +42,7 @@ source_set("mus") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
+    "//components/bitmap_uploader",
     "//components/mus/gles2:lib",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
@@ -50,6 +56,8 @@ source_set("mus") {
     "//mojo/converters/input_events",
     "//mojo/converters/network",
     "//mojo/converters/surfaces",
+    "//mojo/platform_handle:for_component",
+    "//mojo/public/c/system:for_component",
     "//mojo/public/cpp/bindings",
     "//third_party/icu",
     "//ui/aura",
@@ -88,5 +96,31 @@ repack("resources") {
     "//ui/strings",
     "//ui/resources",
     "//ui/views/resources",
+  ]
+}
+
+group("for_mojo_application") {
+  public_deps = [
+    ":mus",
+  ]
+}
+
+group("for_shared_library") {
+  public_deps = [
+    ":mus",
+  ]
+  if (!is_component_build) {
+    deps = [
+      "//mojo/gles2",
+    ]
+  }
+}
+
+group("for_component") {
+  public_deps = [
+    ":mus",
+  ]
+  deps = [
+    "//mojo/gles2",
   ]
 }

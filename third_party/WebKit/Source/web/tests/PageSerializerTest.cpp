@@ -44,11 +44,12 @@
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
 #include "public/web/WebSettings.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
+#include "wtf/Assertions.h"
 #include "wtf/Vector.h"
-#include <gtest/gtest.h>
 
 using blink::URLTestHelpers::toKURL;
 using blink::URLTestHelpers::registerMockedURLLoad;
@@ -123,14 +124,18 @@ protected:
         for (const auto& rewriteURL: m_rewriteURLs)
             serializer.registerRewriteURL(rewriteURL.key, rewriteURL.value);
 
-        serializer.serialize(m_helper.webViewImpl()->mainFrameImpl()->frame()->page());
+        Frame* frame = m_helper.webViewImpl()->mainFrameImpl()->frame();
+        for (; frame; frame = frame->tree().traverseNext()) {
+            // This is safe, because tests do not do cross-site navigation
+            // (and therefore don't have remote frames).
+            serializer.serializeFrame(*toLocalFrame(frame));
+        }
     }
 
     Vector<SerializedResource>& getResources()
     {
         return m_resources;
     }
-
 
     const SerializedResource* getResource(const char* url, const char* mimeType)
     {

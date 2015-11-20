@@ -123,7 +123,7 @@ ResourceRequest FrameLoader::resourceRequestFromHistoryItem(HistoryItem* item,
         request.setHTTPBody(formData);
         request.setHTTPContentType(item->formContentType());
         RefPtr<SecurityOrigin> securityOrigin = SecurityOrigin::createFromString(item->referrer().referrer);
-        request.addHTTPOriginIfNeeded(securityOrigin->toAtomicString());
+        request.addHTTPOriginIfNeeded(securityOrigin);
     }
     return request;
 }
@@ -311,7 +311,7 @@ void FrameLoader::clear()
 // This is the <iframe src="javascript:'html'"> case.
 void FrameLoader::replaceDocumentWhileExecutingJavaScriptURL(const String& source, Document* ownerDocument)
 {
-    if (!m_frame->document()->loader())
+    if (!m_frame->document()->loader() || m_frame->document()->pageDismissalEventBeingDispatched() != Document::NoDismissal)
         return;
 
     // DocumentLoader::replaceDocumentWhileExecutingJavaScriptURL can cause the DocumentLoader to get deref'ed and possible destroyed,
@@ -729,7 +729,7 @@ void FrameLoader::setReferrerForFrameRequest(ResourceRequest& request, ShouldSen
 
     request.setHTTPReferrer(referrer);
     RefPtr<SecurityOrigin> referrerOrigin = SecurityOrigin::createFromString(referrer.referrer);
-    request.addHTTPOriginIfNeeded(referrerOrigin->toAtomicString());
+    request.addHTTPOriginIfNeeded(referrerOrigin);
 }
 
 FrameLoadType FrameLoader::determineFrameLoadType(const FrameLoadRequest& request)
@@ -1054,7 +1054,7 @@ bool FrameLoader::prepareForCommit()
     if (pdl != m_provisionalDocumentLoader)
         return false;
     if (m_documentLoader) {
-        FrameNavigationDisabler navigationDisabler(m_frame);
+        FrameNavigationDisabler navigationDisabler(*m_frame);
         detachDocumentLoader(m_documentLoader);
     }
     // detachFromFrame() will abort XHRs that haven't completed, which can
@@ -1322,10 +1322,6 @@ bool FrameLoader::shouldContinueForNavigationPolicy(const ResourceRequest& reque
         m_frame->owner()->dispatchLoad();
         return false;
     }
-
-    bool isFormSubmission = type == NavigationTypeFormSubmitted || type == NavigationTypeFormResubmitted;
-    if (isFormSubmission && !m_frame->document()->contentSecurityPolicy()->allowFormAction(request.url()))
-        return false;
 
     policy = client()->decidePolicyForNavigation(request, loader, type, policy, replacesCurrentHistoryItem);
     if (policy == NavigationPolicyCurrentTab)

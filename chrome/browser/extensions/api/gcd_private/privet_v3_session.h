@@ -24,13 +24,9 @@ namespace crypto {
 class P224EncryptedKeyExchange;
 }
 
-namespace local_discovery {
-class PrivetHTTPClient;
-class PrivetJSONOperation;
-class PrivetURLFetcher;
-}
-
 namespace extensions {
+
+class PrivetV3ContextGetter;
 
 // Manages secure communication between browser and local Privet device.
 class PrivetV3Session {
@@ -49,8 +45,8 @@ class PrivetV3Session {
                               const base::DictionaryValue& response)>
       MessageCallback;
 
-  explicit PrivetV3Session(
-      scoped_ptr<local_discovery::PrivetHTTPClient> client);
+  PrivetV3Session(const scoped_refptr<PrivetV3ContextGetter>& context_getter,
+                  const net::HostPortPair& host_port);
   ~PrivetV3Session();
 
   // Initializes session. Queries /privet/info and returns supported pairing
@@ -72,6 +68,7 @@ class PrivetV3Session {
  private:
   friend class PrivetV3SessionTest;
   FRIEND_TEST_ALL_PREFIXES(PrivetV3SessionTest, Pairing);
+  FRIEND_TEST_ALL_PREFIXES(PrivetV3SessionTest, SendMessage);
 
   void OnInfoDone(const InitCallback& callback,
                   Result result,
@@ -82,6 +79,8 @@ class PrivetV3Session {
   void OnPairingConfirmDone(const ResultCallback& callback,
                             Result result,
                             const base::DictionaryValue& response);
+  void OnPairedHostAddedToContext(const std::string& auth_code,
+                                  const ResultCallback& callback);
   void OnAuthenticateDone(const ResultCallback& callback,
                           Result result,
                           const base::DictionaryValue& response);
@@ -91,15 +90,19 @@ class PrivetV3Session {
   void StartPostRequest(const std::string& api,
                         const base::DictionaryValue& input,
                         const MessageCallback& callback);
-  local_discovery::PrivetURLFetcher* CreateFetcher(
-      const std::string& api,
-      net::URLFetcher::RequestType request_type,
-      const MessageCallback& callback);
+  void SwitchToHttps();
+  GURL CreatePrivetURL(const std::string& path) const;
+  net::URLFetcher* CreateFetcher(const std::string& api,
+                                 net::URLFetcher::RequestType request_type,
+                                 const MessageCallback& callback);
   void DeleteFetcher(const FetcherDelegate* fetcher);
   void Cancel();
 
-  // Creates instances of PrivetURLFetcher.
-  scoped_ptr<local_discovery::PrivetHTTPClient> client_;
+  // Endpoint for the current session.
+  net::HostPortPair host_port_;
+
+  // Provides context for client_.
+  scoped_refptr<PrivetV3ContextGetter> context_getter_;
 
   // Current authentication token.
   std::string privet_auth_token_;
@@ -115,6 +118,9 @@ class PrivetV3Session {
 
   // HTTPS port of the device.
   uint16_t https_port_ = 0;
+
+  // If true, HTTPS will be used.
+  bool use_https_ = false;
 
   // List of fetches to cancel when session is destroyed.
   ScopedVector<FetcherDelegate> fetchers_;

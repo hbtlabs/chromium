@@ -50,7 +50,6 @@ CompositorOutputSurface::CompositorOutputSurface(
       weak_ptrs_(this) {
   DCHECK(output_surface_filter_.get());
   DCHECK(frame_swap_message_queue_.get());
-  capabilities_.max_frames_pending = 1;
   message_sender_ = RenderThreadImpl::current()->sync_message_filter();
   DCHECK(message_sender_.get());
 }
@@ -125,9 +124,13 @@ void CompositorOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
 
     if (context_provider()) {
       gpu::gles2::GLES2Interface* context = context_provider()->ContextGL();
+      const uint64_t fence_sync = context->InsertFenceSyncCHROMIUM();
       context->Flush();
-      uint32 sync_point = context->InsertSyncPointCHROMIUM();
-      context_provider()->ContextSupport()->SignalSyncPoint(sync_point,
+
+      gpu::SyncToken sync_token;
+      context->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+
+      context_provider()->ContextSupport()->SignalSyncToken(sync_token,
                                                             closure);
     } else {
       base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, closure);

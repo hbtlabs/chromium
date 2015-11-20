@@ -2770,6 +2770,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="BackgroundSync.NetworkObserver.HasPermission" enum="Boolean">
+  <owner>iclelland@chromium.org</owner>
+  <summary>
+    Records whether the browser has sufficient permissions to create a
+    BackgroundSyncNetworkObserver object on Android, at the point when it tries
+    to create it. This should never be false, but is being tracked in order to
+    help resolve crbug.com/545473.
+  </summary>
+</histogram>
+
 <histogram name="BackgroundSync.Registration.OneShot"
     enum="BackgroundSyncStatus">
   <owner>iclelland@chromium.org</owner>
@@ -2901,9 +2911,22 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Blink.DecodedImage.Orientation" enum="DecodedImageOrientation">
+  <owner>rob.buis@samsung.org</owner>
+  <summary>Image orientation inferred during decode.</summary>
+</histogram>
+
 <histogram name="Blink.DecodedImageType" enum="DecodedImageType">
   <owner>urvang@chromium.org</owner>
   <summary>Image codec inferred during decode.</summary>
+</histogram>
+
+<histogram name="Blink.Fonts.ShapeCache">
+  <owner>eae@chromium.org</owner>
+  <summary>
+    Total number of entries in all Blink ShapeCache instances. The value is
+    reported each time the FontCache::purge() method is called.
+  </summary>
 </histogram>
 
 <histogram name="Blink.MediaElement.Autoplay" enum="MediaElementAutoPlay">
@@ -3330,10 +3353,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Bookmarks.LaunchLocation" enum="BookmarkLaunchLocation">
   <owner>ianwen@chromium.org</owner>
-  <summary>
-    Logs every time a bookmark is launched from an assortment of different UI
-    surfaces.
-  </summary>
+  <summary>Logs a UI location from which a bookmark is launched.</summary>
 </histogram>
 
 <histogram name="Bookmarks.OnFaviconsChangedIconURL" enum="BooleanHit">
@@ -5036,6 +5056,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>The default JavaScript setting at profile open.</summary>
 </histogram>
 
+<histogram name="ContentSettings.DefaultKeygenSetting" enum="ContentSetting">
+  <owner>svaldez@chromium.org</owner>
+  <summary>
+    The default setting for using key generation in forms at profile open.
+  </summary>
+</histogram>
+
 <histogram name="ContentSettings.DefaultLocationSetting" enum="ContentSetting">
   <owner>toyoshim@chromium.org</owner>
   <summary>The default location setting at profile open.</summary>
@@ -5169,6 +5196,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>miguelg@chromium.org</owner>
   <summary>
     Number of times a given permission was requested from a secure origin.
+  </summary>
+</histogram>
+
+<histogram name="ContextMenu.SaveLinkType" enum="ContextMenuSaveLinkType">
+  <owner>qinmin@chromium.org</owner>
+  <summary>
+    Type of the url when user saves the content through the save link context
+    menu.
   </summary>
 </histogram>
 
@@ -6411,6 +6446,86 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="DataUse.TabModel.ExpiredActiveTabEntryRemovalDuration"
+    units="milliseconds">
+  <owner>bengr@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    The duration from the start time of a tab entry's latest data usage tracking
+    session, till when the entry is expired and removed from the tab model. This
+    is for tab entries that are still actively tracking data usage for a
+    Chromium tab.
+
+    Tab model maintains the tab entries, each pertaining to tracking sessions of
+    a single Chromium tab. These entries are considered expired after some
+    duration and can be removed from the tab model after that. The sample is
+    taken when an expired tab entry still tracking data usage is removed from
+    the tab model.
+  </summary>
+</histogram>
+
+<histogram name="DataUse.TabModel.ExpiredInactiveTabEntryRemovalDuration"
+    units="milliseconds">
+  <owner>bengr@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    The duration from the end time of a tab entry's latest data usage tracking
+    session, till when the entry is expired and removed from the tab model. This
+    is for tab entries that are not actively tracking data usage for a Chromium
+    tab.
+
+    Tab model maintains the tab entries, each pertaining to tracking sessions of
+    a single Chromium tab. These entries are considered expired after some
+    duration and can be removed from the tab model after that. The sample is
+    taken when an expired inactive tab entry is removed from the tab model.
+  </summary>
+</histogram>
+
+<histogram name="DataUse.TabModel.OldInactiveSessionRemovalDuration"
+    units="milliseconds">
+  <owner>bengr@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    The duration from the end time of a data usage tracking session, till when
+    the tracking session is removed from the tab model. This is for old tracking
+    sessions that are not actively tracking data usage.
+
+    Tab model maintains a limited number of tracking sessions per Chromium tab.
+    When this limit is reached oldest inactive tracking sessions are removed.
+    The sample is taken when an old inactive tracking session of a tab is
+    removed from the tab model.
+  </summary>
+</histogram>
+
+<histogram name="DataUse.TabModel.TrackingSessionLifetime" units="milliseconds">
+  <owner>bengr@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    The lifetime of a data usage tracking session of a Chromium tab, maintained
+    by the tab model. This is the duration between the time tracking started due
+    to an entry event and ended with an exit event. The sample is taken when the
+    data usage tracking session ends.
+  </summary>
+</histogram>
+
+<histogram name="DataUse.TabModel.UnexpiredTabEntryRemovalDuration"
+    units="milliseconds">
+  <owner>bengr@chromium.org</owner>
+  <owner>rajendrant@chromium.org</owner>
+  <summary>
+    The duration from the end time (start time, if still active) of a tab
+    entry's latest data usage tracking session, till when the entry is removed
+    from the tab model. This is for tab entries that are not expired yet, and
+    removed from the tab model.
+
+    Tab model maintains a limited number of entries, each pertaining to tracking
+    sessions of a single Chromium tab. When this limit is reached even after
+    removing expired tab entries, then oldest unexpired tab entries are removed.
+    The sample is taken when an unexpired tab entry is removed from the tab
+    model.
+  </summary>
+</histogram>
+
 <histogram name="DataUse.TrafficSize.System" units="bytes">
   <owner>amohammadkhan@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
@@ -6452,6 +6567,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="DefaultBrowser.AsyncSetAsDefault.Duration"
     units="milliseconds">
+  <obsolete>
+    Deprecated 2015/11. Renamed to DefaultBrowser.SetDefaultAsyncDuration.
+  </obsolete>
   <owner>pmonette@chromium.org</owner>
   <summary>
     How long it took to set Chrome as the default browser asynchronously in
@@ -6462,10 +6580,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="DefaultBrowser.AsyncSetAsDefault.Result"
     enum="DefaultBrowserAsyncAttemptResult">
+  <obsolete>
+    Deprecated 2015/11. Renamed to DefaultBrowser.SetDefaultResult.
+  </obsolete>
   <owner>pmonette@chromium.org</owner>
   <summary>
     The count of how many times users were successfully able to set Chrome as
     the default browser asynchronously in Windows 10+.
+  </summary>
+</histogram>
+
+<histogram name="DefaultBrowser.InfoBar.UserInteraction"
+    enum="DefaultBrowserInfoBarUserInteraction">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Possible user interactions with the default browser info bar.
   </summary>
 </histogram>
 
@@ -6477,12 +6606,33 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="DefaultBrowser.SetDefaultAsyncDuration" units="milliseconds">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    How long it took to set Chrome as the default browser asynchronously in
+    Windows 10+. The duration is recorded only on Success, Failure, Abandoned,
+    Retry and NoErrorsNotDefault result codes.
+  </summary>
+</histogram>
+
+<histogram name="DefaultBrowser.SetDefaultResult"
+    enum="SetDefaultAttemptResult">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The outcome of an attempt to set Chrome as the user's default browser.
+  </summary>
+</histogram>
+
 <histogram name="DefaultBrowser.State" enum="DefaultBrowserState">
   <owner>gab@chromium.org</owner>
   <summary>Whether Chrome was the default browser when it started up.</summary>
 </histogram>
 
 <histogram name="DefaultBrowserWarning.DontSetAsDefault" enum="BooleanHit">
+  <obsolete>
+    Deprecated 2015/11. The same information is available as the value Failure
+    in DefaultBrowser.SetDefaultResult.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     In the make-default infobar, the user explicitly declined to set Chrome as
@@ -6493,6 +6643,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DefaultBrowserWarning.Ignored" enum="BooleanHit">
+  <obsolete>
+    Deprecated 2015/11. Renamed to DefaultBrowser.InfoBar.UserInteraction.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     The user ignored the make-default infobar (it was eventually dismissed along
@@ -6501,6 +6654,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DefaultBrowserWarning.SetAsDefault" enum="BooleanHit">
+  <obsolete>
+    Deprecated 2015/11. Renamed to DefaultBrowser.Infobar.UserInteraction. There
+    is no longer a distinction between interactive or not.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     In the make-default infobar, the user clicked a button making Chrome the
@@ -6509,6 +6666,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DefaultBrowserWarning.SetAsDefaultUI" enum="BooleanHit">
+  <obsolete>
+    Deprecated 2015/11. Renamed to DefaultBrowser.Infobar.UserInteraction. There
+    is no longer a distinction between interactive or not.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     Same as SetAsDefault, but in Win8+ (resulting in interactive UI instead of
@@ -6519,10 +6680,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="DefaultBrowserWarning.SetAsDefaultUIFailed" enum="BooleanHit">
+  <obsolete>
+    Deprecated 2015/11. The same information is available as the value Failure
+    in DefaultBrowser.SetDefaultResult.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     The user dismissed the interactive SetAsDefaultUI without making an explicit
     choice (or the UI failed to come up for another reason).
+  </summary>
+</histogram>
+
+<histogram name="DefaultProtocolClient.SetDefaultResult"
+    enum="SetDefaultAttemptResult">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The outcome of an attempt to set Chrome as the user's default client for a
+    protocol.
   </summary>
 </histogram>
 
@@ -9426,6 +9600,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The time taken to load the script file for the EmbeddedWorkerInstance
     without network access.
   </summary>
+</histogram>
+
+<histogram name="EnhancedBookmarks.AllBookmarksCount">
+  <owner>ianwen@chromium.org</owner>
+  <owner>kkimlabs@chromium.org</owner>
+  <summary>Number of bookmarks the user has. Android only.</summary>
 </histogram>
 
 <histogram name="EnhancedBookmarks.SyncExperimentState"
@@ -20956,6 +21136,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Navigation.Start.RendererBrowserDifference.Negative"
+    units="milliseconds">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The difference between Now() in the renderer and browser_navigation_start
+    for browser-initiated navigations if the difference is negative. This value
+    should ideally only reflect the IPC time between the browser process and
+    renderer process, but in practice could be skewed by inter-process timing
+    errors. If the clocks used for TimeTicks are monotonic across processes, all
+    samples should fall into the Positive bucket.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.Start.RendererBrowserDifference.Positive"
+    units="milliseconds">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The difference between Now() in the renderer and browser_navigation_start
+    for browser-initiated navigations if the difference is positive. This value
+    should ideally only reflect the IPC time between the browser process and
+    renderer process, but in practice could be skewed by inter-process timing
+    errors. If the clocks used for TimeTicks are monotonic across processes, all
+    samples should fall into the Positive bucket.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.TimeToCommit" units="milliseconds">
   <owner>carlosk@chromium.org</owner>
   <summary>
@@ -29822,9 +30028,29 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="OfflinePages.BatchDelete.Count">
+  <owner>jianli@chromium.org</owner>
+  <summary>Number of offline pages that are deleted in a batch.</summary>
+</histogram>
+
+<histogram name="OfflinePages.BatchDelete.TotalPageSize" units="KB">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Total size, in kilobytes, of all offline pages that are deleted in a batch.
+  </summary>
+</histogram>
+
 <histogram name="OfflinePages.ClearAllStatus" enum="OfflinePagesClearAllStatus">
   <owner>jianli@chromium.org</owner>
   <summary>Status code of wiping out the offline page data.</summary>
+</histogram>
+
+<histogram name="OfflinePages.DeletePage.AccessCount">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Number of accesses to the offline page since its creation. This is reported
+    when the offline page was deleted.
+  </summary>
 </histogram>
 
 <histogram name="OfflinePages.DeletePage.FreeSpaceMB" units="MB">
@@ -29843,10 +30069,86 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="OfflinePages.DeletePage.LastOpenToCreated" units="minutes">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Length of time between when an offline page was created and was opened last
+    time. This is reported when the page was deleted.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.DeletePage.PageSize" units="KB">
+  <owner>jianli@chromium.org</owner>
+  <summary>Size of the offline page, in kilobytes, that was deleted.</summary>
+</histogram>
+
+<histogram name="OfflinePages.DeletePage.TimeSinceLastOpen" units="minutes">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Length of time between when an offline page was last opened and was deleted.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.DeletePage.TotalPageSizeAsPercentageOfFreeSpace"
+    units="%">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    The percentage of space taken by offline pages from the free space that
+    could be available, if the feature was not present. I.e. considering
+    situation where the user has: Free Space, Offline content, other apps and
+    data. This is a percentage of: Offline content / (Offline content + Free
+    Space).
+
+    The value will be recorded after user deletes a single or multiple offline
+    pages. In case pages are removed in bulk, this value will be reported once.
+    This value is only reported with deleting, as we are trying to infer if lack
+    of free space might have caused the user to delete.
+  </summary>
+</histogram>
+
 <histogram name="OfflinePages.DeletePageResult"
     enum="OfflinePagesDeletePageResult">
   <owner>jianli@chromium.org</owner>
   <summary>Result of removing an offline copy for a page.</summary>
+</histogram>
+
+<histogram name="OfflinePages.Filter.OnlineWhenEntering" enum="Boolean">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Whether user is connected when entering the filter with offline only
+    content.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Filter.OnlineWhenLeaving" enum="Boolean">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Whether user is connected when leaving the filter with offline only content.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.FirstOpenSinceCreated" units="minutes">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    The time elapsed between creation of the offline page and the first time it
+    was opened.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.IncognitoSave" enum="Boolean">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Whether the page that was being saved offline was in incognito mode.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.LaunchLocation" enum="StarsLaunchLocation">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>Logs a UI location from which an offline page is launched.</summary>
 </histogram>
 
 <histogram name="OfflinePages.LoadStatus" enum="OfflinePagesLoadStatus">
@@ -29864,6 +30166,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Whether an attempt to load the offline pages metadata store was successful.
   </summary>
+</histogram>
+
+<histogram name="OfflinePages.OfflinePageCount">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>Number of offline pages the user has. Android only.</summary>
+</histogram>
+
+<histogram name="OfflinePages.OnlineOnOpen" enum="Boolean">
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Whether the user was online when a saved page with offline copy was opened.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.OpenSinceLastOpen" units="minutes">
+  <owner>jianli@chromium.org</owner>
+  <summary>Length of time between two consecutive opens.</summary>
 </histogram>
 
 <histogram name="OfflinePages.PageLifetime" units="minutes">
@@ -29911,6 +30231,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>jianli@chromium.org</owner>
   <summary>
     The amount of time taken to save an offline copy for a page.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.TotalPageSize" units="MB">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Total size of all the offline pages saved by the user.
+
+    This value is recorded whenever the number of pages change, meaning after a
+    page is added or removed. If pages are removed in bulk, this value will be
+    reported only once.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.TotalPageSizePercentage" units="%">
+  <owner>fgorski@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Total size of all the offline pages saved by the user as a percentage of
+    total storage size.
+
+    This value is recorded whenever the number of pages change, meaning after a
+    page is added or removed.
   </summary>
 </histogram>
 
@@ -30767,6 +31111,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Number of pages that had any HTML form interaction before next page load.
   </summary>
+</histogram>
+
+<histogram name="PageLoad.Clients.GoogleCaptcha.Events"
+    enum="GoogleCaptchaEvent">
+  <owner>mdw@chromium.org</owner>
+  <summary>Events related to Google CAPTCHA pages being seen by users.</summary>
 </histogram>
 
 <histogram name="PageLoad.EventCounts" enum="PageLoadEvent">
@@ -40283,6 +40633,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="SBClientDownload.ZipFileSuccess" enum="BooleanSuccess">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    For each zip file analyzed by the SafeBrowsing download service, records if
+    the unpacking was 100% successful.
+  </summary>
+</histogram>
+
 <histogram name="SBClientMalware.ClassificationStart" enum="BooleanHit">
   <owner>noelutz@chromium.org</owner>
   <summary>
@@ -40977,6 +41335,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Scheduling.SwapToAckLatency" units="microseconds">
+  <owner>brianderson@chromium.org</owner>
+  <summary>How long it takes the swap ack to return after a swap.</summary>
+</histogram>
+
 <histogram name="Sdch3.AdvertisedWithSecureScheme" enum="BooleanHttps">
   <obsolete>
     Experiment complete, histogram gathering code removed.
@@ -41530,6 +41893,60 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Measures usage of window.external.AddSearchProvider and user interaction
     with the resulting confirmation dialog (if any).
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchIconSpriteAnimated"
+    enum="ContextualSearchIconSpriteAnimated">
+  <owner>donnd@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Whether search results were seen, whether the search provider icon sprite
+    was animated when the panel first appeared, and the triggering gesture. If
+    animation is disabled due to a field trial, we still log
+    &quot;animated&quot; if the animation would have run otherwise.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchPeekPromoCount" units="count">
+  <owner>donnd@chromium.org</owner>
+  <owner>pedrosimonetti@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The number of times the Peek Promo was seen. This histogram will be emitted
+    when the Panel closes. The panel is always visible when the Peek Promo is
+    shown, so this histogram will always be emitted after a Promo is shown
+    (except in the case of a crash). This histogram does not care whether the
+    Panel was opened.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchPeekPromoCountUntilOpened"
+    units="count">
+  <owner>donnd@chromium.org</owner>
+  <owner>pedrosimonetti@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The number of times the Peek Promo was seen until the Panel was opened. This
+    histogram will be emitted when the Panel closes, if the Panel was opened
+    with the Peek Promo visible. If the Panel is not opened, nothing will be
+    emitted.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchPeekPromoOutcome"
+    enum="ContextualSearchPeekPromoOutcome">
+  <owner>donnd@chromium.org</owner>
+  <owner>pedrosimonetti@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The outcome of the Contextual Search Peek Promo for those who have seen the
+    promo and for those who would have seen the promo if it was enabled, so we
+    can compare the effect of the promo on users opening the Panel. This
+    histogram will be emitted when the Panel closes, if the conditions to
+    display the Peek Promo are met, regardless of whether the Peek Promo was
+    actually visible (the Promo is controlled by Finch) and regardless of
+    whether the Panel was opened.
   </summary>
 </histogram>
 
@@ -42548,6 +42965,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The enabled state of the Home button pref when pushed up to sync from a
     change made locally.
+  </summary>
+</histogram>
+
+<histogram name="Settings.StartSetAsDefault" enum="BooleanHit">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The user clicked &quot;Make Google Chrome the default browser&quot; on the
+    settings page.
   </summary>
 </histogram>
 
@@ -43902,6 +44327,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="SiteIsolation.OutOfProcessIframes">
+  <owner>nasko@chromium.org</owner>
+  <summary>
+    The count of all out-of-process iframes.  Recorded once per UMA ping.
+  </summary>
+</histogram>
+
 <histogram name="SiteIsolation.XSD.DataLength" units="byte">
   <owner>creis@chromium.org</owner>
   <summary>
@@ -44311,6 +44743,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     components of the version of the software reporter. The high word is the
     first component when there are more than one, and the low word is either the
     second or third one, depending if there are at least 3, or 4 components.
+  </summary>
+</histogram>
+
+<histogram name="SoftwareReporter.MemoryUsed" units="kb">
+  <owner>alito@chromium.org</owner>
+  <summary>
+    The memory used by the software reporter tool as reported by the tool itself
+    via the registry. Logged just after the software reporter tool has finished.
   </summary>
 </histogram>
 
@@ -44773,6 +45213,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Stars.LaunchLocation" enum="StarsLaunchLocation">
+  <owner>ianwen@chromium.org</owner>
+  <summary>Logs a UI location from which a bookmark is launched.</summary>
+</histogram>
+
 <histogram name="Stars.No_Images_Snippets" units="percent">
   <owner>yefim@chromium.org</owner>
   <summary>
@@ -44867,6 +45312,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The amount of time that elapsed during the second section of
     BrowserMainRunnerImpl::Initialize.
+  </summary>
+</histogram>
+
+<histogram name="Startup.BrowserMainToRendererMain" units="milliseconds">
+  <owner>fdoray@chromium.org</owner>
+  <summary>
+    Time from the ChromeMain() entry in the browser process to the first
+    RendererMain() entry.
   </summary>
 </histogram>
 
@@ -45052,8 +45505,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>erikchen@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>
-    [Desktop] DEPRECATED. Measure the elapsed time from process launch to the
-    first main frame load of the first web contents. Deprecated in favor of
+    [Desktop] DEPRECATED (but kept as a known basis until M48 is phased out).
+    Measure the elapsed time from process launch to the first main frame load of
+    the first web contents. Deprecated in favor of
     Startup.FirstWebContents.MainFrameLoad2 which now avoids counting ill-cases
     (ref. FirstWebContentsProfiler::FinishReason).
   </summary>
@@ -45093,8 +45547,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>erikchen@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>
-    [Desktop] DEPRECATED. Measure the elapsed time from process launch to the
-    first non- empty paint of the first web contents. Deprecated in favor of
+    [Desktop] DEPRECATED (but kept as a known basis until M48 is phased out).
+    Measure the elapsed time from process launch to the first non- empty paint
+    of the first web contents. Deprecated in favor of
     Startup.FirstWebContents.NonEmptyPaint2 which now avoids counting ill-cases
     (ref. FirstWebContentsProfiler::FinishReason).
   </summary>
@@ -46369,6 +46824,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Enumeration of types of extension association failures (M18 and earlier were
     mispelled with this histogram).
+  </summary>
+</histogram>
+
+<histogram name="Sync.ExtraSyncDataCount" units="entries">
+  <owner>gangwu@chromium.org</owner>
+  <summary>
+    Counts the total number of extra copies of sync data in memory. This count
+    is emitted once, after loading Sync Directory. The count will indicate how
+    many Directory entities fail to share client and server specifics.
   </summary>
 </histogram>
 
@@ -47731,6 +48195,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Elapsed time between a tab getting discarded to eventually being reloaded by
     the user.
+  </summary>
+</histogram>
+
+<histogram name="TabManager.Discarding.InactiveToReloadTime" units="ms">
+  <owner>georgesak@chromium.org</owner>
+  <summary>
+    Elapsed time between the time a tab switched from being active to inactive
+    (that eventually gets discarded) until it gets reloaded.
   </summary>
 </histogram>
 
@@ -56016,6 +56488,37 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="19" label="Share image"/>
 </enum>
 
+<enum name="ContextMenuSaveLinkType" type="int">
+  <summary>
+    The content type when user chooses save link context menu option
+  </summary>
+  <int value="0" label="Unkown"/>
+  <int value="1" label="Text"/>
+  <int value="2" label="Image"/>
+  <int value="3" label="Audio"/>
+  <int value="4" label="Video"/>
+  <int value="5" label="Pdf"/>
+</enum>
+
+<enum name="ContextualSearchIconSpriteAnimated" type="int">
+  <int value="0" label="Animated, seen, from tap"/>
+  <int value="1" label="Animated, not seen, from tap"/>
+  <int value="2" label="Not animated, seen, from tap"/>
+  <int value="3" label="Not animated, not seen, from tap"/>
+  <int value="4" label="Animated, seen, from long press"/>
+  <int value="5" label="Animated, not seen, from long press"/>
+  <int value="6" label="Not animated, seen, from long press"/>
+  <int value="7" label="Not animated, not seen, from long press"/>
+</enum>
+
+<enum name="ContextualSearchPeekPromoOutcome" type="int">
+  <summary>The outcome of the Contextual Search Peek Promo.</summary>
+  <int value="0" label="Peek Promo was seen, Panel was opened"/>
+  <int value="1" label="Peek Promo was seen, Panel was not opened"/>
+  <int value="2" label="Peek Promo was not seen, Panel was opened"/>
+  <int value="3" label="Peek Promo was not seen, Panel was not opened"/>
+</enum>
+
 <enum name="ContextualSearchShouldTranslate" type="int">
   <summary>
     Notes when a translation one-box should be forced by Contextual Search.
@@ -56600,6 +57103,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="8" label="Data use tracking ended dialog opted out"/>
 </enum>
 
+<enum name="DecodedImageOrientation" type="int">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Top Left"/>
+  <int value="2" label="Top Right"/>
+  <int value="3" label="Bottom Right"/>
+  <int value="4" label="Bottom Left"/>
+  <int value="5" label="Left Top"/>
+  <int value="6" label="Right Top"/>
+  <int value="7" label="Right Bottom"/>
+  <int value="8" label="Left Bottom"/>
+</enum>
+
 <enum name="DecodedImageType" type="int">
   <int value="0" label="kImageUnknown"/>
   <int value="1" label="kImageJPEG"/>
@@ -56611,6 +57126,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="DefaultBrowserAsyncAttemptResult" type="int">
+  <obsolete>
+    Deprecated 2015/11. Renamed to SetDefaultAttemptResult.
+  </obsolete>
   <int value="0" label="Success">No errors encountered.</int>
   <int value="1" label="Already default">
     Chrome was already the default web client. This counts as a successful
@@ -56632,6 +57150,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="6" label="Retry">
     The user initiated another attempt while the asynchronous operation was
     already in progress.
+  </int>
+</enum>
+
+<enum name="DefaultBrowserInfoBarUserInteraction" type="int">
+  <int value="0" label="Start set as default">
+    The user clicked the &quot;Set as default&quot; button.
+  </int>
+  <int value="1" label="Don't ask again">
+    The user doesn't want to be reminded again.
+  </int>
+  <int value="2" label="Ignore info bar">
+    The user did not interact with the info bar.
   </int>
 </enum>
 
@@ -58392,6 +58922,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="308" label="Default printer selection rules"/>
   <int value="309" label="Allow Dinosaur Easter Egg Game"/>
   <int value="310" label="Whether RC4 cipher suites in TLS are enabled"/>
+  <int value="311" label="Default value for Display Rotation"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -59125,6 +59656,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="389" label="EASY_UNLOCK_PRIVATE_ON_CONNECTION_STATUS_CHANGED"/>
   <int value="390" label="EASY_UNLOCK_PRIVATE_ON_DATA_RECEIVED"/>
   <int value="391" label="EASY_UNLOCK_PRIVATE_ON_SEND_COMPLETED"/>
+  <int value="392" label="DISPLAY_SOURCE_ON_SINKS_UPDATED"/>
 </enum>
 
 <enum name="ExtensionFileWriteResult" type="int">
@@ -60268,6 +60800,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1095" label="SETTINGSPRIVATE_SETDEFAULTZOOMPERCENTFUNCTION"/>
   <int value="1096" label="BLUETOOTHPRIVATE_CONNECT"/>
   <int value="1097" label="BLUETOOTHPRIVATE_FORGETDEVICE"/>
+  <int value="1098" label="DISPLAYSOURCE_GETAVAILABLESINKS"/>
+  <int value="1099" label="DISPLAYSOURCE_REQUESTAUTHENTICATION"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -61806,7 +62340,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="930" label="PresentationRequestReconnect"/>
   <int value="931" label="PresentationRequestGetAvailability"/>
   <int value="932" label="PresentationRequestConnectionAvailableEventListener"/>
-  <int value="933" label="PresentationConnectionClose"/>
+  <int value="933" label="PresentationConnectionTerminate"/>
   <int value="934" label="PresentationConnectionSend"/>
   <int value="935" label="PresentationConnectionStateChangeEventListener"/>
   <int value="936" label="PresentationConnectionMessageEventListener"/>
@@ -61870,6 +62404,34 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="994" label="MeterElementWithNoneAppearance"/>
   <int value="995" label="MeterElementWithRatingAppearance"/>
   <int value="996" label="MeterElementWithRelevancyAppearance"/>
+  <int value="997" label="SelectionAnchorNode"/>
+  <int value="998" label="SelectionAnchorOffset"/>
+  <int value="999" label="SelectionFocusNode"/>
+  <int value="1000" label="SelectionFocusOffset"/>
+  <int value="1001" label="SelectionIsCollapsed"/>
+  <int value="1002" label="SelectionRangeCount"/>
+  <int value="1003" label="SelectionGetRangeAt"/>
+  <int value="1004" label="SelectionAddRange"/>
+  <int value="1005" label="SelectionRemoveAllRanges"/>
+  <int value="1006" label="SelectionCollapse"/>
+  <int value="1007" label="SelectionCollapseToStart"/>
+  <int value="1008" label="SelectionCollapseToEnd"/>
+  <int value="1009" label="SelectionExtend"/>
+  <int value="1010" label="SelectionSelectAllChildren"/>
+  <int value="1011" label="SelectionDeleteDromDocument"/>
+  <int value="1012" label="SelectionDOMString"/>
+  <int value="1013" label="InputTypeRangeVerticalAppearance"/>
+  <int value="1014" label="CSSFilterReference"/>
+  <int value="1015" label="CSSFilterGrayscale"/>
+  <int value="1016" label="CSSFilterSepia"/>
+  <int value="1017" label="CSSFilterSaturate"/>
+  <int value="1018" label="CSSFilterHueRotate"/>
+  <int value="1019" label="CSSFilterInvert"/>
+  <int value="1020" label="CSSFilterOpacity"/>
+  <int value="1021" label="CSSFilterBrightness"/>
+  <int value="1022" label="CSSFilterContrast"/>
+  <int value="1023" label="CSSFilterBlur"/>
+  <int value="1024" label="CSSFilterDropShadow"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -61877,6 +62439,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="NoCORS"/>
   <int value="2" label="CORS"/>
   <int value="3" label="CORSWithForcedPreflight"/>
+  <int value="4" label="Navigate"/>
 </enum>
 
 <enum name="FFmpegCodecHashes" type="int">
@@ -63287,6 +63850,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="4" label="CANT_CREATE_DIR"/>
   <int value="5" label="CANT_WRITE_TO_PATH"/>
   <int value="6" label="UNSET"/>
+</enum>
+
+<enum name="GoogleCaptchaEvent" type="int">
+  <int value="0" label="Google CAPTCHA shown"/>
+  <int value="1" label="Google CAPTCHA solved"/>
 </enum>
 
 <enum name="GoogleNowCardTypeId" type="int">
@@ -65916,6 +66484,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-867087281" label="enable-virtual-keyboard"/>
   <int value="-864266073" label="cros-regions-mode"/>
   <int value="-864205629" label="enable-offline-load-stale-cache"/>
+  <int value="-861678473" label="disable-offer-upload-credit-cards"/>
   <int value="-853594220" label="disable-new-avatar-menu"/>
   <int value="-836123854" label="wallet-service-use-sandbox"/>
   <int value="-820041355" label="enable-transition-compositing"/>
@@ -66279,6 +66848,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2122876605" label="enable-bleeding-edge-rendering-fast-paths"/>
   <int value="2137347307" label="enable-drive-apps-in-app-list"/>
   <int value="2137599770" label="enable-win32k-renderer-lockdown"/>
+  <int value="2141463681" label="enable-offer-upload-credit-cards"/>
 </enum>
 
 <enum name="LoginDatabaseInitError" type="int">
@@ -73146,6 +73716,34 @@ To add a new entry, add it with any value and run test to compute valid value.
   </int>
 </enum>
 
+<enum name="SetDefaultAttemptResult" type="int">
+  <int value="0" label="Success">Chrome was set as the default web client.</int>
+  <int value="1" label="Already default">
+    Chrome was already the default web client. This counts as a successful
+    attempt.
+  </int>
+  <int value="2" label="Failure">
+    Chrome was not set as the default web client.
+  </int>
+  <int value="3" label="Abandoned">
+    The attempt was abandoned because the observer was destroyed.
+  </int>
+  <int value="4" label="Launch failure">
+    Failed to launch the process to set Chrome as the default web client
+    asynchronously.
+  </int>
+  <int value="5" label="Other worker">
+    Another worker is already in progress to make Chrome the default web client.
+  </int>
+  <int value="6" label="Retry">
+    The user initiated another attempt while the asynchronous operation was
+    already in progress.
+  </int>
+  <int value="7" label="No errors, not default">
+    No errors were encountered yet Chrome is still not the default web client.
+  </int>
+</enum>
+
 <enum name="SHA1Status" type="int">
   <summary>
     Whether or not SHA-1 was present in a certificate chain and, if it was, when
@@ -74642,6 +75240,15 @@ To add a new entry, add it with any value and run test to compute valid value.
       label="Displayed clock interstitial. (DISPLAYED_CLOCK_INTERSTITIAL)"/>
 </enum>
 
+<enum name="StarsLaunchLocation" type="int">
+  <int value="0" label="All Items"/>
+  <int value="1" label="Uncategorized"/>
+  <int value="2" label="Folder"/>
+  <int value="3" label="Filter"/>
+  <int value="4" label="Search"/>
+  <int value="5" label="Bookmark Editor"/>
+</enum>
+
 <enum name="StartupProfilingFinishReason" type="int">
   <int value="0" label="Done (all metrics gathered)"/>
   <int value="1"
@@ -75522,7 +76129,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="10" label="kDefaultSearchProviderName"/>
   <int value="11" label="kPinnedTabs"/>
   <int value="12" label="kKnownDisabled (Obsolete 07/2014)"/>
-  <int value="13" label="kProfileResetPromptMemento"/>
+  <int value="13" label="kProfileResetPromptMemento (Obsolete 11/2015)"/>
   <int value="14" label="kDefaultSearchProviderDataPrefName"/>
   <int value="15" label="kPreferenceResetTime"/>
   <int value="16" label="kSafeBrowsingIncidentReportSent"/>
@@ -75968,7 +76575,7 @@ To add a new entry, add it with any value and run test to compute valid value.
 
 <enum name="VariationsFirstRunResult" type="int">
   <int value="0" label="Seed imported successfully"/>
-  <int value="1" label="Seed import failed - no callback"/>
+  <int value="1" label="Seed import failed - no callback (Obsolete)"/>
   <int value="2" label="Seed import failed - no first run seed"/>
   <int value="3" label="Seed import failed - failed to store seed"/>
 </enum>
@@ -76535,6 +77142,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="7" label="Transparency viewer opened"/>
   <int value="8" label="Connection help opened"/>
   <int value="9" label="Site settings opened"/>
+  <int value="10" label="Security details opened"/>
 </enum>
 
 <enum name="WebSocketHandshakeResult" type="int">
@@ -76641,6 +77249,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="325375649" label="chrome://settings-frame/"/>
   <int value="361621847" label="chrome://make-metro/"/>
   <int value="554090510" label="chrome://first-run/"/>
+  <int value="581234974" label="chrome://tcmalloc/"/>
   <int value="646837226" label="chrome://crashes/"/>
   <int value="659389881" label="chrome://gpu/"/>
   <int value="689991895" label="chrome://supervised-user-internals/"/>
@@ -76965,7 +77574,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="Failure"/>
   <suffix name="Abandoned"/>
   <suffix name="Retry"/>
+  <suffix name="NoErrorsNotDefault"/>
   <affected-histogram name="DefaultBrowser.AsyncSetAsDefault.Duration"/>
+  <affected-histogram name="DefaultBrowser.SetDefaultAsyncDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="AutofillDataAvailability" separator=".">
@@ -77335,17 +77946,6 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="ChromeOS.MachineIdRegen.AgeSeconds"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="Clients.FromGWS" separator="." ordering="prefix">
-  <suffix name="PageLoadClientFromGWS"
-      label="PageLoadMetrics that are a result of a navigation from a web
-             search"/>
-  <affected-histogram
-      name="PageLoad.Timing2.NavigationToDOMContentLoadedEventFired"/>
-  <affected-histogram name="PageLoad.Timing2.NavigationToFirstLayout"/>
-  <affected-histogram name="PageLoad.Timing2.NavigationToFirstTextPaint"/>
-  <affected-histogram name="PageLoad.Timing2.NavigationToLoadEventFired"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="CloudPrintRequests" separator=".">
   <suffix name="Register" label="Register request"/>
   <suffix name="UpdatePrinter" label="Update printer request"/>
@@ -77366,6 +77966,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Scheduling.CommitToReadyToActivateDuration"/>
   <affected-histogram name="Scheduling.DrawDuration"/>
   <affected-histogram name="Scheduling.PrepareTilesDuration"/>
+  <affected-histogram name="Scheduling.SwapToAckLatency"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="CompositorTimingHistoryProcess2" separator="."
@@ -80417,6 +81018,21 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="PageLoad.Timing2.NavigationToLoadEventFired"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="PageLoadMetricsClients" separator="."
+    ordering="prefix">
+  <suffix name="Clients.FromGWS"
+      label="PageLoadMetrics that are a result of a navigation from a Google
+             web search"/>
+  <affected-histogram
+      name="PageLoad.Timing2.NavigationToDOMContentLoadedEventFired"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstContentfulPaint"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstImagePaint"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstLayout"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstPaint"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstTextPaint"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToLoadEventFired"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="PageLoadType">
   <suffix name="HistoryLoad"
       label="but only for user pressing back or forward"/>
@@ -81815,6 +82431,7 @@ To add a new entry, add it with any value and run test to compute valid value.
 <histogram_suffixes name="StartupTemperature" separator=".">
   <suffix name="ColdStartup" label="Startup was cold (mostly hard faults)."/>
   <suffix name="WarmStartup" label="Startup was warm (almost no hard faults)."/>
+  <affected-histogram name="Startup.BrowserMainToRendererMain"/>
   <affected-histogram name="Startup.BrowserMessageLoopStartTime"/>
   <affected-histogram name="Startup.BrowserMessageLoopStartTimeFromMainEntry"/>
   <affected-histogram

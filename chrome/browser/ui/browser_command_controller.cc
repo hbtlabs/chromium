@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/browser_command_controller.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -165,7 +167,6 @@ class SwitchToMetroUIHandler
       return;
     }
     first_check_ = false;
-    default_browser_worker_->StartCheckIsDefault();
   }
 
   bool IsInteractiveSetDefaultPermitted() override {
@@ -525,6 +526,9 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
 #if defined(OS_MACOSX)
     case IDC_PRESENTATION_MODE:
       chrome::ToggleFullscreenMode(browser_);
+      break;
+    case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
+      chrome::ToggleFullscreenToolbar(browser_);
       break;
 #endif
     case IDC_EXIT:
@@ -1291,6 +1295,8 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
 
   command_updater_.UpdateCommandEnabled(IDC_FULLSCREEN, fullscreen_enabled);
   command_updater_.UpdateCommandEnabled(IDC_PRESENTATION_MODE,
+                                        fullscreen_enabled);
+  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_FULLSCREEN_TOOLBAR,
                                         fullscreen_enabled);
 
   UpdateCommandsForBookmarkBar();

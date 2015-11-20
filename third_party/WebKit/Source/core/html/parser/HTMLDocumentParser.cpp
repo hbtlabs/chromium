@@ -207,6 +207,7 @@ HTMLDocumentParser::~HTMLDocumentParser()
 DEFINE_TRACE(HTMLDocumentParser)
 {
     visitor->trace(m_treeBuilder);
+    visitor->trace(m_parserScheduler);
     visitor->trace(m_xssAuditorDelegate);
     visitor->trace(m_scriptRunner);
     visitor->trace(m_preloader);
@@ -599,6 +600,11 @@ void HTMLDocumentParser::pumpPendingSpeculations()
 
     TRACE_EVENT_END1("devtools.timeline", "ParseHTML", "endData", InspectorParseHtmlEvent::endData(lineNumber().zeroBasedInt() - 1));
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());
+}
+
+HTMLTreeBuilder* HTMLDocumentParser::treeBuilder() const
+{
+    return m_treeBuilder.get();
 }
 
 void HTMLDocumentParser::forcePlaintextForTextDocument()

@@ -80,6 +80,10 @@
     "label": "//third_party/WebKit/public:blink_platform_unittests",
     "type": "unknown",
   },
+  "breakpad_unittests": {
+    "label": "//breakpad:breakpad_unittests",
+    "type": "console_test_launcher",
+  },
   "browser_tests": {
     "label": "//chrome/test:browser_tests",
     "type": "windowed_test_launcher",
@@ -405,6 +409,18 @@
       "--xvfb",
       "../../tools/perf/run_tests",
       "-v",
+    ],
+  },
+  "telemetry_unittests": {
+    "label": "//chrome/test:telemetry_unittests",
+    "type": "script",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "args": [
+      "--xvfb",
+      "../../tools/telemetry/run_tests",
+      "-v",
+      "--chrome-root",
+      "../../",
     ],
   },
   "ui_android_unittests": {

@@ -75,12 +75,6 @@ struct TranslationTable {
     OmniboxResultView::HOVERED, OmniboxResultView::URL },
   { NativeTheme::kColorId_ResultsTableSelectedUrl,
     OmniboxResultView::SELECTED, OmniboxResultView::URL },
-  { NativeTheme::kColorId_ResultsTableNormalDivider,
-    OmniboxResultView::NORMAL, OmniboxResultView::DIVIDER },
-  { NativeTheme::kColorId_ResultsTableHoveredDivider,
-    OmniboxResultView::HOVERED, OmniboxResultView::DIVIDER },
-  { NativeTheme::kColorId_ResultsTableSelectedDivider,
-    OmniboxResultView::SELECTED, OmniboxResultView::DIVIDER },
 };
 
 struct TextStyle {
@@ -257,7 +251,7 @@ SkColor OmniboxResultView::GetColor(
   }
 
   NOTREACHED();
-  return SK_ColorRED;
+  return gfx::kPlaceholderColor;
 }
 
 void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {

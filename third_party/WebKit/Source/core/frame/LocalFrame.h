@@ -31,9 +31,12 @@
 #include "core/CoreExport.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/Frame.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrameLifecycleNotifier.h"
 #include "core/frame/LocalFrameLifecycleObserver.h"
+#include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/FrameLoader.h"
+#include "core/loader/NavigationScheduler.h"
 #include "core/page/FrameTree.h"
 #include "core/paint/PaintPhase.h"
 #include "platform/Supplementable.h"
@@ -56,14 +59,11 @@ class EventHandler;
 class FloatSize;
 class FrameConsole;
 class FrameSelection;
-class FrameView;
 class HTMLPlugInElement;
 class InputMethodController;
 class IntPoint;
 class IntSize;
-class InstrumentingAgents;
 class LocalDOMWindow;
-class NavigationScheduler;
 class Node;
 class NodeTraversal;
 class Range;
@@ -110,7 +110,7 @@ public:
     FrameView* view() const;
     Document* document() const;
     void setPagePopupOwner(Element&);
-    Element* pagePopupOwner() const { return m_pagePopupOwner.get(); }
+    Element* pagePopupOwner() const;
 
     LayoutView* contentLayoutObject() const; // Root of the layout tree for the document contained in this frame.
 
@@ -184,13 +184,15 @@ public:
 
     bool shouldThrottleRendering() const;
 
-    // ========
-
     // Returns the frame scheduler, creating one if needed.
     WebFrameScheduler* frameScheduler();
     void updateFrameSecurityOrigin();
 
+    bool isNavigationAllowed() const { return m_navigationDisableCount == 0; }
+
 private:
+    friend class FrameNavigationDisabler;
+
     LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*);
 
     // Internal Frame helper overrides:
@@ -203,6 +205,9 @@ private:
     PassOwnPtr<DragImage> paintIntoDragImage(const DisplayItemClientWrapper&,
         RespectImageOrientationEnum shouldRespectImageOrientation, const GlobalPaintFlags,
         IntRect paintingRect, float opacity = 1);
+
+    void enableNavigation() { --m_navigationDisableCount; }
+    void disableNavigation() { ++m_navigationDisableCount; }
 
     mutable FrameLoader m_loader;
     OwnPtrWillBeMember<NavigationScheduler> m_navigationScheduler;
@@ -221,6 +226,8 @@ private:
     const OwnPtrWillBeMember<InputMethodController> m_inputMethodController;
     OwnPtr<WebFrameScheduler> m_frameScheduler;
 
+    int m_navigationDisableCount;
+
 #if ENABLE(OILPAN)
     // Oilpan: in order to reliably finalize plugin elements with
     // renderer-less plugins, the frame keeps track of them. When
@@ -235,8 +242,7 @@ private:
     // weak callback, the set itself is not on the heap and the
     // references are bare pointers (rather than WeakMembers.)
     // See LocalFrame::clearWeakMembers().
-    GC_PLUGIN_IGNORE("553613")
-    HashSet<HTMLPlugInElement*> m_pluginElements;
+    HashSet<UntracedMember<HTMLPlugInElement>> m_pluginElements;
 #endif
 
     float m_pageZoomFactor;
@@ -254,11 +260,6 @@ private:
 inline void LocalFrame::init()
 {
     m_loader.init();
-}
-
-inline LocalDOMWindow* LocalFrame::localDOMWindow() const
-{
-    return m_domWindow.get();
 }
 
 inline FrameLoader& LocalFrame::loader() const
@@ -326,6 +327,17 @@ inline EventHandler& LocalFrame::eventHandler() const
 DEFINE_TYPE_CASTS(LocalFrame, Frame, localFrame, localFrame->isLocalFrame(), localFrame.isLocalFrame());
 
 DECLARE_WEAK_IDENTIFIER_MAP(LocalFrame);
+
+class FrameNavigationDisabler {
+    WTF_MAKE_NONCOPYABLE(FrameNavigationDisabler);
+    STACK_ALLOCATED();
+public:
+    explicit FrameNavigationDisabler(LocalFrame&);
+    ~FrameNavigationDisabler();
+
+private:
+    RawPtrWillBeMember<LocalFrame> m_frame;
+};
 
 } // namespace blink
 

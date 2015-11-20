@@ -129,7 +129,6 @@
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
-#include "third_party/WebKit/public/web/WebColorName.h"
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
 #include "third_party/WebKit/public/web/WebDOMEvent.h"
 #include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
@@ -143,7 +142,6 @@
 #include "third_party/WebKit/public/web/WebFormControlElement.h"
 #include "third_party/WebKit/public/web/WebFormElement.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebGlyphCache.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebHitTestResult.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
@@ -217,7 +215,6 @@ using blink::WebApplicationCacheHost;
 using blink::WebApplicationCacheHostClient;
 using blink::WebCString;
 using blink::WebColor;
-using blink::WebColorName;
 using blink::WebConsoleMessage;
 using blink::WebData;
 using blink::WebDataSource;
@@ -2708,8 +2705,7 @@ void RenderViewImpl::OnSetRendererPrefs(
 
 #if defined(USE_DEFAULT_RENDER_THEME)
   if (renderer_prefs.use_custom_colors) {
-    WebColorName name = blink::WebColorWebkitFocusRingColor;
-    blink::setNamedColors(&name, &renderer_prefs.focus_ring_color, 1);
+    blink::setFocusRingColor(renderer_prefs.focus_ring_color);
     blink::setCaretBlinkInterval(renderer_prefs.caret_blink_interval);
 
     if (webview()) {

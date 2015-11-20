@@ -2566,8 +2566,9 @@ _FUNCTION_INFO = {
   'LineWidth': {
     'type': 'StateSet',
     'state': 'LineWidth',
+    'decoder_func': 'DoLineWidth',
     'valid_args': {
-      '0': '0.5f'
+      '0': '2.0f'
     },
   },
   'PolygonOffset': {
@@ -3790,14 +3791,6 @@ _FUNCTION_INFO = {
     'cmd_args': 'uint32_t bucket_id',
     'extension': 'CHROMIUM_request_extension',
     'chromium': True,
-  },
-  'CreateStreamTextureCHROMIUM':  {
-    'type': 'HandWritten',
-    'impl_func': False,
-    'gen_cmd': False,
-    'extension': True,
-    'chromium': True,
-    'trace_level': 1,
   },
   'TexImageIOSurface2DCHROMIUM': {
     'decoder_func': 'DoTexImageIOSurface2DCHROMIUM',

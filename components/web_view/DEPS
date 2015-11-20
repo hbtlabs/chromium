@@ -3,6 +3,7 @@ include_rules = [
   "+components/devtools_service/public/cpp",
   "+components/devtools_service/public/interfaces",
   "+components/font_service/public/interfaces",
+  "+components/mus/common",
   "+components/mus/public",
   "+components/resource_provider/public/interfaces",
   "+mojo/application/public",
@@ -10,6 +11,7 @@ include_rules = [
   "+mojo/converters/geometry",
   "+mojo/public",
   "+mojo/services/network/public/interfaces",
+  "+mojo/services/tracing/public/cpp",
   "+mojo/services/tracing/public/interfaces",
   "+mojo/util",
 ]

@@ -10,7 +10,7 @@
 
 #include "base/callback.h"
 #include "base/observer_list.h"
-#include "components/mus/public/cpp/types.h"
+#include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/mus_constants.mojom.h"
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
@@ -29,6 +29,7 @@ namespace mus {
 class ServiceProviderImpl;
 class WindowObserver;
 class WindowSurface;
+class WindowTreeClientImpl;
 class WindowTreeConnection;
 
 namespace {
@@ -167,15 +168,10 @@ class Window {
   void SetTextInputState(mojo::TextInputStatePtr state);
   void SetImeVisibility(bool visible, mojo::TextInputStatePtr state);
 
-  // The following make their way to the WindowManager. See
-  // window_manager.mojom for details.
-  void SetPreferredSize(const gfx::Size& size);
-  void SetShowState(mojom::ShowState show_state);
-  void SetResizeBehavior(mojom::ResizeBehavior resize_behavior);
-
   // Focus.
   void SetFocus();
   bool HasFocus() const;
+  void SetCanFocus(bool can_focus);
 
   // Embedding. See window_tree.mojom for details.
   void Embed(mus::mojom::WindowTreeClientPtr client);
@@ -196,6 +192,8 @@ class Window {
   friend class WindowTreeClientImpl;
 
   Window(WindowTreeConnection* connection, Id id);
+
+  WindowTreeClientImpl* tree_client();
 
   // Applies a shared property change locally and forwards to the server. If
   // |data| is null, this property is deleted.

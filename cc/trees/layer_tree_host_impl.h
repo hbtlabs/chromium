@@ -93,7 +93,6 @@ class LayerTreeHostImplClient {
   virtual void CommitVSyncParameters(base::TimeTicks timebase,
                                      base::TimeDelta interval) = 0;
   virtual void SetEstimatedParentDrawTime(base::TimeDelta draw_time) = 0;
-  virtual void SetMaxSwapsPendingOnImplThread(int max) = 0;
   virtual void DidSwapBuffersOnImplThread() = 0;
   virtual void DidSwapBuffersCompleteOnImplThread() = 0;
   virtual void OnResourcelessSoftareDrawStateChanged(
@@ -223,6 +222,9 @@ class CC_EXPORT LayerTreeHostImpl
 
     // RenderPassSink implementation.
     void AppendRenderPass(scoped_ptr<RenderPass> render_pass) override;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(FrameData);
   };
 
   virtual void BeginMainFrameAborted(CommitEarlyOutReason reason);
@@ -627,13 +629,14 @@ class CC_EXPORT LayerTreeHostImpl
   BeginFrameTracker current_begin_frame_tracker_;
 
  private:
+  const gfx::Transform LayerScreenSpaceTransform(const LayerImpl* layer);
   gfx::Vector2dF ScrollLayerWithViewportSpaceDelta(
       LayerImpl* layer_impl,
       const gfx::PointF& viewport_point,
       const gfx::Vector2dF& viewport_delta);
 
   void CreateAndSetRenderer();
-  void CleanUpTileManager();
+  void CleanUpTileManagerAndUIResources();
   void CreateTileManagerResources();
   void ReleaseTreeResources();
   void RecreateTreeResources();
@@ -686,6 +689,7 @@ class CC_EXPORT LayerTreeHostImpl
   void SetManagedMemoryPolicy(const ManagedMemoryPolicy& policy);
 
   void MarkUIResourceNotEvicted(UIResourceId uid);
+  void ClearUIResources();
 
   void NotifySwapPromiseMonitorsOfSetNeedsRedraw();
   void NotifySwapPromiseMonitorsOfForwardingToMainThread();
@@ -738,7 +742,8 @@ class CC_EXPORT LayerTreeHostImpl
   bool wheel_scrolling_;
   bool scroll_affects_scroll_handler_;
   int scroll_layer_id_when_mouse_over_scrollbar_;
-  ScopedPtrVector<SwapPromise> swap_promises_for_main_thread_scroll_update_;
+  std::vector<scoped_ptr<SwapPromise>>
+      swap_promises_for_main_thread_scroll_update_;
 
   // An object to implement the ScrollElasticityHelper interface and
   // hold all state related to elasticity. May be NULL if never requested.

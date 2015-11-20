@@ -6,13 +6,14 @@
 #define IOS_PUBLIC_PROVIDER_CHROME_BROWSER_CHROME_BROWSER_PROVIDER_H_
 
 #include <CoreGraphics/CoreGraphics.h>
-
+#include <stddef.h>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "components/favicon_base/favicon_callback.h"
 
+class AutocompleteProvider;
 class GURL;
 class InfoBarViewDelegate;
 class PrefRegistrySimple;
@@ -30,10 +31,6 @@ class MetricsService;
 
 namespace net {
 class URLRequestContextGetter;
-}
-
-namespace policy {
-class BrowserPolicyConnector;
 }
 
 namespace rappor {
@@ -67,6 +64,8 @@ class ChromeBrowserState;
 class ChromeBrowserStateManager;
 class ChromeIdentityService;
 class GeolocationUpdaterProvider;
+class IOSChromeBrowsingDataRemoverProvider;
+class SigninResourcesProvider;
 class StringProvider;
 class LiveTabContextProvider;
 class UpdatableResourceProvider;
@@ -105,13 +104,19 @@ class ChromeBrowserProvider {
   virtual InfoBarViewPlaceholder CreateInfoBarView(
       CGRect frame,
       InfoBarViewDelegate* delegate);
+  // Returns an instance of a signin resources provider.
+  virtual SigninResourcesProvider* GetSigninResourcesProvider();
   // Returns an instance of a Chrome identity service.
   virtual ChromeIdentityService* GetChromeIdentityService();
   // Returns an instance of a string provider.
   virtual StringProvider* GetStringProvider();
   // Returns an instance of a LiveTabContextProvider.
   virtual LiveTabContextProvider* GetLiveTabContextProvider();
+  virtual scoped_ptr<IOSChromeBrowsingDataRemoverProvider>
+  GetIOSChromeBrowsingDataRemoverProvider(ChromeBrowserState* browser_state);
   virtual GeolocationUpdaterProvider* GetGeolocationUpdaterProvider();
+  // Returns "enabled", "disabled", or "default".
+  virtual std::string DataReductionProxyAvailability();
   // Returns the distribution brand code.
   virtual std::string GetDistributionBrandCode();
   // Sets the alpha property of an UIView with an animation.
@@ -126,8 +131,6 @@ class ChromeBrowserProvider {
       autofill::CardUnmaskPromptController* controller);
   // Returns risk data used in Wallet requests.
   virtual std::string GetRiskData();
-  // Starts and manages the policy system.
-  virtual policy::BrowserPolicyConnector* GetBrowserPolicyConnector();
   // Returns the RapporService. May be null.
   virtual rappor::RapporService* GetRapporService();
   // Returns whether there is an Off-The-Record session active.

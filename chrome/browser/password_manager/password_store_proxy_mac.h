@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_PROXY_MAC_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_STORE_PROXY_MAC_H_
 
+#include <string>
 #include <vector>
 
 #include "base/prefs/pref_member.h"
@@ -37,7 +38,7 @@ class PasswordStoreProxyMac : public password_manager::PasswordStore {
       PrefService* prefs);
 
   bool Init(const syncer::SyncableService::StartSyncFlare& flare) override;
-  void Shutdown() override;
+  void ShutdownOnUIThread() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetBackgroundTaskRunner()
       override;
 

@@ -549,7 +549,9 @@ test("content_unittests") {
     }
   }
 
-  configs += [ "//build/config:precompiled_headers" ]
+  configs += [
+    "//build/config:precompiled_headers",
+  ]
 
   deps = [
     ":test_support",
@@ -658,6 +660,7 @@ test("content_unittests") {
 
     if (is_android) {
       sources -= [
+        "../renderer/media/audio_track_recorder_unittest.cc",
         "../renderer/media/media_recorder_handler_unittest.cc",
         "../renderer/media/video_track_recorder_unittest.cc",
       ]

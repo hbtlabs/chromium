@@ -8,6 +8,7 @@
 #include "cc/animation/keyframed_animation_curve.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/proto/layer.pb.h"
@@ -1153,9 +1154,9 @@ static bool AddTestAnimation(Layer* layer) {
   curve->AddKeyframe(
       FloatKeyframe::Create(base::TimeDelta::FromSecondsD(1.0), 0.7f, nullptr));
   scoped_ptr<Animation> animation =
-      Animation::Create(curve.Pass(), 0, 0, Animation::OPACITY);
+      Animation::Create(std::move(curve), 0, 0, Animation::OPACITY);
 
-  return layer->AddAnimation(animation.Pass());
+  return layer->AddAnimation(std::move(animation));
 }
 
 TEST_F(LayerLayerTreeHostTest, ShouldNotAddAnimationWithoutAnimationRegistrar) {
@@ -1274,11 +1275,11 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // layer does not abort either one.
   scoped_ptr<CopyOutputRequest> request = CopyOutputRequest::CreateRequest(
       base::Bind(&ReceiveCopyOutputResult, &result_count));
-  layer->RequestCopyOfOutput(request.Pass());
+  layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
   request = CopyOutputRequest::CreateRequest(
       base::Bind(&ReceiveCopyOutputResult, &result_count));
-  layer->RequestCopyOfOutput(request.Pass());
+  layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
 
   // When the layer is destroyed, expect both requests to be aborted.
@@ -1295,27 +1296,28 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   request = CopyOutputRequest::CreateRequest(base::Bind(
       &ReceiveCopyOutputResult, &did_receive_first_result_from_this_source));
   request->set_source(this);
-  layer->RequestCopyOfOutput(request.Pass());
+  layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_first_result_from_this_source);
   // Make a request from a different source.
   int did_receive_result_from_different_source = 0;
   request = CopyOutputRequest::CreateRequest(base::Bind(
       &ReceiveCopyOutputResult, &did_receive_result_from_different_source));
   request->set_source(reinterpret_cast<void*>(0xdeadbee0));
-  layer->RequestCopyOfOutput(request.Pass());
+  layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_different_source);
   // Make a request without specifying the source.
   int did_receive_result_from_anonymous_source = 0;
   request = CopyOutputRequest::CreateRequest(base::Bind(
       &ReceiveCopyOutputResult, &did_receive_result_from_anonymous_source));
-  layer->RequestCopyOfOutput(request.Pass());
+  layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
   // Make the second request from |this| source.
   int did_receive_second_result_from_this_source = 0;
   request = CopyOutputRequest::CreateRequest(base::Bind(
       &ReceiveCopyOutputResult, &did_receive_second_result_from_this_source));
   request->set_source(this);
-  layer->RequestCopyOfOutput(request.Pass());  // First request to be aborted.
+  layer->RequestCopyOfOutput(
+      std::move(request));  // First request to be aborted.
   EXPECT_EQ(1, did_receive_first_result_from_this_source);
   EXPECT_EQ(0, did_receive_result_from_different_source);
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
@@ -1565,6 +1567,141 @@ TEST_F(LayerTest, DeleteMaskAndReplicaLayer) {
 
   EXPECT_EQ(nullptr, layer_dest_root->mask_layer());
   EXPECT_EQ(nullptr, layer_dest_root->replica_layer());
+}
+
+TEST_F(LayerTest, SimplePropertiesSerialization) {
+  /* Testing serialization of properties for a tree that looks like this:
+          root+
+          /  \
+         a*   b*+[mask:*,replica]
+        /      \
+       c        d*
+     Layers marked with * have changed properties.
+     Layers marked with + have descendants with changed properties.
+     Layer b also has a mask layer and a replica layer.
+  */
+  scoped_refptr<Layer> layer_src_root = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_a = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_b = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_b_mask = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_b_replica = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_c = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_d = Layer::Create(LayerSettings());
+  layer_src_root->AddChild(layer_src_a);
+  layer_src_root->AddChild(layer_src_b);
+  layer_src_a->AddChild(layer_src_c);
+  layer_src_b->AddChild(layer_src_d);
+  layer_src_b->SetMaskLayer(layer_src_b_mask.get());
+  layer_src_b->SetReplicaLayer(layer_src_b_replica.get());
+
+  layer_src_a->SetNeedsPushProperties();
+  layer_src_b->SetNeedsPushProperties();
+  layer_src_b_mask->SetNeedsPushProperties();
+  layer_src_d->SetNeedsPushProperties();
+
+  // Only layers with descendants that require pushing properties will
+  // return true from ToLayerPropertiesProto.
+  proto::LayerUpdate layer_update_root;
+  EXPECT_TRUE(layer_src_root->ToLayerPropertiesProto(&layer_update_root));
+  proto::LayerUpdate layer_update_a;
+  EXPECT_FALSE(layer_src_a->ToLayerPropertiesProto(&layer_update_a));
+  proto::LayerUpdate layer_update_b;
+  EXPECT_TRUE(layer_src_b->ToLayerPropertiesProto(&layer_update_b));
+  proto::LayerUpdate layer_update_b_mask;
+  EXPECT_FALSE(layer_src_b_mask->ToLayerPropertiesProto(&layer_update_b_mask));
+  proto::LayerUpdate layer_update_b_replica;
+  EXPECT_FALSE(
+      layer_src_b_replica->ToLayerPropertiesProto(&layer_update_b_replica));
+  proto::LayerUpdate layer_update_c;
+  EXPECT_FALSE(layer_src_c->ToLayerPropertiesProto(&layer_update_c));
+  proto::LayerUpdate layer_update_d;
+  EXPECT_FALSE(layer_src_d->ToLayerPropertiesProto(&layer_update_d));
+
+  // All flags for pushing properties should have been cleared.
+  EXPECT_FALSE(layer_src_root->needs_push_properties());
+  EXPECT_FALSE(layer_src_root->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_a->needs_push_properties());
+  EXPECT_FALSE(layer_src_a->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_b->needs_push_properties());
+  EXPECT_FALSE(layer_src_b->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_b_mask->needs_push_properties());
+  EXPECT_FALSE(layer_src_b_mask->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_b_replica->needs_push_properties());
+  EXPECT_FALSE(layer_src_b_replica->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_c->needs_push_properties());
+  EXPECT_FALSE(layer_src_c->descendant_needs_push_properties());
+  EXPECT_FALSE(layer_src_d->needs_push_properties());
+  EXPECT_FALSE(layer_src_d->descendant_needs_push_properties());
+
+  // Only 5 of the layers should have been serialized.
+  ASSERT_EQ(1, layer_update_root.layers_size());
+  EXPECT_EQ(layer_src_root->id(), layer_update_root.layers(0).id());
+  proto::LayerProperties dest_root = layer_update_root.layers(0);
+  ASSERT_EQ(1, layer_update_a.layers_size());
+  EXPECT_EQ(layer_src_a->id(), layer_update_a.layers(0).id());
+  proto::LayerProperties dest_a = layer_update_a.layers(0);
+  ASSERT_EQ(1, layer_update_b.layers_size());
+  EXPECT_EQ(layer_src_b->id(), layer_update_b.layers(0).id());
+  proto::LayerProperties dest_b = layer_update_b.layers(0);
+  ASSERT_EQ(1, layer_update_b_mask.layers_size());
+  EXPECT_EQ(layer_src_b_mask->id(), layer_update_b_mask.layers(0).id());
+  proto::LayerProperties dest_b_mask = layer_update_b_mask.layers(0);
+  EXPECT_EQ(0, layer_update_b_replica.layers_size());
+  EXPECT_EQ(0, layer_update_c.layers_size());
+  ASSERT_EQ(1, layer_update_d.layers_size());
+  EXPECT_EQ(layer_src_d->id(), layer_update_d.layers(0).id());
+  proto::LayerProperties dest_d = layer_update_d.layers(0);
+
+  // Ensure the properties and dependants metadata is correctly serialized.
+  EXPECT_FALSE(dest_root.needs_push_properties());
+  EXPECT_EQ(2, dest_root.num_dependents_need_push_properties());
+  EXPECT_FALSE(dest_root.has_base());
+
+  EXPECT_TRUE(dest_a.needs_push_properties());
+  EXPECT_EQ(0, dest_a.num_dependents_need_push_properties());
+  EXPECT_TRUE(dest_a.has_base());
+
+  EXPECT_TRUE(dest_b.needs_push_properties());
+  EXPECT_EQ(2, dest_b.num_dependents_need_push_properties());
+  EXPECT_TRUE(dest_b.has_base());
+
+  EXPECT_TRUE(dest_d.needs_push_properties());
+  EXPECT_EQ(0, dest_d.num_dependents_need_push_properties());
+  EXPECT_TRUE(dest_d.has_base());
+
+  EXPECT_TRUE(dest_b_mask.needs_push_properties());
+  EXPECT_EQ(0, dest_b_mask.num_dependents_need_push_properties());
+  EXPECT_TRUE(dest_b_mask.has_base());
+}
+
+TEST_F(LayerTest, SimplePropertiesDeserialization) {
+  scoped_refptr<Layer> layer = Layer::Create(LayerSettings());
+  proto::LayerProperties properties;
+  properties.set_id(layer->id());
+
+  properties.set_needs_push_properties(true);
+  properties.set_num_dependents_need_push_properties(2);
+  properties.mutable_base();
+  layer->FromLayerPropertiesProto(properties);
+  EXPECT_TRUE(layer->needs_push_properties());
+  EXPECT_TRUE(layer->descendant_needs_push_properties());
+
+  properties.set_needs_push_properties(false);
+  properties.mutable_base()->Clear();
+  layer->FromLayerPropertiesProto(properties);
+  EXPECT_FALSE(layer->needs_push_properties());
+  EXPECT_TRUE(layer->descendant_needs_push_properties());
+
+  properties.set_num_dependents_need_push_properties(0);
+  layer->FromLayerPropertiesProto(properties);
+  EXPECT_FALSE(layer->needs_push_properties());
+  EXPECT_FALSE(layer->descendant_needs_push_properties());
+
+  properties.set_needs_push_properties(true);
+  properties.mutable_base();
+  layer->FromLayerPropertiesProto(properties);
+  EXPECT_TRUE(layer->needs_push_properties());
+  EXPECT_FALSE(layer->descendant_needs_push_properties());
 }
 
 }  // namespace

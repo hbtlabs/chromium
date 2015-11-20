@@ -4,14 +4,15 @@
 
 #include "ui/views/mus/window_tree_host_mus.h"
 
+#include "components/bitmap_uploader/bitmap_uploader.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
-#include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/view_prop.h"
 #include "ui/events/event.h"
 #include "ui/views/mus/input_method_mus.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/platform_window_mus.h"
-#include "ui/views/mus/surface_context_factory.h"
 
 namespace views {
 
@@ -24,18 +25,20 @@ WindowTreeHostMus::WindowTreeHostMus(mojo::Shell* shell,
                                      mus::mojom::SurfaceType surface_type)
     : native_widget_(native_widget),
       show_state_(ui::PLATFORM_WINDOW_STATE_UNKNOWN) {
-  context_factory_.reset(
-      new SurfaceContextFactory(shell, window, surface_type));
-  // WindowTreeHost creates the compositor using the ContextFactory from
-  // aura::Env. Install |context_factory_| there so that |context_factory_| is
-  // picked up.
-  ui::ContextFactory* default_context_factory =
-      aura::Env::GetInstance()->context_factory();
-  aura::Env::GetInstance()->set_context_factory(context_factory_.get());
   SetPlatformWindow(make_scoped_ptr(new PlatformWindowMus(this, window)));
+  // The location of events is already transformed, and there is no way to
+  // correctly determine the reverse transform. So, don't attempt to transform
+  // event locations, else the root location is wrong.
+  // TODO(sky): we need to transform for device scale though.
+  dispatcher()->set_transform_events(false);
   compositor()->SetHostHasTransparentBackground(true);
-  aura::Env::GetInstance()->set_context_factory(default_context_factory);
-  DCHECK_EQ(context_factory_.get(), compositor()->context_factory());
+
+  bitmap_uploader_.reset(new bitmap_uploader::BitmapUploader(window));
+  bitmap_uploader_->Init(shell);
+  prop_.reset(
+      new ui::ViewProp(GetAcceleratedWidget(),
+                       bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
+                       bitmap_uploader_.get()));
 
   input_method_.reset(new InputMethodMUS(this, window));
   SetSharedInputMethod(input_method_.get());

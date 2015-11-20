@@ -15,23 +15,10 @@ declare_args() {
   use_chromecast_webui = true
 }
 
-# TODO(slan): This target is being used far too broadly. We should reduce the
-# uses of this config to targets that actually need it. (b/23814594)
-config("config") {
-  defines = []
-
-  if (use_playready) {
-    defines += [ "PLAYREADY_CDM_AVAILABLE" ]
+if (use_playready) {
+  config("playready_config") {
+    defines = [ "PLAYREADY_CDM_AVAILABLE" ]
   }
-}
-
-component("chromecast") {
-  deps = [
-    "//chromecast/base",
-    "//chromecast/base/metrics",
-    "//chromecast/crash",
-    "//chromecast/media",
-  ]
 }
 
 # A list of all public test() binaries. This is an organizational target that
@@ -41,7 +28,6 @@ cast_test_group("cast_tests") {
     "//base:base_unittests",
     "//chromecast/base:cast_base_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
-    "//chromecast/crash:cast_crash_unittests",
     "//content/test:content_unittests",
     "//crypto:crypto_unittests",
     "//ipc:ipc_tests",
@@ -57,6 +43,10 @@ cast_test_group("cast_tests") {
     "//ui/base:ui_base_unittests",
     "//url:url_unittests",
   ]
+
+  if (is_linux) {
+    tests += [ "//chromecast/crash:cast_crash_unittests" ]
+  }
 
   filters = []
 

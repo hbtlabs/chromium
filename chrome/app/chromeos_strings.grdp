@@ -1049,6 +1049,20 @@ Press any key to continue exploring.
     Volume slider
   </message>
 
+<!-- Audio Player -->
+  <message name="IDS_AUDIO_PLAYER_SHUFFLE_BUTTON_LABEL" desc="Label for the Shuffle button of audio player.">
+    Shuffle
+  </message>
+  <message name="IDS_AUDIO_PLAYER_REPEAT_BUTTON_LABEL" desc="Label for the Repeat button of audio player">
+    Repeat
+  </message>
+  <message name="IDS_AUDIO_PLAYER_OPEN_VOLUME_SLIDER_BUTTON_LABEL" desc="Label for a button which is used to open volume slider in audio player.">
+    Open volume slider
+  </message>
+  <message name="IDS_AUDIO_PLAYER_OPEN_PLAY_LIST_BUTTON_LABEL" desc="Label for a button which is used to open play list in audio player.">
+    Open play list
+  </message>
+
 <!-- Video Player -->
   <message name="IDS_VIDEO_PLAYER_PLAY_THIS_COMPUTER" desc="In the video player app, message of menu item which is shown at the top of the list of Chromecasts. This menuitem is to play the video on this computer (locally), intead of on TVs with Chromecast.">
     This computer
@@ -1924,6 +1938,9 @@ Press any key to continue exploring.
 
   <message name="IDS_OPTIONS_SETTINGS_NETWORK_DISABLED" desc="Message displayed when a type of network connection is disabled">
     Disabled
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_NETWORK_PROHIBITED" desc="Message displayed when a type of network connection is prohibited">
+    Disabled by administrator
   </message>
   <message name="IDS_OPTIONS_SETTINGS_NETWORK_OTHER" desc="Menu option for connecting to a network that is not listed in the menu.">
     Join other...

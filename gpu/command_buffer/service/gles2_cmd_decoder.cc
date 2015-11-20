@@ -749,6 +749,10 @@ bool GLES2Decoder::GetServiceTextureId(uint32 client_texture_id,
   return false;
 }
 
+uint32 GLES2Decoder::GetAndClearBackbufferClearBitsForTest() {
+  return 0;
+}
+
 GLES2Decoder::GLES2Decoder()
     : initialized_(false),
       debug_(false),
@@ -867,6 +871,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   void SetIgnoreCachedStateForTest(bool ignore) override;
   void SetForceShaderNameHashingForTest(bool force) override;
+  uint32 GetAndClearBackbufferClearBitsForTest() override;
   void ProcessFinishedAsyncTransfers();
 
   bool GetServiceTextureId(uint32 client_texture_id,
@@ -1114,6 +1119,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   // Wrapper for SwapBuffers.
   void DoSwapBuffers();
+
+  // Callback for async SwapBuffers.
+  void FinishSwapBuffers(gfx::SwapResult result);
 
   // Wrapper for SwapInterval.
   void DoSwapInterval(int interval);
@@ -1748,6 +1756,8 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool DoIsVertexArrayOES(GLuint client_id);
   bool DoIsPathCHROMIUM(GLuint client_id);
 
+  void DoLineWidth(GLfloat width);
+
   // Wrapper for glLinkProgram
   void DoLinkProgram(GLuint program);
 
@@ -2215,6 +2225,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool context_was_lost_;
   bool reset_by_robustness_extension_;
   bool supports_post_sub_buffer_;
+  bool supports_async_swap_;
 
   ContextType context_type_;
 
@@ -2285,6 +2296,8 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   static const CommandInfo command_info[kNumCommands - kStartPoint];
 
   bool force_shader_name_hashing_for_test;
+
+  GLfloat line_width_range_[2];
 
   DISALLOW_COPY_AND_ASSIGN(GLES2DecoderImpl);
 };
@@ -2758,6 +2771,7 @@ GLES2DecoderImpl::GLES2DecoderImpl(ContextGroup* group)
       context_was_lost_(false),
       reset_by_robustness_extension_(false),
       supports_post_sub_buffer_(false),
+      supports_async_swap_(false),
       context_type_(CONTEXT_TYPE_OPENGLES2),
       derivatives_explicitly_enabled_(false),
       frag_depth_explicitly_enabled_(false),
@@ -3160,6 +3174,8 @@ bool GLES2DecoderImpl::Initialize(
   viewport_max_width_ = viewport_params[0];
   viewport_max_height_ = viewport_params[1];
 
+  glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, line_width_range_);
+
   state_.scissor_width = state_.viewport_width;
   state_.scissor_height = state_.viewport_height;
 
@@ -3205,6 +3221,8 @@ bool GLES2DecoderImpl::Initialize(
           .disable_post_sub_buffers_for_onscreen_surfaces &&
       !surface->IsOffscreen())
     supports_post_sub_buffer_ = false;
+
+  supports_async_swap_ = surface->SupportsAsyncSwap();
 
   if (feature_info_->workarounds().reverse_point_sprite_coord_origin) {
     glPointParameteri(GL_POINT_SPRITE_COORD_ORIGIN, GL_LOWER_LEFT);
@@ -4910,6 +4928,13 @@ void GLES2DecoderImpl::SetForceShaderNameHashingForTest(bool force) {
   force_shader_name_hashing_for_test = force;
 }
 
+// Added specifically for testing backbuffer_needs_clear_bits unittests.
+uint32 GLES2DecoderImpl::GetAndClearBackbufferClearBitsForTest() {
+  uint32 clear_bits = backbuffer_needs_clear_bits_;
+  backbuffer_needs_clear_bits_ = 0;
+  return clear_bits;
+}
+
 void GLES2DecoderImpl::OnFboChanged() const {
   if (workarounds().restore_scissor_on_fbo_change)
     state_.fbo_binding_for_scissor_workaround_dirty = true;
@@ -5130,6 +5155,7 @@ void GLES2DecoderImpl::DoDiscardFramebufferEXT(GLenum target,
           break;
         case GL_DEPTH_EXT:
           backbuffer_needs_clear_bits_ |= GL_DEPTH_BUFFER_BIT;
+          break;
         case GL_STENCIL_EXT:
           backbuffer_needs_clear_bits_ |= GL_STENCIL_BUFFER_BIT;
           break;
@@ -6826,6 +6852,11 @@ void GLES2DecoderImpl::DoRenderbufferStorage(
     renderbuffer_manager()->SetInfo(
         renderbuffer, 1, internalformat, width, height);
   }
+}
+
+void GLES2DecoderImpl::DoLineWidth(GLfloat width) {
+  glLineWidth(
+      std::min(std::max(width, line_width_range_[0]), line_width_range_[1]));
 }
 
 void GLES2DecoderImpl::DoLinkProgram(GLuint program_id) {
@@ -9270,11 +9301,8 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32 immediate_data_size,
         glReadPixels(x, y, width, height, format, type, 0);
         pending_readpixel_fences_.push(linked_ptr<FenceCallback>(
             new FenceCallback()));
-        WaitForReadPixels(base::Bind(
-            &GLES2DecoderImpl::FinishReadPixels,
-            base::internal::SupportsWeakPtrBase::StaticAsWeakPtr
-            <GLES2DecoderImpl>(this),
-            c, buffer));
+        WaitForReadPixels(base::Bind(&GLES2DecoderImpl::FinishReadPixels,
+                                     base::AsWeakPtr(this), c, buffer));
         glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, 0);
         return error::kNoError;
       } else {
@@ -9361,13 +9389,17 @@ error::Error GLES2DecoderImpl::HandlePostSubBufferCHROMIUM(
     gpu_state_tracer_->TakeSnapshotWithCurrentFramebuffer(
         is_offscreen ? offscreen_size_ : surface_->GetSize());
   }
-  if (surface_->PostSubBuffer(c.x, c.y, c.width, c.height) !=
-      gfx::SwapResult::SWAP_FAILED) {
-    return error::kNoError;
+
+  if (supports_async_swap_) {
+    surface_->PostSubBufferAsync(
+        c.x, c.y, c.width, c.height,
+        base::Bind(&GLES2DecoderImpl::FinishSwapBuffers,
+                   base::AsWeakPtr(this)));
   } else {
-    LOG(ERROR) << "Context lost because PostSubBuffer failed.";
-    return error::kLostContext;
+    FinishSwapBuffers(surface_->PostSubBuffer(c.x, c.y, c.width, c.height));
   }
+
+  return error::kNoError;
 }
 
 error::Error GLES2DecoderImpl::HandleScheduleOverlayPlaneCHROMIUM(
@@ -9385,10 +9417,14 @@ error::Error GLES2DecoderImpl::HandleScheduleOverlayPlaneCHROMIUM(
   Texture::ImageState image_state;
   gl::GLImage* image =
       ref->texture()->GetLevelImage(ref->texture()->target(), 0, &image_state);
-  if (!image || image_state != Texture::BOUND) {
+  if (!image) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE,
                        "glScheduleOverlayPlaneCHROMIUM",
                        "unsupported texture format");
+    return error::kNoError;
+  }
+  if (image_state != Texture::BOUND) {
+    // No-op case for pass-through overlays (such as on Chromecast).
     return error::kNoError;
   }
   gfx::OverlayTransform transform = GetGFXOverlayTransform(c.plane_transform);
@@ -11939,19 +11975,26 @@ void GLES2DecoderImpl::DoSwapBuffers() {
       if (!feature_info_->gl_version_info().is_angle)
         glFlush();
     }
+  } else if (supports_async_swap_) {
+    surface_->SwapBuffersAsync(base::Bind(&GLES2DecoderImpl::FinishSwapBuffers,
+                                          base::AsWeakPtr(this)));
   } else {
-    if (surface_->SwapBuffers() == gfx::SwapResult::SWAP_FAILED) {
-      LOG(ERROR) << "Context lost because SwapBuffers failed.";
-      if (!CheckResetStatus()) {
-        MarkContextLost(error::kUnknown);
-        group_->LoseContexts(error::kUnknown);
-      }
-    }
+    FinishSwapBuffers(surface_->SwapBuffers());
   }
 
   // This may be a slow command.  Exit command processing to allow for
   // context preemption and GPU watchdog checks.
   ExitCommandProcessingEarly();
+}
+
+void GLES2DecoderImpl::FinishSwapBuffers(gfx::SwapResult result) {
+  if (result == gfx::SwapResult::SWAP_FAILED) {
+    LOG(ERROR) << "Context lost because SwapBuffers failed.";
+    if (!CheckResetStatus()) {
+      MarkContextLost(error::kUnknown);
+      group_->LoseContexts(error::kUnknown);
+    }
+  }
 }
 
 void GLES2DecoderImpl::DoSwapInterval(int interval) {

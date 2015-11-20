@@ -880,7 +880,7 @@ const std::string& WebContentsImpl::GetUserAgentOverride() const {
 }
 
 void WebContentsImpl::EnableTreeOnlyAccessibilityMode() {
-  if (GetAccessibilityMode() == AccessibilityModeTreeOnly)
+  if (GetAccessibilityMode() != AccessibilityModeOff)
     ForEachFrame(base::Bind(&ResetAccessibility));
   else
     AddAccessibilityMode(AccessibilityModeTreeOnly);
@@ -1694,6 +1694,16 @@ void WebContentsImpl::LostMouseLock(RenderWidgetHostImpl* render_widget_host) {
 
   if (delegate_)
     delegate_->LostMouseLock();
+}
+
+void WebContentsImpl::ForwardCompositorProto(
+    RenderWidgetHostImpl* render_widget_host,
+    const std::vector<uint8_t>& proto) {
+  if (render_widget_host != GetRenderViewHost()->GetWidget())
+    return;
+
+  if (delegate_)
+    delegate_->ForwardCompositorProto(proto);
 }
 
 void WebContentsImpl::CreateNewWindow(
@@ -2831,7 +2841,7 @@ void WebContentsImpl::ResumeLoadingCreatedWebContents() {
   // TODO(brettw): It seems bogus to reach into here and initialize the host.
   if (is_resume_pending_) {
     is_resume_pending_ = false;
-    GetRenderViewHost()->Init();
+    GetRenderViewHost()->GetWidget()->Init();
     GetMainFrame()->Init();
   }
 }

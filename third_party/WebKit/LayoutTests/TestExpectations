@@ -35,6 +35,8 @@ crbug.com/527242 virtual/spv2/paint/invalidation/spv2/cached-change-row-border-w
 crbug.com/527242 virtual/spv2/paint/invalidation/spv2/cached-change-table-border-width.html [ Failure ]
 crbug.com/527242 virtual/spv2/paint/invalidation/spv2/cached-change-tbody-border-width.html [ Failure ]
 
+crbug.com/553905 plugins/webview-plugin-scroll.html [ NeedsRebaseline ]
+
 crbug.com/546730 virtual/syncpaint/paint/invalidation/composited-table-cell-container-background.html [ Failure ]
 
 crbug.com/536138 virtual/spv2/paint/invalidation/repaint-subsequence-on-ancestor-clip-change.html [ Failure ]
@@ -105,7 +107,6 @@ crbug.com/521853 [ Win ] http/tests/inspector/search/sources-search-scope.html [
 crbug.com/521084 animations/additive-transform-animations.html [ Pass Timeout ]
 crbug.com/521085 fast/compositorworker/compositor-proxy-disconnect-worker-terminate.html [ Crash Pass ]
 crbug.com/521086 fast/cookies/cookies-disabled-in-data-url.html [ Crash Pass Timeout ]
-crbug.com/521087 [ Linux Debug ] fast/dom/shadow/gc-after-body-removed.html [ Crash Pass ]
 crbug.com/521089 [ Precise ] fast/preloader/image.html [ Failure Pass ]
 crbug.com/521090 [ Mac Win ] http/tests/history/post-replace-state-reload.html [ Crash Failure Pass ]
 crbug.com/521091 http/tests/inspector/elements/styles/selector-line-sourcemap-header.html [ Crash Failure Timeout Pass ]
@@ -428,6 +429,8 @@ crbug.com/490511 imported/web-platform-tests/html/browsers/history/the-location-
 crbug.com/526898 imported/web-platform-tests/html/rendering/non-replaced-elements/phrasing-content-0/font-element-text-decoration-color/001-x.xhtml [ Failure ]
 crbug.com/108417 imported/web-platform-tests/html/rendering/non-replaced-elements/tables/table-border-1.html [ Failure ]
 crbug.com/525872 imported/web-platform-tests/html/rendering/non-replaced-elements/tables/table-border-2.html [ Failure ]
+crbug.com/490511 imported/web-platform-tests/html/rendering/non-replaced-elements/the-hr-element-0/color.html [ Failure Pass ]
+crbug.com/490511 imported/web-platform-tests/html/rendering/non-replaced-elements/the-hr-element-0/width.html [ Failure Pass ]
 crbug.com/490511 imported/web-platform-tests/html/semantics/document-metadata/styling/LinkStyle.html [ Failure Pass ]
 crbug.com/525896 imported/web-platform-tests/html/semantics/embedded-content/the-embed-element/embed-represent-nothing-01.html [ Failure ]
 crbug.com/490511 imported/web-platform-tests/html/semantics/embedded-content/media-elements/interfaces/HTMLElement/HTMLTrackElement/src.html [ Failure ]
@@ -653,6 +656,7 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-block-alignment-
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-block-alignment-007.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-table-alignment-003.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-table-alignment-005.xht [ Failure ]
+crbug.com/491454 imported/csswg-test/css-writing-modes-3/outline-inline-vrl-006.html [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-002.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-003.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-004.xht [ Failure ]
@@ -763,8 +767,6 @@ crbug.com/467635 fast/dom/HTMLImageElement/image-sizes-meta-viewport.html [ Skip
 
 crbug.com/484370 [ Win Debug ] svg/custom/gradient-userSpaceOnUse-with-percentage.svg [ Failure ]
 
-crbug.com/116710 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
-
 # Printing Layout broken in these tests.
 crbug.com/377696 printing/setPrinting.html [ Skip ]
 crbug.com/377696 printing/width-overflow.html [ Skip ]
@@ -868,7 +870,6 @@ crbug.com/419993 [ Debug ] fast/css/giant-stylesheet-crash.html [ Pass Slow ]
 # Part of a larger issue referenced in the bug. This specific issue will be fixed shortly.
 crbug.com/408159 accessibility/is-ignored-change-sends-notification.html [ Timeout ]
 
-crbug.com/418021 inspector/profiler/heap-snapshot-inspect-dom-wrapper.html [ Pass Slow ]
 crbug.com/504706 [ Linux ] inspector/profiler/heap-snapshot-containment-expansion-preserved-when-sorting.html [ Pass Slow ]
 crbug.com/504706 [ Linux ] inspector/profiler/heap-snapshot-containment-sorting.html [ Pass Slow ]
 
@@ -1060,7 +1061,6 @@ crbug.com/509025 [ Mac10.10 ] compositing/overflow/updating-scrolling-container-
 crbug.com/509025 [ Mac10.10 ] compositing/overflow/updating-scrolling-container.html [ Failure ]
 # TODO(chrishtr): uncomment/inspect rebaseline of this after fixing crbug.com/516016
 # crbug.com/509025 [ Mac10.10 ] compositing/repaint/should-not-clip-composited-overflow-scrolling-layer.html [ Failure ]
-crbug.com/509025 [ Mac10.10 ] compositing/squashing/iframe-inside-squashed-layer.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] compositing/squashing/invalidate-when-leaving-squashed-layer.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] compositing/squashing/invalidation-for-subpixel-offset-of-squashed-layer.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] compositing/squashing/invalidations-with-large-negative-margin.html [ Failure ]
@@ -1106,8 +1106,6 @@ crbug.com/464736 http/tests/xmlhttprequest/ontimeout-event-override-after-failur
 
 # Unclear semantics of ToString (actually ToPrimitive) across iframes.
 crbug.com/532469 http/tests/security/cross-frame-access-custom.html [ NeedsManualRebaseline ]
-
-crbug.com/507590 fast/block/float/containing-block-change-compositing.html [ Failure ]
 
 crbug.com/521730 [ Win10 ] compositing/plugins/invalidate_rect.html [ Crash ]
 crbug.com/521730 [ Win10 ] plugins/mouse-click-plugin-clears-selection.html [ Crash ]
@@ -1340,6 +1338,7 @@ crbug.com/457273 [ Mac ] http/tests/websocket/close.html [ Pass Timeout ]
 crbug.com/531286 virtual/gpu/fast/canvas/yuv-video-on-accelerated-canvas.html [ Failure ]
 
 crbug.com/535478 [ Win ] virtual/threaded/inspector/tracing/decode-resize.html [ Slow Pass Failure ]
+crbug.com/535478 [ XP ] virtual/syncpaint/inspector/tracing/decode-resize.html [ Slow Pass Failure ]
 
 crbug.com/524646 [ Mac10.10 ] fast/dom/shadow/shadowdom-for-button.html [ Failure ]
 
@@ -1360,8 +1359,3 @@ crbug.com/548416 [ Mac10.6 ] virtual/syncpaint/compositing/repaint/background-at
 crbug.com/548765 http/tests/inspector/console-fetch-logging.html [ Failure Pass Slow ]
 
 crbug.com/549314 [ XP ] inspector-protocol/layout-fonts/unicode-range-combining-chars-fallback.html [ Failure ]
-
-crbug.com/551272 fast/js/getOwnPropertyDescriptor.html [ NeedsManualRebaseline ]
-crbug.com/551272 fast/js/pic/cached-named-property-getter.html [ NeedsManualRebaseline ]
-crbug.com/551272 fast/js/mozilla/strict/15.10.7.html [ NeedsManualRebaseline ]
-crbug.com/555052 http/tests/misc/script-sync-slow-scripts-onerror.html [ Failure Pass ]

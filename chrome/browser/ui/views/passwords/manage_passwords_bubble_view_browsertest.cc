@@ -6,10 +6,10 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
@@ -17,13 +17,11 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
-#include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_switches.h"
 #include "net/url_request/test_url_fetcher_factory.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 using testing::Eq;
 using testing::Field;
@@ -78,15 +76,12 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
   EXPECT_FALSE(IsBubbleShowing());
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubbleView::USER_GESTURE);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   const ManagePasswordsBubbleView* bubble =
       ManagePasswordsBubbleView::manage_password_bubble();
   EXPECT_TRUE(bubble->initially_focused_view());
-  EXPECT_EQ(bubble->initially_focused_view(),
-            bubble->GetFocusManager()->GetFocusedView());
+  EXPECT_FALSE(bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
 
@@ -94,9 +89,11 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
   ManagePasswordsBubbleView::ShowBubble(
       browser()->tab_strip_model()->GetActiveWebContents(),
       ManagePasswordsBubbleView::USER_GESTURE);
-  EXPECT_TRUE(ManagePasswordsBubbleView::manage_password_bubble()->
-      GetFocusManager()->GetFocusedView());
   EXPECT_TRUE(IsBubbleShowing());
+  bubble = ManagePasswordsBubbleView::manage_password_bubble();
+  EXPECT_TRUE(bubble->initially_focused_view());
+  EXPECT_EQ(bubble->initially_focused_view(),
+            bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
 }
@@ -222,9 +219,7 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest,
 
 // If this flakes, disable and log details in http://crbug.com/523255.
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnClick) {
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubbleView::AUTOMATIC);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   EXPECT_FALSE(ManagePasswordsBubbleView::manage_password_bubble()->
       GetFocusManager()->GetFocusedView());
@@ -233,9 +228,7 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnClick) {
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnEsc) {
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubbleView::AUTOMATIC);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE,
       false, false, false, false));
@@ -250,14 +243,13 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnKey) {
       browser(),
       GURL("data:text/html;charset=utf-8,<input type=\"text\" autofocus>"));
   focus_observer.Wait();
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ManagePasswordsBubbleView::ShowBubble(web_contents,
-                                        ManagePasswordsBubbleView::AUTOMATIC);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   EXPECT_FALSE(ManagePasswordsBubbleView::manage_password_bubble()->
       GetFocusManager()->GetFocusedView());
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(web_contents->GetRenderViewHost()->IsFocusedElementEditable());
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_K,
       false, false, false, false));
@@ -277,17 +269,16 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, TwoTabsWithBubble) {
   // Set up the first tab with the bubble.
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
-  // Set up the second tab.
-  AddTabAtIndex(0, GURL("chrome://newtab"), ui::PAGE_TRANSITION_TYPED);
-  EXPECT_FALSE(IsBubbleShowing());
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubbleView::AUTOMATIC);
-  EXPECT_TRUE(IsBubbleShowing());
+  // Set up the second tab and bring the bubble again.
+  AddTabAtIndex(1, GURL("http://example.com/"), ui::PAGE_TRANSITION_TYPED);
   TabStripModel* tab_model = browser()->tab_strip_model();
-  EXPECT_EQ(0, tab_model->active_index());
-  // Back to the first tab.
   tab_model->ActivateTabAt(1, true);
+  EXPECT_FALSE(IsBubbleShowing());
+  EXPECT_EQ(1, tab_model->active_index());
+  SetupPendingPassword();
+  EXPECT_TRUE(IsBubbleShowing());
+  // Back to the first tab.
+  tab_model->ActivateTabAt(0, true);
   EXPECT_FALSE(IsBubbleShowing());
 }
 
@@ -373,7 +364,10 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSignin) {
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
   content::RunAllPendingInMessageLoop();
-  EXPECT_EQ(password_manager::ui::MANAGE_STATE, GetController()->state());
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(password_manager::ui::MANAGE_STATE,
+            PasswordsModelDelegateFromWebContents(web_contents)->GetState());
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSigninNoFocus) {

@@ -145,7 +145,33 @@ bool IsOnline(NetworkPortalDetector::CaptivePortalStatus status) {
 
 }  // namespace
 
-GaiaContext::GaiaContext() {}
+// A class that's used to specify the way how Gaia should be loaded.
+struct GaiaScreenHandler::GaiaContext {
+  GaiaContext();
+
+  // Forces Gaia to reload.
+  bool force_reload = false;
+
+  // True if user pods can be displayed.
+  bool show_users = false;
+
+  // Whether Gaia should be loaded in offline mode.
+  bool use_offline = false;
+
+  // Email of the current user.
+  std::string email;
+
+  // GAIA ID of the current user.
+  std::string gaia_id;
+
+  // GAPS cookie.
+  std::string gaps_cookie;
+
+  // Whether consumer management enrollment is in progress.
+  bool is_enrolling_consumer_management = false;
+};
+
+GaiaScreenHandler::GaiaContext::GaiaContext() {}
 
 GaiaScreenHandler::GaiaScreenHandler(
     CoreOobeActor* core_oobe_actor,
@@ -180,7 +206,6 @@ void GaiaScreenHandler::LoadGaiaWithVersion(
       context.is_enrolling_consumer_management;
 
   params.SetBoolean("forceReload", context.force_reload);
-  params.SetBoolean("isLocal", context.is_local);
   params.SetBoolean("isShowUsers", context.show_users);
   params.SetBoolean("useOffline", context.use_offline);
   params.SetString("gaiaId", context.gaia_id);
@@ -828,15 +853,16 @@ void GaiaScreenHandler::LoadAuthExtension(bool force,
           << ", offline: " << offline;
   GaiaContext context;
   context.force_reload = force;
-  context.is_local = offline;
   context.use_offline = offline;
   context.email = populated_email_;
   context.is_enrolling_consumer_management = is_enrolling_consumer_management_;
 
   std::string gaia_id;
-  if (user_manager::UserManager::Get()->FindGaiaID(
-          AccountId::FromUserEmail(context.email), &gaia_id))
+  if (!context.email.empty() &&
+      user_manager::UserManager::Get()->FindGaiaID(
+          AccountId::FromUserEmail(context.email), &gaia_id)) {
     context.gaia_id = gaia_id;
+  }
 
   if (Delegate()) {
     context.show_users = Delegate()->IsShowUsers();

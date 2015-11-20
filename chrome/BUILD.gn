@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -10,6 +11,14 @@ import("//build/config/ui.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/chrome_repack_locales.gni")
 import("//chrome/version.gni")
+
+declare_args() {
+  # If true, builds as a console app (rather than a windowed app), which allows
+  # logging to be printed to the user. This will cause a terminal window to pop
+  # up when Chrome is not run from the command line, so should only be used for
+  # development. Only has an effect on Windows builds.
+  win_console_app = false
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -39,6 +48,12 @@ if (is_win) {
     deps = [
       ":chrome_initial",
     ]
+  }
+
+  # The AddressSanitizer build should be a console program as it prints out
+  # stuff on stderr.
+  if (is_asan) {
+    win_console_app = true
   }
 }
 
@@ -154,9 +169,11 @@ if (!is_android) {
         "wintrust.lib",
         "crypt32.lib",
       ]
-      if (!is_asan) {
-        # Set /SUBSYSTEM:WINDOWS for chrome.exe itself, except for the
-        # AddressSanitizer build where console output is important.
+      if (win_console_app) {
+        defines += [ "WIN_CONSOLE_APP" ]
+      } else {
+        # Set /SUBSYSTEM:WINDOWS for chrome.exe itself, unless a console build
+        # has been requested.
         configs -= [ "//build/config/win:console" ]
         configs += [ "//build/config/win:windowed" ]
       }
@@ -220,7 +237,7 @@ if (!is_android) {
         ":packed_resources",
       ]
       deps += [
-        "//components/startup_metric_utils/browser",
+        "//components/startup_metric_utils/browser:lib",
 
         # Precompiled plugins that need to get copied to the output directory.
         # On Mac, internal plugins go inside the framework, so these
@@ -407,6 +424,13 @@ if (is_mac || is_win) {
       ]
 
       if (is_win) {
+        if (symbol_level == 2) {
+          # Incremental linking doesn't work on this target in debug mode with
+          # full symbols, but does work in other cases, including minimal
+          # symbols.
+          configs -= [ "//build/config/win:default_incremental_linking" ]
+          configs += [ "//build/config/win:incremental_linking" ]
+        }
         # TODO(GYP) bug 512851: PGO on Windows.
         # ['chrome_pgo_phase==1', {
         #   'msvs_settings': {

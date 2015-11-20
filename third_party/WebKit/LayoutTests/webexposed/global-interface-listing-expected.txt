@@ -3468,7 +3468,6 @@ interface Navigator
     method constructor
     method getBattery
     method getGamepads
-    method getStorageUpdates
     method getVRDevices
     method isProtocolHandlerRegistered
     method javaEnabled
@@ -3623,8 +3622,13 @@ interface PageTransitionEvent : Event
     getter persisted
     method constructor
 interface PasswordCredential : Credential
+    getter additionalData
+    getter idName
+    getter passwordName
     method constructor
-    method toFormData
+    setter additionalData
+    setter idName
+    setter passwordName
 interface Path2D
     method addPath
     method arc
@@ -3786,9 +3790,9 @@ interface PresentationConnection : EventTarget
     getter onmessage
     getter onstatechange
     getter state
-    method close
     method constructor
     method send
+    method terminate
     setter binaryType
     setter onmessage
     setter onstatechange
@@ -5160,15 +5164,8 @@ interface SubtleCrypto
     method wrapKey
 interface SyncManager
     method constructor
-    method getRegistration
-    method getRegistrations
-    method permissionState
+    method getTags
     method register
-interface SyncRegistration
-    getter finished
-    getter tag
-    method constructor
-    method unregister
 interface Text : CharacterData
     getter wholeText
     method constructor
@@ -5347,6 +5344,19 @@ interface URL
     setter protocol
     setter search
     setter username
+interface URLSearchParams
+    method append
+    method constructor
+    method delete
+    method entries
+    method forEach
+    method get
+    method getAll
+    method has
+    method keys
+    method set
+    method toString
+    method values
 interface USBAlternateInterface
     getter alternateSetting
     getter endpoints

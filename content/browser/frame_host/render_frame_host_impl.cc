@@ -472,8 +472,8 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_AddMessageToConsole, OnAddMessageToConsole)
     IPC_MESSAGE_HANDLER(FrameHostMsg_Detach, OnDetach)
     IPC_MESSAGE_HANDLER(FrameHostMsg_FrameFocused, OnFrameFocused)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_DidStartProvisionalLoadForFrame,
-                        OnDidStartProvisionalLoadForFrame)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_DidStartProvisionalLoad,
+                        OnDidStartProvisionalLoad)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidFailProvisionalLoadWithError,
                         OnDidFailProvisionalLoadWithError)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidFailLoadWithError,
@@ -816,9 +816,11 @@ void RenderFrameHostImpl::OnDocumentOnLoadCompleted(
   delegate_->DocumentOnLoadCompleted(this);
 }
 
-void RenderFrameHostImpl::OnDidStartProvisionalLoadForFrame(const GURL& url) {
-  frame_tree_node_->navigator()->DidStartProvisionalLoad(
-      this, url);
+void RenderFrameHostImpl::OnDidStartProvisionalLoad(
+    const GURL& url,
+    const base::TimeTicks& navigation_start) {
+  frame_tree_node_->navigator()->DidStartProvisionalLoad(this, url,
+                                                         navigation_start);
 }
 
 void RenderFrameHostImpl::OnDidFailProvisionalLoadWithError(
@@ -958,7 +960,7 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
   // message.
   if (!navigation_handle_) {
     navigation_handle_ = NavigationHandleImpl::Create(
-        validated_params.url, frame_tree_node_);
+        validated_params.url, frame_tree_node_, base::TimeTicks::Now());
   }
 
   accessibility_reset_count_ = 0;

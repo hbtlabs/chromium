@@ -1078,7 +1078,7 @@ unsigned WebLocalFrameImpl::unloadListenerCount() const
 
 void WebLocalFrameImpl::replaceSelection(const WebString& text)
 {
-    bool selectReplacement = false;
+    bool selectReplacement = frame()->editor().behavior().shouldSelectReplacement();
     bool smartReplace = true;
     frame()->editor().replaceSelectionWithText(text, selectReplacement, smartReplace);
 }
@@ -1834,6 +1834,11 @@ WebViewImpl* WebLocalFrameImpl::viewImpl() const
     if (!frame())
         return 0;
     return WebViewImpl::fromPage(frame()->page());
+}
+
+WebDevToolsAgentImpl* WebLocalFrameImpl::devToolsAgentImpl() const
+{
+    return m_devToolsAgent.get();
 }
 
 WebDataSourceImpl* WebLocalFrameImpl::dataSourceImpl() const

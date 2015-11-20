@@ -13,6 +13,7 @@
 #include "base/metrics/histogram.h"
 #include "base/process/process.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -321,7 +322,7 @@ void SetProcessBackgroundedOnLauncherThread(base::Process process,
 #endif
 }
 
-}  // anonymous namespace
+}  // namespace
 
 ChildProcessLauncher::ChildProcessLauncher(
     SandboxedProcessLauncherDelegate* delegate,

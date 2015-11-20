@@ -35,6 +35,10 @@ extern const char kEnableLRUSnapshotCache[];
 extern const char kIOSMetricsRecordingOnly[];
 extern const char kUserAgent[];
 
+extern const char kIOSHostResolverRules[];
+extern const char kIOSTestingFixedHttpPort[];
+extern const char kIOSTestingFixedHttpsPort[];
+
 }  // namespace switches
 
 #endif  // IOS_CHROME_BROWSER_CHROME_SWITCHES_H_

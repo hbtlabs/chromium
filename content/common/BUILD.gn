@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//content/common/common.gni")
+import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
@@ -133,6 +134,13 @@ source_set("common") {
                         ".",
                         "//content")
 
+  # These files are only built in a GN build because they bring in
+  # dependencies that don't build with GYP.
+  sources += [
+    "mojo/mojo_shell_connection_impl.cc",
+    "mojo/mojo_shell_connection_impl.h",
+  ]
+
   configs += [
     "//content:content_implementation",
     "//build/config:precompiled_headers",
@@ -146,10 +154,14 @@ source_set("common") {
   deps = [
     "//base",
     "//build/util:webkit_version",
+    "//components/mus/public/interfaces",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common:gles2_utils",
+    "//mojo/application/public/cpp",
+    "//mojo/converters/network",
+    "//mojo/runner/child:lib",
     "//net",
     "//skia",
     "//third_party/icu",
@@ -356,6 +368,10 @@ source_set("common") {
         "gpu/media/android_video_encode_accelerator.cc",
         "gpu/media/android_video_encode_accelerator.h",
       ]
+    }
+
+    if (enable_mojo_media == "gpu") {
+      deps += [ "//media/mojo/services:application" ]
     }
   }
 

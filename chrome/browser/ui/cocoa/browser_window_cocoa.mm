@@ -442,8 +442,16 @@ void BrowserWindowCocoa::UpdateFullscreenWithToolbar(bool with_toolbar) {
   [controller_ updateFullscreenWithToolbar:with_toolbar];
 }
 
+void BrowserWindowCocoa::ToggleFullscreenToolbar() {
+  [controller_ toggleFullscreenToolbar];
+}
+
 bool BrowserWindowCocoa::IsFullscreenWithToolbar() const {
   return IsFullscreen() && ![controller_ inPresentationMode];
+}
+
+bool BrowserWindowCocoa::ShouldHideFullscreenToolbar() const {
+  return [controller_ shouldHideFullscreenToolbar];
 }
 
 void BrowserWindowCocoa::ConfirmAddSearchProvider(
@@ -651,16 +659,6 @@ void BrowserWindowCocoa::ShowTranslateBubble(
   [controller_ showTranslateBubbleForWebContents:contents
                                             step:step
                                        errorType:error_type];
-}
-
-bool BrowserWindowCocoa::IsProfileResetBubbleSupported() const {
-  return false;
-}
-
-GlobalErrorBubbleViewBase* BrowserWindowCocoa::ShowProfileResetBubble(
-    const base::WeakPtr<ProfileResetGlobalError>& global_error) {
-  NOTREACHED();
-  return nullptr;
 }
 
 #if defined(ENABLE_ONE_CLICK_SIGNIN)

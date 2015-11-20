@@ -9,10 +9,12 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
+
+namespace {
 
 class MockScrollableArea : public NoBaseWillBeGarbageCollectedFinalized<MockScrollableArea>, public ScrollableArea {
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MockScrollableArea);
@@ -24,11 +26,9 @@ public:
 
     MOCK_CONST_METHOD0(isActive, bool());
     MOCK_CONST_METHOD1(scrollSize, int(ScrollbarOrientation));
-    MOCK_METHOD2(invalidateScrollbar, void(Scrollbar*, const IntRect&));
     MOCK_CONST_METHOD0(isScrollCornerVisible, bool());
     MOCK_CONST_METHOD0(scrollCornerRect, IntRect());
-    MOCK_METHOD2(invalidateScrollbarRect, void(Scrollbar*, const IntRect&));
-    MOCK_METHOD1(invalidateScrollCornerRect, void(const IntRect&));
+    MOCK_METHOD0(scrollControlWasSetNeedsPaintInvalidation, void());
     MOCK_CONST_METHOD0(enclosingScrollableArea, ScrollableArea*());
     MOCK_CONST_METHOD1(visibleContentRect, IntRect(IncludeScrollbarsInRect));
     MOCK_CONST_METHOD0(contentsSize, IntSize());
@@ -97,6 +97,8 @@ public:
 private:
     FakeWebThread m_webThread;
 };
+
+} // namespace
 
 class ScrollableAreaTest : public testing::Test {
 public:

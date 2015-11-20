@@ -412,9 +412,9 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
     Renderer* renderer = host_impl->renderer();
 
     LayerImpl* root = host_impl->active_tree()->root_layer();
-    LayerImpl* grand_parent = root->children()[0];
-    LayerImpl* parent = grand_parent->children()[0];
-    LayerImpl* copy_layer = parent->children()[0];
+    LayerImpl* grand_parent = root->children()[0].get();
+    LayerImpl* parent = grand_parent->children()[0].get();
+    LayerImpl* copy_layer = parent->children()[0].get();
 
     // |parent| owns a surface, but it was hidden and not part of the copy
     // request so it should not allocate any resource.
@@ -610,7 +610,7 @@ class LayerTreeHostCopyRequestTestLostOutputSurface
 
     // Save the result for later.
     EXPECT_FALSE(result_);
-    result_ = result.Pass();
+    result_ = std::move(result);
 
     // Post a commit to lose the output surface.
     layer_tree_host()->SetNeedsCommit();
@@ -846,7 +846,7 @@ class LayerTreeHostCopyRequestTestProvideTexture
         TextureMailbox(mailbox, sync_token_, GL_TEXTURE_2D));
     EXPECT_TRUE(request->has_texture_mailbox());
 
-    copy_layer_->RequestCopyOfOutput(request.Pass());
+    copy_layer_->RequestCopyOfOutput(std::move(request));
   }
 
   void AfterTest() override {
@@ -907,7 +907,7 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
                 base::Bind(&LayerTreeHostCopyRequestTestDestroyBeforeCopy::
                                 CopyOutputCallback,
                            base::Unretained(this)));
-        copy_layer_->RequestCopyOfOutput(request.Pass());
+        copy_layer_->RequestCopyOfOutput(std::move(request));
 
         layer_tree_host()->SetViewportSize(gfx::Size());
         break;
@@ -984,7 +984,7 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
                 base::Bind(&LayerTreeHostCopyRequestTestShutdownBeforeCopy::
                                 CopyOutputCallback,
                            base::Unretained(this)));
-        copy_layer_->RequestCopyOfOutput(request.Pass());
+        copy_layer_->RequestCopyOfOutput(std::move(request));
 
         layer_tree_host()->SetViewportSize(gfx::Size());
         break;
@@ -1051,7 +1051,7 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     LayerImpl* root = host_impl->active_tree()->root_layer();
-    LayerImpl* child = root->children()[0];
+    LayerImpl* child = root->children()[0].get();
 
     bool saw_root = false;
     bool saw_child = false;

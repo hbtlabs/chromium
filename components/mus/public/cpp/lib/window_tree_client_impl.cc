@@ -5,9 +5,9 @@
 #include "components/mus/public/cpp/lib/window_tree_client_impl.h"
 
 #include "base/bind.h"
+#include "components/mus/common/util.h"
 #include "components/mus/public/cpp/lib/in_flight_change.h"
 #include "components/mus/public/cpp/lib/window_private.h"
-#include "components/mus/public/cpp/util.h"
 #include "components/mus/public/cpp/window_manager_delegate.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
@@ -21,11 +21,6 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace mus {
-namespace {
-
-void WindowManagerCallback(mojom::WindowManagerErrorCode error_code) {}
-
-}  // namespace
 
 Id MakeTransportId(ConnectionSpecificId connection_id,
                    ConnectionSpecificId local_id) {
@@ -220,6 +215,11 @@ void WindowTreeClientImpl::SetFocus(Id window_id) {
   tree_->SetFocus(window_id);
 }
 
+void WindowTreeClientImpl::SetCanFocus(Id window_id, bool can_focus) {
+  DCHECK(tree_);
+  tree_->SetCanFocus(window_id, can_focus);
+}
+
 void WindowTreeClientImpl::SetVisible(Id window_id, bool visible) {
   DCHECK(tree_);
   tree_->SetWindowVisibility(window_id, visible, ActionCompletedCallback());
@@ -302,24 +302,6 @@ void WindowTreeClientImpl::OnRootDestroyed(Window* root) {
   // When the root is gone we can't do anything useful.
   if (!in_destructor_)
     delete this;
-}
-
-void WindowTreeClientImpl::SetPreferredSize(Id window_id,
-                                            const gfx::Size& size) {
-  tree_->SetPreferredSize(window_id, mojo::Size::From(size),
-                          base::Bind(&WindowManagerCallback));
-}
-
-void WindowTreeClientImpl::SetShowState(Id window_id,
-                                        mojom::ShowState show_state) {
-  tree_->SetShowState(window_id, show_state,
-                      base::Bind(&WindowManagerCallback));
-}
-
-void WindowTreeClientImpl::SetResizeBehavior(
-    Id window_id,
-    mojom::ResizeBehavior resize_behavior) {
-  tree_->SetResizeBehavior(window_id, resize_behavior);
 }
 
 InFlightChange* WindowTreeClientImpl::GetOldestInFlightChangeMatching(

@@ -226,9 +226,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTexture(
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
     base::TimeDelta timestamp) {
-  if (format != PIXEL_FORMAT_ARGB &&
-      format != PIXEL_FORMAT_UYVY &&
-      format != PIXEL_FORMAT_NV12) {
+  if (format != PIXEL_FORMAT_ARGB && format != PIXEL_FORMAT_XRGB &&
+      format != PIXEL_FORMAT_UYVY && format != PIXEL_FORMAT_NV12) {
     DLOG(ERROR) << "Unsupported pixel format supported, got "
                 << VideoPixelFormatToString(format);
     return nullptr;
@@ -492,6 +491,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
       return nullptr;
   }
 #endif
+
+  if (frame->storage_type() == STORAGE_SHMEM)
+    wrapping_frame->AddSharedMemoryHandle(frame->shared_memory_handle_);
 
   return wrapping_frame;
 }
@@ -830,6 +832,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalStorage(
     size_t data_offset) {
   DCHECK(IsStorageTypeMappable(storage_type));
 
+  // TODO(miu): This function should support any pixel format.
+  // http://crbug.com/555909
   if (format != PIXEL_FORMAT_I420) {
     DLOG(ERROR) << "Only PIXEL_FORMAT_I420 format supported: "
                 << VideoPixelFormatToString(format);
@@ -853,6 +857,10 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalStorage(
                            natural_size, timestamp);
   }
   frame->strides_[kYPlane] = coded_size.width();
+  // TODO(miu): This always rounds widths down, whereas VideoFrame::RowBytes()
+  // always rounds up.  This inconsistency must be resolved.  Perhaps a
+  // CommonAlignment() check should be made in IsValidConfig()?
+  // http://crbug.com/555909
   frame->strides_[kUPlane] = coded_size.width() / 2;
   frame->strides_[kVPlane] = coded_size.width() / 2;
   frame->data_[kYPlane] = data;

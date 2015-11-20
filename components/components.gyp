@@ -56,6 +56,7 @@
     'net_log.gypi',
     'network_hints.gypi',
     'network_time.gypi',
+    'ntp_snippets.gypi',
     'offline_pages.gypi',
     'omnibox.gypi',
     'onc.gypi',
@@ -129,6 +130,7 @@
         'web_cache.gypi',
         'web_contents_delegate_android.gypi',
         'web_modal.gypi',
+        'webusb.gypi',
       ],
     }],
     ['OS == "ios"', {
@@ -143,7 +145,6 @@
         'feedback.gypi',
         'proximity_auth.gypi',
         'storage_monitor.gypi',
-        'webusb.gypi',
       ]
     }],
     ['chromeos == 1', {
@@ -151,6 +152,11 @@
         'pairing.gypi',
         'timers.gypi',
         'wifi_sync.gypi',
+      ],
+    }],
+    ['chromeos == 1 and enable_arc == 1', {
+      'includes': [
+        'arc.gypi',
       ],
     }],
     ['OS == "win" or OS == "mac"', {
@@ -195,6 +201,11 @@
       'includes': [
         'rlz.gypi',
       ],
-    }]
+    }],
+    ['use_ash==1', {
+      'includes': [
+        'exo.gypi',
+      ],
+    }],
   ],
 }

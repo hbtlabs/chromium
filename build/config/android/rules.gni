@@ -348,13 +348,19 @@ template("java_cpp_enum") {
                            ])
 
     script = "//build/android/gyp/java_cpp_enum.py"
+    depfile = "$target_gen_dir/$target_name.d"
 
     _srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
     _rebased_srcjar_path = rebase_path(_srcjar_path, root_build_dir)
     _rebased_sources = rebase_path(invoker.sources, root_build_dir)
 
-    args = [ "--srcjar=$_rebased_srcjar_path" ] + _rebased_sources
+    args = [
+             "--depfile",
+             rebase_path(depfile, root_build_dir),
+             "--srcjar=$_rebased_srcjar_path",
+           ] + _rebased_sources
     outputs = [
+      depfile,
       _srcjar_path,
     ]
   }
@@ -1186,6 +1192,8 @@ template("android_java_prebuilt") {
 #   native_libs: List paths of native libraries to include in this apk. If these
 #     libraries depend on other shared_library targets, those dependencies will
 #     also be included in the apk.
+#   native_lib_placeholders: List of placeholder filenames to add to the apk
+#     (optional).
 #   apk_under_test: For an instrumentation test apk, this is the target of the
 #     tested apk.
 #   include_all_resources - If true include all resource IDs in all generated
@@ -1385,7 +1393,11 @@ template("android_apk") {
   _generated_proguard_config = "$base_path.resources.proguard.txt"
   process_resources_target = "${_template_name}__process_resources"
   process_resources(process_resources_target) {
-    forward_variables_from(invoker, [ "include_all_resources" ])
+    forward_variables_from(invoker,
+                           [
+                             "include_all_resources",
+                             "shared_resources",
+                           ])
     srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
     r_text_path = "${target_gen_dir}/${target_name}_R.txt"
     android_manifest = _android_manifest
@@ -1617,6 +1629,7 @@ template("android_apk") {
                              "deps",
                              "extensions_to_not_compress",
                              "language_splits",
+                             "shared_resources",
                            ])
     apk_path = _final_apk_path
     android_manifest = _android_manifest
@@ -1655,6 +1668,12 @@ template("android_apk") {
 
     if (_native_libs != [] && !_create_abi_split) {
       native_libs_dir = _native_libs_dir
+
+      # Placeholders are not necessary for L+, so add them here, but don't
+      # bother to create them in the case of splits.
+      # http://crbug.com/395038
+      forward_variables_from(invoker, [ "native_lib_placeholders" ])
+
       deps += [ ":$_prepare_native_target_name" ]
     }
   }

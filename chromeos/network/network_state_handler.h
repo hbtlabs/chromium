@@ -74,7 +74,8 @@ class CHROMEOS_EXPORT NetworkStateHandler
     TECHNOLOGY_AVAILABLE,
     TECHNOLOGY_UNINITIALIZED,
     TECHNOLOGY_ENABLING,
-    TECHNOLOGY_ENABLED
+    TECHNOLOGY_ENABLED,
+    TECHNOLOGY_PROHIBITED
   };
 
   ~NetworkStateHandler() override;
@@ -94,6 +95,9 @@ class CHROMEOS_EXPORT NetworkStateHandler
   bool IsTechnologyEnabled(const NetworkTypePattern& type) const {
     return GetTechnologyState(type) == TECHNOLOGY_ENABLED;
   }
+  bool IsTechnologyProhibited(const NetworkTypePattern& type) const {
+    return GetTechnologyState(type) == TECHNOLOGY_PROHIBITED;
+  }
 
   // Asynchronously sets the technology enabled property for |type|. Only
   // NetworkTypePattern::Primitive, ::Mobile and ::Ethernet are supported.
@@ -101,6 +105,13 @@ class CHROMEOS_EXPORT NetworkStateHandler
   void SetTechnologyEnabled(
       const NetworkTypePattern& type,
       bool enabled,
+      const network_handler::ErrorCallback& error_callback);
+
+  // Asynchronously sets the list of prohibited technologies. The accepted
+  // values are the shill network technology identifiers. See also
+  // chromeos::onc::Validator::ValidateGlobalNetworkConfiguration().
+  void SetProhibitedTechnologies(
+      const std::vector<std::string>& prohibited_technologies,
       const network_handler::ErrorCallback& error_callback);
 
   // Finds and returns a device state by |device_path| or NULL if not found.

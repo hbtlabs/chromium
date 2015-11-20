@@ -22,11 +22,9 @@ const char MediaBrowserTest::kEnded[] = "ENDED";
 const char MediaBrowserTest::kError[] = "ERROR";
 const char MediaBrowserTest::kFailed[] = "FAILED";
 
-MediaBrowserTest::MediaBrowserTest() : ignore_plugin_crash_(false) {
-}
+MediaBrowserTest::MediaBrowserTest() : ignore_plugin_crash_(false) {}
 
-MediaBrowserTest::~MediaBrowserTest() {
-}
+MediaBrowserTest::~MediaBrowserTest() {}
 
 void MediaBrowserTest::RunMediaTestPage(const std::string& html_page,
                                         const base::StringPairs& query_params,
@@ -38,10 +36,9 @@ void MediaBrowserTest::RunMediaTestPage(const std::string& html_page,
   if (http) {
     DVLOG(0) << base::TimeFormatTimeOfDayWithMilliseconds(base::Time::Now())
              << " Starting HTTP server";
-    http_test_server.reset(
-        new net::SpawnedTestServer(net::SpawnedTestServer::TYPE_HTTP,
-                                   net::SpawnedTestServer::kLocalhost,
-                                   media::GetTestDataPath()));
+    http_test_server.reset(new net::SpawnedTestServer(
+        net::SpawnedTestServer::TYPE_HTTP, net::SpawnedTestServer::kLocalhost,
+        media::GetTestDataPath()));
     CHECK(http_test_server->Start());
     gurl = http_test_server->GetURL("files/" + html_page + "?" + query);
   } else {
@@ -84,4 +81,3 @@ void MediaBrowserTest::PluginCrashed(const base::FilePath& plugin_path,
 void MediaBrowserTest::IgnorePluginCrash() {
   ignore_plugin_crash_ = true;
 }
-

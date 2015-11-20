@@ -29,8 +29,8 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
                    &shared_bitmap_manager_,
                    &task_graph_runner_),
         root_(CreateThreeNodeTree(&host_impl_)),
-        parent_(root_->children()[0]),
-        child_(parent_->children()[0]) {}
+        parent_(root_->children()[0].get()),
+        child_(parent_->children()[0].get()) {}
 
   LayerImpl* root() { return root_.get(); }
   LayerImpl* parent() { return parent_; }
@@ -43,7 +43,7 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
     root->AddChild(LayerImpl::Create(host_impl->active_tree(), 2));
     root->children()[0]->AddChild(
         LayerImpl::Create(host_impl->active_tree(), 3));
-    return root.Pass();
+    return root;
   }
 
   FakeImplTaskRunnerProvider task_runner_provider_;

@@ -11,7 +11,8 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/testing/DummyPageHolder.h"
-#include <gtest/gtest.h>
+#include "platform/heap/Handle.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
@@ -56,17 +57,18 @@ protected:
     virtual void SetUp()
     {
         m_pageHolder = DummyPageHolder::create(IntSize(800, 600));
-        Document& document = m_pageHolder->document();
+        Document& document = this->document();
         document.write("<video controls>");
         HTMLVideoElement& video = toHTMLVideoElement(*document.querySelector("video", ASSERT_NO_EXCEPTION));
         m_mediaControls = video.mediaControls();
     }
 
     MediaControls& mediaControls() { return *m_mediaControls; }
+    Document& document() { return m_pageHolder->document(); }
 
 private:
     OwnPtr<DummyPageHolder> m_pageHolder;
-    MediaControls* m_mediaControls;
+    RawPtrWillBePersistent<MediaControls> m_mediaControls;
 };
 
 TEST_F(MediaControlsTest, HideAndShow)
@@ -101,6 +103,17 @@ TEST_F(MediaControlsTest, HideAndReset)
     ASSERT_FALSE(isElementVisible(*panel));
     mediaControls().reset();
     ASSERT_FALSE(isElementVisible(*panel));
+}
+
+TEST_F(MediaControlsTest, ResetDoesNotTriggerInitialLayout)
+{
+    Document& document = this->document();
+    int oldResolverCount = document.styleEngine().resolverAccessCount();
+    // Also assert that there are no layouts yet.
+    ASSERT_EQ(0, oldResolverCount);
+    mediaControls().reset();
+    int newResolverCount = document.styleEngine().resolverAccessCount();
+    ASSERT_EQ(oldResolverCount, newResolverCount);
 }
 
 } // namespace blink

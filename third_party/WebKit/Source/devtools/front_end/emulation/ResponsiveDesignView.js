@@ -105,7 +105,6 @@ WebInspector.ResponsiveDesignView.prototype = {
         this._increasePageScaleButton.addEventListener("click", this._pageScaleButtonClicked.bind(this, true), false);
 
         this._mediaInspector.addEventListener(WebInspector.MediaQueryInspector.Events.CountUpdated, this._updateMediaQueryInspectorButton, this);
-        this._mediaInspector.addEventListener(WebInspector.MediaQueryInspector.Events.HeightUpdated, this.onResize, this);
         this._overridesWarningUpdated();
     },
 
@@ -636,7 +635,7 @@ WebInspector.ResponsiveDesignView.prototype = {
 
     _createButtonsSection: function()
     {
-        var buttonsToolbar = new WebInspector.Toolbar(this._toolbarElement);
+        var buttonsToolbar = new WebInspector.Toolbar("", this._toolbarElement);
         buttonsToolbar.makeVertical();
         buttonsToolbar.setColor("white");
         buttonsToolbar.setToggledColor("rgb(105, 194, 236)");

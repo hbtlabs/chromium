@@ -4,7 +4,9 @@
 
 package org.chromium.content.browser.webcontents;
 
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.ParcelUuid;
@@ -15,6 +17,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
+import org.chromium.content_public.browser.ContentBitmapCallback;
 import org.chromium.content_public.browser.JavaScriptCallback;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
@@ -195,13 +198,13 @@ import java.util.UUID;
         // Unselect may get triggered when certain selection-related widgets
         // are destroyed. As the timing for such destruction is unpredictable,
         // safely guard against this case.
-        if (mNativeWebContentsAndroid == 0) return;
+        if (isDestroyed()) return;
         nativeUnselect(mNativeWebContentsAndroid);
     }
 
     @Override
     public void insertCSS(String css) {
-        if (mNativeWebContentsAndroid == 0) return;
+        if (isDestroyed()) return;
         nativeInsertCSS(mNativeWebContentsAndroid, css);
     }
 
@@ -304,6 +307,7 @@ import java.util.UUID;
 
     @Override
     public void evaluateJavaScript(String script, JavaScriptCallback callback) {
+        if (isDestroyed()) return;
         nativeEvaluateJavaScript(mNativeWebContentsAndroid, script, callback);
     }
 
@@ -400,6 +404,12 @@ import java.util.UUID;
         return node;
     }
 
+    @CalledByNative
+    private static void setAccessibilitySnapshotSelection(
+            AccessibilitySnapshotNode node, int start, int end) {
+        node.setSelection(start, end);
+    }
+
     @Override
     public void addObserver(WebContentsObserver observer) {
         assert mNativeWebContentsAndroid != 0;
@@ -411,6 +421,19 @@ import java.util.UUID;
     public void removeObserver(WebContentsObserver observer) {
         if (mObserverProxy == null) return;
         mObserverProxy.removeObserver(observer);
+    }
+
+    @Override
+    public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
+            ContentBitmapCallback callback) {
+        nativeGetContentBitmap(mNativeWebContentsAndroid, callback, config, scale,
+                srcRect.top, srcRect.left, srcRect.width(), srcRect.height());
+    }
+
+    @CalledByNative
+    private void onGetContentBitmapFinished(ContentBitmapCallback callback, Bitmap bitmap,
+            int response) {
+        callback.onFinishGetBitmap(bitmap, response);
     }
 
     // This is static to avoid exposing a public destroy method on the native side of this class.
@@ -468,4 +491,7 @@ import java.util.UUID;
     private native void nativeSuspendMediaSession(long nativeWebContentsAndroid);
     private native void nativeStopMediaSession(long nativeWebContentsAndroid);
     private native String nativeGetEncoding(long nativeWebContentsAndroid);
+    private native void nativeGetContentBitmap(long nativeWebContentsAndroid,
+            ContentBitmapCallback callback, Bitmap.Config config, float scale,
+            float x, float y, float width, float height);
 }

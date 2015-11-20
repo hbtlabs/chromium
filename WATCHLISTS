@@ -713,6 +713,9 @@
     'streams': {
       'filepath': 'content/browser/streams/',
     },
+    'styleguide': {
+      'filepath': '^styleguide/',
+    },
     'supervised_users': {
       'filepath': 'chrome/browser/.*managed_mode'\
                   '|chrome/browser/.*managed_user'\
@@ -1168,9 +1171,6 @@
       'filepath': 'third_party/WebKit/LayoutTests/imported/' \
                   '|third_party/WebKit/Tools/Scripts/webkitpy/w3c/'
     },
-    'blink_web_idl': {
-      'filepath': 'third_party/WebKit/Source/core/.*\.idl'
-    },
     'blink_webcomponents': {
       'filepath': 'third_party/WebKit/Source/core/dom/shadow/' \
                   '|third_party/WebKit/Source/core/dom/custom/' \
@@ -1460,6 +1460,7 @@
                    'rlp+watch@chromium.org',
                    'rouslan+spell@chromium.org'],
     'streams': ['zork+watch@chromium.org'],
+    'styleguide': ['vmpstr+watch@chromium.org'],
     'sync': ['tim+watch@chromium.org',
              'maxbogue+watch@chromium.org',
              'plaree+watch@chromium.org',
@@ -1528,7 +1529,8 @@
     'blink_bluetooth': [ 'scheib+watch@chromium.org' ],
     'blink_canvas2d': [ 'cabanier@adobe.com',
                         'dongseong.hwang@intel.com',
-                        'junov@chromium.org' ],
+                        'junov@chromium.org',
+                        'ajuma+watch-canvas@chromium.org' ],
     'blink_clipboard': [ 'dcheng@chromium.org', ],
     'blink_content_security_policy': [ 'mkwst+watchlist-csp@chromium.org' ],
     'blink_css': [ 'alexis.menard@intel.com',
@@ -1553,7 +1555,6 @@
                             'mlamouri+watch-blink@chromium.org' ],
     'blink_device_orientation': [ 'timvolodine@chromium.org',
                                   'mvanouwerkerk+watch@chromium.org',
-                                  'ch.dumez@samsung.com',
                                   'mlamouri+watch-blink@chromium.org' ],
     'blink_devtools': [ 'pfeldman+blink@chromium.org',
                         'apavlov+blink@chromium.org',
@@ -1683,9 +1684,6 @@
     'blink_out_of_process_frames': [ 'dcheng@chromium.org',
                                      'mlamouri+watch-blink@chromium.org' ],
     'blink_screen_orientation': [ 'mlamouri+watch-blink@chromium.org' ],
-    'blink_web_idl': [ 'ch.dumez@samsung.com',
-                       'vivekg@chromium.org',
-                       'vivek.vg@samsung.com' ],
     'blink_websockets': [ 'tyoshino+watch@chromium.org',
                           'yhirano+watch@chromium.org' ],
     'blink_workers': [ 'blink-worker-reviews@chromium.org',

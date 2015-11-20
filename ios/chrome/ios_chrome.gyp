@@ -8,6 +8,7 @@
   },
   'targets': [
     {
+      # GN version: //ios/chrome/app
       'target_name': 'ios_chrome_app',
       'type': 'static_library',
       'include_dirs': [
@@ -35,6 +36,7 @@
       ],
     },
     {
+      # GN version: //ios/chrome/browser
       'target_name': 'ios_chrome_browser',
       'type': 'static_library',
       'include_dirs': [
@@ -72,6 +74,7 @@
         '../../components/components.gyp:metrics',
         '../../components/components.gyp:net_log',
         '../../components/components.gyp:network_time',
+        '../../components/components.gyp:ntp_snippets',
         '../../components/components.gyp:omnibox_browser',
         '../../components/components.gyp:open_from_clipboard',
         '../../components/components.gyp:password_manager_core_browser',
@@ -117,6 +120,9 @@
         'ios_chrome_resources.gyp:ios_chrome_resources',
         'ios_chrome_resources.gyp:ios_chrome_ui_string_overrider_factory',
         'ios_chrome_resources.gyp:ios_chrome_ui_string_overrider_factory_gen',
+      ],
+      'export_dependent_settings': [
+        '../../components/components.gyp:dom_distiller_core',
       ],
       'link_settings': {
         'libraries': [
@@ -181,6 +187,8 @@
         'browser/browser_state/browser_state_otr_helper.h',
         'browser/browser_state_metrics/browser_state_metrics.cc',
         'browser/browser_state_metrics/browser_state_metrics.h',
+        'browser/browsing_data/ios_chrome_browsing_data_remover.cc',
+        'browser/browsing_data/ios_chrome_browsing_data_remover.h',
         'browser/browsing_data_change_listening.h',
         'browser/chrome_constants.cc',
         'browser/chrome_constants.h',
@@ -344,12 +352,24 @@
         'browser/net/proxy_service_factory.h',
         'browser/net/retryable_url_fetcher.h',
         'browser/net/retryable_url_fetcher.mm',
+        'browser/ntp_snippets/ios_chrome_ntp_snippets_service_factory.cc',
+        'browser/ntp_snippets/ios_chrome_ntp_snippets_service_factory.h',
         'browser/open_from_clipboard/create_clipboard_recent_content.h',
         'browser/open_from_clipboard/create_clipboard_recent_content.mm',
+        'browser/passwords/credential_manager.h',
+        'browser/passwords/credential_manager.mm',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.cc',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.h',
         'browser/passwords/ios_chrome_password_store_factory.cc',
         'browser/passwords/ios_chrome_password_store_factory.h',
+        'browser/passwords/js_credential_manager.h',
+        'browser/passwords/js_credential_manager.mm',
+        'browser/passwords/js_password_manager.h',
+        'browser/passwords/js_password_manager.mm',
+        'browser/passwords/password_generation_edit_view.h',
+        'browser/passwords/password_generation_edit_view.mm',
+        'browser/passwords/password_generation_offer_view.h',
+        'browser/passwords/password_generation_offer_view.mm',
         'browser/passwords/password_generation_utils.h',
         'browser/passwords/password_generation_utils.mm',
         'browser/pref_names.cc',
@@ -520,6 +540,8 @@
         'browser/ui/webui/about_ui.h',
         'browser/ui/webui/crashes_ui.cc',
         'browser/ui/webui/crashes_ui.h',
+        'browser/ui/webui/gcm/gcm_internals_ui.cc',
+        'browser/ui/webui/gcm/gcm_internals_ui.h',
         'browser/ui/webui/net_export/net_export_ui.cc',
         'browser/ui/webui/net_export/net_export_ui.h',
         'browser/ui/webui/sync_internals/sync_internals_message_handler.cc',
@@ -560,15 +582,10 @@
             'ios_chrome_browser_rlz',
           ],
         }],
-        ['configuration_policy==1', {
-          'dependencies': [
-            '../../components/components.gyp:policy_component_browser',
-            '../../components/components.gyp:policy_component_common',
-          ],
-        }],
       ],
     },
     {
+      # GN version: //ios/chrome/common
       'target_name': 'ios_chrome_common',
       'type': 'static_library',
       'include_dirs': [
@@ -593,19 +610,25 @@
       ],
     },
     {
+      # GN version: //ios/chrome/browser:injected_js
       'target_name': 'injected_js',
       'type': 'none',
       'sources': [
         'browser/find_in_page/resources/find_in_page.js',
+        'browser/passwords/resources/credential_manager.js',
+        'browser/passwords/resources/password_controller.js',
       ],
       'includes': [ '../../ios/web/js_compile.gypi' ],
       'link_settings': {
         'mac_bundle_resources': [
+          '<(SHARED_INTERMEDIATE_DIR)/credential_manager.js',
           '<(SHARED_INTERMEDIATE_DIR)/find_in_page.js',
+          '<(SHARED_INTERMEDIATE_DIR)/password_controller.js',
         ],
       },
     },
     {
+      # GN version: //ios/chrome/common/app_group
       'target_name': 'app_group_common',
       'type': 'static_library',
       'sources': [
@@ -625,6 +648,7 @@
       ],
     },
     {
+      # GN version: //ios/chrome/common/app_group:client
       'target_name': 'app_group_client',
       'type': 'static_library',
       'sources': [
@@ -641,6 +665,7 @@
       ],
     },
     {
+      # GN version: //ios/chrome/common/app_group:main_app
       'target_name': 'app_group_mainapp',
       'type': 'static_library',
       'sources': [
@@ -659,6 +684,7 @@
     ['enable_rlz_support==1', {
       'targets': [
         {
+          # GN version: //ios/chrome/browser/rlz
           'target_name': 'ios_chrome_browser_rlz',
           'type': 'static_library',
           'sources': [

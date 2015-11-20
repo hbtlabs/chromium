@@ -252,7 +252,7 @@ bool ThemePainterMac::paintProgressBar(const LayoutObject& layoutObject, const P
     }
 
     if (!paintInfo.context->contextDisabled())
-        imageBuffer->draw(paintInfo.context, FloatRect(inflatedRect.location(), imageBuffer->size()), nullptr, SkXfermode::kSrcOver_Mode);
+        imageBuffer->draw(paintInfo.context, FloatRect(inflatedRect.location(), FloatSize(imageBuffer->size())), nullptr, SkXfermode::kSrcOver_Mode);
     return false;
 }
 
@@ -341,16 +341,16 @@ bool ThemePainterMac::paintSliderTrack(const LayoutObject& o, const PaintInfo& p
 
     bool isVerticalSlider = o.styleRef().appearance() == SliderVerticalPart;
 
-    int fillRadiusSize = (LayoutThemeMac::sliderTrackWidth - LayoutThemeMac::sliderTrackBorderWidth) / 2;
-    IntSize fillRadius(fillRadiusSize, fillRadiusSize);
-    IntRect fillBounds = enclosedIntRect(unzoomedRect);
+    float fillRadiusSize = (LayoutThemeMac::sliderTrackWidth - LayoutThemeMac::sliderTrackBorderWidth) / 2;
+    FloatSize fillRadius(fillRadiusSize, fillRadiusSize);
+    FloatRect fillBounds(enclosedIntRect(unzoomedRect));
     FloatRoundedRect fillRect(fillBounds, fillRadius, fillRadius, fillRadius, fillRadius);
     paintInfo.context->fillRoundedRect(fillRect, fillColor);
 
-    IntSize shadowOffset(isVerticalSlider ? 1 : 0,
-                         isVerticalSlider ? 0 : 1);
-    int shadowBlur = 3;
-    int shadowSpread = 0;
+    FloatSize shadowOffset(isVerticalSlider ? 1 : 0,
+                           isVerticalSlider ? 0 : 1);
+    float shadowBlur = 3;
+    float shadowSpread = 0;
     paintInfo.context->save();
     paintInfo.context->drawInnerShadow(fillRect, shadowColor, shadowOffset, shadowBlur, shadowSpread);
     paintInfo.context->restore();

@@ -120,7 +120,7 @@ protected:
     HTMLDocumentParser(HTMLDocument&, bool reportErrors, ParserSynchronizationPolicy);
     HTMLDocumentParser(DocumentFragment*, Element* contextElement, ParserContentPolicy);
 
-    HTMLTreeBuilder* treeBuilder() const { return m_treeBuilder.get(); }
+    HTMLTreeBuilder* treeBuilder() const;
 
     void forcePlaintextForTextDocument();
 
@@ -188,7 +188,7 @@ private:
     OwnPtr<HTMLPreloadScanner> m_preloadScanner;
     OwnPtr<HTMLPreloadScanner> m_insertionPreloadScanner;
     OwnPtr<WebTaskRunner> m_loadingTaskRunner;
-    OwnPtr<HTMLParserScheduler> m_parserScheduler;
+    OwnPtrWillBeMember<HTMLParserScheduler> m_parserScheduler;
     HTMLSourceTracker m_sourceTracker;
     TextPosition m_textPosition;
     XSSAuditor m_xssAuditor;

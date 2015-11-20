@@ -330,8 +330,9 @@
       'variables': {
         'input_path': '<(jar_path)',
         'output_path': '<(jar_final_path)',
+        'coverage_file': '<(jar_dir)/<(_target_name).em',
+        'sources_list_file': '<(jar_dir)/<(_target_name)_sources.txt',
         'stamp_path': '<(emma_instr_stamp)',
-        'instr_type': 'jar',
       },
       'outputs': [
         '<(jar_final_path)',

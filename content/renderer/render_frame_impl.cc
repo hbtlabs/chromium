@@ -139,7 +139,6 @@
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebGlyphCache.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebMediaStreamRegistry.h"
@@ -478,9 +477,15 @@ base::TimeTicks SanitizeNavigationTiming(
   DCHECK(!browser_navigation_start.is_null());
   base::TimeTicks navigation_start =
       std::min(browser_navigation_start, renderer_navigation_start);
-  // TODO(csharrison) Investigate how big a problem the cross process
-  // monotonicity really is and on what platforms. Log UMA for:
-  // |renderer_navigation_start - browser_navigation_start|
+  base::TimeDelta difference =
+      renderer_navigation_start - browser_navigation_start;
+  if (difference > base::TimeDelta()) {
+    UMA_HISTOGRAM_TIMES("Navigation.Start.RendererBrowserDifference.Positive",
+                        difference);
+  } else {
+    UMA_HISTOGRAM_TIMES("Navigation.Start.RendererBrowserDifference.Negative",
+                        -difference);
+  }
   return navigation_start;
 }
 
@@ -1502,6 +1507,7 @@ void RenderFrameImpl::OnReplace(const base::string16& text) {
     frame_->selectWordAroundCaret();
 
   frame_->replaceSelection(text);
+  SyncSelectionIfRequired();
 }
 
 void RenderFrameImpl::OnReplaceMisspelling(const base::string16& text) {
@@ -2721,6 +2727,8 @@ void RenderFrameImpl::didStartProvisionalLoad(blink::WebLocalFrame* frame,
   // Start time is only set after request time.
   document_state->set_start_load_time(Time::Now());
 
+  NavigationStateImpl* navigation_state = static_cast<NavigationStateImpl*>(
+      document_state->navigation_state());
   bool is_top_most = !frame->parent();
   if (is_top_most) {
     render_view_->set_navigation_gesture(
@@ -2730,16 +2738,19 @@ void RenderFrameImpl::didStartProvisionalLoad(blink::WebLocalFrame* frame,
     // Subframe navigations that don't add session history items must be
     // marked with AUTO_SUBFRAME. See also didFailProvisionalLoad for how we
     // handle loading of error pages.
-    static_cast<NavigationStateImpl*>(document_state->navigation_state())
-        ->set_transition_type(ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+    navigation_state->set_transition_type(ui::PAGE_TRANSITION_AUTO_SUBFRAME);
   }
+
+  base::TimeTicks navigation_start =
+      navigation_state->common_params().navigation_start;
+  DCHECK(!navigation_start.is_null());
 
   FOR_EACH_OBSERVER(RenderViewObserver, render_view_->observers(),
                     DidStartProvisionalLoad(frame));
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, DidStartProvisionalLoad());
 
-  Send(new FrameHostMsg_DidStartProvisionalLoadForFrame(
-       routing_id_, ds->request().url()));
+  Send(new FrameHostMsg_DidStartProvisionalLoad(
+      routing_id_, ds->request().url(), navigation_start));
 }
 
 void RenderFrameImpl::didReceiveServerRedirectForProvisionalLoad(
@@ -4245,11 +4256,6 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     params.ui_timestamp = base::TimeTicks() + base::TimeDelta::FromSecondsD(
         frame->dataSource()->request().uiStartTime());
 
-    // Save some histogram data so we can compute the average memory used per
-    // page load of the glyphs.
-    UMA_HISTOGRAM_COUNTS_10000("Memory.GlyphPagesPerLoad",
-                               blink::WebGlyphCache::pageCount());
-
     // This message needs to be sent before any of allowScripts(),
     // allowImages(), allowPlugins() is called for the new page, so that when
     // these functions send a ViewHostMsg_ContentBlocked message, it arrives
@@ -4350,8 +4356,8 @@ void RenderFrameImpl::OnFailedNavigation(
 
   // Inform the browser of the start of the provisional load. This is needed so
   // that the load is properly tracked by the WebNavigation API.
-  Send(new FrameHostMsg_DidStartProvisionalLoadForFrame(
-      routing_id_, common_params.url));
+  Send(new FrameHostMsg_DidStartProvisionalLoad(
+      routing_id_, common_params.url, common_params.navigation_start));
 
   // Send the provisional load failure.
   blink::WebURLError error =
@@ -4676,6 +4682,14 @@ void RenderFrameImpl::NavigateInternal(
 
   pending_navigation_params_.reset(
       new NavigationParams(common_params, start_params, request_params));
+
+  // Unless the load is a WebFrameLoadType::Standard, this should remain
+  // uninitialized. It will be updated when the load type is determined to be
+  // Standard, or after the previous document's unload handler has been
+  // triggered. This occurs in UpdateNavigationState.
+  // TODO(csharrison) See if we can always use the browser timestamp.
+  pending_navigation_params_->common_params.navigation_start =
+      base::TimeTicks();
 
   // Unless the load is a WebFrameLoadType::Standard, this should remain
   // uninitialized. It will be updated when the load type is determined to be
@@ -5032,7 +5046,7 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request) {
 
   // These values are assumed on the browser side for navigations. These checks
   // ensure the renderer has the correct values.
-  DCHECK_EQ(FETCH_REQUEST_MODE_SAME_ORIGIN,
+  DCHECK_EQ(FETCH_REQUEST_MODE_NAVIGATE,
             GetFetchRequestModeForWebURLRequest(*request));
   DCHECK_EQ(FETCH_CREDENTIALS_MODE_INCLUDE,
             GetFetchCredentialsModeForWebURLRequest(*request));
@@ -5218,31 +5232,18 @@ WebMediaPlayer* RenderFrameImpl::CreateAndroidWebMediaPlayer(
           SynchronousCompositorFactory::GetInstance()) {
     stream_texture_factory = factory->CreateStreamTextureFactory(routing_id_);
   } else {
-    GpuChannelHost* gpu_channel_host =
-        RenderThreadImpl::current()->EstablishGpuChannelSync(
-            CAUSE_FOR_GPU_LAUNCH_VIDEODECODEACCELERATOR_INITIALIZE);
-
-    if (!gpu_channel_host) {
-      LOG(ERROR) << "Failed to establish GPU channel for media player";
+    stream_texture_factory =
+        RenderThreadImpl::current()->GetStreamTexureFactory();
+    if (!stream_texture_factory.get()) {
+      LOG(ERROR) << "Failed to get stream texture factory!";
       return NULL;
     }
-
-    scoped_refptr<cc_blink::ContextProviderWebContext> context_provider =
-        RenderThreadImpl::current()->SharedMainThreadContextProvider();
-
-    if (!context_provider.get()) {
-      LOG(ERROR) << "Failed to get context3d for media player";
-      return NULL;
-    }
-
-    stream_texture_factory = StreamTextureFactoryImpl::Create(
-        context_provider, gpu_channel_host, routing_id_);
   }
 
   return new WebMediaPlayerAndroid(frame_, client, encrypted_client,
                                    GetWebMediaPlayerDelegate()->AsWeakPtr(),
                                    GetMediaPlayerManager(), GetCdmFactory(),
-                                   stream_texture_factory, params);
+                                   stream_texture_factory, routing_id_, params);
 }
 
 RendererMediaPlayerManager* RenderFrameImpl::GetMediaPlayerManager() {

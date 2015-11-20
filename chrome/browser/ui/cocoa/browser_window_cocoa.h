@@ -89,7 +89,9 @@ class BrowserWindowCocoa
   bool IsFullscreenBubbleVisible() const override;
   bool SupportsFullscreenWithToolbar() const override;
   void UpdateFullscreenWithToolbar(bool with_toolbar) override;
+  void ToggleFullscreenToolbar() override;
   bool IsFullscreenWithToolbar() const override;
+  bool ShouldHideFullscreenToolbar() const override;
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
@@ -122,9 +124,6 @@ class BrowserWindowCocoa
                            translate::TranslateStep step,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture) override;
-  bool IsProfileResetBubbleSupported() const override;
-  GlobalErrorBubbleViewBase* ShowProfileResetBubble(
-      const base::WeakPtr<ProfileResetGlobalError>& global_error) override;
 #if defined(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninBubble(
       OneClickSigninBubbleType type,

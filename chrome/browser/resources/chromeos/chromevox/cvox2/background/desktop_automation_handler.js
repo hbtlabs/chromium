@@ -67,7 +67,7 @@ DesktopAutomationHandler.prototype = {
 
     // Check to see if we've crossed roots. Continue if we've crossed roots or
     // are not within web content.
-    if (node.root.role == 'desktop' ||
+    if (node.root.role == RoleType.desktop ||
         !prevRange ||
         prevRange.start.node.root != node.root)
       global.backgroundObj.refreshMode(node.root.docUrl || '');
@@ -75,7 +75,8 @@ DesktopAutomationHandler.prototype = {
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
     if (node.root.role != RoleType.desktop &&
         global.backgroundObj.mode === ChromeVoxMode.CLASSIC) {
-      chrome.accessibilityPrivate.setFocusRing([]);
+      if (cvox.ChromeVox.isChromeOS)
+        chrome.accessibilityPrivate.setFocusRing([]);
       return;
     }
 
@@ -128,7 +129,8 @@ DesktopAutomationHandler.prototype = {
     if (node.role == RoleType.rootWebArea) {
       // Discard focus events for root web areas when focus was previously
       // placed on a descendant.
-      if (global.backgroundObj.currentRange.start.node.root == node)
+      var currentRange = global.backgroundObj.currentRange;
+      if (currentRange && currentRange.start.node.root == node)
         return;
 
       // Discard focused root nodes without focused state set.

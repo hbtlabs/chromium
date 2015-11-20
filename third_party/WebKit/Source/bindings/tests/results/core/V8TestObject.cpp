@@ -190,7 +190,7 @@ static void readonlyTestInterfaceEmptyAttributeAttributeGetter(const v8::Functio
         return;
     v8::Local<v8::Value> v8Value(toV8(cppValue.get(), holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "readonlyTestInterfaceEmptyAttribute"), v8Value);
+        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "readonlyTestInterfaceEmptyAttribute"), v8Value);
         v8SetReturnValue(info, v8Value);
     }
 }
@@ -2279,7 +2279,7 @@ static void cachedAttributeAnyAttributeAttributeGetter(const v8::FunctionCallbac
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "cachedAttributeAnyAttribute");
     TestObject* impl = V8TestObject::toImpl(holder);
     if (!impl->isValueDirty()) {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(info.GetIsolate(), holder, propertyName);
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -2287,7 +2287,7 @@ static void cachedAttributeAnyAttributeAttributeGetter(const v8::FunctionCallbac
     }
     ScriptValue cppValue(impl->cachedAttributeAnyAttribute());
     v8::Local<v8::Value> v8Value(cppValue.v8Value());
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, v8Value);
     v8SetReturnValue(info, v8Value);
 }
 
@@ -2304,7 +2304,7 @@ static void cachedAttributeAnyAttributeAttributeSetter(v8::Local<v8::Value> v8Va
     TestObject* impl = V8TestObject::toImpl(holder);
     ScriptValue cppValue = ScriptValue(ScriptState::current(info.GetIsolate()), v8Value);
     impl->setCachedAttributeAnyAttribute(cppValue);
-    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "cachedAttributeAnyAttribute")); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "cachedAttributeAnyAttribute")); // Invalidate the cached value.
 }
 
 static void cachedAttributeAnyAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2321,7 +2321,7 @@ static void cachedArrayAttributeAttributeGetter(const v8::FunctionCallbackInfo<v
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "cachedArrayAttribute");
     TestObject* impl = V8TestObject::toImpl(holder);
     if (!impl->isArrayDirty()) {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(info.GetIsolate(), holder, propertyName);
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -2329,7 +2329,7 @@ static void cachedArrayAttributeAttributeGetter(const v8::FunctionCallbackInfo<v
     }
     Vector<String> cppValue(impl->cachedArrayAttribute());
     v8::Local<v8::Value> v8Value(toV8(cppValue, holder, info.GetIsolate()));
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, v8Value);
     v8SetReturnValue(info, v8Value);
 }
 
@@ -2349,7 +2349,7 @@ static void cachedArrayAttributeAttributeSetter(v8::Local<v8::Value> v8Value, co
     if (exceptionState.throwIfNeeded())
         return;
     impl->setCachedArrayAttribute(cppValue);
-    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "cachedArrayAttribute")); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "cachedArrayAttribute")); // Invalidate the cached value.
 }
 
 static void cachedArrayAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2366,7 +2366,7 @@ static void cachedStringOrNoneAttributeAttributeGetter(const v8::FunctionCallbac
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "cachedStringOrNoneAttribute");
     TestObject* impl = V8TestObject::toImpl(holder);
     if (!impl->isStringDirty()) {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(info.GetIsolate(), holder, propertyName);
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -2374,7 +2374,7 @@ static void cachedStringOrNoneAttributeAttributeGetter(const v8::FunctionCallbac
     }
     String cppValue(impl->cachedStringOrNoneAttribute());
     v8::Local<v8::Value> v8Value(cppValue.isNull() ? v8::Local<v8::Value>(v8::Null(info.GetIsolate())) : v8String(info.GetIsolate(), cppValue));
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, v8Value);
     v8SetReturnValue(info, v8Value);
 }
 
@@ -2393,7 +2393,7 @@ static void cachedStringOrNoneAttributeAttributeSetter(v8::Local<v8::Value> v8Va
     if (!cppValue.prepare())
         return;
     impl->setCachedStringOrNoneAttribute(cppValue);
-    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "cachedStringOrNoneAttribute")); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "cachedStringOrNoneAttribute")); // Invalidate the cached value.
 }
 
 static void cachedStringOrNoneAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -2948,7 +2948,7 @@ static void perWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetter(c
         return;
     v8::Local<v8::Value> v8Value(toV8(cppValue.get(), holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "perWorldBindingsReadonlyTestInterfaceEmptyAttribute"), v8Value);
+        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "perWorldBindingsReadonlyTestInterfaceEmptyAttribute"), v8Value);
         v8SetReturnValue(info, v8Value);
     }
 }
@@ -2969,7 +2969,7 @@ static void perWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetterFo
         return;
     v8::Local<v8::Value> v8Value(toV8(cppValue.get(), holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "perWorldBindingsReadonlyTestInterfaceEmptyAttribute"), v8Value);
+        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "perWorldBindingsReadonlyTestInterfaceEmptyAttribute"), v8Value);
         v8SetReturnValue(info, v8Value);
     }
 }
@@ -3542,7 +3542,7 @@ static void locationGarbageCollectedAttributeGetter(const v8::FunctionCallbackIn
         return;
     v8::Local<v8::Value> v8Value(toV8(cppValue.get(), holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "locationGarbageCollected"), v8Value);
+        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "locationGarbageCollected"), v8Value);
         v8SetReturnValue(info, v8Value);
     }
 }
@@ -3582,7 +3582,7 @@ static void locationWillBeGarbageCollectedAttributeGetter(const v8::FunctionCall
         return;
     v8::Local<v8::Value> v8Value(toV8(cppValue.get(), holder, info.GetIsolate()));
     if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "locationWillBeGarbageCollected"), v8Value);
+        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "locationWillBeGarbageCollected"), v8Value);
         v8SetReturnValue(info, v8Value);
     }
 }
@@ -3764,7 +3764,7 @@ static void cachedAttributeRaisesExceptionGetterAnyAttributeAttributeGetter(cons
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "cachedAttributeRaisesExceptionGetterAnyAttribute");
     TestObject* impl = V8TestObject::toImpl(holder);
     if (!impl->isValueDirty()) {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(info.GetIsolate(), holder, propertyName);
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -3775,7 +3775,7 @@ static void cachedAttributeRaisesExceptionGetterAnyAttributeAttributeGetter(cons
     if (UNLIKELY(exceptionState.throwIfNeeded()))
         return;
     v8::Local<v8::Value> v8Value(cppValue.v8Value());
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, v8Value);
     v8SetReturnValue(info, v8Value);
 }
 
@@ -3794,7 +3794,7 @@ static void cachedAttributeRaisesExceptionGetterAnyAttributeAttributeSetter(v8::
     ScriptValue cppValue = ScriptValue(ScriptState::current(info.GetIsolate()), v8Value);
     impl->setCachedAttributeRaisesExceptionGetterAnyAttribute(cppValue, exceptionState);
     exceptionState.throwIfNeeded();
-    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "cachedAttributeRaisesExceptionGetterAnyAttribute")); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "cachedAttributeRaisesExceptionGetterAnyAttribute")); // Invalidate the cached value.
 }
 
 static void cachedAttributeRaisesExceptionGetterAnyAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -4827,7 +4827,7 @@ static void cachedTreatReturnedNullStringAsUndefinedStringAttributeAttributeGett
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "cachedTreatReturnedNullStringAsUndefinedStringAttribute");
     TestObject* impl = V8TestObject::toImpl(holder);
     if (!impl->isStringDirty()) {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(info.GetIsolate(), holder, propertyName);
+        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -4835,7 +4835,7 @@ static void cachedTreatReturnedNullStringAsUndefinedStringAttributeAttributeGett
     }
     String cppValue(impl->cachedTreatReturnedNullStringAsUndefinedStringAttribute());
     v8::Local<v8::Value> v8Value(cppValue.isNull() ? v8Undefined() : v8String(info.GetIsolate(), cppValue));
-    V8HiddenValue::setHiddenValue(info.GetIsolate(), holder, propertyName, v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, v8Value);
     v8SetReturnValue(info, v8Value);
 }
 
@@ -4854,7 +4854,7 @@ static void cachedTreatReturnedNullStringAsUndefinedStringAttributeAttributeSett
     if (!cppValue.prepare())
         return;
     impl->setCachedTreatReturnedNullStringAsUndefinedStringAttribute(cppValue);
-    V8HiddenValue::deleteHiddenValue(info.GetIsolate(), holder, v8AtomicString(info.GetIsolate(), "cachedTreatReturnedNullStringAsUndefinedStringAttribute")); // Invalidate the cached value.
+    V8HiddenValue::deleteHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "cachedTreatReturnedNullStringAsUndefinedStringAttribute")); // Invalidate the cached value.
 }
 
 static void cachedTreatReturnedNullStringAsUndefinedStringAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -12917,21 +12917,17 @@ static void installV8TestObjectTemplate(v8::Local<v8::FunctionTemplate> function
     ExecutionContext* context = currentExecutionContext(isolate);
     ALLOW_UNUSED_LOCAL(context);
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
-        const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = \
+        const V8DOMConfiguration::AccessorConfiguration accessorruntimeEnabledLongAttributeConfiguration = \
         {"runtimeEnabledLongAttribute", TestObjectV8Internal::runtimeEnabledLongAttributeAttributeGetterCallback, TestObjectV8Internal::runtimeEnabledLongAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorConfiguration);
-    }
-#if ENABLE(CONDITION)
-    if (RuntimeEnabledFeatures::featureNameEnabled()) {
-        const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = \
-        {"conditionalRuntimeEnabledLongAttribute", TestObjectV8Internal::conditionalRuntimeEnabledLongAttributeAttributeGetterCallback, TestObjectV8Internal::conditionalRuntimeEnabledLongAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorConfiguration);
-    }
-#endif // ENABLE(CONDITION)
-    if (RuntimeEnabledFeatures::featureNameEnabled()) {
-        const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = \
+        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorruntimeEnabledLongAttributeConfiguration);
+        const V8DOMConfiguration::AccessorConfiguration accessorunscopeableRuntimeEnabledLongAttributeConfiguration = \
         {"unscopeableRuntimeEnabledLongAttribute", TestObjectV8Internal::unscopeableRuntimeEnabledLongAttributeAttributeGetterCallback, TestObjectV8Internal::unscopeableRuntimeEnabledLongAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
-        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorConfiguration);
+        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorunscopeableRuntimeEnabledLongAttributeConfiguration);
+#if ENABLE(CONDITION)
+        const V8DOMConfiguration::AccessorConfiguration accessorconditionalRuntimeEnabledLongAttributeConfiguration = \
+        {"conditionalRuntimeEnabledLongAttribute", TestObjectV8Internal::conditionalRuntimeEnabledLongAttributeAttributeGetterCallback, TestObjectV8Internal::conditionalRuntimeEnabledLongAttributeAttributeSetterCallback, 0, 0, 0, v8::DEFAULT, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype, V8DOMConfiguration::CheckHolder};
+        V8DOMConfiguration::installAccessor(isolate, instanceTemplate, prototypeTemplate, functionTemplate, defaultSignature, accessorconditionalRuntimeEnabledLongAttributeConfiguration);
+#endif // ENABLE(CONDITION)
     }
     const V8DOMConfiguration::ConstantConfiguration V8TestObjectConstants[] = {
         {"CONST_VALUE_0", 0, 0, V8DOMConfiguration::ConstantTypeUnsignedShort},
@@ -13050,24 +13046,24 @@ TestObject* V8TestObject::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8
     return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
 }
 
-void V8TestObject::preparePrototypeAndInterfaceObject(v8::Isolate* isolate, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
+void V8TestObject::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
-    v8::Local<v8::Context> v8Context(prototypeObject->CreationContext());
+    v8::Isolate* isolate = context->GetIsolate();
     v8::Local<v8::Name> unscopablesSymbol(v8::Symbol::GetUnscopables(isolate));
     v8::Local<v8::Object> unscopeables;
-    if (v8CallBoolean(prototypeObject->HasOwnProperty(v8Context, unscopablesSymbol)))
-        unscopeables = prototypeObject->Get(v8Context, unscopablesSymbol).ToLocalChecked().As<v8::Object>();
+    if (v8CallBoolean(prototypeObject->HasOwnProperty(context, unscopablesSymbol)))
+        unscopeables = prototypeObject->Get(context, unscopablesSymbol).ToLocalChecked().As<v8::Object>();
     else
         unscopeables = v8::Object::New(isolate);
-    unscopeables->CreateDataProperty(v8Context, v8AtomicString(isolate, "unscopeableLongAttribute"), v8::True(isolate)).FromJust();
+    unscopeables->CreateDataProperty(context, v8AtomicString(isolate, "unscopeableLongAttribute"), v8::True(isolate)).FromJust();
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
-        unscopeables->CreateDataProperty(v8Context, v8AtomicString(isolate, "unscopeableRuntimeEnabledLongAttribute"), v8::True(isolate)).FromJust();
+        unscopeables->CreateDataProperty(context, v8AtomicString(isolate, "unscopeableRuntimeEnabledLongAttribute"), v8::True(isolate)).FromJust();
     }
     if (RuntimeEnabledFeatures::featureNameEnabled()) {
-        unscopeables->CreateDataProperty(v8Context, v8AtomicString(isolate, "unscopeableRuntimeEnabledVoidMethod"), v8::True(isolate)).FromJust();
+        unscopeables->CreateDataProperty(context, v8AtomicString(isolate, "unscopeableRuntimeEnabledVoidMethod"), v8::True(isolate)).FromJust();
     }
-    unscopeables->CreateDataProperty(v8Context, v8AtomicString(isolate, "unscopeableVoidMethod"), v8::True(isolate)).FromJust();
-    prototypeObject->CreateDataProperty(v8Context, unscopablesSymbol, unscopeables).FromJust();
+    unscopeables->CreateDataProperty(context, v8AtomicString(isolate, "unscopeableVoidMethod"), v8::True(isolate)).FromJust();
+    prototypeObject->CreateDataProperty(context, unscopablesSymbol, unscopeables).FromJust();
 }
 
 void V8TestObject::refObject(ScriptWrappable* scriptWrappable)

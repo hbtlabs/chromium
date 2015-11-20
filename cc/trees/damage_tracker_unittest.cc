@@ -44,7 +44,7 @@ void ClearDamageForAllSurfaces(LayerImpl* layer) {
 
   // Recursively clear damage for any existing surface.
   for (size_t i = 0; i < layer->children().size(); ++i)
-    ClearDamageForAllSurfaces(layer->children()[i]);
+    ClearDamageForAllSurfaces(layer->children()[i].get());
 }
 
 void EmulateDrawingOneFrame(LayerImpl* root) {
@@ -98,9 +98,9 @@ class DamageTrackerTest : public testing::Test {
     child->SetPosition(gfx::PointF(100.f, 100.f));
     child->SetBounds(gfx::Size(30, 30));
     child->SetDrawsContent(true);
-    root->AddChild(child.Pass());
+    root->AddChild(std::move(child));
 
-    return root.Pass();
+    return root;
   }
 
   scoped_ptr<LayerImpl> CreateTestTreeWithTwoSurfaces() {
@@ -145,12 +145,12 @@ class DamageTrackerTest : public testing::Test {
     grand_child2->SetBounds(gfx::Size(6, 8));
     grand_child2->SetDrawsContent(true);
 
-    child1->AddChild(grand_child1.Pass());
-    child1->AddChild(grand_child2.Pass());
-    root->AddChild(child1.Pass());
-    root->AddChild(child2.Pass());
+    child1->AddChild(std::move(grand_child1));
+    child1->AddChild(std::move(grand_child2));
+    root->AddChild(std::move(child1));
+    root->AddChild(std::move(child2));
 
-    return root.Pass();
+    return root;
   }
 
   scoped_ptr<LayerImpl> CreateAndSetUpTestTreeWithOneSurface() {
@@ -160,7 +160,7 @@ class DamageTrackerTest : public testing::Test {
     // everything, so that we can actually perform specific tests.
     EmulateDrawingOneFrame(root.get());
 
-    return root.Pass();
+    return root;
   }
 
   scoped_ptr<LayerImpl> CreateAndSetUpTestTreeWithTwoSurfaces() {
@@ -170,7 +170,7 @@ class DamageTrackerTest : public testing::Test {
     // everything, so that we can actually perform specific tests.
     EmulateDrawingOneFrame(root.get());
 
-    return root.Pass();
+    return root;
   }
 
  protected:
@@ -202,8 +202,8 @@ TEST_F(DamageTrackerTest, SanityCheckTestTreeWithTwoSurfaces) {
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
 
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* child2 = root->children()[1];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* child2 = root->children()[1].get();
   gfx::Rect child_damage_rect =
       child1->render_surface()->damage_tracker()->current_damage_rect();
   gfx::Rect root_damage_rect =
@@ -223,7 +223,7 @@ TEST_F(DamageTrackerTest, SanityCheckTestTreeWithTwoSurfaces) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForUpdateRects) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // CASE 1: Setting the update rect should cause the corresponding damage to
   //         the surface.
@@ -263,7 +263,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForUpdateRects) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForLayerDamageRects) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // CASE 1: Adding the layer damage rect should cause the corresponding damage
   // to the surface.
@@ -315,7 +315,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForLayerDamageRects) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForLayerUpdateAndDamageRects) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // CASE 1: Adding the layer damage rect and update rect should cause the
   // corresponding damage to the surface.
@@ -357,7 +357,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForLayerUpdateAndDamageRects) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForPropertyChanges) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // CASE 1: The layer's property changed flag takes priority over update rect.
   //
@@ -406,7 +406,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForTransformedLayer) {
   // transformed layer.
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   gfx::Transform rotation;
   rotation.Rotate(45.0);
@@ -456,7 +456,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForPerspectiveClippedLayer) {
   //
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   gfx::Transform transform;
   transform.Translate3d(500.0, 500.0, 0.0);
@@ -493,8 +493,8 @@ TEST_F(DamageTrackerTest, VerifyDamageForPerspectiveClippedLayer) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForBlurredSurface) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* surface = root->children()[0];
-  LayerImpl* child = surface->children()[0];
+  LayerImpl* surface = root->children()[0].get();
+  LayerImpl* child = surface->children()[0].get();
 
   FilterOperations filters;
   filters.Append(FilterOperation::CreateBlurFilter(5.f));
@@ -527,7 +527,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForBlurredSurface) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForImageFilter) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
   gfx::Rect root_damage_rect, child_damage_rect;
 
   // Allow us to set damage on child too.
@@ -580,8 +580,8 @@ TEST_F(DamageTrackerTest, VerifyDamageForImageFilter) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForBackgroundBlurredChild) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* child2 = root->children()[1];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* child2 = root->children()[1].get();
 
   // Allow us to set damage on child1 too.
   child1->SetDrawsContent(true);
@@ -707,7 +707,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForBackgroundBlurredChild) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForAddingAndRemovingLayer) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
 
   // CASE 1: Adding a new layer should cause the appropriate damage.
   //
@@ -718,7 +718,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForAddingAndRemovingLayer) {
     child2->SetPosition(gfx::PointF(400.f, 380.f));
     child2->SetBounds(gfx::Size(6, 8));
     child2->SetDrawsContent(true);
-    root->AddChild(child2.Pass());
+    root->AddChild(std::move(child2));
   }
   EmulateDrawingOneFrame(root.get());
 
@@ -772,7 +772,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForNewUnchangedLayer) {
     // scenario.
     ASSERT_FALSE(child2->LayerPropertyChanged());
     ASSERT_TRUE(child2->update_rect().IsEmpty());
-    root->AddChild(child2.Pass());
+    root->AddChild(std::move(child2));
   }
   EmulateDrawingOneFrame(root.get());
 
@@ -787,7 +787,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForNewUnchangedLayer) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForMultipleLayers) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
 
   // In this test we don't want the above tree manipulation to be considered
   // part of the same frame.
@@ -798,9 +798,9 @@ TEST_F(DamageTrackerTest, VerifyDamageForMultipleLayers) {
     child2->SetPosition(gfx::PointF(400.f, 380.f));
     child2->SetBounds(gfx::Size(6, 8));
     child2->SetDrawsContent(true);
-    root->AddChild(child2.Pass());
+    root->AddChild(std::move(child2));
   }
-  LayerImpl* child2 = root->children()[1];
+  LayerImpl* child2 = root->children()[1].get();
   EmulateDrawingOneFrame(root.get());
 
   // Damaging two layers simultaneously should cause combined damage.
@@ -818,9 +818,9 @@ TEST_F(DamageTrackerTest, VerifyDamageForMultipleLayers) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForNestedSurfaces) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* child2 = root->children()[1];
-  LayerImpl* grand_child1 = root->children()[0]->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* child2 = root->children()[1].get();
+  LayerImpl* grand_child1 = root->children()[0]->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -864,8 +864,8 @@ TEST_F(DamageTrackerTest, VerifyDamageForSurfaceChangeFromDescendantLayer) {
   // entire surface should be marked dirty.
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* grand_child1 = root->children()[0]->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* grand_child1 = root->children()[0]->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -902,7 +902,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForSurfaceChangeFromAncestorLayer) {
   // transforming it, while the root surface would be damaged appropriately.
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -928,7 +928,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForSurfaceChangeFromAncestorLayer) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForAddingAndRemovingRenderSurfaces) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -981,7 +981,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForAddingAndRemovingRenderSurfaces) {
 
 TEST_F(DamageTrackerTest, VerifyNoDamageWhenNothingChanged) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -1011,7 +1011,7 @@ TEST_F(DamageTrackerTest, VerifyNoDamageWhenNothingChanged) {
 
 TEST_F(DamageTrackerTest, VerifyNoDamageForUpdateRectThatDoesNotDrawContent) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
   gfx::Rect child_damage_rect;
   gfx::Rect root_damage_rect;
 
@@ -1030,9 +1030,9 @@ TEST_F(DamageTrackerTest, VerifyNoDamageForUpdateRectThatDoesNotDrawContent) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForReplica) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* grand_child1 = child1->children()[0];
-  LayerImpl* grand_child2 = child1->children()[1];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* grand_child1 = child1->children()[0].get();
+  LayerImpl* grand_child2 = child1->children()[1].get();
 
   // Damage on a surface that has a reflection should cause the target surface
   // to receive the surface's damage and the surface's reflected damage.
@@ -1047,7 +1047,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplica) {
     grand_child3->SetPosition(gfx::PointF(240.f, 240.f));
     grand_child3->SetBounds(gfx::Size(10, 10));
     grand_child3->SetDrawsContent(true);
-    child1->AddChild(grand_child3.Pass());
+    child1->AddChild(std::move(grand_child3));
   }
   child1->SetOpacity(0.5f);
   EmulateDrawingOneFrame(root.get());
@@ -1062,7 +1062,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplica) {
     gfx::Transform reflection;
     reflection.Scale3d(-1.0, 1.0, 1.0);
     grand_child1_replica->SetTransform(reflection);
-    grand_child1->SetReplicaLayer(grand_child1_replica.Pass());
+    grand_child1->SetReplicaLayer(std::move(grand_child1_replica));
     grand_child1->SetHasRenderSurface(true);
   }
   EmulateDrawingOneFrame(root.get());
@@ -1134,7 +1134,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplica) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForMask) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // In the current implementation of the damage tracker, changes to mask
   // layers should damage the entire corresponding surface.
@@ -1147,7 +1147,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForMask) {
             LayerImpl::Create(host_impl_.active_tree(), 3);
     mask_layer->SetPosition(child->position());
     mask_layer->SetBounds(child->bounds());
-    child->SetMaskLayer(mask_layer.Pass());
+    child->SetMaskLayer(std::move(mask_layer));
     child->SetHasRenderSurface(true);
   }
   LayerImpl* mask_layer = child->mask_layer();
@@ -1160,7 +1160,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForMask) {
     grand_child->SetPosition(gfx::PointF(2.f, 2.f));
     grand_child->SetBounds(gfx::Size(2, 2));
     grand_child->SetDrawsContent(true);
-    child->AddChild(grand_child.Pass());
+    child->AddChild(std::move(grand_child));
   }
   EmulateDrawingOneFrame(root.get());
 
@@ -1220,8 +1220,8 @@ TEST_F(DamageTrackerTest, VerifyDamageForMask) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForReplicaMask) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* grand_child1 = child1->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* grand_child1 = child1->children()[0].get();
 
   // Changes to a replica's mask should not damage the original surface,
   // because it is not masked. But it does damage the ancestor target surface.
@@ -1236,7 +1236,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMask) {
     gfx::Transform reflection;
     reflection.Scale3d(-1.0, 1.0, 1.0);
     grand_child1_replica->SetTransform(reflection);
-    grand_child1->SetReplicaLayer(grand_child1_replica.Pass());
+    grand_child1->SetReplicaLayer(std::move(grand_child1_replica));
     grand_child1->SetHasRenderSurface(true);
   }
   LayerImpl* grand_child1_replica = grand_child1->replica_layer();
@@ -1247,7 +1247,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMask) {
             LayerImpl::Create(host_impl_.active_tree(), 7);
     replica_mask_layer->SetPosition(gfx::PointF());
     replica_mask_layer->SetBounds(grand_child1->bounds());
-    grand_child1_replica->SetMaskLayer(replica_mask_layer.Pass());
+    grand_child1_replica->SetMaskLayer(std::move(replica_mask_layer));
   }
   LayerImpl* replica_mask_layer = grand_child1_replica->mask_layer();
 
@@ -1289,8 +1289,8 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMask) {
 
 TEST_F(DamageTrackerTest, VerifyDamageForReplicaMaskWithTransformOrigin) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithTwoSurfaces();
-  LayerImpl* child1 = root->children()[0];
-  LayerImpl* grand_child1 = child1->children()[0];
+  LayerImpl* child1 = root->children()[0].get();
+  LayerImpl* grand_child1 = child1->children()[0].get();
 
   // Verify that the correct replica_origin_transform is used for the
   // replica_mask.
@@ -1313,7 +1313,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMaskWithTransformOrigin) {
     gfx::Transform reflection;
     reflection.Scale3d(-1.0, 1.0, 1.0);
     grand_child1_replica->SetTransform(reflection);
-    grand_child1->SetReplicaLayer(grand_child1_replica.Pass());
+    grand_child1->SetReplicaLayer(std::move(grand_child1_replica));
     grand_child1->SetHasRenderSurface(true);
   }
   LayerImpl* grand_child1_replica = grand_child1->replica_layer();
@@ -1325,7 +1325,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMaskWithTransformOrigin) {
     replica_mask_layer->SetPosition(gfx::PointF());
     // Note: this is not the transform origin being tested.
     replica_mask_layer->SetBounds(grand_child1->bounds());
-    grand_child1_replica->SetMaskLayer(replica_mask_layer.Pass());
+    grand_child1_replica->SetMaskLayer(std::move(replica_mask_layer));
   }
   LayerImpl* replica_mask_layer = grand_child1_replica->mask_layer();
 
@@ -1348,7 +1348,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForReplicaMaskWithTransformOrigin) {
 
 TEST_F(DamageTrackerTest, DamageWhenAddedExternally) {
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   // Case 1: This test ensures that when the tracker is given damage, that
   //         it is included with any other partial damage.
@@ -1384,7 +1384,7 @@ TEST_F(DamageTrackerTest, VerifyDamageForEmptyLayerList) {
   root->SetHasRenderSurface(true);
   root->draw_properties().render_target = root.get();
 
-  ASSERT_TRUE(root == root->render_target());
+  ASSERT_EQ(root.get(), root->render_target());
   RenderSurfaceImpl* target_surface = root->render_surface();
 
   LayerImplList empty_list;
@@ -1405,7 +1405,7 @@ TEST_F(DamageTrackerTest, VerifyDamageAccumulatesUntilReset) {
   // If damage is not cleared, it should accumulate.
 
   scoped_ptr<LayerImpl> root = CreateAndSetUpTestTreeWithOneSurface();
-  LayerImpl* child = root->children()[0];
+  LayerImpl* child = root->children()[0].get();
 
   ClearDamageForAllSurfaces(root.get());
   child->SetUpdateRect(gfx::Rect(10.f, 11.f, 1.f, 2.f));
@@ -1449,7 +1449,7 @@ TEST_F(DamageTrackerTest, HugeDamageRect) {
 
   for (int i = 0; i < kRange; ++i) {
     scoped_ptr<LayerImpl> root = CreateTestTreeWithOneSurface();
-    LayerImpl* child = root->children()[0];
+    LayerImpl* child = root->children()[0].get();
 
     gfx::Transform transform;
     transform.Translate(-kBigNumber, -kBigNumber);

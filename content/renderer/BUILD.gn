@@ -28,7 +28,9 @@ source_set("renderer") {
     "//base/allocator",
     "//cc",
     "//cc/blink",
+    "//cc/proto",
     "//components/scheduler:scheduler",
+    "//components/startup_metric_utils/common",
     "//components/url_formatter",
     "//components/webusb",
     "//content:resources",
@@ -181,6 +183,7 @@ source_set("renderer") {
       "//ppapi/proxy",
       "//ppapi/shared_impl",
       "//third_party/libvpx_new",
+      "//third_party/opus",
     ]
   }
 

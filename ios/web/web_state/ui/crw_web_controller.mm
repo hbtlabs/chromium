@@ -46,7 +46,7 @@
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/referrer_util.h"
 #include "ios/web/public/ssl_status.h"
-#include "ios/web/public/url_scheme_util.h"
+#import "ios/web/public/url_scheme_util.h"
 #include "ios/web/public/url_util.h"
 #include "ios/web/public/user_metrics.h"
 #include "ios/web/public/web_client.h"
@@ -54,6 +54,7 @@
 #include "ios/web/public/web_state/credential.h"
 #import "ios/web/public/web_state/crw_web_controller_observer.h"
 #import "ios/web/public/web_state/crw_web_view_scroll_view_proxy.h"
+#import "ios/web/public/web_state/js/credential_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_manager.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
@@ -66,7 +67,6 @@
 #import "ios/web/web_state/crw_web_view_proxy_impl.h"
 #import "ios/web/web_state/error_translation_util.h"
 #include "ios/web/web_state/frame_info.h"
-#import "ios/web/web_state/js/credential_util.h"
 #import "ios/web/web_state/js/crw_js_early_script_manager.h"
 #import "ios/web/web_state/js/crw_js_plugin_placeholder_manager.h"
 #import "ios/web/web_state/js/crw_js_window_id_manager.h"
@@ -166,15 +166,17 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
 }  // namespace
 
 @interface CRWWebController () <CRWNativeContentDelegate,
+                                CRWWebControllerContainerViewDelegate,
                                 CRWWebViewScrollViewProxyObserver> {
   base::WeakNSProtocol<id<CRWWebDelegate>> _delegate;
   base::WeakNSProtocol<id<CRWWebUserInterfaceDelegate>> _UIDelegate;
   base::WeakNSProtocol<id<CRWNativeContentProvider>> _nativeProvider;
   base::WeakNSProtocol<id<CRWSwipeRecognizerProvider>> _swipeRecognizerProvider;
-  base::scoped_nsobject<CRWWebControllerContainerView> _containerView;
   // The CRWWebViewProxy is the wrapper to give components access to the
   // web view in a controlled and limited way.
   base::scoped_nsobject<CRWWebViewProxyImpl> _webViewProxy;
+  // The view used to display content.  Must outlive |_webViewProxy|.
+  base::scoped_nsobject<CRWWebControllerContainerView> _containerView;
   // If |_contentView| contains a native view rather than a web view, this
   // is its controller. If it's a web view, this is nil.
   base::scoped_nsprotocol<id<CRWNativeContent>> _nativeController;
@@ -652,7 +654,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)showTransientContentView:(CRWContentView*)contentView {
   DCHECK(contentView);
   DCHECK(contentView.scrollView);
-  DCHECK([contentView.scrollView isDescendantOfView:contentView]);
+  // TODO(crbug.com/556848) Reenable DCHECK when |CRWWebControllerContainerView|
+  // is restructured so that subviews are not added during |layoutSubviews|.
+  // DCHECK([contentView.scrollView isDescendantOfView:contentView]);
   [self.containerView displayTransientContent:contentView];
 }
 
@@ -1550,8 +1554,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     // native or web). Note, this needs to be created with a non-zero size
     // to allow for (native) subviews with autosize constraints to be correctly
     // processed.
-    _containerView.reset([[CRWWebControllerContainerView alloc]
-        initWithContentViewProxy:_webViewProxy]);
+    _containerView.reset(
+        [[CRWWebControllerContainerView alloc] initWithDelegate:self]);
     self.containerView.frame = [[UIScreen mainScreen] bounds];
     [self.containerView addGestureRecognizer:[self touchTrackingRecognizer]];
     [self.containerView setAccessibilityIdentifier:web::kContainerViewID];
@@ -1794,20 +1798,24 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)finishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry {
   [_delegate webWillFinishHistoryNavigationFromEntry:fromEntry];
 
-  // If the current entry has a serialized state object, inject its state into
-  // the web view.
-  web::NavigationItemImpl* currentItem =
-      self.currentSessionEntry.navigationItemImpl;
-  NSString* state = currentItem->GetSerializedStateObject();
-  if (state.length)
-    [self setPushedOrReplacedURL:currentItem->GetURL() stateObject:state];
   // Only load the new URL if the current entry was not created by a JavaScript
   // window.history.pushState() call from |fromEntry|.
-  if (![_webStateImpl->GetNavigationManagerImpl().GetSessionController()
+  BOOL shouldLoadURL =
+      ![_webStateImpl->GetNavigationManagerImpl().GetSessionController()
           isPushStateNavigationBetweenEntry:fromEntry
-                                   andEntry:self.currentSessionEntry]) {
-    web::NavigationItem* currentItem =
-        _webStateImpl->GetNavigationManagerImpl().GetVisibleItem();
+                                   andEntry:self.currentSessionEntry];
+  // Set the serialized state if necessary.  State must be set if:
+  // - the transition between |fromEntry| and the current session entry is a
+  //   history.pushState, or
+  // - the current session entry has a serialized state object (occurs after a
+  //   history.replaceState).
+  web::NavigationItemImpl* currentItem =
+      self.currentSessionEntry.navigationItemImpl;
+  NSString* stateObject = currentItem->GetSerializedStateObject();
+  if (!shouldLoadURL || stateObject.length) {
+    [self setPushedOrReplacedURL:currentItem->GetURL() stateObject:stateObject];
+  }
+  if (shouldLoadURL) {
     GURL endURL = [self URLForHistoryNavigationFromItem:fromEntry.navigationItem
                                                  toItem:currentItem];
     ui::PageTransition transition = ui::PageTransitionFromInt(
@@ -1918,6 +1926,19 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // TODO(stuartmorgan): Remove this temporary bridge to the helper function
   // once the referrer handling moves into the subclasses.
   return web::ReferrerPolicyFromString(policy);
+}
+
+#pragma mark -
+#pragma mark CRWWebControllerContainerViewDelegate
+
+- (CRWWebViewProxyImpl*)contentViewProxyForContainerView:
+        (CRWWebControllerContainerView*)containerView {
+  return _webViewProxy.get();
+}
+
+- (CGFloat)headerHeightForContainerView:
+        (CRWWebControllerContainerView*)containerView {
+  return [self headerHeight];
 }
 
 #pragma mark -

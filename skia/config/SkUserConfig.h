@@ -218,6 +218,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_IGNORE_ETC1_SUPPORT
 #endif
 
+#ifndef    SK_SUPPORT_LEGACY_LINEAR_GRADIENT_TABLE
+#   define SK_SUPPORT_LEGACY_LINEAR_GRADIENT_TABLE
+#endif
+
 #ifndef    SK_IGNORE_GPU_DITHER
 #   define SK_IGNORE_GPU_DITHER
 #endif
@@ -244,6 +248,9 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
 #define SK_ENABLE_INST_COUNT        0
 #define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
+
+// Blink layout tests are baselined to Clang optimizing through the UB in SkDivBits.
+#define SK_SUPPORT_LEGACY_DIVBITS_UB
 
 // ===== End Chrome-specific definitions =====
 

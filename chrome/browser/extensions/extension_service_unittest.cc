@@ -31,6 +31,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/version.h"
+#include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/blacklist.h"
@@ -432,6 +433,14 @@ class MockProviderVisitor
 class ExtensionServiceTest
     : public extensions::ExtensionServiceTestWithInstall {
  public:
+  ExtensionServiceTest() {
+    // The extension subsystem posts logging tasks to be done after
+    // browser startup. There's no StartupObserver as there normally
+    // would be since we're in a unit test, so we have to explicitly
+    // note tasks should be processed.
+    AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
+  }
+
   void AddMockExternalProvider(
       extensions::ExternalProviderInterface* provider) {
     service()->AddProviderForTesting(provider);
@@ -1863,7 +1872,7 @@ TEST_F(ExtensionServiceTest, UpdateApps) {
 // Verifies that the NTP page and launch ordinals are kept when updating apps.
 TEST_F(ExtensionServiceTest, UpdateAppsRetainOrdinals) {
   InitializeEmptyExtensionService();
-  AppSorting* sorting = ExtensionPrefs::Get(profile())->app_sorting();
+  AppSorting* sorting = ExtensionSystem::Get(profile())->app_sorting();
   base::FilePath extensions_path = data_dir().AppendASCII("app_update");
 
   // First install v1 of a hosted app.
@@ -1899,7 +1908,7 @@ TEST_F(ExtensionServiceTest, EnsureCWSOrdinalsInitialized) {
       IDR_WEBSTORE_MANIFEST, base::FilePath(FILE_PATH_LITERAL("web_store")));
   service()->Init();
 
-  AppSorting* sorting = ExtensionPrefs::Get(profile())->app_sorting();
+  AppSorting* sorting = ExtensionSystem::Get(profile())->app_sorting();
   EXPECT_TRUE(
       sorting->GetPageOrdinal(extensions::kWebStoreAppId).IsValid());
   EXPECT_TRUE(

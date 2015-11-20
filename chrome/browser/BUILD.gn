@@ -142,6 +142,7 @@ source_set("browser") {
     "//components/metrics_services_manager",
     "//components/mime_util",
     "//components/navigation_metrics",
+    "//components/ntp_snippets",
     "//components/network_time",
     "//components/offline_pages",
     "//components/omnibox/browser",
@@ -160,7 +161,8 @@ source_set("browser") {
     "//components/security_interstitials/core",
     "//components/signin/core/browser",
     "//components/ssl_errors",
-    "//components/startup_metric_utils/browser",
+    "//components/startup_metric_utils/browser:lib",
+    "//components/startup_metric_utils/browser:message_filter_lib",
     "//components/strings",
     "//components/suggestions",
     "//components/sync_bookmarks",
@@ -318,8 +320,13 @@ source_set("browser") {
       "//components/visitedlink/common",
       "//components/web_cache/browser",
       "//components/web_modal",
+      "//components/webusb",
       "//content/app/resources",
+      "//device/core",
+      "//device/devices_app/public/cpp",
+      "//device/devices_app/public/cpp:factory",
       "//device/devices_app/usb/public/interfaces",
+      "//device/usb",
       "//media",
       "//media/midi",
       "//mojo/application/public/cpp",
@@ -575,23 +582,20 @@ source_set("browser") {
     # These files are only built in a GN build because they bring in
     # dependencies that don't build with GYP.
     sources += [
-      "mojo_runner_state.cc",
-      "mojo_runner_state.h",
       "ui/views/frame/browser_frame_mus.cc",
       "ui/views/frame/browser_frame_mus.h",
     ]
     deps += [
-      "//components/mus/public/interfaces",
+      "//content/public/common",
       "//mojo/runner/child:lib",
-      "//mojo/converters/network",
       "//ui/aura",
       "//ui/compositor",
       "//ui/keyboard",
       "//ui/keyboard:keyboard_with_content",
-      "//ui/views/mus",
+      "//ui/views/mus:for_component",
     ]
-    defines += [ "MOJO_RUNNER_CLIENT" ]
-    data_deps += [ "//components/mus/example/wm:example_wm" ]
+    defines += [ "MOJO_SHELL_CLIENT" ]
+    data_deps += [ "//mash/wm:example_wm" ]
   }
   if (ui_compositor_image_transport) {
     deps += [ "//ui/gl" ]
@@ -616,6 +620,7 @@ source_set("browser") {
     deps += [
       "//components/crash/content/app",
       "//components/crash/content/browser",
+      "//components/version_info:generate_version_info",
     ]
   }
   if (use_nss_certs) {
@@ -699,14 +704,7 @@ source_set("browser") {
     sources += rebase_path(gypi_values.chrome_browser_non_mobile_sources,
                            ".",
                            "//chrome")
-    deps += [
-      "//components/feedback",
-      "//components/webusb",
-      "//device/core",
-      "//device/devices_app/public/cpp",
-      "//device/devices_app/public/cpp:factory",
-      "//device/usb",
-    ]
+    deps += [ "//components/feedback" ]
   }
 
   if (!is_chrome_branded) {
@@ -902,6 +900,17 @@ source_set("browser") {
 
   if (enable_mojo_media == "utility") {
     deps += [ "//media/mojo/services:application" ]
+  }
+
+  if (enable_wayland_server) {
+    deps += [
+      "//components/exo",
+      "//components/exo/wayland",
+    ]
+    sources += [
+      "chrome_browser_main_extra_parts_exo.cc",
+      "chrome_browser_main_extra_parts_exo.h",
+    ]
   }
 }
 

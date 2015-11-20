@@ -137,10 +137,12 @@ class TestPersonalDataManager : public PersonalDataManager {
   }
 
   void AddProfile(AutofillProfile* profile) {
+    profile->set_modification_date(base::Time::Now());
     web_profiles_.push_back(profile);
   }
 
   void AddCreditCard(CreditCard* credit_card) {
+    credit_card->set_modification_date(base::Time::Now());
     local_credit_cards_.push_back(credit_card);
   }
 
@@ -824,6 +826,26 @@ class AutofillManagerTest : public testing::Test {
     }
     test::CreateTestFormField("CVC", "cvc", "", "text", &field);
     form->fields.push_back(field);
+  }
+
+  // Fills the fields in |form| with test data.
+  void ManuallyFillAddressForm(FormData* form) {
+    for (FormFieldData& field : form->fields) {
+      if (base::EqualsASCII(field.name, "firstname"))
+        field.value = ASCIIToUTF16("Flo");
+      else if (base::EqualsASCII(field.name, "lastname"))
+        field.value = ASCIIToUTF16("Master");
+      else if (base::EqualsASCII(field.name, "addr1"))
+        field.value = ASCIIToUTF16("123 Maple");
+      else if (base::EqualsASCII(field.name, "city"))
+        field.value = ASCIIToUTF16("Dallas");
+      else if (base::EqualsASCII(field.name, "state"))
+        field.value = ASCIIToUTF16("Texas");
+      else if (base::EqualsASCII(field.name, "zipcode"))
+        field.value = ASCIIToUTF16("77401");
+      else if (base::EqualsASCII(field.name, "country"))
+        field.value = ASCIIToUTF16("US");
+    }
   }
 
   // Tests if credit card data gets saved
@@ -2570,6 +2592,88 @@ TEST_F(AutofillManagerTest, AutocompleteOffRespectedForAutocomplete) {
   GetAutofillSuggestions(form, *field);
 }
 
+// Test that OnLoadedServerPredictions can obtain the FormStructure with the
+// signature of the queried form and apply type predictions.
+TEST_F(AutofillManagerTest, OnLoadedServerPredictions) {
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  TestFormStructure* form_structure = new TestFormStructure(form);
+  form_structure->DetermineHeuristicTypes();
+  autofill_manager_->AddSeenForm(form_structure);
+
+  std::string xml = "<autofillqueryresponse>"
+                    "<field autofilltype=\"3\" />"  // This is tested below.
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"3\" />"
+                    "<field autofilltype=\"2\" />"
+                    "<field autofilltype=\"61\"/>"
+                    "</autofillqueryresponse>";
+  std::vector<std::string> signatures;
+  signatures.push_back(form_structure->FormSignature());
+
+  base::HistogramTester histogram_tester;
+  autofill_manager_->OnLoadedServerPredictions(xml, signatures);
+  // Verify that FormStructure::ParseQueryResponse was called (here and below).
+  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
+                                     AutofillMetrics::QUERY_RESPONSE_RECEIVED,
+                                     1);
+  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
+                                     AutofillMetrics::QUERY_RESPONSE_PARSED,
+                                     1);
+  // We expect the server type to have been applied to the first field.
+  EXPECT_EQ(NAME_FIRST, form_structure->field(0)->Type().GetStorableType());
+}
+
+// Test that OnLoadedServerPredictions does not call ParseQueryResponse if the
+// AutofillManager has been reset between the time the query was sent and the
+// response received.
+TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+
+  // Simulate having seen this form on page load.
+  // |form_structure| will be owned by |autofill_manager_|.
+  TestFormStructure* form_structure = new TestFormStructure(form);
+  form_structure->DetermineHeuristicTypes();
+  autofill_manager_->AddSeenForm(form_structure);
+
+  std::string xml = "<autofillqueryresponse>"
+                    "<field autofilltype=\"3\" />"  // This is tested below.
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"0\" />"
+                    "<field autofilltype=\"3\" />"
+                    "<field autofilltype=\"2\" />"
+                    "<field autofilltype=\"61\"/>"
+                    "</autofillqueryresponse>";
+  std::vector<std::string> signatures;
+  signatures.push_back(form_structure->FormSignature());
+
+  // Reset the manager (such as during a navigation).
+  autofill_manager_->Reset();
+
+  base::HistogramTester histogram_tester;
+  autofill_manager_->OnLoadedServerPredictions(xml, signatures);
+
+  // Verify that FormStructure::ParseQueryResponse was NOT called.
+  histogram_tester.ExpectTotalCount("Autofill.ServerQueryResponse", 0);
+}
+
 // Test that we are able to save form data when forms are submitted and we only
 // have server data for the field types.
 TEST_F(AutofillManagerTest, FormSubmittedServerTypes) {
@@ -3268,22 +3372,7 @@ TEST_F(AutofillManagerTest, DontOfferToSavePaymentsCard) {
   form = FormData();
   test::CreateTestAddressFormData(&form);
   FormsSeen(std::vector<FormData>(1, form));
-  for (size_t i = 0; i < form.fields.size(); ++i) {
-    if (form.fields[i].name == ASCIIToUTF16("firstname"))
-      form.fields[i].value = ASCIIToUTF16("Flo");
-    else if (form.fields[i].name == ASCIIToUTF16("lastname"))
-      form.fields[i].value = ASCIIToUTF16("Master");
-    else if (form.fields[i].name == ASCIIToUTF16("addr1"))
-      form.fields[i].value = ASCIIToUTF16("123 Maple");
-    else if (form.fields[i].name == ASCIIToUTF16("city"))
-      form.fields[i].value = ASCIIToUTF16("Dallas");
-    else if (form.fields[i].name == ASCIIToUTF16("state"))
-      form.fields[i].value = ASCIIToUTF16("Texas");
-    else if (form.fields[i].name == ASCIIToUTF16("zipcode"))
-      form.fields[i].value = ASCIIToUTF16("77401");
-    else if (form.fields[i].name == ASCIIToUTF16("country"))
-      form.fields[i].value = ASCIIToUTF16("US");
-  }
+  ManuallyFillAddressForm(&form);
   autofill_manager_->OnFormSubmitted(form);
 }
 
@@ -3310,59 +3399,111 @@ TEST_F(AutofillManagerTest, FillInUpdatedExpirationDate) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard) {
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm(&address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
 
   // Edit the data, and submit
-  form.fields[1].value = ASCIIToUTF16("4111111111111111");
-  form.fields[2].value = ASCIIToUTF16("11");
-  form.fields[3].value = ASCIIToUTF16("2017");
-  form.fields[4].value = ASCIIToUTF16("123");
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
 
-  FormSubmitted(form);
+  FormSubmitted(credit_card_form);
   EXPECT_TRUE(autofill_manager_->credit_card_was_uploaded());
 }
 
 TEST_F(AutofillManagerTest, DontUploadCreditCardIfFeatureNotEnabled) {
   autofill_manager_->set_credit_card_upload_enabled(false);
 
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm(&address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
 
   // Edit the data, and submit
-  form.fields[1].value = ASCIIToUTF16("4111111111111111");
-  form.fields[2].value = ASCIIToUTF16("11");
-  form.fields[3].value = ASCIIToUTF16("2017");
-  form.fields[4].value = ASCIIToUTF16("123");
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
 
   // The save prompt should be shown instead of doing an upload.
   EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_)).Times(1);
-  FormSubmitted(form);
+  FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
 }
 
 TEST_F(AutofillManagerTest, DontUploadCreditCardIfCvcUnavailable) {
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm(&address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
 
   // Edit the data, and submit
-  form.fields[1].value = ASCIIToUTF16("4111111111111111");
-  form.fields[2].value = ASCIIToUTF16("11");
-  form.fields[3].value = ASCIIToUTF16("2017");
-  form.fields[4].value = ASCIIToUTF16("");  // CVC
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("");  // CVC MISSING
 
   // The save prompt should be shown instead of doing an upload.
   EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_)).Times(1);
-  FormSubmitted(form);
+  FormSubmitted(credit_card_form);
+  EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
+}
+
+TEST_F(AutofillManagerTest, DontUploadCreditCardIfNoMatchingProfileAvailable) {
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm(&address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit
+  // The address form has "Flo Master" but the credit card has "Bob Master".
+  credit_card_form.fields[0].value = ASCIIToUTF16("Bob Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
+
+  // The save prompt should be shown instead of doing an upload.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_)).Times(1);
+  FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
 }
 
@@ -3371,21 +3512,29 @@ TEST_F(AutofillManagerTest, DontUploadCreditCardIfUploadDetailsFails) {
   // response.
   autofill_manager_->set_app_locale("pt-BR");
 
-  // Set up our form data.
-  FormData form;
-  CreateTestCreditCardFormData(&form, true, false);
-  std::vector<FormData> forms(1, form);
-  FormsSeen(forms);
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm(&address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
 
   // Edit the data, and submit
-  form.fields[1].value = ASCIIToUTF16("4111111111111111");
-  form.fields[2].value = ASCIIToUTF16("11");
-  form.fields[3].value = ASCIIToUTF16("2017");
-  form.fields[4].value = ASCIIToUTF16("123");
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
 
   // The save prompt should be shown instead of doing an upload.
   EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_)).Times(1);
-  FormSubmitted(form);
+  FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
 }
 

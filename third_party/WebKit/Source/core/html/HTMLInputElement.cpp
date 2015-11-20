@@ -147,6 +147,11 @@ DEFINE_TRACE(HTMLInputElement)
     HTMLTextFormControlElement::trace(visitor);
 }
 
+HTMLImageLoader* HTMLInputElement::imageLoader() const
+{
+    return m_imageLoader.get();
+}
+
 HTMLImageLoader& HTMLInputElement::ensureImageLoader()
 {
     if (!m_imageLoader)
@@ -351,10 +356,7 @@ void HTMLInputElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionB
             restoreCachedSelection();
             break;
         case SelectionBehaviorOnFocus::None:
-            // |None| is used only for FocusController::setFocusedElement and
-            // Document::setFocusedElement, and they don't call
-            // updateFocusAppearance().
-            ASSERT_NOT_REACHED();
+            return;
         }
         if (document().frame())
             document().frame()->selection().revealSelection();

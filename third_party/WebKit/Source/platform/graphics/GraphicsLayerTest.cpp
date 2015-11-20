@@ -40,8 +40,8 @@
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebUnitTestSupport.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PassOwnPtr.h"
-#include <gtest/gtest.h>
 
 namespace blink {
 
@@ -49,8 +49,9 @@ namespace {
 
 class MockGraphicsLayerClient : public GraphicsLayerClient {
 public:
-    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect* inClip) const override { }
-    String debugName(const GraphicsLayer*) override { return String(); }
+    IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const { return IntRect(); }
+    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect&) const override { }
+    String debugName(const GraphicsLayer*) const override { return String(); }
 };
 
 class GraphicsLayerForTesting : public GraphicsLayer {
@@ -199,8 +200,7 @@ public:
     IntSize contentsSize() const override { return IntSize(100, 100); }
     bool scrollbarsCanBeActive() const override { return false; }
     IntRect scrollableAreaBoundingBox() const override { return IntRect(); }
-    void invalidateScrollbarRect(Scrollbar*, const IntRect&) override { }
-    void invalidateScrollCornerRect(const IntRect&) override { }
+    void scrollControlWasSetNeedsPaintInvalidation() override { }
     bool userInputScrollable(ScrollbarOrientation) const override { return true; }
     bool shouldPlaceVerticalScrollbarOnLeft() const override { return false; }
     int pageStep(ScrollbarOrientation) const override { return 0; }

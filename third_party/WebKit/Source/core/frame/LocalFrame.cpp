@@ -257,6 +257,8 @@ void LocalFrame::navigate(Document& originDocument, const KURL& url, bool replac
 
 void LocalFrame::navigate(const FrameLoadRequest& request)
 {
+    if (!isNavigationAllowed())
+        return;
     m_loader.load(request);
 }
 
@@ -436,6 +438,16 @@ Document* LocalFrame::document() const
 void LocalFrame::setPagePopupOwner(Element& owner)
 {
     m_pagePopupOwner = &owner;
+}
+
+Element* LocalFrame::pagePopupOwner() const
+{
+    return m_pagePopupOwner.get();
+}
+
+LocalDOMWindow* LocalFrame::localDOMWindow() const
+{
+    return m_domWindow.get();
 }
 
 LayoutView* LocalFrame::contentLayoutObject() const
@@ -878,6 +890,7 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameO
     , m_eventHandler(adoptPtrWillBeNoop(new EventHandler(this)))
     , m_console(FrameConsole::create(*this))
     , m_inputMethodController(InputMethodController::create(*this))
+    , m_navigationDisableCount(0)
     , m_pageZoomFactor(parentPageZoomFactor(this))
     , m_textZoomFactor(parentTextZoomFactor(this))
     , m_inViewSourceMode(false)
@@ -908,5 +921,16 @@ void LocalFrame::updateFrameSecurityOrigin()
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(LocalFrame);
+
+FrameNavigationDisabler::FrameNavigationDisabler(LocalFrame& frame)
+    : m_frame(&frame)
+{
+    m_frame->disableNavigation();
+}
+
+FrameNavigationDisabler::~FrameNavigationDisabler()
+{
+    m_frame->enableNavigation();
+}
 
 } // namespace blink

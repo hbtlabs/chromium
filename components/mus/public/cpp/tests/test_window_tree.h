@@ -64,19 +64,12 @@ class TestWindowTree : public mojom::WindowTree {
              uint32_t policy_bitmask,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t window_id) override;
+  void SetCanFocus(uint32_t window_id, bool can_focus) override;
   void SetWindowTextInputState(uint32_t window_id,
                                mojo::TextInputStatePtr state) override;
   void SetImeVisibility(uint32_t window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void SetPreferredSize(uint32_t window_id,
-                        mojo::SizePtr size,
-                        const SetPreferredSizeCallback& callback) override;
-  void SetShowState(uint32_t window_id,
-                    mojom::ShowState show_state,
-                    const SetShowStateCallback& callback) override;
-  void SetResizeBehavior(uint32_t window_id,
-                         mojom::ResizeBehavior resize_behavior) override;
   void WmResponse(uint32_t change_id, bool response) override;
 
   bool got_change_;

@@ -246,7 +246,9 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
  private:
   // AutofillDownloadManager::Observer:
-  void OnLoadedServerPredictions(const std::string& response_xml) override;
+  void OnLoadedServerPredictions(
+      const std::string& response_xml,
+      const std::vector<std::string>& form_signatures) override;
 
   // CardUnmaskDelegate:
   void OnUnmaskResponse(const UnmaskResponse& response) override;
@@ -372,6 +374,12 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
   // Imports the form data, submitted by the user, into |personal_data_|.
   void ImportFormData(const FormStructure& submitted_form);
+
+  // Returns all web profiles known to the personal data manager whose names
+  // match the name on |card| and that have been created or used within the last
+  // 15 minutes.
+  std::vector<AutofillProfile> GetProfilesForCreditCardUpload(
+      const CreditCard& card);
 
   // If |initial_interaction_timestamp_| is unset or is set to a later time than
   // |interaction_timestamp|, updates the cached timestamp.  The latter check is
@@ -509,6 +517,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, UserHappinessFormInteraction);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            FormSubmittedAutocompleteEnabled);
+  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
+                           OnLoadedServerPredictions);
+  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
+                           OnLoadedServerPredictions_ResetManager);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            AutocompleteSuggestions_SomeWhenAutofillDisabled);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,

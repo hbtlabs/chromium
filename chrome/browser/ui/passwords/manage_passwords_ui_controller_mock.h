@@ -8,6 +8,9 @@
 #include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "components/password_manager/core/browser/password_manager.h"
+#include "components/password_manager/core/browser/stub_password_manager_client.h"
+#include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "content/public/browser/navigation_details.h"
 
@@ -56,16 +59,21 @@ class ManagePasswordsUIControllerMock
   bool choose_credential() const { return choose_credential_; }
   autofill::PasswordForm chosen_credential() { return chosen_credential_; }
 
-  const autofill::PasswordForm& PendingPassword() const override;
+  const autofill::PasswordForm& GetPendingPassword() const override;
   void SetPendingPassword(autofill::PasswordForm pending_password);
 
-  password_manager::ui::State state() const override;
+  password_manager::ui::State GetState() const override;
   void SetState(password_manager::ui::State state);
   void UnsetState();
 
   void UpdateBubbleAndIconVisibility() override;
 
   void UpdateAndroidAccountChooserInfoBarVisibility() override;
+
+  void OnBubbleHidden() override;
+
+  password_manager::InteractionsStats* GetCurrentInteractionStats()
+      const override;
 
   // Simulate the pending password state. |best_matches| can't be empty.
   void PretendSubmittedPassword(
@@ -89,9 +97,9 @@ class ManagePasswordsUIControllerMock
   autofill::PasswordForm chosen_credential_;
   autofill::PasswordForm pending_password_;
 
-  scoped_ptr<password_manager::PasswordManagerClient> client_;
-  scoped_ptr<password_manager::PasswordManagerDriver> driver_;
-  scoped_ptr<password_manager::PasswordManager> password_manager_;
+  password_manager::StubPasswordManagerClient client_;
+  password_manager::StubPasswordManagerDriver driver_;
+  password_manager::PasswordManager password_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsUIControllerMock);
 };

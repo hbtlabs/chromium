@@ -20,9 +20,9 @@ Polymer({
 
     /**
      * The list of CastModes to show.
-     * @private {!Array<!media_router.CastMode>}
+     * @type {!Array<!media_router.CastMode>}
      */
-    castModeList_: {
+    castModeList: {
       type: Array,
       value: [],
       observer: 'checkCurrentCastMode_',
@@ -162,7 +162,7 @@ Polymer({
     },
 
     /**
-     * The value of the selected cast mode in |castModeList_|.
+     * The value of the selected cast mode in |castModeList|.
      * @private {number}
      */
     selectedCastModeValue_: {
@@ -243,9 +243,9 @@ Polymer({
    * cast mode to the first available cast mode on the list.
    */
   checkCurrentCastMode_: function() {
-    if (this.castModeList_.length > 0 &&
+    if (this.castModeList.length > 0 &&
         !this.findCastModeByType_(this.selectedCastModeValue_)) {
-      this.setSelectedCastMode_(this.castModeList_[0]);
+      this.setSelectedCastMode_(this.castModeList[0]);
     }
   },
 
@@ -504,7 +504,7 @@ Polymer({
    *     castModeList, or undefined if not found.
    */
   findCastModeByType_: function(castModeType) {
-    return this.castModeList_.find(function(element, index, array) {
+    return this.castModeList.find(function(element, index, array) {
       return element.type == castModeType;
     });
   },
@@ -518,7 +518,7 @@ Polymer({
    *     opened.
    */
   initializeCastModes: function(availableCastModes, initialCastModeType) {
-    this.castModeList_ = availableCastModes;
+    this.castModeList = availableCastModes;
     var castMode = this.findCastModeByType_(initialCastModeType);
     if (!castMode)
       return;
@@ -692,16 +692,28 @@ Polymer({
   /**
    * Rebuilds the list of sinks to be shown for the current cast mode.
    * A sink should be shown if it is compatible with the current cast mode, or
-   * if the sink is associated with a route.
+   * if the sink is associated with a route.  The resulting list is sorted by
+   * name.
    */
   rebuildSinksToShow_: function() {
     var sinksToShow = [];
-    this.allSinks.forEach(function(element, index, array) {
+    this.allSinks.forEach(function(element) {
       if (element.castModes.indexOf(this.selectedCastModeValue_) != -1 ||
           this.sinkToRouteMap_[element.id]) {
         sinksToShow.push(element);
       }
     }, this);
+
+    // Sort the |sinksToShow| by name.  If any two devices have the same name,
+    // use their IDs to stabilize the ordering.
+    sinksToShow.sort(function(a, b) {
+      var ordering = a.name.localeCompare(b.name);
+      if (ordering != 0) {
+        return ordering;
+      }
+      return (a.id < b.id) ? -1 : ((a.id == b.id) ? 0 : 1);
+    });
+
     this.sinksToShow_ = sinksToShow;
   },
 

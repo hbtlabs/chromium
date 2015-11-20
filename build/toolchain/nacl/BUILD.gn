@@ -22,23 +22,42 @@ revisions = exec_script("//native_client/build/get_toolchain_revision.py",
                         "trim list lines")
 nacl_x86_glibc_rev = revisions[0]
 nacl_arm_glibc_rev = revisions[1]
-pnacl_newlib_rev = revisions[2]
 
-nacl_toolchain("newlib_pnacl") {
-  toolchain_package = "pnacl_newlib"
-  toolchain_revision = pnacl_newlib_rev
-  toolchain_cpu = "pnacl"
-  toolprefix =
-      rebase_path("${nacl_toolchain_dir}/${toolchain_package}/bin/pnacl-",
-                  root_build_dir)
+# TODO(mcgrathr): Uncomment this when
+# https://code.google.com/p/chromium/issues/detail?id=395883 is fixed.
+#pnacl_newlib_rev = revisions[2]
 
+template("pnacl_toolchain") {
+  assert(defined(invoker.executable_extension),
+         "Must define executable_extension")
+
+  # TODO(mcgrathr): See above.
+  pnacl_newlib_rev = revisions[2]
+
+  nacl_toolchain(target_name) {
+    toolchain_package = "pnacl_newlib"
+    toolchain_revision = pnacl_newlib_rev
+    toolchain_cpu = "pnacl"
+    toolprefix =
+        rebase_path("${nacl_toolchain_dir}/${toolchain_package}/bin/pnacl-",
+                    root_build_dir)
+
+    is_clang = true
+    cc = toolprefix + "clang"
+    cxx = toolprefix + "clang++"
+    ar = toolprefix + "ar"
+    ld = cxx
+    readelf = toolprefix + "readelf"
+    nm = toolprefix + "nm"
+    if (defined(invoker.strip)) {
+      strip = toolprefix + invoker.strip
+    }
+    executable_extension = invoker.executable_extension
+  }
+}
+
+pnacl_toolchain("newlib_pnacl") {
   executable_extension = ".pexe"
-
-  is_clang = true
-  cc = toolprefix + "clang"
-  cxx = toolprefix + "clang++"
-  ar = toolprefix + "ar"
-  ld = cxx
 
   # The pnacl-finalize tool turns a .pexe.debug file into a .pexe file.
   # It's very similar in purpose to the traditional "strip" utility: it
@@ -47,23 +66,14 @@ nacl_toolchain("newlib_pnacl") {
   # you ever actually want to use other than pnacl-finalize, so just
   # make pnacl-finalize the strip tool rather than adding an additional
   # step like "postlink" to run pnacl-finalize.
-  strip = toolprefix + "finalize"
+  strip = "finalize"
 }
 
-nacl_toolchain("newlib_pnacl_nonsfi") {
-  toolchain_package = "pnacl_newlib"
-  toolchain_revision = pnacl_newlib_rev
-  toolchain_cpu = "pnacl"
-  toolprefix =
-      rebase_path("${nacl_toolchain_dir}/${toolchain_package}/bin/pnacl-",
-                  root_build_dir)
-
-  is_clang = true
-  cc = toolprefix + "clang"
-  cxx = toolprefix + "clang++"
-  ar = toolprefix + "ar"
-  ld = cxx
+pnacl_toolchain("newlib_pnacl_nonsfi") {
   executable_extension = ""
+  # TODO(mcgrathr): Uncomment this after pnacl-strip has been taught
+  # to grok --strip-unneeded.
+  #strip = "strip"
 }
 
 template("nacl_glibc_toolchain") {
@@ -81,14 +91,25 @@ template("nacl_glibc_toolchain") {
                                invoker.toolchain_tuple + "-",
                            root_build_dir)
 
+  # TODO(mcgrathr): Hoist this to top level when
+  # https://code.google.com/p/chromium/issues/detail?id=395883 is fixed.
+  if (host_os == "win") {
+    toolsuffix = ".exe"
+  } else {
+    toolsuffix = ""
+  }
+
   nacl_toolchain("glibc_" + toolchain_cpu) {
     is_clang = false
     is_nacl_glibc = true
 
-    cc = toolprefix + "gcc"
-    cxx = toolprefix + "g++"
-    ar = toolprefix + "ar"
+    cc = toolprefix + "gcc" + toolsuffix
+    cxx = toolprefix + "g++" + toolsuffix
+    ar = toolprefix + "ar" + toolsuffix
     ld = cxx
+    readelf = toolprefix + "readelf" + toolsuffix
+    nm = toolprefix + "nm" + toolsuffix
+    strip = toolprefix + "strip" + toolsuffix
   }
 }
 
@@ -114,18 +135,32 @@ template("nacl_clang_toolchain") {
   toolchain_cpu = target_name
   assert(defined(invoker.toolchain_tuple), "Must define toolchain_tuple")
 
+  # TODO(mcgrathr): See above.
+  pnacl_newlib_rev = revisions[2]
+
   toolchain_package = "pnacl_newlib"
   toolchain_revision = pnacl_newlib_rev
   toolprefix = rebase_path("${nacl_toolchain_dir}/${toolchain_package}/bin/" +
                                invoker.toolchain_tuple + "-",
                            root_build_dir)
 
+  # TODO(mcgrathr): Hoist this to top level when
+  # https://code.google.com/p/chromium/issues/detail?id=395883 is fixed.
+  if (host_os == "win") {
+    toolsuffix = ".exe"
+  } else {
+    toolsuffix = ""
+  }
+
   nacl_toolchain("clang_newlib_" + toolchain_cpu) {
     is_clang = true
-    cc = toolprefix + "clang"
-    cxx = toolprefix + "clang++"
-    ar = toolprefix + "ar"
+    cc = toolprefix + "clang" + toolsuffix
+    cxx = toolprefix + "clang++" + toolsuffix
+    ar = toolprefix + "ar" + toolsuffix
     ld = cxx
+    readelf = toolprefix + "readelf" + toolsuffix
+    nm = toolprefix + "nm" + toolsuffix
+    strip = toolprefix + "strip" + toolsuffix
   }
 }
 
@@ -133,11 +168,22 @@ template("nacl_irt_toolchain") {
   toolchain_cpu = target_name
   assert(defined(invoker.toolchain_tuple), "Must define toolchain_tuple")
 
+  # TODO(mcgrathr): See above.
+  pnacl_newlib_rev = revisions[2]
+
   toolchain_package = "pnacl_newlib"
   toolchain_revision = pnacl_newlib_rev
   toolprefix = rebase_path("${nacl_toolchain_dir}/${toolchain_package}/bin/" +
                                invoker.toolchain_tuple + "-",
                            root_build_dir)
+
+  # TODO(mcgrathr): Hoist this to top level when
+  # https://code.google.com/p/chromium/issues/detail?id=395883 is fixed.
+  if (host_os == "win") {
+    toolsuffix = ".exe"
+  } else {
+    toolsuffix = ""
+  }
 
   link_irt = rebase_path("//native_client/build/link_irt.py", root_build_dir)
 
@@ -150,11 +196,12 @@ template("nacl_irt_toolchain") {
 
   nacl_toolchain("irt_" + toolchain_cpu) {
     is_clang = true
-    cc = toolprefix + "clang"
-    cxx = toolprefix + "clang++"
-    ar = toolprefix + "ar"
-    readelf = toolprefix + "readelf"
-    strip = toolprefix + "strip"
+    cc = toolprefix + "clang" + toolsuffix
+    cxx = toolprefix + "clang++" + toolsuffix
+    ar = toolprefix + "ar" + toolsuffix
+    readelf = toolprefix + "readelf" + toolsuffix
+    nm = toolprefix + "nm" + toolsuffix
+    strip = toolprefix + "strip" + toolsuffix
 
     # Always build the IRT with full debugging symbols, regardless of
     # how Chromium itself is being built (or other NaCl executables).

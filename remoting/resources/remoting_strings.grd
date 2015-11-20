@@ -576,11 +576,14 @@
         <message desc="Menu item to select the Trackpad input mode. In this mode, the mouse cursor is visible and the screen acts as a laptop's trackpad." name="IDS_SELECT_TRACKPAD_MODE" formatter_data="android_java">
           Trackpad mode
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to their account" name="IDS_HOST_LIST_EMPTY_ANDROID" formatter_data="android_java">
-          You have no computers registered.
+        <message desc="Message displayed in the Android application if the user has not setup any computers for remote access." name="IDS_HOST_LIST_EMPTY_ANDROID" formatter_data="android_java">
+          There's nothing to connect to.
         </message>
-        <message desc="Message displayed to the user if there are no hosts registered to their account. This is styled to look like a hyperlink. When a user activates the link, they are taken to a web page that explains how to set up a Chromoting host." name="IDS_HOST_SETUP_LINK_ANDROID" formatter_data="android_java">
-          Learn how to set up a computer for remote access.
+        <message desc="Instruction displayed in the Android application if the user has not setup any computers for remote access. It appears after some larger text which states that the user has no computers to connect to." name="IDS_HOST_LIST_EMPTY_INSTRUCTIONS_ANDROID" formatter_data="android_java">
+          You need to first setup your computer for remote access.
+        </message>
+        <message desc="This button appears below some text which explains that the user needs to setup a computer for remote access. When a user activates the button, they are taken to a web page that explains how to set up a Chromoting host." name="IDS_HOST_SETUP_LINK_ANDROID" formatter_data="android_java">
+          Learn how
         </message>
         <message desc="Title of the authentication dialog" name="IDS_TITLE_AUTHENTICATE" formatter_data="android_java">
           Authenticate to host
@@ -648,8 +651,9 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Added Credits screen.
-• Fixed a problem when going full-screen with the keyboard visible.
+• Material Design UI updates.
+• Third-party licensing credits.
+• Information shown for remote computers that are offline.
         </message>
       </if>  <!-- is_android or is_ios -->
 

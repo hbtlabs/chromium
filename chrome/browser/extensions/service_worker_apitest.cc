@@ -4,20 +4,30 @@
 
 #include "base/bind_helpers.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/notifications/desktop_notification_profile_util.h"
+#include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
+#include "chrome/browser/push_messaging/push_messaging_service_factory.h"
+#include "chrome/browser/push_messaging/push_messaging_service_impl.h"
+#include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
+#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/page_type.h"
+#include "content/public/test/background_sync_test_util.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/test/background_page_watcher.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace extensions {
 
@@ -111,6 +121,77 @@ class ServiceWorkerTest : public ExtensionApiTest {
   ScopedCurrentChannel current_channel_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerTest);
+};
+
+class ServiceWorkerBackgroundSyncTest : public ServiceWorkerTest {
+ public:
+  ServiceWorkerBackgroundSyncTest() {}
+  ~ServiceWorkerBackgroundSyncTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // ServiceWorkerRegistration.sync requires experimental flag.
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+    ServiceWorkerTest::SetUpCommandLine(command_line);
+  }
+
+  void SetUp() override {
+    content::background_sync_test_util::SetIgnoreNetworkChangeNotifier(true);
+    ServiceWorkerTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBackgroundSyncTest);
+};
+
+class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
+ public:
+  ServiceWorkerPushMessagingTest()
+      : gcm_service_(nullptr), push_service_(nullptr) {}
+  ~ServiceWorkerPushMessagingTest() override {}
+
+  void GrantNotificationPermissionForTest(const GURL& url) {
+    GURL origin = url.GetOrigin();
+    DesktopNotificationProfileUtil::GrantPermission(profile(), origin);
+    ASSERT_EQ(
+        CONTENT_SETTING_ALLOW,
+        DesktopNotificationProfileUtil::GetContentSetting(profile(), origin));
+  }
+
+  PushMessagingAppIdentifier GetAppIdentifierForServiceWorkerRegistration(
+      int64 service_worker_registration_id,
+      const GURL& origin) {
+    PushMessagingAppIdentifier app_identifier =
+        PushMessagingAppIdentifier::FindByServiceWorker(
+            profile(), origin, service_worker_registration_id);
+
+    EXPECT_FALSE(app_identifier.is_null());
+    return app_identifier;
+  }
+
+  // ExtensionApiTest overrides.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kEnablePushMessagePayload);
+    ServiceWorkerTest::SetUpCommandLine(command_line);
+  }
+  void SetUpOnMainThread() override {
+    gcm_service_ = static_cast<gcm::FakeGCMProfileService*>(
+        gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+            profile(), &gcm::FakeGCMProfileService::Build));
+    gcm_service_->set_collect(true);
+    push_service_ = PushMessagingServiceFactory::GetForProfile(profile());
+
+    ServiceWorkerTest::SetUpOnMainThread();
+  }
+
+  gcm::FakeGCMProfileService* gcm_service() const { return gcm_service_; }
+  PushMessagingServiceImpl* push_service() const { return push_service_; }
+
+ private:
+  gcm::FakeGCMProfileService* gcm_service_;
+  PushMessagingServiceImpl* push_service_;
+
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerPushMessagingTest);
 };
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterSucceedsOnTrunk) {
@@ -340,6 +421,89 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, NotificationAPI) {
   EXPECT_TRUE(RunExtensionSubtest("service_worker/notifications/has_permission",
                                   "page.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {
+  const Extension* extension = LoadExtensionWithFlags(
+      test_data_dir_.AppendASCII("service_worker/sync"), kFlagNone);
+  ASSERT_TRUE(extension);
+  ui_test_utils::NavigateToURL(browser(),
+                               extension->GetResourceURL("page.html"));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Prevent firing by going offline.
+  content::background_sync_test_util::SetOnline(web_contents, false);
+
+  ExtensionTestMessageListener sync_listener("SYNC: send-chats", false);
+  sync_listener.set_failure_message("FAIL");
+
+  std::string result;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, "window.runServiceWorker()", &result));
+  ASSERT_EQ("SERVICE_WORKER_READY", result);
+
+  EXPECT_FALSE(sync_listener.was_satisfied());
+  // Resume firing by going online.
+  content::background_sync_test_util::SetOnline(web_contents, true);
+  EXPECT_TRUE(sync_listener.WaitUntilSatisfied());
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
+                       FetchFromContentScriptShouldNotGoToServiceWorkerOfPage) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  GURL page_url = embedded_test_server()->GetURL(
+      "/extensions/api_test/service_worker/content_script_fetch/"
+      "controlled_page/index.html");
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ui_test_utils::NavigateToURL(browser(), page_url);
+  content::WaitForLoadStop(tab);
+
+  std::string value;
+  ASSERT_TRUE(
+      content::ExecuteScriptAndExtractString(tab, "register();", &value));
+  EXPECT_EQ("SW controlled", value);
+
+  ASSERT_TRUE(RunExtensionTest("service_worker/content_script_fetch"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
+  const Extension* extension = LoadExtensionWithFlags(
+      test_data_dir_.AppendASCII("service_worker/push_messaging"), kFlagNone);
+  ASSERT_TRUE(extension);
+  GURL extension_url = extension->url();
+
+  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermissionForTest(extension_url));
+
+  GURL url = extension->GetResourceURL("page.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Start the ServiceWorker.
+  ExtensionTestMessageListener ready_listener("SERVICE_WORKER_READY", false);
+  ready_listener.set_failure_message("SERVICE_WORKER_FAILURE");
+  const char* kScript = "window.runServiceWorker()";
+  EXPECT_TRUE(content::ExecuteScript(web_contents->GetMainFrame(), kScript));
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
+
+  PushMessagingAppIdentifier app_identifier =
+      GetAppIdentifierForServiceWorkerRegistration(0LL, extension_url);
+  ASSERT_EQ(app_identifier.app_id(), gcm_service()->last_registered_app_id());
+  EXPECT_EQ("1234567890", gcm_service()->last_registered_sender_ids()[0]);
+
+  // Send a push message via gcm and expect the ServiceWorker to receive it.
+  ExtensionTestMessageListener push_message_listener("OK", false);
+  push_message_listener.set_failure_message("FAIL");
+  gcm::IncomingMessage message;
+  message.sender_id = "1234567890";
+  message.raw_data = "testdata";
+  message.decrypted = true;
+  push_service()->OnMessage(app_identifier.app_id(), message);
+  EXPECT_TRUE(push_message_listener.WaitUntilSatisfied());
 }
 
 }  // namespace extensions

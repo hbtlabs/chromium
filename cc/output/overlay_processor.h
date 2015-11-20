@@ -8,6 +8,7 @@
 #include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/base/cc_export.h"
+#include "cc/output/ca_layer_overlay.h"
 #include "cc/output/overlay_candidate.h"
 #include "cc/quads/render_pass.h"
 
@@ -28,26 +29,35 @@ class CC_EXPORT OverlayProcessor {
     // overlays.
     virtual bool Attempt(ResourceProvider* resource_provider,
                          RenderPassList* render_passes,
-                         OverlayCandidateList* candidates,
-                         gfx::Rect* damage_rect) = 0;
+                         OverlayCandidateList* candidates) = 0;
   };
-  typedef ScopedPtrVector<Strategy> StrategyList;
+  using StrategyList = std::vector<scoped_ptr<Strategy>>;
 
   explicit OverlayProcessor(OutputSurface* surface);
   virtual ~OverlayProcessor();
   // Virtual to allow testing different strategies.
   virtual void Initialize();
 
+  gfx::Rect GetAndResetOverlayDamage();
+
   void ProcessForOverlays(ResourceProvider* resource_provider,
                           RenderPassList* render_passes,
-                          OverlayCandidateList* candidates,
+                          OverlayCandidateList* overlay_candidates,
+                          CALayerOverlayList* ca_layer_overlays,
                           gfx::Rect* damage_rect);
 
  protected:
   StrategyList strategies_;
   OutputSurface* surface_;
+  gfx::Rect overlay_damage_rect_;
 
  private:
+  bool ProcessForCALayers(ResourceProvider* resource_provider,
+                          RenderPassList* render_passes,
+                          OverlayCandidateList* overlay_candidates,
+                          CALayerOverlayList* ca_layer_overlays,
+                          gfx::Rect* damage_rect);
+
   DISALLOW_COPY_AND_ASSIGN(OverlayProcessor);
 };
 

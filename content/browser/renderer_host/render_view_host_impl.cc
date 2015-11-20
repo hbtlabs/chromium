@@ -79,8 +79,8 @@
 #include "storage/browser/fileapi/isolated_context.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/touch/touch_device.h"
+#include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
-#include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_switches.h"
@@ -822,9 +822,7 @@ void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
   }
 }
 
-void RenderViewHostImpl::GotFocus() {
-  RenderWidgetHostImpl::GotFocus();  // Notifies the renderer it got focus.
-
+void RenderViewHostImpl::RenderWidgetGotFocus() {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
     view->GotFocus();
@@ -875,7 +873,7 @@ void RenderViewHostImpl::DirectoryEnumerationFinished(
                                               files));
 }
 
-void RenderViewHostImpl::SetIsLoading(bool is_loading) {
+void RenderViewHostImpl::RenderWidgetWillSetIsLoading(bool is_loading) {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO,
@@ -886,7 +884,6 @@ void RenderViewHostImpl::SetIsLoading(bool is_loading) {
                    GetRoutingID(),
                    is_loading));
   }
-  RenderWidgetHostImpl::SetIsLoading(is_loading);
 }
 
 void RenderViewHostImpl::LoadStateChanged(
@@ -964,8 +961,7 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void RenderViewHostImpl::Init() {
-  RenderWidgetHostImpl::Init();
+void RenderViewHostImpl::RenderWidgetDidInit() {
   PostRenderViewReady();
 }
 
@@ -982,7 +978,7 @@ void RenderViewHostImpl::Shutdown() {
   RenderWidgetHostImpl::Shutdown();
 }
 
-void RenderViewHostImpl::WasHidden() {
+void RenderViewHostImpl::RenderWidgetWillBeHidden() {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -990,11 +986,9 @@ void RenderViewHostImpl::WasHidden() {
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
-
-  RenderWidgetHostImpl::WasHidden();
 }
 
-void RenderViewHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
+void RenderViewHostImpl::RenderWidgetWillBeShown() {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -1002,8 +996,6 @@ void RenderViewHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
                    base::Unretained(ResourceDispatcherHostImpl::Get()),
                    GetProcess()->GetID(), GetRoutingID()));
   }
-
-  RenderWidgetHostImpl::WasShown(latency_info);
 }
 
 void RenderViewHostImpl::CreateNewWindow(
@@ -1206,6 +1198,10 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
   }
 #endif
 
+  // None of the rest makes sense without a view.
+  if (!GetWidget()->GetView())
+    return;
+
   // Convert node_bounds to screen coordinates.
   gfx::Rect view_bounds_in_screen = GetWidget()->GetView()->GetViewBounds();
   gfx::Point origin = node_bounds_in_viewport.origin();
@@ -1230,23 +1226,22 @@ void RenderViewHostImpl::OnFocus() {
   delegate_->Activate();
 }
 
-void RenderViewHostImpl::ForwardMouseEvent(
+void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  RenderWidgetHostImpl::ForwardMouseEvent(mouse_event);
   if (mouse_event.type == WebInputEvent::MouseWheel &&
       GetWidget()->ignore_input_events()) {
     delegate_->OnIgnoredUIEvent();
   }
 }
 
-void RenderViewHostImpl::ForwardKeyboardEvent(
+bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->ignore_input_events()) {
     if (key_event.type == WebInputEvent::RawKeyDown)
       delegate_->OnIgnoredUIEvent();
-    return;
+    return false;
   }
-  RenderWidgetHostImpl::ForwardKeyboardEvent(key_event);
+  return true;
 }
 
 void RenderViewHostImpl::OnTextSurroundingSelectionResponse(

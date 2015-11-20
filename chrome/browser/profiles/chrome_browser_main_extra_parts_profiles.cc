@@ -27,6 +27,7 @@
 #include "chrome/browser/notifications/extension_welcome_notification_factory.h"
 #include "chrome/browser/notifications/notification_permission_context_factory.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
+#include "chrome/browser/ntp_snippets/ntp_snippets_service_factory.h"
 #include "chrome/browser/password_manager/password_manager_setting_migrator_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/plugins/plugin_prefs_factory.h"
@@ -123,7 +124,6 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/profile_resetter/automatic_profile_resetter_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #endif
@@ -184,9 +184,6 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   AccountTrackerServiceFactory::GetInstance();
   AccountFetcherServiceFactory::GetInstance();
   autofill::PersonalDataManagerFactory::GetInstance();
-#if !defined(OS_ANDROID)
-  AutomaticProfileResetterFactory::GetInstance();
-#endif
 #if defined(ENABLE_BACKGROUND)
   BackgroundContentsServiceFactory::GetInstance();
 #endif
@@ -274,6 +271,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   MediaGalleriesPreferencesFactory::GetInstance();
   NTPResourceCacheFactory::GetInstance();
 #endif
+  NTPSnippetsServiceFactory::GetInstance();
   PasswordStoreFactory::GetInstance();
   PasswordManagerSettingMigratorServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)

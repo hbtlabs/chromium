@@ -72,23 +72,19 @@ void RecordBrowserWindowDisplay(const base::TimeTicks& ticks);
 // Call this with the time delta that the browser spent opening its tabs.
 void RecordBrowserOpenTabsDelta(const base::TimeDelta& delta);
 
+// Call this with a renderer main entry time. The value provided for the first
+// call to this function is used to compute
+// Startup.LoadTime.BrowserMainToRendererMain. Further calls to this
+// function are ignored.
+void RecordRendererMainEntryTime(const base::TimeTicks& ticks);
+
 // Call this with the time when the first web contents loaded its main frame,
 // only if the first web contents was unimpended in its attempt to do so.
 void RecordFirstWebContentsMainFrameLoad(const base::TimeTicks& ticks);
 
-// Call this with the time when the first web contents loaded its main frame.
-// This records an old stat kept for comparison purposes until M49.
-void RecordDeprecatedFirstWebContentsMainFrameLoad(
-    const base::TimeTicks& ticks);
-
 // Call this with the time when the first web contents had a non-empty paint,
 // only if the first web contents was unimpended in its attempt to do so.
 void RecordFirstWebContentsNonEmptyPaint(const base::TimeTicks& ticks);
-
-// Call this with the time when the first web contents had a non-empty paint.
-// This records an old stat kept for comparison purposes until M49.
-void RecordDeprecatedFirstWebContentsNonEmptyPaint(
-    const base::TimeTicks& ticks);
 
 // Call this with the time when the first web contents began navigating its main
 // frame.

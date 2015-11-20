@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/login/login_prompt.h"
 #include "chrome/browser/ui/login/login_prompt_test_utils.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -54,7 +53,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -1384,18 +1382,16 @@ IN_PROC_BROWSER_TEST_F(
       ::switches::kIgnoreCertificateErrors);
   const base::FilePath::CharType kDocRoot[] =
       FILE_PATH_LITERAL("chrome/test/data");
-  net::SpawnedTestServer https_test_server(
-      net::SpawnedTestServer::TYPE_HTTPS,
-      net::SpawnedTestServer::SSLOptions(
-          net::SpawnedTestServer::SSLOptions::CERT_OK),
-      base::FilePath(kDocRoot));
+  net::EmbeddedTestServer https_test_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
   ASSERT_TRUE(https_test_server.Start());
 
   // This test case cannot inject the scripts via content::ExecuteScript() in
   // files served through HTTPS. Therefore the scripts are made part of the HTML
   // site and executed on load.
   std::string path =
-      "password/separate_login_form_with_onload_submit_script.html";
+      "/password/separate_login_form_with_onload_submit_script.html";
   GURL https_url(https_test_server.GetURL(path));
   ASSERT_TRUE(https_url.SchemeIs(url::kHttpsScheme));
 
@@ -2732,6 +2728,39 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
       RenderViewHost(), get_password, &actual_password));
   EXPECT_EQ("mypassword", actual_password);
+}
+
+// Check that the internals page contains logs both from the renderer and the
+// browser.
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase, InternalsPage) {
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("chrome://password-manager-internals"), CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  content::WebContents* internals_web_contents = WebContents();
+
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("/password/password_form.html"),
+      NEW_FOREGROUND_TAB, ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  std::string find_renderer_logs =
+      "var text = document.getElementById('log-entries').innerText;"
+      "var logs_found = /PasswordAutofillAgent::/.test(text);"
+      "window.domAutomationController.send(logs_found);";
+  bool renderer_logs_found;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      internals_web_contents->GetRenderViewHost(), find_renderer_logs,
+      &renderer_logs_found));
+  EXPECT_TRUE(renderer_logs_found);
+
+  std::string find_browser_logs =
+      "var text = document.getElementById('log-entries').innerText;"
+      "var logs_found = /PasswordManager::/.test(text);"
+      "window.domAutomationController.send(logs_found);";
+  bool browser_logs_found;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      internals_web_contents->GetRenderViewHost(), find_browser_logs,
+      &browser_logs_found));
+  EXPECT_TRUE(browser_logs_found);
 }
 
 }  // namespace password_manager

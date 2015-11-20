@@ -49,8 +49,6 @@ import org.chromium.chrome.browser.contextualsearch.ContextualSearchTabHelper;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.dom_distiller.ReaderModeActivityDelegate;
-import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.download.ChromeDownloadDelegate;
 import org.chromium.chrome.browser.enhancedbookmarks.EnhancedBookmarkUtils;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -356,8 +354,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     protected Handler mHandler;
 
-    private final ReaderModeManager mReaderModeManager;
-
     private class TabContentViewClient extends ContentViewClient {
         @Override
         public void onBackgroundColorChanged(int color) {
@@ -580,7 +576,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             }
         };
 
-        mReaderModeManager = new ReaderModeManager(this, activity);
         mTabRedirectHandler = new TabRedirectHandler(activity);
         addObserver(mTabObserver);
 
@@ -1091,19 +1086,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      * on both cold and warm starts.
      */
     public void onActivityStart() {
-        onActivityStartInternal(true);
-    }
-
-    /**
-     * Called on the foreground tab when the Activity showing the Tab gets stopped.
-     */
-    public void onActivityStop() {
-        hide();
-    }
-
-    protected void onActivityStartInternal(boolean showNow) {
         if (isHidden()) {
-            if (showNow) show(TabSelectionType.FROM_USER);
+            show(TabSelectionType.FROM_USER);
         } else {
             // The visible Tab's renderer process may have died after the activity was paused.
             // Ensure that it's restored appropriately.
@@ -1114,6 +1098,13 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         // subactivity did not change the fullscreen configuration of this ChromeTab's renderer in
         // the case where it was shared (i.e. via an EmbedContentViewActivity).
         updateFullscreenEnabledState();
+    }
+
+    /**
+     * Called on the foreground tab when the Activity showing the Tab gets stopped.
+     */
+    public void onActivityStop() {
+        hide();
     }
 
     /**
@@ -1364,14 +1355,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         for (TabObserver observer : mObservers) {
             observer.onOverlayContentViewCoreAdded(this, content);
         }
-    }
-
-    /**
-     * TODO(aruslan): remove this.
-     * Temporary overload to avoid 2-way commit.
-     */
-    public void attachOverlayContentViewCore(ContentViewCore content, boolean visible) {
-        attachOverlayContentViewCore(content, visible, true);
     }
 
     /**
@@ -2799,17 +2782,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mHandler.removeMessages(MSG_ID_ENABLE_FULLSCREEN_AFTER_LOAD);
             enableFullscreenAfterLoad();
         }
-    }
-
-    /**
-     * @return The reader mode manager for this tab that handles UI events for reader mode.
-     */
-    public ReaderModeManager getReaderModeManager() {
-        return mReaderModeManager;
-    }
-
-    public ReaderModeActivityDelegate getReaderModeActivityDelegate() {
-        return mActivity == null ? null : mActivity.getReaderModeActivityDelegate();
     }
 
     /**

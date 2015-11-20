@@ -283,14 +283,14 @@ RootInlineBox* LayoutBlockFlow::constructLine(BidiRunList<BidiRun>& bidiRuns, co
         if (!box)
             continue;
 
-        if (!rootHasSelectedChildren && box->layoutObject().selectionState() != SelectionNone)
+        if (!rootHasSelectedChildren && box->lineLayoutItem().selectionState() != SelectionNone)
             rootHasSelectedChildren = true;
 
         // If we have no parent box yet, or if the run is not simply a sibling,
         // then we need to construct inline boxes as necessary to properly enclose the
         // run's inline box. Segments can only be siblings at the root level, as
         // they are positioned separately.
-        if (!parentBox || parentBox->layoutObject() != r->m_object->parent()) {
+        if (!parentBox || (!parentBox->lineLayoutItem().isEqual(r->m_object->parent()))) {
             // Create new inline boxes all the way back to the appropriate insertion point.
             parentBox = createLineBoxes(r->m_object->parent(), lineInfo, box);
         } else {
@@ -1856,6 +1856,7 @@ bool LayoutBlockFlow::matchedEndLine(LineLayoutState& layoutState, const InlineB
 }
 
 bool LayoutBlockFlow::generatesLineBoxesForInlineChild(LayoutObject* inlineObj)
+
 {
     ASSERT(inlineObj->parent() == this);
 
@@ -1867,9 +1868,13 @@ bool LayoutBlockFlow::generatesLineBoxesForInlineChild(LayoutObject* inlineObj)
     return !it.atEnd();
 }
 
+
 void LayoutBlockFlow::addOverflowFromInlineChildren()
 {
     LayoutUnit endPadding = hasOverflowClip() ? paddingEnd() : LayoutUnit();
+    // FIXME: Need to find another way to do this, since scrollbars could show when we don't want them to.
+    if (hasOverflowClip() && !endPadding && node() && node()->isRootEditableElement() && style()->isLeftToRightDirection())
+        endPadding = 1;
     for (RootInlineBox* curr = firstRootBox(); curr; curr = curr->nextRootBox()) {
         addLayoutOverflow(curr->paddedLayoutOverflowRect(endPadding));
         LayoutRect visualOverflow = curr->visualOverflowRect(curr->lineTop(), curr->lineBottom());

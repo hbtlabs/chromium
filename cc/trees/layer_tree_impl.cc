@@ -221,7 +221,7 @@ void LayerTreeImpl::UpdateScrollbars(int scroll_layer_id, int clip_layer_id) {
 }
 
 void LayerTreeImpl::SetRootLayer(scoped_ptr<LayerImpl> layer) {
-  root_layer_ = layer.Pass();
+  root_layer_ = std::move(layer);
 
   layer_tree_host_impl_->OnCanDrawStateChangedForTree();
 }
@@ -261,7 +261,7 @@ gfx::ScrollOffset LayerTreeImpl::TotalMaxScrollOffset() const {
 scoped_ptr<LayerImpl> LayerTreeImpl::DetachLayerTree() {
   render_surface_layer_list_.clear();
   set_needs_update_draw_properties();
-  return root_layer_.Pass();
+  return std::move(root_layer_);
 }
 
 static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
@@ -325,7 +325,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   target_tree->elastic_overscroll()->PushPendingToActive();
 
   target_tree->pending_page_scale_animation_ =
-      pending_page_scale_animation_.Pass();
+      std::move(pending_page_scale_animation_);
 
   target_tree->SetViewportLayersFromIds(
       overscroll_elasticity_layer_id_, page_scale_layer_id_,
@@ -548,15 +548,33 @@ gfx::SizeF LayerTreeImpl::ScrollableViewportSize() const {
                         1.0f / current_page_scale_factor());
 }
 
+static const gfx::Transform LayerScreenSpaceTransform(
+    const LayerImpl* layer,
+    const TransformTree& transform_tree,
+    const bool use_property_trees) {
+  if (!use_property_trees)
+    return layer->screen_space_transform();
+  // When we use property trees, UpdateDrawProperties does not update the draw
+  // properties of a layer that is not in render surface layer list, so we need
+  // to compute the screen space transform.
+  return layer->IsDrawnRenderSurfaceLayerListMember()
+             ? layer->screen_space_transform()
+             : ScreenSpaceTransformFromPropertyTrees(layer, transform_tree);
+}
+
 gfx::Rect LayerTreeImpl::RootScrollLayerDeviceViewportBounds() const {
   LayerImpl* root_scroll_layer = OuterViewportScrollLayer()
                                      ? OuterViewportScrollLayer()
                                      : InnerViewportScrollLayer();
   if (!root_scroll_layer || root_scroll_layer->children().empty())
     return gfx::Rect();
-  LayerImpl* layer = root_scroll_layer->children()[0];
-  return MathUtil::MapEnclosingClippedRect(layer->screen_space_transform(),
-                                           gfx::Rect(layer->bounds()));
+  LayerImpl* layer = root_scroll_layer->children()[0].get();
+  bool use_property_trees =
+      settings().verify_property_trees || settings().use_property_trees;
+  return MathUtil::MapEnclosingClippedRect(
+      LayerScreenSpaceTransform(layer, property_trees_.transform_tree,
+                                use_property_trees),
+      gfx::Rect(layer->bounds()));
 }
 
 void LayerTreeImpl::ApplySentScrollAndScaleDeltasFromAbortedCommit() {
@@ -865,7 +883,7 @@ void LayerTreeImpl::DidBecomeActive() {
         root_layer(), [](LayerImpl* layer) { layer->DidBecomeActive(); });
   }
 
-  for (auto* swap_promise : swap_promise_list_)
+  for (const auto& swap_promise : swap_promise_list_)
     swap_promise->DidActivate();
   devtools_instrumentation::DidActivateLayerTree(layer_tree_host_impl_->id(),
                                                  source_frame_number_);
@@ -1078,12 +1096,12 @@ void LayerTreeImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->EndArray();
 
   state->BeginArray("swap_promise_trace_ids");
-  for (auto* swap_promise : swap_promise_list_)
+  for (const auto& swap_promise : swap_promise_list_)
     state->AppendDouble(swap_promise->TraceId());
   state->EndArray();
 
   state->BeginArray("pinned_swap_promise_trace_ids");
-  for (auto* swap_promise : pinned_swap_promise_list_)
+  for (const auto& swap_promise : pinned_swap_promise_list_)
     state->AppendDouble(swap_promise->TraceId());
   state->EndArray();
 }
@@ -1122,38 +1140,38 @@ bool LayerTreeImpl::DistributeRootScrollOffset(
 
 void LayerTreeImpl::QueueSwapPromise(scoped_ptr<SwapPromise> swap_promise) {
   DCHECK(swap_promise);
-  swap_promise_list_.push_back(swap_promise.Pass());
+  swap_promise_list_.push_back(std::move(swap_promise));
 }
 
 void LayerTreeImpl::QueuePinnedSwapPromise(
     scoped_ptr<SwapPromise> swap_promise) {
   DCHECK(IsActiveTree());
   DCHECK(swap_promise);
-  pinned_swap_promise_list_.push_back(swap_promise.Pass());
+  pinned_swap_promise_list_.push_back(std::move(swap_promise));
 }
 
 void LayerTreeImpl::PassSwapPromises(
-    ScopedPtrVector<SwapPromise>* new_swap_promise) {
-  for (auto* swap_promise : swap_promise_list_)
+    std::vector<scoped_ptr<SwapPromise>>* new_swap_promise) {
+  for (const auto& swap_promise : swap_promise_list_)
     swap_promise->DidNotSwap(SwapPromise::SWAP_FAILS);
   swap_promise_list_.clear();
   swap_promise_list_.swap(*new_swap_promise);
 }
 
 void LayerTreeImpl::FinishSwapPromises(CompositorFrameMetadata* metadata) {
-  for (auto* swap_promise : swap_promise_list_)
+  for (const auto& swap_promise : swap_promise_list_)
     swap_promise->DidSwap(metadata);
   swap_promise_list_.clear();
-  for (auto* swap_promise : pinned_swap_promise_list_)
+  for (const auto& swap_promise : pinned_swap_promise_list_)
     swap_promise->DidSwap(metadata);
   pinned_swap_promise_list_.clear();
 }
 
 void LayerTreeImpl::BreakSwapPromises(SwapPromise::DidNotSwapReason reason) {
-  for (auto* swap_promise : swap_promise_list_)
+  for (const auto& swap_promise : swap_promise_list_)
     swap_promise->DidNotSwap(reason);
   swap_promise_list_.clear();
-  for (auto* swap_promise : pinned_swap_promise_list_)
+  for (const auto& swap_promise : pinned_swap_promise_list_)
     swap_promise->DidNotSwap(reason);
   pinned_swap_promise_list_.clear();
 }
@@ -1390,20 +1408,6 @@ static const LayerImpl* GetNextClippingLayer(const LayerImpl* layer) {
   return layer->parent();
 }
 
-static const gfx::Transform LayerScreenSpaceTransform(
-    const LayerImpl* layer,
-    const TransformTree& transform_tree,
-    const bool use_property_trees) {
-  if (!use_property_trees)
-    return layer->screen_space_transform();
-  // When we use property trees, UpdateDrawProperties does not update the draw
-  // properties of a layer that is not in render surface layer list, so we need
-  // to compute the screen space transform.
-  return layer->IsDrawnRenderSurfaceLayerListMember()
-             ? layer->screen_space_transform()
-             : ScreenSpaceTransformFromPropertyTrees(layer, transform_tree);
-}
-
 static const gfx::Transform SurfaceScreenSpaceTransform(
     const LayerImpl* layer,
     const TransformTree& transform_tree,
@@ -1492,8 +1496,8 @@ static void FindClosestMatchingLayer(
   size_t children_size = layer->children().size();
   for (size_t i = 0; i < children_size; ++i) {
     size_t index = children_size - 1 - i;
-    FindClosestMatchingLayer(screen_space_point, layer->children()[index], func,
-                             transform_tree, use_property_trees,
+    FindClosestMatchingLayer(screen_space_point, layer->children()[index].get(),
+                             func, transform_tree, use_property_trees,
                              data_for_recursion);
   }
 
@@ -1760,12 +1764,12 @@ VideoFrameControllerClient* LayerTreeImpl::GetVideoFrameControllerClient()
 
 void LayerTreeImpl::SetPendingPageScaleAnimation(
     scoped_ptr<PendingPageScaleAnimation> pending_animation) {
-  pending_page_scale_animation_ = pending_animation.Pass();
+  pending_page_scale_animation_ = std::move(pending_animation);
 }
 
 scoped_ptr<PendingPageScaleAnimation>
     LayerTreeImpl::TakePendingPageScaleAnimation() {
-  return pending_page_scale_animation_.Pass();
+  return std::move(pending_page_scale_animation_);
 }
 
 bool LayerTreeImpl::IsAnimatingFilterProperty(const LayerImpl* layer) const {

@@ -246,6 +246,14 @@
         '<@(remoting_protocol_sources)',
         '<@(remoting_signaling_sources)',
       ],
+      'conditions': [
+        ['enable_webrtc==1', {
+          'dependencies': [
+            '../third_party/libjingle/libjingle.gyp:libjingle_webrtc',
+            '../third_party/libjingle/libjingle.gyp:libpeerconnection',
+          ],
+        }],
+      ],
     },  # end of target 'remoting_protocol'
   ],  # end of targets
 }

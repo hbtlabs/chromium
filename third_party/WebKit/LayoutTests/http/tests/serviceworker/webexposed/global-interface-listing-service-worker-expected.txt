@@ -587,19 +587,12 @@ interface SubtleCrypto
     method wrapKey
 interface SyncEvent : ExtendableEvent
     getter lastChance
-    getter registration
+    getter tag
     method constructor
 interface SyncManager
     method constructor
-    method getRegistration
-    method getRegistrations
-    method permissionState
+    method getTags
     method register
-interface SyncRegistration
-    getter finished
-    getter tag
-    method constructor
-    method unregister
 interface TextDecoder
     getter encoding
     getter fatal
@@ -636,6 +629,19 @@ interface URL
     setter protocol
     setter search
     setter username
+interface URLSearchParams
+    method append
+    method constructor
+    method delete
+    method entries
+    method forEach
+    method get
+    method getAll
+    method has
+    method keys
+    method set
+    method toString
+    method values
 interface WebSocket : EventTarget
     attribute CLOSED
     attribute CLOSING

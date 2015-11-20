@@ -441,7 +441,7 @@ class LayerTreeHostFreeWorkerContextResourcesTest : public LayerTreeHostTest {
                 SetWorkerContextShouldAggressivelyFreeResources(true))
         .After(visibility_true)
         .WillOnce(testing::Invoke([this](bool is_visible) { EndTest(); }));
-    return output_surface.Pass();
+    return std::move(output_surface);
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
@@ -1217,12 +1217,12 @@ class LayerTreeHostTestDamageWithScale : public LayerTreeHostTest {
     scoped_ptr<FakeDisplayListRecordingSource> recording(
         new FakeDisplayListRecordingSource);
     root_layer_ = FakePictureLayer::CreateWithRecordingSource(
-        layer_settings(), &client_, recording.Pass());
+        layer_settings(), &client_, std::move(recording));
     root_layer_->SetBounds(gfx::Size(50, 50));
 
     recording.reset(new FakeDisplayListRecordingSource);
     child_layer_ = FakePictureLayer::CreateWithRecordingSource(
-        layer_settings(), &client_, recording.Pass());
+        layer_settings(), &client_, std::move(recording));
     child_layer_->SetBounds(gfx::Size(25, 25));
     child_layer_->SetIsDrawable(true);
     child_layer_->SetContentsOpaque(true);
@@ -1649,7 +1649,7 @@ class LayerTreeHostTestDeviceScaleFactorScalesViewportAndLayers
     FakePictureLayerImpl* root =
         static_cast<FakePictureLayerImpl*>(impl->active_tree()->root_layer());
     FakePictureLayerImpl* child = static_cast<FakePictureLayerImpl*>(
-        impl->active_tree()->root_layer()->children()[0]);
+        impl->active_tree()->root_layer()->children()[0].get());
 
     // Positions remain in layout pixels.
     EXPECT_EQ(gfx::PointF(), root->position());
@@ -2246,9 +2246,10 @@ class LayerTreeHostTestIOSurfaceDrawing : public LayerTreeHostTest {
     mock_context_ = mock_context_owned.get();
 
     if (delegating_renderer())
-      return FakeOutputSurface::CreateDelegating3d(mock_context_owned.Pass());
+      return FakeOutputSurface::CreateDelegating3d(
+          std::move(mock_context_owned));
     else
-      return FakeOutputSurface::Create3d(mock_context_owned.Pass());
+      return FakeOutputSurface::Create3d(std::move(mock_context_owned));
   }
 
   void SetupTree() override {
@@ -2443,7 +2444,7 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
     if (host_impl->GetDrawMode() == DRAW_MODE_RESOURCELESS_SOFTWARE) {
       EXPECT_EQ(1u, frame_data->render_passes.size());
       // Has at least 3 quads for each layer.
-      RenderPass* render_pass = frame_data->render_passes[0];
+      RenderPass* render_pass = frame_data->render_passes[0].get();
       EXPECT_GE(render_pass->quad_list.size(), 3u);
     } else {
       EXPECT_EQ(2u, frame_data->render_passes.size());
@@ -3014,21 +3015,21 @@ class LayerTreeHostTestImplLayersPushProperties
 
     if (root_impl_ && root_impl_->children().size() > 0) {
       child_impl_ = static_cast<PushPropertiesCountingLayerImpl*>(
-          root_impl_->children()[0]);
+          root_impl_->children()[0].get());
 
       if (child_impl_ && child_impl_->children().size() > 0)
         grandchild_impl_ = static_cast<PushPropertiesCountingLayerImpl*>(
-            child_impl_->children()[0]);
+            child_impl_->children()[0].get());
     }
 
     if (root_impl_ && root_impl_->children().size() > 1) {
       child2_impl_ = static_cast<PushPropertiesCountingLayerImpl*>(
-          root_impl_->children()[1]);
+          root_impl_->children()[1].get());
 
       if (child2_impl_ && child2_impl_->children().size() > 0)
         leaf_always_pushing_layer_impl_ =
             static_cast<PushPropertiesCountingLayerImpl*>(
-                child2_impl_->children()[0]);
+                child2_impl_->children()[0].get());
     }
 
     if (root_impl_)
@@ -3770,8 +3771,8 @@ class LayerTreeHostTestPushHiddenLayer : public LayerTreeHostTest {
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->active_tree()->root_layer();
-    LayerImpl* parent = root->children()[0];
-    LayerImpl* child = parent->children()[0];
+    LayerImpl* parent = root->children()[0].get();
+    LayerImpl* child = parent->children()[0].get();
 
     switch (impl->active_tree()->source_frame_number()) {
       case 1:
@@ -3850,7 +3851,7 @@ class LayerTreeHostTestSetMemoryPolicyOnLostOutputSurface
                                            : first_output_surface_memory_limit_,
             gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
             ManagedMemoryPolicy::kDefaultNumResourcesLimit)));
-    return output_surface.Pass();
+    return output_surface;
   }
 
   void SetupTree() override {
@@ -4015,7 +4016,7 @@ class LayerTreeHostTestBreakSwapPromise : public LayerTreeHostTest {
     ASSERT_LE(commit_count_, 2);
     scoped_ptr<SwapPromise> swap_promise(
         new TestSwapPromise(&swap_promise_result_[commit_count_]));
-    layer_tree_host()->QueueSwapPromise(swap_promise.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -4202,7 +4203,7 @@ class LayerTreeHostTestBreakSwapPromiseForVisibility
     layer_tree_host()->SetVisible(false);
     scoped_ptr<SwapPromise> swap_promise(
         new TestSwapPromise(&swap_promise_result_));
-    layer_tree_host()->QueueSwapPromise(swap_promise.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
   }
 
   void ScheduledActionWillSendBeginMainFrame() override {
@@ -4246,7 +4247,7 @@ class LayerTreeHostTestBreakSwapPromiseForContext : public LayerTreeHostTest {
     layer_tree_host()->DidLoseOutputSurface();
     scoped_ptr<SwapPromise> swap_promise(
         new TestSwapPromise(&swap_promise_result_));
-    layer_tree_host()->QueueSwapPromise(swap_promise.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
   }
 
   void ScheduledActionWillSendBeginMainFrame() override {
@@ -4426,7 +4427,7 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
 
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(
-            layer_settings(), &layer_client_, recording_source.Pass());
+            layer_settings(), &layer_client_, std::move(recording_source));
     layer_ = layer.get();
     layer->SetBounds(gfx::Size(10, 10));
     layer->SetIsDrawable(true);
@@ -4481,7 +4482,7 @@ class LayerTreeHostTestEmptyLayerGpuRasterization : public LayerTreeHostTest {
 
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(
-            layer_settings(), &layer_client_, recording_source.Pass());
+            layer_settings(), &layer_client_, std::move(recording_source));
     layer_ = layer.get();
     layer->SetBounds(gfx::Size());
     layer->SetIsDrawable(true);
@@ -4538,7 +4539,7 @@ class LayerTreeHostTestGpuRasterizationEnabled : public LayerTreeHostTest {
 
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(
-            layer_settings(), &layer_client_, recording_source.Pass());
+            layer_settings(), &layer_client_, std::move(recording_source));
     layer_ = layer.get();
     layer->SetBounds(gfx::Size(10, 10));
     layer->SetIsDrawable(true);
@@ -4607,7 +4608,7 @@ class LayerTreeHostTestGpuRasterizationForced : public LayerTreeHostTest {
 
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(
-            layer_settings(), &layer_client_, recording_source.Pass());
+            layer_settings(), &layer_client_, std::move(recording_source));
     layer_ = layer.get();
 
     layer->SetBounds(gfx::Size(10, 10));
@@ -4921,20 +4922,20 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
     // Successful composite.
     scoped_ptr<SwapPromise> swap_promise0(
         new TestSwapPromise(&swap_promise_result_[0]));
-    layer_tree_host()->QueueSwapPromise(swap_promise0.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise0));
     layer_tree_host()->Composite(base::TimeTicks::Now());
 
     // Fail to swap (no damage).
     scoped_ptr<SwapPromise> swap_promise1(
         new TestSwapPromise(&swap_promise_result_[1]));
-    layer_tree_host()->QueueSwapPromise(swap_promise1.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise1));
     layer_tree_host()->SetNeedsCommit();
     layer_tree_host()->Composite(base::TimeTicks::Now());
 
     // Fail to draw (not visible).
     scoped_ptr<SwapPromise> swap_promise2(
         new TestSwapPromise(&swap_promise_result_[2]));
-    layer_tree_host()->QueueSwapPromise(swap_promise2.Pass());
+    layer_tree_host()->QueueSwapPromise(std::move(swap_promise2));
     layer_tree_host()->SetNeedsDisplayOnAllLayers();
     layer_tree_host()->SetVisible(false);
     layer_tree_host()->Composite(base::TimeTicks::Now());
@@ -5052,7 +5053,7 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
     recording->SetPlaybackAllowedEvent(&playback_allowed_event_);
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(layer_settings(), &client_,
-                                                    recording.Pass());
+                                                    std::move(recording));
     layer->SetBounds(gfx::Size(500, 500));
     layer->SetContentsOpaque(true);
     // Avoid LCD text on the layer so we don't cause extra commits when we
@@ -5071,7 +5072,7 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
     if (frame_data->has_no_damage)
       return 0.f;
     float frame_scale = 0.f;
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     for (const auto& draw_quad : root_pass->quad_list) {
       // Checkerboards mean an incomplete frame.
       if (draw_quad->material != DrawQuad::TILED_CONTENT)
@@ -5226,9 +5227,9 @@ class LayerTreeHostTestCrispUpAfterPinchEndsWithOneCopy
 #endif
 
     if (delegating_renderer())
-      return FakeOutputSurface::CreateDelegating3d(context3d.Pass());
+      return FakeOutputSurface::CreateDelegating3d(std::move(context3d));
     else
-      return FakeOutputSurface::Create3d(context3d.Pass());
+      return FakeOutputSurface::Create3d(std::move(context3d));
   }
 };
 
@@ -5254,7 +5255,7 @@ class RasterizeWithGpuRasterizationCreatesResources : public LayerTreeHostTest {
         new FakeDisplayListRecordingSource);
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(layer_settings(), &client_,
-                                                    recording.Pass());
+                                                    std::move(recording));
     layer->SetBounds(gfx::Size(500, 500));
     layer->SetContentsOpaque(true);
     root->AddChild(layer);
@@ -5295,7 +5296,7 @@ class GpuRasterizationRasterizesBorderTiles : public LayerTreeHostTest {
         new FakeDisplayListRecordingSource);
     scoped_refptr<FakePictureLayer> root =
         FakePictureLayer::CreateWithRecordingSource(layer_settings(), &client_,
-                                                    recording.Pass());
+                                                    std::move(recording));
     root->SetBounds(gfx::Size(10000, 10000));
     root->SetContentsOpaque(true);
 
@@ -5348,7 +5349,7 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
     recording->SetPlaybackAllowedEvent(&playback_allowed_event_);
     scoped_refptr<FakePictureLayer> layer =
         FakePictureLayer::CreateWithRecordingSource(layer_settings(), &client_,
-                                                    recording.Pass());
+                                                    std::move(recording));
     layer->SetBounds(gfx::Size(500, 500));
     layer->SetContentsOpaque(true);
     // Avoid LCD text on the layer so we don't cause extra commits when we
@@ -5367,7 +5368,7 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
     if (frame_data->has_no_damage)
       return 0.f;
     float frame_scale = 0.f;
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     for (const auto& draw_quad : root_pass->quad_list) {
       const TileDrawQuad* quad = TileDrawQuad::MaterialCast(draw_quad);
       float quad_scale =
@@ -5816,7 +5817,7 @@ class LayerTreeTestMaskLayerForSurfaceWithClippedLayer : public LayerTreeTest {
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     EXPECT_EQ(2u, frame_data->render_passes.size());
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     EXPECT_EQ(2u, root_pass->quad_list.size());
 
     // There's a solid color quad under everything.
@@ -5900,7 +5901,7 @@ class LayerTreeTestMaskLayerWithScaling : public LayerTreeTest {
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     EXPECT_EQ(2u, frame_data->render_passes.size());
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     EXPECT_EQ(2u, root_pass->quad_list.size());
 
     // There's a solid color quad under everything.
@@ -5988,7 +5989,7 @@ class LayerTreeTestMaskLayerWithDifferentBounds : public LayerTreeTest {
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     EXPECT_EQ(2u, frame_data->render_passes.size());
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     EXPECT_EQ(2u, root_pass->quad_list.size());
 
     // There's a solid color quad under everything.
@@ -6079,7 +6080,7 @@ class LayerTreeTestReflectionMaskLayerWithDifferentBounds
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     EXPECT_EQ(2u, frame_data->render_passes.size());
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     EXPECT_EQ(3u, root_pass->quad_list.size());
 
     // There's a solid color quad under everything.
@@ -6177,7 +6178,7 @@ class LayerTreeTestReflectionMaskLayerForSurfaceWithUnclippedChild
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
     EXPECT_EQ(2u, frame_data->render_passes.size());
-    RenderPass* root_pass = frame_data->render_passes.back();
+    RenderPass* root_pass = frame_data->render_passes.back().get();
     EXPECT_EQ(3u, root_pass->quad_list.size());
 
     // There's a solid color quad under everything.

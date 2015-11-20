@@ -313,9 +313,11 @@ WebInspector.OverridesSupport.prototype = {
 
             if (this.canEmulate()) {
                 target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._onMainFrameNavigated, this);
-                var domModel = WebInspector.DOMModel.fromTarget(this._target);
-                if (domModel)
-                    domModel.addEventListener(WebInspector.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeWillBeToggled, this);
+                if (!Runtime.experiments.isEnabled("deviceMode")) {
+                    var domModel = WebInspector.DOMModel.fromTarget(this._target);
+                    if (domModel)
+                        domModel.addEventListener(WebInspector.DOMModel.Events.InspectModeWillBeToggled, this._inspectModeWillBeToggled, this);
+                }
                 this._applyInitialOverrides();
             }
 
@@ -748,7 +750,6 @@ WebInspector.OverridesSupport.prototype = {
     {
         var showRulersValue = WebInspector.moduleSetting("showMetricsRulers").get();
         for (var target of WebInspector.targetManager.targets(WebInspector.Target.Type.Page)) {
-            target.pageAgent().setShowViewportSizeOnResize(!this._pageResizerActive(), showRulersValue);
             var domModel = WebInspector.DOMModel.fromTarget(target);
             if (domModel)
                 domModel.setHighlightSettings(showRulersValue && !this._pageResizerActive(), showRulersValue);
@@ -757,7 +758,8 @@ WebInspector.OverridesSupport.prototype = {
 
     _onMainFrameNavigated: function()
     {
-        this._deviceMetricsChanged(false);
+        if (!Runtime.experiments.isEnabled("deviceMode"))
+            this._deviceMetricsChanged(false);
         this._updateUserAgentWarningMessage("");
         this._updateDeviceMetricsWarningMessage("");
     },

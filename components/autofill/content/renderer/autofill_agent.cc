@@ -47,7 +47,6 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebOptionElement.h"
-#include "third_party/WebKit/public/web/WebTextAreaElement.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -67,7 +66,6 @@ using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebOptionElement;
 using blink::WebString;
-using blink::WebTextAreaElement;
 using blink::WebUserGestureIndicator;
 using blink::WebVector;
 
@@ -78,26 +76,25 @@ namespace {
 // Gets all the data list values (with corresponding label) for the given
 // element.
 void GetDataListSuggestions(const WebInputElement& element,
-                            bool ignore_current_value,
                             std::vector<base::string16>* values,
                             std::vector<base::string16>* labels) {
   WebElementCollection options = element.dataListOptions();
   if (options.isNull())
     return;
 
-  base::string16 prefix;
-  if (!ignore_current_value) {
-    prefix = element.editingValue();
-    if (element.isMultiple() && element.isEmailField()) {
-      const base::char16 comma[2] = { ',', 0 };
-      std::vector<base::string16> parts = base::SplitString(
-          prefix, comma, base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-      if (parts.size() > 0) {
-        base::TrimWhitespace(parts[parts.size() - 1], base::TRIM_LEADING,
-                             &prefix);
-      }
+  // If the field accepts multiple email addresses, filter only on the last one.
+  base::string16 prefix = element.editingValue();
+  if (element.isMultiple() && element.isEmailField()) {
+    std::vector<base::string16> parts = base::SplitString(
+        prefix, base::ASCIIToUTF16(","), base::TRIM_WHITESPACE,
+        base::SPLIT_WANT_ALL);
+    if (!parts.empty()) {
+      base::TrimWhitespace(parts[parts.size() - 1], base::TRIM_LEADING,
+                           &prefix);
     }
   }
+
+  // Prefix filtering.
   prefix = base::i18n::ToLower(prefix);
   for (WebOptionElement option = options.firstItem().to<WebOptionElement>();
        !option.isNull(); option = options.nextItem().to<WebOptionElement>()) {
@@ -666,7 +663,7 @@ void AutofillAgent::ShowSuggestions(const WebFormControlElement& element,
       return;
   } else {
     DCHECK(form_util::IsTextAreaElement(element));
-    if (!element.toConst<WebTextAreaElement>().suggestedValue().isEmpty())
+    if (!element.toConst<WebFormControlElement>().suggestedValue().isEmpty())
       return;
   }
 
@@ -739,7 +736,6 @@ void AutofillAgent::QueryAutofillSuggestions(
   if (input_element) {
     // Find the datalist values and send them to the browser process.
     GetDataListSuggestions(*input_element,
-                           datalist_only,
                            &data_list_values,
                            &data_list_labels);
     TrimStringVectorForIPC(&data_list_values);

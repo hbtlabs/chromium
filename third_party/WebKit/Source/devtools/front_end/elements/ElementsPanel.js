@@ -53,10 +53,7 @@ WebInspector.ElementsPanel = function()
     stackElement.appendChild(this._contentElement);
     stackElement.appendChild(crumbsContainer);
 
-    this._treeOutlineSplit = new WebInspector.SplitWidget(false, true, "treeOutlineAnimationTimelineWidget", 300, 300);
-    this._treeOutlineSplit.hideSidebar();
-    this._treeOutlineSplit.setMainWidget(this._searchableView);
-    this._splitWidget.setMainWidget(this._treeOutlineSplit);
+    this._splitWidget.setMainWidget(this._searchableView);
 
     this._contentElement.id = "elements-content";
     // FIXME: crbug.com/425984
@@ -1057,19 +1054,6 @@ WebInspector.ElementsPanel.prototype = {
             this._extensionSidebarPanesContainer.addPane(pane);
     },
 
-    /**
-     * @param {?WebInspector.Widget} widget
-     */
-    setWidgetBelowDOM: function(widget)
-    {
-        if (widget) {
-            this._treeOutlineSplit.setSidebarWidget(widget);
-            this._treeOutlineSplit.showBoth(true);
-        } else {
-            this._treeOutlineSplit.hideSidebar(true);
-        }
-    },
-
     __proto__: WebInspector.Panel.prototype
 }
 
@@ -1237,12 +1221,12 @@ WebInspector.ElementsPanel.PseudoStateMarkerDecorator.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.Widget}
+ * @extends {WebInspector.ThrottledWidget}
  * @param {!WebInspector.ToolbarItem} toolbarItem
  */
 WebInspector.ElementsPanel.BaseToolbarPaneWidget = function(toolbarItem)
 {
-    WebInspector.Widget.call(this);
+    WebInspector.ThrottledWidget.call(this);
     this._toolbarItem = toolbarItem;
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._nodeChanged, this);
 }
@@ -1271,6 +1255,7 @@ WebInspector.ElementsPanel.BaseToolbarPaneWidget.prototype = {
     willHide: function()
     {
         this._toolbarItem.setToggled(false);
+        WebInspector.ThrottledWidget.prototype.willHide.call(this);
     },
 
     /**
@@ -1280,7 +1265,8 @@ WebInspector.ElementsPanel.BaseToolbarPaneWidget.prototype = {
     {
         this._toolbarItem.setToggled(true);
         this._nodeChanged();
+        WebInspector.ThrottledWidget.prototype.wasShown.call(this);
     },
 
-    __proto__: WebInspector.Widget.prototype
+    __proto__: WebInspector.ThrottledWidget.prototype
 }

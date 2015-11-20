@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/compiler/compiler.gni")
+
 group("telemetry_chrome_test") {
   deps = [
     "//tools/telemetry:telemetry_test_support",
@@ -25,5 +27,18 @@ group("telemetry_chrome_test") {
 
   if (is_linux) {
     data_deps += [ "//tools/xdisplaycheck" ]
+  }
+
+  if (is_win && (symbol_level == 1 || symbol_level == 2)) {
+    # TODO(GYP): These should be provided automatically through data_deps.
+    data += [ "$root_out_dir/chrome.exe.pdb" ]
+    if (is_component_build) {
+      data += [
+        "$root_out_dir/base.dll.pdb",
+        "$root_out_dir/blink_platform.dll.pdb",
+        "$root_out_dir/blink_web.dll.pdb",
+        "$root_out_dir/content.dll.pdb",
+      ]
+    }
   }
 }

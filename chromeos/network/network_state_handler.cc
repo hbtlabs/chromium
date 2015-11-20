@@ -114,6 +114,8 @@ NetworkStateHandler::TechnologyState NetworkStateHandler::GetTechnologyState(
     state = TECHNOLOGY_ENABLED;
   else if (shill_property_handler_->IsTechnologyEnabling(technology))
     state = TECHNOLOGY_ENABLING;
+  else if (shill_property_handler_->IsTechnologyProhibited(technology))
+    state = TECHNOLOGY_PROHIBITED;
   else if (shill_property_handler_->IsTechnologyUninitialized(technology))
     state = TECHNOLOGY_UNINITIALIZED;
   else if (shill_property_handler_->IsTechnologyAvailable(technology))
@@ -140,6 +142,15 @@ void NetworkStateHandler::SetTechnologyEnabled(
     shill_property_handler_->SetTechnologyEnabled(*technology, enabled,
                                                   error_callback);
   }
+  // Signal Device/Technology state changed.
+  NotifyDeviceListChanged();
+}
+
+void NetworkStateHandler::SetProhibitedTechnologies(
+    const std::vector<std::string>& prohibited_technologies,
+    const network_handler::ErrorCallback& error_callback) {
+  shill_property_handler_->SetProhibitedTechnologies(prohibited_technologies,
+                                                     error_callback);
   // Signal Device/Technology state changed.
   NotifyDeviceListChanged();
 }

@@ -6,7 +6,7 @@
 
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
-#include "components/page_load_metrics/browser/page_load_metrics_macros.h"
+#include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
@@ -97,6 +97,22 @@ void FromGWSPageLoadMetricsObserver::OnComplete(
     PAGE_LOAD_HISTOGRAM(
         "PageLoad.Clients.FromGWS.Timing2.NavigationToFirstTextPaint",
         timing.first_text_paint);
+  }
+  if (ShouldLogEvent(timing.first_image_paint, first_background)) {
+    PAGE_LOAD_HISTOGRAM(
+        "PageLoad.Clients.FromGWS.Timing2.NavigationToFirstImagePaint",
+        timing.first_image_paint);
+  }
+  if (ShouldLogEvent(timing.first_paint, first_background)) {
+    PAGE_LOAD_HISTOGRAM(
+        "PageLoad.Clients.FromGWS.Timing2.NavigationToFirstPaint",
+        timing.first_paint);
+  }
+  base::TimeDelta first_contentful_paint = GetFirstContentfulPaint(timing);
+  if (ShouldLogEvent(first_contentful_paint, first_background)) {
+    PAGE_LOAD_HISTOGRAM(
+        "PageLoad.Clients.FromGWS.Timing2.NavigationToFirstContentfulPaint",
+        first_contentful_paint);
   }
 }
 

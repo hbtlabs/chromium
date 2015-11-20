@@ -737,6 +737,10 @@ void WebGL2RenderingContextBase::texSubImage3DImpl(GLenum target, GLint level, G
         return;
 
     // All calling functions check isContextLost, so a duplicate check is not needed here.
+    if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
+        // The UNSIGNED_INT_10F_11F_11F_REV type pack/unpack isn't implemented.
+        type = GL_FLOAT;
+    }
     Vector<uint8_t> data;
     WebGLImageConversion::ImageExtractor imageExtractor(image, domSource, premultiplyAlpha, m_unpackColorspaceConversion == GL_NONE);
     if (!imageExtractor.imagePixelData()) {
@@ -797,6 +801,10 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
     if (isContextLost() || !pixels || !validateTexSubImage3D("texSubImage3D", target, level, xoffset, yoffset, zoffset, format, type, pixels->width(), pixels->height(), 1))
         return;
 
+    if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
+        // The UNSIGNED_INT_10F_11F_11F_REV type pack/unpack isn't implemented.
+        type = GL_FLOAT;
+    }
     Vector<uint8_t> data;
     bool needConversion = true;
     // The data from ImageData is always of format RGBA8.
@@ -821,7 +829,7 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
     if (isContextLost() || !image || !validateHTMLImageElement("texSubImage3D", image, exceptionState))
         return;
 
-    RefPtr<Image> imageForRender = image->cachedImage()->imageForLayoutObject(image->layoutObject());
+    RefPtr<Image> imageForRender = image->cachedImage()->image();
     if (imageForRender->isSVGImage())
         imageForRender = drawImageIntoBuffer(imageForRender.get(), image->width(), image->height(), "texSubImage3D");
 

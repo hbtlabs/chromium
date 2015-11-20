@@ -134,8 +134,6 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
-#include "platform/graphics/filters/FilterOperation.h"
-#include "platform/graphics/filters/FilterOperations.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/Platform.h"
@@ -921,7 +919,7 @@ String Internals::viewportAsText(Document* document, float, int availableWidth, 
     document->page()->deprecatedLocalMainFrame()->view()->setFrameRect(IntRect(IntPoint::zero(), initialViewportSize));
 
     ViewportDescription description = page->viewportDescription();
-    PageScaleConstraints constraints = description.resolve(initialViewportSize, Length());
+    PageScaleConstraints constraints = description.resolve(FloatSize(initialViewportSize), Length());
 
     constraints.fitToContentsWidth(constraints.layoutSize.width(), availableWidth);
     constraints.resolveAutoInitialScale();

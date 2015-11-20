@@ -18,17 +18,18 @@ mojo_native_application("views_examples") {
 
   deps = [
     "//base",
+    "//components/mus/public/interfaces",
     "//mojo/application/public/cpp",
     "//mojo/application/public/cpp:sources",
     "//mojo/converters/geometry",
-    "//mojo/converters/network",
     "//mojo/public/cpp/bindings",
+    "//mojo/services/tracing/public/cpp",
     "//skia",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/views",
     "//ui/views/examples:views_examples_lib",
-    "//ui/views/mus",
+    "//ui/views/mus:for_mojo_application",
   ]
 
   resources = [ "$root_out_dir/views_mus_resources.pak" ]

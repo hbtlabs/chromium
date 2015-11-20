@@ -151,7 +151,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
   for (size_t i = 0; i < render_passes_in_draw_order.size(); ++i)
     render_passes_in_frame.insert(std::pair<RenderPassId, gfx::Size>(
         render_passes_in_draw_order[i]->id,
-        RenderPassTextureSize(render_passes_in_draw_order[i])));
+        RenderPassTextureSize(render_passes_in_draw_order[i].get())));
 
   std::vector<RenderPassId> passes_to_delete;
   for (auto pass_iter = render_pass_textures_.begin();
@@ -183,7 +183,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
       scoped_ptr<ScopedResource> texture =
           ScopedResource::Create(resource_provider_);
       render_pass_textures_.set(render_passes_in_draw_order[i]->id,
-                              texture.Pass());
+                                std::move(texture));
     }
   }
 }
@@ -198,7 +198,8 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
       "Renderer4.renderPassCount",
       base::saturated_cast<int>(render_passes_in_draw_order->size()));
 
-  const RenderPass* root_render_pass = render_passes_in_draw_order->back();
+  const RenderPass* root_render_pass =
+      render_passes_in_draw_order->back().get();
   DCHECK(root_render_pass);
 
   DrawingFrame frame;
@@ -207,6 +208,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   frame.root_damage_rect = Capabilities().using_partial_swap
                                ? root_render_pass->damage_rect
                                : root_render_pass->output_rect;
+  frame.root_damage_rect.Union(overlay_processor_->GetAndResetOverlayDamage());
   frame.root_damage_rect.Intersect(gfx::Rect(device_viewport_rect.size()));
   frame.device_viewport_rect = device_viewport_rect;
   frame.device_clip_rect = device_clip_rect;
@@ -236,51 +238,42 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
     frame.overlay_list.push_back(output_surface_plane);
   }
 
-  // If we have any copy requests, we can't remove any quads for overlays,
-  // otherwise the framebuffer will be missing the overlay contents.
-  if (root_render_pass->copy_requests.empty()) {
-    overlay_processor_->ProcessForOverlays(
-        resource_provider_, render_passes_in_draw_order, &frame.overlay_list,
-        &frame.root_damage_rect);
-
-    // No need to render in case the damage rect is completely composited using
-    // overlays and dont have any copy requests.
-    if (frame.root_damage_rect.IsEmpty()) {
-      bool handle_copy_requests = false;
-      for (auto* pass : *render_passes_in_draw_order) {
-        if (!pass->copy_requests.empty()) {
-          handle_copy_requests = true;
-          break;
-        }
-      }
-
-      if (!handle_copy_requests) {
-        BindFramebufferToOutputSurface(&frame);
-        FinishDrawingFrame(&frame);
-        render_passes_in_draw_order->clear();
-        return;
-      }
+  // If we have any copy requests, we can't remove any quads for overlays or
+  // CALayers because the framebuffer would be missing the removed quads'
+  // contents.
+  bool has_copy_requests = false;
+  for (const auto& pass : *render_passes_in_draw_order) {
+    if (!pass->copy_requests.empty()) {
+      has_copy_requests = true;
+      break;
     }
   }
+  if (!has_copy_requests) {
+    overlay_processor_->ProcessForOverlays(
+        resource_provider_, render_passes_in_draw_order, &frame.overlay_list,
+        &frame.ca_layer_overlay_list, &frame.root_damage_rect);
+  }
 
-  for (size_t i = 0; i < render_passes_in_draw_order->size(); ++i) {
-    RenderPass* pass = render_passes_in_draw_order->at(i);
-    DrawRenderPass(&frame, pass);
+  // If all damage is being drawn with overlays or CALayers then skip drawing
+  // the render passes.
+  if (frame.root_damage_rect.IsEmpty() && !has_copy_requests) {
+    BindFramebufferToOutputSurface(&frame);
+  } else {
+    for (const auto& pass : *render_passes_in_draw_order) {
+      DrawRenderPass(&frame, pass.get());
 
-    for (ScopedPtrVector<CopyOutputRequest>::iterator it =
-             pass->copy_requests.begin();
-         it != pass->copy_requests.end();
-         ++it) {
-      if (it != pass->copy_requests.begin()) {
+      bool first_request = true;
+      for (auto& copy_request : pass->copy_requests) {
         // Doing a readback is destructive of our state on Mac, so make sure
         // we restore the state between readbacks. http://crbug.com/99393.
-        UseRenderPass(&frame, pass);
+        if (!first_request)
+          UseRenderPass(&frame, pass.get());
+        CopyCurrentRenderPassToBitmap(&frame, std::move(copy_request));
+        first_request = false;
       }
-      CopyCurrentRenderPassToBitmap(&frame, pass->copy_requests.take(it));
     }
   }
   FinishDrawingFrame(&frame);
-
   render_passes_in_draw_order->clear();
 }
 
@@ -404,10 +397,11 @@ void DirectRenderer::DoDrawPolygon(const DrawPolygon& poly,
   }
 }
 
-void DirectRenderer::FlushPolygons(ScopedPtrDeque<DrawPolygon>* poly_list,
-                                   DrawingFrame* frame,
-                                   const gfx::Rect& render_pass_scissor,
-                                   bool use_render_pass_scissor) {
+void DirectRenderer::FlushPolygons(
+    std::deque<scoped_ptr<DrawPolygon>>* poly_list,
+    DrawingFrame* frame,
+    const gfx::Rect& render_pass_scissor,
+    bool use_render_pass_scissor) {
   if (poly_list->empty()) {
     return;
   }
@@ -473,7 +467,7 @@ void DirectRenderer::DrawRenderPass(DrawingFrame* frame,
       MoveFromDrawToWindowSpace(frame, render_pass_scissor_in_draw_space));
 
   const QuadList& quad_list = render_pass->quad_list;
-  ScopedPtrDeque<DrawPolygon> poly_list;
+  std::deque<scoped_ptr<DrawPolygon>> poly_list;
 
   int next_polygon_id = 0;
   int last_sorting_context_id = 0;
@@ -500,7 +494,7 @@ void DirectRenderer::DrawRenderPass(DrawingFrame* frame,
           *it, gfx::RectF(quad.visible_rect),
           quad.shared_quad_state->quad_to_target_transform, next_polygon_id++));
       if (new_polygon->points().size() > 2u) {
-        poly_list.push_back(new_polygon.Pass());
+        poly_list.push_back(std::move(new_polygon));
       }
       continue;
     }

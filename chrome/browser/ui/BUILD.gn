@@ -154,6 +154,10 @@ source_set("ui") {
     }
   }
 
+  if (use_aura) {
+    defines += [ "MOJO_RUNNER_CLIENT" ]
+  }
+
   if (enable_basic_printing || enable_print_preview) {
     deps += [ "//printing" ]
   }
@@ -196,6 +200,9 @@ source_set("ui") {
     deps += [ "//chrome/browser/chromeos" ]
   } else {
     defines += [ "FRAME_AVATAR_BUTTON=1" ]
+  }
+  if (is_chromeos && enable_arc) {
+    deps += [ "//components/arc" ]
   }
   if (use_cups) {
     configs += [ "//printing:cups" ]
@@ -299,6 +306,7 @@ source_set("ui") {
       "//ui/keyboard:resources",
       "//ui/wm",
     ]
+    defines += [ "MOJO_SHELL_CLIENT" ]
     if (!is_chromeos) {
       sources += rebase_path(gypi_values.chrome_browser_ui_aura_non_chromeos,
                              ".",
@@ -327,7 +335,7 @@ source_set("ui") {
       "//crypto:platform",
     ]
 
-    defines += [ "CHROME_BUILD_ID=" + android_chrome_build_id ]
+    defines += [ "CHROME_BUILD_ID=\"$android_chrome_build_id\"" ]
 
     if (!use_aura) {
       sources +=
@@ -389,6 +397,7 @@ source_set("ui") {
     deps += [
       "//chrome/browser/metro_utils",
       "//chrome/installer/util:strings",
+      "//components/search_engines",
       "//google_update",
       "//third_party/wtl",
       "//third_party/iaccessible2",

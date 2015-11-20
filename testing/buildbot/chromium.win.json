@@ -690,6 +690,9 @@
       {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",
+        "override_compile_targets": [
+          "telemetry_gpu_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
@@ -697,16 +700,25 @@
       {
         "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
+        "override_compile_targets": [
+          "telemetry_perf_unittests_run"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "telemetry_unittests",
+        "name": "telemetry_unittests",
+        "override_compile_targets": [
+          "telemetry_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
       }
     ],
     "scripts": [
-      {
-        "name": "telemetry_unittests",
-        "script": "telemetry_unittests.py"
-      },
       {
         "name": "nacl_integration",
         "script": "nacl_integration.py"
@@ -1138,6 +1150,9 @@
       {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",
+        "override_compile_targets": [
+          "telemetry_gpu_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
@@ -1145,16 +1160,25 @@
       {
         "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
+        "override_compile_targets": [
+          "telemetry_perf_unittests_run"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "telemetry_unittests",
+        "name": "telemetry_unittests",
+        "override_compile_targets": [
+          "telemetry_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
       }
     ],
     "scripts": [
-      {
-        "name": "telemetry_unittests",
-        "script": "telemetry_unittests.py"
-      },
       {
         "name": "nacl_integration",
         "script": "nacl_integration.py"
@@ -1490,19 +1514,32 @@
       {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",
+        "override_compile_targets": [
+          "telemetry_gpu_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
-      }
-    ],
-    "scripts": [
-      {
-        "name": "telemetry_unittests",
-        "script": "telemetry_unittests.py"
       },
       {
+        "isolate_name": "telemetry_perf_unittests",
         "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
+        "override_compile_targets": [
+          "telemetry_perf_unittests_run"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
+      },
+      {
+        "isolate_name": "telemetry_unittests",
+        "name": "telemetry_unittests",
+        "override_compile_targets": [
+          "telemetry_unittests_run"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        }
       }
     ]
   },
@@ -1974,20 +2011,15 @@
       {
         "isolate_name": "telemetry_gpu_unittests",
         "name": "telemetry_gpu_unittests",
+        "override_compile_targets": [
+          "telemetry_gpu_unittests_run"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         }
       }
     ],
     "scripts": [
-      {
-        "name": "telemetry_unittests",
-        "script": "telemetry_unittests.py"
-      },
-      {
-        "name": "telemetry_perf_unittests",
-        "script": "telemetry_perf_unittests.py"
-      },
       {
         "name": "nacl_integration",
         "script": "nacl_integration.py"

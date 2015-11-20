@@ -21,6 +21,7 @@
 #include "content/renderer/pepper/pepper_video_decoder_host.h"
 #include "content/renderer/render_thread_impl.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
 #include "media/base/media_util.h"
@@ -48,7 +49,11 @@ bool IsCodecSupported(media::VideoCodec codec) {
     return true;
 #endif
 
+#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
   return media::FFmpegVideoDecoder::IsCodecSupported(codec);
+#else
+  return false;
+#endif
 }
 
 }  // namespace
@@ -684,23 +689,28 @@ void VideoDecoderShim::DecoderImpl::Initialize(
   DCHECK(!decoder_);
 #if !defined(MEDIA_DISABLE_LIBVPX)
   if (config.codec() == media::kCodecVP9) {
-    decoder_.reset(
-        new media::VpxVideoDecoder(base::ThreadTaskRunnerHandle::Get()));
+    decoder_.reset(new media::VpxVideoDecoder());
   } else
 #endif
+
+#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
   {
     scoped_ptr<media::FFmpegVideoDecoder> ffmpeg_video_decoder(
         new media::FFmpegVideoDecoder(base::ThreadTaskRunnerHandle::Get()));
     ffmpeg_video_decoder->set_decode_nalus(true);
     decoder_ = ffmpeg_video_decoder.Pass();
   }
+#elif defined(MEDIA_DISABLE_LIBVPX)
+  OnInitDone(false);
+  return;
+#endif
 
   // VpxVideoDecoder and FFmpegVideoDecoder support only one pending Decode()
   // request.
   DCHECK_EQ(decoder_->GetMaxDecodeRequests(), 1);
 
   decoder_->Initialize(
-      config, true /* low_delay */,
+      config, true /* low_delay */, media::SetCdmReadyCB(),
       base::Bind(&VideoDecoderShim::DecoderImpl::OnInitDone,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&VideoDecoderShim::DecoderImpl::OnOutputComplete,

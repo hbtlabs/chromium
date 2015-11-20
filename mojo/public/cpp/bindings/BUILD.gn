@@ -2,9 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../../mojo_sdk.gni")
-
-mojo_sdk_source_set("bindings") {
+source_set("bindings") {
   sources = [
     "array.h",
     "associated_interface_ptr_info.h",
@@ -32,6 +30,7 @@ mojo_sdk_source_set("bindings") {
     "lib/filter_chain.h",
     "lib/fixed_buffer.cc",
     "lib/fixed_buffer.h",
+    "lib/interface_id.h",
     "lib/interface_ptr_internal.h",
     "lib/map_data_internal.h",
     "lib/map_internal.h",
@@ -44,6 +43,11 @@ mojo_sdk_source_set("bindings") {
     "lib/message_header_validator.h",
     "lib/message_internal.h",
     "lib/no_interface.cc",
+    "lib/pipe_control_message_handler.cc",
+    "lib/pipe_control_message_handler.h",
+    "lib/pipe_control_message_handler_delegate.h",
+    "lib/pipe_control_message_proxy.cc",
+    "lib/pipe_control_message_proxy.h",
     "lib/router.cc",
     "lib/router.h",
     "lib/string_serialization.cc",
@@ -67,19 +71,17 @@ mojo_sdk_source_set("bindings") {
 
   public_deps = [
     ":callback",
+    "//mojo/public/cpp/system",
   ]
 
-  mojo_sdk_public_deps = [
-    "mojo/public/cpp/system",
-  ]
-
-  mojo_sdk_deps = [
-    "mojo/public/cpp/environment",
-    "mojo/public/interfaces/bindings:bindings_cpp_sources",
+  deps = [
+    "//base",
+    "//mojo/public/cpp/environment",
+    "//mojo/public/interfaces/bindings:bindings_cpp_sources",
   ]
 }
 
-mojo_sdk_source_set("callback") {
+source_set("callback") {
   sources = [
     "callback.h",
     "lib/callback_internal.h",
@@ -91,5 +93,7 @@ mojo_sdk_source_set("callback") {
     "lib/thread_checker_posix.h",
   ]
 
-  mojo_sdk_deps = [ "mojo/public/cpp/system" ]
+  deps = [
+    "//mojo/public/cpp/system",
+  ]
 }

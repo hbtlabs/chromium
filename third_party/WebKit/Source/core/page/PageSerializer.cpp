@@ -190,7 +190,7 @@ void SerializerMarkupAccumulator::appendCustomAttributes(StringBuilder& result, 
         return;
 
     // We need to give a fake location to blank frames so they can be referenced by the serialized frame.
-    url = m_serializer->urlForBlankFrame(toLocalFrame(frame));
+    url = m_serializer->urlForBlankFrame(*toLocalFrame(frame));
     appendAttribute(result, element, Attribute(frameOwnerURLAttributeName(frameOwner), AtomicString(url.string())), namespaces);
 }
 
@@ -304,15 +304,10 @@ PageSerializer::PageSerializer(Vector<SerializedResource>* resources, PassOwnPtr
 {
 }
 
-void PageSerializer::serialize(Page* page)
+void PageSerializer::serializeFrame(const LocalFrame& frame)
 {
-    serializeFrame(page->deprecatedLocalMainFrame());
-}
-
-void PageSerializer::serializeFrame(LocalFrame* frame)
-{
-    ASSERT(frame->document());
-    Document& document = *frame->document();
+    ASSERT(frame.document());
+    Document& document = *frame.document();
     KURL url = document.url();
     // FIXME: This probably wants isAboutBlankURL? to exclude other about: urls (like about:srcdoc)?
     if (!url.isValid() || url.protocolIsAbout()) {
@@ -330,7 +325,7 @@ void PageSerializer::serializeFrame(LocalFrame* frame)
     // If frame is an image document, add the image and don't continue
     if (document.isImageDocument()) {
         ImageDocument& imageDocument = toImageDocument(document);
-        addImageToResources(imageDocument.cachedImage(), imageDocument.imageElement()->layoutObject(), url);
+        addImageToResources(imageDocument.cachedImage(), url);
         return;
     }
 
@@ -364,13 +359,13 @@ void PageSerializer::serializeFrame(LocalFrame* frame)
             HTMLImageElement& imageElement = toHTMLImageElement(element);
             KURL url = document.completeURL(imageElement.getAttribute(HTMLNames::srcAttr));
             ImageResource* cachedImage = imageElement.cachedImage();
-            addImageToResources(cachedImage, imageElement.layoutObject(), url);
+            addImageToResources(cachedImage, url);
         } else if (isHTMLInputElement(element)) {
             HTMLInputElement& inputElement = toHTMLInputElement(element);
             if (inputElement.type() == InputTypeNames::image && inputElement.imageLoader()) {
                 KURL url = inputElement.src();
                 ImageResource* cachedImage = inputElement.imageLoader()->image();
-                addImageToResources(cachedImage, inputElement.layoutObject(), url);
+                addImageToResources(cachedImage, url);
             }
         } else if (isHTMLLinkElement(element)) {
             HTMLLinkElement& linkElement = toHTMLLinkElement(element);
@@ -384,13 +379,6 @@ void PageSerializer::serializeFrame(LocalFrame* frame)
             if (CSSStyleSheet* sheet = styleElement.sheet())
                 serializeCSSStyleSheet(*sheet, KURL());
         }
-    }
-
-    for (Frame* childFrame = frame->tree().firstChild(); childFrame; childFrame = childFrame->tree().nextSibling()) {
-        // TODO(lukasza): This causes incomplete MHTML for OOPIFs.
-        // (crbug.com/538766)
-        if (childFrame->isLocalFrame())
-            serializeFrame(toLocalFrame(childFrame));
     }
 }
 
@@ -489,7 +477,7 @@ void PageSerializer::addToResources(Resource* resource, PassRefPtr<SharedBuffer>
     m_resourceURLs.add(url);
 }
 
-void PageSerializer::addImageToResources(ImageResource* image, LayoutObject* imageLayoutObject, const KURL& url)
+void PageSerializer::addImageToResources(ImageResource* image, const KURL& url)
 {
     if (!shouldAddURL(url))
         return;
@@ -497,10 +485,7 @@ void PageSerializer::addImageToResources(ImageResource* image, LayoutObject* ima
     if (!image || !image->hasImage() || image->errorOccurred())
         return;
 
-    RefPtr<SharedBuffer> data = imageLayoutObject ? image->imageForLayoutObject(imageLayoutObject)->data() : nullptr;
-    if (!data)
-        data = image->image()->data();
-
+    RefPtr<SharedBuffer> data = image->image()->data();
     addToResources(image, data, url);
 }
 
@@ -539,7 +524,7 @@ void PageSerializer::retrieveResourcesForCSSValue(CSSValue* cssValue, Document& 
         if (!styleImage || !styleImage->isImageResource())
             return;
 
-        addImageToResources(styleImage->cachedImage(), nullptr, styleImage->cachedImage()->url());
+        addImageToResources(styleImage->cachedImage(), styleImage->cachedImage()->url());
     } else if (cssValue->isFontFaceSrcValue()) {
         CSSFontFaceSrcValue* fontFaceSrcValue = toCSSFontFaceSrcValue(cssValue);
         if (fontFaceSrcValue->isLocal()) {
@@ -564,14 +549,14 @@ void PageSerializer::setRewriteURLFolder(const String& rewriteFolder)
     m_rewriteFolder = rewriteFolder;
 }
 
-KURL PageSerializer::urlForBlankFrame(LocalFrame* frame)
+KURL PageSerializer::urlForBlankFrame(const LocalFrame& frame)
 {
-    BlankFrameURLMap::iterator iter = m_blankFrameURLs.find(frame);
+    BlankFrameURLMap::iterator iter = m_blankFrameURLs.find(&frame);
     if (iter != m_blankFrameURLs.end())
         return iter->value;
     String url = "wyciwyg://frame/" + String::number(m_blankFrameCounter++);
     KURL fakeURL(ParsedURLString, url);
-    m_blankFrameURLs.add(frame, fakeURL);
+    m_blankFrameURLs.add(&frame, fakeURL);
 
     return fakeURL;
 }

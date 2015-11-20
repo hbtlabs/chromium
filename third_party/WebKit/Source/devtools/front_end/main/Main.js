@@ -90,28 +90,8 @@ WebInspector.Main.prototype = {
         }
 
         this._initializeExperiments(prefs);
-
-        /**
-         * @param {!Array<{name: string}>} changes
-         */
-        function trackPrefsObject(changes)
-        {
-            if (!Object.keys(prefs).length) {
-                InspectorFrontendHost.clearPreferences();
-                return;
-            }
-
-            for (var change of changes) {
-                var name = change.name;
-                if (name in prefs)
-                    InspectorFrontendHost.setPreference(name, prefs[name]);
-                else
-                    InspectorFrontendHost.removePreference(name);
-            }
-        }
-
-        Object.observe(prefs, trackPrefsObject);
-        WebInspector.settings = new WebInspector.Settings(prefs);
+        WebInspector.settings = new WebInspector.Settings(new WebInspector.SettingsStorage(prefs,
+            InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference, InspectorFrontendHost.clearPreferences));
 
         if (!InspectorFrontendHost.isUnderTest())
             new WebInspector.VersionController().updateVersion();
@@ -131,7 +111,6 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
         Runtime.experiments.register("fileSystemInspection", "FileSystem inspection");
         Runtime.experiments.register("gpuTimeline", "GPU data on timeline", true);
-        Runtime.experiments.register("inspectDevicesDialog", "Inspect devices dialog", true);
         Runtime.experiments.register("inputEventsOnTimelineOverview", "Input events on Timeline overview", true);
         Runtime.experiments.register("layersPanel", "Layers panel");
         Runtime.experiments.register("layoutEditor", "Layout editor", true);
@@ -168,6 +147,8 @@ WebInspector.Main.prototype = {
         }
 
         Runtime.experiments.setDefaultExperiments([
+            "animationInspection",
+            "deviceMode",
             "securityPanel"
         ]);
     },
@@ -781,28 +762,6 @@ WebInspector.Main.SearchActionDelegate.prototype = {
 }
 
 /**
- * @constructor
- * @implements {WebInspector.ActionDelegate}
- */
-WebInspector.Main.InspectDevicesActionDelegate = function()
-{
-}
-
-WebInspector.Main.InspectDevicesActionDelegate.prototype = {
-    /**
-     * @override
-     * @param {!WebInspector.Context} context
-     * @param {string} actionId
-     * @return {boolean}
-     */
-    handleAction: function(context, actionId)
-    {
-        InspectorFrontendHost.openInNewTab("chrome://inspect#devices");
-        return true;
-    }
-}
-
-/**
  * @param {boolean} hard
  */
 WebInspector.Main._reloadPage = function(hard)
@@ -913,7 +872,7 @@ WebInspector.Main.MainMenuItem.prototype = {
             var toggleDockSideShorcuts = WebInspector.shortcutRegistry.shortcutDescriptorsForAction("main.toggle-dock");
             titleElement.title = WebInspector.UIString("Placement of DevTools relative to the page. (%s to restore last position)", toggleDockSideShorcuts[0].name);
             dockItemElement.appendChild(titleElement);
-            var dockItemToolbar = new WebInspector.Toolbar(dockItemElement);
+            var dockItemToolbar = new WebInspector.Toolbar("", dockItemElement);
             dockItemToolbar.makeBlueOnHover();
             var undock = new WebInspector.ToolbarButton(WebInspector.UIString("Undock into separate window"), "dock-toolbar-item-undock");
             var bottom = new WebInspector.ToolbarButton(WebInspector.UIString("Dock to bottom"), "dock-toolbar-item-bottom");

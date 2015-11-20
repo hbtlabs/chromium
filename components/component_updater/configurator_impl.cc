@@ -109,9 +109,12 @@ ConfiguratorImpl::ConfiguratorImpl(
   pings_enabled_ = !HasSwitchValue(switch_values, kSwitchDisablePings);
   deltas_enabled_ = !HasSwitchValue(switch_values, kSwitchDisableDeltaUpdates);
 
-  // Disable BITS on all platforms in all cases until crbug.com/475872 is
-  // resolved.
+#if defined(OS_WIN)
+  background_downloads_enabled_ =
+      !HasSwitchValue(switch_values, kSwitchDisableBackgroundDownloads);
+#else
   background_downloads_enabled_ = false;
+#endif
 
   const std::string switch_url_source =
       GetSwitchArgument(switch_values, kSwitchUrlSource);

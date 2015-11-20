@@ -425,8 +425,8 @@ class LayerTreeHostTimelinesTestLayerAddedWithAnimation
       // Any valid AnimationCurve will do here.
       scoped_ptr<AnimationCurve> curve(new FakeFloatAnimationCurve());
       scoped_ptr<Animation> animation(
-          Animation::Create(curve.Pass(), 1, 1, Animation::OPACITY));
-      player_->AddAnimation(animation.Pass());
+          Animation::Create(std::move(curve), 1, 1, Animation::OPACITY));
+      player_->AddAnimation(std::move(animation));
 
       // We add the animation *before* attaching the layer to the tree.
       layer_tree_host()->root_layer()->AddChild(layer);
@@ -559,13 +559,13 @@ class LayerTreeHostTimelinesTestScrollOffsetChangesArePropagated
             ScrollOffsetAnimationCurve::Create(
                 gfx::ScrollOffset(500.f, 550.f),
                 EaseInOutTimingFunction::Create()));
-        scoped_ptr<Animation> animation(
-            Animation::Create(curve.Pass(), 1, 0, Animation::SCROLL_OFFSET));
+        scoped_ptr<Animation> animation(Animation::Create(
+            std::move(curve), 1, 0, Animation::SCROLL_OFFSET));
         animation->set_needs_synchronized_start_time(true);
         bool impl_scrolling_supported =
             layer_tree_host()->proxy()->SupportsImplScrolling();
         if (impl_scrolling_supported)
-          player_child_->AddAnimation(animation.Pass());
+          player_child_->AddAnimation(std::move(animation));
         else
           EndTest();
         break;
@@ -611,12 +611,12 @@ class LayerTreeHostTimelinesTestScrollOffsetAnimationRemoval
         ScrollOffsetAnimationCurve::Create(gfx::ScrollOffset(6500.f, 7500.f),
                                            EaseInOutTimingFunction::Create()));
     scoped_ptr<Animation> animation(
-        Animation::Create(curve.Pass(), 1, 0, Animation::SCROLL_OFFSET));
+        Animation::Create(std::move(curve), 1, 0, Animation::SCROLL_OFFSET));
     animation->set_needs_synchronized_start_time(true);
 
     AttachPlayersToTimeline();
     player_child_->AttachLayer(scroll_layer_->id());
-    player_child_->AddAnimation(animation.Pass());
+    player_child_->AddAnimation(std::move(animation));
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -658,7 +658,7 @@ class LayerTreeHostTimelinesTestScrollOffsetAnimationRemoval
         timeline_impl->GetPlayerById(player_child_id_);
 
     LayerImpl* scroll_layer_impl =
-        host_impl->active_tree()->root_layer()->children()[0];
+        host_impl->active_tree()->root_layer()->children()[0].get();
     Animation* animation = player_impl->element_animations()
                                ->layer_animation_controller()
                                ->GetAnimation(Animation::SCROLL_OFFSET);
@@ -681,7 +681,7 @@ class LayerTreeHostTimelinesTestScrollOffsetAnimationRemoval
     if (host_impl->pending_tree()->source_frame_number() != 1)
       return;
     LayerImpl* scroll_layer_impl =
-        host_impl->pending_tree()->root_layer()->children()[0];
+        host_impl->pending_tree()->root_layer()->children()[0].get();
     EXPECT_EQ(final_postion_, scroll_layer_impl->CurrentScrollOffset());
   }
 
@@ -689,7 +689,7 @@ class LayerTreeHostTimelinesTestScrollOffsetAnimationRemoval
     if (host_impl->active_tree()->source_frame_number() != 1)
       return;
     LayerImpl* scroll_layer_impl =
-        host_impl->active_tree()->root_layer()->children()[0];
+        host_impl->active_tree()->root_layer()->children()[0].get();
     EXPECT_EQ(final_postion_, scroll_layer_impl->CurrentScrollOffset());
     EndTest();
   }
@@ -970,7 +970,7 @@ class LayerTreeHostTimelinesTestAnimationFinishesDuringCommit
         gfx::Transform expected_transform;
         expected_transform.Translate(5.f, 5.f);
         LayerImpl* layer_impl =
-            host_impl->sync_tree()->root_layer()->children()[0];
+            host_impl->sync_tree()->root_layer()->children()[0].get();
         EXPECT_EQ(expected_transform, layer_impl->draw_transform());
         EndTest();
         break;

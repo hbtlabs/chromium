@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "cc/base/container_util.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/surfaces/surface_factory.h"
@@ -49,8 +50,8 @@ void Surface::QueueFrame(scoped_ptr<CompositorFrame> frame,
     TakeLatencyInfo(&frame->metadata.latency_info);
   }
 
-  scoped_ptr<CompositorFrame> previous_frame = current_frame_.Pass();
-  current_frame_ = frame.Pass();
+  scoped_ptr<CompositorFrame> previous_frame = std::move(current_frame_);
+  current_frame_ = std::move(frame);
 
   if (current_frame_) {
     factory_->ReceiveFromChild(
@@ -103,24 +104,22 @@ void Surface::RequestCopyOfOutput(scoped_ptr<CopyOutputRequest> copy_request) {
   if (current_frame_ &&
       !current_frame_->delegated_frame_data->render_pass_list.empty())
     current_frame_->delegated_frame_data->render_pass_list.back()
-        ->copy_requests.push_back(copy_request.Pass());
+        ->copy_requests.push_back(std::move(copy_request));
   else
     copy_request->SendEmptyResult();
 }
 
 void Surface::TakeCopyOutputRequests(
-    std::multimap<RenderPassId, CopyOutputRequest*>* copy_requests) {
+    std::multimap<RenderPassId, scoped_ptr<CopyOutputRequest>>* copy_requests) {
   DCHECK(copy_requests->empty());
   if (current_frame_) {
     for (const auto& render_pass :
          current_frame_->delegated_frame_data->render_pass_list) {
-      while (!render_pass->copy_requests.empty()) {
-        scoped_ptr<CopyOutputRequest> request =
-            render_pass->copy_requests.take_back();
-        render_pass->copy_requests.pop_back();
+      for (auto& request : render_pass->copy_requests) {
         copy_requests->insert(
-            std::make_pair(render_pass->id, request.release()));
+            std::make_pair(render_pass->id, std::move(request)));
       }
+      render_pass->copy_requests.clear();
     }
   }
 }

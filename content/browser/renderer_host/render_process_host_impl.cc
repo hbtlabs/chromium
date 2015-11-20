@@ -221,6 +221,10 @@
 #include "content/common/media/media_stream_messages.h"
 #endif
 
+#if defined(MOJO_SHELL_CLIENT)
+#include "content/browser/mojo/mojo_shell_client_host.h"
+#endif
+
 #if defined(OS_WIN)
 #define IntToStringType base::IntToString16
 #else
@@ -988,7 +992,7 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   if (browser_command_line.HasSwitch(switches::kEnableMemoryBenchmarking))
     AddFilter(new MemoryBenchmarkMessageFilter());
 #endif
-  AddFilter(new MemoryMessageFilter());
+  AddFilter(new MemoryMessageFilter(this));
   AddFilter(new PushMessagingMessageFilter(
       GetID(), storage_partition_impl_->GetServiceWorkerContext()));
   // TODO(mfomitchev): Screen Orientation APIs on Aura - crbug.com/546719.
@@ -1279,6 +1283,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   // Propagate the following switches to the renderer command line (along
   // with any associated values) if present in the browser command line.
   static const char* const kSwitchNames[] = {
+    switches::kAgcStartupMinVolume,
     switches::kAllowLoopbackInPeerConnection,
     switches::kAudioBufferSize,
     switches::kBlinkPlatformLogChannels,
@@ -1418,10 +1423,10 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     // also be added to chrome/browser/chromeos/login/chrome_restart_request.cc.
     cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
+    cc::switches::kDisableCompositorPropertyTrees,
     cc::switches::kDisableMainFrameBeforeActivation,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableBeginFrameScheduling,
-    cc::switches::kEnableCompositorPropertyTrees,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kShowCompositedLayerBorders,
@@ -2448,6 +2453,12 @@ void RenderProcessHostImpl::OnProcessLaunched() {
   NotificationService::current()->Notify(NOTIFICATION_RENDERER_PROCESS_CREATED,
                                          Source<RenderProcessHost>(this),
                                          NotificationService::NoDetails());
+
+#if defined(MOJO_SHELL_CLIENT)
+  // Send a handle that the external Mojo shell can use to pass an Application
+  // request to the child.
+  RegisterChildWithExternalShell(id_, GetHandle(), this);
+#endif
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/465841
   // is fixed.

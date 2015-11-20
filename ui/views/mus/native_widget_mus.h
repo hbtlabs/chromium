@@ -13,6 +13,7 @@
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/platform_window/platform_window_delegate.h"
+#include "ui/views/mus/mus_export.h"
 #include "ui/views/widget/native_widget_private.h"
 
 namespace aura {
@@ -40,6 +41,7 @@ class FocusController;
 }
 
 namespace views {
+class SurfaceContextFactory;
 struct WindowManagerClientAreaInsets;
 class WindowTreeHostMus;
 
@@ -49,8 +51,9 @@ class WindowTreeHostMus;
 // aura::Window in a hierarchy is created without a delegate by the
 // aura::WindowTreeHost, we must create a child aura::Window in this class
 // (content_) and attach it to the root.
-class NativeWidgetMus : public internal::NativeWidgetPrivate,
-                        public aura::WindowDelegate {
+class VIEWS_MUS_EXPORT NativeWidgetMus
+    : public internal::NativeWidgetPrivate,
+      public aura::WindowDelegate {
  public:
   NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
                   mojo::Shell* shell,
@@ -75,6 +78,9 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   void OnActivationChanged(bool active);
 
  protected:
+  // Updates the client area in the mus::Window.
+  virtual void UpdateClientArea();
+
   // internal::NativeWidgetPrivate:
   NonClientFrameView* CreateNonClientFrameView() override;
   void InitNativeWidget(const Widget::InitParams& params) override;
@@ -188,8 +194,6 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   void OnGestureEvent(ui::GestureEvent* event) override;
 
  private:
-  void UpdateClientAreaInWindowManager();
-
   mus::Window* window_;
 
   mojo::Shell* shell_;
@@ -203,6 +207,7 @@ class NativeWidgetMus : public internal::NativeWidgetPrivate,
   Widget::InitParams::Ownership ownership_;
 
   // Aura configuration.
+  scoped_ptr<SurfaceContextFactory> context_factory_;
   scoped_ptr<WindowTreeHostMus> window_tree_host_;
   aura::Window* content_;
   scoped_ptr<wm::FocusController> focus_client_;

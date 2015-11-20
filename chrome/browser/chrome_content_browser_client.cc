@@ -109,6 +109,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/data_reduction_proxy/content/browser/data_reduction_proxy_message_filter.h"
+#include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/metrics/client_info.h"
@@ -116,6 +117,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/rappor/rappor_utils.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/startup_metric_utils/browser/startup_metric_message_filter.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/variations/variations_associated_data.h"
@@ -272,6 +274,10 @@
 #if defined(ENABLE_MEDIA_ROUTER)
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
+#endif
+
+#if defined(ENABLE_WAYLAND_SERVER)
+#include "chrome/browser/chrome_browser_main_extra_parts_exo.h"
 #endif
 
 using base::FileDescriptor;
@@ -637,7 +643,6 @@ void GetGuestViewDefaultContentSettingRules(
 void CreateUsbDeviceManager(
     RenderFrameHost* render_frame_host,
     mojo::InterfaceRequest<device::usb::DeviceManager> request) {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
   WebContents* web_contents =
       WebContents::FromRenderFrameHost(render_frame_host);
   if (!web_contents) {
@@ -648,7 +653,6 @@ void CreateUsbDeviceManager(
   UsbTabHelper* tab_helper =
       UsbTabHelper::GetOrCreateForWebContents(web_contents);
   tab_helper->CreateDeviceManager(render_frame_host, request.Pass());
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 }
 
 }  // namespace
@@ -751,6 +755,10 @@ content::BrowserMainParts* ChromeContentBrowserClient::CreateBrowserMainParts(
 
 #if defined(USE_X11)
   main_parts->AddParts(new ChromeBrowserMainExtraPartsX11());
+#endif
+
+#if defined(ENABLE_WAYLAND_SERVER)
+  main_parts->AddParts(new ChromeBrowserMainExtraPartsExo());
 #endif
 
   chrome::AddMetricsExtraParts(main_parts);
@@ -906,6 +914,7 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile);
   host->AddFilter(new data_reduction_proxy::DataReductionProxyMessageFilter(
       data_reduction_proxy_settings));
+  host->AddFilter(new startup_metric_utils::StartupMetricMessageFilter());
 
   host->Send(new ChromeViewMsg_SetIsIncognitoProcess(
       profile->IsOffTheRecord()));
@@ -1582,6 +1591,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
       switches::kProfilingAtStart,
       switches::kProfilingFile,
       switches::kProfilingFlush,
+      switches::kReaderModeHeuristics,
       switches::kUnsafelyTreatInsecureOriginAsSecure,
       translate::switches::kTranslateSecurityOrigin,
     };
@@ -1913,6 +1923,17 @@ bool ChromeContentBrowserClient::AllowWebRTCIdentityCache(
          cookie_settings->IsSettingCookieAllowed(url, first_party_url);
 }
 #endif  // defined(ENABLE_WEBRTC)
+
+bool ChromeContentBrowserClient::AllowKeygen(
+    const GURL& url,
+    content::ResourceContext* context) {
+  HostContentSettingsMap* content_settings =
+      ProfileIOData::FromResourceContext(context)->GetHostContentSettingsMap();
+
+  return content_settings->GetContentSetting(
+             url, url, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()) ==
+         CONTENT_SETTING_ALLOW;
+}
 
 net::URLRequestContext*
 ChromeContentBrowserClient::OverrideRequestContextForURL(

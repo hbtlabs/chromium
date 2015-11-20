@@ -201,6 +201,7 @@ interface WindowTree {
         uint32 policy_bitmask) => (bool success, uint16 connection_id);
 
   SetFocus(uint32 window_id);
+  SetCanFocus(uint32 window_id, bool can_focus);
 
   // Set text input state for the given window.
   SetWindowTextInputState(uint32 window_id, mojo.TextInputState state);
@@ -209,17 +210,6 @@ interface WindowTree {
   // If state is non-null, the specified window's text input state is updated.
   // Otherwise the existing state is used.
   SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
-
-  // --------------------------------------------------------------------------
-  // This section is for functions that call through directly to the
-  // WindowManager. It is expected this will move into an associated interface.
-  // See window_manager.mojom for details of these functions.
-  //   OpenWindow(WindowTreeClient client);
-  SetPreferredSize(uint32 window_id, mojo.Size size) =>
-      (WindowManagerErrorCode result);
-  SetShowState(uint32 window_id, ShowState show_state) =>
-      (WindowManagerErrorCode result);
-  SetResizeBehavior(uint32 window_id, ResizeBehavior resize_behavior);
 
   // --------------------------------------------------------------------------
   // This section is for functions called from the window manager. It is

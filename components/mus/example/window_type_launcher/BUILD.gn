@@ -21,11 +21,11 @@ executable("window_type_launcher") {
     ":window_type_launcher_resources",
     "//base",
     "//base:base_static",
+    "//components/mus/public/interfaces",
     "//mojo/application/public/cpp",
     "//mojo/application/public/interfaces",
     "//mojo/common:common_base",
     "//mojo/converters/geometry",
-    "//mojo/converters/network",
     "//mojo/message_pump",
     "//mojo/public/cpp/bindings",
     "//mojo/runner/child:lib",
@@ -36,7 +36,7 @@ executable("window_type_launcher") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/views",
-    "//ui/views/mus",
+    "//ui/views/mus:for_shared_library",
   ]
 
   data_deps = [

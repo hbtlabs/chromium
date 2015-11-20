@@ -319,7 +319,7 @@ void DelegatedFrameHost::SwapDelegatedFrame(
     std::vector<uint32_t>* satisfies_sequences) {
   DCHECK(!frame_data->render_pass_list.empty());
 
-  cc::RenderPass* root_pass = frame_data->render_pass_list.back();
+  cc::RenderPass* root_pass = frame_data->render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
   gfx::Size frame_size_in_dip =
@@ -349,7 +349,7 @@ void DelegatedFrameHost::SwapDelegatedFrame(
     damage_rect_in_dip = gfx::Rect(frame_size_in_dip);
 
     // Give the same damage rect to the compositor.
-    cc::RenderPass* root_pass = frame_data->render_pass_list.back();
+    cc::RenderPass* root_pass = frame_data->render_pass_list.back().get();
     root_pass->damage_rect = damage_rect;
   }
 
@@ -379,7 +379,7 @@ void DelegatedFrameHost::SwapDelegatedFrame(
     }
     last_output_surface_id_ = output_surface_id;
   }
-  bool skip_frame_size_mismatch = false;
+  bool immediate_ack = !compositor_;
   pending_delegated_ack_count_++;
 
   if (frame_size.IsEmpty()) {
@@ -421,10 +421,10 @@ void DelegatedFrameHost::SwapDelegatedFrame(
 
       gfx::Size desired_size = client_->DelegatedFrameHostDesiredSizeInDIP();
       if (desired_size != frame_size_in_dip && !desired_size.IsEmpty())
-        skip_frame_size_mismatch = true;
+        immediate_ack = true;
 
       cc::SurfaceFactory::DrawCallback ack_callback;
-      if (compositor_ && !skip_frame_size_mismatch) {
+      if (compositor_ && !immediate_ack) {
         ack_callback = base::Bind(&DelegatedFrameHost::SurfaceDrawn,
                                   AsWeakPtr(), output_surface_id);
       }
@@ -460,9 +460,7 @@ void DelegatedFrameHost::SwapDelegatedFrame(
     client_->DelegatedFrameHostGetLayer()->OnDelegatedFrameDamage(
         damage_rect_in_dip);
 
-  // Note that |compositor_| may be reset by SetShowSurface or
-  // SetShowDelegatedContent above.
-  if (!compositor_ || skip_frame_size_mismatch) {
+  if (immediate_ack) {
     SendDelegatedFrameAck(output_surface_id);
   } else if (!use_surfaces_) {
     std::vector<ui::LatencyInfo>::const_iterator it;
@@ -600,7 +598,7 @@ static void CopyFromCompositingSurfaceFinished(
   if (result) {
     GLHelper* gl_helper = ImageTransportFactory::GetInstance()->GetGLHelper();
     if (gl_helper)
-      sync_token = gpu::SyncToken(gl_helper->InsertSyncPoint());
+      gl_helper->GenerateSyncToken(&sync_token);
   }
   const bool lost_resource = !sync_token.HasData();
   release_callback->Run(sync_token, lost_resource);
@@ -735,7 +733,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo(
   gpu::SyncToken sync_token;
   if (result) {
     GLHelper* gl_helper = ImageTransportFactory::GetInstance()->GetGLHelper();
-    sync_token = gpu::SyncToken(gl_helper->InsertSyncPoint());
+    gl_helper->GenerateSyncToken(&sync_token);
   }
   if (release_callback) {
     // A release callback means the texture came from the compositor, so there

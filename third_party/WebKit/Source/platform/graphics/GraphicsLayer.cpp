@@ -125,7 +125,6 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     m_layer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(m_contentLayerDelegate.get()));
     m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
     m_layer->layer()->setWebLayerClient(this);
-    m_layer->setAutomaticallyComputeRasterScale(true);
 
     // TODO(rbyers): Expose control over this to the web - crbug.com/489802:
     setScrollBlocksOn(WebScrollBlocksOnStartTouch | WebScrollBlocksOnWheelEvent);
@@ -293,9 +292,9 @@ void GraphicsLayer::setOffsetDoubleFromLayoutObject(const DoubleSize& offset, Sh
         setNeedsDisplay();
 }
 
-void GraphicsLayer::paint(GraphicsContext& context, const IntRect* clip)
+void GraphicsLayer::paint(GraphicsContext& context, const IntRect* interestRect)
 {
-    ASSERT(clip || RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
+    ASSERT(interestRect || RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
     ASSERT(drawsContent());
 
     if (!m_client)
@@ -312,8 +311,22 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect* clip)
         }
     }
 #endif
-    m_client->paintContents(this, context, m_paintingPhase, clip);
+
+    IntRect newInterestRect;
+    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled()) {
+        if (!interestRect) {
+            newInterestRect = m_client->computeInterestRect(this, m_previousInterestRect);
+            interestRect = &newInterestRect;
+        }
+        if (!m_client->needsRepaint() && !paintController()->cacheIsEmpty() && m_previousInterestRect == *interestRect) {
+            paintController()->createAndAppend<CachedDisplayItem>(*this, DisplayItem::CachedDisplayItemList);
+            return;
+        }
+    }
+
+    m_client->paintContents(this, context, m_paintingPhase, *interestRect);
     notifyFirstPaintToClient();
+    m_previousInterestRect = *interestRect;
 }
 
 void GraphicsLayer::notifyFirstPaintToClient()
@@ -382,7 +395,7 @@ void GraphicsLayer::updateContentsRect()
 
     if (m_contentsClippingMaskLayer) {
         if (m_contentsClippingMaskLayer->size() != m_contentsRect.size()) {
-            m_contentsClippingMaskLayer->setSize(m_contentsRect.size());
+            m_contentsClippingMaskLayer->setSize(FloatSize(m_contentsRect.size()));
             m_contentsClippingMaskLayer->setNeedsDisplay();
         }
         m_contentsClippingMaskLayer->setPosition(FloatPoint());
@@ -947,7 +960,7 @@ void GraphicsLayer::setContentsClippingMaskLayer(GraphicsLayer* contentsClipping
 void GraphicsLayer::setBackfaceVisibility(bool visible)
 {
     m_backfaceVisibility = visible;
-    m_layer->setDoubleSided(m_backfaceVisibility);
+    platformLayer()->setDoubleSided(m_backfaceVisibility);
 }
 
 void GraphicsLayer::setOpacity(float opacity)

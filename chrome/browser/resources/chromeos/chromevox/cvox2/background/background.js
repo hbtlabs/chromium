@@ -119,8 +119,7 @@ Background = function() {
 
   cvox.ExtensionBridge.addMessageListener(this.onMessage_);
 
-  document.addEventListener(
-      'keydown', cvox.ChromeVoxKbHandler.basicKeyDownActionsListener, true);
+  document.addEventListener('keydown', this.onKeyDown.bind(this), true);
   cvox.ChromeVoxKbHandler.commandHandler = this.onGotCommand.bind(this);
 
   // Classic keymap.
@@ -135,10 +134,12 @@ Background.prototype = {
     this.setChromeVoxMode(ChromeVoxMode.FORCE_NEXT);
   },
 
+  /** @type {ChromeVoxMode} */
   get mode() {
     return this.mode_;
   },
 
+  /** @type {cursors.Range} */
   get currentRange() {
     return this.currentRange_;
   },
@@ -413,6 +414,19 @@ Background.prototype = {
   },
 
   /**
+   * Handles key down events.
+   * @param {Event} evt The key down event to process.
+   * @return {boolean} True if the default action should be performed.
+   */
+  onKeyDown: function(evt) {
+    if (this.mode_ != ChromeVoxMode.CLASSIC &&
+        !cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
+      evt.preventDefault();
+      evt.stopPropagation();
+    }
+  },
+
+  /**
    * Open the options page in a new tab.
    */
   showOptionsPage: function() {
@@ -570,6 +584,11 @@ Background.prototype = {
    *                                     defaults to false.
    */
   setChromeVoxMode: function(mode, opt_injectClassic) {
+    // Switching key maps potentially affects the key codes that involve
+    // sequencing. Without resetting this list, potentially stale key codes
+    // remain. The key codes themselves get pushed in
+    // cvox.KeySequence.deserialize which gets called by cvox.KeyMap.
+    cvox.ChromeVox.sequenceSwitchKeyCodes = [];
     if (mode === ChromeVoxMode.CLASSIC || mode === ChromeVoxMode.COMPAT)
       cvox.ChromeVoxKbHandler.handlerKeyMap = cvox.KeyMap.fromDefaults();
     else
@@ -595,7 +614,8 @@ Background.prototype = {
       } else {
         // When in compat mode, if the focus is within the desktop tree proper,
         // then do not disable content scripts.
-        if (this.currentRange_.start.node.root.role == 'desktop')
+        if (this.currentRange_ &&
+            this.currentRange_.start.node.root.role == RoleType.desktop)
           return;
 
         this.disableClassicChromeVox_();

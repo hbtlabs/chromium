@@ -106,6 +106,7 @@
       'browser/devtools/devtools_window_testing.cc',
       'browser/devtools/devtools_window_testing.h',
       'browser/do_not_track_browsertest.cc',
+      'browser/dom_distiller/distillable_page_utils_browsertest.cc',
       'browser/dom_distiller/dom_distiller_viewer_source_browsertest.cc',
       'browser/dom_distiller/tab_utils_browsertest.cc',
       'browser/download/download_browsertest.cc',
@@ -624,6 +625,7 @@
       'browser/ui/ash/shelf_browsertest.cc',
       'browser/ui/ash/system_tray_delegate_chromeos_browsertest_chromeos.cc',
       'browser/ui/ash/system_tray_tray_cast_browsertest_chromeos.cc',
+      'browser/ui/ash/system_tray_tray_cast_browsertest_media_router_chromeos.cc',
       'browser/ui/ash/volume_controller_browsertest_chromeos.cc',
       'browser/ui/views/frame/browser_non_client_frame_view_ash_browsertest.cc',
     ],
@@ -788,6 +790,8 @@
       'browser/chromeos/net/network_portal_detector_impl_browsertest.cc',
       'browser/chromeos/ownership/fake_owner_settings_service.cc',
       'browser/chromeos/ownership/fake_owner_settings_service.h',
+      'browser/chromeos/policy/affiliation_test_helper.cc',
+      'browser/chromeos/policy/affiliation_test_helper.h',
       'browser/chromeos/policy/blocking_login_browsertest.cc',
       'browser/chromeos/policy/device_cloud_policy_browsertest.cc',
       'browser/chromeos/policy/device_local_account_browsertest.cc',
@@ -795,6 +799,7 @@
       'browser/chromeos/policy/device_policy_cros_browser_test.h',
       'browser/chromeos/policy/device_status_collector_browsertest.cc',
       'browser/chromeos/policy/device_system_use_24hour_clock_browsertest.cc',
+      'browser/chromeos/policy/display_rotation_default_handler_browsertest.cc',
       'browser/chromeos/policy/force_maximize_on_first_run_chromeos_browsertest.cc',
       'browser/chromeos/policy/login_policy_test_base.cc',
       'browser/chromeos/policy/login_policy_test_base.h',
@@ -802,6 +807,7 @@
       'browser/chromeos/policy/policy_cert_verifier_browsertest.cc',
       'browser/chromeos/policy/power_policy_browsertest.cc',
       'browser/chromeos/policy/restore_on_startup_browsertest_chromeos.cc',
+      'browser/chromeos/policy/user_affiliation_browsertest.cc',
       'browser/chromeos/policy/user_cloud_external_data_manager_browsertest.cc',
       'browser/chromeos/policy/user_cloud_policy_manager_chromeos_browsertest.cc',
       'browser/chromeos/policy/user_policy_test_helper.cc',
@@ -952,6 +958,8 @@
       'browser/ui/webui/options/settings_app_browsertest.js',
       'browser/ui/webui/options/settings_format_browsertest.js',
       'browser/ui/webui/options/startup_page_list_browsertest.js',
+      'browser/ui/webui/settings/settings_advanced_browsertest.js',
+      'browser/ui/webui/settings/settings_basic_browsertest.js',
       'browser/ui/webui/sync_internals_browsertest.js',
       'browser/ui/webui/sync_setup_browsertest.js',
       'test/data/chromeos/oobe_webui_browsertest.js',
@@ -983,6 +991,8 @@
       'test/data/webui/print_preview.js',
       'test/data/webui/sandboxstatus_browsertest.js',
       'test/data/webui/settings/cr_settings_browsertest.js',
+      'test/data/webui/settings/main_page_browsertest.js',
+      'test/data/webui/settings/settings_page_browsertest.js',
     ],
     # TODO(rockot) bug 505926: These should be moved to a target in
     # //extensions but have old dependencies on chrome files. The chrome
@@ -3231,7 +3241,7 @@
           ],
         },
         {
-         'target_name': 'telemetry_perf_unittests',
+         'target_name': 'telemetry_perf_unittests_run',
          'type': 'none',
          'dependencies': [
             'chrome_run',
@@ -3245,7 +3255,21 @@
           ],
         },
         {
-         'target_name': 'telemetry_gpu_unittests',
+         'target_name': 'telemetry_unittests_run',
+         'type': 'none',
+         'dependencies': [
+            'chrome_run',
+            'telemetry_chrome_test_base'
+         ],
+         'includes': [
+           '../build/isolate.gypi',
+          ],
+          'sources': [
+            'telemetry_unittests.isolate',
+          ],
+        },
+        {
+         'target_name': 'telemetry_gpu_unittests_run',
          'type': 'none',
          'dependencies': [
             '../content/content_shell_and_tests.gyp:telemetry_base',

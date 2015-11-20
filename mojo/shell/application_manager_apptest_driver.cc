@@ -25,7 +25,6 @@
 #include "mojo/shell/application_manager_apptests.mojom.h"
 #include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 #include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
-#include "third_party/mojo/src/mojo/edk/embedder/process_delegate.h"
 #include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
 
 using mojo::shell::test::mojom::Driver;
@@ -97,7 +96,8 @@ class TargetApplicationDelegate : public mojo::ApplicationDelegate,
   #endif
     target_ = base::LaunchProcess(child_command_line, options);
   }
-  bool ConfigureIncomingConnection(mojo::ApplicationConnection* connection) {
+  bool ConfigureIncomingConnection(
+      mojo::ApplicationConnection* connection) override {
     connection->AddService<Driver>(this);
     return true;
   }
@@ -117,9 +117,9 @@ class TargetApplicationDelegate : public mojo::ApplicationDelegate,
   void DidCreateChannel(mojo::embedder::ChannelInfo* channel_info) {}
 
   mojo::ApplicationImpl* app_;
-  base::WeakPtrFactory<TargetApplicationDelegate> weak_factory_;
   base::Process target_;
   mojo::WeakBindingSet<Driver> bindings_;
+  base::WeakPtrFactory<TargetApplicationDelegate> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TargetApplicationDelegate);
 };

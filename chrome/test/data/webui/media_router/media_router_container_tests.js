@@ -93,16 +93,9 @@ cr.define('media_router_container', function() {
         assertEquals(hidden, element.hidden);
       };
 
-      // Checks whether |expected| and the text in the |elementId| element
-      // are equal.
+      // Checks whether |expected| and the text in the |element| are equal.
       var checkElementText = function(expected, element) {
         assertEquals(expected.trim(), element.textContent.trim());
-      };
-
-      // Checks whether |expected| and the text in the |elementId| element
-      // are equal given an id.
-      var checkElementTextWithId = function(expected, elementId) {
-        checkElementText(expected, container.$[elementId]);
       };
 
       // Checks whether |expected| and the |property| in |container| are equal.
@@ -146,6 +139,8 @@ cr.define('media_router_container', function() {
           new media_router.Route('id 2', 'sink id 2', 'Title 2', 1, true),
         ];
 
+        // Note: These need to be in-order by name to prevent shuffling.
+        // Sorting of sinks by name is tested separately.
         fakeSinkList = [
           new media_router.Sink('sink id 1', 'Sink 1',
               media_router.SinkIconType.CAST,
@@ -216,7 +211,7 @@ cr.define('media_router_container', function() {
       // Tests that |container| returns to SINK_LIST view and arrow drop icon
       // toggles after a cast mode is selected.
       test('select cast mode', function(done) {
-        container.castModeList_ = fakeCastModeListWithNonDefaultModesOnly;
+        container.castModeList = fakeCastModeListWithNonDefaultModesOnly;
 
         MockInteractions.tap(container.$['container-header'].
             $['arrow-drop-icon']);
@@ -252,7 +247,7 @@ cr.define('media_router_container', function() {
             container.selectCastModeHeaderText_);
         assertEquals(fakeCastModeList[1].description, container.headerText);
 
-        container.castModeList_ = fakeCastModeListWithNonDefaultModesOnly;
+        container.castModeList = fakeCastModeListWithNonDefaultModesOnly;
         setTimeout(function() {
           var castModeList =
               container.$['cast-mode-list'].querySelectorAll('paper-item');
@@ -275,7 +270,7 @@ cr.define('media_router_container', function() {
       // Tests the header text when updated with a cast mode list with a mix of
       // default and non-default cast modes.
       test('cast modes with one default mode', function(done) {
-        container.castModeList_ = fakeCastModeList;
+        container.castModeList = fakeCastModeList;
 
         setTimeout(function() {
           var castModeList =
@@ -391,21 +386,18 @@ cr.define('media_router_container', function() {
         container.showCastModeList_();
         checkElementsVisibleWithId(['cast-mode-list',
                                     'container-header',
-                                    'device-missing',
-                                    'sink-list']);
+                                    'device-missing']);
 
         // Set a non-blocking issue. The issue should stay hidden.
         container.issue = fakeNonBlockingIssue;
         checkElementsVisibleWithId(['cast-mode-list',
                                     'container-header',
-                                    'device-missing',
-                                    'sink-list']);
+                                    'device-missing']);
 
         // Set a blocking issue. The issue should stay hidden.
         container.issue = fakeBlockingIssue;
         checkElementsVisibleWithId(['container-header',
-                                    'device-missing',
-                                    'sink-list']);
+                                    'device-missing']);
       });
 
 
@@ -414,8 +406,7 @@ cr.define('media_router_container', function() {
         container.showRouteDetails_();
         checkElementsVisibleWithId(['container-header',
                                     'device-missing',
-                                    'route-details',
-                                    'sink-list']);
+                                    'route-details']);
       });
 
       // Tests for expected visible UI when the view is ROUTE_DETAILS, and there
@@ -429,8 +420,7 @@ cr.define('media_router_container', function() {
           checkElementsVisibleWithId(['container-header',
                                       'device-missing',
                                       'issue-banner',
-                                      'route-details',
-                                      'sink-list']);
+                                      'route-details']);
           done();
         });
       });
@@ -446,8 +436,7 @@ cr.define('media_router_container', function() {
         setTimeout(function() {
           checkElementsVisibleWithId(['container-header',
                                       'device-missing',
-                                      'issue-banner',
-                                      'sink-list']);
+                                      'issue-banner']);
           done();
          });
       });
@@ -457,7 +446,6 @@ cr.define('media_router_container', function() {
         container.showSinkList_();
         checkElementsVisibleWithId(['container-header',
                                     'device-missing',
-                                    'sink-list',
                                     'sink-list-view']);
 
         // Set an non-empty sink list.
@@ -574,6 +562,61 @@ cr.define('media_router_container', function() {
             done();
           });
          });
+      });
+
+      // Tests that sinks provided in some random order will be sorted by name
+      // when shown to the user.
+      test('sinks are shown sorted by name', function(done) {
+        var outOfOrderSinks = [
+          new media_router.Sink('6543', 'Sleepy',
+              media_router.SinkIconType.CAST,
+              media_router.SinkStatus.ACTIVE, [1]),
+          new media_router.Sink('543', 'Happy',
+              media_router.SinkIconType.CAST,
+              media_router.SinkStatus.ACTIVE, [1]),
+          new media_router.Sink('43', 'Bashful',
+              media_router.SinkIconType.CAST,
+              media_router.SinkStatus.ACTIVE, [1]),
+          new media_router.Sink('2', 'George',
+              media_router.SinkIconType.CAST_AUDIO,
+              media_router.SinkStatus.ACTIVE, [1]),
+          new media_router.Sink('1', 'George',
+              media_router.SinkIconType.CAST,
+              media_router.SinkStatus.ACTIVE, [1]),
+          new media_router.Sink('3', 'George',
+              media_router.SinkIconType.HANGOUT,
+              media_router.SinkStatus.ACTIVE, [1]),
+        ];
+
+        container.allSinks = outOfOrderSinks;
+
+        setTimeout(function() {
+          var sinkList =
+              container.$['sink-list'].querySelectorAll('paper-item');
+
+          assertEquals(6, sinkList.length);
+          checkElementText('Bashful', sinkList[0]);
+          checkElementText('George', sinkList[1]);
+          checkElementText('George', sinkList[2]);
+          checkElementText('George', sinkList[3]);
+          checkElementText('Happy', sinkList[4]);
+          checkElementText('Sleepy', sinkList[5]);
+
+          // There are three George's, so check that the first has id '1', the
+          // second has id '2', and the third has id '3'.  The icons are used to
+          // determine which is which.
+          assertEquals(
+              container.computeSinkIcon_(outOfOrderSinks[4]),
+              sinkList[1].querySelector('iron-icon').icon);
+          assertEquals(
+              container.computeSinkIcon_(outOfOrderSinks[3]),
+              sinkList[2].querySelector('iron-icon').icon);
+          assertEquals(
+              container.computeSinkIcon_(outOfOrderSinks[5]),
+              sinkList[3].querySelector('iron-icon').icon);
+
+          done();
+        });
       });
     });
   }

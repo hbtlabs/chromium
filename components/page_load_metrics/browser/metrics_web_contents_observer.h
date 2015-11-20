@@ -34,26 +34,43 @@ class RapporService;
 namespace page_load_metrics {
 
 // These constants are for keeping the tests in sync.
-const char kHistogramNameFirstLayout[] =
-    "PageLoad.Timing2.NavigationToFirstLayout";
-const char kHistogramNameFirstTextPaint[] =
+const char kHistogramFirstLayout[] = "PageLoad.Timing2.NavigationToFirstLayout";
+const char kHistogramFirstTextPaint[] =
     "PageLoad.Timing2.NavigationToFirstTextPaint";
-const char kHistogramNameDomContent[] =
+const char kHistogramDomContentLoaded[] =
     "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired";
-const char kHistogramNameLoad[] = "PageLoad.Timing2.NavigationToLoadEventFired";
-const char kBGHistogramNameFirstLayout[] =
+const char kHistogramLoad[] = "PageLoad.Timing2.NavigationToLoadEventFired";
+const char kHistogramFirstPaint[] = "PageLoad.Timing2.NavigationToFirstPaint";
+const char kHistogramFirstImagePaint[] =
+    "PageLoad.Timing2.NavigationToFirstImagePaint";
+const char kHistogramFirstContentfulPaint[] =
+    "PageLoad.Timing2.NavigationToFirstContentfulPaint";
+const char kBackgroundHistogramFirstLayout[] =
     "PageLoad.Timing2.NavigationToFirstLayout.Background";
-const char kBGHistogramNameFirstTextPaint[] =
+const char kBackgroundHistogramFirstTextPaint[] =
     "PageLoad.Timing2.NavigationToFirstTextPaint.Background";
-const char kBGHistogramNameDomContent[] =
+const char kBackgroundHistogramDomContentLoaded[] =
     "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired.Background";
-const char kBGHistogramNameLoad[] =
+const char kBackgroundHistogramLoad[] =
     "PageLoad.Timing2.NavigationToLoadEventFired.Background";
+const char kBackgroundHistogramFirstPaint[] =
+    "PageLoad.Timing2.NavigationToFirstPaint.Background";
+const char kBackgroundHistogramFirstImagePaint[] =
+    "PageLoad.Timing2.NavigationToFirstImagePaint.Background.";
+const char kBackgroundHistogramFirstContentfulPaint[] =
+    "PageLoad.Timing2.NavigationToFirstContentfulPaint.Background";
+
+const char kHistogramFirstBackground[] =
+    "PageLoad.Timing2.NavigationToFirstBackground";
+const char kHistogramFirstForeground[] =
+    "PageLoad.Timing2.NavigationToFirstForeground";
 
 const char kProvisionalEvents[] = "PageLoad.Events.Provisional";
 const char kCommittedEvents[] = "PageLoad.Events.Committed";
-const char kBGProvisionalEvents[] = "PageLoad.Events.Provisional.Background";
-const char kBGCommittedEvents[] = "PageLoad.Events.Committed.Background";
+const char kBackgroundProvisionalEvents[] =
+    "PageLoad.Events.Provisional.Background";
+const char kBackgroundCommittedEvents[] =
+    "PageLoad.Events.Committed.Background";
 
 const char kErrorEvents[] = "PageLoad.Events.InternalError";
 
@@ -178,8 +195,10 @@ class PageLoadTracker {
   // outlives this class.
   PageLoadTracker(bool in_foreground,
                   PageLoadMetricsEmbedderInterface* embedder_interface,
+                  content::NavigationHandle* navigation_handle,
                   base::ObserverList<PageLoadMetricsObserver, true>* observers);
   ~PageLoadTracker();
+  void Redirect(content::NavigationHandle* navigation_handle);
   void Commit(content::NavigationHandle* navigation_handle);
   void WebContentsHidden();
   void WebContentsShown();
@@ -200,6 +219,9 @@ class PageLoadTracker {
   void RecordRappor();
 
   bool has_commit_;
+
+  // The navigation start in TimeTicks, not the wall time reported by Blink.
+  const base::TimeTicks navigation_start_;
 
   // We record separate metrics for events that occur after a background,
   // because metrics like layout/paint are delayed artificially
@@ -247,6 +269,8 @@ class MetricsWebContentsObserver
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidRedirectNavigation(
       content::NavigationHandle* navigation_handle) override;
 
   void WasShown() override;

@@ -6,43 +6,70 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "device/serial/serial.mojom.h"
+#include "base/memory/ref_counted.h"
+#include "device/serial/serial_io_handler.h"
 
 namespace battor {
 
+// A BattOrAgent is a class used to synchronously communicate with a BattOr for
+// the purpose of collecting power samples. A BattOr is an external USB device
+// that's capable of recording accurate, high-frequency (2000Hz) power samples.
+//
+// Because the communication is synchronous and passes over a serial connection,
+// callers wishing to avoid blocking the thread (like the Chromium tracing
+// controller) should issue these commands in a separate thread.
+//
+// The serial connection is automatically opened when the first command
+// (e.g. StartTracing(), StopTracing(), etc.) is issued, and automatically
+// closed when either StopTracing() or the destructor is called. For Telemetry,
+// this means that the connection must be reinitialized for every command that's
+// issued because a new BattOrAgent is constructed. For Chromium, we use the
+// same BattOrAgent for multiple commands and thus avoid having to reinitialize
+// the serial connection.
+//
+// This class is NOT thread safe.
 class BattOrAgent {
  public:
-  typedef base::Callback<void(device::serial::SendError)> SendCallback;
-  typedef base::Callback<void(device::serial::SendError,
-                              device::serial::ReceiveError)>
-      SendReceiveCallback;
+  enum BattOrError {
+    BATTOR_ERROR_NONE,
+    BATTOR_ERROR_CONNECTION_FAILED,
+    BATTOR_ERROR_TIMEOUT,
+  };
 
   explicit BattOrAgent(const std::string& path);
   virtual ~BattOrAgent();
 
-  // Tells the BattOr to start tracing and calls the callback when complete.
-  void StartTracing(const SendCallback& callback);
+  // Tells the BattOr to start tracing.
+  BattOrError StartTracing();
 
   // Tells the BattOr to stop tracing and write the trace output to the
-  // specified string and calls the callback when complete.
-  void StopTracing(std::string* trace_output,
-                   const SendReceiveCallback& callback);
+  // specified string.
+  BattOrError StopTracing(std::string* trace_output);
 
-  // Tells the BattOr to record a clock sync marker in its own trace log and
-  // calls the callback when complete.
-  void RecordClockSyncMarker(const std::string& marker,
-                             const SendReceiveCallback& callback);
+  // Tells the BattOr to record a clock sync marker in its own trace log.
+  BattOrError RecordClockSyncMarker(const std::string& marker);
 
   // Tells the BattOr to issue clock sync markers to all other tracing agents
-  // that it's connected to and calls the callback when complete.
-  void IssueClockSyncMarker(const SendCallback& callback);
+  // to which it's connected.
+  BattOrError IssueClockSyncMarker();
 
   // Returns whether the BattOr is able to record clock sync markers in its own
   // trace log.
   static bool SupportsExplicitClockSync() { return true; }
 
  private:
+  // Initializes the serial connection with the BattOr. If the connection
+  // already exists, BATTOR_ERROR_NONE is immediately returned.
+  BattOrError ConnectIfNeeded();
+
+  // Resets the connection to its unopened state.
+  void ResetConnection();
+
+  // The path of the BattOr (e.g. "/dev/tty.battor_serial").
   std::string path_;
+
+  // IO handler capable of reading from and writing to the serial connection.
+  scoped_refptr<device::SerialIoHandler> io_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(BattOrAgent);
 };

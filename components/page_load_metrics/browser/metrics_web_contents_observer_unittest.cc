@@ -69,17 +69,18 @@ class MetricsWebContentsObserverTest
   }
 
   void AssertNoHistogramsLogged() {
-    histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 0);
-    histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-    histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 0);
-    histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+    histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 0);
+    histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+    histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 0);
+    histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
   }
 
   void CheckProvisionalEvent(ProvisionalLoadEvent event,
                              int count,
                              bool background) {
     if (background) {
-      histogram_tester_.ExpectBucketCount(kBGProvisionalEvents, event, count);
+      histogram_tester_.ExpectBucketCount(kBackgroundProvisionalEvents, event,
+                                          count);
       num_provisional_events_bg_ += count;
     } else {
       histogram_tester_.ExpectBucketCount(kProvisionalEvents, event, count);
@@ -91,7 +92,8 @@ class MetricsWebContentsObserverTest
                            int count,
                            bool background) {
     if (background) {
-      histogram_tester_.ExpectBucketCount(kBGCommittedEvents, event, count);
+      histogram_tester_.ExpectBucketCount(kBackgroundCommittedEvents, event,
+                                          count);
       num_committed_events_bg_ += count;
     } else {
       histogram_tester_.ExpectBucketCount(kCommittedEvents, event, count);
@@ -108,9 +110,9 @@ class MetricsWebContentsObserverTest
     histogram_tester_.ExpectTotalCount(kProvisionalEvents,
                                        num_provisional_events_);
     histogram_tester_.ExpectTotalCount(kCommittedEvents, num_committed_events_);
-    histogram_tester_.ExpectTotalCount(kBGProvisionalEvents,
+    histogram_tester_.ExpectTotalCount(kBackgroundProvisionalEvents,
                                        num_provisional_events_bg_);
-    histogram_tester_.ExpectTotalCount(kBGCommittedEvents,
+    histogram_tester_.ExpectTotalCount(kBackgroundCommittedEvents,
                                        num_committed_events_bg_);
     histogram_tester_.ExpectTotalCount(kErrorEvents, num_errors_);
   }
@@ -204,12 +206,12 @@ TEST_F(MetricsWebContentsObserverTest, SamePageNoTriggerUntilTrueNavCommit) {
   // But we should keep the timing info and log it when we get another
   // navigation.
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl2));
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
 }
 
 TEST_F(MetricsWebContentsObserverTest, SingleMetricAfterCommit) {
@@ -232,12 +234,12 @@ TEST_F(MetricsWebContentsObserverTest, SingleMetricAfterCommit) {
   // Navigate again to force histogram recording.
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
 }
 
 TEST_F(MetricsWebContentsObserverTest, MultipleMetricsAfterCommits) {
@@ -276,33 +278,31 @@ TEST_F(MetricsWebContentsObserverTest, MultipleMetricsAfterCommits) {
 
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl));
 
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout_1.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 2);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 2);
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout_1.InMilliseconds(), 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout_2.InMilliseconds(), 1);
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstTextPaint,
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramFirstTextPaint,
                                       first_text_paint.InMilliseconds(), 1);
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameDomContent,
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramDomContentLoaded,
                                       dom_content.InMilliseconds(), 1);
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameLoad, load.InMilliseconds(),
-                                      1);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramLoad, load.InMilliseconds(), 1);
 }
 
 TEST_F(MetricsWebContentsObserverTest, BackgroundDifferentHistogram) {
   base::TimeDelta first_layout = base::TimeDelta::FromSeconds(2);
 
   PageLoadTiming timing;
-  timing.navigation_start = base::Time::FromDoubleT(
-      (base::TimeTicks::Now() - base::TimeTicks::UnixEpoch()).InSecondsF());
+  timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = first_layout;
 
   content::WebContentsTester* web_contents_tester =
@@ -323,17 +323,17 @@ TEST_F(MetricsWebContentsObserverTest, BackgroundDifferentHistogram) {
   // Navigate again to force histogram recording.
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameFirstLayout, 1);
-  histogram_tester_.ExpectBucketCount(kBGHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramFirstLayout, 1);
+  histogram_tester_.ExpectBucketCount(kBackgroundHistogramFirstLayout,
                                       first_layout.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramFirstTextPaint, 0);
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
 }
 
 TEST_F(MetricsWebContentsObserverTest, DontLogPrerender) {
@@ -355,11 +355,11 @@ TEST_F(MetricsWebContentsObserverTest, DontLogPrerender) {
 
 TEST_F(MetricsWebContentsObserverTest, OnlyBackgroundLaterEvents) {
   PageLoadTiming timing;
-  timing.navigation_start = base::Time::FromDoubleT(
-      (base::TimeTicks::Now() - base::TimeTicks::UnixEpoch()).InSecondsF() - 1);
-
-  timing.response_start = base::TimeDelta::FromMilliseconds(1);
-  timing.dom_content_loaded_event_start = base::TimeDelta::FromMilliseconds(1);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  // Set these events at 1 microsecond so they are definitely occur before we
+  // background the tab later in the test.
+  timing.response_start = base::TimeDelta::FromMicroseconds(1);
+  timing.dom_content_loaded_event_start = base::TimeDelta::FromMicroseconds(1);
 
   content::WebContentsTester* web_contents_tester =
       content::WebContentsTester::For(web_contents());
@@ -381,27 +381,29 @@ TEST_F(MetricsWebContentsObserverTest, OnlyBackgroundLaterEvents) {
   // Navigate again to force histogram recording.
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl2));
 
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameFirstLayout, 1);
-  histogram_tester_.ExpectBucketCount(kBGHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramFirstLayout, 1);
+  histogram_tester_.ExpectBucketCount(kBackgroundHistogramFirstLayout,
                                       timing.first_layout.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kBGHistogramNameFirstTextPaint, 1);
-  histogram_tester_.ExpectBucketCount(kBGHistogramNameFirstTextPaint,
+  histogram_tester_.ExpectTotalCount(kBackgroundHistogramFirstTextPaint, 1);
+  histogram_tester_.ExpectBucketCount(kBackgroundHistogramFirstTextPaint,
                                       timing.first_text_paint.InMilliseconds(),
                                       1);
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 1);
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 1);
   histogram_tester_.ExpectBucketCount(
-      kHistogramNameDomContent,
+      kHistogramDomContentLoaded,
       timing.dom_content_loaded_event_start.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
 }
 
 TEST_F(MetricsWebContentsObserverTest, DontBackgroundQuickerLoad) {
-  base::TimeDelta first_layout = base::TimeDelta::FromMilliseconds(1);
+  // Set this event at 1 microsecond so it occurs before we foreground later in
+  // the test.
+  base::TimeDelta first_layout = base::TimeDelta::FromMicroseconds(1);
 
   PageLoadTiming timing;
   timing.navigation_start = base::Time::FromDoubleT(1);
@@ -429,15 +431,15 @@ TEST_F(MetricsWebContentsObserverTest, DontBackgroundQuickerLoad) {
       main_rfh());
   rfh_tester->SimulateNavigationStop();
 
-  // Navigate again to see if the timing updated for a subframe message.
+  // Navigate again to see if the timing updated for the foregrounded load.
   web_contents_tester->NavigateAndCommit(GURL(kDefaultTestUrl));
 
-  histogram_tester_.ExpectTotalCount(kHistogramNameDomContent, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameLoad, 0);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstLayout, 1);
-  histogram_tester_.ExpectBucketCount(kHistogramNameFirstLayout,
+  histogram_tester_.ExpectTotalCount(kHistogramDomContentLoaded, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramLoad, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstLayout, 1);
+  histogram_tester_.ExpectBucketCount(kHistogramFirstLayout,
                                       first_layout.InMilliseconds(), 1);
-  histogram_tester_.ExpectTotalCount(kHistogramNameFirstTextPaint, 0);
+  histogram_tester_.ExpectTotalCount(kHistogramFirstTextPaint, 0);
 }
 
 TEST_F(MetricsWebContentsObserverTest, FailProvisionalLoad) {
@@ -577,9 +579,7 @@ TEST_F(MetricsWebContentsObserverTest, SuccessfulFirstLayoutInForegroundEvent) {
 TEST_F(MetricsWebContentsObserverTest,
        SuccessfulFirstLayoutInBackgroundEvent) {
   PageLoadTiming timing;
-  timing.navigation_start = base::Time::FromDoubleT(
-      (base::TimeTicks::Now() - base::TimeTicks::UnixEpoch()).InSecondsF() - 1);
-
+  timing.navigation_start = base::Time::FromDoubleT(1);
   timing.first_layout = base::TimeDelta::FromSeconds(30);
 
   content::WebContentsTester* web_contents_tester =

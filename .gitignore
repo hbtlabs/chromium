@@ -405,6 +405,7 @@ v8.log
 /third_party/v8-i18n
 /third_party/valgrind
 /third_party/v4l2capture
+/third_party/wayland/src
 /third_party/webdriver/pylib
 /third_party/webdriver/python/selenium
 /third_party/webgl
@@ -433,6 +434,7 @@ v8.log
 /tools/gyp
 /tools/histograms
 /tools/json_schema_compiler/test/json_schema_compiler_tests.xml
+/tools/metrics/actions/actions.old.xml
 /tools/metrics/histograms/histograms.before.pretty-print.xml
 /tools/page_cycler/acid3
 /tools/perf/data

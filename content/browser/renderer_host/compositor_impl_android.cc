@@ -229,6 +229,7 @@ scoped_ptr<cc::SurfaceIdAllocator> CompositorImpl::CreateSurfaceIdAllocator() {
 CompositorImpl::CompositorImpl(CompositorClient* client,
                                gfx::NativeWindow root_window)
     : root_layer_(cc::Layer::Create(Compositor::LayerSettings())),
+      resource_manager_(root_window),
       surface_id_allocator_(GetSurfaceManager() ? CreateSurfaceIdAllocator()
                                                 : nullptr),
       has_transparent_background_(false),
@@ -444,8 +445,8 @@ void CompositorImpl::CreateLayerTreeHost() {
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
   settings.initial_debug_state.show_fps_counter =
       command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
-  settings.use_property_trees =
-      command_line->HasSwitch(cc::switches::kEnableCompositorPropertyTrees);
+  if (command_line->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
+    settings.use_property_trees = false;
   // TODO(enne): Update this this compositor to use the scheduler.
   settings.single_thread_proxy_scheduler = false;
 

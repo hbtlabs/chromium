@@ -31,12 +31,14 @@
 #include "core/fetch/ResourceLoader.h"
 
 #include "core/fetch/CSSStyleSheetResource.h"
+#include "core/fetch/InspectorFetchTraceEvents.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourcePtr.h"
 #include "platform/Logging.h"
 #include "platform/SharedBuffer.h"
 #include "platform/ThreadedDataReceiver.h"
+#include "platform/TraceEvent.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/network/ResourceError.h"
@@ -51,7 +53,7 @@
 
 namespace blink {
 
-ResourceLoader* ResourceLoader::create(ResourceFetcher* fetcher, Resource* resource, ResourceRequest& request, const ResourceLoaderOptions& options)
+ResourceLoader* ResourceLoader::create(ResourceFetcher* fetcher, Resource* resource, const ResourceRequest& request, const ResourceLoaderOptions& options)
 {
     ResourceLoader* loader = new ResourceLoader(fetcher, resource, options);
     loader->init(request);
@@ -103,13 +105,15 @@ void ResourceLoader::releaseResources()
     m_fetcher.clear();
 }
 
-void ResourceLoader::init(ResourceRequest& request)
+void ResourceLoader::init(const ResourceRequest& passedRequest)
 {
     ASSERT(m_state != Terminated);
+    ResourceRequest request(passedRequest);
     m_fetcher->willSendRequest(m_resource->identifier(), request, ResourceResponse(), m_options.initiatorInfo);
     ASSERT(m_state != Terminated);
     ASSERT(!request.isNull());
-    m_request = applyOptions(request);
+    m_originalRequest = m_request = applyOptions(request);
+    m_resource->updateRequest(request);
     ASSERT(m_state != Terminated);
     m_fetcher->didInitializeResourceLoader(this);
 }
@@ -274,10 +278,15 @@ void ResourceLoader::willFollowRedirect(WebURLLoader*, WebURLRequest& passedNewR
 
     applyOptions(newRequest); // canAccessRedirect() can modify m_options so we should re-apply it.
     m_fetcher->redirectReceived(m_resource, redirectResponse);
-    m_fetcher->willSendRequest(m_resource->identifier(), newRequest, redirectResponse, m_options.initiatorInfo);
+    ASSERT(m_state != Terminated);
     m_resource->willFollowRedirect(newRequest, redirectResponse);
     if (newRequest.isNull() || m_state == Terminated)
         return;
+
+    m_fetcher->willSendRequest(m_resource->identifier(), newRequest, redirectResponse, m_options.initiatorInfo);
+    ASSERT(m_state != Terminated);
+    ASSERT(!newRequest.isNull());
+    m_resource->updateRequest(newRequest);
     m_request = newRequest;
 }
 
@@ -314,6 +323,7 @@ void ResourceLoader::didReceiveResponse(WebURLLoader*, const WebURLResponse& res
     m_connectionState = ConnectionStateReceivedResponse;
 
     const ResourceResponse& resourceResponse = response.toResourceResponse();
+    TRACE_EVENT1("devtools.timeline", "ResourceReceiveResponse", "data", InspectorReceiveResponseEvent::data(m_resource->identifier(), resourceResponse));
 
     if (responseNeedsAccessControlCheck()) {
         if (response.wasFetchedViaServiceWorker()) {
@@ -392,6 +402,7 @@ void ResourceLoader::didReceiveData(WebURLLoader*, const char* data, int length,
 {
     ASSERT(m_state != Terminated);
     RELEASE_ASSERT(m_connectionState == ConnectionStateReceivedResponse || m_connectionState == ConnectionStateReceivingData);
+    TRACE_EVENT1("devtools.timeline", "ResourceReceivedData", "data", InspectorReceiveDataEvent::data(m_resource->identifier(), encodedDataLength));
     m_connectionState = ConnectionStateReceivingData;
 
     // It is possible to receive data on uninitialized resources if it had an error status code, and we are running a nested message
@@ -413,6 +424,7 @@ void ResourceLoader::didReceiveData(WebURLLoader*, const char* data, int length,
 void ResourceLoader::didFinishLoading(WebURLLoader*, double finishTime, int64_t encodedDataLength)
 {
     RELEASE_ASSERT(m_connectionState == ConnectionStateReceivedResponse || m_connectionState == ConnectionStateReceivingData);
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data", InspectorResourceFinishEvent::data(m_resource->identifier(), finishTime, false));
     m_connectionState = ConnectionStateFinishedLoading;
     if (m_state != Initialized)
         return;
@@ -436,6 +448,7 @@ void ResourceLoader::didFinishLoading(WebURLLoader*, double finishTime, int64_t 
 
 void ResourceLoader::didFail(WebURLLoader*, const WebURLError& error)
 {
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data", InspectorResourceFinishEvent::data(m_resource->identifier(), 0, true));
     m_connectionState = ConnectionStateFailed;
     ASSERT(m_state != Terminated);
     WTF_LOG(ResourceLoading, "Failed to load '%s'.\n", m_resource->url().string().latin1().data());

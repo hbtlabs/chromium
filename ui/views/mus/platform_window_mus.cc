@@ -14,21 +14,32 @@
 namespace views {
 
 namespace {
-void WindowManagerCallback(mus::mojom::WindowManagerErrorCode error_code) {}
+static uint32_t accelerated_widget_count = 1;
+
 }  // namespace
 
 PlatformWindowMus::PlatformWindowMus(ui::PlatformWindowDelegate* delegate,
                                      mus::Window* mus_window)
     : delegate_(delegate),
       mus_window_(mus_window),
-      show_state_(mus::mojom::SHOW_STATE_RESTORED) {
+      show_state_(mus::mojom::SHOW_STATE_RESTORED),
+      has_capture_(false) {
   DCHECK(delegate_);
   DCHECK(mus_window_);
   mus_window_->AddObserver(this);
 
+  // We need accelerated widget numbers to be different for each
+  // window and fit in the smallest sizeof(AcceleratedWidget) uint32_t
+  // has this property.
+#if defined(OS_WIN)
   delegate_->OnAcceleratedWidgetAvailable(
-      gfx::kNullAcceleratedWidget,
+      reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++),
       mus_window_->viewport_metrics().device_pixel_ratio);
+#else
+  delegate_->OnAcceleratedWidgetAvailable(
+      static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++),
+      mus_window_->viewport_metrics().device_pixel_ratio);
+#endif
 }
 
 PlatformWindowMus::~PlatformWindowMus() {
@@ -68,10 +79,14 @@ void PlatformWindowMus::SetTitle(const base::string16& title) {
 }
 
 void PlatformWindowMus::SetCapture() {
+  // TODO(sky): this is wrong, need real capture api.
+  has_capture_ = true;
   NOTIMPLEMENTED();
 }
 
 void PlatformWindowMus::ReleaseCapture() {
+  // TODO(sky): this is wrong, need real capture api.
+  has_capture_ = false;
   NOTIMPLEMENTED();
 }
 
@@ -108,8 +123,8 @@ ui::PlatformImeController* PlatformWindowMus::GetPlatformImeController() {
 }
 
 void PlatformWindowMus::SetShowState(mus::mojom::ShowState show_state) {
-  WindowManagerConnection::Get()->window_manager()->SetShowState(
-      mus_window_->id(), show_state, base::Bind(&WindowManagerCallback));
+  mus_window_->SetSharedProperty<int32_t>(
+      mus::mojom::WindowManager::kShowState_Property, show_state);
 }
 
 void PlatformWindowMus::OnWindowDestroyed(mus::Window* window) {

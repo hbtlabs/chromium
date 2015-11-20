@@ -35,12 +35,28 @@ href="https://groups.google.com/a/chromium.org/forum/#!forum/cxx">cxx@chromium.o
 Ideally include a short blurb on what the feature is, and why you think it
 should or should not be allowed.  Ideally, the list will arrive at some
 consensus and the wiki page will be updated to mention that consensus. If
-there's no consensus, <code>src/styleguide/C++/OWNERS</code> get to decide --
+there's no consensus, <code>src/styleguide/c++/OWNERS</code> get to decide --
 for divisive features, we expect the decision to be to not use the feature yet
 and possibly discuss it again a few months later, when we have more experience
 with the language.</p>
 
-<h2 id="whitelist">C++11 Allowed Features</h2>
+<h2>Table of Contents</h2>
+<ol class="toc">
+<li>Allowed Features<ol>
+    <li><a href="#core-whitelist">Language</a></li>
+    <li><a href="#library-whitelist">Library</a></li>
+</ol></li>
+<li>Banned Features<ol>
+    <li><a href="#core-blacklist">Language</a></li>
+    <li><a href="#library-blacklist">Library</a></li>
+</ol></li>
+<li>To Be Discussed<ol>
+    <li><a href="#core-review">Language</a></li>
+    <li><a href="#library-review">Library</a></li>
+</ol></li>
+</ol>
+
+<h2 id="whitelist"><a name="core-whitelist"></a>C++11 Allowed Features</h2>
 
 <p>The following features are currently allowed.</p>
 
@@ -258,7 +274,7 @@ Parameter pack</a></td>
 </tbody>
 </table>
 
-<h2 id="whitelist">C++11 Allowed Library Features</h2>
+<h2 id="whitelist"><a name="library-whitelist"></a>C++11 Allowed Library Features</h2>
 
 <p>The following library features are currently allowed.</p>
 
@@ -271,6 +287,14 @@ Parameter pack</a></td>
 <th style='width:240px;'>Description</th>
 <th style='width:240px;'>Documentation Link</th>
 <th style='width:240px;'>Notes</th>
+</tr>
+
+<tr>
+<td>Access to underlying <code>std::vector</code> data</td>
+<td><code>v.data()</code></td>
+<td>Returns a pointer to a <code>std::vector</code>'s underlying data, accounting for empty vectors.</td>
+<td><a href="http://en.cppreference.com/w/cpp/container/vector/data">std::vector::data</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/16V7fmtbzok">Discussion thread</a>.</td>
 </tr>
 
 <tr>
@@ -288,6 +312,36 @@ Parameter pack</a></td>
 <td><a href="http://en.cppreference.com/w/cpp/utility/tuple/tie">std::tie</a></td>
 <td>General use of <code>std::tuple</code>, and <code>std::tie</code> for unpacking or multiple assignments is still not allowed. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/3DZ64dIMRTY/discussion">Discussion thread</a></td>
 </tr>
+
+<tr>
+<td>Move Semantics</td>
+<td><code>std::move()</code></td>
+<td>Facilitates efficient move operations</td>
+<td><a href="http://en.cppreference.com/w/cpp/utility/move">
+<code>std::move</code> reference</a></td>
+<td>Note: std::move() is allowed but writing your own move constructors is still only allowed in exceptional cases for now, see 'Rvalue References (and Move Semantics)'. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/x_dWFxJFdbM'>Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Conditional Type Selection</td>
+<td><code>std::enable_if</code> and <code>std::conditional</code></td>
+<td>Enables compile-time conditional type selection</td>
+<td><a href="http://en.cppreference.com/w/cpp/types/enable_if">
+std::enable_if</a> and
+<a href="http://en.cppreference.com/w/cpp/types/conditional">
+conditional</a></td>
+<td>Usage should be rare.<a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Type Traits</td>
+<td>Class templates within <code>&lt;type_traits&gt;</code></td>
+<td>Allows compile-time inspection of the properties of types</td>
+<td><a href="http://en.cppreference.com/w/cpp/header/type_traits">
+Standard library header &lt;type_traits&gt;</a></td>
+<td>Note that not all type traits are available on all platforms (eg std::underlying_type doesn't work in libstdc++4.6). Use judiciously. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
+</tr>
+
 </tbody>
 </table>
 
@@ -295,7 +349,7 @@ Parameter pack</a></td>
 
 <p>This section lists features that are not allowed to be used yet.
 
-<h3 id="blacklist_banned">C++11 Banned Features</h3>
+<h3 id="blacklist_banned"><a name="core-blacklist"></a>C++11 Banned Features</h3>
 
 <p>This section lists C++11 features that are not allowed in the Chromium
 codebase.
@@ -418,7 +472,7 @@ string literal</a></td>
 </tbody>
 </table>
 
-<h3 id="whitelist">C++11 Banned Library Features</h3>
+<h3 id="blacklist_stdlib"><a name="library-blacklist"></a>C++11 Banned Library Features</h3>
 
 <p>This section lists C++11 library features that are not allowed in the Chromium codebase.</p>
 
@@ -462,7 +516,7 @@ string literal</a></td>
 </table>
 
 
-<h3 id="blacklist_review">C++11 Features To Be Discussed</h3>
+<h3 id="blacklist_review"><a name="core-review"></a>C++11 Features To Be Discussed</h3>
 
 <p>The following C++ language features are currently disallowed.
 See the top of this page on how to propose moving a feature from this list
@@ -560,7 +614,7 @@ User-defined literals</a></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_stdlib">C++11 Standard Library Features To Be Discussed</h3>
+<h3 id="blacklist_stdlib_review"><a name="library-review"></a>C++11 Standard Library Features To Be Discussed</h3>
 
 <p>The following C++ library features are currently disallowed. See the top of this page on how to propose moving a feature from this list into the allowed or banned sections. Note that not all of these features work in all our compilers yet.</p>
 
@@ -662,17 +716,6 @@ compilers not supporting these reliably.</td>
 <td>Adds inverse trigonomentric and hyperbolic non-member functions to
 the <code>&lt;complex&gt;</code> library.</td>
 <td><a href="http://en.cppreference.com/w/cpp/numeric/complex">std::complex</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Conditional Type Selection</td>
-<td><code>std::enable_if</code> and <code>std::conditional</code></td>
-<td>Enables compile-time conditional type selection</td>
-<td><a href="http://en.cppreference.com/w/cpp/types/enable_if">
-std::enable_if</a> and
-<a href="http://en.cppreference.com/w/cpp/types/conditional">
-conditional</a></td>
 <td></td>
 </tr>
 
@@ -805,15 +848,6 @@ and <a href="http://en.cppreference.com/w/cpp/iterator/prev">std::prev</a>
 <td><code>std::initializer_list&lt;T&gt;</code></td>
 <td>Allows containers to be initialized with aggregate elements</td>
 <td>TODO: documentation link</td>
-<td></td>
-</tr>
-
-<tr>
-<td>Move Semantics</td>
-<td><code>std::move()</code></td>
-<td>Facilitates efficient move operations</td>
-<td><a href="http://en.cppreference.com/w/cpp/utility/move">
-<code>std::move</code> reference</a></td>
 <td></td>
 </tr>
 
@@ -962,15 +996,6 @@ std::type_info::hash_code</a></td>
 <td><code>std::type_index</code> is a thin wrapper for
 <code>std::type_info</code>, allowing you to use it directly
 within both associative and unordered containers</td>
-</tr>
-
-<tr>
-<td>Type Traits</td>
-<td>Class templates within <code>&lt;type_traits&gt;</code></td>
-<td>Allows compile-time inspection of the properties of types</td>
-<td><a href="http://en.cppreference.com/w/cpp/header/type_traits">
-Standard library header &lt;type_traits&gt;</a></td>
-<td></td>
 </tr>
 
 <tr>

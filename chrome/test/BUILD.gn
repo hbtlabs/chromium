@@ -49,8 +49,6 @@ source_set("test_support") {
     "base/find_in_page_observer.h",
     "base/history_index_restore_observer.cc",
     "base/history_index_restore_observer.h",
-    "base/profile_mock.cc",
-    "base/profile_mock.h",
     "base/scoped_browser_locale.cc",
     "base/scoped_browser_locale.h",
     "base/scoped_bundle_swizzler_mac.h",
@@ -674,19 +672,28 @@ if (!is_android) {
       "//testing/xvfb.py",
       "//testing/scripts/run_telemetry_as_googletest.py",
     ]
+  }
 
-    if (is_win && (symbol_level == 1 || symbol_level == 2)) {
-      # TODO(GYP): These should be provided automatically through data_deps.
-      data += [ "$root_out_dir/chrome.exe.pdb" ]
-      if (is_component_build) {
-        data += [
-          "$root_out_dir/base.dll.pdb",
-          "$root_out_dir/blink_platform.dll.pdb",
-          "$root_out_dir/blink_web.dll.pdb",
-          "$root_out_dir/content.dll.pdb",
-        ]
-      }
-    }
+  # TODO(GYP): Delete this after we've converted everything to GN.
+  # The _run targets exist only for compatibility w/ GYP.
+  group("telemetry_unittests_run") {
+    testonly = true
+    deps = [
+      ":telemetry_unittests",
+    ]
+  }
+
+  group("telemetry_unittests") {
+    deps = [
+      "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+    ]
+
+    data = [
+      # For isolate contract.
+      "//testing/scripts/common.py",
+      "//testing/xvfb.py",
+      "//testing/scripts/run_telemetry_as_googletest.py",
+    ]
   }
 
   # TODO(GYP): Delete this after we've converted everything to GN.
@@ -714,19 +721,6 @@ if (!is_android) {
       "//third_party/webgl/",
       "//content/test/gpu/run_gpu_test.py",
     ]
-
-    if (is_win && (symbol_level == 1 || symbol_level == 2)) {
-      # TODO(GYP): These should be provided automatically through data_deps.
-      data += [ "$root_out_dir/chrome.exe.pdb" ]
-      if (is_component_build) {
-        data += [
-          "$root_out_dir/base.dll.pdb",
-          "$root_out_dir/blink_platform.dll.pdb",
-          "$root_out_dir/blink_web.dll.pdb",
-          "$root_out_dir/content.dll.pdb",
-        ]
-      }
-    }
   }
 
   group("telemetry_gpu_unittests_run") {
@@ -1565,6 +1559,7 @@ test("unit_tests") {
     "//base/allocator",
     "//chrome:resources",
     "//chrome:strings",
+    "//components/version_info:generate_version_info",
     "//courgette:courgette_lib",
     "//google_apis",
     "//skia",
@@ -2003,12 +1998,11 @@ test("unit_tests") {
   }
   if (is_android || is_ios) {
     sources -= [
+      "../browser/devtools/device/cast_device_provider_unittest.cc",
       "../browser/devtools/device/webrtc/devtools_bridge_instances_request_unittest.cc",
       "../browser/ui/bookmarks/bookmark_ui_utils_desktop_unittest.cc",
       "../browser/ui/sync/sync_promo_ui_unittest.cc",
     ]
-  } else {
-    deps += [ "//chrome/tools/profile_reset:jtl_compiler_lib" ]
   }
   if (!is_android && !is_chromeos) {
     sources += rebase_path(
@@ -2105,7 +2099,6 @@ if (is_win || (is_linux && !is_chromeos)) {
       "../common/crash_keys.cc",
       "../common/crash_keys.h",
     ]
-
     deps = [
       ":test_support",
       "//breakpad:client",

@@ -34,6 +34,7 @@ class HttpResponseInfo;
 class HttpTransaction;
 class HttpUserAgentSettings;
 class ProxyInfo;
+class SSLPrivateKey;
 class UploadDataStream;
 class URLRequestContext;
 
@@ -77,9 +78,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
 
   // Shadows URLRequestJob's version of this method so we can grab cookies.
   void NotifyHeadersComplete();
-
-  // Shadows URLRequestJob's method so we can record histograms.
-  void NotifyDone(const URLRequestStatus& status);
 
   void DestroyTransaction();
 
@@ -128,10 +126,11 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void GetAuthChallengeInfo(scoped_refptr<AuthChallengeInfo>*) override;
   void SetAuth(const AuthCredentials& credentials) override;
   void CancelAuth() override;
-  void ContinueWithCertificate(X509Certificate* client_cert) override;
+  void ContinueWithCertificate(X509Certificate* client_cert,
+                               SSLPrivateKey* client_private_key) override;
   void ContinueDespiteLastError() override;
   void ResumeNetworkStart() override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
   void StopCaching() override;
   bool GetFullRequestHeaders(HttpRequestHeaders* headers) const override;
   int64 GetTotalReceivedBytes() const override;

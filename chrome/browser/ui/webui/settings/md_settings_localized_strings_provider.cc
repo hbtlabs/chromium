@@ -126,7 +126,15 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH);
   html_source->AddLocalizedString(
-      "enableBluetooth", IDS_SETTINGS_BLUETOOTH_ENABLE);
+      "bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE);
+  html_source->AddLocalizedString(
+      "bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT);
+  html_source->AddLocalizedString(
+      "bluetoothAddDevice", IDS_OPTIONS_SETTINGS_ADD_BLUETOOTH_DEVICE);
+  html_source->AddLocalizedString(
+      "bluetoothNoDevices", IDS_OPTIONS_SETTINGS_BLUETOOTH_NO_DEVICES);
+  html_source->AddLocalizedString(
+      "bluetoothConnecting", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECTING);
 }
 #endif
 
@@ -200,6 +208,12 @@ void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_CLEAR_DATA_4WEEKS);
   html_source->AddLocalizedString("clearDataEverything",
                                   IDS_SETTINGS_CLEAR_DATA_EVERYTHING);
+  html_source->AddLocalizedString(
+      "warnAboutNonClearedData",
+      IDS_SETTINGS_CLEAR_DATA_SOME_STUFF_REMAINS);
+  html_source->AddLocalizedString(
+      "clearsSyncedData",
+      IDS_SETTINGS_CLEAR_DATA_CLEARS_SYNCED_DATA);
 }
 
 #if !defined(OS_CHROMEOS)

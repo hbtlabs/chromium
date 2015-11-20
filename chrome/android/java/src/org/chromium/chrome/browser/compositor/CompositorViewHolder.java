@@ -39,6 +39,7 @@ import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvi
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManagerDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -50,7 +51,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.content.browser.ContentReadbackHandler;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.SPenSupport;
@@ -318,14 +318,6 @@ public class CompositorViewHolder extends FrameLayout
 
     public ContentOffsetProvider getContentOffsetProvider() {
         return mCompositorView;
-    }
-
-    /**
-     * @return The content readback handler.
-     */
-    public ContentReadbackHandler getContentReadbackHandler() {
-        if (mCompositorView == null) return null;
-        return mCompositorView.getContentReadbackHandler();
     }
 
     /**
@@ -776,14 +768,16 @@ public class CompositorViewHolder extends FrameLayout
      * @param androidContentContainer The {@link ViewGroup} the {@link LayoutManager} should bind
      *                                Android content to.
      * @param contextualSearchManager A {@link ContextualSearchManagementDelegate} instance.
+     * @param readerModeManager       A {@link ReaderModeManagerDelegate} instance.
      */
     public void onFinishNativeInitialization(TabModelSelector tabModelSelector,
             TabCreatorManager tabCreatorManager, TabContentManager tabContentManager,
             ViewGroup androidContentContainer,
-            ContextualSearchManagementDelegate contextualSearchManager) {
+            ContextualSearchManagementDelegate contextualSearchManager,
+            ReaderModeManagerDelegate readerModeManager) {
         assert mLayoutManager != null;
         mLayoutManager.init(tabModelSelector, tabCreatorManager, tabContentManager,
-                androidContentContainer, contextualSearchManager,
+                androidContentContainer, contextualSearchManager, readerModeManager,
                 mCompositorView.getResourceManager().getDynamicResourceLoader());
         mTabModelSelector = tabModelSelector;
         tabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {

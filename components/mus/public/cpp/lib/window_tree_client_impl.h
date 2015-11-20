@@ -6,7 +6,7 @@
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 
 #include "base/containers/scoped_ptr_map.h"
-#include "components/mus/public/cpp/types.h"
+#include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
@@ -65,6 +65,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                  const gfx::Rect& bounds);
   void SetClientArea(Id window_id, const gfx::Insets& client_area);
   void SetFocus(Id window_id);
+  void SetCanFocus(Id window_id, bool can_focus);
   void SetVisible(Id window_id, bool visible);
   void SetProperty(Window* window,
                    const std::string& name,
@@ -100,10 +101,6 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // (as the last step of ~Window). This ordering ensures that the Window Server
   // is torn down after the root.
   void OnRootDestroyed(Window* root);
-
-  void SetPreferredSize(Id window_id, const gfx::Size& size);
-  void SetShowState(Id window_id, mojom::ShowState show_state);
-  void SetResizeBehavior(Id window_id, mojom::ResizeBehavior resize_behavior);
 
  private:
   friend class WindowTreeClientImplPrivate;

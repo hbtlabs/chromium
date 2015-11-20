@@ -7,6 +7,7 @@ source_set("base") {
 
   sources = [
     "completion_event.h",
+    "container_util.h",
     "delayed_unique_notifier.cc",
     "delayed_unique_notifier.h",
     "histograms.cc",
@@ -26,9 +27,6 @@ source_set("base") {
     "rolling_time_delta_history.h",
     "rtree.cc",
     "rtree.h",
-    "scoped_ptr_algorithm.h",
-    "scoped_ptr_deque.h",
-    "scoped_ptr_vector.h",
     "simple_enclosed_region.cc",
     "simple_enclosed_region.h",
     "switches.cc",

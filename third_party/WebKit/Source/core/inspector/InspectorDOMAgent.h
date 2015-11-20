@@ -189,7 +189,7 @@ public:
 
     PassRefPtr<TypeBuilder::Runtime::RemoteObject> resolveNode(Node*, const String& objectGroup);
 
-    InspectorHistory* history() { return m_history.get(); }
+    InspectorHistory* history() const;
 
     // We represent embedded doms as a part of the same hierarchy. Hence we treat children of frame owners differently.
     // We also skip whitespace text nodes conditionally. Following methods encapsulate these specifics.
@@ -245,7 +245,7 @@ private:
 
     RawPtrWillBeMember<InspectorRevalidateDOMTask> revalidateTask();
 
-    InspectedFrames* m_inspectedFrames;
+    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
     RawPtrWillBeMember<InjectedScriptManager> m_injectedScriptManager;
     Client* m_client;
     RawPtrWillBeMember<DOMListener> m_domListener;

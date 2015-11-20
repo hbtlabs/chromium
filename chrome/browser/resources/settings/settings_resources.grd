@@ -223,6 +223,9 @@
       <structure name="IDR_SETTINGS_DOWNLOADS_PAGE_JS"
                  file="downloads_page/downloads_page.js"
                  type="chrome_html" />
+      <structure name="IDR_SETTINGS_I18n_SETUP_HTML"
+                 file="i18n_setup.html"
+                 type="chrome_html" />
       <structure name="IDR_SETTINGS_POWERWASH_DIALOG_HTML"
                  file="reset_page/powerwash_dialog.html"
                  type="chrome_html" />
@@ -231,7 +234,8 @@
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_RESET_PAGE_HTML"
                  file="reset_page/reset_page.html"
-                 type="chrome_html" />
+                 type="chrome_html"
+                 flattenhtml="true" />
       <structure name="IDR_SETTINGS_RESET_PAGE_JS"
                  file="reset_page/reset_page.js"
                  type="chrome_html" />
@@ -302,6 +306,12 @@
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_PASSWORDS_AND_FORMS_PAGE_JS"
                  file="passwords_and_forms_page/passwords_and_forms_page.js"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_PREF_UTIL_HTML"
+                 file="prefs/pref_util.html"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_PREF_UTIL_JS"
+                 file="prefs/pref_util.js"
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_PREFS_HTML"
                  file="prefs/prefs.html"

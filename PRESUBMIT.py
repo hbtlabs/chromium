@@ -900,7 +900,8 @@ def _CheckHardcodedGoogleHostsInLowerLayers(input_api, output_api):
                   _TEST_CODE_EXCLUDED_PATHS +
                   input_api.DEFAULT_BLACK_LIST))
 
-  base_pattern = '"[^"]*google\.com[^"]*"'
+  base_pattern = ('"[^"]*(google|googleapis|googlezip|googledrive|appspot)'
+                  '\.(com|net)[^"]*"')
   comment_pattern = input_api.re.compile('//.*%s' % base_pattern)
   pattern = input_api.re.compile(base_pattern)
   problems = []  # items are (filename, line_number, line)
@@ -1962,9 +1963,6 @@ def GetDefaultTryConfigs(bots):
 def CheckChangeOnCommit(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
-  # TODO(thestig) temporarily disabled, doesn't work in third_party/
-  #results.extend(input_api.canned_checks.CheckSvnModifiedDirectories(
-  #    input_api, output_api, sources))
   # Make sure the tree is 'open'.
   results.extend(input_api.canned_checks.CheckTreeIsOpen(
       input_api,

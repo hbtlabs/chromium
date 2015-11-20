@@ -7,7 +7,8 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
-#include "components/page_load_metrics/browser/page_load_metrics_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/common/page_load_metrics_messages.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/rappor/rappor_service.h"
@@ -76,22 +77,8 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
   return true;
 }
 
-base::Time WallTimeFromTimeTicks(const base::TimeTicks& time) {
-  return base::Time::FromDoubleT(
-      (time - base::TimeTicks::UnixEpoch()).InSecondsF());
-}
-
 void RecordInternalError(InternalErrorLoadEvent event) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PageLoad.Events.InternalError", event, ERR_LAST_ENTRY);
-}
-
-base::TimeDelta GetFirstContentfulPaint(const PageLoadTiming& timing) {
-  if (timing.first_text_paint.is_zero())
-    return timing.first_image_paint;
-  if (timing.first_image_paint.is_zero())
-    return timing.first_text_paint;
-  return std::min(timing.first_text_paint, timing.first_image_paint);
+  UMA_HISTOGRAM_ENUMERATION(kErrorEvents, event, ERR_LAST_ENTRY);
 }
 
 // The number of buckets in the bitfield histogram. These buckets are described
@@ -122,8 +109,10 @@ uint64_t RapporHistogramBucketIndex(const base::TimeDelta& time) {
 PageLoadTracker::PageLoadTracker(
     bool in_foreground,
     PageLoadMetricsEmbedderInterface* embedder_interface,
+    content::NavigationHandle* navigation_handle,
     base::ObserverList<PageLoadMetricsObserver, true>* observers)
     : has_commit_(false),
+      navigation_start_(navigation_handle->NavigationStart()),
       started_in_foreground_(in_foreground),
       embedder_interface_(embedder_interface),
       observers_(observers) {}
@@ -160,6 +149,11 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
                     OnCommit(navigation_handle));
 }
 
+void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
+  FOR_EACH_OBSERVER(PageLoadMetricsObserver, *observers_,
+                    OnRedirect(navigation_handle));
+}
+
 bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing) {
   // Throw away IPCs that are not relevant to the current navigation.
   // Two timing structures cannot refer to the same navigation if they indicate
@@ -182,14 +176,10 @@ bool PageLoadTracker::HasBackgrounded() {
 PageLoadExtraInfo PageLoadTracker::GetPageLoadMetricsInfo() {
   base::TimeDelta first_background_time;
   base::TimeDelta first_foreground_time;
-  if (!background_time_.is_null() && started_in_foreground_) {
-    first_background_time =
-        WallTimeFromTimeTicks(background_time_) - timing_.navigation_start;
-  }
-  if (!foreground_time_.is_null() && !started_in_foreground_) {
-    first_foreground_time =
-        WallTimeFromTimeTicks(foreground_time_) - timing_.navigation_start;
-  }
+  if (!background_time_.is_null() && started_in_foreground_)
+    first_background_time = background_time_ - navigation_start_;
+  if (!foreground_time_.is_null() && !started_in_foreground_)
+    first_foreground_time = foreground_time_ - navigation_start_;
   return PageLoadExtraInfo(first_background_time, first_foreground_time,
                            started_in_foreground_);
 }
@@ -213,9 +203,8 @@ const GURL& PageLoadTracker::GetCommittedURL() {
 //    backgrounded.
 base::TimeDelta PageLoadTracker::GetBackgroundDelta() {
   if (started_in_foreground_) {
-    if (background_time_.is_null())
-      return base::TimeDelta::Max();
-    return WallTimeFromTimeTicks(background_time_) - timing_.navigation_start;
+    return background_time_.is_null() ? base::TimeDelta::Max()
+                                      : background_time_ - navigation_start_;
   }
   return base::TimeDelta();
 }
@@ -235,23 +224,18 @@ void PageLoadTracker::RecordTimingHistograms() {
 
   if (!timing_.dom_content_loaded_event_start.is_zero()) {
     if (timing_.dom_content_loaded_event_start < background_delta) {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired",
-          timing_.dom_content_loaded_event_start);
+      PAGE_LOAD_HISTOGRAM(kHistogramDomContentLoaded,
+                          timing_.dom_content_loaded_event_start);
     } else {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired.Background",
-          timing_.dom_content_loaded_event_start);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramDomContentLoaded,
+                          timing_.dom_content_loaded_event_start);
     }
   }
   if (!timing_.load_event_start.is_zero()) {
     if (timing_.load_event_start < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToLoadEventFired",
-                          timing_.load_event_start);
+      PAGE_LOAD_HISTOGRAM(kHistogramLoad, timing_.load_event_start);
     } else {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToLoadEventFired.Background",
-          timing_.load_event_start);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramLoad, timing_.load_event_start);
     }
   }
   if (timing_.first_layout.is_zero()) {
@@ -259,74 +243,64 @@ void PageLoadTracker::RecordTimingHistograms() {
                          HasBackgrounded());
   } else {
     if (timing_.first_layout < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstLayout",
-                          timing_.first_layout);
+      PAGE_LOAD_HISTOGRAM(kHistogramFirstLayout, timing_.first_layout);
       RecordCommittedEvent(COMMITTED_LOAD_SUCCESSFUL_FIRST_LAYOUT, false);
     } else {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstLayout.Background",
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramFirstLayout,
                           timing_.first_layout);
       RecordCommittedEvent(COMMITTED_LOAD_SUCCESSFUL_FIRST_LAYOUT, true);
     }
   }
   if (!timing_.first_paint.is_zero()) {
     if (timing_.first_paint < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstPaint",
-                          timing_.first_paint);
+      PAGE_LOAD_HISTOGRAM(kHistogramFirstPaint, timing_.first_paint);
     } else {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstPaint.Background",
-                          timing_.first_paint);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramFirstPaint, timing_.first_paint);
     }
   }
   if (!timing_.first_text_paint.is_zero()) {
     if (timing_.first_text_paint < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstTextPaint",
-                          timing_.first_text_paint);
+      PAGE_LOAD_HISTOGRAM(kHistogramFirstTextPaint, timing_.first_text_paint);
     } else {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToFirstTextPaint.Background",
-          timing_.first_text_paint);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramFirstTextPaint,
+                          timing_.first_text_paint);
     }
   }
   if (!timing_.first_image_paint.is_zero()) {
     if (timing_.first_image_paint < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstImagePaint",
-                          timing_.first_image_paint);
+      PAGE_LOAD_HISTOGRAM(kHistogramFirstImagePaint, timing_.first_image_paint);
     } else {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToFirstImagePaint.Background",
-          timing_.first_image_paint);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramFirstImagePaint,
+                          timing_.first_image_paint);
     }
   }
   base::TimeDelta first_contentful_paint = GetFirstContentfulPaint(timing_);
   if (!first_contentful_paint.is_zero()) {
     if (first_contentful_paint < background_delta) {
-      PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstContentfulPaint",
+      PAGE_LOAD_HISTOGRAM(kHistogramFirstContentfulPaint,
                           first_contentful_paint);
     } else {
-      PAGE_LOAD_HISTOGRAM(
-          "PageLoad.Timing2.NavigationToFirstContentfulPaint.Background",
-          first_contentful_paint);
+      PAGE_LOAD_HISTOGRAM(kBackgroundHistogramFirstContentfulPaint,
+                          first_contentful_paint);
     }
   }
 
   // Log time to first foreground / time to first background. Log counts that we
   // started a relevant page load in the foreground / background.
   if (!background_time_.is_null()) {
-    PAGE_LOAD_HISTOGRAM("PageLoad.Timing2.NavigationToFirstBackground",
-                        background_delta);
+    PAGE_LOAD_HISTOGRAM(kHistogramFirstBackground, background_delta);
   } else if (!foreground_time_.is_null()) {
-    PAGE_LOAD_HISTOGRAM(
-        "PageLoad.Timing2.NavigationToFirstForeground",
-        WallTimeFromTimeTicks(foreground_time_) - timing_.navigation_start);
+    PAGE_LOAD_HISTOGRAM(kHistogramFirstForeground,
+                        foreground_time_ - navigation_start_);
   }
 }
 
 void PageLoadTracker::RecordProvisionalEvent(ProvisionalLoadEvent event) {
   if (HasBackgrounded()) {
-    UMA_HISTOGRAM_ENUMERATION("PageLoad.Events.Provisional.Background", event,
+    UMA_HISTOGRAM_ENUMERATION(kBackgroundProvisionalEvents, event,
                               PROVISIONAL_LOAD_LAST_ENTRY);
   } else {
-    UMA_HISTOGRAM_ENUMERATION("PageLoad.Events.Provisional", event,
+    UMA_HISTOGRAM_ENUMERATION(kProvisionalEvents, event,
                               PROVISIONAL_LOAD_LAST_ENTRY);
   }
 }
@@ -337,10 +311,10 @@ void PageLoadTracker::RecordProvisionalEvent(ProvisionalLoadEvent event) {
 void PageLoadTracker::RecordCommittedEvent(CommittedLoadEvent event,
                                            bool backgrounded) {
   if (backgrounded) {
-    UMA_HISTOGRAM_ENUMERATION("PageLoad.Events.Committed.Background", event,
+    UMA_HISTOGRAM_ENUMERATION(kBackgroundCommittedEvents, event,
                               COMMITTED_LOAD_LAST_ENTRY);
   } else {
-    UMA_HISTOGRAM_ENUMERATION("PageLoad.Events.Committed", event,
+    UMA_HISTOGRAM_ENUMERATION(kCommittedEvents, event,
                               COMMITTED_LOAD_LAST_ENTRY);
   }
 }
@@ -365,9 +339,8 @@ void PageLoadTracker::RecordRappor() {
     // The IsSlow flag is just a one bit boolean if the first layout was > 10s.
     sample->SetFlagsField("IsSlow", first_contentful_paint.InSecondsF() >= 10,
                           1);
-    rappor_service->RecordSampleObj(
-        "PageLoad.CoarseTiming.NavigationToFirstContentfulPaint",
-        sample.Pass());
+    rappor_service->RecordSampleObj(kRapporMetricsNameCoarseTiming,
+                                     sample.Pass());
   }
 }
 
@@ -437,10 +410,10 @@ void MetricsWebContentsObserver::DidStartNavigation(
   // Passing raw pointers to observers_ and embedder_interface_ is safe because
   // the MetricsWebContentsObserver owns them both list and they are torn down
   // after the PageLoadTracker.
-  provisional_loads_.insert(
-      navigation_handle,
-      make_scoped_ptr(new PageLoadTracker(
-          in_foreground_, embedder_interface_.get(), &observers_)));
+  provisional_loads_.insert(navigation_handle,
+                            make_scoped_ptr(new PageLoadTracker(
+                                in_foreground_, embedder_interface_.get(),
+                                navigation_handle, &observers_)));
 }
 
 void MetricsWebContentsObserver::DidFinishNavigation(
@@ -485,6 +458,16 @@ void MetricsWebContentsObserver::DidFinishNavigation(
 
   committed_load_ = finished_nav.Pass();
   committed_load_->Commit(navigation_handle);
+}
+
+void MetricsWebContentsObserver::DidRedirectNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame())
+    return;
+  auto it = provisional_loads_.find(navigation_handle);
+  if (it == provisional_loads_.end())
+    return;
+  it->second->Redirect(navigation_handle);
 }
 
 void MetricsWebContentsObserver::WasShown() {

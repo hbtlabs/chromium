@@ -351,6 +351,9 @@ are declared in build/common.gypi.
       <message name="IDS_WEBSITE_SETTINGS_UNKNOWN_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if Chrome cannot determine what kind of transport the website used. This string must be the same as IDS_WEBSITE_SETTINGS_NON_SECURE_TRANSPORT.">
         Your connection to this site is not private.
       </message>
+      <message name="IDS_WEBSITE_SETTINGS_DETAILS_LINK" desc="Link in the Website Settings that opens up additional security details about the current page in the DevTools Security panel.">
+        Details
+      </message>
       <message name="IDS_WEBSITE_SETTINGS_CT_ERROR" desc="Text that is displayed in the header of the Website Settings popup if the website has provided Signed Certificate Timestamps but none are valid.">
         This site supplied invalid Certificate Transparency information.
       </message>
@@ -646,8 +649,8 @@ Psst! Incognito mode <ph name="SHORTCUT_KEY">$1<ex>(Ctrl+Shift+N)</ex></ph> may 
         Right to Left
       </message>
 
-      <!-- content area context menus. Android does not use it -->
-      <if expr="not is_android">
+      <!-- content area context menus. -->
+      <if expr="not is_android or use_aura">
         <message name="IDS_CONTENT_CONTEXT_INSPECTELEMENT" desc="The name of the Inspect Element command in the content area context menu">
           I&amp;nspect
         </message>
@@ -1938,8 +1941,8 @@ Even if you have downloaded files from this website before, the website might ha
         Keep anyway
       </message>
       <message name="IDS_CONFIRM_DOWNLOAD_AGAIN_MALICIOUS"
-               desc="The text for the button used to confirm that the user DOES want to keep malware. Don't translate the English string literally; for translations, translate 'Recover anyway'">
-        Hurt me plenty
+               desc="The text for the button used to confirm that the user DOES want to keep malware.">
+        Recover anyway
       </message>
       <message name="IDS_CONFIRM_CANCEL_AGAIN_MALICIOUS"
                desc="Text for the button used to indicate that the user does NOT want to restore a malicious download.">
@@ -3437,6 +3440,12 @@ Even if you have downloaded files from this website before, the website might ha
       <message name="IDS_LOGIN_DIALOG_DESCRIPTION_NO_REALM" desc="String to be displayed in the login prompt dialog to explain what the user needs to do">
         The server <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password.
       </message>
+      <message name="IDS_LOGIN_DIALOG_DESCRIPTION_PROXY" desc="String to be displayed in the proxy login prompt dialog to explain what the user needs to do">
+        The proxy <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password. The proxy says: <ph name="REALM">$2<ex>opaque string</ex></ph>.
+      </message>
+      <message name="IDS_LOGIN_DIALOG_DESCRIPTION_PROXY_NO_REALM" desc="String to be displayed in the proxy login prompt dialog to explain what the user needs to do">
+        The proxy <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password.
+      </message>
       <message name="IDS_LOGIN_DIALOG_USERNAME_FIELD" desc="The label of the username field in the login prompt dialog" formatter_data="android_java">
         User Name:
       </message>
@@ -4211,6 +4220,9 @@ Even if you have downloaded files from this website before, the website might ha
         </message>
         <message name="IDS_EXTENSION_PROMPT_WARNING_USERS_PRIVATE" desc="Permission string for access to user accounts.">
           Read and change whitelisted users
+        </message>
+        <message name="IDS_EXTENSION_PROMPT_WARNING_DISPLAY_SOURCE" desc="Permission string for access to Display Source API.">
+          Send audio and video to displays on the local network
         </message>
       </if>
 
@@ -5752,18 +5764,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
       </if>
 
-      <message name="IDS_GENERIC_EXPERIMENT_CHOICE_AUTOMATIC" desc="Generic 'Automatic' experiment choice option name.">
-        Automatic
-      </message>
-      <message name="IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT" desc="Generic 'Default' experiment choice option name. E.G. shown in multi value options in about:flags.">
-        Default
-      </message>
-      <message name="IDS_GENERIC_EXPERIMENT_CHOICE_ENABLED" desc="Generic 'Enabled' experiment choice option name. E.G. shown in multi value options in about:flags.">
-        Enabled
-      </message>
-      <message name="IDS_GENERIC_EXPERIMENT_CHOICE_DISABLED" desc="Generic 'Disabled' experiment choice option name. E.G. shown in multi value options in about:flags.">
-        Disabled
-      </message>
       <message name="IDS_FLAGS_DISABLE_JAVASCRIPT_HARMONY_SHIPPING_NAME" desc="Title for the flag to disable latest (non-experimental) JavaScript fatures">
         Disable latest stable JavaScript features
       </message>
@@ -6659,6 +6659,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_ENABLE_APPCONTAINER_DESCRIPTION" desc="Description of the flag to enable AppContainer lockdown experiment.">
           Enables the use of an AppContainer on sandboxed processes to improve security.
+        </message>
+      </if>
+      <if expr="toolkit_views">
+        <message name="IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_NAME" desc="Name of the flag to enable uploading Autofill credit cards.">
+          Enable offering upload of Autofilled credit cards
+        </message>
+        <message name="IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_DESCRIPTION" desc="Description of the flag to enable uploading Autofill credit cards.">
+          Enables a new option to upload credit cards to Google Payments for sync to all Chrome devices.
         </message>
       </if>
 
@@ -8260,6 +8268,7 @@ I don't think this site should be blocked!
           Unusual behavior detected
         </message>
       </if>
+
       <!-- Upgrade bubble messages -->
       <message name="IDS_REENABLE_UPDATES" desc="Text for the button the user clicks to re-enable automatic updates.">
         Enable autoupdate
@@ -10032,8 +10041,8 @@ I don't think this site should be blocked!
         Platform
       </message>
 
-      <!-- chrome://settings. Android uses native UI for settings -->
-      <if expr="not is_android">
+      <!-- chrome://settings. Non-Aura Android uses native UI for settings -->
+      <if expr="not is_android or use_aura">
         <if expr="chromeos">
           <message name="IDS_OPTIONS_INTERNET_TAB_LABEL" desc="The title of the Internet tab">
             Internet
@@ -10548,9 +10557,6 @@ I don't think this site should be blocked!
         </message>
 
         <!-- Reset Profile Settings strings -->
-        <message name="IDS_RESET_PROFILE_SETTINGS_BANNER_TEXT" desc="The text to show in a banner at the top of the chrome://settings page. The banner is displayed when Chrome detects that the settings might have been changed without the user's knowledge.">
-          Some of your settings may have been changed without your knowledge.
-        </message>
         <message name="IDS_RESET_PROFILE_SETTINGS_SECTION_TITLE" desc="The title of the section in chrome://settings that allows resetting some settings in a profile">
           Reset settings
         </message>
@@ -12781,6 +12787,9 @@ Some features may be unavailable.  Please check that the profile exists and you 
         <message name="IDS_EXIT_PRESENTATION_MAC" desc="The Mac menu item to leave presentation mode in the view menu.">
           Exit Presentation Mode
         </message>
+        <message name="IDS_TOGGLE_FULLSCREEN_TOOLBAR_MAC" desc="The Mac menu checkbox item to show/hide the toolbar in full screen.">
+          Hide Toolbar in Full Screen
+        </message>
         <message name="IDS_TEXT_BIGGER_MAC" desc="The Mac menu item to zoom in on the page in the view menu.">
           Zoom In
         </message>
@@ -14097,7 +14106,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </if>
 
       <!-- Media Galleries. -->
-      <if expr="not is_android">
+      <if expr="not is_android or use_aura">
         <message name="IDS_MEDIA_GALLERIES_DIALOG_HEADER" desc="Header for media gallery permissions dialog.">
           Media-File Permissions for "<ph name="EXTENSION">$1<ex>Photo Editor</ex></ph>"
         </message>
@@ -15309,7 +15318,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
     </if>
 
-    <if expr="not is_android and not is_ios">
+    <if expr="not is_ios">
       <!-- WebUSB permission bypass flag. -->
       <message name="IDS_FLAGS_ENABLE_WEBUSB_ON_ANY_ORIGIN_NAME" desc="Title for the flag that bypasses WebUSB permission prompts.">
         Allow WebUSB from any origin.

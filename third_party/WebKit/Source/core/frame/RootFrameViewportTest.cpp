@@ -3,15 +3,13 @@
 // found in the LICENSE file.
 
 #include "config.h"
-
 #include "core/frame/RootFrameViewport.h"
 
 #include "core/layout/ScrollAlignment.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/scroll/ScrollableArea.h"
-
-#include <gtest/gtest.h>
+#include "testing/gtest/include/gtest/gtest.h"
 
 #define EXPECT_POINT_EQ(expected, actual) \
     do { \
@@ -89,8 +87,7 @@ protected:
     bool scrollbarsCanBeActive() const override { return true; }
     IntRect scrollableAreaBoundingBox() const override { return IntRect(); }
     bool shouldPlaceVerticalScrollbarOnLeft() const override { return true; }
-    void invalidateScrollbarRect(Scrollbar*, const IntRect&) override { }
-    void invalidateScrollCornerRect(const IntRect&) override { }
+    void scrollControlWasSetNeedsPaintInvalidation() override { }
     GraphicsLayer* layerForContainer() const override { return nullptr; }
     GraphicsLayer* layerForScrolling() const override { return nullptr; }
     GraphicsLayer* layerForHorizontalScrollbar() const override { return nullptr; }

@@ -26,6 +26,7 @@
 #ifndef CachingWordShapeIterator_h
 #define CachingWordShapeIterator_h
 
+#include "platform/fonts/Font.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/shaping/CachingWordShapeIterator.h"
 #include "platform/fonts/shaping/HarfBuzzShaper.h"
@@ -34,7 +35,9 @@
 
 namespace blink {
 
-class CachingWordShapeIterator {
+class CachingWordShapeIterator final {
+    WTF_MAKE_NONCOPYABLE(CachingWordShapeIterator);
+    USING_FAST_MALLOC(CachingWordShapeIterator);
 public:
     CachingWordShapeIterator(ShapeCache* cache, const TextRun& run,
         const Font* font)

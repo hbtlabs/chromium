@@ -541,7 +541,7 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
     }
 
     {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.This() is an Object. #}
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(info.GetIsolate(), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "{{method.name}}"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "{{method.name}}"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
         return;
@@ -675,8 +675,8 @@ V8DOMConfiguration::installMethod(isolate, {{instance_template}}, {{prototype_te
 {% if conditionally_enabled_methods %}
 {# Define operations with limited exposure #}
 v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate));
-ExecutionContext* context = toExecutionContext(prototypeObject->CreationContext());
-ASSERT(context);
+ExecutionContext* executionContext = toExecutionContext(prototypeObject->CreationContext());
+ASSERT(executionContext);
 {% for method in conditionally_enabled_methods %}
 {% filter exposed(method.overloads.exposed_test_all
                   if method.overloads else

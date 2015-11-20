@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <map>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -311,7 +313,7 @@ class PasswordFormManagerTest : public testing::Test {
 
   void TearDown() override {
     if (mock_store_.get())
-      mock_store_->Shutdown();
+      mock_store_->ShutdownOnUIThread();
   }
 
   MockPasswordStore* mock_store() const { return mock_store_.get(); }

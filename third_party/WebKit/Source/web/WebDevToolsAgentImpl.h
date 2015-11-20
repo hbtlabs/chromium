@@ -83,7 +83,7 @@ public:
 
     void willBeDestroyed();
     WebDevToolsAgentClient* client() { return m_client; }
-    InspectorOverlay* overlay() const { return m_overlay.get(); }
+    InspectorOverlay* overlay() const;
     void flushPendingProtocolNotifications();
     void dispatchMessageFromFrontend(const String& message);
     void registerAgent(PassOwnPtrWillBeRawPtr<InspectorAgent>);
@@ -143,7 +143,7 @@ private:
     OwnPtrWillBeMember<InspectorResourceContentLoader> m_resourceContentLoader;
     OwnPtrWillBeMember<InspectorCompositeState> m_state;
     OwnPtrWillBeMember<InspectorOverlay> m_overlay;
-    OwnPtr<InspectedFrames> m_inspectedFrames;
+    OwnPtrWillBeMember<InspectedFrames> m_inspectedFrames;
 
     RawPtrWillBeMember<InspectorInspectorAgent> m_inspectorAgent;
     RawPtrWillBeMember<InspectorDOMAgent> m_domAgent;

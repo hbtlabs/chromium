@@ -41,8 +41,8 @@ class VIEWS_EXPORT NativeWidgetAura
  public:
   explicit NativeWidgetAura(internal::NativeWidgetDelegate* delegate);
 
-  // Called internally by NativeWidgetAura and DesktopNativeWidgetAura to
-  // associate |native_widget| with |window|.
+  // Called internally by NativeWidget implementations to associate
+  // |native_widget| with |window|.
   static void RegisterNativeWidgetForWindow(
       internal::NativeWidgetPrivate* native_widget,
       aura::Window* window);

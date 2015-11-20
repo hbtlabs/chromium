@@ -8,19 +8,17 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/local_discovery/privet_http.h"
+#include "chrome/browser/extensions/api/gcd_private/privet_v3_context_getter.h"
 #include "chrome/common/chrome_switches.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "crypto/hmac.h"
 #include "crypto/p224_spake.h"
+#include "net/http/http_response_headers.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using local_discovery::PrivetHTTPClient;
-using local_discovery::PrivetJSONOperation;
-using local_discovery::PrivetURLFetcher;
 
 namespace extensions {
 
@@ -35,60 +33,29 @@ using testing::InvokeWithoutArgs;
 using testing::Return;
 using testing::SaveArg;
 using testing::StrictMock;
+using testing::WithArgs;
 
 using PairingType = PrivetV3Session::PairingType;
 using Result = PrivetV3Session::Result;
 
 const char kInfoResponse[] =
     "{\"version\":\"3.0\","
-    "\"endpoints\":{\"httpsPort\": 443},"
+    "\"endpoints\":{\"httpsPort\": 1443},"
     "\"authentication\":{"
     "  \"mode\":[\"anonymous\",\"pairing\",\"cloud\"],"
     "  \"pairing\":[\"pinCode\",\"embeddedCode\"],"
     "  \"crypto\":[\"p224_spake2\"]"
     "}}";
 
-class MockPrivetHTTPClient : public PrivetHTTPClient {
- public:
-  MockPrivetHTTPClient() {
-    request_context_ = new net::TestURLRequestContextGetter(
-        base::ThreadTaskRunnerHandle::Get());
-  }
-
-  MOCK_METHOD0(GetName, const std::string&());
-  MOCK_METHOD1(
-      CreateInfoOperationPtr,
-      PrivetJSONOperation*(const PrivetJSONOperation::ResultCallback&));
-  MOCK_METHOD2(SwitchToHttps, void(uint16_t, const net::SHA256HashValue&));
-  MOCK_CONST_METHOD0(IsInHttpsMode, bool());
-  MOCK_CONST_METHOD0(GetHost, std::string());
-
-  void RefreshPrivetToken(
-      const PrivetURLFetcher::TokenCallback& callback) override {
-    FAIL();
-  }
-
-  scoped_ptr<PrivetJSONOperation> CreateInfoOperation(
-      const PrivetJSONOperation::ResultCallback& callback) override {
-    return make_scoped_ptr(CreateInfoOperationPtr(callback));
-  }
-
-  scoped_ptr<PrivetURLFetcher> CreateURLFetcher(
-      const GURL& url,
-      net::URLFetcher::RequestType request_type,
-      PrivetURLFetcher::Delegate* delegate) override {
-    return make_scoped_ptr(new PrivetURLFetcher(
-        url, request_type, request_context_.get(), delegate));
-  }
-
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_;
-};
-
 }  // namespace
 
 class PrivetV3SessionTest : public testing::Test {
  public:
-  PrivetV3SessionTest() : fetcher_factory_(nullptr) {}
+  PrivetV3SessionTest()
+      : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD),
+        fetcher_factory_(nullptr,
+                         base::Bind(&PrivetV3SessionTest::CreateFakeURLFetcher,
+                                    base::Unretained(this))) {}
 
   void OnInitialized(Result result, const base::DictionaryValue& info) {
     info_.MergeDictionary(&info);
@@ -106,28 +73,41 @@ class PrivetV3SessionTest : public testing::Test {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnablePrivetV3);
 
-    http_client_ = new StrictMock<MockPrivetHTTPClient>();
-    session_.reset(new PrivetV3Session(make_scoped_ptr(http_client_)));
+    scoped_refptr<PrivetV3ContextGetter> context_getter =
+        new PrivetV3ContextGetter(base::ThreadTaskRunnerHandle::Get());
+
+    session_.reset(
+        new PrivetV3Session(context_getter, net::HostPortPair("host", 180)));
 
     session_->on_post_data_ =
         base::Bind(&PrivetV3SessionTest::OnPostData, base::Unretained(this));
-
-    EXPECT_CALL(*http_client_, IsInHttpsMode()).WillRepeatedly(Return(false));
-    EXPECT_CALL(*http_client_, GetHost()).WillRepeatedly(Return("1.1.1.1"));
   }
 
-  base::MessageLoop loop_;
+  scoped_ptr<net::FakeURLFetcher> CreateFakeURLFetcher(
+      const GURL& url,
+      net::URLFetcherDelegate* fetcher_delegate,
+      const std::string& response_data,
+      net::HttpStatusCode response_code,
+      net::URLRequestStatus::Status status) {
+    scoped_ptr<net::FakeURLFetcher> fetcher(new net::FakeURLFetcher(
+        url, fetcher_delegate, response_data, response_code, status));
+    scoped_refptr<net::HttpResponseHeaders> headers =
+        new net::HttpResponseHeaders("");
+    headers->AddHeader("Content-Type: application/json");
+    fetcher->set_response_headers(headers);
+    return fetcher.Pass();
+  }
+
+  content::TestBrowserThreadBundle thread_bundle_;
   net::FakeURLFetcherFactory fetcher_factory_;
-  StrictMock<MockPrivetHTTPClient>* http_client_ = nullptr;
   base::DictionaryValue info_;
-  base::Closure quit_closure_;
   scoped_ptr<PrivetV3Session> session_;
 };
 
 TEST_F(PrivetV3SessionTest, InitError) {
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_CONNECTIONERROR, _))
       .Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"), "",
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"), "",
                                    net::HTTP_OK, net::URLRequestStatus::FAILED);
   session_->Init(
       base::Bind(&PrivetV3SessionTest::OnInitialized, base::Unretained(this)));
@@ -140,8 +120,8 @@ TEST_F(PrivetV3SessionTest, VersionError) {
 
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_SESSIONERROR, _))
       .Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"), response,
-                                   net::HTTP_OK,
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"),
+                                   response, net::HTTP_OK,
                                    net::URLRequestStatus::SUCCESS);
   session_->Init(
       base::Bind(&PrivetV3SessionTest::OnInitialized, base::Unretained(this)));
@@ -154,8 +134,8 @@ TEST_F(PrivetV3SessionTest, ModeError) {
 
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_SESSIONERROR, _))
       .Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"), response,
-                                   net::HTTP_OK,
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"),
+                                   response, net::HTTP_OK,
                                    net::URLRequestStatus::SUCCESS);
   session_->Init(
       base::Bind(&PrivetV3SessionTest::OnInitialized, base::Unretained(this)));
@@ -164,7 +144,7 @@ TEST_F(PrivetV3SessionTest, ModeError) {
 
 TEST_F(PrivetV3SessionTest, NoHttpsError) {
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_SUCCESS, _)).Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"),
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"),
                                    kInfoResponse, net::HTTP_OK,
                                    net::URLRequestStatus::SUCCESS);
 
@@ -181,7 +161,7 @@ TEST_F(PrivetV3SessionTest, NoHttpsError) {
 
 TEST_F(PrivetV3SessionTest, Pairing) {
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_SUCCESS, _)).Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"),
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"),
                                    kInfoResponse, net::HTTP_OK,
                                    net::URLRequestStatus::SUCCESS);
 
@@ -216,7 +196,7 @@ TEST_F(PrivetV3SessionTest, Pairing) {
         std::string device_commitment;
         base::Base64Encode(spake.GetNextMessage(), &device_commitment);
         fetcher_factory_.SetFakeResponse(
-            GURL("http://host/privet/v3/pairing/start"),
+            GURL("http://host:180/privet/v3/pairing/start"),
             base::StringPrintf(
                 "{\"deviceCommitment\":\"%s\",\"sessionId\":\"testId\"}",
                 device_commitment.c_str()),
@@ -233,14 +213,6 @@ TEST_F(PrivetV3SessionTest, Pairing) {
   net::SHA256HashValue sha_fingerprint;
   ASSERT_EQ(sizeof(sha_fingerprint.data), fingerprint.size());
   memcpy(sha_fingerprint.data, fingerprint.data(), fingerprint.size());
-
-  EXPECT_CALL(*http_client_,
-              SwitchToHttps(443, Field(&net::SHA256HashValue::data,
-                                       ElementsAreArray(sha_fingerprint.data))))
-      .WillOnce(InvokeWithoutArgs([this]() {
-        EXPECT_CALL(*http_client_, IsInHttpsMode())
-            .WillRepeatedly(Return(true));
-      }));
 
   EXPECT_CALL(*this, OnCodeConfirmed(Result::STATUS_SUCCESS)).Times(1);
   EXPECT_CALL(*this, OnPostData(_))
@@ -273,7 +245,7 @@ TEST_F(PrivetV3SessionTest, Pairing) {
             base::Base64Encode(signature, &signature_base64);
 
             fetcher_factory_.SetFakeResponse(
-                GURL("http://host/privet/v3/pairing/confirm"),
+                GURL("http://host:180/privet/v3/pairing/confirm"),
                 base::StringPrintf(
                     "{\"certFingerprint\":\"%s\",\"certSignature\":\"%s\"}",
                     fingerprint_base64.c_str(), signature_base64.c_str()),
@@ -291,7 +263,7 @@ TEST_F(PrivetV3SessionTest, Pairing) {
         EXPECT_TRUE(hmac.Verify("testId", access_token));
 
         fetcher_factory_.SetFakeResponse(
-            GURL("http://host/privet/v3/auth"),
+            GURL("https://host:1443/privet/v3/auth"),
             "{\"accessToken\":\"567\",\"tokenType\":\"testType\","
             "\"scope\":\"owner\"}",
             net::HTTP_OK, net::URLRequestStatus::SUCCESS);
@@ -301,13 +273,13 @@ TEST_F(PrivetV3SessionTest, Pairing) {
                                    base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(session_->client_->IsInHttpsMode());
+  EXPECT_TRUE(session_->use_https_);
   EXPECT_EQ("testType 567", session_->privet_auth_token_);
 }
 
 TEST_F(PrivetV3SessionTest, Cancel) {
   EXPECT_CALL(*this, OnInitializedMock(Result::STATUS_SUCCESS, _)).Times(1);
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/info"),
+  fetcher_factory_.SetFakeResponse(GURL("http://host:180/privet/info"),
                                    kInfoResponse, net::HTTP_OK,
                                    net::URLRequestStatus::SUCCESS);
 
@@ -315,15 +287,13 @@ TEST_F(PrivetV3SessionTest, Cancel) {
       base::Bind(&PrivetV3SessionTest::OnInitialized, base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_CALL(*http_client_, IsInHttpsMode()).WillRepeatedly(Return(false));
-
   EXPECT_CALL(*this, OnPairingStarted(Result::STATUS_SUCCESS)).Times(1);
   EXPECT_CALL(*this, OnPostData(_))
       .WillOnce(Invoke([this](const base::DictionaryValue& data) {
         std::string device_commitment;
         base::Base64Encode("1234", &device_commitment);
         fetcher_factory_.SetFakeResponse(
-            GURL("http://host/privet/v3/pairing/start"),
+            GURL("http://host:180/privet/v3/pairing/start"),
             base::StringPrintf(
                 "{\"deviceCommitment\":\"%s\",\"sessionId\":\"testId\"}",
                 device_commitment.c_str()),
@@ -334,17 +304,42 @@ TEST_F(PrivetV3SessionTest, Cancel) {
                                     base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 
-  fetcher_factory_.SetFakeResponse(GURL("http://host/privet/v3/pairing/cancel"),
-                                   kInfoResponse, net::HTTP_OK,
-                                   net::URLRequestStatus::SUCCESS);
+  fetcher_factory_.SetFakeResponse(
+      GURL("http://host:180/privet/v3/pairing/cancel"), kInfoResponse,
+      net::HTTP_OK, net::URLRequestStatus::SUCCESS);
   EXPECT_CALL(*this, OnPostData(_))
       .WillOnce(Invoke([this](const base::DictionaryValue& data) {
         std::string session_id;
         EXPECT_TRUE(data.GetString("sessionId", &session_id));
       }));
+
+  session_.reset();
+  base::RunLoop().RunUntilIdle();
 }
 
-// TODO(vitalybuka): replace PrivetHTTPClient with regular URL fetcher and
-// implement SendMessage test.
+TEST_F(PrivetV3SessionTest, SendMessage) {
+  session_->use_https_ = true;
+  session_->host_port_.set_port(1443);
+
+  const std::string id = "123123";
+
+  fetcher_factory_.SetFakeResponse(
+      GURL("https://host:1443/privet/v3/commands/status"),
+      "{\"id\":\"123123\"}", net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+
+  EXPECT_CALL(*this, OnMessageSend(Result::STATUS_SUCCESS, _))
+      .WillOnce(WithArgs<1>(Invoke([id](const base::DictionaryValue& data) {
+        std::string reply_id;
+        EXPECT_TRUE(data.GetString("id", &reply_id));
+        EXPECT_EQ(id, reply_id);
+      })));
+
+  base::DictionaryValue input;
+  input.SetString("id", id);
+  session_->SendMessage(
+      "/privet/v3/commands/status", input,
+      base::Bind(&PrivetV3SessionTest::OnMessageSend, base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+}
 
 }  // namespace extensions

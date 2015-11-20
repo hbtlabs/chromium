@@ -167,6 +167,7 @@ void NativeMediaFileUtil::CreateDirectory(
 void NativeMediaFileUtil::GetFileInfo(
     scoped_ptr<storage::FileSystemOperationContext> context,
     const storage::FileSystemURL& url,
+    int /* fields */,
     const GetFileInfoCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   storage::FileSystemOperationContext* context_ptr = context.get();
@@ -579,8 +580,6 @@ base::File::Error NativeMediaFileUtil::ReadDirectorySync(
     storage::DirectoryEntry entry;
     entry.is_directory = info.IsDirectory();
     entry.name = enum_path.BaseName().value();
-    entry.size = info.GetSize();
-    entry.last_modified_time = info.GetLastModifiedTime();
 
     file_list->push_back(entry);
   }

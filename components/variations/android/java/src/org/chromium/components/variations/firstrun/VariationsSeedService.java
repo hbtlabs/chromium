@@ -27,17 +27,36 @@ public class VariationsSeedService extends IntentService {
     private static final int READ_TIMEOUT = 10000; // time in ms
     private static final int REQUEST_TIMEOUT = 15000; // time in ms
 
+    // Static variable that indicates a status of the variations seed fetch. If one request is in
+    // progress, we do not start another fetch.
+    private static boolean sFetchInProgress = false;
+
     public VariationsSeedService() {
         super(TAG);
     }
 
     @Override
     public void onHandleIntent(Intent intent) {
+        // Check if any variations seed fetch is in progress, or the seed has been already fetched,
+        // or seed has been successfully stored on the C++ side.
+        if (sFetchInProgress || VariationsSeedBridge.hasJavaPref(getApplicationContext())
+                || VariationsSeedBridge.hasNativePref(getApplicationContext())) {
+            return;
+        }
+        setFetchInProgressFlagValue(true);
         try {
             downloadContent(new URL(VARIATIONS_SERVER_URL));
         } catch (MalformedURLException e) {
             Log.w(TAG, "Variations server URL is malformed.", e);
+        } finally {
+            setFetchInProgressFlagValue(false);
         }
+    }
+
+    // Separate function is needed to avoid FINDBUGS build error (assigning value to static variable
+    // from non-static onHandleIntent() method).
+    private static void setFetchInProgressFlagValue(boolean value) {
+        sFetchInProgress = value;
     }
 
     private boolean downloadContent(URL variationsServerUrl) {
@@ -47,8 +66,7 @@ public class VariationsSeedService extends IntentService {
             connection.setReadTimeout(READ_TIMEOUT);
             connection.setConnectTimeout(REQUEST_TIMEOUT);
             connection.setDoInput(true);
-            // TODO(agulenko): add gzip compression support.
-            // connection.setRequestProperty("A-IM", "gzip");
+            connection.setRequestProperty("A-IM", "gzip");
             connection.connect();
             int responseCode = connection.getResponseCode();
             if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -58,10 +76,12 @@ public class VariationsSeedService extends IntentService {
 
             // Convert the InputStream into a byte array.
             byte[] rawSeed = getRawSeed(connection);
-            String signature = connection.getHeaderField("X-Seed-Signature");
-            String country = connection.getHeaderField("X-Country");
+            String signature = getHeaderFieldOrEmpty(connection, "X-Seed-Signature");
+            String country = getHeaderFieldOrEmpty(connection, "X-Country");
+            String date = getHeaderFieldOrEmpty(connection, "Date");
+            boolean isGzipCompressed = getHeaderFieldOrEmpty(connection, "IM").equals("gzip");
             VariationsSeedBridge.setVariationsFirstRunSeed(
-                    getApplicationContext(), rawSeed, signature, country);
+                    getApplicationContext(), rawSeed, signature, country, date, isGzipCompressed);
             return true;
         } catch (IOException e) {
             Log.w(TAG, "IOException fetching first run seed: ", e);
@@ -71,6 +91,14 @@ public class VariationsSeedService extends IntentService {
                 connection.disconnect();
             }
         }
+    }
+
+    private String getHeaderFieldOrEmpty(HttpURLConnection connection, String name) {
+        String headerField = connection.getHeaderField(name);
+        if (headerField == null) {
+            return "";
+        }
+        return headerField.trim();
     }
 
     private byte[] getRawSeed(HttpURLConnection connection) throws IOException {

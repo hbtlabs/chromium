@@ -5,12 +5,13 @@
 #ifndef CC_ANIMATION_KEYFRAMED_ANIMATION_CURVE_H_
 #define CC_ANIMATION_KEYFRAMED_ANIMATION_CURVE_H_
 
+#include <vector>
+
 #include "base/time/time.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/timing_function.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_vector.h"
 
 namespace cc {
 
@@ -121,7 +122,7 @@ class CC_EXPORT KeyframedColorAnimationCurve : public ColorAnimationCurve {
 
   void AddKeyframe(scoped_ptr<ColorKeyframe> keyframe);
   void SetTimingFunction(scoped_ptr<TimingFunction> timing_function) {
-    timing_function_ = timing_function.Pass();
+    timing_function_ = std::move(timing_function);
   }
 
   // AnimationCurve implementation
@@ -136,7 +137,7 @@ class CC_EXPORT KeyframedColorAnimationCurve : public ColorAnimationCurve {
 
   // Always sorted in order of increasing time. No two keyframes have the
   // same time.
-  ScopedPtrVector<ColorKeyframe> keyframes_;
+  std::vector<scoped_ptr<ColorKeyframe>> keyframes_;
   scoped_ptr<TimingFunction> timing_function_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyframedColorAnimationCurve);
@@ -151,7 +152,7 @@ class CC_EXPORT KeyframedFloatAnimationCurve : public FloatAnimationCurve {
 
   void AddKeyframe(scoped_ptr<FloatKeyframe> keyframe);
   void SetTimingFunction(scoped_ptr<TimingFunction> timing_function) {
-    timing_function_ = timing_function.Pass();
+    timing_function_ = std::move(timing_function);
   }
 
   // AnimationCurve implementation
@@ -166,7 +167,7 @@ class CC_EXPORT KeyframedFloatAnimationCurve : public FloatAnimationCurve {
 
   // Always sorted in order of increasing time. No two keyframes have the
   // same time.
-  ScopedPtrVector<FloatKeyframe> keyframes_;
+  std::vector<scoped_ptr<FloatKeyframe>> keyframes_;
   scoped_ptr<TimingFunction> timing_function_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyframedFloatAnimationCurve);
@@ -182,7 +183,7 @@ class CC_EXPORT KeyframedTransformAnimationCurve
 
   void AddKeyframe(scoped_ptr<TransformKeyframe> keyframe);
   void SetTimingFunction(scoped_ptr<TimingFunction> timing_function) {
-    timing_function_ = timing_function.Pass();
+    timing_function_ = std::move(timing_function);
   }
 
   // AnimationCurve implementation
@@ -206,7 +207,7 @@ class CC_EXPORT KeyframedTransformAnimationCurve
 
   // Always sorted in order of increasing time. No two keyframes have the
   // same time.
-  ScopedPtrVector<TransformKeyframe> keyframes_;
+  std::vector<scoped_ptr<TransformKeyframe>> keyframes_;
   scoped_ptr<TimingFunction> timing_function_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyframedTransformAnimationCurve);
@@ -222,7 +223,7 @@ class CC_EXPORT KeyframedFilterAnimationCurve
 
   void AddKeyframe(scoped_ptr<FilterKeyframe> keyframe);
   void SetTimingFunction(scoped_ptr<TimingFunction> timing_function) {
-    timing_function_ = timing_function.Pass();
+    timing_function_ = std::move(timing_function);
   }
 
   // AnimationCurve implementation
@@ -238,7 +239,7 @@ class CC_EXPORT KeyframedFilterAnimationCurve
 
   // Always sorted in order of increasing time. No two keyframes have the
   // same time.
-  ScopedPtrVector<FilterKeyframe> keyframes_;
+  std::vector<scoped_ptr<FilterKeyframe>> keyframes_;
   scoped_ptr<TimingFunction> timing_function_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyframedFilterAnimationCurve);

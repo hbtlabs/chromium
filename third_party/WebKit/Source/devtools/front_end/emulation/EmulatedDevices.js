@@ -403,7 +403,6 @@ WebInspector.EmulatedDevice.prototype = {
 WebInspector.EmulatedDevicesList = function()
 {
     WebInspector.Object.call(this);
-    WebInspector.settings.createSetting("standardEmulatedDeviceList", []).remove();
 
     /** @type {!WebInspector.Setting} */
     this._standardSetting = WebInspector.settings.createSetting("standardEmulatedDeviceList", []);
@@ -473,6 +472,11 @@ WebInspector.EmulatedDevicesList.prototype = {
     custom: function()
     {
         return this._custom;
+    },
+
+    revealCustomSetting: function()
+    {
+        WebInspector.Revealer.reveal(this._customSetting);
     },
 
     /**

@@ -1,0 +1,167 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/mojo_application.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//tools/grit/repack.gni")
+
+group("wm") {
+  testonly = true
+  deps = [
+    ":example_wm",
+    ":apptests",
+  ]
+}
+
+source_set("example_wm_lib") {
+  sources = [
+    "background_layout.cc",
+    "background_layout.h",
+    "frame/caption_buttons/caption_button_types.h",
+    "frame/caption_buttons/frame_caption_button.cc",
+    "frame/caption_buttons/frame_caption_button.h",
+    "frame/caption_buttons/frame_caption_button_container_view.cc",
+    "frame/caption_buttons/frame_caption_button_container_view.h",
+    "frame/default_header_painter.cc",
+    "frame/default_header_painter.h",
+    "frame/frame_border_hit_test_controller.cc",
+    "frame/frame_border_hit_test_controller.h",
+    "frame/header_painter.h",
+    "frame/header_painter_util.cc",
+    "frame/header_painter_util.h",
+    "frame/move_loop.cc",
+    "frame/move_loop.h",
+    "frame/non_client_frame_view_mash.cc",
+    "frame/non_client_frame_view_mash.h",
+    "layout_manager.cc",
+    "layout_manager.h",
+    "non_client_frame_controller.cc",
+    "non_client_frame_controller.h",
+    "property_util.cc",
+    "property_util.h",
+    "shelf_layout.cc",
+    "shelf_layout.h",
+    "window_layout.cc",
+    "window_layout.h",
+    "window_manager_application.cc",
+    "window_manager_application.h",
+    "window_manager_impl.cc",
+    "window_manager_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/mus/common",
+    "//components/mus/public/cpp",
+    "//components/mus/public/interfaces",
+    "//mash/wm/public/interfaces",
+    "//mash/wm/resources",
+    "//mojo/application/public/cpp",
+    "//mojo/common:common_base",
+    "//mojo/converters/geometry",
+    "//mojo/converters/input_events",
+    "//mojo/services/tracing/public/cpp",
+    "//skia",
+    "//ui/aura",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/mojo/init",
+    "//ui/strings",
+    "//ui/views",
+    "//ui/views/mus:for_mojo_application",
+  ]
+}
+
+mojo_native_application("example_wm") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":example_wm_lib",
+    ":resources",
+    "//mojo/application/public/cpp",
+  ]
+
+  data_deps = [
+    "//components/mus",
+  ]
+
+  resources = [ "$root_out_dir/mash_wm_resources.pak" ]
+}
+
+repack("resources") {
+  sources = [
+    "$root_gen_dir/mash/wm/resources/mash_wm_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+    "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
+  ]
+  output = "$root_out_dir/mash_wm_resources.pak"
+  deps = [
+    "//mash/wm/resources",
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views/mus:resources",
+    "//ui/views/resources",
+  ]
+}
+
+mojo_native_application("apptests") {
+  output_name = "mus_example_wm_apptests"
+  testonly = true
+
+  sources = [
+    "window_manager_apptest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_config",
+    "//components/mus/public/cpp",
+    "//components/mus/public/cpp/tests:test_support",
+    "//components/mus/public/interfaces",
+    "//mojo/application/public/cpp:sources",
+    "//mojo/application/public/cpp:test_support",
+    "//mojo/common:common_base",
+    "//mojo/converters/geometry",
+    "//ui/mojo/geometry:interfaces",
+    "//ui/mojo/geometry:util",
+  ]
+
+  data_deps = [
+    ":example_wm",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "frame/move_loop_unittest.cc",
+  ]
+
+  deps = [
+    ":example_wm_lib",
+    "//base",
+    "//base/test:test_config",
+    "//components/mus/public/cpp",
+    "//components/mus/public/cpp/tests:unittest_support",
+    "//mojo/converters/geometry",
+    "//mojo/converters/input_events",
+    "//mojo/gles2",
+    "//mojo/platform_handle",
+    "//mojo/public/cpp/system",
+    "//testing/gtest",
+    "//third_party/mojo/src/mojo/edk/system",
+    "//ui/events",
+    "//ui/gfx/geometry",
+    "//ui/gfx:test_support",
+    "//ui/mojo/geometry:interfaces",
+    "//ui/mojo/geometry:util",
+  ]
+}

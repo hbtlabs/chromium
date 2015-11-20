@@ -70,10 +70,10 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/ui/ash/cast_config_delegate_chromeos.h"
+#include "chrome/browser/ui/ash/cast_config_delegate_media_router.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/networking_config_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/system_tray_delegate_utils.h"
-#include "chrome/browser/ui/ash/user_accounts_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/volume_controller_chromeos.h"
 #include "chrome/browser/ui/ash/vpn_delegate_chromeos.h"
 #include "chrome/browser/ui/browser.h"
@@ -167,6 +167,12 @@ void BluetoothDeviceConnectError(
     device::BluetoothDevice::ConnectErrorCode error_code) {
 }
 
+scoped_ptr<ash::CastConfigDelegate> CreateCastConfigDelegate() {
+  if (CastConfigDelegateMediaRouter::IsEnabled())
+    return make_scoped_ptr(new CastConfigDelegateMediaRouter());
+  return make_scoped_ptr(new CastConfigDelegateChromeos());
+}
+
 void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
   chrome::ShowSettingsSubPageForProfile(
       ProfileManager::GetActiveUserProfile(), sub_page);
@@ -189,7 +195,7 @@ SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
       have_session_length_limit_(false),
       should_run_bluetooth_discovery_(false),
       session_started_(false),
-      cast_config_delegate_(new CastConfigDelegateChromeos()),
+      cast_config_delegate_(CreateCastConfigDelegate()),
       networking_config_delegate_(new NetworkingConfigDelegateChromeos()),
       volume_control_delegate_(new VolumeController()),
       vpn_delegate_(new VPNDelegateChromeOS),
@@ -814,23 +820,6 @@ void SystemTrayDelegateChromeOS::ActiveUserWasChanged() {
 
 bool SystemTrayDelegateChromeOS::IsSearchKeyMappedToCapsLock() {
   return search_key_mapped_to_ == input_method::kCapsLockKey;
-}
-
-ash::tray::UserAccountsDelegate*
-SystemTrayDelegateChromeOS::GetUserAccountsDelegate(
-    const AccountId& account_id) {
-  auto it = accounts_delegates_.find(account_id);
-  if (it == accounts_delegates_.end()) {
-    const user_manager::User* user =
-        user_manager::UserManager::Get()->FindUser(account_id);
-    Profile* user_profile = ProfileHelper::Get()->GetProfileByUserUnsafe(user);
-    CHECK(user_profile);
-    accounts_delegates_.set(
-        account_id, scoped_ptr<ash::tray::UserAccountsDelegate>(
-                        new UserAccountsDelegateChromeOS(user_profile)));
-    it = accounts_delegates_.find(account_id);
-  }
-  return it->second;
 }
 
 void SystemTrayDelegateChromeOS::AddCustodianInfoTrayObserver(

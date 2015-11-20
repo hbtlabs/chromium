@@ -112,6 +112,8 @@
         'browser/chromeos/display/output_protection_delegate.h',
         'browser/chromeos/display/overscan_calibrator.cc',
         'browser/chromeos/display/overscan_calibrator.h',
+        'browser/chromeos/policy/display_rotation_default_handler.cc',
+        'browser/chromeos/policy/display_rotation_default_handler.h',
         'browser/chromeos/drive/debug_info_collector.cc',
         'browser/chromeos/drive/debug_info_collector.h',
         'browser/chromeos/drive/download_handler.cc',
@@ -990,8 +992,6 @@
         'browser/chromeos/ui/focus_ring_layer.h',
         'browser/chromeos/ui/idle_app_name_notification_view.cc',
         'browser/chromeos/ui/idle_app_name_notification_view.h',
-        'browser/chromeos/ui/inline_login_dialog.cc',
-        'browser/chromeos/ui/inline_login_dialog.h',
         'browser/chromeos/ui/kiosk_external_update_notification.cc',
         'browser/chromeos/ui/kiosk_external_update_notification.h',
         'browser/chromeos/ui/mobile_config_ui.cc',
@@ -1263,6 +1263,11 @@
         ['use_ozone == 1', {
           'dependencies': [
             '../ui/ozone/ozone.gyp:ozone',
+          ],
+        }],
+        ['enable_arc == 1', {
+          'dependencies': [
+            '../components/components.gyp:arc',
           ],
         }],
       ],

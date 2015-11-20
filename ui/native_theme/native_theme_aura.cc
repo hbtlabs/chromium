@@ -109,19 +109,9 @@ SkColor NativeThemeAura::GetSystemColor(ColorId color_id) const {
     // Dialogs:
     static const SkColor kDialogBackgroundColorMd = SK_ColorWHITE;
     // Results tables:
-    static const SkColor kResultsTableSelectedBackgroundMd =
-        SkColorSetARGB(0x15, 0x00, 0x00, 0x00);
     static const SkColor kResultsTableTextMd = SK_ColorBLACK;
     static const SkColor kResultsTableDimmedTextMd =
         SkColorSetRGB(0x64, 0x64, 0x64);
-    static const SkColor kResultsTableUrlMd = SkColorSetRGB(0x33, 0x67, 0xD6);
-    static const SkColor kResultsTableHoveredBackgroundMd =
-        SkColorSetARGB(0x0D, 0x00, 0x00, 0x00);
-    static const SkColor kResultsTableDividerMd = color_utils::AlphaBlend(
-        kResultsTableTextMd, kTextfieldDefaultBackground, 0x34);
-    static const SkColor kResultsTableSelectedDividerMd =
-        color_utils::AlphaBlend(kResultsTableTextMd,
-                                kTextfieldSelectionBackgroundFocused, 0x34);
     static const SkColor kPositiveTextColorMd = SkColorSetRGB(0x0b, 0x80, 0x43);
     static const SkColor kNegativeTextColorMd = SkColorSetRGB(0xc5, 0x39, 0x29);
 
@@ -133,9 +123,11 @@ SkColor NativeThemeAura::GetSystemColor(ColorId color_id) const {
 
       // Results Tables
       case kColorId_ResultsTableHoveredBackground:
-        return kResultsTableHoveredBackgroundMd;
+        return SkColorSetA(
+            GetSystemColor(kColorId_ResultsTableNormalBackground), 0x0D);
       case kColorId_ResultsTableSelectedBackground:
-        return kResultsTableSelectedBackgroundMd;
+        return SkColorSetA(
+            GetSystemColor(kColorId_ResultsTableNormalBackground), 0x14);
       case kColorId_ResultsTableNormalText:
       case kColorId_ResultsTableHoveredText:
       case kColorId_ResultsTableSelectedText:
@@ -150,12 +142,7 @@ SkColor NativeThemeAura::GetSystemColor(ColorId color_id) const {
       case kColorId_ResultsTableNormalUrl:
       case kColorId_ResultsTableHoveredUrl:
       case kColorId_ResultsTableSelectedUrl:
-        return kResultsTableUrlMd;
-      case kColorId_ResultsTableNormalDivider:
-      case kColorId_ResultsTableHoveredDivider:
-        return kResultsTableDividerMd;
-      case kColorId_ResultsTableSelectedDivider:
-        return kResultsTableSelectedDividerMd;
+        return GetSystemColor(kColorId_LinkEnabled);
       case kColorId_ResultsTablePositiveText:
       case kColorId_ResultsTablePositiveHoveredText:
       case kColorId_ResultsTablePositiveSelectedText:
@@ -236,12 +223,6 @@ SkColor NativeThemeAura::GetSystemColor(ColorId color_id) const {
   static const SkColor kResultsTableNormalUrl = kTextfieldSelectionColor;
   static const SkColor kResultsTableSelectedOrHoveredUrl =
       SkColorSetARGB(0xff, 0x0b, 0x80, 0x43);
-  static const SkColor kResultsTableNormalDivider = color_utils::AlphaBlend(
-      kResultsTableNormalText, kTextfieldDefaultBackground, 0x34);
-  static const SkColor kResultsTableHoveredDivider = color_utils::AlphaBlend(
-      kResultsTableHoveredText, kResultsTableHoveredBackground, 0x34);
-  static const SkColor kResultsTableSelectedDivider = color_utils::AlphaBlend(
-      kResultsTableSelectedText, kTextfieldSelectionBackgroundFocused, 0x34);
   const SkColor kPositiveTextColor = SkColorSetRGB(0x0b, 0x80, 0x43);
   const SkColor kNegativeTextColor = SkColorSetRGB(0xc5, 0x39, 0x29);
   static const SkColor kResultsTablePositiveText = color_utils::AlphaBlend(
@@ -384,12 +365,6 @@ SkColor NativeThemeAura::GetSystemColor(ColorId color_id) const {
     case kColorId_ResultsTableHoveredUrl:
     case kColorId_ResultsTableSelectedUrl:
       return kResultsTableSelectedOrHoveredUrl;
-    case kColorId_ResultsTableNormalDivider:
-      return kResultsTableNormalDivider;
-    case kColorId_ResultsTableHoveredDivider:
-      return kResultsTableHoveredDivider;
-    case kColorId_ResultsTableSelectedDivider:
-      return kResultsTableSelectedDivider;
     case kColorId_ResultsTablePositiveText:
       return kResultsTablePositiveText;
     case kColorId_ResultsTablePositiveHoveredText:

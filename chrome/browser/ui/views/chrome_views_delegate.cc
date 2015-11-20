@@ -52,6 +52,10 @@
 #include "ui/views/linux_ui/linux_ui.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "ui/views/widget/android/native_widget_android.h"
+#endif
+
 #if defined(USE_ASH)
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/shell.h"
@@ -404,7 +408,11 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
         params->context ? params->context : params->parent;
     if (chrome::GetHostDesktopTypeForNativeView(to_check) ==
         chrome::HOST_DESKTOP_TYPE_NATIVE) {
+#if defined(OS_ANDROID)
+      params->native_widget = new views::NativeWidgetAndroid(delegate);
+#else
       params->native_widget = new views::DesktopNativeWidgetAura(delegate);
+#endif
     }
   }
 #endif
@@ -472,7 +480,7 @@ ChromeViewsDelegate::GetBlockingPoolTaskRunner() {
   return content::BrowserThread::GetBlockingPool();
 }
 
-#if !defined(USE_AURA) && !defined(USE_CHROMEOS)
+#if !defined(USE_ASH)
 views::Widget::InitParams::WindowOpacity
 ChromeViewsDelegate::GetOpacityForInitParams(
     const views::Widget::InitParams& params) {

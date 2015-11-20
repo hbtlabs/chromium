@@ -48,6 +48,7 @@
 #include "core/page/Page.h"
 #include "core/svg/SVGStyleElement.h"
 #include "platform/TraceEvent.h"
+#include "platform/fonts/FontCache.h"
 
 namespace blink {
 
@@ -492,6 +493,7 @@ void StyleEngine::updateGenericFontFamilySettings()
     m_fontSelector->updateGenericFontFamilySettings(*m_document);
     if (m_resolver)
         m_resolver->invalidateMatchedPropertiesCache();
+    FontCache::fontCache()->invalidateShapeCache();
 }
 
 void StyleEngine::removeFontFaceRules(const WillBeHeapVector<RawPtrWillBeMember<const StyleRuleFontFace>>& fontFaceRules)
@@ -609,6 +611,11 @@ void StyleEngine::fontsNeedUpdate(CSSFontSelector*)
     if (m_resolver)
         m_resolver->invalidateMatchedPropertiesCache();
     document().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Fonts));
+}
+
+CSSFontSelector* StyleEngine::fontSelector() const
+{
+    return m_fontSelector.get();
 }
 
 void StyleEngine::setFontSelector(PassRefPtrWillBeRawPtr<CSSFontSelector> fontSelector)

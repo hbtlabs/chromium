@@ -159,6 +159,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void RemoveMouseEventCallback(const MouseEventCallback& callback) override;
   void GetWebScreenInfo(blink::WebScreenInfo* result) override;
   bool GetScreenColorProfile(std::vector<char>* color_profile) override;
+  void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
 
   // Notification that the screen info has changed.
   void NotifyScreenInfoChanged();
@@ -181,7 +182,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Called when a renderer object already been created for this host, and we
   // just need to be attached to it. Used for window.open, <select> dropdown
   // menus, and other times when the renderer initiates creating an object.
-  virtual void Init();
+  void Init();
 
   // Initializes a RenderWidgetHost that is attached to a RenderFrameHost.
   void InitForFrame();
@@ -205,19 +206,19 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool Send(IPC::Message* msg) override;
 
   // Indicates if the page has finished loading.
-  virtual void SetIsLoading(bool is_loading);
+  void SetIsLoading(bool is_loading);
 
   // Called to notify the RenderWidget that it has been hidden or restored from
   // having been hidden.
-  virtual void WasHidden();
-  virtual void WasShown(const ui::LatencyInfo& latency_info);
+  void WasHidden();
+  void WasShown(const ui::LatencyInfo& latency_info);
 
   // Returns true if the RenderWidget is hidden.
   bool is_hidden() const { return is_hidden_; }
 
   // Called to notify the RenderWidget that its associated native window
   // got/lost focused.
-  virtual void GotFocus();
+  void GotFocus();
   void LostCapture();
 
   // Indicates whether the RenderWidgetHost thinks it is focused.
@@ -589,6 +590,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                           const gfx::Range& range);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
+  void OnForwardCompositorProto(const std::vector<uint8_t>& proto);
 
   // Called (either immediately or asynchronously) after we're done with our
   // BackingStore and can send an ACK to the renderer so it can paint onto it

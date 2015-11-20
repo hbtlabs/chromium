@@ -119,7 +119,8 @@ bool AutofillDownloadManager::StartQueryRequest(
     VLOG(1) << "AutofillDownloadManager: query request has been retrieved "
              << "from the cache, form signatures: "
              << GetCombinedSignature(request_data.form_signatures);
-    observer_->OnLoadedServerPredictions(query_data);
+    observer_->OnLoadedServerPredictions(query_data,
+                                         request_data.form_signatures);
     return true;
   }
 
@@ -341,7 +342,8 @@ void AutofillDownloadManager::OnURLFetchComplete(
              << " request has succeeded with response body: " << response_body;
     if (it->second.request_type == AutofillDownloadManager::REQUEST_QUERY) {
       CacheQueryRequest(it->second.form_signatures, response_body);
-      observer_->OnLoadedServerPredictions(response_body);
+      observer_->OnLoadedServerPredictions(response_body,
+                                           it->second.form_signatures);
     } else {
       double new_positive_upload_rate = 0;
       double new_negative_upload_rate = 0;

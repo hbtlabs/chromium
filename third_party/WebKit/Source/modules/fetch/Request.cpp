@@ -120,15 +120,27 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         // We don't use fallback values. We set these flags directly in below.
     }
 
-    //   14. If any of |init|'s members are present, set |request|'s referrer
-    // to client, and |request|'s referrer policy to the empty string.
-    //   => RequestInit::RequestInit.
+    // "14. If any of |init|'s members are present, run these substeps:"
+    if (init.areAnyMembersSet) {
+        // "1. If |request|'s |mode| is "navigate", throw a TypeError."
+        if (request->mode() == WebURLRequest::FetchRequestModeNavigate) {
+            exceptionState.throwTypeError("Cannot construct a Request with a Request whose mode is 'navigate' and a non-empty RequestInit.");
+            return nullptr;
+        }
+        // "2. Unset |request|'s omit-Origin-header flag."
+        // "3. Set |request|'s referrer to "client"."
+        // "4. Set |request|'s referrer policy to the empty string."
+        // => RequestInit::RequestInit.
+    }
+
     //   15. If |init|'s referrer member is present, run these substeps:
     // Note that JS null and undefined are encoded as an empty string and thus
     // a null string means referrer member is not set.
     //   16. If |init|'s referrerPolicy member is present, set |request|'s
     // referrer policy to it.
-    if (init.isReferrerSet) {
+    // areAnyMembersSet will be True, if any members in RequestInit are set and
+    // hence the referrer member
+    if (init.areAnyMembersSet) {
         // 1. Let |referrer| be |init|'s referrer member.
         if (init.referrer.referrer.isEmpty()) {
             // 2. if |referrer| is the empty string, set |request|'s referrer to
@@ -161,10 +173,14 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         request->setReferrerPolicy(init.referrer.referrerPolicy);
     }
 
-
-    // "17. Let |mode| be |init|'s mode member if it is present, and
+    // "16. Let |mode| be |init|'s mode member if it is present, and
     // |fallbackMode| otherwise."
+    // "17. If |mode| is "navigate", throw a TypeError.
     // "18. If |mode| is non-null, set |request|'s mode to |mode|."
+    if (init.mode == "navigate") {
+        exceptionState.throwTypeError("Cannot construct a Request with a RequestInit whose mode member is set as 'navigate'.");
+        return nullptr;
+    }
     if (init.mode == "same-origin") {
         request->setMode(WebURLRequest::FetchRequestModeSameOrigin);
     } else if (init.mode == "no-cors") {
@@ -300,9 +316,21 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     if (temporaryBody)
         r->m_request->setBuffer(temporaryBody);
 
-    // https://w3c.github.io/webappsec/specs/credentialmanagement/#monkey-patching-fetch-2
-    if (init.opaque || (inputRequest && inputRequest->opaque()))
-        r->makeOpaque();
+    // https://w3c.github.io/webappsec-credential-management/#monkey-patching-fetch-3
+    // "If |init|'s body member is a 'Credential' object:"
+    if (init.isCredentialRequest) {
+        // "1. If |r|'s url is not the same as |r|'s client’s origin, throw a TypeError."
+        if (!origin->canRequest(r->url())) {
+            exceptionState.throwTypeError("Credentials may only be submitted to same-origin endpoints.");
+            return nullptr;
+        }
+        // "2. Set |r|'s redirect mode to "error"."
+        r->m_request->setRedirect(WebURLRequest::FetchRedirectModeError);
+        // "3. Set |r|'s skip-service-worker flag."
+        // TODO(mkwst): Set this flag.
+        // "4. Set |r|'s opaque flag."
+        r->setOpaque();
+    }
 
     // "34. Set |r|'s MIME type to the result of extracting a MIME type from
     // |r|'s request's header list."
@@ -497,6 +525,8 @@ String Request::mode() const
     case WebURLRequest::FetchRequestModeCORS:
     case WebURLRequest::FetchRequestModeCORSWithForcedPreflight:
         return "cors";
+    case WebURLRequest::FetchRequestModeNavigate:
+        return "navigate";
     }
     ASSERT_NOT_REACHED();
     return "";

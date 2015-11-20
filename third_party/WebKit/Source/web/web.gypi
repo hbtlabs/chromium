@@ -113,7 +113,6 @@
       'WebBindings.cpp',
       'WebBlob.cpp',
       'WebCache.cpp',
-      'WebColorName.cpp',
       'WebColorSuggestion.cpp',
       'WebCryptoNormalize.cpp',
       'WebCustomElement.cpp',
@@ -124,7 +123,6 @@
       'WebDOMMediaStreamTrack.cpp',
       'WebDOMMessageEvent.cpp',
       'WebDOMProgressEvent.cpp',
-      'WebDOMResourceProgressEvent.cpp',
       'WebDataSourceImpl.cpp',
       'WebDataSourceImpl.h',
       'WebDatabase.cpp',
@@ -134,7 +132,6 @@
       'WebDevToolsFrontendImpl.cpp',
       'WebDevToolsFrontendImpl.h',
       'WebDocument.cpp',
-      'WebDocumentType.cpp',
       'WebElement.cpp',
       'WebElementCollection.cpp',
       'WebEmbeddedWorkerImpl.cpp',
@@ -156,7 +153,6 @@
       'WebGeolocationPermissionRequest.cpp',
       'WebGeolocationPermissionRequestManager.cpp',
       'WebGeolocationPosition.cpp',
-      'WebGlyphCache.cpp',
       'WebHeap.cpp',
       'WebHelperPluginImpl.cpp',
       'WebHelperPluginImpl.h',
@@ -223,7 +219,6 @@
       'WebSpeechRecognitionResult.cpp',
       'WebStorageEventDispatcherImpl.cpp',
       'WebSurroundingText.cpp',
-      'WebTextAreaElement.cpp',
       'WebTextCheckingCompletionImpl.cpp',
       'WebTextCheckingCompletionImpl.h',
       'WebTextCheckingResult.cpp',
@@ -316,16 +311,6 @@
       'tests/sim/SimTest.h',
       'tests/sim/SimWebViewClient.cpp',
       'tests/sim/SimWebViewClient.h',
-    ],
-    'conditions': [
-      ['OS!="mac"',
-        {
-          'web_unittest_files': [
-            # Mac uses ScrollAnimatorMac instead of ScrollAnimator.
-            'tests/ScrollAnimatorTest.cpp',
-          ],
-        }
-      ],
     ],
   },
 }

@@ -33,10 +33,11 @@ source_set("lib") {
     "//mojo/common",
     "//mojo/converters/geometry",
     "//mojo/public/cpp/bindings",
+    "//mojo/services/tracing/public/cpp",
     "//skia",
     "//ui/gfx/geometry",
     "//ui/mojo/init",
     "//ui/views",
-    "//ui/views/mus",
+    "//ui/views/mus:for_mojo_application",
   ]
 }

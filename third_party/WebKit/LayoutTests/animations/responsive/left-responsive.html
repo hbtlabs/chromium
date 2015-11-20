@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script src="resources/responsive-test.js"></script>
 <script>
-assertResponsive({
+assertCSSResponsive({
   property: 'left',
   from: 'inherit',
   to: '200px',
@@ -20,33 +20,32 @@ assertResponsive({
   }],
 });
 
-assertResponsive({
+assertCSSResponsive({
   property: 'left',
-  from: '',
-  to: '200px',
+  from: '200px',
   configurations: [{
     state: {underlying: '100px'},
     expect: [
-      {at: 0.25, is: '125px'},
-      {at: 0.75, is: '175px'},
+      {at: 0.25, is: '175px'},
+      {at: 0.75, is: '125px'},
     ],
   }, {
     state: {underlying: 'auto'},
     expect: [
-      {at: 0.25, is: 'auto'},
-      {at: 0.75, is: '200px'},
+      {at: 0.25, is: '200px'},
+      {at: 0.75, is: 'auto'},
     ],
   }, {
     state: {underlying: 'inherit', inherited: '100px'},
     expect: [
-      {at: 0.25, is: '125px'},
-      {at: 0.75, is: '175px'},
+      {at: 0.25, is: '175px'},
+      {at: 0.75, is: '125px'},
     ],
   }, {
     state: {underlying: 'inherit', inherited: 'auto'},
     expect: [
-      {at: 0.25, is: 'auto'},
-      {at: 0.75, is: '200px'},
+      {at: 0.25, is: '200px'},
+      {at: 0.75, is: 'auto'},
     ],
   }],
 });

@@ -26,7 +26,6 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/mojo_runner_util.h"
 #include "chrome/browser/native_window_notification_source.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
@@ -81,7 +80,6 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
-#include "chrome/browser/ui/views/profiles/profile_reset_bubble_view.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/browser/ui/views/settings_api_bubble_helper_views.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
@@ -135,8 +133,10 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/screen.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -158,6 +158,7 @@
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #include "chrome/browser/jumplist_win.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
@@ -169,6 +170,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#endif
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "content/public/common/mojo_shell_connection.h"
 #endif
 
 using base::TimeDelta;
@@ -679,7 +684,19 @@ WebContents* BrowserView::GetActiveWebContents() const {
 }
 
 gfx::ImageSkia BrowserView::GetOTRAvatarIcon() const {
-  return *GetThemeProvider()->GetImageSkiaNamed(IDR_OTR_ICON);
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    SkColor icon_color = SK_ColorWHITE;
+#if defined(OS_WIN)
+    // On Windows 10, we can't change the frame color so must assume it's white.
+    if (base::win::GetVersion() == base::win::VERSION_WIN10)
+      icon_color = gfx::kChromeIconGrey;
+#endif
+    return gfx::CreateVectorIcon(gfx::VectorIconId::INCOGNITO, 24, icon_color);
+  }
+
+  // GetThemeProvider() can return null if this view is not yet part of the
+  // widget hierarchy, but the frame's theme provider is always valid.
+  return *frame_->GetThemeProvider()->GetImageSkiaNamed(IDR_OTR_ICON);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1032,7 +1049,16 @@ void BrowserView::UpdateFullscreenWithToolbar(bool with_toolbar) {
   NOTIMPLEMENTED();
 }
 
+void BrowserView::ToggleFullscreenToolbar() {
+  // This is currently a Mac only feature.
+  NOTIMPLEMENTED();
+}
+
 bool BrowserView::IsFullscreenWithToolbar() const {
+  return false;
+}
+
+bool BrowserView::ShouldHideFullscreenToolbar() const {
   return false;
 }
 
@@ -1316,15 +1342,6 @@ void BrowserView::ShowTranslateBubble(
       GetToolbarView()->GetTranslateBubbleAnchor(), web_contents, step,
       error_type, is_user_gesture ? TranslateBubbleView::USER_GESTURE
                                   : TranslateBubbleView::AUTOMATIC);
-}
-
-bool BrowserView::IsProfileResetBubbleSupported() const {
-  return true;
-}
-
-GlobalErrorBubbleViewBase* BrowserView::ShowProfileResetBubble(
-    const base::WeakPtr<ProfileResetGlobalError>& global_error) {
-  return ProfileResetBubbleView::ShowBubble(global_error, browser_.get());
 }
 
 #if defined(ENABLE_ONE_CLICK_SIGNIN)
@@ -2389,8 +2406,10 @@ void BrowserView::LoadAccelerators() {
   // TODO(beng): for some reason GetFocusManager() returns null in this case,
   //             investigate, but for now just disable accelerators in this
   //             mode.
-  if (IsRunningInMojoRunner())
+#if defined(MOJO_SHELL_CLIENT)
+  if (content::MojoShellConnection::Get())
     return;
+#endif
 
   views::FocusManager* focus_manager = GetFocusManager();
   DCHECK(focus_manager);
@@ -2597,7 +2616,7 @@ void BrowserView::ActivateAppModalDialog() const {
 
   Browser* modal_browser =
       chrome::FindBrowserWithWebContents(active_dialog->web_contents());
-  if (modal_browser && (browser_ != modal_browser)) {
+  if (modal_browser && (browser_.get() != modal_browser)) {
     modal_browser->window()->FlashFrame(true);
     modal_browser->window()->Activate();
   }

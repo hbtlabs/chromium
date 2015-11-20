@@ -8,6 +8,7 @@
    },
   'targets': [
     {
+      # GN version: //ios/web/public/app
       'target_name': 'ios_web_app',
       'type': 'static_library',
       'include_dirs': [
@@ -99,8 +100,8 @@
         'navigation/time_smoother.h',
         'navigation/web_load_params.h',
         'navigation/web_load_params.mm',
-        'net/cert_host_pair.h',
         'net/cert_host_pair.cc',
+        'net/cert_host_pair.h',
         'net/cert_policy.cc',
         'net/cert_store_impl.cc',
         'net/cert_store_impl.h',
@@ -181,6 +182,7 @@
         'public/web_state/crw_web_view_proxy.h',
         'public/web_state/crw_web_view_scroll_view_proxy.h',
         'public/web_state/global_web_state_observer.h',
+        'public/web_state/js/credential_util.h',
         'public/web_state/js/crw_js_injection_evaluator.h',
         'public/web_state/js/crw_js_injection_manager.h',
         'public/web_state/js/crw_js_injection_receiver.h',
@@ -226,7 +228,6 @@
         'web_state/global_web_state_event_tracker.cc',
         'web_state/global_web_state_event_tracker.h',
         'web_state/global_web_state_observer.cc',
-        'web_state/js/credential_util.h',
         'web_state/js/credential_util.mm',
         'web_state/js/crw_js_early_script_manager.h',
         'web_state/js/crw_js_early_script_manager.mm',
@@ -288,6 +289,8 @@
         'web_state/web_view_internal_creation_util.mm',
         'web_state/wk_web_view_security_util.h',
         'web_state/wk_web_view_security_util.mm',
+        'web_thread_impl.cc',
+        'web_thread_impl.h',
         'web_view_counter_impl.h',
         'web_view_counter_impl.mm',
         'web_view_creation_util.mm',
@@ -312,8 +315,6 @@
         'webui/web_ui_ios_data_source_impl.h',
         'webui/web_ui_ios_impl.h',
         'webui/web_ui_ios_impl.mm',
-        'web_thread_impl.cc',
-        'web_thread_impl.h',
       ],
       'link_settings': {
         # TODO(crbug.com/541549): change to regular linking once support for
@@ -459,6 +460,8 @@
         'public/test/response_providers/file_based_response_provider_impl.h',
         'public/test/response_providers/response_provider.cc',
         'public/test/response_providers/response_provider.h',
+        'public/test/response_providers/string_response_provider.h',
+        'public/test/response_providers/string_response_provider.mm',
         'public/test/test_browser_state.cc',
         'public/test/test_browser_state.h',
         'public/test/test_web_client.h',
@@ -474,6 +477,8 @@
         'test/crw_fake_web_controller_observer.mm',
         'test/test_web_thread.cc',
         'test/test_web_thread_bundle.cc',
+        'test/web_int_test.h',
+        'test/web_int_test.mm',
         'test/web_test.h',
         'test/web_test.mm',
         'test/web_test_suite.cc',

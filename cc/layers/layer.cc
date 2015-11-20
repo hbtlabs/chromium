@@ -22,6 +22,7 @@
 #include "cc/layers/layer_client.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/layer_proto_converter.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/layers/scrollbar_layer_interface.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -413,15 +414,16 @@ void Layer::RequestCopyOfOutput(
   DCHECK(IsPropertyChangeAllowed());
   bool had_no_copy_requests = copy_requests_.empty();
   if (void* source = request->source()) {
-    auto it = std::find_if(
-        copy_requests_.begin(), copy_requests_.end(),
-        [source](const CopyOutputRequest* x) { return x->source() == source; });
+    auto it = std::find_if(copy_requests_.begin(), copy_requests_.end(),
+                           [source](const scoped_ptr<CopyOutputRequest>& x) {
+                             return x->source() == source;
+                           });
     if (it != copy_requests_.end())
       copy_requests_.erase(it);
   }
   if (request->IsEmpty())
     return;
-  copy_requests_.push_back(request.Pass());
+  copy_requests_.push_back(std::move(request));
   if (had_no_copy_requests) {
     UpdateNumCopyRequestsForSubtree(1);
   }
@@ -1160,7 +1162,7 @@ void Layer::SetPositionConstraint(const LayerPositionConstraint& constraint) {
 
 static void RunCopyCallbackOnMainThread(scoped_ptr<CopyOutputRequest> request,
                                         scoped_ptr<CopyOutputResult> result) {
-  request->SendResult(result.Pass());
+  request->SendResult(std::move(result));
 }
 
 static void PostCopyCallbackToMainThread(
@@ -1296,13 +1298,11 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
 
   // Wrap the copy_requests_ in a PostTask to the main thread.
   bool had_copy_requests = !copy_requests_.empty();
-  ScopedPtrVector<CopyOutputRequest> main_thread_copy_requests;
-  for (ScopedPtrVector<CopyOutputRequest>::iterator it = copy_requests_.begin();
-       it != copy_requests_.end();
-       ++it) {
+  std::vector<scoped_ptr<CopyOutputRequest>> main_thread_copy_requests;
+  for (auto it = copy_requests_.begin(); it != copy_requests_.end(); ++it) {
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
         layer_tree_host()->task_runner_provider()->MainThreadTaskRunner();
-    scoped_ptr<CopyOutputRequest> original_request = copy_requests_.take(it);
+    scoped_ptr<CopyOutputRequest> original_request = std::move(*it);
     const CopyOutputRequest& original_request_ref = *original_request;
     scoped_ptr<CopyOutputRequest> main_thread_request =
         CopyOutputRequest::CreateRelayRequest(
@@ -1310,7 +1310,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
             base::Bind(&PostCopyCallbackToMainThread,
                        main_thread_task_runner,
                        base::Passed(&original_request)));
-    main_thread_copy_requests.push_back(main_thread_request.Pass());
+    main_thread_copy_requests.push_back(std::move(main_thread_request));
   }
   if (!copy_requests_.empty() && layer_tree_host_)
     layer_tree_host_->property_trees()->needs_rebuild = true;
@@ -1416,6 +1416,56 @@ void Layer::FromLayerNodeProto(const proto::LayerNode& proto,
   } else {
     replica_layer_ = nullptr;
   }
+}
+
+bool Layer::ToLayerPropertiesProto(proto::LayerUpdate* layer_update) {
+  if (!needs_push_properties_ && num_dependents_need_push_properties_ == 0)
+    return false;
+
+  // Always set properties metadata for serialized layers.
+  proto::LayerProperties* proto = layer_update->add_layers();
+  proto->set_id(layer_id_);
+  proto->set_needs_push_properties(needs_push_properties_);
+  proto->set_num_dependents_need_push_properties(
+      num_dependents_need_push_properties_);
+
+  if (needs_push_properties_)
+    LayerSpecificPropertiesToProto(proto);
+
+  needs_push_properties_ = false;
+
+  bool descendant_needs_push_properties =
+      num_dependents_need_push_properties_ > 0;
+  num_dependents_need_push_properties_ = 0;
+
+  return descendant_needs_push_properties;
+}
+
+void Layer::FromLayerPropertiesProto(const proto::LayerProperties& proto) {
+  DCHECK(proto.has_id());
+  DCHECK_EQ(layer_id_, proto.id());
+  DCHECK(proto.has_needs_push_properties());
+  needs_push_properties_ = proto.needs_push_properties();
+  DCHECK(proto.has_num_dependents_need_push_properties());
+  num_dependents_need_push_properties_ =
+      proto.num_dependents_need_push_properties();
+
+  if (!needs_push_properties_)
+    return;
+
+  FromLayerSpecificPropertiesProto(proto);
+}
+
+void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
+  // TODO(nyquist): Write all required properties to |proto|.
+  // Create an empty proto::LayerProperties::base message.
+  proto->mutable_base();
+}
+
+void Layer::FromLayerSpecificPropertiesProto(
+    const proto::LayerProperties& proto) {
+  DCHECK(proto.has_base());
+  // TODO(nyquist): Read all required properties from |proto|.
 }
 
 scoped_ptr<LayerImpl> Layer::CreateLayerImpl(LayerTreeImpl* tree_impl) {
@@ -1610,7 +1660,7 @@ bool Layer::AddAnimation(scoped_ptr <Animation> animation) {
 
   UMA_HISTOGRAM_BOOLEAN("Renderer.AnimationAddedToOrphanLayer",
                         !layer_tree_host_);
-  layer_animation_controller_->AddAnimation(animation.Pass());
+  layer_animation_controller_->AddAnimation(std::move(animation));
   SetNeedsCommit();
   return true;
 }

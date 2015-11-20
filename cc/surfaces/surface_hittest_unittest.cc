@@ -79,7 +79,7 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   SurfaceIdAllocator root_allocator(2);
   SurfaceId root_surface_id = root_allocator.GenerateId();
   factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   {
@@ -109,7 +109,7 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   SurfaceIdAllocator root_allocator(2);
   SurfaceId root_surface_id = root_allocator.GenerateId();
   factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
   TestCase tests[] = {
     {
@@ -153,7 +153,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   SurfaceIdAllocator root_allocator(2);
   SurfaceId root_surface_id = root_allocator.GenerateId();
   factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   // Creates a child surface.
@@ -173,7 +173,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
 
   // Submit the frame.
   factory.Create(child_surface_id);
-  factory.SubmitCompositorFrame(child_surface_id, child_frame.Pass(),
+  factory.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
                                 SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {
@@ -227,7 +227,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
                         root_rect,
                         child_rect,
                         child_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   // Verify that point (100, 100) no longer falls on the child surface.
@@ -293,7 +293,7 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
   SurfaceIdAllocator root_allocator(2);
   SurfaceId root_surface_id = root_allocator.GenerateId();
   factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   // Creates a child surface.
@@ -313,7 +313,7 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
 
   // Submit the frame.
   factory.Create(child_surface_id);
-  factory.SubmitCompositorFrame(child_surface_id, child_frame.Pass(),
+  factory.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
                                 SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {
@@ -389,7 +389,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
   RenderPass* root_pass = nullptr;
   scoped_ptr<CompositorFrame> root_frame =
       CreateCompositorFrameWithRenderPassList(&render_pass_list);
-  root_pass = root_frame->delegated_frame_data->render_pass_list.back();
+  root_pass = root_frame->delegated_frame_data->render_pass_list.back().get();
 
   // Create a RenderPassDrawQuad.
   gfx::Rect render_pass_quad_rect(100, 100);
@@ -401,7 +401,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
 
   // Add a solid quad in the child render pass.
   RenderPass* child_render_pass =
-      root_frame->delegated_frame_data->render_pass_list.front();
+      root_frame->delegated_frame_data->render_pass_list.front().get();
   gfx::Rect child_solid_quad_rect(100, 100);
   CreateSolidColorDrawQuad(child_render_pass,
                            gfx::Transform(),
@@ -412,7 +412,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
   SurfaceIdAllocator root_allocator(1);
   SurfaceId root_surface_id = root_allocator.GenerateId();
   factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, root_frame.Pass(),
+  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {

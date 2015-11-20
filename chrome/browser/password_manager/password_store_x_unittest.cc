@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -373,7 +375,7 @@ TEST_P(PasswordStoreXTest, Notifications) {
 
   store->RemoveObserver(&observer);
 
-  store->Shutdown();
+  store->ShutdownOnUIThread();
 }
 
 TEST_P(PasswordStoreXTest, NativeMigration) {
@@ -476,7 +478,7 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
     EXPECT_EQ(db_file_start_info.size, db_file_end_info.size);
   }
 
-  store->Shutdown();
+  store->ShutdownOnUIThread();
 }
 
 INSTANTIATE_TEST_CASE_P(NoBackend,

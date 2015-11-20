@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../mojo_edk.gni")
 import("//testing/test.gni")
 import("../../../mojo/public/tools/bindings/mojom.gni")
 
@@ -16,14 +15,6 @@ config("system_config") {
     # Ensures that dependent projects import the core functions on Windows.
     "MOJO_USE_SYSTEM_IMPL",
   ]
-}
-
-mojom("master") {
-  sources = [
-    "master.mojom",
-  ]
-
-  with_environment = false
 }
 
 static_library("system") {
@@ -57,9 +48,6 @@ static_library("system") {
     "handle_table.h",
     "mapping_table.cc",
     "mapping_table.h",
-
-    #"master_impl.cc",
-    #"master_impl.h",
     "message_in_transit.cc",
     "message_in_transit.h",
     "message_in_transit_queue.cc",
@@ -101,8 +89,6 @@ static_library("system") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
-
-    #":master",
   ]
 
   if (is_win) {
@@ -122,7 +108,7 @@ group("tests") {
   ]
 }
 
-mojo_edk_source_set("test_utils") {
+source_set("test_utils") {
   testonly = true
 
   sources = [
@@ -153,9 +139,6 @@ test("mojo_system_unittests2") {
     "core_unittest.cc",
     "data_pipe_unittest.cc",
     "dispatcher_unittest.cc",
-
-    #"master_impl_unittest.cc",
-
     "message_in_transit_queue_unittest.cc",
     "message_in_transit_test_utils.cc",
     "message_in_transit_test_utils.h",

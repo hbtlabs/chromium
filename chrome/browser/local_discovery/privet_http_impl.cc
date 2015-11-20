@@ -720,8 +720,6 @@ scoped_ptr<PrivetURLFetcher> PrivetHTTPClientImpl::CreateURLFetcher(
   replacements.SetHostStr(host);
   std::string port = base::UintToString(host_port_.port());
   replacements.SetPortStr(port);
-  std::string scheme = IsInHttpsMode() ? "https" : "http";
-  replacements.SetSchemeStr(scheme);
   return scoped_ptr<PrivetURLFetcher>(
       new PrivetURLFetcher(url.ReplaceComponents(replacements), request_type,
                            context_getter_, delegate));
@@ -737,23 +735,6 @@ void PrivetHTTPClientImpl::RefreshPrivetToken(
                    base::Unretained(this)));
     info_operation_->Start();
   }
-}
-
-void PrivetHTTPClientImpl::SwitchToHttps(
-    uint16_t port,
-    const net::SHA256HashValue& certificate_fingerprint) {
-  use_https_ = true;
-  host_port_.set_port(port);
-  context_getter_ = new extensions::PrivetV3ContextGetter(
-      context_getter_->GetNetworkTaskRunner(), certificate_fingerprint);
-}
-
-bool PrivetHTTPClientImpl::IsInHttpsMode() const {
-  return use_https_;
-}
-
-std::string PrivetHTTPClientImpl::GetHost() const {
-  return host_port_.host();
 }
 
 void PrivetHTTPClientImpl::OnPrivetInfoDone(

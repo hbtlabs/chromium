@@ -609,7 +609,7 @@ using content::WebContents;
 
 // Called right after our window became the main window.
 - (void)windowDidBecomeMain:(NSNotification*)notification {
-  if (chrome::GetLastActiveBrowser() != browser_) {
+  if (chrome::GetLastActiveBrowser() != browser_.get()) {
     BrowserList::SetLastActive(browser_.get());
   }
   // Always saveWindowPositionIfNeeded when becoming main, not just
@@ -1947,6 +1947,13 @@ willAnimateFromState:(BookmarkBar::State)oldState
   [self showFullscreenExitBubbleIfNecessary];
 }
 
+- (void)toggleFullscreenToolbar {
+  shouldHideFullscreenToolbar_ = !shouldHideFullscreenToolbar_;
+
+  if ([self isInAppKitFullscreen])
+    [self updateFullscreenWithToolbar:!shouldHideFullscreenToolbar_];
+}
+
 - (BOOL)isInAnyFullscreenMode {
   return [self isInImmersiveFullscreen] || [self isInAppKitFullscreen];
 }
@@ -2002,6 +2009,10 @@ willAnimateFromState:(BookmarkBar::State)oldState
          [presentationModeController_ inPresentationMode] &&
          presentationModeController_.get().slidingStyle ==
              fullscreen_mac::OMNIBOX_TABS_HIDDEN;
+}
+
+- (BOOL)shouldHideFullscreenToolbar {
+  return shouldHideFullscreenToolbar_;
 }
 
 - (void)resizeFullscreenWindow {

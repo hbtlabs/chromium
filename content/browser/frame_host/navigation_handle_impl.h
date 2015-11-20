@@ -57,14 +57,20 @@ struct NavigationRequestInfo;
 // the RenderFrameHost still apply.
 class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
  public:
+  // |navigation_start| comes from the DidStartProvisionalLoad IPC, which tracks
+  // both renderer-initiated and browser-initiated navigation start.
+  // PlzNavigate: This value always comes from the CommonNavigationParams
+  // associated with this navigation.
   static scoped_ptr<NavigationHandleImpl> Create(
       const GURL& url,
-      FrameTreeNode* frame_tree_node);
+      FrameTreeNode* frame_tree_node,
+      const base::TimeTicks& navigation_start);
   ~NavigationHandleImpl() override;
 
   // NavigationHandle implementation:
   const GURL& GetURL() override;
   bool IsInMainFrame() override;
+  const base::TimeTicks& NavigationStart() override;
   bool IsPost() override;
   const Referrer& GetReferrer() override;
   bool HasUserGesture() override;
@@ -76,6 +82,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool HasCommitted() override;
   bool IsErrorPage() override;
   void Resume() override;
+  void CancelDeferredNavigation(
+      NavigationThrottle::ThrottleCheckResult result) override;
   void RegisterThrottleForTesting(
       scoped_ptr<NavigationThrottle> navigation_throttle) override;
   NavigationThrottle::ThrottleCheckResult CallWillStartRequestForTesting(
@@ -156,16 +164,22 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     DEFERRING_START,
     WILL_REDIRECT_REQUEST,
     DEFERRING_REDIRECT,
+    CANCELING,
     READY_TO_COMMIT,
     DID_COMMIT,
     DID_COMMIT_ERROR_PAGE,
   };
 
   NavigationHandleImpl(const GURL& url,
-                       FrameTreeNode* frame_tree_node);
+                       FrameTreeNode* frame_tree_node,
+                       const base::TimeTicks& navigation_start);
 
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
+
+  // Helper function to run and reset the |complete_callback_|. This marks the
+  // end of a round of NavigationThrottleChecks.
+  void RunCompleteCallback(NavigationThrottle::ThrottleCheckResult result);
 
   // Used in tests.
   State state() const { return state_; }
@@ -196,6 +210,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // The index of the next throttle to check.
   size_t next_index_;
+
+  // The time this navigation started.
+  const base::TimeTicks navigation_start_;
 
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;

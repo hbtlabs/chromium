@@ -97,6 +97,9 @@
     'certificate_transparency_unittest_sources': [
       'certificate_transparency/log_proof_fetcher_unittest.cc',
     ],
+    'child_trace_message_filter_unittest_sources': [
+      'tracing/child_trace_message_filter_unittest.cc',
+    ],
     'cloud_devices_unittest_sources': [
       'cloud_devices/common/cloud_devices_urls_unittest.cc',
       'cloud_devices/common/printer_description_unittest.cc',
@@ -198,6 +201,7 @@
     ],
     'favicon_unittest_sources': [
       'favicon/content/content_favicon_driver_unittest.cc',
+      'favicon/core/fallback_url_util_unittest.cc',
       'favicon/core/favicon_handler_unittest.cc',
       'favicon/core/large_icon_service_unittest.cc',
     ],
@@ -256,6 +260,7 @@
       'gcm_driver/crypto/gcm_encryption_provider_unittest.cc',
       'gcm_driver/crypto/gcm_key_store_unittest.cc',
       'gcm_driver/crypto/gcm_message_cryptographer_unittest.cc',
+      'gcm_driver/crypto/p256_key_util_unittest.cc',
     ],
     'google_unittest_sources': [
       'google/core/browser/google_url_tracker_unittest.cc',
@@ -416,6 +421,7 @@
       'page_load_metrics/renderer/page_timing_metrics_sender_unittest.cc',
     ],
     'password_manager_unittest_sources': [
+      'password_manager/content/browser/content_password_manager_driver_unittest.cc',
       'password_manager/content/browser/credential_manager_dispatcher_unittest.cc',
       'password_manager/core/browser/affiliated_match_helper_unittest.cc',
       'password_manager/core/browser/affiliation_backend_unittest.cc',
@@ -428,6 +434,7 @@
       'password_manager/core/browser/export/csv_writer_unittest.cc',
       'password_manager/core/browser/facet_manager_unittest.cc',
       'password_manager/core/browser/import/csv_reader_unittest.cc',
+      'password_manager/core/browser/log_manager_unittest.cc',
       'password_manager/core/browser/log_router_unittest.cc',
       'password_manager/core/browser/login_database_ios_unittest.cc',
       'password_manager/core/browser/login_database_unittest.cc',
@@ -594,6 +601,7 @@
       'scheduler/base/test_always_fail_time_source.h',
       'scheduler/base/test_time_source.cc',
       'scheduler/base/test_time_source.h',
+      'scheduler/base/time_domain_unittest.cc',
       'scheduler/child/idle_helper_unittest.cc',
       'scheduler/child/scheduler_helper_unittest.cc',
       'scheduler/child/scheduler_tqm_delegate_for_test.cc',
@@ -618,6 +626,7 @@
     'search_engines_unittest_sources': [
       'search_engines/default_search_manager_unittest.cc',
       'search_engines/default_search_pref_migration_unittest.cc',
+      'search_engines/detect_desktop_search_win_unittest.cc',
       'search_engines/keyword_table_unittest.cc',
       'search_engines/search_host_to_urls_map_unittest.cc',
       'search_engines/template_url_prepopulate_data_unittest.cc',
@@ -695,7 +704,6 @@
       'sync_driver/sync_stopped_reporter_unittest.cc',
       'sync_driver/sync_util_unittest.cc',
       'sync_driver/system_encryptor_unittest.cc',
-      'sync_driver/tab_node_pool_unittest.cc',
       'sync_driver/ui_data_type_controller_unittest.cc',
     ],
     'sync_sessions_unittest_sources': [
@@ -708,6 +716,7 @@
       'sync_sessions/revisit/typed_url_page_revisit_task_unittest.cc',
       'sync_sessions/session_data_type_controller_unittest.cc',
       'sync_sessions/synced_session_tracker_unittest.cc',
+      'sync_sessions/tab_node_pool_unittest.cc',
     ],
     'syncable_prefs_unittest_sources': [
       'syncable_prefs/pref_model_associator_unittest.cc',
@@ -726,7 +735,6 @@
       'translate/core/common/translate_metrics_unittest.cc',
       'translate/core/common/translate_util_unittest.cc',
       'translate/core/language_detection/language_detection_util_unittest.cc',
-      # TODO(GYP) bug 523060: these translate tests on iOS.
       'translate/ios/browser/js_translate_manager_unittest.mm',
       'translate/ios/browser/language_detection_controller_unittest.mm',
       'translate/ios/browser/translate_controller_unittest.mm',
@@ -859,6 +867,7 @@
         '<@(bubble_unittest_sources)',
         '<@(captive_portal_unittest_sources)',
         '<@(certificate_reporting_unittest_sources)',
+        '<@(child_trace_message_filter_unittest_sources)',
         '<@(cloud_devices_unittest_sources)',
         '<@(component_updater_unittest_sources)',
         '<@(compression_unittest_sources)',
@@ -1306,6 +1315,7 @@
             'components.gyp:data_reduction_proxy_content',
             'components.gyp:data_usage_android',
             'components.gyp:safe_json_java',
+            'components.gyp:variations_java',
             '../content/content.gyp:content_java',
             '../testing/android/native_test.gyp:native_test_native_code',
           ],
@@ -1374,6 +1384,14 @@
             'components.gyp:pairing',
             'components.gyp:user_manager_test_support',
             'components.gyp:wifi_sync',
+          ],
+        }],
+        ['chromeos==1 and enable_arc==1', {
+          'sources': [
+            'arc/arc_bridge_service_unittest.cc',
+          ],
+          'dependencies': [
+            'components.gyp:arc',
           ],
         }],
         ['OS=="linux"', {

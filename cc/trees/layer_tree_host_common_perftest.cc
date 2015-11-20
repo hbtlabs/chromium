@@ -4,6 +4,7 @@
 
 #include "cc/trees/layer_tree_host_common.h"
 
+#include <deque>
 #include <sstream>
 
 #include "base/files/file_path.h"
@@ -13,8 +14,6 @@
 #include "base/strings/string_piece.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "cc/base/scoped_ptr_deque.h"
-#include "cc/base/scoped_ptr_vector.h"
 #include "cc/debug/lap_timer.h"
 #include "cc/layers/layer.h"
 #include "cc/output/bsp_tree.h"
@@ -154,7 +153,7 @@ class BspTreePerfTest : public CalcDrawPropsTest {
     BuildLayerImplList(active_tree->root_layer(), &base_list);
 
     int polygon_counter = 0;
-    ScopedPtrVector<DrawPolygon> polygon_list;
+    std::vector<scoped_ptr<DrawPolygon>> polygon_list;
     for (LayerImplList::iterator it = base_list.begin(); it != base_list.end();
          ++it) {
       DrawPolygon* draw_polygon =
@@ -165,7 +164,7 @@ class BspTreePerfTest : public CalcDrawPropsTest {
 
     timer_.Reset();
     do {
-      ScopedPtrDeque<DrawPolygon> test_list;
+      std::deque<scoped_ptr<DrawPolygon>> test_list;
       for (int i = 0; i < num_duplicates_; i++) {
         for (size_t i = 0; i < polygon_list.size(); i++) {
           test_list.push_back(polygon_list[i]->CreateCopy());
@@ -184,7 +183,7 @@ class BspTreePerfTest : public CalcDrawPropsTest {
     }
 
     for (size_t i = 0; i < layer->children().size(); i++) {
-      BuildLayerImplList(layer->children()[i], list);
+      BuildLayerImplList(layer->children()[i].get(), list);
     }
   }
 

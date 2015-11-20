@@ -4,6 +4,8 @@
 
 package org.chromium.content_public.browser;
 
+import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Parcelable;
 
 import org.chromium.base.VisibleForTesting;
@@ -100,7 +102,8 @@ public interface WebContents extends Parcelable {
     void selectAll();
 
     /**
-     * Clear the selection.
+     * Clear the selection. This includes the cursor which is a zero-sized selection, and keyboard
+     * will be hidden as a result.
      */
     void unselect();
 
@@ -324,4 +327,7 @@ public interface WebContents extends Parcelable {
      */
     @VisibleForTesting
     String getEncoding();
+
+    public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
+            ContentBitmapCallback callback);
 }

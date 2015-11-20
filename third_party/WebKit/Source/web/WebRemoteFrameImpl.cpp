@@ -376,11 +376,6 @@ unsigned WebRemoteFrameImpl::unloadListenerCount() const
     return 0;
 }
 
-void WebRemoteFrameImpl::replaceSelection(const WebString&)
-{
-    ASSERT_NOT_REACHED();
-}
-
 void WebRemoteFrameImpl::insertText(const WebString&)
 {
     ASSERT_NOT_REACHED();
@@ -448,11 +443,6 @@ bool WebRemoteFrameImpl::isContinuousSpellCheckingEnabled() const
 }
 
 void WebRemoteFrameImpl::requestTextChecking(const WebElement&)
-{
-    ASSERT_NOT_REACHED();
-}
-
-void WebRemoteFrameImpl::replaceMisspelledRange(const WebString&)
 {
     ASSERT_NOT_REACHED();
 }
@@ -747,6 +737,11 @@ WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(WebTreeScopeType scope, co
 void WebRemoteFrameImpl::setCoreFrame(PassRefPtrWillBeRawPtr<RemoteFrame> frame)
 {
     m_frame = frame;
+}
+
+RemoteFrame* WebRemoteFrameImpl::frame() const
+{
+    return m_frame.get();
 }
 
 WebRemoteFrameImpl* WebRemoteFrameImpl::fromFrame(RemoteFrame& frame)

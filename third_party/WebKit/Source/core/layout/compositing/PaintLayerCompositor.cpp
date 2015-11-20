@@ -538,8 +538,8 @@ void PaintLayerCompositor::frameViewDidChangeSize()
 {
     if (m_containerLayer) {
         FrameView* frameView = m_layoutView.frameView();
-        m_containerLayer->setSize(frameView->visibleContentSize());
-        m_overflowControlsHostLayer->setSize(frameView->visibleContentSize(IncludeScrollbars));
+        m_containerLayer->setSize(FloatSize(frameView->visibleContentSize()));
+        m_overflowControlsHostLayer->setSize(FloatSize(frameView->visibleContentSize(IncludeScrollbars)));
 
         frameViewDidScroll();
         updateOverflowControlsLayers();
@@ -739,13 +739,13 @@ void PaintLayerCompositor::updateRootLayerPosition()
 {
     if (m_rootContentLayer) {
         const IntRect& documentRect = m_layoutView.documentRect();
-        m_rootContentLayer->setSize(documentRect.size());
+        m_rootContentLayer->setSize(FloatSize(documentRect.size()));
         m_rootContentLayer->setPosition(documentRect.location());
     }
     if (m_containerLayer) {
         FrameView* frameView = m_layoutView.frameView();
-        m_containerLayer->setSize(frameView->visibleContentSize());
-        m_overflowControlsHostLayer->setSize(frameView->visibleContentSize(IncludeScrollbars));
+        m_containerLayer->setSize(FloatSize(frameView->visibleContentSize()));
+        m_overflowControlsHostLayer->setSize(FloatSize(frameView->visibleContentSize(IncludeScrollbars)));
     }
 }
 
@@ -800,21 +800,19 @@ static void paintScrollbar(const Scrollbar* scrollbar, GraphicsContext& context,
     scrollbar->paint(&context, CullRect(transformedClip));
 }
 
-void PaintLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase, const IntRect* clip) const
+IntRect PaintLayerCompositor::computeInterestRect(const GraphicsLayer* graphicsLayer, const IntRect&) const
 {
-    IntRect defaultClip;
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled() && !clip) {
-        defaultClip.setSize(m_layoutView.layoutSize(IncludeScrollbars));
-        clip = &defaultClip;
-    }
-    ASSERT(clip);
+    return IntRect(IntPoint(), m_layoutView.layoutSize(IncludeScrollbars));
+}
 
+void PaintLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase, const IntRect& interestRect) const
+{
     if (graphicsLayer == layerForHorizontalScrollbar())
-        paintScrollbar(m_layoutView.frameView()->horizontalScrollbar(), context, *clip);
+        paintScrollbar(m_layoutView.frameView()->horizontalScrollbar(), context, interestRect);
     else if (graphicsLayer == layerForVerticalScrollbar())
-        paintScrollbar(m_layoutView.frameView()->verticalScrollbar(), context, *clip);
+        paintScrollbar(m_layoutView.frameView()->verticalScrollbar(), context, interestRect);
     else if (graphicsLayer == layerForScrollCorner())
-        FramePainter(*m_layoutView.frameView()).paintScrollCorner(&context, *clip);
+        FramePainter(*m_layoutView.frameView()).paintScrollCorner(&context, interestRect);
 }
 
 bool PaintLayerCompositor::supportsFixedRootBackgroundCompositing() const
@@ -1040,7 +1038,7 @@ void PaintLayerCompositor::destroyRootLayer()
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->scrollableAreaScrollbarLayerDidChange(m_layoutView.frameView(), HorizontalScrollbar);
         if (Scrollbar* horizontalScrollbar = m_layoutView.frameView()->horizontalScrollbar())
-            m_layoutView.frameView()->invalidateScrollbar(horizontalScrollbar, IntRect(IntPoint(0, 0), horizontalScrollbar->frameRect().size()));
+            m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(horizontalScrollbar);
     }
 
     if (m_layerForVerticalScrollbar) {
@@ -1049,12 +1047,12 @@ void PaintLayerCompositor::destroyRootLayer()
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->scrollableAreaScrollbarLayerDidChange(m_layoutView.frameView(), VerticalScrollbar);
         if (Scrollbar* verticalScrollbar = m_layoutView.frameView()->verticalScrollbar())
-            m_layoutView.frameView()->invalidateScrollbar(verticalScrollbar, IntRect(IntPoint(0, 0), verticalScrollbar->frameRect().size()));
+            m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(verticalScrollbar);
     }
 
     if (m_layerForScrollCorner) {
         m_layerForScrollCorner = nullptr;
-        m_layoutView.frameView()->invalidateScrollCorner(m_layoutView.frameView()->scrollCornerRect());
+        m_layoutView.frameView()->setScrollCornerNeedsPaintInvalidation();
     }
 
     if (m_overflowControlsHostLayer) {
@@ -1184,7 +1182,7 @@ DocumentLifecycle& PaintLayerCompositor::lifecycle() const
     return m_layoutView.document().lifecycle();
 }
 
-String PaintLayerCompositor::debugName(const GraphicsLayer* graphicsLayer)
+String PaintLayerCompositor::debugName(const GraphicsLayer* graphicsLayer) const
 {
     String name;
     if (graphicsLayer == m_rootContentLayer.get()) {

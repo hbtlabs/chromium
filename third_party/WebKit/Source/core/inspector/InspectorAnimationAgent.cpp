@@ -227,6 +227,10 @@ void InspectorAnimationAgent::setPaused(ErrorString* errorString, const RefPtr<J
         if (!animation)
             return;
         Animation* clone = animationClone(animation);
+        if (!clone) {
+            *errorString = "Failed to clone detached animation";
+            return;
+        }
         if (paused && !clone->paused()) {
             // Ensure we restore a current time if the animation is limited.
             double currentTime = clone->timeline()->currentTime() - clone->startTime();
@@ -257,6 +261,8 @@ Animation* InspectorAnimationAgent::animationClone(Animation* animation)
             StringKeyframeEffectModel* newStringKeyframeModel = StringKeyframeEffectModel::create(newKeyframes);
             // TODO(samli): This shouldn't be required.
             Element* element = oldEffect->target();
+            if (!element)
+                return nullptr;
             newStringKeyframeModel->forceConversionsToAnimatableValues(*element, element->computedStyle());
             newModel = newStringKeyframeModel;
         } else if (oldModel->isAnimatableValueKeyframeEffectModel()) {
@@ -292,6 +298,10 @@ void InspectorAnimationAgent::seekAnimations(ErrorString* errorString, const Ref
         if (!animation)
             return;
         Animation* clone = animationClone(animation);
+        if (!clone) {
+            *errorString = "Failed to clone a detached animation.";
+            return;
+        }
         if (!clone->paused())
             clone->play();
         clone->setCurrentTime(currentTime);
@@ -303,6 +313,8 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
     Animation* animation = assertAnimation(errorString, animationId);
     if (!animation)
         return;
+
+    animation = animationClone(animation);
 
     AnimationType type = m_idToAnimationType.get(animationId);
     if (type == AnimationType::CSSTransition) {
@@ -323,7 +335,7 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
         UnrestrictedDoubleOrString unrestrictedDuration;
         unrestrictedDuration.setUnrestrictedDouble(duration + delay);
         timing->setDuration(unrestrictedDuration);
-    } else if (type == AnimationType::WebAnimation) {
+    } else {
         AnimationEffectTiming* timing = animation->effect()->timing();
         UnrestrictedDoubleOrString unrestrictedDuration;
         unrestrictedDuration.setUnrestrictedDouble(duration);
@@ -398,12 +410,12 @@ String InspectorAnimationAgent::createCSSId(Animation& animation)
     }
 
     Element* element = effect->target();
-    RefPtrWillBeRawPtr<CSSRuleList> ruleList = m_cssAgent->matchedRulesList(element);
+    WillBeHeapVector<RefPtrWillBeMember<CSSStyleDeclaration>> styles = m_cssAgent->matchingStyles(element);
     OwnPtr<WebCryptoDigestor> digestor = createDigestor(HashAlgorithmSha1);
     addStringToDigestor(digestor.get(), String::number(type));
     addStringToDigestor(digestor.get(), effect->name());
     for (CSSPropertyID property : cssProperties) {
-        RefPtrWillBeRawPtr<CSSStyleDeclaration> style = m_cssAgent->findEffectiveDeclaration(property, ruleList.get(), element->style());
+        RefPtrWillBeRawPtr<CSSStyleDeclaration> style = m_cssAgent->findEffectiveDeclaration(property, styles);
         // Ignore inline styles.
         if (!style || !style->parentStyleSheet() || !style->parentRule() || style->parentRule()->type() != CSSRule::STYLE_RULE)
             continue;
@@ -467,6 +479,7 @@ double InspectorAnimationAgent::normalizedStartTime(Animation& animation)
 DEFINE_TRACE(InspectorAnimationAgent)
 {
 #if ENABLE(OILPAN)
+    visitor->trace(m_inspectedFrames);
     visitor->trace(m_domAgent);
     visitor->trace(m_cssAgent);
     visitor->trace(m_injectedScriptManager);

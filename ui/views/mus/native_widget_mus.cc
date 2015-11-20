@@ -7,9 +7,11 @@
 #include "base/thread_task_runner_handle.h"
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
+#include "components/mus/public/cpp/window_property.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/window_tree_client.h"
+#include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -18,6 +20,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/views/mus/platform_window_mus.h"
+#include "ui/views/mus/surface_context_factory.h"
 #include "ui/views/mus/window_manager_client_area_insets.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -176,6 +179,7 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
       surface_type_(surface_type),
       show_state_before_fullscreen_(ui::PLATFORM_WINDOW_STATE_UNKNOWN),
       ownership_(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET),
+      context_factory_(new SurfaceContextFactory(shell, window, surface_type)),
       content_(new aura::Window(this)),
       close_widget_factory_(this) {}
 
@@ -211,6 +215,19 @@ void NativeWidgetMus::OnActivationChanged(bool active) {
   }
 }
 
+void NativeWidgetMus::UpdateClientArea() {
+  NonClientView* non_client_view =
+      native_widget_delegate_->AsWidget()->non_client_view();
+  if (!non_client_view || !non_client_view->client_view())
+    return;
+
+  const gfx::Rect client_area_rect(non_client_view->client_view()->bounds());
+  window_->SetClientArea(gfx::Insets(
+      client_area_rect.y(), client_area_rect.x(),
+      non_client_view->bounds().height() - client_area_rect.bottom(),
+      non_client_view->bounds().width() - client_area_rect.right()));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetMus, private:
 
@@ -235,9 +252,23 @@ NonClientFrameView* NativeWidgetMus::CreateNonClientFrameView() {
 
 void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   ownership_ = params.ownership;
+  window_->SetCanFocus(params.activatable ==
+                       Widget::InitParams::ACTIVATABLE_YES);
+
+  // WindowTreeHost creates the compositor using the ContextFactory from
+  // aura::Env. Install |context_factory_| there so that |context_factory_| is
+  // picked up.
+  ui::ContextFactory* default_context_factory =
+      aura::Env::GetInstance()->context_factory();
+  // For Chrome, we need the GpuProcessTransportFactory so that renderer and
+  // browser pixels are composited into a single backing
+  // SoftwareOutputDeviceMus.
+  if (!default_context_factory)
+    aura::Env::GetInstance()->set_context_factory(context_factory_.get());
   window_tree_host_.reset(
       new WindowTreeHostMus(shell_, this, window_, surface_type_));
   window_tree_host_->InitHost();
+  aura::Env::GetInstance()->set_context_factory(default_context_factory);
 
   focus_client_.reset(new wm::FocusController(new FocusRulesImpl));
 
@@ -341,7 +372,7 @@ void NativeWidgetMus::ReleaseCapture() {
 }
 
 bool NativeWidgetMus::HasCapture() const {
-  return window_tree_host_->window()->HasCapture();
+  return content_->HasCapture();
 }
 
 ui::InputMethod* NativeWidgetMus::GetInputMethod() {
@@ -350,7 +381,8 @@ ui::InputMethod* NativeWidgetMus::GetInputMethod() {
 
 void NativeWidgetMus::CenterWindow(const gfx::Size& size) {
   // TODO(beng): clear user-placed property and set preferred size property.
-  window_->SetPreferredSize(size);
+  window_->SetSharedProperty<gfx::Size>(
+      mus::mojom::WindowManager::kPreferredSize_Property, size);
 }
 
 void NativeWidgetMus::GetWindowPlacement(
@@ -614,7 +646,8 @@ bool NativeWidgetMus::IsTranslucentWindowOpacitySupported() const {
 }
 
 void NativeWidgetMus::OnSizeConstraintsChanged() {
-  window_->SetResizeBehavior(
+  window_->SetSharedProperty<int32_t>(
+      mus::mojom::WindowManager::kResizeBehavior_Property,
       ResizeBehaviorFromDelegate(GetWidget()->widget_delegate()));
 }
 
@@ -644,7 +677,7 @@ void NativeWidgetMus::OnBoundsChanged(const gfx::Rect& old_bounds,
   }
   if (old_bounds.size() != new_bounds.size()) {
     native_widget_delegate_->OnNativeWidgetSizeChanged(new_bounds.size());
-    UpdateClientAreaInWindowManager();
+    UpdateClientArea();
   }
 }
 
@@ -746,22 +779,6 @@ void NativeWidgetMus::OnScrollEvent(ui::ScrollEvent* event) {
 
 void NativeWidgetMus::OnGestureEvent(ui::GestureEvent* event) {
   native_widget_delegate_->OnGestureEvent(event);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// NativeWidgetMus, private:
-
-void NativeWidgetMus::UpdateClientAreaInWindowManager() {
-  NonClientView* non_client_view =
-      native_widget_delegate_->AsWidget()->non_client_view();
-  if (!non_client_view || !non_client_view->client_view())
-    return;
-
-  const gfx::Rect client_area_rect(non_client_view->client_view()->bounds());
-  window_->SetClientArea(gfx::Insets(
-      client_area_rect.y(), client_area_rect.x(),
-      non_client_view->bounds().height() - client_area_rect.bottom(),
-      non_client_view->bounds().width() - client_area_rect.right()));
 }
 
 }  // namespace views

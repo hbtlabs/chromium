@@ -9,7 +9,15 @@
 
 namespace media {
 
+void VideoDecodeAccelerator::Client::NotifyCdmAttached(bool success) {
+  NOTREACHED() << "By default CDM is not supported.";
+}
+
 VideoDecodeAccelerator::~VideoDecodeAccelerator() {}
+
+void VideoDecodeAccelerator::SetCdm(int cdm_id) {
+  NOTREACHED() << "By default CDM is not supported.";
+}
 
 bool VideoDecodeAccelerator::CanDecodeOnIOThread() {
   // GPU process subclasses must override this.
@@ -30,14 +38,11 @@ VideoDecodeAccelerator::SupportedProfile::~SupportedProfile() {
 
 } // namespace media
 
-namespace base {
+namespace std {
 
-void DefaultDeleter<media::VideoDecodeAccelerator>::operator()(
-    void* video_decode_accelerator) const {
-  static_cast<media::VideoDecodeAccelerator*>(video_decode_accelerator)->
-      Destroy();
+void default_delete<media::VideoDecodeAccelerator>::operator()(
+    media::VideoDecodeAccelerator* vda) const {
+  vda->Destroy();
 }
 
-}  // namespace base
-
-
+}  // namespace std

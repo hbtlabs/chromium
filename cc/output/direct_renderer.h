@@ -9,7 +9,7 @@
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/scoped_ptr_deque.h"
+#include "cc/output/ca_layer_overlay.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/output/renderer.h"
 #include "cc/raster/task_graph_runner.h"
@@ -57,6 +57,7 @@ class CC_EXPORT DirectRenderer : public Renderer {
     bool disable_picture_quad_image_filtering;
 
     OverlayCandidateList overlay_list;
+    CALayerOverlayList ca_layer_overlay_list;
   };
 
   void SetEnlargePassTextureAmountForTesting(const gfx::Vector2d& amount);
@@ -104,7 +105,7 @@ class CC_EXPORT DirectRenderer : public Renderer {
 
   static gfx::Size RenderPassTextureSize(const RenderPass* render_pass);
 
-  void FlushPolygons(ScopedPtrDeque<DrawPolygon>* poly_list,
+  void FlushPolygons(std::deque<scoped_ptr<DrawPolygon>>* poly_list,
                      DrawingFrame* frame,
                      const gfx::Rect& render_pass_scissor,
                      bool use_render_pass_scissor);

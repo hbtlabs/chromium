@@ -724,10 +724,9 @@ DOMSelection* LocalDOMWindow::getSelection()
 
 Element* LocalDOMWindow::frameElement() const
 {
-    if (!frame())
+    if (!(frame() && frame()->owner() && frame()->owner()->isLocal()))
         return nullptr;
 
-    // The bindings security check should ensure we're same origin...
     return toHTMLFrameOwnerElement(frame()->owner());
 }
 
@@ -934,8 +933,8 @@ static FloatSize getViewportSize(LocalFrame* frame)
     }
 
     return frame->isMainFrame() && !host->settings().inertVisualViewport()
-        ? host->visualViewport().visibleRect().size()
-        : view->visibleContentRect(IncludeScrollbars).size();
+        ? FloatSize(host->visualViewport().visibleRect().size())
+        : FloatSize(view->visibleContentRect(IncludeScrollbars).size());
 }
 
 int LocalDOMWindow::innerHeight() const
@@ -1497,7 +1496,9 @@ PassRefPtrWillBeRawPtr<DOMWindow> LocalDOMWindow::open(const String& urlString, 
         return targetFrame->domWindow();
     }
 
-    return createWindow(urlString, frameName, WindowFeatures(windowFeaturesString), *callingWindow, *firstFrame, *frame());
+    WindowFeatures features(windowFeaturesString);
+    RefPtrWillBeRawPtr<DOMWindow> newWindow = createWindow(urlString, frameName, features, *callingWindow, *firstFrame, *frame());
+    return features.noopener ? nullptr : newWindow;
 }
 
 DEFINE_TRACE(LocalDOMWindow)

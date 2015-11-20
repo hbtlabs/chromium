@@ -39,27 +39,27 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'c94cd7cc01b655b7f4289537962c36a4ee8dd63e',
+  'skia_revision': 'a37662937cb0a44b5d75a9240cfa9587b4d60e9c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '10449d46aa20f10f39598627bf07f70def597029',
+  'v8_revision': '7e9a0251ded07fda6c783871d40af052c68fa7f4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': '8fce79620b04bbe5415ace1103db27505bdc4c06',
+  'swarming_revision': '05e17879accce360bee999cd9ec891d761056bc2',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '5576734a46f80bc8c5265cac9fb1af774b658d89',
+  'angle_revision': 'daa8c27f57c16cfc574ec6e4b32d56396f70c4bd',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '3ba3ca22ec610fe95683f6bfdeea9d90c768abd7',
+  'buildtools_revision': '818123dac34899ec230840936fc15b8b2b5556f9',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '4274ea205ca2219f6a4cfc54025284c1aa3b14b8',
+  'pdfium_revision': '76b0104270b0a7f3ce7d40ddde2b6d6c8cb944db',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -67,7 +67,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': 'd7421ebf6cae07051caf657016f160585b64f8a6',
+  'boringssl_revision': '3ac32b1eda0da7a99d9c2b6c605fe50af80ccd90',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling nss
   # and whatever else without interference from each other.
@@ -148,7 +148,7 @@ deps = {
     Var('chromium_git') + '/external/snappy.git' + '@' + '762bb32f0c9d2f31ba4958c7c0933d22e80c20bf',
 
   'src/tools/gyp':
-    Var('chromium_git') + '/external/gyp.git' + '@' + '2c1e6cced23554ce84806e570acea637f6473afc',
+    Var('chromium_git') + '/external/gyp.git' + '@' + 'e1133480da78cd4a23a8cec604d1d6d46dab35d6',
 
   'src/tools/swarming_client':
    Var('chromium_git') + '/external/swarming.client.git' + '@' +  Var('swarming_revision'),
@@ -184,19 +184,19 @@ deps = {
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
 
   'src/third_party/libvpx_new/source/libvpx':
-   Var('chromium_git') + '/webm/libvpx.git' + '@' +  '0941ff72a00732cea6750477edfe649348e699de',
+   Var('chromium_git') + '/webm/libvpx.git' + '@' +  '204cde580a5f6dd5e7511c932c47c068046d9671',
 
   'src/third_party/ffmpeg':
-   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '3540f6b0097b03aae1f29e41d8d8433044ee8cdb',
+   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '1de28af528a87ac01a767eafabdb80c5c003ed35',
 
   'src/third_party/libjingle/source/talk':
-    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + '54a2705b0cb5978dc4c6054bea2f02130a21d328', # commit position 10622
+    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + '3ecea8a7f856b250a0c86d26f7a7d0f284ca5afb', # commit position 10671
 
   'src/third_party/usrsctp/usrsctplib':
     Var('chromium_git') + '/external/usrsctplib.git' + '@' + '36444a999739e9e408f8f587cb4c3ffeef2e50ac', # from svn revision 9215
 
   'src/third_party/libsrtp':
-   Var('chromium_git') + '/chromium/deps/libsrtp.git' + '@' + '502e81a238a864cfce774d4de3893810629bf227', # from svn revision 295151
+   Var('chromium_git') + '/chromium/deps/libsrtp.git' + '@' + 'b8dd754b4fa05fd4cf1c2e8dc3b1ac976280e41a', # from svn revision 295151
 
   'src/third_party/yasm/source/patched-yasm':
    Var('chromium_git') + '/chromium/deps/yasm/patched-yasm.git' + '@' + '4671120cd8558ce62ee8672ebf3eb6f5216f909b',
@@ -214,7 +214,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'e22c7db3011093af98a9d698087f145a9471ad18', # commit position 10619
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '82cc96fa7a18819123cc171b19ca880c48b3406f', # commit position 10685
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -223,7 +223,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
 
   'src/third_party/libyuv':
-    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '6100f50f136829b9769baf79306b31e0665ec16a', # from version 1536
+    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '1019e4537fc1bfc6ee505cd1c628b645c7e966b7', # from version 1537
 
   'src/third_party/smhasher/src':
     Var('chromium_git') + '/external/smhasher.git' + '@' + 'e87738e57558e0ec472b2fc3a643b838e5b6e88f',
@@ -415,6 +415,10 @@ deps_os = {
     # Graphics buffer allocator for Chrome OS.
     'src/third_party/minigbm/src':
      Var('chromium_git') + '/chromiumos/platform/minigbm.git' + '@' + 'f9d2ab79a15a1bb6a1307f3b608964c81c27791b',
+
+    # Display server protocol for Linux.
+    'src/third_party/wayland/src':
+     Var('chromium_git') + '/external/wayland/wayland.git' + '@' + 'b05668f0ad64ad9ba82e124965163daed4172ead',
   },
   'android': {
     'src/third_party/android_protobuf/src':

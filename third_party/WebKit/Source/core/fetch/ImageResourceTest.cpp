@@ -47,8 +47,7 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/WebUnitTestSupport.h"
-
-#include <gtest/gtest.h>
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
@@ -135,7 +134,7 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_FALSE(cachedImage->image()->isNull());
     ASSERT_EQ(cachedImage->image()->width(), 1);
     ASSERT_EQ(cachedImage->image()->height(), 1);
-    ASSERT_EQ(client.imageChangedCount(), 2);
+    ASSERT_EQ(client.imageChangedCount(), 1);
     ASSERT_TRUE(client.notifyFinishedCalled());
 }
 
