@@ -918,10 +918,10 @@ crbug.com/524596 virtual/syncpaint/paint/invalidation/composited-non-stacking-co
 crbug.com/524596 virtual/syncpaint/paint/invalidation/composited-non-stacking-context-descendant-move.html [ Skip ]
 crbug.com/524596 virtual/syncpaint/paint/invalidation/fixed-position-descendant-paint-offset-indirect.html [ Skip ]
 
-crbug.com/546538 svg/clip-path/clip-path-child-clipped.svg [ NeedsManualRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-nonzero.svg [ NeedsManualRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-evenodd-nonzero.svg [ NeedsManualRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-nonzero-evenodd.svg [ NeedsManualRebaseline ]
+crbug.com/546538 svg/clip-path/clip-path-child-clipped.svg [ NeedsRebaseline ]
+crbug.com/546538 svg/clip-path/clip-path-nonzero.svg [ NeedsRebaseline ]
+crbug.com/546538 svg/clip-path/clip-path-evenodd-nonzero.svg [ NeedsRebaseline ]
+crbug.com/546538 svg/clip-path/clip-path-nonzero-evenodd.svg [ NeedsRebaseline ]
 
 crbug.com/425113 svg/clip-path/clip-path-multiple-children.svg [ Failure ]
 
@@ -1346,5 +1346,7 @@ crbug.com/545551 [ Win Mac ] svg/custom/repaint-shadow.svg [ Failure Pass ]
 crbug.com/546215 [ Android ] fast/inline-block/overflow-clip.html [ Failure ]
 
 crbug.com/548765 http/tests/inspector/console-fetch-logging.html [ Failure Pass Slow ]
+
+crbug.com/559300 inspector/layers/layer-canvas-log.html [ Failure ]
 
 crbug.com/549314 [ XP ] inspector-protocol/layout-fonts/unicode-range-combining-chars-fallback.html [ Failure ]

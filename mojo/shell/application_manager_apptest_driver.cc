@@ -43,8 +43,7 @@ class TargetApplicationDelegate : public mojo::ApplicationDelegate,
   void Initialize(mojo::ApplicationImpl* app) override {
     app_ = app;
     mojo::shell::mojom::ApplicationManagerPtr application_manager;
-    app_->ConnectToService(mojo::URLRequest::From(std::string("mojo:shell")),
-                           &application_manager);
+    app_->ConnectToService("mojo:shell", &application_manager);
 
     base::FilePath target_path;
     CHECK(base::PathService::Get(base::DIR_EXE, &target_path));
@@ -82,8 +81,7 @@ class TargetApplicationDelegate : public mojo::ApplicationDelegate,
 
     application_manager->CreateInstanceForHandle(
         mojo::ScopedHandle(mojo::Handle(handle.release().value())),
-        "exe:application_manager_apptest_target",
-        "0");
+        "exe:application_manager_apptest_target");
     // Put the other end on the command line used to launch the target.
     platform_channel_pair.PrepareToPassClientHandleToChildProcess(
         &child_command_line, &handle_passing_info);

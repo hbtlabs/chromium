@@ -12,8 +12,8 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/heap/Handle.h"
-#include "third_party/skia/include/core/SkImage.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 
@@ -33,11 +33,15 @@ public:
     static PassRefPtrWillBeRawPtr<ImageBitmap> create(ImageData*, const IntRect&);
     static PassRefPtrWillBeRawPtr<ImageBitmap> create(ImageBitmap*, const IntRect&);
     static PassRefPtrWillBeRawPtr<ImageBitmap> create(Image*, const IntRect&);
+    static PassRefPtrWillBeRawPtr<ImageBitmap> create(PassRefPtr<StaticBitmapImage>);
 
-    SkImage* skImage() const { return (m_image) ? m_image.get() : nullptr; }
+    StaticBitmapImage* bitmapImage() const { return (m_image) ? m_image.get() : nullptr; }
     unsigned long width() const;
     unsigned long height() const;
     IntSize size() const;
+
+    bool isNeutered() const { return m_isNeutered; }
+    PassRefPtr<StaticBitmapImage> transfer();
 
     ~ImageBitmap() override;
 
@@ -56,14 +60,14 @@ private:
     ImageBitmap(ImageData*, const IntRect&);
     ImageBitmap(ImageBitmap*, const IntRect&);
     ImageBitmap(Image*, const IntRect&);
-
-    PassRefPtr<SkImage> cropImage(PassRefPtr<SkImage>, const IntRect&);
+    ImageBitmap(PassRefPtr<StaticBitmapImage>);
 
     // ImageLoaderClient
     void notifyImageSourceChanged() override;
     bool requestsHighLiveResourceCachePriority() override { return true; }
 
-    RefPtr<SkImage> m_image;
+    RefPtr<StaticBitmapImage> m_image;
+    bool m_isNeutered = false;
 };
 
 } // namespace blink

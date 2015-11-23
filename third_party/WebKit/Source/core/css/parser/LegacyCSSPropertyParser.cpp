@@ -1153,6 +1153,7 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyFlexGrow:
     case CSSPropertyFlexShrink:
     case CSSPropertyFlexFlow:
+    case CSSPropertyStrokeDasharray:
         validPrimitive = false;
         break;
 
@@ -2953,24 +2954,24 @@ bool CSSPropertyParser::parseGridTemplateAreasRow(NamedGridAreaMap& gridAreaMap,
 
         NamedGridAreaMap::iterator gridAreaIt = gridAreaMap.find(gridAreaName);
         if (gridAreaIt == gridAreaMap.end()) {
-            gridAreaMap.add(gridAreaName, GridCoordinate(GridSpan(rowCount, rowCount + 1), GridSpan(currentCol, lookAheadCol)));
+            gridAreaMap.add(gridAreaName, GridCoordinate(GridSpan::definiteGridSpan(rowCount, rowCount + 1), GridSpan::definiteGridSpan(currentCol, lookAheadCol)));
         } else {
             GridCoordinate& gridCoordinate = gridAreaIt->value;
 
             // The following checks test that the grid area is a single filled-in rectangle.
             // 1. The new row is adjacent to the previously parsed row.
-            if (rowCount != gridCoordinate.rows.resolvedFinalPosition.toInt())
+            if (rowCount != gridCoordinate.rows.resolvedFinalPosition().toInt())
                 return false;
 
             // 2. The new area starts at the same position as the previously parsed area.
-            if (currentCol != gridCoordinate.columns.resolvedInitialPosition.toInt())
+            if (currentCol != gridCoordinate.columns.resolvedInitialPosition().toInt())
                 return false;
 
             // 3. The new area ends at the same position as the previously parsed area.
-            if (lookAheadCol != gridCoordinate.columns.resolvedFinalPosition.toInt())
+            if (lookAheadCol != gridCoordinate.columns.resolvedFinalPosition().toInt())
                 return false;
 
-            ++gridCoordinate.rows.resolvedFinalPosition;
+            gridCoordinate.rows = GridSpan::definiteGridSpan(gridCoordinate.rows.resolvedInitialPosition(), gridCoordinate.rows.resolvedFinalPosition().next());
         }
         currentCol = lookAheadCol - 1;
     }
@@ -5441,12 +5442,6 @@ bool CSSPropertyParser::parseSVGValue(CSSPropertyID propId, bool important)
     case CSSPropertyRy:
         validPrimitive = validUnit(value, FLength | FPercent, SVGAttributeMode);
         break;
-    case CSSPropertyStrokeDasharray: // none | <dasharray> | inherit
-        if (id == CSSValueNone)
-            validPrimitive = true;
-        else
-            parsedValue = parseSVGStrokeDasharray();
-        break;
 
     default:
         // If you crash here, it's because you added a css property and are not handling it
@@ -5479,32 +5474,6 @@ bool CSSPropertyParser::parseSVGValue(CSSPropertyID propId, bool important)
 
     addProperty(propId, parsedValue.release(), important);
     return true;
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSVGStrokeDasharray()
-{
-    RefPtrWillBeRawPtr<CSSValueList> ret = CSSValueList::createCommaSeparated();
-    CSSParserValue* value = m_valueList->current();
-    bool validPrimitive = true;
-    while (value) {
-        validPrimitive = validUnit(value, FLength | FPercent | FNonNeg, SVGAttributeMode);
-        if (!validPrimitive)
-            break;
-        if (value->id)
-            ret->append(CSSPrimitiveValue::createIdentifier(value->id));
-        else if (value->unit() >= CSSPrimitiveValue::UnitType::Number && value->unit() <= CSSPrimitiveValue::UnitType::Kilohertz)
-            ret->append(CSSPrimitiveValue::create(value->fValue, value->unit()));
-        else if (value->unit() == CSSPrimitiveValue::UnitType::Rems || value->unit() == CSSPrimitiveValue::UnitType::Chs)
-            ret->append(CSSPrimitiveValue::create(value->fValue, value->unit()));
-        value = m_valueList->next();
-        bool commaConsumed = consumeComma(m_valueList);
-        value = m_valueList->current();
-        if (commaConsumed && !value)
-            return nullptr;
-    }
-    if (!validPrimitive)
-        return nullptr;
-    return ret.release();
 }
 
 } // namespace blink

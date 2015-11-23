@@ -393,20 +393,93 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(ScriptState* 
     }
 }
 
-void WebGL2RenderingContextBase::invalidateFramebuffer(GLenum target, Vector<GLenum>& attachments)
+bool WebGL2RenderingContextBase::checkAndTranslateAttachments(const char* functionName, GLenum target, const Vector<GLenum>& attachments, Vector<GLenum>& translatedAttachments)
 {
-    if (isContextLost())
-        return;
+    GLsizei size = attachments.size();
+    translatedAttachments.resize(size);
 
-    webContext()->invalidateFramebuffer(target, attachments.size(), attachments.data());
+    WebGLFramebuffer* framebufferBinding = getFramebufferBinding(target);
+    ASSERT(framebufferBinding || drawingBuffer());
+    if (!framebufferBinding) {
+        // For the default framebuffer
+        // Translate GL_COLOR/GL_DEPTH/GL_STENCIL, because the default framebuffer of WebGL is not fb 0, it is an internal fbo
+        for (GLsizei i = 0; i < size; ++i) {
+            switch (attachments[i]) {
+            case GL_COLOR:
+                translatedAttachments[i] = GL_COLOR_ATTACHMENT0;
+                break;
+            case GL_DEPTH:
+                translatedAttachments[i] = GL_DEPTH_ATTACHMENT;
+                break;
+            case GL_STENCIL:
+                translatedAttachments[i] = GL_STENCIL_ATTACHMENT;
+                break;
+            default:
+                synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid attachment");
+                return false;
+            }
+        }
+    } else {
+        // For the FBO
+        for (GLsizei i = 0; i < size; ++i) {
+            switch (attachments[i]) {
+            case GL_COLOR_ATTACHMENT0:
+            case GL_DEPTH_ATTACHMENT:
+            case GL_STENCIL_ATTACHMENT:
+            case GL_DEPTH_STENCIL_ATTACHMENT:
+                translatedAttachments[i] = attachments[i];
+                break;
+            default:
+                if (attachments[i] > GL_COLOR_ATTACHMENT0
+                    && attachments[i] < static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + maxColorAttachments())) {
+                    translatedAttachments[i] = attachments[i];
+                    break;
+                }
+                synthesizeGLError(GL_INVALID_OPERATION, functionName, "invalid attachment");
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
-void WebGL2RenderingContextBase::invalidateSubFramebuffer(GLenum target, Vector<GLenum>& attachments, GLint x, GLint y, GLsizei width, GLsizei height)
+void WebGL2RenderingContextBase::invalidateFramebuffer(GLenum target, const Vector<GLenum>& attachments)
 {
     if (isContextLost())
         return;
 
-    webContext()->invalidateSubFramebuffer(target, attachments.size(), attachments.data(), x, y, width, height);
+    if (!validateFramebufferTarget(target)) {
+        synthesizeGLError(GL_INVALID_ENUM, "invalidateFramebuffer", "invalid target");
+        return;
+    }
+
+    Vector<GLenum> translatedAttachments;
+    if (!checkAndTranslateAttachments("invalidateFramebuffer", target, attachments, translatedAttachments))
+        return;
+
+    webContext()->invalidateFramebuffer(target, translatedAttachments.size(), translatedAttachments.data());
+}
+
+void WebGL2RenderingContextBase::invalidateSubFramebuffer(GLenum target, const Vector<GLenum>& attachments, GLint x, GLint y, GLsizei width, GLsizei height)
+{
+    if (isContextLost())
+        return;
+
+    if (!validateFramebufferTarget(target)) {
+        synthesizeGLError(GL_INVALID_ENUM, "invalidateFramebuffer", "invalid target");
+        return;
+    }
+
+    if (width < 0 || height < 0) {
+        synthesizeGLError(GL_INVALID_VALUE, "invalidateSubFramebuffer", "invalid width or height");
+        return;
+    }
+
+    Vector<GLenum> translatedAttachments;
+    if (!checkAndTranslateAttachments("invalidateSubFramebuffer", target, attachments, translatedAttachments))
+        return;
+
+    webContext()->invalidateSubFramebuffer(target, translatedAttachments.size(), translatedAttachments.data(), x, y, width, height);
 }
 
 void WebGL2RenderingContextBase::readBuffer(GLenum mode)
@@ -702,7 +775,7 @@ bool WebGL2RenderingContextBase::validateTexImage3D(const char* functionName, GL
 void WebGL2RenderingContextBase::texImage3D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, DOMArrayBufferView* pixels)
 {
     if (isContextLost() || !validateTexImage3D("texImage3D", target, level, internalformat, width, height, depth, border, format, type)
-        || !validateTexFuncData("texImage3D", level, width, height, format, type, pixels, NullAllowed))
+        || !validateTexFuncData("texImage3D", level, width, height, depth, format, type, pixels, NullAllowed))
         return;
 
     void* data = pixels ? pixels->baseAddress() : 0;
@@ -810,7 +883,7 @@ void WebGL2RenderingContextBase::texSubImage3DImpl(GLenum target, GLint level, G
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels)
 {
     if (isContextLost() || !pixels || !validateTexSubImage3D("texSubImage3D", target, level, xoffset, yoffset, zoffset, format, type, width, height, depth)
-        || !validateTexFuncData("texSubImage3D", level, width, height, format, type, pixels, NullAllowed))
+        || !validateTexFuncData("texSubImage3D", level, width, height, depth, format, type, pixels, NullAllowed))
         return;
 
     // FIXME: Ensure pixels is large enough to contain the desired texture dimensions.

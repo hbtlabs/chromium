@@ -60,14 +60,13 @@ public:
     blink::Image* image(); // Returns the nullImage() if the image is not available yet.
     bool hasImage() const { return m_image.get(); }
     // Side effect: ensures decoded image is in cache, therefore should only be called when about to draw the image.
-    // FIXME: Decoding image on the main thread is expensive, so rather than forcing decode, consider returning false
-    // when image is not decoded yet, as we do in case of deferred decoding.
     bool currentFrameKnownToBeOpaque(const LayoutObject*);
 
     static std::pair<blink::Image*, float> brokenImage(float deviceScaleFactor); // Returns an image and the image's resolution scale factor.
     bool willPaintBrokenImage() const;
 
-    bool canRender(const LayoutObject& layoutObject, float multiplier) { return !errorOccurred() && !imageSizeForLayoutObject(&layoutObject, multiplier).isEmpty(); }
+    // Assumes that image rotation or scale doesn't effect the image size being empty or not.
+    bool canRender() { return !errorOccurred() && !imageSizeForLayoutObject(nullptr, 1).isEmpty(); }
 
     bool usesImageContainerSize() const;
     bool imageHasRelativeWidth() const;

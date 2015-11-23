@@ -7,6 +7,8 @@
 #include "base/prefs/pref_service.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/enhanced_bookmarks/bookmark_server_cluster_service.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
@@ -27,6 +29,7 @@
 #include "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_local_state.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
+#import "ios/chrome/browser/metrics/ios_chrome_metrics_service_client.h"
 #include "ios/chrome/browser/net/http_server_properties_manager_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
@@ -48,6 +51,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   BrowserStateInfoCache::RegisterPrefs(registry);
   gcm::GCMChannelStatusSyncer::RegisterPrefs(registry);
   ios::SigninManagerFactory::RegisterPrefs(registry);
+  IOSChromeMetricsServiceClient::RegisterPrefs(registry);
   network_time::NetworkTimeTracker::RegisterPrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterPrefs(registry);
   rappor::RapporService::RegisterPrefs(registry);
@@ -62,6 +66,13 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   [OmniboxGeolocationLocalState registerLocalState:registry];
   [MemoryDebuggerManager registerLocalState:registry];
+
+  // TODO(crbug.com/557814): data_reduction_proxy::prefs::kDataReductionProxy
+  // should be registered by data_reduction_proxy::RegisterPrefs() instead of
+  // here.
+  registry->RegisterStringPref(data_reduction_proxy::prefs::kDataReductionProxy,
+                               std::string());
+  data_reduction_proxy::RegisterPrefs(registry);
 
   // TODO(shreyasv): Remove this in M49 as almost all users would have the
   // "do not backup" bit set by then. crbug.com/489865.

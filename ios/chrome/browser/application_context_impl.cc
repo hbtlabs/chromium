@@ -87,7 +87,7 @@ void ApplicationContextImpl::OnAppEnterForeground() {
     variations_service->OnAppEnterForeground();
 
   std::vector<ios::ChromeBrowserState*> loaded_browser_state =
-      GetChromeBrowserStateManager()->GetLoadedChromeBrowserStates();
+      GetChromeBrowserStateManager()->GetLoadedBrowserStates();
   for (ios::ChromeBrowserState* browser_state : loaded_browser_state) {
     browser_state->SetExitType(ios::ChromeBrowserState::EXIT_CRASHED);
   }
@@ -97,7 +97,7 @@ void ApplicationContextImpl::OnAppEnterBackground() {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Mark all the ChromeBrowserStates as clean and persist history.
   std::vector<ios::ChromeBrowserState*> loaded_browser_state =
-      GetChromeBrowserStateManager()->GetLoadedChromeBrowserStates();
+      GetChromeBrowserStateManager()->GetLoadedBrowserStates();
   for (ios::ChromeBrowserState* browser_state : loaded_browser_state) {
     if (history::HistoryService* history_service =
             ios::HistoryServiceFactory::GetForBrowserStateIfExists(
@@ -198,7 +198,7 @@ void ApplicationContextImpl::CreateLocalState() {
   RegisterLocalStatePrefs(pref_registry.get());
 
   local_state_ = ::CreateLocalState(
-      local_state_path, local_state_task_runner_.get(), pref_registry, false);
+      local_state_path, local_state_task_runner_.get(), pref_registry);
 
   const int max_per_proxy =
       local_state_->GetInteger(ios::prefs::kMaxConnectionsPerProxy);

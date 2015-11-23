@@ -18,6 +18,8 @@ rm -rf ../../web-animations-js/sources
 
 bower install
 
+rm components/*/.travis.yml
+
 mv components/web-animations-js ../../web-animations-js/sources
 cp ../../web-animations-js/sources/COPYING ../../web-animations-js/LICENSE
 
@@ -64,3 +66,25 @@ sed -i 's/['"$NBSP"']/\\u00A0/g' components/polymer/polymer-mini.html
 # and apply additional chrome specific patches. NOTE: Where possible create
 # a Polymer issue and/or pull request to minimize these patches.
 patch -p1 < chromium.patch
+
+new=$(git status --porcelain components-chromium | grep '^??' | \
+      cut -d' ' -f2 | egrep '\.(html|js|css)$')
+
+if [[ ! -z "${new}" ]]; then
+  echo
+  echo 'These files appear to have been added:'
+  echo "${new}" | sed 's/^/  /'
+fi
+
+deleted=$(git status --porcelain components-chromium | grep '^.D' | \
+          sed 's/^.//' | cut -d' ' -f2 | egrep '\.(html|js|css)$')
+
+if [[ ! -z "${deleted}" ]]; then
+  echo
+  echo 'These files appear to have been removed:'
+  echo "${deleted}" | sed 's/^/  /'
+fi
+
+if [[ ! -z "${new}${deleted}" ]]; then
+  echo
+fi

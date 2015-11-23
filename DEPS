@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '211df380655d3fd0c76b9b7f8be399040ca0b7a5',
+  'skia_revision': '93c69fff535075e86596a2b224f52f454b060be3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '3c19105e9c418a135a205c37c2c51e443e76650f',
+  'v8_revision': '2280bfa03b1173d32bd2dbad60013d8390ce2ec5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'daa8c27f57c16cfc574ec6e4b32d56396f70c4bd',
+  'angle_revision': '847638a64a32df1b357b57507170301195263a1c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -87,11 +87,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '546ef11ffcbedf8c33bfa12643408c1182b6839e',
+  'nacl_revision': 'b6ec17db8c2958f3455043e29000f17354336fb8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.
-  'deqp_revision': '194294e69d44eac48bc1fb063bd607189650aa5e',
+  'deqp_revision': 'cc0ded6c77267bbb14d21aac358fc5d9690c07f8',
   'deqp_url': 'https://android.googlesource.com/platform/external/deqp',
 }
 
@@ -178,7 +178,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '421bc6095d1065bb6057e33fbab737b35d39930d',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'c8dd77f93df19bd76de9ef727414dcd32b54cdee',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -190,7 +190,7 @@ deps = {
    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'c21cf0893cb95476b2a902d6c06a5c2652b832cc',
 
   'src/third_party/libjingle/source/talk':
-    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + 'eddf34f4a9ddd5bdac8d85125a4ed04eff704638', # commit position 10725
+    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + '15bbf6cdc4ce473f93befea563c56d7af4bc6ba2', # commit position 10735
 
   'src/third_party/usrsctp/usrsctplib':
     Var('chromium_git') + '/external/usrsctplib.git' + '@' + '36444a999739e9e408f8f587cb4c3ffeef2e50ac', # from svn revision 9215
@@ -214,7 +214,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'dba3e4553cbe4aa286dda6074fdb004fb1eb652f', # commit position 10724
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '3e38ef990fa4264c1dffaee831af26dc9bfc5fbf', # commit position 10736
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),

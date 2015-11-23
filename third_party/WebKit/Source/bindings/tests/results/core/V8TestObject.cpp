@@ -61,6 +61,7 @@
 #include "core/dom/MessagePort.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/custom/CustomElementProcessingStack.h"
+#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
@@ -1107,7 +1108,7 @@ static void serializedScriptValueAttributeAttributeSetter(v8::Local<v8::Value> v
     v8::Local<v8::Object> holder = info.Holder();
     ExceptionState exceptionState(ExceptionState::SetterContext, "serializedScriptValueAttribute", "TestObject", holder, info.GetIsolate());
     TestObject* impl = V8TestObject::toImpl(holder);
-    RefPtr<SerializedScriptValue> cppValue = SerializedScriptValueFactory::instance().create(info.GetIsolate(), v8Value, 0, 0, exceptionState);
+    RefPtr<SerializedScriptValue> cppValue = SerializedScriptValueFactory::instance().create(info.GetIsolate(), v8Value, nullptr, nullptr, nullptr, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
     impl->setSerializedScriptValueAttribute(WTF::getPtr(cppValue));
@@ -7922,7 +7923,7 @@ static void voidMethodSerializedScriptValueArgMethod(const v8::FunctionCallbackI
     TestObject* impl = V8TestObject::toImpl(info.Holder());
     RefPtr<SerializedScriptValue> serializedScriptValueArg;
     {
-        serializedScriptValueArg = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], 0, 0, exceptionState);
+        serializedScriptValueArg = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], nullptr, nullptr, nullptr, exceptionState);
         if (exceptionState.throwIfNeeded())
             return;
     }
@@ -10910,14 +10911,15 @@ void postMessageImpl(const char* interfaceName, TestObject* instance, const v8::
     }
     OwnPtrWillBeRawPtr<MessagePortArray> ports = adoptPtrWillBeNoop(new MessagePortArray);
     ArrayBufferArray arrayBuffers;
+    ImageBitmapArray imageBitmaps;
     if (info.Length() > 1) {
         const int transferablesArgIndex = 1;
-        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, *ports, arrayBuffers, exceptionState)) {
+        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, *ports, arrayBuffers, imageBitmaps, exceptionState)) {
             exceptionState.throwIfNeeded();
             return;
         }
     }
-    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], ports.get(), &arrayBuffers, exceptionState);
+    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], ports.get(), &arrayBuffers, &imageBitmaps, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
     // FIXME: Only pass context/exceptionState if instance really requires it.
@@ -11659,35 +11661,6 @@ static void useToImpl4ArgumentsCheckingIfPossibleWithUndefinedArgMethodCallback(
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     TestObjectV8Internal::useToImpl4ArgumentsCheckingIfPossibleWithUndefinedArgMethod(info);
-    TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
-}
-
-static void typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    ExceptionState exceptionState(ExceptionState::ExecutionContext, "typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", "TestObject", info.Holder(), info.GetIsolate());
-    if (UNLIKELY(info.Length() < 2)) {
-        setMinimumArityTypeError(exceptionState, 2, info.Length());
-        exceptionState.throwIfNeeded();
-        return;
-    }
-    TestObject* impl = V8TestObject::toImpl(info.Holder());
-    float floatArg;
-    double doubleArg;
-    {
-        floatArg = toRestrictedFloat(info.GetIsolate(), info[0], exceptionState);
-        if (exceptionState.throwIfNeeded())
-            return;
-        doubleArg = toRestrictedDouble(info.GetIsolate(), info[1], exceptionState);
-        if (exceptionState.throwIfNeeded())
-            return;
-    }
-    impl->typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg(floatArg, doubleArg);
-}
-
-static void typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
-    TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
-    TestObjectV8Internal::typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethod(info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
 
@@ -12873,7 +12846,6 @@ const V8DOMConfiguration::MethodConfiguration V8TestObjectMethods[] = {
     {"useToImpl4ArgumentsCheckingIfPossibleWithOptionalArg", TestObjectV8Internal::useToImpl4ArgumentsCheckingIfPossibleWithOptionalArgMethodCallback, 0, 1, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
     {"useToImpl4ArgumentsCheckingIfPossibleWithNullableArg", TestObjectV8Internal::useToImpl4ArgumentsCheckingIfPossibleWithNullableArgMethodCallback, 0, 2, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
     {"useToImpl4ArgumentsCheckingIfPossibleWithUndefinedArg", TestObjectV8Internal::useToImpl4ArgumentsCheckingIfPossibleWithUndefinedArgMethodCallback, 0, 1, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
-    {"typeCheckingUnrestrictedVoidMethodFloatArgDoubleArg", TestObjectV8Internal::typeCheckingUnrestrictedVoidMethodFloatArgDoubleArgMethodCallback, 0, 2, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
     {"unforgeableVoidMethod", TestObjectV8Internal::unforgeableVoidMethodMethodCallback, 0, 0, static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete), V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnInstance},
     {"voidMethodTestInterfaceGarbageCollectedSequenceArg", TestObjectV8Internal::voidMethodTestInterfaceGarbageCollectedSequenceArgMethodCallback, 0, 1, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},
     {"voidMethodTestInterfaceGarbageCollectedArrayArg", TestObjectV8Internal::voidMethodTestInterfaceGarbageCollectedArrayArgMethodCallback, 0, 1, v8::None, V8DOMConfiguration::ExposedToAllScripts, V8DOMConfiguration::OnPrototype},

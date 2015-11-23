@@ -31,12 +31,9 @@
 #include "core/CoreExport.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/Frame.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrameLifecycleNotifier.h"
 #include "core/frame/LocalFrameLifecycleObserver.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/FrameLoader.h"
-#include "core/loader/NavigationScheduler.h"
 #include "core/page/FrameTree.h"
 #include "core/paint/PaintPhase.h"
 #include "platform/Supplementable.h"
@@ -59,11 +56,14 @@ class EventHandler;
 class FloatSize;
 class FrameConsole;
 class FrameSelection;
+class FrameView;
 class HTMLPlugInElement;
 class InputMethodController;
 class IntPoint;
 class IntSize;
+class InstrumentingAgents;
 class LocalDOMWindow;
+class NavigationScheduler;
 class Node;
 class NodeTraversal;
 class Range;
@@ -110,7 +110,7 @@ public:
     FrameView* view() const;
     Document* document() const;
     void setPagePopupOwner(Element&);
-    Element* pagePopupOwner() const;
+    Element* pagePopupOwner() const { return m_pagePopupOwner.get(); }
 
     LayoutView* contentLayoutObject() const; // Root of the layout tree for the document contained in this frame.
 
@@ -262,6 +262,11 @@ inline void LocalFrame::init()
     m_loader.init();
 }
 
+inline LocalDOMWindow* LocalFrame::localDOMWindow() const
+{
+    return m_domWindow.get();
+}
+
 inline FrameLoader& LocalFrame::loader() const
 {
     return m_loader;
@@ -340,10 +345,5 @@ private:
 };
 
 } // namespace blink
-
-// During refactoring, there are some places where we need to do type conversions that
-// will not be needed once all instances of LocalFrame and RemoteFrame are sorted out.
-// At that time this #define will be removed and all the uses of it will need to be corrected.
-#define toLocalFrameTemporary toLocalFrame
 
 #endif // LocalFrame_h

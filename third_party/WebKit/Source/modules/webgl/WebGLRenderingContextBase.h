@@ -129,8 +129,21 @@ struct FormatTypeCompare {
 class ScopedDrawingBufferBinder {
     STACK_ALLOCATED();
 public:
-    ScopedDrawingBufferBinder(DrawingBuffer*, WebGLFramebuffer*);
-    ~ScopedDrawingBufferBinder();
+    ScopedDrawingBufferBinder(DrawingBuffer* drawingBuffer, WebGLFramebuffer* framebufferBinding)
+        : m_drawingBuffer(drawingBuffer)
+        , m_readFramebufferBinding(framebufferBinding)
+    {
+        // Commit DrawingBuffer if needed (e.g., for multisampling)
+        if (!m_readFramebufferBinding && m_drawingBuffer)
+            m_drawingBuffer->commit();
+    }
+
+    ~ScopedDrawingBufferBinder()
+    {
+        // Restore DrawingBuffer if needed
+        if (!m_readFramebufferBinding && m_drawingBuffer)
+            m_drawingBuffer->restoreFramebufferBindings();
+    }
 
 private:
     DrawingBuffer* m_drawingBuffer;
@@ -745,8 +758,21 @@ protected:
     class ScopedDrawingBufferBinder {
         STACK_ALLOCATED();
     public:
-        ScopedDrawingBufferBinder(DrawingBuffer*, WebGLFramebuffer*);
-        ~ScopedDrawingBufferBinder();
+        ScopedDrawingBufferBinder(DrawingBuffer* drawingBuffer, WebGLFramebuffer* framebufferBinding)
+            : m_drawingBuffer(drawingBuffer)
+            , m_readFramebufferBinding(framebufferBinding)
+        {
+            // Commit DrawingBuffer if needed (e.g., for multisampling)
+            if (!m_readFramebufferBinding && m_drawingBuffer)
+                m_drawingBuffer->commit();
+        }
+
+        ~ScopedDrawingBufferBinder()
+        {
+            // Restore DrawingBuffer if needed
+            if (!m_readFramebufferBinding && m_drawingBuffer)
+                m_drawingBuffer->restoreFramebufferBindings();
+        }
 
     private:
         DrawingBuffer* m_drawingBuffer;
@@ -908,7 +934,7 @@ protected:
     // Helper function to validate that the given ArrayBufferView
     // is of the correct type and contains enough data for the texImage call.
     // Generates GL error and returns false if parameters are invalid.
-    bool validateTexFuncData(const char* functionName, GLint level, GLsizei width, GLsizei height, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
+    bool validateTexFuncData(const char* functionName, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
 
     // Helper function to validate that a copyTexSubImage call is valid.
     bool validateCopyTexSubImage(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
