@@ -127,11 +127,6 @@ class BluetoothTestBase : public testing::Test {
   virtual void SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) {}
 
-  // Simulates a Characteristic Changed operation with updated |value|.
-  virtual void SimulateGattCharacteristicChanged(
-      BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8>& value) {}
-
   // Simulates a Characteristic Read operation succeeding, returning |value|.
   virtual void SimulateGattCharacteristicRead(
       BluetoothGattCharacteristic* characteristic,

@@ -439,18 +439,6 @@ class Fakes {
             mValue = new byte[0];
         }
 
-        // Simulate a characteristic value notified as changed.
-        @CalledByNative("FakeBluetoothGattCharacteristic")
-        private static void valueChanged(
-                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, byte[] value) {
-            FakeBluetoothGattCharacteristic fakeCharacteristic =
-                    (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
-
-            fakeCharacteristic.mValue = value;
-            fakeCharacteristic.mService.mDevice.mGattCallback.onCharacteristicChanged(
-                    fakeCharacteristic);
-        }
-
         // Simulate a value being read from a characteristic.
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void valueRead(ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic,

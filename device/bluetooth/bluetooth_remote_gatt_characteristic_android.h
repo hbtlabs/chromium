@@ -11,8 +11,6 @@
 
 namespace device {
 
-class BluetoothAdapterAndroid;
-
 // BluetoothRemoteGattCharacteristicAndroid along with its owned Java class
 // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic
 // implement BluetootGattCharacteristic.
@@ -31,7 +29,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
   // reference
   // to |bluetooth_gatt_characteristic_wrapper|.
   static scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> Create(
-      BluetoothAdapterAndroid* adapter,
       const std::string& instanceId,
       jobject /* BluetoothGattCharacteristicWrapper */
       bluetooth_gatt_characteristic_wrapper,
@@ -67,9 +64,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
                                  const base::Closure& callback,
                                  const ErrorCallback& error_callback) override;
 
-  // Called when value changed even occurs.
-  void OnChanged(JNIEnv* env, jobject jcaller, jbyteArray value);
-
   // Callback after Read operation completes.
   void OnRead(JNIEnv* env, jobject jcaller, int32_t status, jbyteArray value);
 
@@ -77,12 +71,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
   void OnWrite(JNIEnv* env, jobject jcaller, int32_t status);
 
  private:
-  BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                           const std::string& instanceId);
-
-  // The adapter associated with this service. It's ok to store a raw pointer
-  // here since |adapter_| indirectly owns this instance.
-  BluetoothAdapterAndroid* adapter_;
+  BluetoothRemoteGattCharacteristicAndroid(const std::string& instanceId);
 
   // Java object
   // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic.

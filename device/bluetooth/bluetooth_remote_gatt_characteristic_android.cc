@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothRemoteGattCharacteristic_jni.h"
@@ -22,13 +21,12 @@ namespace device {
 // static
 scoped_ptr<BluetoothRemoteGattCharacteristicAndroid>
 BluetoothRemoteGattCharacteristicAndroid::Create(
-    BluetoothAdapterAndroid* adapter,
     const std::string& instanceId,
     jobject /* BluetoothGattCharacteristicWrapper */
     bluetooth_gatt_characteristic_wrapper,
     jobject /* ChromeBluetoothDevice */ chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> characteristic(
-      new BluetoothRemoteGattCharacteristicAndroid(adapter, instanceId));
+      new BluetoothRemoteGattCharacteristicAndroid(instanceId));
 
   characteristic->j_characteristic_.Reset(
       Java_ChromeBluetoothRemoteGattCharacteristic_create(
@@ -128,16 +126,13 @@ void BluetoothRemoteGattCharacteristicAndroid::StartNotifySession(
     const ErrorCallback& error_callback) {
   // TODO(crbug.com/551634): Check characteristic properties and return a better
   // error code if notifications aren't permitted.
-LOG(WARNING) << __FUNCTION__;
   if (Java_ChromeBluetoothRemoteGattCharacteristic_startNotifySession(
           AttachCurrentThread(), j_characteristic_.obj())) {
-LOG(WARNING) << __FUNCTION__;
     scoped_ptr<device::BluetoothGattNotifySession> notify_session(
         new BluetoothGattNotifySessionAndroid(instance_id_));
     base::MessageLoop::current()->PostTask(
         FROM_HERE, base::Bind(callback, base::Passed(&notify_session)));
   } else {
-LOG(WARNING) << __FUNCTION__;
     base::MessageLoop::current()->PostTask(
         FROM_HERE,
         base::Bind(error_callback,
@@ -196,14 +191,6 @@ void BluetoothRemoteGattCharacteristicAndroid::WriteRemoteCharacteristic(
   write_error_callback_ = error_callback;
 }
 
-void BluetoothRemoteGattCharacteristicAndroid::OnChanged(JNIEnv* env,
-                                                         jobject jcaller,
-                                                         jbyteArray value) {
-  base::android::JavaByteArrayToByteVector(env, value, &value_);
-  FOR_EACH_OBSERVER(BluetoothAdapter::Observer, adapter_->GetObservers(),
-                    GattCharacteristicValueChanged(adapter_, this, value_));
-}
-
 void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
                                                       jobject jcaller,
                                                       int32_t status,
@@ -220,7 +207,6 @@ void BluetoothRemoteGattCharacteristicAndroid::OnRead(JNIEnv* env,
       && !read_callback.is_null()) {
     base::android::JavaByteArrayToByteVector(env, value, &value_);
     read_callback.Run(value_);
-    // TODO(http://crbug.com/545682): Call GattCharacteristicValueChanged.
   } else if (!read_error_callback.is_null()) {
     read_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
@@ -241,7 +227,6 @@ void BluetoothRemoteGattCharacteristicAndroid::OnWrite(JNIEnv* env,
   if (status == 0  // android.bluetooth.BluetoothGatt.GATT_SUCCESS
       && !write_callback.is_null()) {
     write_callback.Run();
-    // TODO(http://crbug.com/545682): Call GattCharacteristicValueChanged.
   } else if (!write_error_callback.is_null()) {
     write_error_callback.Run(
         BluetoothRemoteGattServiceAndroid::GetGattErrorCode(status));
@@ -249,8 +234,7 @@ void BluetoothRemoteGattCharacteristicAndroid::OnWrite(JNIEnv* env,
 }
 
 BluetoothRemoteGattCharacteristicAndroid::
-    BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                             const std::string& instanceId)
-    : adapter_(adapter), instance_id_(instanceId) {}
+    BluetoothRemoteGattCharacteristicAndroid(const std::string& instanceId)
+    : instance_id_(instanceId) {}
 
 }  // namespace device
