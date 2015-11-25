@@ -189,7 +189,10 @@ final class ChromeBluetoothDevice {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
+                        Log.v(TAG, "Read.");
                         chromeCharacteristic.onCharacteristicRead(status);
+                    } else {
+                        Log.v(TAG, "Read on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
                     }
                 }
             });
@@ -205,7 +208,10 @@ final class ChromeBluetoothDevice {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
                     if (chromeCharacteristic != null) {
+                        Log.v(TAG, "Write.");
                         chromeCharacteristic.onCharacteristicWrite(status);
+                    } else {
+                        Log.v(TAG, "Write on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
                     }
                 }
             });

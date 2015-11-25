@@ -198,6 +198,24 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Empty) {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
+// Tests ReadRemoteCharacteristic and GetValue with empty value buffer.
+TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  characteristic1_->ReadRemoteCharacteristic(
+      GetReadValueCallback(Call::NOT_EXPECTED),
+      GetGattErrorCallback(Call::NOT_EXPECTED));
+
+  //               DeleteDevice(device_);
+
+  std::vector<uint8_t> empty_vector;
+  SimulateGattCharacteristicRead(characteristic1_, empty_vector);
+
+  // Expect no crash.
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
 // Tests WriteRemoteCharacteristic with empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Empty) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
