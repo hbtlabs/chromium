@@ -206,10 +206,10 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
       GetReadValueCallback(Call::NOT_EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
 
-  //               DeleteDevice(device_);
+                 DeleteDevice(device_);
 
   std::vector<uint8_t> empty_vector;
-  SimulateGattCharacteristicRead(characteristic1_, empty_vector);
+  SimulateGattCharacteristicRead(nullptr, empty_vector);
 
   // Expect no crash.
 }

@@ -428,6 +428,7 @@ class Fakes {
         final int mProperties;
         final UUID mUuid;
         byte[] mValue;
+        static FakeBluetoothGattCharacteristic mLastCreatedCharacteristic;
 
         public FakeBluetoothGattCharacteristic(
                 FakeBluetoothGattService service, int instanceId, int properties, UUID uuid) {
@@ -437,6 +438,7 @@ class Fakes {
             mProperties = properties;
             mUuid = uuid;
             mValue = new byte[0];
+            mLastCreatedCharacteristic = this;
         }
 
         // Simulate a value being read from a characteristic.
@@ -444,6 +446,7 @@ class Fakes {
         private static void valueRead(ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic,
                 int status, byte[] value) {
             FakeBluetoothGattCharacteristic fakeCharacteristic =
+                chromeCharacteristic == null ? mLastCreatedCharacteristic : 
                     (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
 
             fakeCharacteristic.mValue = value;
