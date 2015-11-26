@@ -445,9 +445,9 @@ class Fakes {
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void valueRead(ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic,
                 int status, byte[] value) {
-            FakeBluetoothGattCharacteristic fakeCharacteristic =
-                chromeCharacteristic == null ? mLastCreatedCharacteristic : 
-                    (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
+            FakeBluetoothGattCharacteristic fakeCharacteristic = chromeCharacteristic == null
+                    ? mLastCreatedCharacteristic
+                    : (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
 
             fakeCharacteristic.mValue = value;
             fakeCharacteristic.mService.mDevice.mGattCallback.onCharacteristicRead(

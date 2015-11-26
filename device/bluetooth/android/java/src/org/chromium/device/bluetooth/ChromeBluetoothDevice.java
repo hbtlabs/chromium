@@ -192,7 +192,8 @@ final class ChromeBluetoothDevice {
                         Log.v(TAG, "Read.");
                         chromeCharacteristic.onCharacteristicRead(status);
                     } else {
-                        Log.v(TAG, "Read on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
+                        Log.v(TAG,
+                                "Read on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
                     }
                 }
             });
@@ -211,7 +212,8 @@ final class ChromeBluetoothDevice {
                         Log.v(TAG, "Write.");
                         chromeCharacteristic.onCharacteristicWrite(status);
                     } else {
-                        Log.v(TAG, "Write on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
+                        Log.v(TAG,
+                                "Write on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
                     }
                 }
             });
