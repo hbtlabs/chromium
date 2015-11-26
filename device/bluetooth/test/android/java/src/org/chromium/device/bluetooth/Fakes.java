@@ -428,7 +428,7 @@ class Fakes {
         final int mProperties;
         final UUID mUuid;
         byte[] mValue;
-        static FakeBluetoothGattCharacteristic mLastCreatedCharacteristic;
+        static FakeBluetoothGattCharacteristic mRememberedCharacteristic;
 
         public FakeBluetoothGattCharacteristic(
                 FakeBluetoothGattService service, int instanceId, int properties, UUID uuid) {
@@ -438,16 +438,30 @@ class Fakes {
             mProperties = properties;
             mUuid = uuid;
             mValue = new byte[0];
-            mLastCreatedCharacteristic = this;
+        }
+
+        // Simulate a value being read from a characteristic.
+        @CalledByNative("FakeBluetoothGattCharacteristic")
+        private static void rememberCharacteristic(
+                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic) {
+            mRememberedCharacteristic =
+                    (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
         }
 
         // Simulate a value being read from a characteristic.
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void valueRead(ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic,
                 int status, byte[] value) {
-            FakeBluetoothGattCharacteristic fakeCharacteristic = chromeCharacteristic == null
-                    ? mLastCreatedCharacteristic
-                    : (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
+            FakeBluetoothGattCharacteristic fakeCharacteristic;
+            if (chromeCharacteristic == null) {
+                if (mRememberedCharacteristic == null)
+                    throw new IllegalArgumentException(
+                            "rememberCharacteristic wasn't called previously.");
+                fakeCharacteristic = mRememberedCharacteristic;
+            } else {
+                fakeCharacteristic =
+                        (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
+            }
 
             fakeCharacteristic.mValue = value;
             fakeCharacteristic.mService.mDevice.mGattCallback.onCharacteristicRead(
