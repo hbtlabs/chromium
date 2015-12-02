@@ -93,7 +93,7 @@ WebInspector.TimelinePanel = function()
     // Create top level properties splitter.
     this._detailsSplitWidget = new WebInspector.SplitWidget(false, true, "timelinePanelDetailsSplitViewState");
     this._detailsSplitWidget.element.classList.add("timeline-details-split");
-    this._detailsView = new WebInspector.TimelineDetailsView(this._model);
+    this._detailsView = new WebInspector.TimelineDetailsView(this._model, this);
     this._detailsSplitWidget.installResizer(this._detailsView.headerElement());
     this._detailsSplitWidget.setSidebarWidget(this._detailsView);
 
@@ -592,7 +592,7 @@ WebInspector.TimelinePanel.prototype = {
         this._statusPane = new WebInspector.TimelinePanel.StatusPane();
         this._statusPane.addEventListener(WebInspector.TimelinePanel.StatusPane.Events.Finish, this._stopRecording, this);
         this._statusPane.showPane(this._statusPaneContainer);
-        this._updateStatus(WebInspector.UIString("Initializing recording\u2026"));
+        this._statusPane.updateStatus(WebInspector.UIString("Initializing recording\u2026"));
 
         this._autoRecordGeneration = userInitiated ? null : Symbol("Generation");
         this._model.startRecording(true, this._enableJSSamplingSetting.get(), this._captureMemorySetting.get(), this._captureLayersAndPicturesSetting.get(), this._captureFilmStripSetting && this._captureFilmStripSetting.get());
@@ -609,7 +609,8 @@ WebInspector.TimelinePanel.prototype = {
     _stopRecording: function()
     {
         this._statusPane.finish();
-        this._updateStatus(WebInspector.UIString("Retrieving timeline\u2026"));
+        this._statusPane.updateStatus(WebInspector.UIString("Retrieving timeline\u2026"));
+        this._statusPane.updateProgressBar(WebInspector.UIString("Received"), 0);
         this._setState(WebInspector.TimelinePanel.State.StopPending);
         this._autoRecordGeneration = null;
         this._model.stopRecording();
@@ -678,10 +679,11 @@ WebInspector.TimelinePanel.prototype = {
     {
         var fromFile = event.data && event.data.fromFile;
         this._setState(fromFile ? WebInspector.TimelinePanel.State.Loading : WebInspector.TimelinePanel.State.Recording);
-        var message = fromFile ? WebInspector.UIString("Loading\u2026") : WebInspector.UIString("Recording\u2026");
-        this._updateStatus(message);
-        if (this._statusPane)
+        if (this._statusPane) {
+            this._statusPane.updateStatus(fromFile ? WebInspector.UIString("Loading\u2026") : WebInspector.UIString("Recording\u2026"));
+            this._statusPane.updateProgressBar(fromFile ? WebInspector.UIString("Loaded") : WebInspector.UIString("Buffer usage"), 0)
             this._statusPane.startTimer();
+        }
     },
 
     /**
@@ -691,21 +693,19 @@ WebInspector.TimelinePanel.prototype = {
     {
         var usage = /** @type {number} */ (event.data);
         if (this._statusPane)
-            this._statusPane.updateBufferUsage(usage * 100);
-    },
-
-    _onRetrieveEventsProgress: function()
-    {
-        this._updateStatus(WebInspector.UIString("Retrieving timeline\u2026"));
+            this._statusPane.updateProgressBar(WebInspector.UIString("Buffer usage"), usage * 100);
     },
 
     /**
-     * @param {string} statusMessage
+     * @param {!WebInspector.Event} event
      */
-    _updateStatus: function(statusMessage)
+    _onRetrieveEventsProgress: function(event)
     {
-        if (this._statusPane)
-            this._statusPane.updateStatus(statusMessage);
+        if (!this._statusPane)
+            return;
+        this._statusPane.updateStatus(WebInspector.UIString("Retrieving timeline\u2026"));
+        var usage = /** @type {number} */ (event.data);
+        this._statusPane.updateProgressBar(WebInspector.UIString("Received"), usage * 100);
     },
 
     _showRecordingHelpMessage: function()
@@ -1089,11 +1089,19 @@ WebInspector.TimelinePanel.prototype = {
         if (preferredTab)
             this._detailsView.setPreferredTab(preferredTab);
 
-        for (var i = 0; i < this._currentViews.length; ++i) {
-            var view = this._currentViews[i];
+        for (var view of this._currentViews)
             view.setSelection(selection);
-        }
         this._updateSelectionDetails();
+    },
+
+    /**
+     * @override
+     * @param {?WebInspector.TracingModel.Event} event
+     */
+    highlightEvent: function(event)
+    {
+        for (var view of this._currentViews)
+            view.highlightEvent(event);
     },
 
     /**
@@ -1217,6 +1225,14 @@ WebInspector.TimelineTreeModeView.prototype = {
 
     /**
      * @override
+     * @param {?WebInspector.TracingModel.Event} event
+     */
+    highlightEvent: function(event)
+    {
+    },
+
+    /**
+     * @override
      */
     refreshRecords: function()
     {
@@ -1269,8 +1285,9 @@ WebInspector.TimelineTreeModeView.prototype = {
  * @constructor
  * @extends {WebInspector.TabbedPane}
  * @param {!WebInspector.TimelineModel} timelineModel
+ * @param {!WebInspector.TimelineModeViewDelegate} delegate
  */
-WebInspector.TimelineDetailsView = function(timelineModel)
+WebInspector.TimelineDetailsView = function(timelineModel, delegate)
 {
     WebInspector.TabbedPane.call(this);
     this.element.classList.add("timeline-details");
@@ -1286,7 +1303,7 @@ WebInspector.TimelineDetailsView = function(timelineModel)
     this._rangeDetailViews = new Map();
     if (!Runtime.experiments.isEnabled("multipleTimelineViews")) {
         if (Runtime.experiments.isEnabled("timelineEventsTreeView")) {
-            var eventsView = new WebInspector.EventsTimelineTreeView(timelineModel);
+            var eventsView = new WebInspector.EventsTimelineTreeView(timelineModel, delegate);
             this.appendTab(tabIds.Events, WebInspector.UIString("Events"), eventsView);
             this._rangeDetailViews.set(tabIds.Events, eventsView);
         }
@@ -1532,6 +1549,11 @@ WebInspector.TimelineModeView.prototype = {
      * @param {?WebInspector.TimelineSelection} selection
      */
     setSelection: function(selection) {},
+
+    /**
+     * @param {?WebInspector.TracingModel.Event} event
+     */
+    highlightEvent: function(event) { }
 }
 
 /**
@@ -1556,6 +1578,11 @@ WebInspector.TimelineModeViewDelegate.prototype = {
      * @param {!Node} node
      */
     showInDetails: function(node) {},
+
+    /**
+     * @param {?WebInspector.TracingModel.Event} event
+     */
+    highlightEvent: function(event) {}
 }
 
 /**
@@ -1683,13 +1710,23 @@ WebInspector.TimelineStaticFilter.prototype = {
 WebInspector.TimelinePanel.StatusPane = function()
 {
     WebInspector.VBox.call(this, true);
-    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element, "timeline/timelineStatusDialog.css");
-    this._contentElement = shadowRoot.createChild("div", "timeline-status-dialog");
-    this._status = this._contentElement.createChild("div", "status");
-    this._time = this._contentElement.createChild("div", "time");
-    this._bufferUsage = this._contentElement.createChild("div", "buffer-usage").createChild("div", "indicator-container").createChild("div", "indicator");
+    this.registerRequiredCSS("timeline/timelineStatusDialog.css");
+    this.contentElement.classList.add("timeline-status-dialog");
+
+    var statusLine = this.contentElement.createChild("div", "status-dialog-line status");
+    statusLine.createChild("div", "label").textContent = WebInspector.UIString("Status");
+    this._status = statusLine.createChild("div", "content");
+
+    var timeLine = this.contentElement.createChild("div", "status-dialog-line time");
+    timeLine.createChild("div", "label").textContent = WebInspector.UIString("Time");
+    this._time = timeLine.createChild("div", "content");
+
+    var progressLine = this.contentElement.createChild("div", "status-dialog-line progress");
+    this._progressLabel = progressLine.createChild("div", "label");
+    this._progressBar = progressLine.createChild("div", "indicator-container").createChild("div", "indicator");
+
     this._stopButton = createTextButton(WebInspector.UIString("Finish"), this._onFinish.bind(this));
-    this._contentElement.createChild("div", "stop-button").appendChild(this._stopButton);
+    this.contentElement.createChild("div", "stop-button").appendChild(this._stopButton);
 }
 
 WebInspector.TimelinePanel.StatusPane.Events = {
@@ -1727,11 +1764,13 @@ WebInspector.TimelinePanel.StatusPane.prototype = {
     },
 
     /**
+     * @param {string} activity
      * @param {number} percent
      */
-    updateBufferUsage: function(percent)
+    updateProgressBar: function(activity, percent)
     {
-        this._bufferUsage.style.width = percent.toFixed(1) + "%";
+        this._progressLabel.textContent = activity;
+        this._progressBar.style.width = percent.toFixed(1) + "%";
         this._updateTimer();
     },
 
@@ -1744,6 +1783,7 @@ WebInspector.TimelinePanel.StatusPane.prototype = {
     {
         this._startTime = Date.now();
         this._timeUpdateTimer = setInterval(this._updateTimer.bind(this, false), 1000);
+        this._updateTimer();
     },
 
     _stopTimer: function()
@@ -1760,6 +1800,8 @@ WebInspector.TimelinePanel.StatusPane.prototype = {
      */
     _updateTimer: function(precise)
     {
+        if (!this._timeUpdateTimer)
+            return;
         var elapsed = (Date.now() - this._startTime) / 1000;
         this._time.textContent = WebInspector.UIString("%s\u2009sec", elapsed.toFixed(precise ? 1 : 0));
     },

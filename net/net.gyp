@@ -53,6 +53,7 @@
         'base/registry_controlled_domains/effective_tld_names_unittest4.gperf',
         'base/registry_controlled_domains/effective_tld_names_unittest5.gperf',
         'base/registry_controlled_domains/effective_tld_names_unittest6.gperf',
+        'base/stale_while_revalidate_experiment_domains.gperf',
       ],
       'rules': [
         {
@@ -142,6 +143,7 @@
         'net_extras',
         'net_test_support',
         'simple_quic_tools',
+        'stale_while_revalidate_experiment_domains',
       ],
       'sources': [
         '<@(net_test_sources)',
@@ -848,6 +850,23 @@
         'tools/quic/synchronous_host_resolver.h',
       ],
     },
+    {
+      # GN version: //net:stale_while_revalidate_experiment_domains
+      'target_name': 'stale_while_revalidate_experiment_domains',
+      'type': '<(component)',
+      'dependencies': [
+        '../base/base.gyp:base',
+        'net',
+        'net_derived_sources',
+      ],
+      'defines': [
+        'NET_IMPLEMENTATION',
+      ],
+      'sources': [
+        'base/stale_while_revalidate_experiment_domains.cc',
+        'base/stale_while_revalidate_experiment_domains.h',
+      ],
+    },
   ],
   'conditions': [
     ['use_v8_in_net == 1', {
@@ -1354,7 +1373,6 @@
             'android/java/src/org/chromium/net/AndroidCertVerifyResult.java',
             'android/java/src/org/chromium/net/AndroidKeyStore.java',
             'android/java/src/org/chromium/net/AndroidNetworkLibrary.java',
-            'android/java/src/org/chromium/net/AndroidPrivateKey.java',
             'android/java/src/org/chromium/net/AndroidTrafficStats.java',
             'android/java/src/org/chromium/net/GURLUtils.java',
             'android/java/src/org/chromium/net/HttpNegotiateAuthenticator.java',
@@ -1395,24 +1413,9 @@
             'network_change_notifier_android_types_java',
             'net_errors_java',
             'private_key_types_java',
-            'remote_android_keystore_aidl',
             'traffic_stats_error_java',
           ],
           'includes': [ '../build/java.gypi' ],
-        },
-        {
-          # Processes the interface files for communication with an Android KeyStore
-          # running in a separate process.
-          'target_name': 'remote_android_keystore_aidl',
-          'type': 'none',
-          'variables': {
-            'aidl_interface_file': '../net/android/java/src/org/chromium/net/IRemoteAndroidKeyStoreInterface.aidl',
-          },
-          'sources': [
-            '../net/android/java/src/org/chromium/net/IRemoteAndroidKeyStore.aidl',
-            '../net/android/java/src/org/chromium/net/IRemoteAndroidKeyStoreCallbacks.aidl',
-          ],
-          'includes': [ '../build/java_aidl.gypi' ],
         },
         {
           'target_name': 'net_java_test_support',

@@ -300,7 +300,7 @@ public:
 
     // This method is called whenever an attribute is added, changed or removed.
     virtual void attributeChanged(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason = ModifiedDirectly);
-    virtual void parseAttribute(const QualifiedName&, const AtomicString&);
+    virtual void parseAttribute(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue);
 
     virtual bool hasLegalLinkAttribute(const QualifiedName&) const;
     virtual const QualifiedName& subResourceAttributeName() const;
@@ -533,6 +533,12 @@ public:
     void incrementProxyCount();
     void decrementProxyCount();
 
+    // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
+    // the element is inDocument() and the context is an isolated world.
+    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2);
+    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3);
+    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3, const String& arg4);
+
     DECLARE_VIRTUAL_TRACE();
 
     SpellcheckAttributeState spellcheckAttributeState() const;
@@ -546,6 +552,7 @@ protected:
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, CSSValueID identifier);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, double value, CSSPrimitiveValue::UnitType);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, const String& value);
+    void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>);
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;

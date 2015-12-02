@@ -83,7 +83,7 @@ Geofencing status=experimental
 GeometryInterfaces status=test
 GetUserMedia depends_on=MediaDevices, status=experimental
 GlobalCacheStorage status=stable
-HiResEventTimeStamp status=experimental
+HiResEventTimeStamp status=stable
 ImageColorProfiles
 ImageOrientation status=test
 ImageRenderingPixelated status=stable
@@ -135,7 +135,7 @@ PrefixedEncryptedMedia status=test
 PrefixedVideoFullscreen status=stable
 Presentation status=stable
 PresentationReceiver status=test
-PromiseRejectionEvent status=experimental
+PromiseRejectionEvent status=stable
 PushMessaging status=stable
 // Push messaging payloads are blocked on the Push API supporting encryption.
 PushMessagingData status=test

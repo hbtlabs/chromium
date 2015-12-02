@@ -22,19 +22,19 @@
 
 interface HTMLTableElement : HTMLElement {
     // TODO(philipj): The caption, tHead and tFoot setters should never throw.
-    [RaisesException=Setter, LegacyInterfaceTypeChecking] attribute HTMLTableCaptionElement? caption;
-    HTMLElement createCaption();
+    [RaisesException=Setter] attribute HTMLTableCaptionElement? caption;
+    HTMLTableCaptionElement createCaption();
     void deleteCaption();
-    [RaisesException=Setter, LegacyInterfaceTypeChecking] attribute HTMLTableSectionElement? tHead;
-    HTMLElement createTHead();
+    [RaisesException=Setter] attribute HTMLTableSectionElement? tHead;
+    HTMLTableSectionElement createTHead();
     void deleteTHead();
-    [RaisesException=Setter, LegacyInterfaceTypeChecking] attribute HTMLTableSectionElement? tFoot;
-    HTMLElement createTFoot();
+    [RaisesException=Setter] attribute HTMLTableSectionElement? tFoot;
+    HTMLTableSectionElement createTFoot();
     void deleteTFoot();
     readonly attribute HTMLCollection tBodies;
-    HTMLElement createTBody();
+    HTMLTableSectionElement createTBody();
     readonly attribute HTMLCollection rows;
-    [RaisesException] HTMLElement insertRow(optional long index = -1);
+    [RaisesException] HTMLTableRowElement insertRow(optional long index = -1);
     [RaisesException] void deleteRow(long index);
     // attribute boolean sortable;
     // void stopSorting();

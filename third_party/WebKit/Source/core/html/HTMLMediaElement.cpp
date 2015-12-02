@@ -501,7 +501,7 @@ bool HTMLMediaElement::isMouseFocusable() const
     return false;
 }
 
-void HTMLMediaElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void HTMLMediaElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == srcAttr) {
         // Trigger a reload, as long as the 'src' attribute is present.
@@ -514,7 +514,7 @@ void HTMLMediaElement::parseAttribute(const QualifiedName& name, const AtomicStr
     } else if (name == preloadAttr) {
         setPlayerPreload();
     } else {
-        HTMLElement::parseAttribute(name, value);
+        HTMLElement::parseAttribute(name, oldValue, value);
     }
 }
 
@@ -1116,6 +1116,8 @@ void HTMLMediaElement::startDeferredLoad()
         executeDeferredLoad();
         return;
     }
+    if (m_deferredLoadState == ExecuteOnStopDelayingLoadEventTask)
+        return;
     ASSERT(m_deferredLoadState == WaitingForStopDelayingLoadEventTask);
     m_deferredLoadState = ExecuteOnStopDelayingLoadEventTask;
 }
@@ -1556,6 +1558,7 @@ void HTMLMediaElement::setReadyState(ReadyState state)
                 invalidateCachedTime();
                 scheduleEvent(EventTypeNames::play);
                 scheduleEvent(EventTypeNames::playing);
+                m_autoplaying = false;
             }
         }
 

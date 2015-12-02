@@ -197,7 +197,7 @@ bool SVGSVGElement::zoomAndPanEnabled() const
     return currentViewSpec && currentViewSpec->zoomAndPan() == SVGZoomAndPanMagnify;
 }
 
-void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (!nearestViewportElement()) {
         bool setListener = true;
@@ -224,7 +224,7 @@ void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString
         document().setWindowAttributeEventListener(EventTypeNames::error, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
     } else if (SVGZoomAndPan::parseAttribute(name, value)) {
     } else {
-        SVGElement::parseAttribute(name, value);
+        SVGElement::parseAttribute(name, oldValue, value);
     }
 }
 
@@ -249,14 +249,14 @@ void SVGSVGElement::collectStyleForPresentationAttribute(const QualifiedName& na
 {
     RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
     if (property == m_x) {
-        addSVGLengthPropertyToPresentationAttributeStyle(style, CSSPropertyX, *m_x->currentValue());
+        addPropertyToPresentationAttributeStyle(style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
     } else if (property == m_y) {
-        addSVGLengthPropertyToPresentationAttributeStyle(style, CSSPropertyY, *m_y->currentValue());
+        addPropertyToPresentationAttributeStyle(style, CSSPropertyY, m_y->currentValue()->asCSSPrimitiveValue());
     } else if (isOutermostSVGSVGElement() && (property == m_width || property == m_height)) {
         if (property == m_width)
-            addSVGLengthPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, *m_width->currentValue());
+            addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, m_width->currentValue()->asCSSPrimitiveValue());
         else if (property == m_height)
-            addSVGLengthPropertyToPresentationAttributeStyle(style, CSSPropertyHeight, *m_height->currentValue());
+            addPropertyToPresentationAttributeStyle(style, CSSPropertyHeight, m_height->currentValue()->asCSSPrimitiveValue());
     } else {
         SVGGraphicsElement::collectStyleForPresentationAttribute(name, value, style);
     }

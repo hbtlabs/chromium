@@ -1867,6 +1867,10 @@ void WebGLRenderingContextBase::compressedTexImage2D(GLenum target, GLint level,
 {
     if (isContextLost())
         return;
+    WebGLTexture* tex = validateTextureBinding("compressedTexImage2D", target, true);
+    if (!tex)
+        return;
+
     if (!validateTexFuncLevel("compressedTexImage2D", target, level))
         return;
 
@@ -1881,10 +1885,6 @@ void WebGLRenderingContextBase::compressedTexImage2D(GLenum target, GLint level,
     if (!validateCompressedTexDimensions("compressedTexImage2D", NotTexSubImage2D, target, level, width, height, internalformat))
         return;
     if (!validateCompressedTexFuncData("compressedTexImage2D", width, height, internalformat, data))
-        return;
-
-    WebGLTexture* tex = validateTextureBinding("compressedTexImage2D", target, true);
-    if (!tex)
         return;
 
     if (tex->isImmutable()) {
@@ -1904,6 +1904,10 @@ void WebGLRenderingContextBase::compressedTexSubImage2D(GLenum target, GLint lev
 {
     if (isContextLost())
         return;
+    WebGLTexture* tex = validateTextureBinding("compressedTexSubImage2D", target, true);
+    if (!tex)
+        return;
+
     if (!validateTexFuncLevel("compressedTexSubImage2D", target, level))
         return;
     if (!validateCompressedTexFormat(format)) {
@@ -1911,10 +1915,6 @@ void WebGLRenderingContextBase::compressedTexSubImage2D(GLenum target, GLint lev
         return;
     }
     if (!validateCompressedTexFuncData("compressedTexSubImage2D", width, height, format, data))
-        return;
-
-    WebGLTexture* tex = validateTextureBinding("compressedTexSubImage2D", target, true);
-    if (!tex)
         return;
 
     if (!isWebGL2OrHigher() && format != tex->getInternalFormat(target, level)) {
@@ -4179,11 +4179,9 @@ void WebGLRenderingContextBase::texImage2DImpl(GLenum target, GLint level, GLenu
         }
     }
 
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     texImage2DBase(target, level, internalformat, imageExtractor.imageWidth(), imageExtractor.imageHeight(), 0, format, type, needConversion ? data.data() : imagePixelData);
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 bool WebGLRenderingContextBase::validateTexFunc(const char* functionName, TexImageFunctionType functionType, TexFuncValidationSourceType sourceType, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, GLint xoffset, GLint yoffset)
@@ -4302,10 +4300,10 @@ void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum in
         changeUnpackAlignment = true;
     }
     if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        resetUnpackParameters();
     texImage2DBase(target, level, internalformat, width, height, border, format, type, data);
     if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+        restoreUnpackParameters();
 }
 
 void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum internalformat,
@@ -4333,11 +4331,9 @@ void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum in
             return;
         }
     }
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     texImage2DBase(target, level, internalformat, pixels->width(), pixels->height(), 0, format, type, needConversion ? data.data() : pixels->data()->data());
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum internalformat,
@@ -4602,11 +4598,9 @@ void WebGLRenderingContextBase::texSubImage2DImpl(GLenum target, GLint level, GL
         }
     }
 
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     webContext()->texSubImage2D(target, level, xoffset, yoffset, imageExtractor.imageWidth(), imageExtractor.imageHeight(), format, type,  needConversion ? data.data() : imagePixelData);
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
@@ -4627,10 +4621,10 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint 
         changeUnpackAlignment = true;
     }
     if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        resetUnpackParameters();
     webContext()->texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, data);
     if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+        restoreUnpackParameters();
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
@@ -4658,11 +4652,9 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint 
             return;
         }
     }
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     webContext()->texSubImage2D(target, level, xoffset, yoffset, pixels->width(), pixels->height(), format, type, needConversion ? data.data() : pixels->data()->data());
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
@@ -5929,6 +5921,12 @@ bool WebGLRenderingContextBase::validateCompressedTexFuncData(const char* functi
         }
         break;
     case GC3D_COMPRESSED_ATC_RGB_AMD:
+    case GL_COMPRESSED_R11_EAC:
+    case GL_COMPRESSED_SIGNED_R11_EAC:
+    case GL_COMPRESSED_RGB8_ETC2:
+    case GL_COMPRESSED_SRGB8_ETC2:
+    case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+    case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
     case GL_ETC1_RGB8_OES:
         {
             bytesRequired = floor(static_cast<double>((width + 3) / 4)) * floor(static_cast<double>((height + 3) / 4)) * 8;
@@ -5936,6 +5934,10 @@ bool WebGLRenderingContextBase::validateCompressedTexFuncData(const char* functi
         break;
     case GC3D_COMPRESSED_ATC_RGBA_EXPLICIT_ALPHA_AMD:
     case GC3D_COMPRESSED_ATC_RGBA_INTERPOLATED_ALPHA_AMD:
+    case GL_COMPRESSED_RG11_EAC:
+    case GL_COMPRESSED_SIGNED_RG11_EAC:
+    case GL_COMPRESSED_RGBA8_ETC2_EAC:
+    case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
         {
             bytesRequired = floor(static_cast<double>((width + 3) / 4)) * floor(static_cast<double>((height + 3) / 4)) * 16;
         }
@@ -5974,6 +5976,20 @@ bool WebGLRenderingContextBase::validateCompressedTexDimensions(const char* func
     bool heightValid = false;
 
     switch (format) {
+    case GL_COMPRESSED_R11_EAC:
+    case GL_COMPRESSED_SIGNED_R11_EAC:
+    case GL_COMPRESSED_RG11_EAC:
+    case GL_COMPRESSED_SIGNED_RG11_EAC:
+    case GL_COMPRESSED_RGB8_ETC2:
+    case GL_COMPRESSED_SRGB8_ETC2:
+    case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+    case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+    case GL_COMPRESSED_RGBA8_ETC2_EAC:
+    case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC: {
+        widthValid = true;
+        heightValid = true;
+        break;
+    }
     case GL_COMPRESSED_RGBA_ASTC_4x4_KHR:
     case GL_COMPRESSED_RGBA_ASTC_5x4_KHR:
     case GL_COMPRESSED_RGBA_ASTC_5x5_KHR:
@@ -6932,6 +6948,18 @@ int WebGLRenderingContextBase::externallyAllocatedBytesPerPixel()
 DrawingBuffer* WebGLRenderingContextBase::drawingBuffer() const
 {
     return m_drawingBuffer.get();
+}
+
+void WebGLRenderingContextBase::resetUnpackParameters()
+{
+    if (m_unpackAlignment != 1)
+        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+}
+
+void WebGLRenderingContextBase::restoreUnpackParameters()
+{
+    if (m_unpackAlignment != 1)
+        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
 }
 
 } // namespace blink

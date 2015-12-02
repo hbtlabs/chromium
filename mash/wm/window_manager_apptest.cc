@@ -22,7 +22,7 @@ class WindowManagerAppTest : public mojo::test::ApplicationTestBase,
 
  protected:
   void ConnectToWindowManager(mus::mojom::WindowManagerPtr* window_manager) {
-    application_impl()->ConnectToService("mojo:mash_wm", window_manager);
+    application_impl()->ConnectToService("mojo:desktop_wm", window_manager);
   }
 
   mus::Window* OpenWindow(mus::mojom::WindowManager* window_manager) {
@@ -46,7 +46,8 @@ class WindowManagerAppTest : public mojo::test::ApplicationTestBase,
   DISALLOW_COPY_AND_ASSIGN(WindowManagerAppTest);
 };
 
-TEST_F(WindowManagerAppTest, OpenWindow) {
+// TODO(sky): flakey, http://crbug.com/559412 .
+TEST_F(WindowManagerAppTest, DISABLED_OpenWindow) {
   mus::mojom::WindowManagerPtr connection;
   ConnectToWindowManager(&connection);
 

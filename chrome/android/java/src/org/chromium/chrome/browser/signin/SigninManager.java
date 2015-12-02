@@ -256,7 +256,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     * Clear pending sign in when system accounts in AccountTrackerService were refreshed.
     */
     @Override
-    public void onSystemAccountsForceRefreshed() {
+    public void onSystemAccountsChanged() {
         if (mHasPendingSignin) {
             mHasPendingSignin = false;
             cancelSignIn();
@@ -294,7 +294,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
         notifySignInAllowedChanged();
 
-        if (!AccountTrackerService.get(mContext).isSystemAccountsSeeded()) {
+        if (!AccountTrackerService.get(mContext).checkAndSeedSystemAccounts()) {
             mHasPendingSignin = true;
             return;
         }
@@ -387,7 +387,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
         // Sign-in to sync.
         ProfileSyncService profileSyncService = ProfileSyncService.get();
-        if (AndroidSyncSettings.isSyncEnabled(mContext)
+        if (profileSyncService != null
+                && AndroidSyncSettings.isSyncEnabled(mContext)
                 && !profileSyncService.hasSyncSetupCompleted()) {
             profileSyncService.setSetupInProgress(true);
             profileSyncService.requestStart();
@@ -424,7 +425,10 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         boolean wipeData = getManagementDomain() != null;
         Log.d(TAG, "Signing out, wipe data? " + wipeData);
 
-        ProfileSyncService.get().signOut();
+        ProfileSyncService profileSyncService = ProfileSyncService.get();
+        if (profileSyncService != null) {
+            profileSyncService.signOut();
+        }
         ChromeSigninController.get(mContext).setSignedInAccountName(null);
         mSigninNotificationController.onClearSignedInUser();
         nativeSignOut(mNativeSigninManagerAndroid);
@@ -435,7 +439,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             onSignOutDone();
         }
 
-        AccountTrackerService.get(mContext).forceRefresh();
+        AccountTrackerService.get(mContext).invalidateAccountSeedStatus(true);
     }
 
     /**
@@ -495,9 +499,12 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             public void onSigninComplete() {
                 // TODO(acleung): Maybe GoogleServicesManager should have a
                 // sync = true but setSetupInProgress(true) state?
-                ProfileSyncService.get().setSetupInProgress(
-                        signInSync == SIGNIN_SYNC_SETUP_IN_PROGRESS);
-                SyncController.get(mContext).start();
+                ProfileSyncService profileSyncService = ProfileSyncService.get();
+                if (profileSyncService != null) {
+                    profileSyncService.setSetupInProgress(
+                            signInSync == SIGNIN_SYNC_SETUP_IN_PROGRESS);
+                    SyncController.get(mContext).start();
+                }
 
                 if (observer != null) observer.onSigninComplete();
 

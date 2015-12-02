@@ -56,6 +56,23 @@ component("blimp_net") {
   ]
 }
 
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "blimp_net_test_export.h",
+    "test_common.cc",
+    "test_common.h",
+  ]
+
+  deps = [
+    ":blimp_net",
+    "//blimp/common/proto",
+    "//net:test_support",
+    "//testing/gmock",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
@@ -63,18 +80,18 @@ source_set("unit_tests") {
     "blimp_connection_unittest.cc",
     "blimp_message_demultiplexer_unittest.cc",
     "blimp_message_multiplexer_unittest.cc",
+    "blimp_message_output_buffer_unittest.cc",
     "blimp_message_pump_unittest.cc",
     "engine_connection_manager_unittest.cc",
     "input_message_unittest.cc",
     "stream_packet_reader_unittest.cc",
     "stream_packet_writer_unittest.cc",
     "tcp_transport_unittest.cc",
-    "test_common.cc",
-    "test_common.h",
   ]
 
   deps = [
     ":blimp_net",
+    ":test_support",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",

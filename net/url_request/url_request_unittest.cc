@@ -2419,6 +2419,12 @@ TEST_F(URLRequestTest, DoNotSendCookies_ViaPolicy) {
   }
 }
 
+// TODO(crbug.com/564656) This test is flaky on iOS.
+#if defined(OS_IOS)
+#define MAYBE_DoNotSaveCookies_ViaPolicy FLAKY_DoNotSaveCookies_ViaPolicy
+#else
+#define MAYBE_DoNotSaveCookies_ViaPolicy DoNotSaveCookies_ViaPolicy
+#endif
 TEST_F(URLRequestTest, DoNotSaveCookies_ViaPolicy) {
   LocalHttpTestServer test_server;
   ASSERT_TRUE(test_server.Start());
@@ -2726,7 +2732,7 @@ TEST_F(URLRequestTest, FirstPartyOnlyCookiesDisabled) {
   }
 }
 
-// Tests that $Secure- cookies can't be set on non-secure origins.
+// Tests that __Secure- cookies can't be set on non-secure origins.
 TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
   EmbeddedTestServer http_server;
   http_server.AddDefaultHandlers(
@@ -2742,12 +2748,12 @@ TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
   context.set_network_delegate(&network_delegate);
   context.Init();
 
-  // Try to set a Secure $Secure- cookie, with experimental features
+  // Try to set a Secure __Secure- cookie, with experimental features
   // enabled.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(context.CreateRequest(
-        http_server.GetURL("/set-cookie?$Secure-nonsecure-origin=1;Secure"),
+        http_server.GetURL("/set-cookie?__Secure-nonsecure-origin=1;Secure"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2763,7 +2769,7 @@ TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("$Secure-nonsecure-origin=1") ==
+    EXPECT_TRUE(d.data_received().find("__Secure-nonsecure-origin=1") ==
                 std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
@@ -2782,13 +2788,14 @@ TEST_F(URLRequestTest, SecureCookiePrefixNonexperimental) {
   context.Init();
 
   // Without experimental features, there should be no restrictions on
-  // $Secure- cookies.
+  // __Secure- cookies.
 
-  // Set a non-Secure cookie with the $Secure- prefix.
+  // Set a non-Secure cookie with the __Secure- prefix.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(context.CreateRequest(
-        https_server.GetURL("/set-cookie?$Secure-nonsecure-not-experimental=1"),
+        https_server.GetURL(
+            "/set-cookie?__Secure-nonsecure-not-experimental=1"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2796,12 +2803,12 @@ TEST_F(URLRequestTest, SecureCookiePrefixNonexperimental) {
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
 
-  // Set a Secure cookie with the $Secure- prefix.
+  // Set a Secure cookie with the __Secure- prefix.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(context.CreateRequest(
         https_server.GetURL(
-            "/set-cookie?$Secure-secure-not-experimental=1;Secure"),
+            "/set-cookie?__Secure-secure-not-experimental=1;Secure"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2818,10 +2825,10 @@ TEST_F(URLRequestTest, SecureCookiePrefixNonexperimental) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("$Secure-secure-not-experimental=1") !=
+    EXPECT_TRUE(d.data_received().find("__Secure-secure-not-experimental=1") !=
                 std::string::npos);
     EXPECT_TRUE(
-        d.data_received().find("$Secure-nonsecure-not-experimental=1") !=
+        d.data_received().find("__Secure-nonsecure-not-experimental=1") !=
         std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
@@ -2839,12 +2846,12 @@ TEST_F(URLRequestTest, SecureCookiePrefixExperimentalNonsecure) {
   context.set_network_delegate(&network_delegate);
   context.Init();
 
-  // Try to set a non-Secure $Secure- cookie, with experimental features
+  // Try to set a non-Secure __Secure- cookie, with experimental features
   // enabled.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(
-        context.CreateRequest(https_server.GetURL("/set-cookie?$Secure-foo=1"),
+        context.CreateRequest(https_server.GetURL("/set-cookie?__Secure-foo=1"),
                               DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2860,7 +2867,7 @@ TEST_F(URLRequestTest, SecureCookiePrefixExperimentalNonsecure) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("$Secure-foo=1") == std::string::npos);
+    EXPECT_TRUE(d.data_received().find("__Secure-foo=1") == std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
@@ -2877,12 +2884,12 @@ TEST_F(URLRequestTest, SecureCookiePrefixExperimentalSecure) {
   context.set_network_delegate(&network_delegate);
   context.Init();
 
-  // Try to set a Secure $Secure- cookie, with experimental features
+  // Try to set a Secure __Secure- cookie, with experimental features
   // enabled.
   {
     TestDelegate d;
     scoped_ptr<URLRequest> req(context.CreateRequest(
-        https_server.GetURL("/set-cookie?$Secure-bar=1;Secure"),
+        https_server.GetURL("/set-cookie?__Secure-bar=1;Secure"),
         DEFAULT_PRIORITY, &d));
     req->Start();
     base::RunLoop().Run();
@@ -2898,7 +2905,7 @@ TEST_F(URLRequestTest, SecureCookiePrefixExperimentalSecure) {
     req->Start();
     base::RunLoop().Run();
 
-    EXPECT_TRUE(d.data_received().find("$Secure-bar=1") != std::string::npos);
+    EXPECT_TRUE(d.data_received().find("__Secure-bar=1") != std::string::npos);
     EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
     EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
   }
@@ -7244,7 +7251,13 @@ TEST_F(URLRequestTestHTTP, DefaultUserAgent) {
 
 // Check that if request overrides the User-Agent header,
 // the default is not appended.
-TEST_F(URLRequestTestHTTP, OverrideUserAgent) {
+// TODO(crbug.com/564656) This test is flaky on iOS.
+#if defined(OS_IOS)
+#define MAYBE_OverrideUserAgent FLAKY_OverrideUserAgent
+#else
+#define MAYBE_OverrideUserAgent OverrideUserAgent
+#endif
+TEST_F(URLRequestTestHTTP, MAYBE_OverrideUserAgent) {
   ASSERT_TRUE(http_test_server()->Start());
 
   TestDelegate d;
