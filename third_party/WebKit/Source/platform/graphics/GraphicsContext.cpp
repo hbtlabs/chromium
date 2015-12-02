@@ -35,7 +35,7 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/weborigin/KURL.h"
-#include "skia/ext/platform_device.h"
+#include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkData.h"
@@ -301,7 +301,7 @@ void GraphicsContext::beginRecording(const FloatRect& bounds)
 
     m_canvas = m_pictureRecorder.beginRecording(bounds, 0);
     if (m_hasMetaData)
-        skia::getMetaData(*m_canvas) = m_metaData;
+        skia::GetMetaData(*m_canvas) = m_metaData;
 }
 
 PassRefPtr<const SkPicture> GraphicsContext::endRecording()
@@ -839,7 +839,7 @@ void GraphicsContext::drawTiledImage(Image* image, const IntRect& destRect, cons
     image->drawTiled(this, destRect, srcPoint, FloatSize(tileSize), op, repeatSpacing);
 }
 
-void GraphicsContext::drawTiledImage(Image* image, const IntRect& dest, const IntRect& srcRect,
+void GraphicsContext::drawTiledImage(Image* image, const FloatRect& dest, const FloatRect& srcRect,
     const FloatSize& tileScaleFactor, Image::TileRule hRule, Image::TileRule vRule, SkXfermode::Mode op)
 {
     if (contextDisabled() || !image)

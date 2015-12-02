@@ -50,15 +50,6 @@ FrameTree::FrameTree(Frame* thisFrame)
 
 FrameTree::~FrameTree()
 {
-#if !ENABLE(OILPAN)
-    // FIXME: Why is this here? Doesn't this parallel what we already do in ~LocalFrame?
-    for (Frame* child = firstChild(); child; child = child->tree().nextSibling()) {
-        if (child->isLocalFrame())
-            toLocalFrame(child)->setView(nullptr);
-        else if (child->isRemoteFrame())
-            toRemoteFrame(child)->setView(nullptr);
-    }
-#endif
 }
 
 void FrameTree::setName(const AtomicString& name, const AtomicString& fallbackName)
@@ -70,6 +61,12 @@ void FrameTree::setName(const AtomicString& name, const AtomicString& fallbackNa
     }
     m_uniqueName = AtomicString(); // Remove our old frame name so it's not considered in uniqueChildName.
     m_uniqueName = parent()->tree().uniqueChildName(name.isEmpty() ? fallbackName : name);
+}
+
+void FrameTree::setNameForReplacementFrame(const AtomicString& name, const AtomicString& uniqueName)
+{
+    m_name = name;
+    m_uniqueName = uniqueName;
 }
 
 Frame* FrameTree::parent() const

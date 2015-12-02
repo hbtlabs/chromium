@@ -182,13 +182,10 @@
 #elif defined(OS_LINUX)
 #include "chrome/browser/chrome_browser_main_linux.h"
 #elif defined(OS_ANDROID)
-#include "chrome/browser/android/new_tab_page_url_handler.h"
-#include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
 #include "chrome/browser/chrome_browser_main_android.h"
 #include "chrome/common/descriptors_android.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "components/service_tab_launcher/browser/android/service_tab_launcher.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #elif defined(OS_POSIX)
 #include "chrome/browser/chrome_browser_main_posix.h"
@@ -278,6 +275,12 @@
 
 #if defined(ENABLE_WAYLAND_SERVER)
 #include "chrome/browser/chrome_browser_main_extra_parts_exo.h"
+#endif
+
+#if defined(OS_ANDROID) && !defined(USE_AURA)
+#include "chrome/browser/android/new_tab_page_url_handler.h"
+#include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
+#include "components/service_tab_launcher/browser/android/service_tab_launcher.h"
 #endif
 
 using base::FileDescriptor;
@@ -586,8 +589,10 @@ class SafeBrowsingSSLCertReporter : public SSLCertReporter {
       safe_browsing_ui_manager_;
 };
 
-#if defined(OS_ANDROID)
 
+  // TODO(bshe): Use defined(ANDROID_JAVA_UI) once
+  // codereview.chromium.org/1459793002 landed.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
 void HandleSingleTabModeBlockOnUIThread(const BlockedWindowParams& params) {
   WebContents* web_contents = tab_util::GetWebContentsByFrameID(
       params.render_process_id(), params.opener_render_frame_id());
@@ -596,7 +601,9 @@ void HandleSingleTabModeBlockOnUIThread(const BlockedWindowParams& params) {
 
   SingleTabModeTabHelper::FromWebContents(web_contents)->HandleOpenUrl(params);
 }
+#endif
 
+#if defined(OS_ANDROID)
 float GetDeviceScaleAdjustment() {
   static const float kMinFSM = 1.05f;
   static const int kWidthForMinFSM = 320;
@@ -616,7 +623,6 @@ float GetDeviceScaleAdjustment() {
       (kWidthForMaxFSM - kWidthForMinFSM);
   return ratio * (kMaxFSM - kMinFSM) + kMinFSM;
 }
-
 #endif  // defined(OS_ANDROID)
 
 #if defined(ENABLE_EXTENSIONS)
@@ -894,7 +900,8 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
   host->AddFilter(new TtsMessageFilter(host->GetBrowserContext()));
 #if defined(ENABLE_WEBRTC)
   WebRtcLoggingHandlerHost* webrtc_logging_handler_host =
-      new WebRtcLoggingHandlerHost(profile);
+      new WebRtcLoggingHandlerHost(
+          profile, g_browser_process->webrtc_log_uploader());
   host->SetWebRtcLogMessageCallback(base::Bind(
       &WebRtcLoggingHandlerHost::LogMessage, webrtc_logging_handler_host));
   host->AddFilter(webrtc_logging_handler_host);
@@ -1963,8 +1970,7 @@ ChromeContentBrowserClient::GetTemporaryStorageEvictionPolicy(
 }
 
 void ChromeContentBrowserClient::AllowCertificateError(
-    int render_process_id,
-    int render_frame_id,
+    content::WebContents* web_contents,
     int cert_error,
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
@@ -1974,6 +1980,7 @@ void ChromeContentBrowserClient::AllowCertificateError(
     bool expired_previous_decision,
     const base::Callback<void(bool)>& callback,
     content::CertificateRequestResultType* result) {
+  DCHECK(web_contents);
   if (resource_type != content::RESOURCE_TYPE_MAIN_FRAME) {
     // A sub-resource has a certificate error.  The user doesn't really
     // have a context for making the right decision, so block the
@@ -1984,16 +1991,8 @@ void ChromeContentBrowserClient::AllowCertificateError(
   }
 
   // If the tab is being prerendered, cancel the prerender and the request.
-  content::RenderFrameHost* render_frame_host =
-      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
-  WebContents* tab = WebContents::FromRenderFrameHost(render_frame_host);
-  if (!tab) {
-    NOTREACHED();
-    return;
-  }
-
   prerender::PrerenderContents* prerender_contents =
-      prerender::PrerenderContents::FromWebContents(tab);
+      prerender::PrerenderContents::FromWebContents(web_contents);
   if (prerender_contents) {
     prerender_contents->Destroy(prerender::FINAL_STATUS_SSL_ERROR);
     *result = content::CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL;
@@ -2016,8 +2015,9 @@ void ChromeContentBrowserClient::AllowCertificateError(
       new SafeBrowsingSSLCertReporter(safe_browsing_service
                                           ? safe_browsing_service->ui_manager()
                                           : nullptr));
-  SSLErrorHandler::HandleSSLError(tab, cert_error, ssl_info, request_url,
-                                  options_mask, cert_reporter.Pass(), callback);
+  SSLErrorHandler::HandleSSLError(web_contents, cert_error, ssl_info,
+                                  request_url, options_mask,
+                                  cert_reporter.Pass(), callback);
 }
 
 void ChromeContentBrowserClient::SelectClientCertificate(
@@ -2176,7 +2176,9 @@ bool ChromeContentBrowserClient::CanCreateWindow(
     }
   }
 
-#if defined(OS_ANDROID)
+  // TODO(bshe): Use defined(ANDROID_JAVA_UI) once
+  // codereview.chromium.org/1459793002 landed.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   if (SingleTabModeTabHelper::IsRegistered(render_process_id,
                                            opener_render_view_id)) {
     BrowserThread::PostTask(BrowserThread::UI,
@@ -2347,7 +2349,9 @@ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
   handler->AddHandlerPair(&WillHandleBrowserAboutURL,
                           BrowserURLHandler::null_handler());
 
-#if defined(OS_ANDROID)
+  // TODO(bshe): Use defined(ANDROID_JAVA_UI) once
+  // codereview.chromium.org/1459793002 landed.
+#if defined(OS_ANDROID) && !defined(USE_AURA)
   // Handler to rewrite chrome://newtab on Android.
   handler->AddHandlerPair(&chrome::android::HandleAndroidNativePageURL,
                           BrowserURLHandler::null_handler());
@@ -2633,7 +2637,9 @@ void ChromeContentBrowserClient::OpenURL(
     const base::Callback<void(content::WebContents*)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // TODO(bshe): Use !defined(ANDROID_JAVA_UI) once
+  // codereview.chromium.org/1459793002 landed.
+#if (!defined(OS_ANDROID) || defined(USE_AURA)) && !defined(OS_IOS)
   chrome::NavigateParams nav_params(
       Profile::FromBrowserContext(browser_context),
       params.url,

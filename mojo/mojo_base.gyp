@@ -205,6 +205,7 @@
       'variables': {
         'mojom_files': [
           'application/public/interfaces/application.mojom',
+          'application/public/interfaces/application_manager.mojom',
           'application/public/interfaces/content_handler.mojom',
           'application/public/interfaces/service_provider.mojom',
           'application/public/interfaces/shell.mojom',
@@ -229,6 +230,8 @@
         'application/public/cpp/application_impl.h',
         'application/public/cpp/application_runner.h',
         'application/public/cpp/connect.h',
+        'application/public/cpp/initialize_base_and_icu.cc',
+        'application/public/cpp/initialize_base_and_icu.h',
         'application/public/cpp/interface_factory.h',
         'application/public/cpp/interface_factory_impl.h',
         'application/public/cpp/lib/app_lifetime_helper.cc',
@@ -245,6 +248,7 @@
         'application/public/cpp/service_provider_impl.h',
       ],
       'dependencies': [
+        '../base/base.gyp:base_i18n',
         'mojo_application_bindings',
         'mojo_message_pump_lib',
         'mojo_services.gyp:network_type_converters',

@@ -112,6 +112,13 @@ public:
             return;
         }
 
+        // MinorGC does not collect objects because it may be expensive to
+        // update references during minorGC
+        if (classId == WrapperTypeInfo::ObjectClassId) {
+            v8::Persistent<v8::Object>::Cast(*value).MarkActive();
+            return;
+        }
+
         v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(m_isolate, v8::Persistent<v8::Object>::Cast(*value));
         ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
         const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
@@ -272,7 +279,7 @@ void gcPrologueForMajorGC(v8::Isolate* isolate, bool constructRetainedObjectInfo
 
 }
 
-void V8GCController::gcPrologue(v8::GCType type, v8::GCCallbackFlags flags)
+void V8GCController::gcPrologue(v8::Isolate* isolate, v8::GCType type, v8::GCCallbackFlags flags)
 {
     if (isMainThread()) {
         ScriptForbiddenScope::enter();
@@ -285,9 +292,6 @@ void V8GCController::gcPrologue(v8::GCType type, v8::GCCallbackFlags flags)
     // if (ThreadState::current())
     //     ThreadState::current()->willStartV8GC();
 
-    // TODO(haraken): It would be nice if the GC callbacks passed the Isolate
-    // directly.
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::HandleScope scope(isolate);
     switch (type) {
     case v8::kGCTypeScavenge:
@@ -321,11 +325,8 @@ void V8GCController::gcPrologue(v8::GCType type, v8::GCCallbackFlags flags)
     }
 }
 
-void V8GCController::gcEpilogue(v8::GCType type, v8::GCCallbackFlags flags)
+void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCallbackFlags flags)
 {
-    // TODO(haraken): It would be nice if the GC callbacks passed the Isolate
-    // directly.
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
     switch (type) {
     case v8::kGCTypeScavenge:
         TRACE_EVENT_END1("devtools.timeline,v8", "MinorGC", "usedHeapSizeAfter", usedHeapSize(isolate));

@@ -14,8 +14,6 @@
 #include "base/at_exit.h"
 #include "base/basictypes.h"
 #include "base/command_line.h"
-#include "base/debug/crash_logging.h"
-#include "base/debug/leak_annotations.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -44,7 +42,7 @@
 #include "chrome/installer/setup/archive_patch_helper.h"
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
-#include "chrome/installer/setup/installer_crash_reporter_client.h"
+#include "chrome/installer/setup/installer_crash_reporting.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
@@ -69,8 +67,6 @@
 #include "chrome/installer/util/self_cleaning_temp_dir.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/user_experiment.h"
-#include "components/crash/content/app/breakpad_win.h"
-#include "components/crash/content/app/crash_keys_win.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
 #include "chrome/installer/util/updating_app_registration_data.h"
@@ -1285,55 +1281,6 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
   return handled;
 }
 
-#if defined(COMPONENT_BUILD)
-// Installed via base::debug::SetCrashKeyReportingFunctions.
-void SetCrashKeyValue(const base::StringPiece& key,
-                      const base::StringPiece& value) {
-  DCHECK(breakpad::CrashKeysWin::keeper());
-  breakpad::CrashKeysWin::keeper()->SetCrashKeyValue(base::UTF8ToUTF16(key),
-                                                     base::UTF8ToUTF16(value));
-}
-
-// Installed via base::debug::SetCrashKeyReportingFunctions.
-void ClearCrashKey(const base::StringPiece& key) {
-  DCHECK(breakpad::CrashKeysWin::keeper());
-  breakpad::CrashKeysWin::keeper()->ClearCrashKeyValue(base::UTF8ToUTF16(key));
-}
-#endif  // COMPONENT_BUILD
-
-void ConfigureCrashReporting(const InstallerState& installer_state) {
-  // This is inspired by work done in various parts of Chrome startup to connect
-  // to the crash service. Since the installer does not split its work between
-  // a stub .exe and a main .dll, crash reporting can be configured in one place
-  // right here.
-
-  // Create the crash client and install it (a la MainDllLoader::Launch).
-  InstallerCrashReporterClient *crash_client =
-      new InstallerCrashReporterClient(!installer_state.system_install());
-  ANNOTATE_LEAKING_OBJECT_PTR(crash_client);
-  crash_reporter::SetCrashReporterClient(crash_client);
-
-  breakpad::InitCrashReporter("Chrome Installer");
-
-  // Set up crash keys and the client id (a la child_process_logging::Init()).
-#if defined(COMPONENT_BUILD)
-  // breakpad::InitCrashReporter takes care of this for static builds but not
-  // component builds due to intricacies of chrome.exe and chrome.dll sharing a
-  // copy of base.dll in that case (for details, see the comment in
-  // components/crash/content/app/breakpad_win.cc).
-  crash_client->RegisterCrashKeys();
-  base::debug::SetCrashKeyReportingFunctions(&SetCrashKeyValue, &ClearCrashKey);
-#endif // COMPONENT_BUILD
-
-  scoped_ptr<metrics::ClientInfo> client_info =
-      GoogleUpdateSettings::LoadMetricsClientInfo();
-  if (client_info)
-    crash_client->SetCrashReporterClientIdFromGUID(client_info->client_id);
-  // TODO(grt): A lack of a client_id at this point generally means that Chrome
-  // has yet to have been launched and picked one. Consider creating it and
-  // setting it here for Chrome to use.
-}
-
 // Uninstalls multi-install Chrome Frame if the current operation is a
 // multi-install install or update. The operation is performed directly rather
 // than delegated to the existing install since there is no facility in older
@@ -1499,9 +1446,8 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     bool proceed_with_installation = true;
 
     uint32 higher_products = 0;
-    COMPILE_ASSERT(
-        sizeof(higher_products) * 8 > BrowserDistribution::NUM_TYPES,
-        too_many_distribution_types_);
+    static_assert(sizeof(higher_products) * 8 > BrowserDistribution::NUM_TYPES,
+                  "too many distribution types");
     const Products& products = installer_state.products();
     for (Products::const_iterator it = products.begin(); it < products.end();
          ++it) {
@@ -1519,8 +1465,8 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
     }
 
     if (higher_products != 0) {
-      COMPILE_ASSERT(BrowserDistribution::NUM_TYPES == 3,
-                     add_support_for_new_products_here_);
+      static_assert(BrowserDistribution::NUM_TYPES == 3,
+                    "add support for new products here");
       int message_id = IDS_INSTALL_HIGHER_VERSION_BASE;
       proceed_with_installation = false;
       install_status = HIGHER_VERSION_EXISTS;
@@ -1705,7 +1651,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   InstallerState installer_state;
   installer_state.Initialize(cmd_line, prefs, original_state);
 
-  ConfigureCrashReporting(installer_state);
+  installer::ConfigureCrashReporting(installer_state);
+  installer::SetInitialCrashKeys(installer_state);
+  installer::SetCrashKeysFromCommandLine(cmd_line);
 
   // Make sure the process exits cleanly on unexpected errors.
   base::EnableTerminationOnHeapCorruption();

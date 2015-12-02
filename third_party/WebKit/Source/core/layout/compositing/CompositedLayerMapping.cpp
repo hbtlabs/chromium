@@ -53,6 +53,7 @@
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayerPainter.h"
 #include "core/paint/PaintLayerStackingNodeIterator.h"
+#include "core/paint/PaintTiming.h"
 #include "core/paint/ScrollableAreaPainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/plugins/PluginView.h"
@@ -1921,7 +1922,7 @@ void CompositedLayerMapping::updateImageContents()
         return;
 
     // This is a no-op if the layer doesn't have an inner layer for the image.
-    m_graphicsLayer->setContentsToImage(image, imageLayoutObject->shouldRespectImageOrientation());
+    m_graphicsLayer->setContentsToImage(image, LayoutObject::shouldRespectImageOrientation(imageLayoutObject));
 
     m_graphicsLayer->setFilterQuality(layoutObject()->style()->imageRendering() == ImageRenderingPixelated ? kNone_SkFilterQuality : kLow_SkFilterQuality);
 
@@ -2225,6 +2226,10 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
     IntSize offsetFromAnchorLayoutObject;
     const LayoutBoxModelObject* anchorLayoutObject;
     if (graphicsLayer == m_squashingLayer) {
+        // TODO(chrishtr): this is a speculative fix for crbug.com/561306. However, it should never be the case that
+        // m_squashingLayer exists yet m_squashedLayers.size() == 0. There must be a bug elsewhere.
+        if (m_squashedLayers.size() == 0)
+            return IntRect();
         // All squashed layers have the same clip and transform space, so we can use the first squashed layer's
         // layoutObject to map the squashing layer's bounds into viewport space, with offsetFromAnchorLayoutObject
         // to translate squashing layer's bounds into the first squashed layer's space.
@@ -2252,7 +2257,7 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
     IntRect localInterestRect;
     // If the visible content rect is empty, then it makes no sense to map it back since there is nothing to map.
     if (!visibleContentRect.isEmpty()) {
-        localInterestRect = anchorLayoutObject->absoluteToLocalQuad(FloatRect(visibleContentRect), UseTransforms).enclosingBoundingBox();
+        localInterestRect = anchorLayoutObject->absoluteToLocalQuad(FloatRect(visibleContentRect), UseTransforms | TraverseDocumentBoundaries).enclosingBoundingBox();
         localInterestRect.move(-offsetFromAnchorLayoutObject);
     }
     // Expand by interest rect padding amount.
@@ -2402,21 +2407,26 @@ void CompositedLayerMapping::notifyAnimationStarted(const GraphicsLayer*, double
 
 void CompositedLayerMapping::notifyFirstPaint()
 {
-    // TODO(ksakamoto): This shouldn't be reported to Document. crbug.com/544811
-    if (Node* node = layoutObject()->node())
-        node->document().markFirstPaint();
+    if (PaintTiming* timing = m_owningLayer.paintTiming()) {
+        if (timing->firstPaint() == 0)
+            timing->markFirstPaint();
+    }
 }
 
 void CompositedLayerMapping::notifyFirstTextPaint()
 {
-    if (Node* node = layoutObject()->node())
-        node->document().markFirstTextPaint();
+    if (PaintTiming* timing = m_owningLayer.paintTiming()) {
+        if (timing->firstTextPaint() == 0)
+            timing->markFirstTextPaint();
+    }
 }
 
 void CompositedLayerMapping::notifyFirstImagePaint()
 {
-    if (Node* node = layoutObject()->node())
-        node->document().markFirstImagePaint();
+    if (PaintTiming* timing = m_owningLayer.paintTiming()) {
+        if (timing->firstImagePaint() == 0)
+            timing->markFirstImagePaint();
+    }
 }
 
 IntRect CompositedLayerMapping::pixelSnappedCompositedBounds() const

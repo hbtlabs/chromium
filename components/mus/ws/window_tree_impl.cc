@@ -37,6 +37,7 @@ WindowTreeImpl::WindowTreeImpl(ConnectionManager* connection_manager,
       id_(connection_manager_->GetAndAdvanceNextConnectionId()),
       creator_id_(creator_id),
       client_(nullptr),
+      event_ack_id_(0),
       is_embed_root_(false) {
   ServerWindow* window = GetWindow(root_id);
   CHECK(window);
@@ -119,13 +120,15 @@ void WindowTreeImpl::NotifyChangeCompleted(
       change_id, error_code == mojom::WINDOW_MANAGER_ERROR_CODE_SUCCESS);
 }
 
-bool WindowTreeImpl::NewWindow(const WindowId& window_id) {
+bool WindowTreeImpl::NewWindow(
+    const WindowId& window_id,
+    const std::map<std::string, std::vector<uint8_t>>& properties) {
   if (window_id.connection_id != id_)
     return false;
   if (window_map_.find(window_id.window_id) != window_map_.end())
     return false;
   window_map_[window_id.window_id] =
-      connection_manager_->CreateServerWindow(window_id);
+      connection_manager_->CreateServerWindow(window_id, properties);
   known_windows_.insert(WindowIdToTransportId(window_id));
   return true;
 }
@@ -191,6 +194,18 @@ bool WindowTreeImpl::Embed(const WindowId& window_id,
   if (is_embed_root_)
     *connection_id = new_connection->id();
   return true;
+}
+
+void WindowTreeImpl::DispatchInputEvent(ServerWindow* target,
+                                        mojom::EventPtr event) {
+  DCHECK_EQ(0u, event_ack_id_);
+  // We do not want to create a sequential id for each event, because that can
+  // leak some information to the client. So instead, manufacture the id from
+  // the event pointer.
+  event_ack_id_ =
+      0x1000000 | (reinterpret_cast<uintptr_t>(event.get()) & 0xffffff);
+  client()->OnWindowInputEvent(
+      event_ack_id_, WindowIdToTransportId(target->id()), event.Pass());
 }
 
 void WindowTreeImpl::ProcessWindowBoundsChanged(const ServerWindow* window,
@@ -605,13 +620,21 @@ void WindowTreeImpl::RemoveChildrenAsPartOfEmbed(const WindowId& window_id) {
     window->Remove(children[i]);
 }
 
-void WindowTreeImpl::NewWindow(uint32_t change_id, Id transport_window_id) {
+void WindowTreeImpl::NewWindow(
+    uint32_t change_id,
+    Id transport_window_id,
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties) {
+  std::map<std::string, std::vector<uint8_t>> properties;
+  if (!transport_properties.is_null()) {
+    properties =
+        transport_properties.To<std::map<std::string, std::vector<uint8_t>>>();
+  }
   client_->OnChangeCompleted(
-      change_id, NewWindow(WindowIdFromTransportId(transport_window_id)));
+      change_id,
+      NewWindow(WindowIdFromTransportId(transport_window_id), properties));
 }
 
-void WindowTreeImpl::DeleteWindow(Id transport_window_id,
-                                  const Callback<void(bool)>& callback) {
+void WindowTreeImpl::DeleteWindow(uint32_t change_id, Id transport_window_id) {
   ServerWindow* window =
       GetWindow(WindowIdFromTransportId(transport_window_id));
   bool success = false;
@@ -622,7 +645,7 @@ void WindowTreeImpl::DeleteWindow(Id transport_window_id,
         connection_manager_->GetConnection(window->id().connection_id);
     success = connection && connection->DeleteWindowImpl(this, window);
   }
-  callback.Run(success);
+  client_->OnChangeCompleted(change_id, success);
 }
 
 void WindowTreeImpl::AddWindow(Id parent_id,
@@ -750,7 +773,7 @@ void WindowTreeImpl::SetWindowProperty(uint32_t change_id,
   client_->OnChangeCompleted(change_id, success);
 }
 
-void WindowTreeImpl::RequestSurface(
+void WindowTreeImpl::AttachSurface(
     Id window_id,
     mojom::SurfaceType type,
     mojo::InterfaceRequest<mojom::Surface> surface,
@@ -785,6 +808,15 @@ void WindowTreeImpl::SetImeVisibility(Id transport_window_id,
     if (host)
       host->SetImeVisibility(window, visible);
   }
+}
+
+void WindowTreeImpl::OnWindowInputEventAck(uint32_t event_id) {
+  if (event_ack_id_ == 0 || event_id != event_ack_id_) {
+    // TODO(sad): Something bad happened. Kill the client?
+    NOTIMPLEMENTED() << "Wrong event acked.";
+  }
+  event_ack_id_ = 0;
+  GetHost()->OnEventAck(this);
 }
 
 void WindowTreeImpl::SetClientArea(Id transport_window_id,

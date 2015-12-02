@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/debug/leak_tracker.h"
 #include "base/environment.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_registry_simple.h"
@@ -23,6 +24,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
 #include "base/threading/worker_pool.h"
@@ -42,7 +44,6 @@
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_usage/core/data_use_aggregator.h"
 #include "components/data_usage/core/data_use_amortizer.h"
 #include "components/data_usage/core/data_use_annotator.h"
@@ -175,20 +176,24 @@ void ObserveKeychainEvents() {
 // Gets file path into ssl_keylog_file from command line argument or
 // environment variable. Command line argument has priority when
 // both specified.
-std::string GetSSLKeyLogFile(const base::CommandLine& command_line) {
+base::FilePath GetSSLKeyLogFile(const base::CommandLine& command_line) {
   if (command_line.HasSwitch(switches::kSSLKeyLogFile)) {
-    std::string file =
-      command_line.GetSwitchValueASCII(switches::kSSLKeyLogFile);
-    if (!file.empty()) {
-      return file;
-    }
-
+    base::FilePath path =
+        command_line.GetSwitchValuePath(switches::kSSLKeyLogFile);
+    if (!path.empty())
+      return path;
     LOG(WARNING) << "ssl-key-log-file argument missing";
   }
+
   scoped_ptr<base::Environment> env(base::Environment::Create());
-  std::string file;
-  env->GetVar("SSLKEYLOGFILE", &file);
-  return file;
+  std::string path_str;
+  env->GetVar("SSLKEYLOGFILE", &path_str);
+#if defined(OS_WIN)
+  // base::Environment returns environment variables in UTF-8 on Windows.
+  return base::FilePath(base::UTF8ToUTF16(path_str));
+#else
+  return base::FilePath(path_str);
+#endif
 }
 
 // Used for the "system" URLRequestContext.
@@ -588,9 +593,11 @@ void IOThread::Init() {
       *base::CommandLine::ForCurrentProcess();
 
   // Export ssl keys if log file specified.
-  std::string ssl_keylog_file = GetSSLKeyLogFile(command_line);
+  base::FilePath ssl_keylog_file = GetSSLKeyLogFile(command_line);
   if (!ssl_keylog_file.empty()) {
-      net::SSLClientSocket::SetSSLKeyLogFile(ssl_keylog_file);
+    net::SSLClientSocket::SetSSLKeyLogFile(
+        ssl_keylog_file,
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
   }
 
   DCHECK(!globals_);
@@ -689,7 +696,7 @@ void IOThread::Init() {
   tracked_objects::ScopedTracker tracking_profile8(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "466432 IOThread::InitAsync::CreateLogVerifiers::Start"));
-  std::vector<scoped_refptr<net::CTLogVerifier>> ct_logs(
+  std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
       net::ct::CreateLogVerifiersForKnownLogs());
 
   // Add logs from command line
@@ -708,7 +715,7 @@ void IOThread::Init() {
       std::string ct_public_key_data;
       CHECK(base::Base64Decode(log_metadata[1], &ct_public_key_data))
           << "Unable to decode CT public key.";
-      scoped_refptr<net::CTLogVerifier> external_log_verifier(
+      scoped_refptr<const net::CTLogVerifier> external_log_verifier(
           net::CTLogVerifier::Create(ct_public_key_data, log_description,
                                      log_url));
       CHECK(external_log_verifier) << "Unable to parse CT public key.";
@@ -716,6 +723,8 @@ void IOThread::Init() {
       ct_logs.push_back(external_log_verifier);
     }
   }
+
+  globals_->ct_logs.assign(ct_logs.begin(), ct_logs.end());
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.
@@ -730,7 +739,7 @@ void IOThread::Init() {
   net::MultiLogCTVerifier* ct_verifier = new net::MultiLogCTVerifier();
   globals_->cert_transparency_verifier.reset(ct_verifier);
   // Add built-in logs
-  ct_verifier->AddLogs(ct_logs);
+  ct_verifier->AddLogs(globals_->ct_logs);
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.
@@ -1011,8 +1020,6 @@ void IOThread::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kGSSAPILibraryName, std::string());
   registry->RegisterStringPref(prefs::kAuthAndroidNegotiateAccountType,
                                std::string());
-  registry->RegisterStringPref(
-      data_reduction_proxy::prefs::kDataReductionProxy, std::string());
   registry->RegisterBooleanPref(prefs::kEnableReferrers, true);
   data_reduction_proxy::RegisterPrefs(registry);
   registry->RegisterBooleanPref(prefs::kBuiltInDnsClientEnabled, true);
@@ -1121,6 +1128,8 @@ void IOThread::InitializeNetworkSessionParamsFromGlobals(
   params->quic_connection_options = globals.quic_connection_options;
   globals.quic_close_sessions_on_ip_change.CopyToIfSet(
       &params->quic_close_sessions_on_ip_change);
+  globals.quic_idle_connection_timeout_seconds.CopyToIfSet(
+      &params->quic_idle_connection_timeout_seconds);
 
   globals.origin_to_force_quic_on.CopyToIfSet(
       &params->origin_to_force_quic_on);
@@ -1252,6 +1261,12 @@ void IOThread::ConfigureQuicGlobals(
         GetQuicConnectionOptions(command_line, quic_trial_params);
     globals->quic_close_sessions_on_ip_change.set(
         ShouldQuicCloseSessionsOnIpChange(quic_trial_params));
+    int idle_connection_timeout_seconds = GetQuicIdleConnectionTimeoutSeconds(
+        quic_trial_params);
+    if (idle_connection_timeout_seconds != 0) {
+      globals->quic_idle_connection_timeout_seconds.set(
+          idle_connection_timeout_seconds);
+    }
   }
 
   size_t max_packet_length = GetQuicMaxPacketLength(command_line,
@@ -1491,6 +1506,17 @@ bool IOThread::ShouldQuicCloseSessionsOnIpChange(
   return base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params, "close_sessions_on_ip_change"),
       "true");
+}
+
+int IOThread::GetQuicIdleConnectionTimeoutSeconds(
+    const VariationParameters& quic_trial_params) {
+  int value;
+  if (base::StringToInt(GetVariationParam(quic_trial_params,
+                                          "idle_connection_timeout_seconds"),
+                        &value)) {
+    return value;
+  }
+  return 0;
 }
 
 size_t IOThread::GetQuicMaxPacketLength(

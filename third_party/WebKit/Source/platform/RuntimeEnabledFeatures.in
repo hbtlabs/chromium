@@ -22,7 +22,7 @@
 
 AdditiveAnimations status=experimental, depends_on=StackedCSSPropertyAnimations
 AppBanner status=stable
-AlwaysUseComplexText status=experimental
+AlwaysUseComplexText status=stable
 ApplicationCache status=stable
 AudioOutputDevices status=experimental
 AudioVideoTracks depends_on=Media, status=experimental
@@ -44,11 +44,11 @@ CSS3TextDecorations status=experimental
 CSSAttributeCaseSensitivity status=experimental
 CSSBackdropFilter status=experimental
 CSSCompositing status=stable
+CSSFontDisplay status=experimental
 CSSFontSizeAdjust status=experimental
 CSSGridLayout status=experimental
 CSSIndependentTransformProperties status=experimental
 CSSMaskSourceType status=experimental
-CSSMotionPath status=stable
 CSSOMSmoothScroll status=experimental
 CSSStickyPosition
 CSSTouchActionPanDirections status=experimental
@@ -165,7 +165,7 @@ SharedWorker status=stable
 SlimmingPaintV2
 SlimmingPaintOffsetCaching implied_by=SlimmingPaintV2
 SlimmingPaintStrictCullRectClipping
-SlimmingPaintSynchronizedPainting implied_by=SlimmingPaintV2
+SlimmingPaintSynchronizedPainting implied_by=SlimmingPaintV2, status=stable
 SlimmingPaintUnderInvalidationChecking
 StackedCSSPropertyAnimations status=experimental
 StyleSharing status=stable

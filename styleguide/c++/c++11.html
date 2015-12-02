@@ -90,6 +90,15 @@ C++ Templates Angle Brackets Pitfall</a></td>
 </tr>
 
 <tr>
+<td>Arrays</td>
+<td><code>std::array</code></td>
+<td>A fixed-size replacement for built-in arrays, with STL support</td>
+<td><a href="http://en.cppreference.com/w/cpp/container/array">
+std::array</a></td>
+<td>Useful in performance-critical situations, with small, fixed-size arrays. In most cases, consider std::vector instead. std::vector is cheaper to std::move and is more widely used. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/pVRQCRWHEU8">Discussion thread</a>.</td>
+</tr>
+
+<tr>
 <td>Automatic Types</td>
 <td><code>auto</code></td>
 <td>Automatic type deduction</td>
@@ -295,6 +304,18 @@ Parameter pack</a></td>
 <td>Returns a pointer to a <code>std::vector</code>'s underlying data, accounting for empty vectors.</td>
 <td><a href="http://en.cppreference.com/w/cpp/container/vector/data">std::vector::data</a></td>
 <td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/16V7fmtbzok">Discussion thread</a>.</td>
+</tr>
+
+<tr>
+<td>Begin and End Non-Member Functions</td>
+<td><code>std::begin()</code> and <code>std::end()</code></td>
+<td>Allows use of free functions on any container, including
+fixed-size arrays</td>
+<td><a href="http://en.cppreference.com/w/cpp/iterator/begin">
+std::begin</a> and
+<a href="http://en.cppreference.com/w/cpp/iterator/end">
+std::end</a></td>
+<td>Useful for fixed-size arrays. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/5iFNE8P5qT4/discussion">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -670,27 +691,6 @@ std::allocator_traits</a></td>
 <td>Fine-grained atomic types and operations</td>
 <td><a href="http://en.cppreference.com/w/cpp/atomic">&lt;atomic&gt;</a></td>
 <td></td>
-</tr>
-
-<tr>
-<td>Arrays</td>
-<td><code>std::array</code></td>
-<td>A fixed-size replacement for built-in arrays, with STL support</td>
-<td><a href="http://en.cppreference.com/w/cpp/container/array">
-std::array</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Begin and End Non-Member Functions</td>
-<td><code>std::begin()</code> and <code>std::end()</code></td>
-<td>Allows use of free functions on any container, including
-built-in arrays</td>
-<td><a href="http://en.cppreference.com/w/cpp/iterator/begin">
-std::begin</a> and
-<a href="http://en.cppreference.com/w/cpp/iterator/end">
-std::end</a></td>
-<td>Useful for built-in arrays.</td>
 </tr>
 
 <tr>

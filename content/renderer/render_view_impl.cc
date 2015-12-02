@@ -86,6 +86,7 @@
 #include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
 #include "content/renderer/mhtml_generator.h"
+#include "content/renderer/mojo_bindings_controller.h"
 #include "content/renderer/navigation_state_impl.h"
 #include "content/renderer/net_info_helper.h"
 #include "content/renderer/render_frame_impl.h"
@@ -100,7 +101,6 @@
 #include "content/renderer/speech_recognition_dispatcher.h"
 #include "content/renderer/text_input_client_observer.h"
 #include "content/renderer/web_ui_extension_data.h"
-#include "content/renderer/web_ui_mojo.h"
 #include "content/renderer/websharedworker_proxy.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/media_switches.h"
@@ -263,7 +263,6 @@ using blink::WebStorageQuotaCallbacks;
 using blink::WebStorageQuotaError;
 using blink::WebStorageQuotaType;
 using blink::WebString;
-using blink::WebTextAffinity;
 using blink::WebTextDirection;
 using blink::WebTouchEvent;
 using blink::WebURL;
@@ -1023,10 +1022,10 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMaxTouchPoints(prefs.pointer_events_max_touch_points);
   settings->setAvailablePointerTypes(prefs.available_pointer_types);
   settings->setPrimaryPointerType(
-      static_cast<WebSettings::PointerType>(prefs.primary_pointer_type));
+      static_cast<blink::PointerType>(prefs.primary_pointer_type));
   settings->setAvailableHoverTypes(prefs.available_hover_types);
   settings->setPrimaryHoverType(
-      static_cast<WebSettings::HoverType>(prefs.primary_hover_type));
+      static_cast<blink::HoverType>(prefs.primary_hover_type));
   settings->setDeviceSupportsTouch(prefs.device_supports_touch);
   settings->setDeviceSupportsMouse(prefs.device_supports_mouse);
   settings->setEnableTouchAdjustment(prefs.touch_adjustment_enabled);
@@ -1484,6 +1483,20 @@ void RenderViewImpl::SendUpdateState() {
       routing_id_, page_id_, HistoryEntryToPageState(entry)));
 }
 
+void RenderViewImpl::SendFrameStateUpdates() {
+  // We only use this path in OOPIF-enabled modes.
+  DCHECK(SiteIsolationPolicy::UseSubframeNavigationEntries());
+
+  // Tell each frame with pending state to send its UpdateState message.
+  for (int render_frame_routing_id : frames_with_pending_state_) {
+    RenderFrameImpl* frame =
+        RenderFrameImpl::FromRoutingID(render_frame_routing_id);
+    if (frame)
+      frame->SendUpdateState();
+  }
+  frames_with_pending_state_.clear();
+}
+
 void RenderViewImpl::ApplyWebPreferencesInternal(
     const WebPreferences& prefs,
     blink::WebView* web_view,
@@ -1848,11 +1861,10 @@ gfx::RectF RenderViewImpl::ClientRectToPhysicalWindowRect(
   return window_rect;
 }
 
-void RenderViewImpl::StartNavStateSyncTimerIfNecessary() {
-  // TODO(creis): Move this to RenderFrameHost.  In the meantime, we'll ignore
-  // state changes between navigation events in OOPIF-enabled modes.
+void RenderViewImpl::StartNavStateSyncTimerIfNecessary(RenderFrameImpl* frame) {
+  // In OOPIF modes, keep track of which frames have pending updates.
   if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
+    frames_with_pending_state_.insert(frame->GetRoutingID());
 
   int delay;
   if (send_content_state_immediately_)
@@ -1871,8 +1883,15 @@ void RenderViewImpl::StartNavStateSyncTimerIfNecessary() {
     nav_state_sync_timer_.Stop();
   }
 
-  nav_state_sync_timer_.Start(FROM_HERE, TimeDelta::FromSeconds(delay), this,
-                              &RenderViewImpl::SendUpdateState);
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+    // In OOPIF modes, tell each frame with pending state to inform the browser.
+    nav_state_sync_timer_.Start(FROM_HERE, TimeDelta::FromSeconds(delay), this,
+                                &RenderViewImpl::SendFrameStateUpdates);
+  } else {
+    // By default, send an UpdateState for the current history item.
+    nav_state_sync_timer_.Start(FROM_HERE, TimeDelta::FromSeconds(delay), this,
+                                &RenderViewImpl::SendUpdateState);
+  }
 }
 
 void RenderViewImpl::setMouseOverURL(const WebURL& url) {
@@ -2133,10 +2152,6 @@ void RenderViewImpl::didChangeIcon(WebLocalFrame* frame,
   SendUpdateFaviconURL(urls);
 }
 
-void RenderViewImpl::didUpdateCurrentHistoryItem(WebLocalFrame* frame) {
-  StartNavStateSyncTimerIfNecessary();
-}
-
 void RenderViewImpl::CheckPreferredSize() {
   // We don't always want to send the change messages over IPC, only if we've
   // been put in that mode by getting a |ViewMsg_EnablePreferredSizeChangedMode|
@@ -2151,10 +2166,6 @@ void RenderViewImpl::CheckPreferredSize() {
   preferred_size_ = size;
   Send(new ViewHostMsg_DidContentsPreferredSizeChange(routing_id_,
                                                       preferred_size_));
-}
-
-void RenderViewImpl::didChangeScrollOffset(WebLocalFrame* frame) {
-  StartNavStateSyncTimerIfNecessary();
 }
 
 void RenderViewImpl::SendFindReply(int request_id,
@@ -2534,8 +2545,8 @@ void RenderViewImpl::OnAllowBindings(int enabled_bindings_flags) {
       !(enabled_bindings_ & BINDINGS_POLICY_WEB_UI)) {
     // WebUIExtensionData deletes itself when we're destroyed.
     new WebUIExtensionData(this);
-    // WebUIMojo deletes itself when we're destroyed.
-    new WebUIMojo(this);
+    // MojoBindingsController deletes itself when we're destroyed.
+    new MojoBindingsController(this);
   }
 
   enabled_bindings_ |= enabled_bindings_flags;
@@ -3220,7 +3231,7 @@ bool RenderViewImpl::SetDeviceColorProfile(
 void RenderViewImpl::ResetDeviceColorProfileForTesting() {
   RenderWidget::ResetDeviceColorProfileForTesting();
   if (webview())
-    webview()->resetDeviceColorProfile();
+    webview()->resetDeviceColorProfileForTesting();
 }
 
 ui::TextInputType RenderViewImpl::GetTextInputType() {

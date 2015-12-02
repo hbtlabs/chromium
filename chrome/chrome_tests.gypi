@@ -912,6 +912,7 @@
       'test/media_router/media_router_base_browsertest.h',
       'test/media_router/media_router_e2e_browsertest.cc',
       'test/media_router/media_router_e2e_browsertest.h',
+      'test/media_router/media_router_e2e_ui_browsertest.cc',
       'test/media_router/media_router_integration_browsertest.cc',
       'test/media_router/media_router_integration_browsertest.h',
       'test/media_router/media_router_integration_ui_browsertest.cc',
@@ -990,6 +991,7 @@
       'test/data/webui/polymer_browser_test_base.js',
       'test/data/webui/print_preview.js',
       'test/data/webui/sandboxstatus_browsertest.js',
+      'test/data/webui/settings/appearance_browsertest.js',
       'test/data/webui/settings/cr_settings_browsertest.js',
       'test/data/webui/settings/main_page_browsertest.js',
       'test/data/webui/settings/settings_page_browsertest.js',
@@ -1616,6 +1618,7 @@
       'type': 'executable',
       'dependencies': [
         'browser',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
         'chrome_resources.gyp:packed_extra_resources',
@@ -1696,10 +1699,12 @@
             # Note: list duplicated in GN build.
             'browser/ui/views/keyboard_access_browsertest.cc',
           ],
-          'sources': [ 'browser/ui/libgtk2ui/select_file_dialog_interactive_uitest.cc' ],
-          'dependencies': [ '../build/linux/system.gyp:gtk2' ],
         }, {  # Everything but desktop Linux.
           'sources': [ '<@(chrome_interactive_ui_test_non_desktop_linux_sources)' ],
+        }],
+        ['OS=="linux" and chromeos==0 and use_ozone==0', {
+          'sources': [ 'browser/ui/libgtk2ui/select_file_dialog_interactive_uitest.cc' ],
+          'dependencies': [ '../build/linux/system.gyp:gtk2' ],
         }],
         ['use_ash==1', {
           'sources': [ '<@(chrome_interactive_ui_test_ash_sources)' ],
@@ -2110,6 +2115,7 @@
       'type': 'executable',
       'dependencies': [
         'browser',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:browser_tests_pak',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
@@ -2654,6 +2660,7 @@
       'type': 'executable',
       'dependencies': [
         'browser',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
         'chrome_resources.gyp:packed_extra_resources',
@@ -3402,6 +3409,20 @@
               ],
             },
             {
+             'target_name': 'telemetry_gpu_new_test_run',
+             'type': 'none',
+             'dependencies': [
+                'chrome_run',
+                'telemetry_chrome_test_base'
+             ],
+             'includes': [
+               '../build/isolate.gypi',
+              ],
+              'sources': [
+                'telemetry_gpu_new_test.isolate',
+              ],
+            },
+            {
               'target_name': 'telemetry_gpu_test_run',
               'type': 'none',
               'dependencies': [
@@ -3468,6 +3489,17 @@
                   ],
                   'sources': [
                     'angle_deqp_gles3_tests.isolate',
+                  ],
+                },
+                {
+                  'target_name': 'angle_deqp_egl_tests_run',
+                  'type': 'none',
+                  'dependencies': [
+                    '../gpu/gpu.gyp:angle_deqp_egl_tests',
+                    'gpu_tests_base',
+                  ],
+                  'sources': [
+                    'angle_deqp_egl_tests.isolate',
                   ],
                 },
               ],

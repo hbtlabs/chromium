@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/base/elements_upload_data_stream.h"
@@ -264,7 +265,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<QuicVersion> {
       bool fin,
       RequestPriority request_priority,
       size_t* spdy_headers_frame_length) {
-    QuicPriority priority =
+    SpdyPriority priority =
         ConvertRequestPriorityToQuicPriority(request_priority);
     return maker_.MakeRequestHeadersPacket(
         packet_number, stream_id_, kIncludeVersion, fin, priority,
@@ -518,10 +519,10 @@ TEST_P(QuicHttpStreamTest, SendPostRequest) {
 
   Initialize();
 
-  ScopedVector<UploadElementReader> element_readers;
-  element_readers.push_back(
-      new UploadBytesElementReader(kUploadData, strlen(kUploadData)));
-  ElementsUploadDataStream upload_data_stream(element_readers.Pass(), 0);
+  std::vector<scoped_ptr<UploadElementReader>> element_readers;
+  element_readers.push_back(make_scoped_ptr(
+      new UploadBytesElementReader(kUploadData, strlen(kUploadData))));
+  ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
   request_.method = "POST";
   request_.url = GURL("http://www.google.com/");
   request_.upload_data_stream = &upload_data_stream;
@@ -822,15 +823,14 @@ TEST_P(QuicHttpStreamTest, Priority) {
   QuicReliableClientStream* reliable_stream =
       QuicHttpStreamPeer::GetQuicReliableClientStream(stream_.get());
   DCHECK(reliable_stream);
-  DCHECK_EQ(QuicWriteBlockedList::kHighestPriority,
-            reliable_stream->EffectivePriority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
 
   EXPECT_EQ(OK, stream_->SendRequest(headers_, &response_,
                                      callback_.callback()));
 
   // Check that priority has now dropped back to MEDIUM.
-  DCHECK_EQ(MEDIUM, ConvertQuicPriorityToRequestPriority(
-      reliable_stream->EffectivePriority()));
+  DCHECK_EQ(MEDIUM,
+            ConvertQuicPriorityToRequestPriority(reliable_stream->Priority()));
 
   // Ack the request.
   ProcessPacket(ConstructAckPacket(1, 0, 0));
@@ -875,14 +875,12 @@ TEST_P(QuicHttpStreamTest, CheckPriorityWithNoDelegate) {
   DCHECK(reliable_stream);
   QuicReliableClientStream::Delegate* delegate = reliable_stream->GetDelegate();
   DCHECK(delegate);
-  DCHECK_EQ(QuicWriteBlockedList::kHighestPriority,
-            reliable_stream->EffectivePriority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
 
-  // Set Delegate to nullptr and make sure EffectivePriority returns highest
+  // Set Delegate to nullptr and make sure Priority returns highest
   // priority.
   reliable_stream->SetDelegate(nullptr);
-  DCHECK_EQ(QuicWriteBlockedList::kHighestPriority,
-            reliable_stream->EffectivePriority());
+  DCHECK_EQ(kV3HighestPriority, reliable_stream->Priority());
   reliable_stream->SetDelegate(delegate);
 
   EXPECT_EQ(0, stream_->GetTotalSentBytes());

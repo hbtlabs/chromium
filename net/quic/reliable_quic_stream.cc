@@ -91,15 +91,6 @@ void ReliableQuicStream::SetFromConfig() {
 void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
   DCHECK_EQ(frame.stream_id, id_);
 
-  bool flag_value = FLAGS_quic_fix_fin_accounting;
-  if (!flag_value) {
-    if (read_side_closed_) {
-      DVLOG(1) << ENDPOINT << "Ignoring frame " << frame.stream_id;
-      // The subclass does not want to read data:  blackhole the data.
-      return;
-    }
-  }
-
   if (frame.fin) {
     fin_received_ = true;
     if (fin_sent_) {
@@ -107,12 +98,10 @@ void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
     }
   }
 
-  if (flag_value) {
-    if (read_side_closed_) {
-      DVLOG(1) << ENDPOINT << "Ignoring data in frame " << frame.stream_id;
-      // The subclass does not want to read data:  blackhole the data.
-      return;
-    }
+  if (read_side_closed_) {
+    DVLOG(1) << ENDPOINT << "Ignoring data in frame " << frame.stream_id;
+    // The subclass does not want to read data:  blackhole the data.
+    return;
   }
 
   // This count includes duplicate data received.
@@ -277,7 +266,7 @@ void ReliableQuicStream::MaybeSendBlocked() {
   // WINDOW_UPDATE arrives.
   if (connection_flow_controller_->IsBlocked() &&
       !flow_controller_.IsBlocked()) {
-    session_->MarkConnectionLevelWriteBlocked(id(), EffectivePriority());
+    session_->MarkConnectionLevelWriteBlocked(id(), Priority());
   }
 }
 
@@ -325,6 +314,12 @@ QuicConsumedData ReliableQuicStream::WritevData(
 
   AddBytesSent(consumed_data.bytes_consumed);
 
+  // The write may have generated a write error causing this stream to be
+  // closed. If so, simply return without marking the stream write blocked.
+  if (write_side_closed_) {
+    return consumed_data;
+  }
+
   if (consumed_data.bytes_consumed == write_length) {
     if (!fin_with_zero_data) {
       MaybeSendBlocked();
@@ -336,10 +331,10 @@ QuicConsumedData ReliableQuicStream::WritevData(
       }
       CloseWriteSide();
     } else if (fin && !consumed_data.fin_consumed) {
-      session_->MarkConnectionLevelWriteBlocked(id(), EffectivePriority());
+      session_->MarkConnectionLevelWriteBlocked(id(), Priority());
     }
   } else {
-    session_->MarkConnectionLevelWriteBlocked(id(), EffectivePriority());
+    session_->MarkConnectionLevelWriteBlocked(id(), Priority());
   }
   return consumed_data;
 }
@@ -383,10 +378,6 @@ QuicVersion ReliableQuicStream::version() const {
 }
 
 void ReliableQuicStream::StopReading() {
-  if (!FLAGS_quic_implement_stop_reading) {
-    CloseReadSide();
-    return;
-  }
   DVLOG(1) << ENDPOINT << "Stop reading from stream " << id();
   sequencer_.StopReading();
 }

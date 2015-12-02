@@ -4,6 +4,7 @@
 
 #include <map>
 
+#include "base/i18n/rtl.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
@@ -31,6 +32,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/view_storage.h"
+#include "ui/views/scoped_target_handler.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/native_widget.h"
@@ -182,7 +184,7 @@ void ScrambleTree(views::View* view) {
 class ScopedRTL {
  public:
   ScopedRTL() {
-    locale_ = l10n_util::GetApplicationLocale(std::string());
+    locale_ = base::i18n::GetConfiguredLocale();
     base::i18n::SetICUDefaultLocale("he");
   }
   ~ScopedRTL() { base::i18n::SetICUDefaultLocale(locale_); }
@@ -526,6 +528,164 @@ TEST_F(ViewTest, PaintEmptyView) {
   EXPECT_FALSE(v1->did_paint_);
   EXPECT_FALSE(v11->did_paint_);
   EXPECT_TRUE(v2->did_paint_);
+}
+
+TEST_F(ViewTest, PaintWithMovedViewUsesCache) {
+  ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
+  View* root_view = widget->GetRootView();
+  TestView* v1 = new TestView;
+  v1->SetBounds(10, 11, 12, 13);
+  root_view->AddChildView(v1);
+
+  // Paint everything once, since it has to build its cache. Then we can test
+  // invalidation.
+  gfx::Rect pixel_rect = gfx::Rect(1, 1);
+  float device_scale_factor = 1.f;
+  scoped_refptr<cc::DisplayItemList> list =
+      cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+  // The visual rects for (clip, drawing, transform) should be in layer space.
+  gfx::Rect expected_visual_rect_in_layer_space(10, 11, 12, 13);
+  int item_index = 3;
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
+
+  // If invalidation doesn't intersect v1, we paint with the cache.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_FALSE(v1->did_paint_);
+  v1->Reset();
+
+  // If invalidation does intersect v1, we don't paint with the cache.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, v1->bounds()));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+
+  // Moving the view should still use the cache when the invalidation doesn't
+  // intersect v1.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  v1->SetX(9);
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_FALSE(v1->did_paint_);
+  v1->Reset();
+  item_index = 3;
+  expected_visual_rect_in_layer_space.SetRect(9, 11, 12, 13);
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
+
+  // Moving the view should not use the cache when painting without
+  // invalidation.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  v1->SetX(8);
+  root_view->Paint(ui::PaintContext(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect),
+      ui::PaintContext::CLONE_WITHOUT_INVALIDATION));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+  item_index = 3;
+  expected_visual_rect_in_layer_space.SetRect(8, 11, 12, 13);
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
+}
+
+TEST_F(ViewTest, PaintWithMovedViewUsesCacheInRTL) {
+  ScopedRTL rtl;
+  ScopedTestPaintWidget widget(CreateParams(Widget::InitParams::TYPE_POPUP));
+  View* root_view = widget->GetRootView();
+  TestView* v1 = new TestView;
+  v1->SetBounds(10, 11, 12, 13);
+  root_view->AddChildView(v1);
+
+  // Paint everything once, since it has to build its cache. Then we can test
+  // invalidation.
+  gfx::Rect pixel_rect = gfx::Rect(1, 1);
+  float device_scale_factor = 1.f;
+  scoped_refptr<cc::DisplayItemList> list =
+      cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+  // The visual rects for (clip, drawing, transform) should be in layer space.
+  // x: 25 - 10(x) - 12(width) = 3
+  gfx::Rect expected_visual_rect_in_layer_space(3, 11, 12, 13);
+  int item_index = 3;
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
+
+  // If invalidation doesn't intersect v1, we paint with the cache.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_FALSE(v1->did_paint_);
+  v1->Reset();
+
+  // If invalidation does intersect v1, we don't paint with the cache.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, v1->bounds()));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+
+  // Moving the view should still use the cache when the invalidation doesn't
+  // intersect v1.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  v1->SetX(9);
+  root_view->Paint(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect));
+  EXPECT_FALSE(v1->did_paint_);
+  v1->Reset();
+  item_index = 3;
+  // x: 25 - 9(x) - 12(width) = 4
+  expected_visual_rect_in_layer_space.SetRect(4, 11, 12, 13);
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
+
+  // Moving the view should not use the cache when painting without
+  // invalidation.
+  list = cc::DisplayItemList::Create(pixel_rect, cc::DisplayItemListSettings());
+  v1->SetX(8);
+  root_view->Paint(ui::PaintContext(
+      ui::PaintContext(list.get(), device_scale_factor, pixel_rect),
+      ui::PaintContext::CLONE_WITHOUT_INVALIDATION));
+  EXPECT_TRUE(v1->did_paint_);
+  v1->Reset();
+  item_index = 3;
+  // x: 25 - 8(x) - 12(width) = 5
+  expected_visual_rect_in_layer_space.SetRect(5, 11, 12, 13);
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index++));
+  EXPECT_EQ(expected_visual_rect_in_layer_space,
+            list->VisualRectForTesting(item_index));
 }
 
 TEST_F(ViewTest, PaintWithUnknownInvalidation) {
@@ -4136,6 +4296,59 @@ TEST_F(ViewTest, OnNativeThemeChanged) {
   EXPECT_EQ(widget->GetNativeTheme(), test_view_child_2->native_theme_);
 
   widget->CloseNow();
+}
+
+class TestEventHandler : public ui::EventHandler {
+ public:
+  TestEventHandler(TestView* view) : view_(view), had_mouse_event_(false) {}
+  ~TestEventHandler() override {}
+
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    // The |view_| should have received the event first.
+    EXPECT_EQ(ui::ET_MOUSE_PRESSED, view_->last_mouse_event_type_);
+    had_mouse_event_ = true;
+  }
+
+  TestView* view_;
+  bool had_mouse_event_;
+};
+
+TEST_F(ViewTest, ScopedTargetHandlerReceivesEvents) {
+  TestView* v = new TestView();
+  v->SetBoundsRect(gfx::Rect(0, 0, 300, 300));
+
+  scoped_ptr<Widget> widget(new Widget);
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = gfx::Rect(50, 50, 350, 350);
+  widget->Init(params);
+  View* root = widget->GetRootView();
+  root->AddChildView(v);
+  v->Reset();
+  {
+    TestEventHandler handler(v);
+    ScopedTargetHandler scoped_target_handler(v, &handler);
+    // View's target EventHandler should be set to the |scoped_target_handler|.
+    EXPECT_EQ(&scoped_target_handler,
+              v->SetTargetHandler(&scoped_target_handler));
+
+    EXPECT_EQ(ui::ET_UNKNOWN, v->last_mouse_event_type_);
+    gfx::Point p(10, 120);
+    ui::MouseEvent pressed(ui::ET_MOUSE_PRESSED, p, p, ui::EventTimeForNow(),
+                           ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+    root->OnMousePressed(pressed);
+
+    // Both the View |v| and the |handler| should have received the event.
+    EXPECT_EQ(ui::ET_MOUSE_PRESSED, v->last_mouse_event_type_);
+    EXPECT_TRUE(handler.had_mouse_event_);
+  }
+
+  // The View should continue receiving events after the |handler| is deleted.
+  v->Reset();
+  ui::MouseEvent released(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
+                          ui::EventTimeForNow(), 0, 0);
+  root->OnMouseReleased(released);
+  EXPECT_EQ(ui::ET_MOUSE_RELEASED, v->last_mouse_event_type_);
 }
 
 }  // namespace views

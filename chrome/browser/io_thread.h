@@ -60,7 +60,7 @@ class CertPolicyEnforcer;
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
-class CTVerifier;
+class CTLogVerifier;
 class FtpTransactionFactory;
 class HostMappingRules;
 class HostResolver;
@@ -153,6 +153,7 @@ class IOThread : public content::BrowserThreadDelegate {
     // used to enforce pinning for system requests and will only use built-in
     // pins.
     scoped_ptr<net::TransportSecurityState> transport_security_state;
+    std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs;
     scoped_ptr<net::CTVerifier> cert_transparency_verifier;
     scoped_ptr<net::CertPolicyEnforcer> cert_policy_enforcer;
     scoped_refptr<net::SSLConfigService> ssl_config_service;
@@ -229,6 +230,7 @@ class IOThread : public content::BrowserThreadDelegate {
     Optional<net::QuicVersionVector> quic_supported_versions;
     Optional<net::HostPortPair> origin_to_force_quic_on;
     Optional<bool> quic_close_sessions_on_ip_change;
+    Optional<int> quic_idle_connection_timeout_seconds;
     bool enable_user_alternate_protocol_ports;
     // NetErrorTabHelper uses |dns_probe_service| to send DNS probes when a
     // main frame load fails with a DNS error in order to provide more useful
@@ -435,6 +437,12 @@ class IOThread : public content::BrowserThreadDelegate {
   // Returns true if QUIC should close sessions when any of the client's
   // IP addresses change.
   static bool ShouldQuicCloseSessionsOnIpChange(
+      const VariationParameters& quic_trial_params);
+
+  // Returns the idle connection timeout for QUIC connections.  Returns 0 if
+  // there is an error parsing any of the options, or if the default value
+  // should be used.
+  static int GetQuicIdleConnectionTimeoutSeconds(
       const VariationParameters& quic_trial_params);
 
   // Returns the maximum length for QUIC packets, based on any flags in

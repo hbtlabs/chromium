@@ -5,6 +5,7 @@
 #include "chrome/common/pref_names.h"
 
 #include "base/basictypes.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_font_webkit_names.h"
 
 namespace prefs {
@@ -849,9 +850,6 @@ const char kLastClearBrowsingDataTime[] =
 // Boolean pref to define the default values for using spellchecker.
 const char kEnableContinuousSpellcheck[] = "browser.enable_spellchecking";
 
-// Boolean pref to define the default values for using auto spell correct.
-const char kEnableAutoSpellCorrect[] = "browser.enable_autospellcorrect";
-
 // Boolean pref to define the default setting for "block offensive words".
 // The old key value is kept to avoid unnecessary migration code.
 const char kSpeechRecognitionFilterProfanities[] =
@@ -1557,7 +1555,7 @@ const char kGeolocationAccessToken[] = "geolocation.access_token";
 const char kGeolocationEnabled[] = "geolocation.enabled";
 #endif
 
-#if defined(ENABLE_GOOGLE_NOW)
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
 // Boolean that is true when Google services can use the user's location.
 const char kGoogleGeolocationAccessEnabled[] =
     "googlegeolocationaccess.enabled";
@@ -1996,6 +1994,7 @@ const char kShelfPreferences[] = "shelf_preferences";
 // a confirmation dialog.
 const char kLogoutDialogDurationMs[] = "logout_dialog_duration_ms";
 const char kPinnedLauncherApps[] = "pinned_launcher_apps";
+const char kPolicyPinnedLauncherApps[] = "policy_pinned_launcher_apps";
 // Boolean value indicating whether to show a logout button in the ash tray.
 const char kShowLogoutButtonInTray[] = "show_logout_button_in_tray";
 #endif

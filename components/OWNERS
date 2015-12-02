@@ -5,6 +5,9 @@ sdefresne@chromium.org
 
 per-file app_modal*=avi@chromium.org
 
+per-file arc.gypi=elijahtaylor@chromium.org
+per-file arc.gypi=hidehiko@chromium.org
+
 per-file audio_modem.gypi=ckehoe@chromium.org
 per-file audio_modem.gypi=rkc@chromium.org
 per-file audio_modem.gypi=xiyuan@chromium.org
@@ -12,8 +15,10 @@ per-file audio_modem.gypi=xiyuan@chromium.org
 # Can not match autofill* due to crbug.com/397984
 per-file autofill.gypi=estade@chromium.org
 per-file autofill.gypi=isherman@chromium.org
+per-file autofill.gypi=vabr@chromium.org
 per-file autofill_strings.grdp=estade@chromium.org
 per-file autofill_strings.grdp=isherman@chromium.org
+per-file autofill_strings.gypi=vabr@chromium.org
 
 per-file bookmark_bar_strings.grdp=sky@chromium.org
 per-file bookmarks.gypi=sky@chromium.org
@@ -228,6 +233,8 @@ per-file pdf.gypi=gene@chromium.org
 per-file pdf.gypi=jam@chromium.org
 per-file pdf.gypi=raymes@chromium.org
 per-file pdf.gypi=thestig@chromium.org
+per-file pdf_strings.grdp=raymes@chromium.org
+per-file pdf_strings.grdp=tsergeant@chromium.org
 
 per-file plugins.gypi=bauerb@chromium.org
 per-file plugins.gypi=tommycli@chromium.org

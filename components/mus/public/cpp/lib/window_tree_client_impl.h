@@ -5,7 +5,8 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 
-#include "base/containers/scoped_ptr_map.h"
+#include <map>
+
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
@@ -42,7 +43,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   // API exposed to the window implementations that pushes local changes to the
   // service.
-  void DestroyWindow(Id window_id);
+  void DestroyWindow(Window* window);
 
   // These methods take TransportIds. For windows owned by the current
   // connection, the connection id high word can be zero. In all cases, the
@@ -80,10 +81,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
              uint32_t policy_bitmask,
              const mojom::WindowTree::EmbedCallback& callback);
 
-  void RequestSurface(Id window_id,
-                      mojom::SurfaceType type,
-                      mojo::InterfaceRequest<mojom::Surface> surface,
-                      mojom::SurfaceClientPtr client);
+  void AttachSurface(Id window_id,
+                     mojom::SurfaceType type,
+                     mojo::InterfaceRequest<mojom::Surface> surface,
+                     mojom::SurfaceClientPtr client);
 
   void set_change_acked_callback(const mojo::Callback<void(void)>& callback) {
     change_acked_callback_ = callback;
@@ -105,9 +106,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
  private:
   friend class WindowTreeClientImplPrivate;
 
-  typedef std::map<Id, Window*> IdToWindowMap;
+  using IdToWindowMap = std::map<Id, Window*>;
 
-  using InFlightMap = base::ScopedPtrMap<uint32_t, scoped_ptr<InFlightChange>>;
+  using InFlightMap = std::map<uint32_t, scoped_ptr<InFlightChange>>;
 
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
@@ -130,7 +131,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   Window* GetRoot() override;
   Window* GetWindowById(Id id) override;
   Window* GetFocusedWindow() override;
-  Window* NewWindow() override;
+  Window* NewWindow(const Window::SharedProperties* properties) override;
   bool IsEmbedRoot() override;
   ConnectionSpecificId GetConnectionId() override;
 
@@ -169,9 +170,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnWindowSharedPropertyChanged(Id window_id,
                                      const mojo::String& name,
                                      mojo::Array<uint8_t> new_data) override;
-  void OnWindowInputEvent(Id window_id,
-                          mojom::EventPtr event,
-                          const mojo::Callback<void()>& callback) override;
+  void OnWindowInputEvent(uint32_t event_id,
+                          Id window_id,
+                          mojom::EventPtr event) override;
   void OnWindowFocused(Id focused_window_id) override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
   void WmSetBounds(uint32_t change_id,

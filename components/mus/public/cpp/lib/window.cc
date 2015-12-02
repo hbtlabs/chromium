@@ -167,7 +167,7 @@ void Window::Destroy() {
     return;
 
   if (connection_)
-    tree_client()->DestroyWindow(id_);
+    tree_client()->DestroyWindow(this);
   while (!children_.empty()) {
     Window* child = children_.front();
     if (!OwnsWindow(connection_, child)) {
@@ -210,14 +210,24 @@ void Window::SetVisible(bool value) {
   LocalSetVisible(value);
 }
 
+bool Window::IsDrawn() const {
+  if (!visible_)
+    return false;
+  return parent_ ? parent_->IsDrawn() : drawn_;
+}
+
 scoped_ptr<WindowSurface> Window::RequestSurface(mojom::SurfaceType type) {
-  mojom::SurfacePtr surface;
-  mojom::SurfaceClientPtr client;
-  mojo::InterfaceRequest<mojom::SurfaceClient> client_request =
-      GetProxy(&client);
-  tree_client()->RequestSurface(id_, type, GetProxy(&surface), client.Pass());
-  return make_scoped_ptr(
-      new WindowSurface(surface.PassInterface(), client_request.Pass()));
+  scoped_ptr<WindowSurfaceBinding> surface_binding;
+  scoped_ptr<WindowSurface> surface = WindowSurface::Create(&surface_binding);
+  AttachSurface(type, surface_binding.Pass());
+  return surface;
+}
+
+void Window::AttachSurface(mojom::SurfaceType type,
+                           scoped_ptr<WindowSurfaceBinding> surface_binding) {
+  tree_client()->AttachSurface(id_, type,
+                               surface_binding->surface_request_.Pass(),
+                               surface_binding->surface_client_.Pass());
 }
 
 void Window::ClearSharedProperty(const std::string& name) {
@@ -226,12 +236,6 @@ void Window::ClearSharedProperty(const std::string& name) {
 
 bool Window::HasSharedProperty(const std::string& name) const {
   return properties_.count(name) > 0;
-}
-
-bool Window::IsDrawn() const {
-  if (!visible_)
-    return false;
-  return parent_ ? parent_->IsDrawn() : drawn_;
 }
 
 void Window::AddObserver(WindowObserver* observer) {
@@ -269,20 +273,11 @@ void Window::RemoveChild(Window* child) {
     tree_client()->RemoveChild(child->id(), id_);
 }
 
-void Window::AddTransientWindow(Window* transient_window) {
+void Window::Reorder(Window* relative, mojom::OrderDirection direction) {
+  if (!LocalReorder(relative, direction))
+    return;
   if (connection_)
-    CHECK_EQ(transient_window->connection(), connection_);
-  LocalAddTransientWindow(transient_window);
-  if (connection_)
-    tree_client()->AddTransientWindow(this, transient_window->id());
-}
-
-void Window::RemoveTransientWindow(Window* transient_window) {
-  if (connection_)
-    CHECK_EQ(transient_window->connection(), connection_);
-  LocalRemoveTransientWindow(transient_window);
-  if (connection_)
-    tree_client()->RemoveTransientWindowFromParent(transient_window);
+    tree_client()->Reorder(id_, relative->id(), direction);
 }
 
 void Window::MoveToFront() {
@@ -297,13 +292,6 @@ void Window::MoveToBack() {
   Reorder(parent_->children_.front(), mojom::ORDER_DIRECTION_BELOW);
 }
 
-void Window::Reorder(Window* relative, mojom::OrderDirection direction) {
-  if (!LocalReorder(relative, direction))
-    return;
-  if (connection_)
-    tree_client()->Reorder(id_, relative->id(), direction);
-}
-
 bool Window::Contains(Window* child) const {
   if (!child)
     return false;
@@ -316,6 +304,22 @@ bool Window::Contains(Window* child) const {
       return true;
   }
   return false;
+}
+
+void Window::AddTransientWindow(Window* transient_window) {
+  if (connection_)
+    CHECK_EQ(transient_window->connection(), connection_);
+  LocalAddTransientWindow(transient_window);
+  if (connection_)
+    tree_client()->AddTransientWindow(this, transient_window->id());
+}
+
+void Window::RemoveTransientWindow(Window* transient_window) {
+  if (connection_)
+    CHECK_EQ(transient_window->connection(), connection_);
+  LocalRemoveTransientWindow(transient_window);
+  if (connection_)
+    tree_client()->RemoveTransientWindowFromParent(transient_window);
 }
 
 Window* Window::GetChildById(Id id) {

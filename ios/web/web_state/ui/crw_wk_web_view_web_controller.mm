@@ -212,6 +212,9 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   // YES if the user has interacted with the content area since the last URL
   // change.
   BOOL _interactionRegisteredSinceLastURLChange;
+
+  // YES if the web process backing _wkWebView is believed to currently be dead.
+  BOOL _webProcessIsDead;
 }
 
 // Dictionary where keys are the names of WKWebView properties and values are
@@ -847,12 +850,19 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
   web::WKBackForwardListItemHolder* holder =
       [self currentBackForwardListItemHolder];
+
   WKNavigationType navigationType =
       _pendingNavigationInfo ? [_pendingNavigationInfo navigationType]
                              : WKNavigationTypeOther;
-    holder->set_back_forward_list_item(
-        [_wkWebView backForwardList].currentItem);
-    holder->set_navigation_type(navigationType);
+  holder->set_back_forward_list_item([_wkWebView backForwardList].currentItem);
+  holder->set_navigation_type(navigationType);
+
+  // Only update the MIME type in the holder if there was MIME type information
+  // as part of this pending load. It will be nil when doing a fast
+  // back/forward navigation, for instance, because the callback that would
+  // populate it is not called in that flow.
+  if ([_pendingNavigationInfo MIMEType])
+    holder->set_mime_type([_pendingNavigationInfo MIMEType]);
 }
 
 - (BOOL)isBackForwardListItemValid:(WKBackForwardListItem*)item {
@@ -878,6 +888,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 }
 
 - (void)webViewWebProcessDidCrash {
+  _webProcessIsDead = YES;
   if ([self.delegate respondsToSelector:
           @selector(webControllerWebProcessDidCrash:)]) {
     [self.delegate webControllerWebProcessDidCrash:self];
@@ -1469,6 +1480,13 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 }
 
 - (void)webViewTitleDidChange {
+  // WKWebView's title becomes empty when the web process dies; ignore that
+  // update.
+  if (_webProcessIsDead) {
+    DCHECK_EQ(self.title.length, 0U);
+    return;
+  }
+
   if ([self.delegate respondsToSelector:
           @selector(webController:titleDidChange:)]) {
     DCHECK(self.title);
@@ -1524,10 +1542,15 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
                        return;
                      }
                      GURL jsURL([result UTF8String]);
-                     // Make sure that the URL is as expected, and re-check
-                     // the origin to prevent race conditions.
+                     // Make sure that the window location is as expected,
+                     // and re-check the origin and web view URL to prevent
+                     // race conditions.
+                     // TODO(crbug.com/563568): The third check may drop same
+                     // document URL changes if pending URL change occurs
+                     // immediately after. Revisit heuristics to prevent this.
                      if (jsURL == url &&
-                         _documentURL.GetOrigin() == url.GetOrigin()) {
+                         _documentURL.GetOrigin() == url.GetOrigin() &&
+                         net::GURLWithNSURL([_wkWebView URL]) == url) {
                        [self URLDidChangeWithoutDocumentChange:url];
                      }
                  }];
@@ -1541,6 +1564,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
                     decisionHandler:
         (void (^)(WKNavigationActionPolicy))decisionHandler {
+  _webProcessIsDead = NO;
   if (self.isBeingDestroyed) {
     decisionHandler(WKNavigationActionPolicyCancel);
     return;
@@ -1690,6 +1714,17 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   DCHECK(_documentURL == self.lastRegisteredRequestURL);
   self.webStateImpl->OnNavigationCommitted(_documentURL);
   [self commitPendingNavigationInfo];
+  if ([self currentBackForwardListItemHolder]->navigation_type() ==
+      WKNavigationTypeBackForward) {
+    // A fast back/forward won't call decidePolicyForNavigationResponse, so
+    // the MIME type needs to be updated explicitly.
+    NSString* storedMIMEType =
+        [self currentBackForwardListItemHolder]->mime_type();
+    if (storedMIMEType) {
+      self.webStateImpl->SetContentsMimeType(
+          base::SysNSStringToUTF8(storedMIMEType));
+    }
+  }
   [self webPageChanged];
 
   [self updateSSLStatusForCurrentNavigationItem];

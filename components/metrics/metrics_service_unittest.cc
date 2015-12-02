@@ -9,12 +9,12 @@
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/prefs/testing_pref_service.h"
 #include "base/threading/platform_thread.h"
 #include "components/compression/compression_utils.h"
 #include "components/metrics/client_info.h"
-#include "components/metrics/metrics_hashes.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -122,7 +122,7 @@ class MetricsServiceTest : public testing::Test {
       const base::StatisticsRecorder::Histograms& histograms,
       uint64 name_hash) {
     for (const base::HistogramBase* histogram : histograms) {
-      if (name_hash == HashMetricName(histogram->histogram_name()))
+      if (name_hash == base::HashMetricName(histogram->histogram_name()))
         return histogram;
     }
     return nullptr;
@@ -335,7 +335,8 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   const base::TimeTicks begin_log_time = base::TimeTicks::Now();
 
   std::vector<variations::ActiveGroupId> synthetic_trials;
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(),
+                                           &synthetic_trials);
   EXPECT_EQ(2U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial1", "Group1"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
@@ -346,14 +347,14 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   // Change the group for the first trial after the log started.
   SyntheticTrialGroup trial3(HashName("TestTrial1"), HashName("Group2"));
   service.RegisterSyntheticFieldTrial(trial3);
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
 
   // Add a new trial after the log started and confirm that it doesn't show up.
   SyntheticTrialGroup trial4(HashName("TestTrial3"), HashName("Group3"));
   service.RegisterSyntheticFieldTrial(trial4);
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
 
@@ -365,7 +366,8 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   service.log_manager_.BeginLoggingWithLog(
       scoped_ptr<MetricsLog>(new MetricsLog(
           "clientID", 1, MetricsLog::ONGOING_LOG, &client, GetLocalState())));
-  service.GetCurrentSyntheticFieldTrials(&synthetic_trials);
+  service.GetSyntheticFieldTrialsOlderThan(
+      service.log_manager_.current_log()->creation_time(), &synthetic_trials);
   EXPECT_EQ(3U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial1", "Group2"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));

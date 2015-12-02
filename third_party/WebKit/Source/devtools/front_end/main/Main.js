@@ -107,7 +107,6 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
-        Runtime.experiments.register("darkTheme", "Dark theme", true);
         Runtime.experiments.register("deviceMode", "Device mode", true);
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
         Runtime.experiments.register("fileSystemInspection", "FileSystem inspection");
@@ -166,11 +165,11 @@ WebInspector.Main.prototype = {
         WebInspector.isolatedFileSystemManager = new WebInspector.IsolatedFileSystemManager();
         WebInspector.isolatedFileSystemManager.initialize(this._didInitializeFileSystemManager.bind(this));
 
-        WebInspector.initializeUIUtils(window);
+        var themeSetting = WebInspector.settings.createSetting("uiTheme", "default");
+        WebInspector.initializeUIUtils(document, themeSetting);
+        themeSetting.addChangeListener(WebInspector.reload.bind(WebInspector));
+
         WebInspector.installComponentRootStyles(/** @type {!Element} */ (document.body));
-        if (Runtime.experiments.isEnabled("darkTheme")) {
-            document.body.classList.add("dark-theme");
-        }
 
         this._addMainEventListeners(document);
 
@@ -316,16 +315,9 @@ WebInspector.Main.prototype = {
         }
 
         var targetType = Runtime.queryParam("isSharedWorker") ? WebInspector.Target.Type.ServiceWorker : WebInspector.Target.Type.Page;
-        WebInspector.targetManager.createTarget(WebInspector.UIString("Main"), targetType, connection, null, this._mainTargetCreated.bind(this));
-    },
 
-    /**
-     * @param {?WebInspector.Target} target
-     */
-    _mainTargetCreated: function(target)
-    {
+        this._mainTarget = WebInspector.targetManager.createTarget(WebInspector.UIString("Main"), targetType, connection, null);
         console.timeStamp("Main._mainTargetCreated");
-        this._mainTarget = /** @type {!WebInspector.Target} */(target);
         this._registerShortcuts();
         var main = this;
 
@@ -799,21 +791,56 @@ WebInspector.Main._addWebSocketTarget = function(ws)
  */
 WebInspector.Main.WarningErrorCounter = function()
 {
-    this._counter = new WebInspector.ToolbarCounter(["error-icon", "revokedError-icon", "warning-icon"]);
-    WebInspector.Main.WarningErrorCounter._instanceForTest = this._counter;
-    this._counter.addEventListener("click", showConsole);
+    WebInspector.Main.WarningErrorCounter._instanceForTest = this;
 
-    function showConsole()
-    {
-        WebInspector.console.show();
-    }
+    this._counter = createElement("div");
+    this._counter.addEventListener("click", WebInspector.console.show.bind(WebInspector.console), false);
+    this._toolbarItem = new WebInspector.ToolbarItem(this._counter);
+    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this._counter, "main/errorWarningCounter.css");
 
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._updateErrorAndWarningCounts, this);
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._updateErrorAndWarningCounts, this);
+    this._errors = this._createItem(shadowRoot, "error-icon");
+    this._revokedErrors = this._createItem(shadowRoot, "revokedError-icon");
+    this._warnings = this._createItem(shadowRoot, "warning-icon");
+    this._titles = [];
+
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._update, this);
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._update, this);
+    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageUpdated, this._update, this);
+    this._update();
 }
 
 WebInspector.Main.WarningErrorCounter.prototype = {
-    _updateErrorAndWarningCounts: function()
+    /**
+     * @param {!Node} shadowRoot
+     * @param {string} iconType
+     * @return {!{item: !Element, text: !Element}}
+     */
+    _createItem: function(shadowRoot, iconType)
+    {
+        var item = createElementWithClass("span", "counter-item");
+        var icon = item.createChild("label", "", "dt-icon-label");
+        icon.type = iconType;
+        var text = icon.createChild("span");
+        shadowRoot.appendChild(item);
+        return {item: item, text: text};
+    },
+
+    /**
+     * @param {!{item: !Element, text: !Element}} item
+     * @param {number} count
+     * @param {boolean} first
+     * @param {string} title
+     */
+    _updateItem: function(item, count, first, title)
+    {
+        item.item.classList.toggle("hidden", !count);
+        item.item.classList.toggle("counter-item-first", first);
+        item.text.textContent = count;
+        if (count)
+            this._titles.push(title);
+    },
+
+    _update: function()
     {
         var errors = 0;
         var revokedErrors = 0;
@@ -824,9 +851,13 @@ WebInspector.Main.WarningErrorCounter.prototype = {
             revokedErrors += targets[i].consoleModel.revokedErrors();
             warnings += targets[i].consoleModel.warnings();
         }
-        this._counter.setCounter("error-icon", errors, WebInspector.UIString(errors === 1 ? "%d error" : "%d errors", errors));
-        this._counter.setCounter("revokedError-icon", revokedErrors, WebInspector.UIString(revokedErrors === 1 ? "%d handled promise rejection" : "%d handled promise rejections", revokedErrors));
-        this._counter.setCounter("warning-icon", warnings, WebInspector.UIString(warnings === 1 ? "%d warning" : "%d warnings", warnings));
+
+        this._titles = [];
+        this._toolbarItem.setVisible(!!(errors || revokedErrors || warnings));
+        this._updateItem(this._errors, errors, false, WebInspector.UIString(errors === 1 ? "%d error" : "%d errors", errors));
+        this._updateItem(this._revokedErrors, revokedErrors, !errors, WebInspector.UIString(revokedErrors === 1 ? "%d handled promise rejection" : "%d handled promise rejections", revokedErrors));
+        this._updateItem(this._warnings, warnings, !errors && !revokedErrors, WebInspector.UIString(warnings === 1 ? "%d warning" : "%d warnings", warnings));
+        this._counter.title = this._titles.join(", ");
         WebInspector.inspectorView.toolbarItemResized();
     },
 
@@ -836,7 +867,7 @@ WebInspector.Main.WarningErrorCounter.prototype = {
      */
     item: function()
     {
-        return this._counter;
+        return this._toolbarItem;
     }
 }
 

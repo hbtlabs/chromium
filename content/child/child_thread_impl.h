@@ -24,10 +24,6 @@
 
 namespace base {
 class MessageLoop;
-
-namespace trace_event {
-class TraceMemoryController;
-}  // namespace trace_event
 }  // namespace base
 
 namespace IPC {
@@ -232,11 +228,9 @@ class CONTENT_EXPORT ChildThreadImpl
   void OnGetChildProfilerData(int sequence_number, int current_profiling_phase);
   void OnProfilingPhaseCompleted(int profiling_phase);
   void OnBindExternalMojoShellHandle(const IPC::PlatformFileForTransit& file);
+  void OnSetMojoParentPipeHandle(const IPC::PlatformFileForTransit& file);
 #ifdef IPC_MESSAGE_LOG_ENABLED
   void OnSetIPCLoggingEnabled(bool enable);
-#endif
-#if defined(USE_TCMALLOC)
-  void OnGetTcmallocStats();
 #endif
 
   void EnsureConnected();
@@ -289,10 +283,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   scoped_ptr<ChildDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
-
-  // Observes the trace event system. When tracing is enabled, optionally
-  // starts profiling the tcmalloc heap.
-  scoped_ptr<base::trace_event::TraceMemoryController> trace_memory_controller_;
 
   scoped_ptr<base::PowerMonitor> power_monitor_;
 

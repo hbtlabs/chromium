@@ -23,6 +23,12 @@ namespace ws {
 
 namespace {
 
+int ValidIndexOf(const Window::Children& windows, Window* window) {
+  Window::Children::const_iterator it =
+      std::find(windows.begin(), windows.end(), window);
+  return (it != windows.end()) ? (it - windows.begin()) : -1;
+}
+
 class BoundsChangeObserver : public WindowObserver {
  public:
   explicit BoundsChangeObserver(Window* window) : window_(window) {
@@ -112,10 +118,8 @@ class TreeSizeMatchesObserver : public WindowObserver {
 };
 
 // Wait until |window| has |tree_size| descendants; returns false on timeout.
-// The
-// count includes |window|. For example, if you want to wait for |window| to
-// have
-// a single child, use a |tree_size| of 2.
+// The count includes |window|. For example, if you want to wait for |window| to
+// have a single child, use a |tree_size| of 2.
 bool WaitForTreeSizeToMatch(Window* window, size_t tree_size) {
   TreeSizeMatchesObserver observer(window, tree_size);
   return observer.IsTreeCorrectSize() ||
@@ -200,6 +204,13 @@ struct EmbedResult {
 class WindowServerTest : public WindowServerTestBase {
  public:
   WindowServerTest() {}
+
+  Window* NewVisibleWindow(Window* parent, WindowTreeConnection* connection) {
+    Window* window = connection->NewWindow();
+    window->SetVisible(true);
+    parent->AddChild(window);
+    return window;
+  }
 
   // Embeds another version of the test app @ window. This runs a run loop until
   // a response is received, or a timeout. On success the new WindowServer is
@@ -623,6 +634,13 @@ class FocusChangeObserver : public WindowObserver {
   MOJO_DISALLOW_COPY_AND_ASSIGN(FocusChangeObserver);
 };
 
+bool WaitForWindowToHaveFocus(Window* window) {
+  if (window->HasFocus())
+    return true;
+  FocusChangeObserver observer(window);
+  return WindowServerTestBase::DoRunLoopWithTimeout();
+}
+
 }  // namespace
 
 TEST_F(WindowServerTest, Focus) {
@@ -657,8 +675,7 @@ TEST_F(WindowServerTest, Focus) {
   }
   {
     // Add an observer on the Window that loses focus, and make sure the
-    // observer
-    // sees the right values.
+    // observer sees the right values.
     FocusChangeObserver observer(window11);
     embedded->GetRoot()->SetFocus();
     ASSERT_TRUE(DoRunLoopWithTimeout());
@@ -666,6 +683,84 @@ TEST_F(WindowServerTest, Focus) {
     ASSERT_NE(nullptr, observer.last_lost_focus());
     EXPECT_EQ(window11->id(), observer.last_lost_focus()->id());
     EXPECT_EQ(embedded->GetRoot()->id(), observer.last_gained_focus()->id());
+  }
+}
+
+TEST_F(WindowServerTest, Activation) {
+  Window* parent =
+      NewVisibleWindow(window_manager()->GetRoot(), window_manager());
+  Window* child1 = NewVisibleWindow(parent, window_manager());
+  Window* child2 = NewVisibleWindow(parent, window_manager());
+  Window* child3 = NewVisibleWindow(parent, window_manager());
+
+  child1->AddTransientWindow(child3);
+
+  WindowTreeConnection* embedded1 = Embed(child1).connection;
+  ASSERT_NE(nullptr, embedded1);
+  WindowTreeConnection* embedded2 = Embed(child2).connection;
+  ASSERT_NE(nullptr, embedded2);
+
+  Window* child11 = NewVisibleWindow(embedded1->GetRoot(), embedded1);
+  Window* child21 = NewVisibleWindow(embedded2->GetRoot(), embedded2);
+
+  WaitForTreeSizeToMatch(parent, 6);
+
+  // Allow the child windows to be activated.
+  host()->AddActivationParent(parent->id());
+
+  // |child2| and |child3| are stacked about |child1|.
+  EXPECT_GT(ValidIndexOf(parent->children(), child2),
+            ValidIndexOf(parent->children(), child1));
+  EXPECT_GT(ValidIndexOf(parent->children(), child3),
+            ValidIndexOf(parent->children(), child1));
+
+  // Set focus on |child11|. This should activate |child1|, and raise it over
+  // |child2|. But |child3| should still be above |child1| because of
+  // transiency.
+  child11->SetFocus();
+  ASSERT_TRUE(WaitForWindowToHaveFocus(child11));
+  ASSERT_TRUE(
+      WaitForWindowToHaveFocus(window_manager()->GetWindowById(child11->id())));
+  EXPECT_EQ(child11->id(), window_manager()->GetFocusedWindow()->id());
+  EXPECT_EQ(child11->id(), embedded1->GetFocusedWindow()->id());
+  EXPECT_EQ(nullptr, embedded2->GetFocusedWindow());
+  EXPECT_GT(ValidIndexOf(parent->children(), child1),
+            ValidIndexOf(parent->children(), child2));
+  EXPECT_GT(ValidIndexOf(parent->children(), child3),
+            ValidIndexOf(parent->children(), child1));
+
+  // Set focus on |child21|. This should activate |child2|, and raise it over
+  // |child1|.
+  child21->SetFocus();
+  ASSERT_TRUE(WaitForWindowToHaveFocus(child21));
+  ASSERT_TRUE(
+      WaitForWindowToHaveFocus(window_manager()->GetWindowById(child21->id())));
+  EXPECT_EQ(child21->id(), window_manager()->GetFocusedWindow()->id());
+  EXPECT_EQ(child21->id(), embedded2->GetFocusedWindow()->id());
+  EXPECT_EQ(nullptr, embedded1->GetFocusedWindow());
+  EXPECT_GT(ValidIndexOf(parent->children(), child2),
+            ValidIndexOf(parent->children(), child1));
+  EXPECT_GT(ValidIndexOf(parent->children(), child3),
+            ValidIndexOf(parent->children(), child1));
+}
+
+TEST_F(WindowServerTest, ActivationNext) {
+  Window* parent = window_manager()->GetRoot();
+  Window* child1 = NewVisibleWindow(parent, window_manager());
+  Window* child2 = NewVisibleWindow(parent, window_manager());
+  Window* child3 = NewVisibleWindow(parent, window_manager());
+
+  WindowTreeConnection* embedded1 = Embed(child1).connection;
+  ASSERT_NE(nullptr, embedded1);
+
+  NewVisibleWindow(embedded1->GetRoot(), embedded1);
+  WaitForTreeSizeToMatch(parent, 5);
+
+  Window* expecteds[] = { child1, child2, child3, child1, nullptr };
+  for (size_t index = 0; expecteds[index]; ++index) {
+    host()->ActivateNextWindow();
+    ASSERT_TRUE(WaitForOrderChange(window_manager(), expecteds[index]))
+        << " Failure at " << index;
   }
 }
 

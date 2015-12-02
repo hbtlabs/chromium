@@ -79,10 +79,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('conformance2/buffers/uniform-buffers.html', bug=483282)
     self.Fail('conformance2/glsl3/array-complex-indexing.html', bug=483282)
+    self.Fail('conformance2/glsl3/const-array-init.html',
+        bug=1198) # angle bug ID
     self.Fail('conformance2/glsl3/forbidden-operators.html', bug=483282)
     self.Fail('conformance2/glsl3/invalid-default-precision.html', bug=483282)
     self.Fail('conformance2/glsl3/sequence-operator-returns-non-constant.html',
         bug=483282)
+    self.Fail('conformance2/extensions/promoted-extensions-in-shaders.html',
+        bug=295792)
     self.Fail('conformance2/reading/read-pixels-into-pixel-pack-buffer.html',
         bug=483282)
     self.Fail('conformance2/renderbuffers/framebuffer-test.html', bug=483282)
@@ -90,7 +94,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         bug=483282)
     self.Fail('conformance2/samplers/sampler-drawing-test.html', bug=483282)
     self.Skip('conformance2/textures/webgl_canvas/*', bug=483282)
-    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html', bug=483282)
     self.Fail('conformance2/textures/misc/tex-storage-2d.html', bug=483282)
 
     # Windows only.
@@ -115,6 +118,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/textures/misc/gl-get-tex-parameter.html',
         ['win'], bug=483282)
     self.Fail('conformance2/textures/misc/tex-input-validation.html',
+        ['win'], bug=483282)
+    self.Skip('conformance2/textures/misc/tex-mipmap-levels.html',
         ['win'], bug=483282)
     self.Skip('conformance2/transform_feedback/transform_feedback.html',
         ['win'], bug=483282)
@@ -143,6 +148,31 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/textures/video/tex-image-and-sub-image-2d' +
         '-with-video-rgb5_a1-rgba-unsigned_byte.html',
         ['win8'], bug=483282)
+    self.Fail('conformance2/textures/video/tex-image-and-sub-image-3d' +
+        '-with-video-rgb5_a1-rgba-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/video/tex-image-and-sub-image-3d' +
+        '-with-video-rgb565-rgb-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/image_data/tex-image-and-sub-image-3d' +
+        '-with-image-data-rgb565-rgb-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/image_data/tex-image-and-sub-image-3d' +
+        '-with-image-data-rgb5_a1-rgba-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/image/tex-image-and-sub-image-3d' +
+        '-with-image-rgb5_a1-rgba-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/image/tex-image-and-sub-image-3d' +
+        '-with-image-rgb565-rgb-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/svg_image/tex-image-and-sub-image-3d' +
+        '-with-svg-image-rgb565-rgb-unsigned_byte.html',
+        ['win8'], bug=560555)
+    self.Fail('conformance2/textures/svg_image/tex-image-and-sub-image-3d' +
+        '-with-svg-image-rgb5_a1-rgba-unsigned_byte.html',
+        ['win8'], bug=560555)
+
     # Windows Debug. Causing assertions in the GPU process which raise
     # a dialog box, so have to skip them rather than mark them as
     # failing.
@@ -184,10 +214,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/textures/video/*', ['mac'], bug=483282)
     self.Fail('conformance2/textures/misc/gl-get-tex-parameter.html',
         ['mac'], bug=483282)
-    self.Fail('conformance2/textures/misc/tex-storage-compressed-formats.html',
-        ['mac'], bug=483282)
     self.Fail('conformance2/textures/misc/texture-npot.html',
         ['mac'], bug=483282)
+    self.Fail('conformance2/textures/misc/tex-storage-compressed-formats.html',
+        ['mac'], bug=295792)
+
+    # Mac 10.9 only.
+    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
+        ['mavericks'], bug=483282)
 
     # Linux only.
     self.Skip('deqp/functional/gles3/shaderswitch.html',
@@ -215,8 +249,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('conformance2/buffers/buffer-overflow-test.html',
         ['linux', 'amd'], bug=483282)
-    self.Fail('conformance2/textures/misc/tex-storage-compressed-formats.html',
+    self.Fail('conformance2/renderbuffers/framebuffer-texture-layer.html',
+        ['linux', 'amd'], bug=295792)
+    self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
         ['linux', 'amd'], bug=483282)
+    self.Fail('conformance2/textures/misc/tex-storage-compressed-formats.html',
+        ['linux', 'amd'], bug=295792)
 
     # Conflicting expectations to test that the
     # "Expectations Have No collisions" unittest works.

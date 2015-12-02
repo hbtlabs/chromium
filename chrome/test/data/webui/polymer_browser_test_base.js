@@ -42,6 +42,18 @@ PolymerTest.prototype = {
     'chrome/test/data/webui/mocha_adapter.js',
   ],
 
+  /** Time when preLoad starts, i.e. before the browsePreload page is loaded. */
+  preloadTime: 0,
+
+  /** Time when test run starts. */
+  runTime: 0,
+
+  /** @override */
+  preLoad: function() {
+    this.preloadTime = window.performance.now();
+    testing.Test.prototype.preLoad.call(this);
+  },
+
   /** @override */
   setUp: function() {
     testing.Test.prototype.setUp.call(this);
@@ -90,6 +102,24 @@ PolymerTest.prototype = {
       return Promise.all(promises);
     });
   },
+
+  /** @override */
+  runTest: function(testBody) {
+    this.runTime = window.performance.now();
+    testing.Test.prototype.runTest.call(this, testBody);
+  },
+
+  /** @override */
+  tearDown: function() {
+    var endTime = window.performance.now();
+    var delta = this.runTime - this.preloadTime;
+    console.log('Page load time: ' + delta.toFixed(0) + " ms");
+    delta = endTime - this.runTime;
+    console.log('Test run time: ' + delta.toFixed(0) + " ms");
+    delta = endTime - this.preloadTime;
+    console.log('Total time: ' + delta.toFixed(0) + " ms");
+    testing.Test.prototype.tearDown.call(this);
+  }
 };
 
 /**

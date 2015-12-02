@@ -27,6 +27,7 @@ using testing::AtLeast;
 using testing::CreateFunctor;
 using testing::InSequence;
 using testing::Invoke;
+using testing::DoAll;
 using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;
@@ -59,9 +60,7 @@ class TestStream : public ReliableQuicStream {
     return should_process_data_ ? data_len : 0;
   }
 
-  QuicPriority EffectivePriority() const override {
-    return QuicUtils::HighestPriority();
-  }
+  SpdyPriority Priority() const override { return net::kV3HighestPriority; }
 
   using ReliableQuicStream::WriteOrBufferData;
   using ReliableQuicStream::CloseWriteSide;
@@ -140,6 +139,17 @@ class ReliableQuicStreamTest : public ::testing::TestWithParam<bool> {
            write_blocked_list_->HasWriteBlockedDataStreams();
   }
 
+  QuicConsumedData CloseStreamOnWriteError(
+      QuicStreamId id,
+      QuicIOVector /*iov*/,
+      QuicStreamOffset /*offset*/,
+      bool /*fin*/,
+      FecProtection /*fec_protection*/,
+      QuicAckListenerInterface* /*ack_notifier_delegate*/) {
+    session_->CloseStream(id);
+    return QuicConsumedData(1, false);
+  }
+
  protected:
   MockConnectionHelper helper_;
   MockConnection* connection_;
@@ -209,6 +219,18 @@ TEST_F(ReliableQuicStreamTest, BlockIfSoloFinNotConsumed) {
       .WillOnce(Return(QuicConsumedData(0, false)));
   stream_->WriteOrBufferData(StringPiece(), true, nullptr);
   ASSERT_EQ(1u, write_blocked_list_->NumBlockedStreams());
+}
+
+TEST_F(ReliableQuicStreamTest, CloseOnPartialWrite) {
+  Initialize(kShouldProcessData);
+
+  // Write some data and no fin. However, while writing the data
+  // close the stream and verify that MarkConnectionLevelWriteBlocked does not
+  // crash with an unknown stream.
+  EXPECT_CALL(*session_, WritevData(kTestStreamId, _, _, _, _, _))
+      .WillOnce(Invoke(this, &ReliableQuicStreamTest::CloseStreamOnWriteError));
+  stream_->WriteOrBufferData(StringPiece(kData1, 2), false, nullptr);
+  ASSERT_EQ(0u, write_blocked_list_->NumBlockedStreams());
 }
 
 TEST_F(ReliableQuicStreamTest, WriteOrBufferData) {
@@ -590,10 +612,6 @@ TEST_F(ReliableQuicStreamTest,
 // Verify that after the consumer calls StopReading(), the stream still sends
 // flow control updates.
 TEST_F(ReliableQuicStreamTest, StopReadingSendsFlowControl) {
-  if (!FLAGS_quic_implement_stop_reading) {
-    return;
-  }
-
   Initialize(kShouldProcessData);
 
   stream_->StopReading();
@@ -737,13 +755,8 @@ TEST_F(ReliableQuicStreamTest, EarlyResponseFinHandling) {
   // Receive remaining data and FIN for the request.
   QuicStreamFrame frame2(stream_->id(), true, 0, StringPiece("End"));
   stream_->OnStreamFrame(frame2);
-  if (FLAGS_quic_fix_fin_accounting) {
-    EXPECT_TRUE(stream_->fin_received());
-    EXPECT_TRUE(stream_->HasFinalReceivedByteOffset());
-  } else {
-    EXPECT_FALSE(stream_->fin_received());
-    EXPECT_FALSE(stream_->HasFinalReceivedByteOffset());
-  }
+  EXPECT_TRUE(stream_->fin_received());
+  EXPECT_TRUE(stream_->HasFinalReceivedByteOffset());
 }
 
 }  // namespace

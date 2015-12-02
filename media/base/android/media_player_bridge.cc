@@ -4,6 +4,7 @@
 
 #include "media/base/android/media_player_bridge.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/basictypes.h"
@@ -204,7 +205,9 @@ bool MediaPlayerBridge::InterceptMediaUrl(
   return false;
 }
 
-void MediaPlayerBridge::OnDidSetDataUriDataSource(JNIEnv* env, jobject obj,
+void MediaPlayerBridge::OnDidSetDataUriDataSource(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
     jboolean success) {
   if (!success) {
     OnMediaError(MEDIA_ERROR_FORMAT);

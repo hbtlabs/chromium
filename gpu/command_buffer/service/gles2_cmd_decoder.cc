@@ -876,6 +876,8 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // Callback for async SwapBuffers.
   void FinishSwapBuffers(gfx::SwapResult result);
 
+  void DoCommitOverlayPlanes();
+
   // Wrapper for SwapInterval.
   void DoSwapInterval(int interval);
 
@@ -1978,6 +1980,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool context_was_lost_;
   bool reset_by_robustness_extension_;
   bool supports_post_sub_buffer_;
+  bool supports_commit_overlay_planes_;
   bool supports_async_swap_;
 
   ContextType context_type_;
@@ -2524,6 +2527,7 @@ GLES2DecoderImpl::GLES2DecoderImpl(ContextGroup* group)
       context_was_lost_(false),
       reset_by_robustness_extension_(false),
       supports_post_sub_buffer_(false),
+      supports_commit_overlay_planes_(false),
       supports_async_swap_(false),
       context_type_(CONTEXT_TYPE_OPENGLES2),
       derivatives_explicitly_enabled_(false),
@@ -2975,6 +2979,8 @@ bool GLES2DecoderImpl::Initialize(
       !surface->IsOffscreen())
     supports_post_sub_buffer_ = false;
 
+  supports_commit_overlay_planes_ = surface->SupportsCommitOverlayPlanes();
+
   supports_async_swap_ = surface->SupportsAsyncSwap();
 
   if (feature_info_->workarounds().reverse_point_sprite_coord_origin) {
@@ -3118,6 +3124,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
 #endif
 
   caps.post_sub_buffer = supports_post_sub_buffer_;
+  caps.commit_overlay_planes = supports_commit_overlay_planes_;
   caps.image = true;
   caps.surfaceless = surfaceless_;
 
@@ -4999,7 +5006,36 @@ void GLES2DecoderImpl::DoGenerateMipmap(GLenum target) {
   if (workarounds().set_texture_filter_before_generating_mipmap) {
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
   }
+
+  // Workaround for Mac driver bug. If the base level is non-zero but the zero
+  // level of a texture has not been set glGenerateMipmaps sets the entire mip
+  // chain to opaque black. If the zero level is set at all, however, the mip
+  // chain is properly generated from the base level.
+  bool texture_zero_level_set = false;
+  GLenum type = 0;
+  GLenum internal_format = 0;
+  GLenum format = 0;
+  if (workarounds().set_zero_level_before_generating_mipmap &&
+      target == GL_TEXTURE_2D) {
+    Texture* tex = texture_ref->texture();
+    if (tex && tex->base_level() != 0 &&
+        !tex->GetLevelType(target, 0, &type, &internal_format) &&
+        tex->GetLevelType(target, tex->base_level(), &type, &internal_format)) {
+      format = TextureManager::ExtractFormatFromStorageFormat(internal_format);
+      glTexImage2D(target, 0, internal_format, 1, 1, 0, format, type, nullptr);
+      texture_zero_level_set = true;
+    }
+  }
+
   glGenerateMipmapEXT(target);
+
+  if (texture_zero_level_set) {
+    // This may have some unwanted side effects, but we expect command buffer
+    // validation to prevent you from doing anything weird with the texture
+    // after this, like calling texSubImage2D sucessfully.
+    glTexImage2D(target, 0, internal_format, 0, 0, 0, format, type, nullptr);
+  }
+
   if (workarounds().set_texture_filter_before_generating_mipmap) {
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
                     texture_ref->texture()->min_filter());
@@ -6083,7 +6119,8 @@ void GLES2DecoderImpl::DoFramebufferTexture2DCommon(
     service_id = texture_ref->service_id();
   }
 
-  if (!texture_manager()->ValidForTarget(textarget, level, 0, 0, 1)) {
+  if ((level > 0 && !feature_info_->IsES3Enabled()) ||
+      !texture_manager()->ValidForTarget(textarget, level, 0, 0, 1)) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE,
         name, "level out of range");
@@ -11752,6 +11789,16 @@ void GLES2DecoderImpl::FinishSwapBuffers(gfx::SwapResult result) {
   }
 }
 
+void GLES2DecoderImpl::DoCommitOverlayPlanes() {
+  TRACE_EVENT0("gpu", "GLES2DecoderImpl::DoCommitOverlayPlanes");
+  if (supports_async_swap_) {
+    surface_->CommitOverlayPlanesAsync(base::Bind(
+        &GLES2DecoderImpl::FinishSwapBuffers, base::AsWeakPtr(this)));
+  } else {
+    FinishSwapBuffers(surface_->CommitOverlayPlanes());
+  }
+}
+
 void GLES2DecoderImpl::DoSwapInterval(int interval) {
   context_->SetSwapInterval(interval);
 }
@@ -15227,9 +15274,8 @@ error::Error GLES2DecoderImpl::HandleProgramPathFragmentInputGenCHROMIUM(
   }
 
   GLint location = static_cast<GLint>(c.location);
-  if (location == -1) {
+  if (program->IsInactiveFragmentInputLocationByFakeLocation(location))
     return error::kNoError;
-  }
 
   const Program::FragmentInputInfo* fragment_input_info =
       program->GetFragmentInputInfoByFakeLocation(location);

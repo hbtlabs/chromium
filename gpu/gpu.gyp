@@ -367,6 +367,7 @@
         'command_buffer/tests/gl_copy_texture_CHROMIUM_unittest.cc',
         'command_buffer/tests/gl_cube_map_texture_unittest.cc',
         'command_buffer/tests/gl_depth_texture_unittest.cc',
+        'command_buffer/tests/gl_ext_multisample_compatibility_unittest.cc',	
         'command_buffer/tests/gl_ext_srgb_unittest.cc',
         'command_buffer/tests/gl_fence_sync_unittest.cc',
         'command_buffer/tests/gl_gpu_memory_buffer_unittest.cc',
@@ -861,6 +862,22 @@
             '../base/base.gyp:test_support_base',
             '../third_party/angle/src/tests/tests.gyp:angle_deqp_gtest_support',
             '../third_party/angle/src/tests/tests.gyp:angle_deqp_libgles3',
+          ],
+          'includes': [
+            '../third_party/angle/build/common_defines.gypi',
+          ],
+          'sources': [
+            'angle_deqp_tests_main.cc',
+          ],
+        },
+        {
+          'target_name': 'angle_deqp_egl_tests',
+          'type': '<(gtest_target_type)',
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../base/base.gyp:test_support_base',
+            '../third_party/angle/src/tests/tests.gyp:angle_deqp_gtest_support',
+            '../third_party/angle/src/tests/tests.gyp:angle_deqp_libegl',
           ],
           'includes': [
             '../third_party/angle/build/common_defines.gypi',

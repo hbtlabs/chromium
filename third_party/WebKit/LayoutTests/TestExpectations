@@ -2,6 +2,12 @@
 crbug.com/524134 paint/invalidation/spv2 [ Skip ]
 crbug.com/524134 virtual/syncpaint/paint/invalidation/spv2 [ Skip ]
 
+# TODO(yosin): We should convert following tests to use asynchronous spell checker.
+crbug.com/563265 editing/spelling/context-menu-suggestions.html [ Skip ]
+crbug.com/563265 editing/spelling/spellcheck-editable-on-focus-multiframe.html [ Skip ]
+crbug.com/563265 editing/spelling/spellcheck-editable-on-focus-sync.html [ Skip ]
+crbug.com/563265 editing/spelling/spelling-unified-emulation.html [ Skip ]
+
 # TODO(wangxianzhu): Triage the failures
 crbug.com/524134 virtual/spv2/paint/invalidation/invalidate-after-composited-scroll.html [ Failure ]
 crbug.com/524134 crbug.com/539546 virtual/spv2/paint/selection/text-selection-drag.html [ Pass Failure ]
@@ -68,7 +74,6 @@ crbug.com/492664 [ Win ] imported/csswg-test/css-writing-modes-3/bidi-override-0
 crbug.com/492664 [ Win ] imported/csswg-test/css-writing-modes-3/bidi-plaintext-001.html [ Failure ]
 crbug.com/492664 imported/csswg-test/css-transitions-2/transitioncancel-001.html [ Failure ]
 crbug.com/418091 [ Mac10.6 ] fast/text/aat-morx.html [ Failure ]
-crbug.com/463358 [ Mac Linux ] svg/hixie/perf/005.xml [ Pass Failure ]
 crbug.com/463358 [ Linux Mac ] svg/transforms/text-with-pattern-inside-transformed-html.xhtml [ Failure ]
 crbug.com/463358 [ Mac Linux Debug ] fast/backgrounds/transformed-body-html-background.html [ Failure ]
 crbug.com/463358 [ Mac Linux Debug ] css3/masking/clip-path-polygon-nonzero.html [ Failure ]
@@ -90,6 +95,7 @@ crbug.com/520739 [ Mac ] http/tests/websocket/close-code-and-reason.html [ Failu
 crbug.com/520737 [ Mac ] imported/csswg-test/css-writing-modes-3/writing-mode-vertical-rl-001.xht [ Failure Pass Timeout ]
 crbug.com/520736 [ Win7 ] media/W3C/video/networkState/networkState_during_progress.html [ Failure Pass ]
 
+crbug.com/563650 inspector/elements/css-rule-hover-highlights-selectors.html [ Pass Failure ]
 crbug.com/522641 inspector/elements/styles-4/styles-update-links.html [ Pass Timeout ]
 crbug.com/522645 [ Linux ] virtual/android/fullscreen/video-fixed-background.html [ Failure Pass ]
 crbug.com/522646 http/tests/media/encrypted-media/encrypted-media-encrypted-event-different-origin.html [ Pass Slow ]
@@ -200,8 +206,6 @@ crbug.com/248938 virtual/threaded/transitions/cancel-and-start-new.html [ Pass F
 crbug.com/248938 virtual/threaded/animations/change-keyframes-name.html [ Failure Pass Timeout ]
 crbug.com/248938 virtual/threaded/animations/change-one-anim.html [ Failure Pass ]
 crbug.com/326139 crbug.com/390125 media/video-frame-accurate-seek.html [ Failure Pass ]
-crbug.com/352856 [ Mac ] svg/batik/text/textPosition.svg [ Failure Pass ]
-crbug.com/352856 [ Mac ] svg/batik/text/textPosition2.svg [ Failure Pass ]
 crbug.com/413604 http/tests/loading/script-priorities.html [ Failure Pass ]
 crbug.com/495523 svg/wicd/test-rightsizing-b.xhtml [ Failure Pass ]
 crbug.com/516364 svg/animations/smil-leak-element-instances.svg [ Failure Pass ]
@@ -327,7 +331,13 @@ crbug.com/487281 [ Mac ] fast/forms/menulist-narrow-width.html [ Failure ]
 
 crbug.com/543110 [ Mac ] fast/text/international/text-shaping-arabic.html [ Failure ]
 
-crbug.com/548904 [ Linux Win7 ] fast/writing-mode/Kusa-Makura-background-canvas.html [ Failure Pass ]
+crbug.com/548904 [ Linux Win ] fast/writing-mode/Kusa-Makura-background-canvas.html [ Failure Pass ]
+
+crbug.com/561394 inspector/console/console-call-getter-on-proto.html [ NeedsManualRebaseline ]
+crbug.com/561394 inspector/console/console-dir-es6.html [ NeedsManualRebaseline ]
+crbug.com/561394 inspector/console/console-format-es6-2.html [ NeedsManualRebaseline ]
+crbug.com/561394 inspector/console/console-log-document-proto.html [ NeedsManualRebaseline ]
+crbug.com/561394 inspector/console/console-object-constructor-name.html [ NeedsManualRebaseline ]
 
 crbug.com/552433 svg/W3C-SVG-1.1/coords-units-02-b.svg [ Pass Failure ]
 crbug.com/552433 [ Linux Mac Win10 Win7 ] svg/dom/length-list-parser.html [ Failure Pass ]
@@ -652,7 +662,6 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-block-alignment-
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-block-alignment-007.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-table-alignment-003.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/inline-table-alignment-005.xht [ Failure ]
-crbug.com/491454 imported/csswg-test/css-writing-modes-3/outline-inline-vrl-006.html [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-002.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-003.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/table-column-order-004.xht [ Failure ]
@@ -680,7 +689,7 @@ crbug.com/537080 imported/csswg-test/css-writing-modes-3/vertical-alignment-003.
 crbug.com/537080 imported/csswg-test/css-writing-modes-3/vertical-alignment-009.xht [ Failure ]
 
 # These tests pass but images do not match because of position: absolute in vertical flow bug
-crbug.com/492664 imported/csswg-test/css-writing-modes-3/block-flow-direction-009.xht [ Failure ]
+crbug.com/492664 imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-009.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vlr-003.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vlr-005.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vlr-007.xht [ Failure ]
@@ -689,7 +698,7 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vrl-002.xht [
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vrl-004.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vrl-006.xht [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/clip-rect-vrl-008.xht [ Failure ]
-crbug.com/492664 imported/csswg-test/css-writing-modes-3/line-box-direction-009.xht [ Failure ]
+crbug.com/492664 imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-009.xht [ Failure ]
 
 # These tests pass but images do not match because tests are stricter than the spec.
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-value-all-001.html [ Failure ]
@@ -697,54 +706,54 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-va
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-value-all-003.html [ Failure ]
 
 # These CSS Writing Modes Level 3 tests pass but causes 1px diff on images, notified to the submitter.
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-001.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-002.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-003.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-htb-001.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-002.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-003.xht [ Failure ]
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-004.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-005.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-006.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-007.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-008.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-010.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-011.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-012.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-013.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-014.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-015.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-016.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-019.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-020.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-021.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-022.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-023.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-024.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-005.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-006.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-007.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-008.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-010.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-011.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-012.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-013.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-014.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-015.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-016.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-019.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-020.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-021.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-022.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vlr-023.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-024.xht [ Failure ]
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/inline-block-alignment-006.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-001.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-002.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-003.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-005.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-006.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-007.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-008.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-010.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-011.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-012.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-013.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-014.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-017.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-018.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-019.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-020.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-002.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-003.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-004.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-005.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-006.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-007.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-008.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-009.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-006.xht [ Failure ]
-crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-007.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-htb-001.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-002.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-003.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-005.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-006.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-007.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-008.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-010.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-011.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-012.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-013.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-014.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-017.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-018.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vrl-019.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/line-box-direction-vlr-020.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vrl-002.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vlr-003.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vrl-004.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vlr-005.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vrl-006.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vlr-007.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vrl-008.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression-vlr-009.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-vrl-006.xht [ Failure ]
+crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-vlr-007.xht [ Failure ]
 
 crbug.com/498845 [ Win ] fast/multicol/vertical-rl/float-content-break.html [ Failure ]
 
@@ -762,6 +771,8 @@ crbug.com/467635 fast/dom/HTMLImageElement/image-sizes-meta-viewport.html [ Skip
 # crbug.com/396823 [ Mac ] fast/multicol/multicol-with-child-renderLayer-for-input.html [ Failure ]
 
 crbug.com/484370 [ Win Debug ] svg/custom/gradient-userSpaceOnUse-with-percentage.svg [ Failure ]
+
+crbug.com/116710 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
 
 # Printing Layout broken in these tests.
 crbug.com/377696 printing/setPrinting.html [ Skip ]
@@ -858,9 +869,6 @@ crbug.com/392706 virtual/threaded/animations/play-state-initially-paused.html [ 
 crbug.com/402379 [ Win7 Debug ] storage/indexeddb/cursor-continue-validity.html [ Pass Slow ]
 crbug.com/402379 [ Win7 Debug ] storage/indexeddb/mozilla/indexes.html [ Pass Slow ]
 
-# The below is failing on XP and Win10 only. See crbug.com/539693
-crbug.com/543309 editing/selection/doubleclick-crash.html [ NeedsManualRebaseline ]
-
 crbug.com/419993 [ Debug ] fast/css/giant-stylesheet-crash.html [ Pass Slow ]
 
 # Part of a larger issue referenced in the bug. This specific issue will be fixed shortly.
@@ -896,8 +904,6 @@ crbug.com/417782 virtual/rootlayerscrolls/fast/scrolling/scrollbar-tickmarks-sty
 
 crbug.com/385014 accessibility/canvas-fallback-content-2.html [ Failure ]
 
-crbug.com/364225 virtual/gpu/fast/canvas/canvas-composite-text-alpha.html [ Pass Slow Timeout ]
-
 crbug.com/440452 virtual/display_list_2d_canvas/fast/canvas/canvas-partial-invalidation-zoomed.html [ Pass Slow Timeout ]
 
 crbug.com/364614 [ Mac ] fast/scroll-behavior/overflow-scroll-animates.html [ Skip ]
@@ -917,11 +923,6 @@ crbug.com/524596 virtual/spv2/paint/invalidation/fixed-position-descendant-paint
 crbug.com/524596 virtual/syncpaint/paint/invalidation/composited-non-stacking-context-descendant-change-color.html [ Skip ]
 crbug.com/524596 virtual/syncpaint/paint/invalidation/composited-non-stacking-context-descendant-move.html [ Skip ]
 crbug.com/524596 virtual/syncpaint/paint/invalidation/fixed-position-descendant-paint-offset-indirect.html [ Skip ]
-
-crbug.com/546538 svg/clip-path/clip-path-child-clipped.svg [ NeedsRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-nonzero.svg [ NeedsRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-evenodd-nonzero.svg [ NeedsRebaseline ]
-crbug.com/546538 svg/clip-path/clip-path-nonzero-evenodd.svg [ NeedsRebaseline ]
 
 crbug.com/425113 svg/clip-path/clip-path-multiple-children.svg [ Failure ]
 
@@ -1007,6 +1008,9 @@ crbug.com/474798 virtual/spv2/paint/invalidation/spv2/justify-self-change-keepin
 crbug.com/474798 virtual/syncpaint/fast/repaint/align-self-change-keeping-geometry-grid.html [ Skip ]
 crbug.com/474798 virtual/syncpaint/fast/repaint/justify-self-change-keeping-geometry.html [ Skip ]
 
+crbug.com/548695 fast/forms/datalist/update-range-with-datalist.html [ Failure ]
+
+crbug.com/548705 fast/css/first-line-hover-001.html [ Failure ]
 
 # Temporarily disabled after chromium change
 crbug.com/492511 [ Mac ] fast/text/atsui-negative-spacing-features.html [ Failure ]
@@ -1117,7 +1121,6 @@ crbug.com/521730 [ Win10 ] fast/text/international/vertical-text-metrics-test.ht
 crbug.com/521730 [ Win10 ] svg/custom/svg-fonts-in-text-controls.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/forms/datetimelocal/datetimelocal-appearance-l10n.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/forms/month/month-appearance-basic.html [ Failure ]
-crbug.com/521730 [ Win10 ] fast/forms/select/popup-menu-appearance-styled.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text-autosizing/hackernews-comments.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text-autosizing/list-item-above-dbcat.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text-autosizing/supercluster-multiple-layout.html [ Timeout Failure ]
@@ -1191,7 +1194,6 @@ crbug.com/521730 [ Win10 ] fast/text/international/complex-character-based-fallb
 crbug.com/521730 [ Win10 ] fast/text/international/hindi-spacing.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/international/hindi-whitespace.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/justify-ideograph-leading-expansion.html [ Failure ]
-crbug.com/521730 [ Win10 ] fast/writing-mode/Kusa-Makura-background-canvas.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/writing-mode/border-vertical-lr.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/writing-mode/japanese-ruby-vertical-lr.html [ Failure ]
 crbug.com/521730 [ Win10 ] media/track/track-cue-rendering-vertical.html [ Failure ]
@@ -1304,6 +1306,10 @@ crbug.com/502927 [ XP ] virtual/syncpaint/paint/frames/frameset-with-stacking-co
 
 crbug.com/353746 virtual/android/fullscreen/video-specified-size.html [ Failure Pass ]
 
+crbug.com/560503 fast/js/mozilla/strict/12.14.1.html [ NeedsManualRebaseline ]
+crbug.com/560503 fast/js/mozilla/strict/13.1.html [ NeedsManualRebaseline ]
+crbug.com/560503 fast/js/mozilla/strict/regress-532254.html [ NeedsManualRebaseline ]
+
 crbug.com/527270 accessibility/name-calc-img.html [ Failure Pass Timeout ]
 
 # This test has different results in Debug and Release.
@@ -1346,7 +1352,26 @@ crbug.com/545551 [ Win Mac ] svg/custom/repaint-shadow.svg [ Failure Pass ]
 crbug.com/546215 [ Android ] fast/inline-block/overflow-clip.html [ Failure ]
 
 crbug.com/548765 http/tests/inspector/console-fetch-logging.html [ Failure Pass Slow ]
-
-crbug.com/559300 inspector/layers/layer-canvas-log.html [ Failure ]
-
+crbug.com/562311 [ Mac ] fast/forms/color/color-suggestion-picker-appearance-zoom125.html [ Pass Timeout ]
+crbug.com/562311 [ Mac ] fast/forms/color/color-suggestion-picker-appearance-zoom200.html [ Pass Timeout ]
+crbug.com/562311 [ Mac10.6 Mac10.7 Mac10.8 Mac10.9 ] fast/forms/suggestion-picker/date-suggestion-picker-appearance-zoom125.html [ Failure Pass Timeout ]
+crbug.com/562311 [ Mac10.6 Mac10.7 Mac10.8 Mac10.9 ] fast/forms/suggestion-picker/date-suggestion-picker-appearance-zoom200.html [ Failure Pass Timeout ]
 crbug.com/549314 [ XP ] inspector-protocol/layout-fonts/unicode-range-combining-chars-fallback.html [ Failure ]
+
+crbug.com/563694 [ Linux Mac Debug ] svg/hixie/perf/005.xml [ Failure ]
+
+crbug.com/564109 [ Win7 XP ]  http/tests/webfont/font-display.html [ Pass Timeout Failure ]
+
+crbug.com/558574 [ Win7 ] fast/forms/text/text-font-height-mismatch.html [ Failure ]
+crbug.com/558574 [ Win7 ] fast/text/emphasis.html [ Failure ]
+
+crbug.com/561595 [ XP ] plugins/webview-plugin-scroll.html [ Failure ]
+
+crbug.com/561519 [ Android ] css1/classification/list_style.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/classification/list_style_position.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/color_and_background/background_color.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/color_and_background/color.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/font_properties/font_style.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/font_properties/font_variant.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] css1/formatting_model/canvas.html [ NeedsRebaseline ]
+crbug.com/561519 [ Android ] svg/canvas/canvas-pattern-svg.html [ NeedsRebaseline ]

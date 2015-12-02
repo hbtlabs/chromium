@@ -21,6 +21,7 @@
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "content/public/browser/navigation_details.h"
@@ -41,10 +42,6 @@ namespace {
 
 // Minimal time span the bubble should survive implicit navigations.
 const int kBubbleMinTime = 5;
-
-// For given site and username the password save bubble is suppressed after
-// the user dismissed it |kMaxShowSaveBubble| times.
-const int kMaxShowSaveBubble = 3;
 
 password_manager::PasswordStore* GetPasswordStore(
     content::WebContents* web_contents) {
@@ -71,47 +68,15 @@ ManagePasswordsUIController::ManagePasswordsUIController(
 
 ManagePasswordsUIController::~ManagePasswordsUIController() {}
 
-void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {
-  // If we're not on a "webby" URL (e.g. "chrome://sign-in"), we shouldn't
-  // display either the bubble or the icon.
-  if (!BrowsingDataHelper::IsWebScheme(
-          web_contents()->GetLastCommittedURL().scheme())) {
-    passwords_data_.OnInactive();
-  }
-
-#if !defined(OS_ANDROID)
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  if (!browser)
-    return;
-  LocationBar* location_bar = browser->window()->GetLocationBar();
-  DCHECK(location_bar);
-  location_bar->UpdateManagePasswordsIconAndBubble();
-#endif
-}
-
-void ManagePasswordsUIController::
-    UpdateAndroidAccountChooserInfoBarVisibility() {
-#if defined(OS_ANDROID)
-  // Deletes itself on the event from Java counterpart, when user interacts with
-  // dialog.
-  AccountChooserDialogAndroid* acccount_chooser_dialog =
-      new AccountChooserDialogAndroid(web_contents(), this);
-  acccount_chooser_dialog->ShowDialog();
-  should_pop_up_bubble_ = false;
-#endif
-}
-
-base::TimeDelta ManagePasswordsUIController::Elapsed() const {
-  return timer_ ? timer_->Elapsed() : base::TimeDelta::Max();
-}
-
 void ManagePasswordsUIController::OnPasswordSubmitted(
     scoped_ptr<PasswordFormManager> form_manager) {
   bool show_bubble = !form_manager->IsBlacklisted();
   passwords_data_.OnPendingPassword(form_manager.Pass());
   if (show_bubble) {
     password_manager::InteractionsStats* stats = GetCurrentInteractionStats();
-    if (stats && stats->dismissal_count > kMaxShowSaveBubble)
+    const int show_threshold =
+        password_bubble_experiment::GetSmartBubbleDismissalThreshold();
+    if (stats && show_threshold > 0 && stats->dismissal_count >= show_threshold)
       show_bubble = false;
   }
   timer_.reset(new base::ElapsedTimer);
@@ -189,6 +154,20 @@ void ManagePasswordsUIController::OnLoginsChanged(
   if (current_state != GetState())
     UpdateBubbleAndIconVisibility();
 }
+
+#if !defined(OS_ANDROID)
+void ManagePasswordsUIController::UpdateIconAndBubbleState(
+    ManagePasswordsIconView* icon) {
+  if (should_pop_up_bubble_) {
+    // We must display the icon before showing the bubble, as the bubble would
+    // be otherwise unanchored.
+    icon->SetState(GetState());
+    ShowBubbleWithoutUserInteraction();
+  } else {
+    icon->SetState(GetState());
+  }
+}
+#endif
 
 const GURL& ManagePasswordsUIController::GetOrigin() const {
   return passwords_data_.origin();
@@ -303,20 +282,7 @@ void ManagePasswordsUIController::NavigateToExternalPasswordManager() {
 #else
   chrome::NavigateParams params(
       chrome::FindBrowserWithWebContents(web_contents()),
-      GURL(chrome::kPasswordManagerAccountDashboardURL),
-      ui::PAGE_TRANSITION_LINK);
-  params.disposition = NEW_FOREGROUND_TAB;
-  chrome::Navigate(&params);
-#endif
-}
-
-void ManagePasswordsUIController::NavigateToSmartLockPage() {
-#if defined(OS_ANDROID)
-  NOTREACHED();
-#else
-  chrome::NavigateParams params(
-      chrome::FindBrowserWithWebContents(web_contents()),
-      GURL(l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK_PAGE)),
+      GURL(password_manager::kPasswordManagerAccountDashboardURL),
       ui::PAGE_TRANSITION_LINK);
   params.disposition = NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
@@ -372,6 +338,28 @@ void ManagePasswordsUIController::NeverSavePasswordInternal() {
   form_manager->PermanentlyBlacklist();
 }
 
+void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {
+  // If we're not on a "webby" URL (e.g. "chrome://sign-in"), we shouldn't
+  // display either the bubble or the icon.
+  if (!BrowsingDataHelper::IsWebScheme(
+          web_contents()->GetLastCommittedURL().scheme())) {
+    passwords_data_.OnInactive();
+  }
+
+#if !defined(OS_ANDROID)
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  if (!browser)
+    return;
+  LocationBar* location_bar = browser->window()->GetLocationBar();
+  DCHECK(location_bar);
+  location_bar->UpdateManagePasswordsIconAndBubble();
+#endif
+}
+
+base::TimeDelta ManagePasswordsUIController::Elapsed() const {
+  return timer_ ? timer_->Elapsed() : base::TimeDelta::Max();
+}
+
 void ManagePasswordsUIController::DidNavigateMainFrame(
     const content::LoadCommittedDetails& details,
     const content::FrameNavigateParams& params) {
@@ -398,20 +386,6 @@ void ManagePasswordsUIController::WasHidden() {
 #endif
 }
 
-#if !defined(OS_ANDROID)
-void ManagePasswordsUIController::UpdateIconAndBubbleState(
-    ManagePasswordsIconView* icon) {
-  if (should_pop_up_bubble_) {
-    // We must display the icon before showing the bubble, as the bubble would
-    // be otherwise unanchored.
-    icon->SetState(GetState());
-    ShowBubbleWithoutUserInteraction();
-  } else {
-    icon->SetState(GetState());
-  }
-}
-#endif
-
 void ManagePasswordsUIController::ShowBubbleWithoutUserInteraction() {
   DCHECK(should_pop_up_bubble_);
 #if !defined(OS_ANDROID)
@@ -429,4 +403,16 @@ void ManagePasswordsUIController::WebContentsDestroyed() {
       GetPasswordStore(web_contents());
   if (password_store)
     password_store->RemoveObserver(this);
+}
+
+void ManagePasswordsUIController::
+    UpdateAndroidAccountChooserInfoBarVisibility() {
+#if defined(OS_ANDROID)
+  // Deletes itself on the event from Java counterpart, when user interacts with
+  // dialog.
+  AccountChooserDialogAndroid* acccount_chooser_dialog =
+      new AccountChooserDialogAndroid(web_contents(), this);
+  acccount_chooser_dialog->ShowDialog();
+  should_pop_up_bubble_ = false;
+#endif
 }

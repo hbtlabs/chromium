@@ -20,13 +20,14 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/compositor/clip_transform_recorder.h"
+#include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
+#include "ui/compositor/transform_recorder.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -115,6 +116,7 @@ View::View()
       context_menu_controller_(NULL),
       drag_controller_(NULL),
       native_view_accessibility_(NULL) {
+  SetTargetHandler(this);
 }
 
 View::~View() {
@@ -778,8 +780,13 @@ void View::Paint(const ui::PaintContext& parent_context) {
 
   // If the view is backed by a layer, it should paint with itself as the origin
   // rather than relative to its parent.
-  ui::ClipTransformRecorder clip_transform_recorder(context);
-  if (!layer()) {
+  bool paint_relative_to_parent = !layer();
+
+  // TODO(wkorman): Rework clip and transform recorders to pass the size in the
+  // individual clip methods rather than in the constructor.
+  ui::ClipRecorder clip_recorder(parent_context,
+                                 parent() ? parent()->size() : size());
+  if (paint_relative_to_parent) {
     // Set the clip rect to the bounds of this View. Note that the X (or left)
     // position we pass to ClipRect takes into consideration whether or not the
     // View uses a right-to-left layout so that we paint the View in its
@@ -789,8 +796,11 @@ void View::Paint(const ui::PaintContext& parent_context) {
     if (parent_)
       clip_rect_in_parent.set_x(
           parent_->GetMirroredXForRect(clip_rect_in_parent));
-    clip_transform_recorder.ClipRect(clip_rect_in_parent);
+    clip_recorder.ClipRect(clip_rect_in_parent);
+  }
 
+  ui::TransformRecorder transform_recorder(context, size());
+  if (paint_relative_to_parent) {
     // Translate the graphics such that 0,0 corresponds to where
     // this View is located relative to its parent.
     gfx::Transform transform_from_parent;
@@ -798,10 +808,13 @@ void View::Paint(const ui::PaintContext& parent_context) {
     transform_from_parent.Translate(offset_from_parent.x(),
                                     offset_from_parent.y());
     transform_from_parent.PreconcatTransform(GetTransform());
-    clip_transform_recorder.Transform(transform_from_parent);
+    transform_recorder.Transform(transform_from_parent);
   }
 
-  if (is_invalidated || !paint_cache_.UseCache(context)) {
+  // Note that the cache is not aware of the offset of the view
+  // relative to the parent since painting is always done relative to
+  // the top left of the individual view.
+  if (is_invalidated || !paint_cache_.UseCache(context, size())) {
     ui::PaintRecorder recorder(context, size(), &paint_cache_);
     gfx::Canvas* canvas = recorder.canvas();
 
@@ -829,9 +842,9 @@ void View::set_background(Background* b) {
 
 void View::SetBorder(scoped_ptr<Border> b) { border_ = b.Pass(); }
 
-ui::ThemeProvider* View::GetThemeProvider() const {
+const ui::ThemeProvider* View::GetThemeProvider() const {
   const Widget* widget = GetWidget();
-  return widget ? widget->GetThemeProvider() : NULL;
+  return widget ? widget->GetThemeProvider() : nullptr;
 }
 
 const ui::NativeTheme* View::GetNativeTheme() const {
@@ -840,12 +853,12 @@ const ui::NativeTheme* View::GetNativeTheme() const {
     return widget->GetNativeTheme();
 
 #if defined(OS_WIN)
-  // On Windows, ui::NativeTheme::instance() returns NativeThemeWinAura because
-  // that's what the renderer wants, but Views should default to NativeThemeWin.
-  // TODO(estade): clean this up, see http://crbug.com/558029
+  // On Windows, ui::NativeTheme::GetInstanceForWeb() returns NativeThemeWinAura
+  // because that's what the renderer wants, but Views should default to
+  // NativeThemeWin. TODO(estade): clean this up, see http://crbug.com/558029
   return ui::NativeThemeWin::instance();
 #else
-  return ui::NativeTheme::instance();
+  return ui::NativeTheme::GetInstanceForWeb();
 #endif
 }
 
@@ -1376,8 +1389,8 @@ void View::OnPaint(gfx::Canvas* canvas) {
 void View::OnPaintBackground(gfx::Canvas* canvas) {
   if (background_.get()) {
     TRACE_EVENT2("views", "View::OnPaintBackground",
-                 "width", canvas->sk_canvas()->getDevice()->width(),
-                 "height", canvas->sk_canvas()->getDevice()->height());
+                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
+                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
     background_->Paint(canvas, this);
   }
 }
@@ -1385,8 +1398,8 @@ void View::OnPaintBackground(gfx::Canvas* canvas) {
 void View::OnPaintBorder(gfx::Canvas* canvas) {
   if (border_.get()) {
     TRACE_EVENT2("views", "View::OnPaintBorder",
-                 "width", canvas->sk_canvas()->getDevice()->width(),
-                 "height", canvas->sk_canvas()->getDevice()->height());
+                 "width", canvas->sk_canvas()->getBaseLayerSize().width(),
+                 "height", canvas->sk_canvas()->getBaseLayerSize().height());
     border_->Paint(*this, canvas);
   }
 }

@@ -90,10 +90,15 @@ void MessagePumpMojo::AddHandler(MessagePumpMojoHandler* handler,
   handler_data.deadline = deadline;
   handler_data.id = next_handler_id_++;
   handlers_[handle] = handler_data;
+  if (!deadline.is_null()) {
+    bool inserted = deadline_handles_.insert(handle).second;
+    DCHECK(inserted);
+  }
 }
 
 void MessagePumpMojo::RemoveHandler(const Handle& handle) {
   handlers_.erase(handle);
+  deadline_handles_.erase(handle);
 }
 
 void MessagePumpMojo::AddObserver(Observer* observer) {
@@ -168,15 +173,23 @@ bool MessagePumpMojo::DoInternalWork(const RunState& run_state, bool block) {
   const MojoDeadline deadline = block ? GetDeadlineForWait(run_state) : 0;
   const WaitState wait_state = GetWaitState();
 
+  std::vector<MojoHandleSignalsState> states(wait_state.handles.size());
   const WaitManyResult wait_many_result =
-      WaitMany(wait_state.handles, wait_state.wait_signals, deadline, nullptr);
+      WaitMany(wait_state.handles, wait_state.wait_signals, deadline, &states);
   const MojoResult result = wait_many_result.result;
   bool did_work = true;
   if (result == MOJO_RESULT_OK) {
     if (wait_many_result.index == 0) {
-      // Control pipe was written to.
-      ReadMessageRaw(read_handle_.get(), NULL, NULL, NULL, NULL,
-                     MOJO_READ_MESSAGE_FLAG_MAY_DISCARD);
+      if (states[0].satisfied_signals & MOJO_HANDLE_SIGNAL_PEER_CLOSED) {
+        // The Mojo EDK is shutting down. The ThreadQuitHelper task in
+        // base::Thread won't get run since the control pipe depends on the EDK
+        // staying alive. So quit manually to avoid this thread hanging.
+        Quit();
+      } else {
+        // Control pipe was written to.
+        ReadMessageRaw(read_handle_.get(), NULL, NULL, NULL, NULL,
+                       MOJO_READ_MESSAGE_FLAG_MAY_DISCARD);
+      }
     } else {
       DCHECK(handlers_.find(wait_state.handles[wait_many_result.index]) !=
              handlers_.end());
@@ -189,6 +202,7 @@ bool MessagePumpMojo::DoInternalWork(const RunState& run_state, bool block) {
     switch (result) {
       case MOJO_RESULT_CANCELLED:
       case MOJO_RESULT_FAILED_PRECONDITION:
+      case MOJO_RESULT_INVALID_ARGUMENT:
         RemoveInvalidHandle(wait_state, result, wait_many_result.index);
         break;
       case MOJO_RESULT_DEADLINE_EXCEEDED:
@@ -201,21 +215,31 @@ bool MessagePumpMojo::DoInternalWork(const RunState& run_state, bool block) {
     }
   }
 
-  // Notify and remove any handlers whose time has expired. Make a copy in case
-  // someone tries to add/remove new handlers from notification.
-  const HandleToHandler cloned_handlers(handlers_);
+  // Notify and remove any handlers whose time has expired. First, iterate over
+  // the set of handles that have a deadline, and add the expired handles to a
+  // map of <Handle, id>. Then, iterate over those expired handles and remove
+  // them. The two-step process is because a handler can add/remove new
+  // handlers.
+  std::map<Handle, int> expired_handles;
   const base::TimeTicks now(internal::NowTicks());
-  for (HandleToHandler::const_iterator i = cloned_handlers.begin();
-       i != cloned_handlers.end(); ++i) {
-    // Since we're iterating over a clone of the handlers, verify the handler is
-    // still valid before notifying.
-    if (!i->second.deadline.is_null() && i->second.deadline < now &&
-        handlers_.find(i->first) != handlers_.end() &&
-        handlers_[i->first].id == i->second.id) {
+  for (const Handle handle : deadline_handles_) {
+    const auto it = handlers_.find(handle);
+    // Expect any handle in |deadline_handles_| to also be in |handlers_| since
+    // the two are modified in lock-step.
+    DCHECK(it != handlers_.end());
+    if (!it->second.deadline.is_null() && it->second.deadline < now)
+      expired_handles[handle] = it->second.id;
+  }
+  for (auto& pair : expired_handles) {
+    auto it = handlers_.find(pair.first);
+    // Don't need to check deadline again since it can't change if id hasn't
+    // changed.
+    if (it != handlers_.end() && it->second.id == pair.second) {
+      MessagePumpMojoHandler* handler = handlers_[pair.first].handler;
+      RemoveHandler(pair.first);
       WillSignalHandler();
-      i->second.handler->OnHandleError(i->first, MOJO_RESULT_DEADLINE_EXCEEDED);
+      handler->OnHandleError(pair.first, MOJO_RESULT_DEADLINE_EXCEEDED);
       DidSignalHandler();
-      handlers_.erase(i->first);
       did_work = true;
     }
   }
@@ -226,18 +250,19 @@ void MessagePumpMojo::RemoveInvalidHandle(const WaitState& wait_state,
                                           MojoResult result,
                                           uint32_t index) {
   // TODO(sky): deal with control pipe going bad.
-  CHECK(result == MOJO_RESULT_FAILED_PRECONDITION ||
+  CHECK(result == MOJO_RESULT_INVALID_ARGUMENT ||
+        result == MOJO_RESULT_FAILED_PRECONDITION ||
         result == MOJO_RESULT_CANCELLED);
   CHECK_NE(index, 0u);  // Indicates the control pipe went bad.
 
   // Remove the handle first, this way if OnHandleError() tries to remove the
   // handle our iterator isn't invalidated.
-  CHECK(handlers_.find(wait_state.handles[index]) != handlers_.end());
-  MessagePumpMojoHandler* handler =
-      handlers_[wait_state.handles[index]].handler;
-  handlers_.erase(wait_state.handles[index]);
+  Handle handle = wait_state.handles[index];
+  CHECK(handlers_.find(handle) != handlers_.end());
+  MessagePumpMojoHandler* handler = handlers_[handle].handler;
+  RemoveHandler(handle);
   WillSignalHandler();
-  handler->OnHandleError(wait_state.handles[index], result);
+  handler->OnHandleError(handle, result);
   DidSignalHandler();
 }
 
@@ -245,6 +270,11 @@ void MessagePumpMojo::SignalControlPipe() {
   const MojoResult result =
       WriteMessageRaw(write_handle_.get(), NULL, 0, NULL, 0,
                       MOJO_WRITE_MESSAGE_FLAG_NONE);
+  if (result == MOJO_RESULT_FAILED_PRECONDITION) {
+    // Mojo EDK is shutting down.
+    return;
+  }
+
   // If we can't write we likely won't wake up the thread and there is a strong
   // chance we'll deadlock.
   CHECK_EQ(MOJO_RESULT_OK, result);
@@ -253,7 +283,8 @@ void MessagePumpMojo::SignalControlPipe() {
 MessagePumpMojo::WaitState MessagePumpMojo::GetWaitState() const {
   WaitState wait_state;
   wait_state.handles.push_back(read_handle_.get());
-  wait_state.wait_signals.push_back(MOJO_HANDLE_SIGNAL_READABLE);
+  wait_state.wait_signals.push_back(
+      MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED);
 
   for (HandleToHandler::const_iterator i = handlers_.begin();
        i != handlers_.end(); ++i) {
@@ -268,10 +299,11 @@ MojoDeadline MessagePumpMojo::GetDeadlineForWait(
   const base::TimeTicks now(internal::NowTicks());
   MojoDeadline deadline = TimeTicksToMojoDeadline(run_state.delayed_work_time,
                                                   now);
-  for (HandleToHandler::const_iterator i = handlers_.begin();
-       i != handlers_.end(); ++i) {
+  for (const Handle handle : deadline_handles_) {
+    auto it = handlers_.find(handle);
+    DCHECK(it != handlers_.end());
     deadline = std::min(
-        TimeTicksToMojoDeadline(i->second.deadline, now), deadline);
+        TimeTicksToMojoDeadline(it->second.deadline, now), deadline);
   }
   return deadline;
 }

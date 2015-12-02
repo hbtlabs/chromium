@@ -23,7 +23,7 @@ import java.net.URISyntaxException;
  * media actions from the controls to the {@link org.chromium.content.browser.MediaSession}
  */
 public class MediaSessionTabHelper {
-    private static final String TAG = "cr.MediaSession";
+    private static final String TAG = "MediaSession";
 
     private static final String UNICODE_PLAY_CHARACTER = "\u25B6";
 
@@ -171,6 +171,8 @@ public class MediaSessionTabHelper {
             return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_MEDIA_NOTIFICATION;
         } else if (source == MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION) {
             return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_MEDIA_SESSION;
+        } else if (source == MediaNotificationListener.ACTION_SOURCE_HEADSET_UNPLUG) {
+            return MediaSessionUMA.MEDIA_SESSION_ACTION_SOURCE_HEADSET_UNPLUG;
         }
 
         assert false;

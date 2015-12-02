@@ -13,7 +13,6 @@
 #include "components/autofill/content/renderer/form_cache.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/web_element_descriptor.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -54,6 +53,20 @@ struct AutofillFieldCase {
   const char* const autofill_value;  // The value being used to fill the field.
   const char* const expected_value;  // The expected value after Autofill
                                      // or Preview.
+};
+
+struct WebElementDescriptor {
+  enum RetrievalMethod {
+    CSS_SELECTOR,
+    ID,
+    NONE,
+  };
+
+  // Information to retrieve element with.
+  std::string descriptor;
+
+  // Which retrieval method to use.
+  RetrievalMethod retrieval_method = NONE;
 };
 
 const char kFormHtml[] =
@@ -4126,6 +4139,49 @@ TEST_F(FormAutofillTest, UnownedFormElementsAndFieldSetsToFormDataWithForm) {
   EXPECT_FALSE(UnownedCheckoutFormElementsAndFieldSetsToFormData(
       fieldsets, control_elements, nullptr, frame->document(), extract_mask,
       &form, nullptr));
+}
+
+TEST_F(FormAutofillTest, FormCache_ExtractNewForms) {
+  struct {
+    const char* html;
+    const size_t expected_forms;
+  } test_cases[] = {
+      // An empty form should not be extracted
+      {"<FORM name='TestForm' action='http://buh.com' method='post'>"
+       "</FORM>",
+       0},
+      // A form with less than three fields with no autocomplete type(s) should
+      // not be extracted.
+      {"<FORM name='TestForm' action='http://buh.com' method='post'>"
+       "  <INPUT type='name' id='firstname'/>"
+       "</FORM>",
+       0},
+      // A form with less than three fields with at least one autocomplete type
+      // should be extracted.
+      {"<FORM name='TestForm' action='http://buh.com' method='post'>"
+       "  <INPUT type='name' id='firstname' autocomplete='given-name'/>"
+       "</FORM>",
+       1},
+      // A form with three or more fields should be extracted.
+      {"<FORM name='TestForm' action='http://buh.com' method='post'>"
+       "  <INPUT type='text' id='firstname'/>"
+       "  <INPUT type='text' id='lastname'/>"
+       "  <INPUT type='text' id='email'/>"
+       "  <INPUT type='submit' value='Send'/>"
+       "</FORM>",
+       1},
+  };
+
+  for (auto test_case : test_cases) {
+    LoadHTML(test_case.html);
+
+    WebFrame* web_frame = GetMainFrame();
+    ASSERT_NE(nullptr, web_frame);
+
+    FormCache form_cache(*web_frame);
+    std::vector<FormData> forms = form_cache.ExtractNewForms();
+    EXPECT_EQ(test_case.expected_forms, forms.size());
+  }
 }
 
 }  // namespace form_util

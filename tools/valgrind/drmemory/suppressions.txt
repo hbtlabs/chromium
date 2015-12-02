@@ -740,14 +740,6 @@ name=bug_536803
 *!blink::SecurityOriginTest_Suborigins_Test::TestBody
 *!testing::internal::HandleExceptionsInMethodIfSupported<>
 
-UNADDRESSABLE ACCESS
-name=bug_554520
-*!gl::Program::release
-*!gl::State::reset
-*!gl::State::~State
-*!`anonymous namespace'::ValidationESTest_DrawElementsWithMaxIndexGivesError_Test::TestBody
-*!testing::internal::HandleExceptionsInMethodIfSupported<>
-
 HANDLE LEAK
 name=bug_555058_a
 system call NtCreateUserProcess
@@ -795,3 +787,10 @@ content.dll!content::BrowserThreadImpl::ProcessLauncherThreadRun
 content.dll!content::BrowserThreadImpl::Run
 base.dll!base::Thread::ThreadMain
 base.dll!base::`anonymous namespace'::ThreadFunc
+
+UNADDRESSABLE ACCESS
+name=bug_563817
+base.dll!base::CommandLine::HasSwitch
+base.dll!base::CommandLine::HasSwitch
+mojo_system_impl.dll!mojo::edk::Init
+mojo_system_impl.dll!mojo::embedder::Init

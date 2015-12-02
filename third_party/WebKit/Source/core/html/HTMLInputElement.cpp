@@ -502,11 +502,11 @@ void HTMLInputElement::updateType()
         ASSERT(elementData());
         AttributeCollection attributes = attributesWithoutUpdate();
         if (const Attribute* height = attributes.find(heightAttr))
-            attributeChanged(heightAttr, height->value());
+            HTMLTextFormControlElement::attributeChanged(heightAttr, height->value(), height->value());
         if (const Attribute* width = attributes.find(widthAttr))
-            attributeChanged(widthAttr, width->value());
+            HTMLTextFormControlElement::attributeChanged(widthAttr, width->value(), width->value());
         if (const Attribute* align = attributes.find(alignAttr))
-            attributeChanged(alignAttr, align->value());
+            HTMLTextFormControlElement::attributeChanged(alignAttr, align->value(), align->value());
     }
 
     if (document().focusedElement() == this)
@@ -667,7 +667,7 @@ void HTMLInputElement::collectStyleForPresentationAttribute(const QualifiedName&
     }
 }
 
-void HTMLInputElement::attributeWillChange(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue)
+void HTMLInputElement::attributeChanged(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason reason)
 {
     if (name == formactionAttr && inDocument()) {
         V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
@@ -680,7 +680,7 @@ void HTMLInputElement::attributeWillChange(const QualifiedName& name, const Atom
             activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
         }
     }
-    HTMLTextFormControlElement::attributeWillChange(name, oldValue, newValue);
+    HTMLTextFormControlElement::attributeChanged(name, oldValue, newValue, reason);
 }
 
 void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
@@ -750,12 +750,10 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         m_maxResults = !value.isNull() ? std::min(value.toInt(), maxSavedResults) : -1;
         // FIXME: Detaching just for maxResults change is not ideal.  We should figure out the right
         // time to relayout for this change.
-        if (m_maxResults != oldResults && (m_maxResults <= 0 || oldResults <= 0))
+        if ((m_maxResults < 0) != (oldResults < 0))
             lazyReattachIfAttached();
-        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(resultsAttr));
         UseCounter::count(document(), UseCounter::ResultsAttribute);
     } else if (name == incrementalAttr) {
-        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(incrementalAttr));
         UseCounter::count(document(), UseCounter::IncrementalAttribute);
     } else if (name == minAttr) {
         m_inputTypeView->minOrMaxAttributeChanged();
@@ -1103,6 +1101,10 @@ void HTMLInputElement::setValueInternal(const String& sanitizedValue, TextFieldE
 {
     m_valueIfDirty = sanitizedValue;
     setNeedsValidityCheck();
+    if (m_inputType->isSteppable()) {
+        pseudoStateChanged(CSSSelector::PseudoInRange);
+        pseudoStateChanged(CSSSelector::PseudoOutOfRange);
+    }
     if (document().focusedElement() == this)
         document().frameHost()->chromeClient().didUpdateTextOfFocusedElementByNonUserInput();
 }

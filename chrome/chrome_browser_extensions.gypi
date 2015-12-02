@@ -956,6 +956,7 @@
       # browser, then we can clean up these dependencies.
       'dependencies': [
         'browser/extensions/api/api_registration.gyp:chrome_api_registration',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_extra_resources',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
@@ -1096,13 +1097,6 @@
           'dependencies': [
             '../third_party/iaccessible2/iaccessible2.gyp:iaccessible2',
             '../third_party/isimpledom/isimpledom.gyp:isimpledom',
-          ],
-          'conditions': [
-            ['win_use_allocator_shim==1', {
-              'dependencies': [
-                '<(allocator_target)',
-              ],
-            }],
           ],
         }, {  # 'OS!="win"
           'conditions': [

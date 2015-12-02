@@ -82,8 +82,8 @@ AbstractAudioContext* AbstractAudioContext::create(Document& document, Exception
 // Constructor for rendering to the audio hardware.
 AbstractAudioContext::AbstractAudioContext(Document* document)
     : ActiveDOMObject(document)
-    , m_isCleared(false)
     , m_destinationNode(nullptr)
+    , m_isCleared(false)
     , m_isResolvingResumePromises(false)
     , m_connectionCount(0)
     , m_didInitializeContextGraphMutex(false)
@@ -99,8 +99,8 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
 // Constructor for offline (non-realtime) rendering.
 AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate)
     : ActiveDOMObject(document)
-    , m_isCleared(false)
     , m_destinationNode(nullptr)
+    , m_isCleared(false)
     , m_isResolvingResumePromises(false)
     , m_connectionCount(0)
     , m_didInitializeContextGraphMutex(false)
@@ -108,12 +108,6 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_contextState(Suspended)
 {
     m_didInitializeContextGraphMutex = true;
-    // Create a new destination for offline rendering.
-    m_renderTarget = AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate);
-    if (m_renderTarget.get())
-        m_destinationNode = OfflineAudioDestinationNode::create(this, m_renderTarget.get());
-
-    initialize();
 }
 
 AbstractAudioContext::~AbstractAudioContext()
@@ -204,12 +198,6 @@ void AbstractAudioContext::decodeAudioData(DOMArrayBuffer* audioData, AudioBuffe
         return;
     }
 
-    if (!audioData) {
-        exceptionState.throwDOMException(
-            SyntaxError,
-            "invalid ArrayBuffer for audioData.");
-        return;
-    }
     m_audioDecoder.decodeAsync(audioData, sampleRate(), successCallback, errorCallback);
 }
 
@@ -239,13 +227,6 @@ MediaElementAudioSourceNode* AbstractAudioContext::createMediaElementSource(HTML
         return nullptr;
     }
 
-    if (!mediaElement) {
-        exceptionState.throwDOMException(
-            InvalidStateError,
-            "invalid HTMLMedialElement.");
-        return nullptr;
-    }
-
     // First check if this media element already has a source node.
     if (mediaElement->audioSourceNode()) {
         exceptionState.throwDOMException(
@@ -268,13 +249,6 @@ MediaStreamAudioSourceNode* AbstractAudioContext::createMediaStreamSource(MediaS
 
     if (isContextClosed()) {
         throwExceptionForClosedState(exceptionState);
-        return nullptr;
-    }
-
-    if (!mediaStream) {
-        exceptionState.throwDOMException(
-            InvalidStateError,
-            "invalid MediaStream source");
         return nullptr;
     }
 
@@ -564,20 +538,6 @@ PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DO
         return nullptr;
     }
 
-    if (!real) {
-        exceptionState.throwDOMException(
-            SyntaxError,
-            "invalid real array");
-        return nullptr;
-    }
-
-    if (!imag) {
-        exceptionState.throwDOMException(
-            SyntaxError,
-            "invalid imaginary array");
-        return nullptr;
-    }
-
     if (real->length() != imag->length()) {
         exceptionState.throwDOMException(
             IndexSizeError,
@@ -804,34 +764,8 @@ void AbstractAudioContext::startRendering()
     }
 }
 
-void AbstractAudioContext::fireCompletionEvent()
-{
-    ASSERT(isMainThread());
-    if (!isMainThread())
-        return;
-
-    AudioBuffer* renderedBuffer = m_renderTarget.get();
-
-    // For an offline context, we set the state to closed here so that the oncomplete handler sees
-    // that the context has been closed.
-    setContextState(Closed);
-
-    ASSERT(renderedBuffer);
-    if (!renderedBuffer)
-        return;
-
-    // Avoid firing the event if the document has already gone away.
-    if (executionContext()) {
-        // Call the offline rendering completion event listener and resolve the promise too.
-        dispatchEvent(OfflineAudioCompletionEvent::create(renderedBuffer));
-        m_offlineResolver->resolve(renderedBuffer);
-    }
-}
-
 DEFINE_TRACE(AbstractAudioContext)
 {
-    visitor->trace(m_offlineResolver);
-    visitor->trace(m_renderTarget);
     visitor->trace(m_destinationNode);
     visitor->trace(m_listener);
     // trace() can be called in AbstractAudioContext constructor, and

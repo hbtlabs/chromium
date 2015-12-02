@@ -66,6 +66,10 @@
 #include "third_party/WebKit/public/web/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebURLLoaderOptions.h"
 
+#if defined(OS_WIN)
+#include "base/win/scoped_handle.h"
+#endif
+
 namespace nacl {
 namespace {
 
@@ -121,6 +125,17 @@ class NaClPluginInstance {
  public:
   NaClPluginInstance(PP_Instance instance):
       nexe_load_manager(instance), pexe_size(0) {}
+  ~NaClPluginInstance() {
+    // Make sure that we do not leak a file descriptor if the NaCl loader
+    // process never called ppapi_start() to initialize PPAPI.
+    if (instance_info) {
+#if defined(OS_WIN)
+      base::win::ScopedHandle closer(instance_info->channel_handle.pipe.handle);
+#else
+      base::ScopedFD closer(instance_info->channel_handle.socket.fd);
+#endif
+    }
+  }
 
   NexeLoadManager nexe_load_manager;
   scoped_ptr<JsonManifest> json_manifest;
@@ -1092,10 +1107,15 @@ PP_Bool ManifestGetProgramURL(PP_Instance instance,
     *pp_full_url = ppapi::StringVar::StringToPPVar(full_url);
     *pp_uses_nonsfi_mode = PP_FromBool(uses_nonsfi_mode);
     // Check if we should use Subzero (x86-32 / non-debugging case for now).
+    // TODO(stichnot): When phasing in Subzero for a new target architecture,
+    // add it behind the --enable-pnacl-subzero flag, and add a clause here:
+    //   && base::CommandLine::ForCurrentProcess()->HasSwitch(
+    //         switches::kEnablePNaClSubzero)
+    // Also modify the ValidationCacheOfTranslatorNexes test to match.  When
+    // Subzero is finally fully released for all sandbox architectures, the
+    // --enable-pnacl-subzero flag can be removed.
     if (pnacl_options->opt_level == 0 && !pnacl_options->is_debug &&
-        strcmp(GetSandboxArch(), "x86-32") == 0 &&
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnablePNaClSubzero)) {
+        strcmp(GetSandboxArch(), "x86-32") == 0) {
       pnacl_options->use_subzero = PP_TRUE;
       // Subzero -O2 is closer to LLC -O0, so indicate -O2.
       pnacl_options->opt_level = 2;

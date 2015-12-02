@@ -11,10 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "extensions/browser/value_store/value_store_util.h"
 #include "extensions/common/extension_api.h"
-
-namespace util = value_store_util;
 
 namespace extensions {
 
@@ -55,8 +52,7 @@ void Free(
   used_per_setting->erase(key);
 }
 
-scoped_ptr<ValueStore::Error> QuotaExceededError(Resource resource,
-                                                 scoped_ptr<std::string> key) {
+ValueStore::Status QuotaExceededError(Resource resource) {
   const char* name = NULL;
   // TODO(kalman): These hisograms are both silly and untracked. Fix.
   switch (resource) {
@@ -77,10 +73,8 @@ scoped_ptr<ValueStore::Error> QuotaExceededError(Resource resource,
       break;
   }
   CHECK(name);
-  return make_scoped_ptr(new ValueStore::Error(
-      ValueStore::QUOTA_EXCEEDED,
-      base::StringPrintf("%s quota exceeded", name),
-      key.Pass()));
+  return ValueStore::Status(ValueStore::QUOTA_EXCEEDED,
+                            base::StringPrintf("%s quota exceeded", name));
 }
 
 }  // namespace
@@ -136,22 +130,17 @@ ValueStore::WriteResult SettingsStorageQuotaEnforcer::Set(
   Allocate(key, value, &new_used_total, &new_used_per_setting);
 
   if (!(options & IGNORE_QUOTA)) {
-    if (new_used_total > limits_.quota_bytes) {
-      return MakeWriteResult(
-          QuotaExceededError(QUOTA_BYTES, util::NewKey(key)));
-    }
-    if (new_used_per_setting[key] > limits_.quota_bytes_per_item) {
-      return MakeWriteResult(
-          QuotaExceededError(QUOTA_BYTES_PER_ITEM, util::NewKey(key)));
-    }
+    if (new_used_total > limits_.quota_bytes)
+      return MakeWriteResult(QuotaExceededError(QUOTA_BYTES));
+    if (new_used_per_setting[key] > limits_.quota_bytes_per_item)
+      return MakeWriteResult(QuotaExceededError(QUOTA_BYTES_PER_ITEM));
     if (new_used_per_setting.size() > limits_.max_items)
-      return MakeWriteResult(QuotaExceededError(MAX_ITEMS, util::NewKey(key)));
+      return MakeWriteResult(QuotaExceededError(MAX_ITEMS));
   }
 
   WriteResult result = delegate_->Set(options, key, value);
-  if (result->HasError()) {
+  if (!result->status().ok())
     return result.Pass();
-  }
 
   used_total_ = new_used_total;
   used_per_setting_.swap(new_used_per_setting);
@@ -168,22 +157,20 @@ ValueStore::WriteResult SettingsStorageQuotaEnforcer::Set(
 
     if (!(options & IGNORE_QUOTA) &&
         new_used_per_setting[it.key()] > limits_.quota_bytes_per_item) {
-      return MakeWriteResult(
-          QuotaExceededError(QUOTA_BYTES_PER_ITEM, util::NewKey(it.key())));
+      return MakeWriteResult(QuotaExceededError(QUOTA_BYTES_PER_ITEM));
     }
   }
 
   if (!(options & IGNORE_QUOTA)) {
     if (new_used_total > limits_.quota_bytes)
-      return MakeWriteResult(QuotaExceededError(QUOTA_BYTES, util::NoKey()));
+      return MakeWriteResult(QuotaExceededError(QUOTA_BYTES));
     if (new_used_per_setting.size() > limits_.max_items)
-      return MakeWriteResult(QuotaExceededError(MAX_ITEMS, util::NoKey()));
+      return MakeWriteResult(QuotaExceededError(MAX_ITEMS));
   }
 
   WriteResult result = delegate_->Set(options, values);
-  if (result->HasError()) {
+  if (!result->status().ok())
     return result.Pass();
-  }
 
   used_total_ = new_used_total;
   used_per_setting_ = new_used_per_setting;
@@ -193,9 +180,8 @@ ValueStore::WriteResult SettingsStorageQuotaEnforcer::Set(
 ValueStore::WriteResult SettingsStorageQuotaEnforcer::Remove(
     const std::string& key) {
   WriteResult result = delegate_->Remove(key);
-  if (result->HasError()) {
+  if (!result->status().ok())
     return result.Pass();
-  }
   Free(&used_total_, &used_per_setting_, key);
   return result.Pass();
 }
@@ -203,9 +189,8 @@ ValueStore::WriteResult SettingsStorageQuotaEnforcer::Remove(
 ValueStore::WriteResult SettingsStorageQuotaEnforcer::Remove(
     const std::vector<std::string>& keys) {
   WriteResult result = delegate_->Remove(keys);
-  if (result->HasError()) {
+  if (!result->status().ok())
     return result.Pass();
-  }
 
   for (std::vector<std::string>::const_iterator it = keys.begin();
       it != keys.end(); ++it) {
@@ -216,9 +201,8 @@ ValueStore::WriteResult SettingsStorageQuotaEnforcer::Remove(
 
 ValueStore::WriteResult SettingsStorageQuotaEnforcer::Clear() {
   WriteResult result = delegate_->Clear();
-  if (result->HasError()) {
+  if (!result->status().ok())
     return result.Pass();
-  }
 
   used_per_setting_.clear();
   used_total_ = 0;
@@ -251,16 +235,14 @@ bool SettingsStorageQuotaEnforcer::RestoreKey(const std::string& key) {
 
 void SettingsStorageQuotaEnforcer::CalculateUsage() {
   ReadResult maybe_settings = delegate_->Get();
-  if (maybe_settings->HasError()) {
+  if (!maybe_settings->status().ok()) {
     // Try to restore the database if it's corrupt.
-    if (maybe_settings->error().code == ValueStore::CORRUPTION &&
-        delegate_->Restore()) {
+    if (maybe_settings->status().IsCorrupted() && delegate_->Restore())
       maybe_settings = delegate_->Get();
-    }
 
-    if (maybe_settings->HasError()) {
+    if (!maybe_settings->status().ok()) {
       LOG(WARNING) << "Failed to get settings for quota:"
-                   << maybe_settings->error().message;
+                   << maybe_settings->status().message;
       return;
     }
   }

@@ -16,7 +16,6 @@ namespace {
 // App ID of default pinned apps.
 const char* kDefaultPinnedApps[] = {
   extension_misc::kGmailAppId,
-  extension_misc::kGoogleSearchAppId,
   extension_misc::kGoogleDocAppId,
   extension_misc::kYoutubeAppId,
 };
@@ -34,6 +33,7 @@ base::ListValue* CreateDefaultPinnedAppsList() {
 namespace ash {
 
 const char kPinnedAppsPrefAppIDPath[] = "id";
+const char kPinnedAppsPrefPinnedByPolicy[] = "pinned_by_policy";
 
 const char kShelfAutoHideBehaviorAlways[] = "Always";
 const char kShelfAutoHideBehaviorNever[] = "Never";
@@ -54,6 +54,7 @@ void RegisterChromeLauncherUserPrefs(
   registry->RegisterListPref(prefs::kPinnedLauncherApps,
                              CreateDefaultPinnedAppsList(),
                              user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterListPref(prefs::kPolicyPinnedLauncherApps);
   registry->RegisterStringPref(prefs::kShelfAutoHideBehavior,
                                kShelfAutoHideBehaviorNever,
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);

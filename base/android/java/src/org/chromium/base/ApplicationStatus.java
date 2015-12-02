@@ -309,7 +309,6 @@ public class ApplicationStatus {
     /**
      * @return The state of the application (see {@link ApplicationState}).
      */
-    @CalledByNative
     public static int getStateForApplication() {
         synchronized (sCachedApplicationStateLock) {
             if (sCachedApplicationState == null) {
@@ -391,6 +390,23 @@ public class ApplicationStatus {
      */
     public static void unregisterApplicationStateListener(ApplicationStateListener listener) {
         sApplicationStateListeners.removeObserver(listener);
+    }
+
+    /**
+     * Robolectric JUnit tests create a new application between each test, while all the context
+     * in static classes isn't reset. This function allows to reset the application status to avoid
+     * being in a dirty state.
+     */
+    public static void destroyForJUnitTests() {
+        sApplicationStateListeners.clear();
+        sGeneralActivityStateListeners.clear();
+        sActivityInfo.clear();
+        synchronized (sCachedApplicationStateLock) {
+            sCachedApplicationState = null;
+        }
+        sActivity = null;
+        sApplication = null;
+        sNativeApplicationStateListener = null;
     }
 
     /**

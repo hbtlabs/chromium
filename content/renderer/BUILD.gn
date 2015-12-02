@@ -19,7 +19,9 @@ source_set("renderer") {
   configs += [
     "//content:content_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
+    "//content/public/common:mojo_shell_client",
   ]
+  defines = []
 
   deps = [
     # TODO(GYP) bug 376846 remove this. This should be inherited from //net but
@@ -67,11 +69,21 @@ source_set("renderer") {
     "//ui/base",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
+    "//ui/events/blink",
     "//ui/gl",
     "//ui/native_theme",
     "//ui/surface",
     "//v8",
   ]
+
+  if (use_aura) {
+    sources += [
+      "render_widget_mus_connection.cc",
+      "render_widget_mus_connection.h",
+      "render_widget_window_tree_client_factory.cc",
+      "render_widget_window_tree_client_factory.h",
+    ]
+  }
 
   if (is_mac) {
     sources -= [
@@ -196,11 +208,11 @@ source_set("renderer") {
 
   if (!enable_pepper_cdms) {
     sources -= [
-      "media/crypto/pepper_cdm_wrapper.h",
-      "media/crypto/pepper_cdm_wrapper_impl.cc",
-      "media/crypto/pepper_cdm_wrapper_impl.h",
-      "media/crypto/ppapi_decryptor.cc",
-      "media/crypto/ppapi_decryptor.h",
+      "media/cdm/pepper_cdm_wrapper.h",
+      "media/cdm/pepper_cdm_wrapper_impl.cc",
+      "media/cdm/pepper_cdm_wrapper_impl.h",
+      "media/cdm/ppapi_decryptor.cc",
+      "media/cdm/ppapi_decryptor.h",
     ]
   }
 
@@ -210,10 +222,10 @@ source_set("renderer") {
 
   if (enable_browser_cdms) {
     sources += [
-      "media/crypto/proxy_media_keys.cc",
-      "media/crypto/proxy_media_keys.h",
-      "media/crypto/renderer_cdm_manager.cc",
-      "media/crypto/renderer_cdm_manager.h",
+      "media/cdm/proxy_media_keys.cc",
+      "media/cdm/proxy_media_keys.h",
+      "media/cdm/renderer_cdm_manager.cc",
+      "media/cdm/renderer_cdm_manager.h",
     ]
   }
 
@@ -228,5 +240,9 @@ source_set("renderer") {
       "vr/vr_type_converters.cc",
       "vr/vr_type_converters.h",
     ]
+  }
+
+  if (use_seccomp_bpf) {
+    defines += [ "USE_SECCOMP_BPF" ]
   }
 }

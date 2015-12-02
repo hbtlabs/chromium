@@ -4,13 +4,15 @@
 
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -19,7 +21,6 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 ManagePasswordsTest::ManagePasswordsTest() {
 }
@@ -46,8 +47,9 @@ void ManagePasswordsTest::ExecuteManagePasswordsCommand() {
 void ManagePasswordsTest::SetupManagingPasswords() {
   base::string16 kTestUsername = base::ASCIIToUTF16("test_username");
   autofill::PasswordFormMap map;
-  map.insert(kTestUsername,
-             make_scoped_ptr(new autofill::PasswordForm(*test_form())));
+  map.insert(std::make_pair(
+      kTestUsername,
+      make_scoped_ptr(new autofill::PasswordForm(*test_form()))));
   GetController()->OnPasswordAutofilled(map, map.begin()->second->origin);
 }
 
@@ -82,8 +84,9 @@ void ManagePasswordsTest::SetupChooseCredentials(
     const GURL& origin) {
   base::string16 kTestUsername = base::ASCIIToUTF16("test_username");
   autofill::PasswordFormMap map;
-  map.insert(kTestUsername,
-             make_scoped_ptr(new autofill::PasswordForm(*test_form())));
+  map.insert(std::make_pair(
+      kTestUsername,
+      make_scoped_ptr(new autofill::PasswordForm(*test_form()))));
   GetController()->OnChooseCredentials(
       local_credentials.Pass(), federated_credentials.Pass(), origin,
       base::Bind(&ManagePasswordsTest::OnChooseCredential, this));
@@ -101,7 +104,7 @@ scoped_ptr<base::HistogramSamples> ManagePasswordsTest::GetSamples(
   return histogram_tester_.GetHistogramSamplesSinceCreation(histogram).Pass();
 }
 
-ManagePasswordsUIController* ManagePasswordsTest::GetController() {
-  return ManagePasswordsUIController::FromWebContents(
+PasswordsClientUIDelegate* ManagePasswordsTest::GetController() {
+  return PasswordsClientUIDelegateFromWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
 }

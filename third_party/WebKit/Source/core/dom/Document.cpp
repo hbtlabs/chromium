@@ -442,7 +442,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_timeline(AnimationTimeline::create(this))
     , m_templateDocumentHost(nullptr)
     , m_didAssociateFormControlsTimer(this, &Document::didAssociateFormControlsTimerFired)
-    , m_timers(Platform::current()->currentThread()->scheduler()->timerTaskRunner()->adoptClone())
+    , m_timers(timerTaskRunner()->adoptClone())
     , m_hasViewportUnits(false)
     , m_styleRecalcElementCounter(0)
     , m_parserSyncPolicy(AllowAsynchronousParsing)
@@ -453,7 +453,6 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
         provideContextFeaturesToDocumentFrom(*this, *m_frame->page());
 
         m_fetcher = m_frame->loader().documentLoader()->fetcher();
-        m_timers.setTimerTaskRunner(m_frame->frameScheduler()->timerTaskRunner()->adoptClone());
         FrameFetchContext::provideDocumentToContext(m_fetcher->context(), this);
     } else if (m_importsController) {
         m_fetcher = FrameFetchContext::createContextAndFetcher(nullptr);
@@ -1377,9 +1376,9 @@ bool Document::hidden() const
 
 void Document::didChangeVisibilityState()
 {
-    dispatchEvent(Event::create(EventTypeNames::visibilitychange));
+    dispatchEvent(Event::createBubble(EventTypeNames::visibilitychange));
     // Also send out the deprecated version until it can be removed.
-    dispatchEvent(Event::create(EventTypeNames::webkitvisibilitychange));
+    dispatchEvent(Event::createBubble(EventTypeNames::webkitvisibilitychange));
 
     PageVisibilityState state = pageVisibilityState();
     for (DocumentVisibilityObserver* observer : m_visibilityObservers)
@@ -1951,24 +1950,6 @@ void Document::layoutUpdated()
         if (!m_documentTiming.firstLayout())
             m_documentTiming.markFirstLayout();
     }
-}
-
-void Document::markFirstPaint()
-{
-    if (m_documentTiming.firstPaint() == 0)
-        m_documentTiming.markFirstPaint();
-}
-
-void Document::markFirstTextPaint()
-{
-    if (m_documentTiming.firstTextPaint() == 0)
-        m_documentTiming.markFirstTextPaint();
-}
-
-void Document::markFirstImagePaint()
-{
-    if (m_documentTiming.firstImagePaint() == 0)
-        m_documentTiming.markFirstImagePaint();
 }
 
 void Document::setNeedsFocusedElementCheck()
@@ -2895,14 +2876,6 @@ KURL Document::virtualCompleteURL(const String& url) const
     return completeURL(url);
 }
 
-double Document::timerAlignmentInterval() const
-{
-    Page* p = page();
-    if (!p)
-        return DOMTimer::visiblePageAlignmentInterval();
-    return p->timerAlignmentInterval();
-}
-
 DOMTimerCoordinator* Document::timers()
 {
     return &m_timers;
@@ -3043,8 +3016,7 @@ void Document::didRemoveAllPendingStylesheet()
 
 void Document::didLoadAllScriptBlockingResources()
 {
-    Platform::current()->currentThread()->scheduler()->loadingTaskRunner()->postTask(
-        BLINK_FROM_HERE, m_executeScriptsWaitingForResourcesTask->cancelAndCreate());
+    loadingTaskRunner()->postTask(BLINK_FROM_HERE, m_executeScriptsWaitingForResourcesTask->cancelAndCreate());
 
     if (frame())
         frame()->loader().client()->didRemoveAllPendingStylesheet();
@@ -4922,8 +4894,7 @@ void Document::didUpdateSecurityOrigin()
 {
     if (!m_frame)
         return;
-    m_frame->updateFrameSecurityOrigin();
-    m_frame->script().updateSecurityOrigin(securityOrigin());
+    m_frame->updateSecurityOrigin(securityOrigin());
 }
 
 bool Document::isContextThread() const
@@ -5768,12 +5739,22 @@ WebTaskRunner* Document::loadingTaskRunner() const
 {
     if (frame())
         return frame()->frameScheduler()->loadingTaskRunner();
+    if (m_importsController)
+        return m_importsController->master()->loadingTaskRunner();
+    if (m_contextDocument)
+        return m_contextDocument->loadingTaskRunner();
     return Platform::current()->currentThread()->scheduler()->loadingTaskRunner();
 }
 
 WebTaskRunner* Document::timerTaskRunner() const
 {
-    return m_timers.timerTaskRunner();
+    if (frame())
+        return m_frame->frameScheduler()->timerTaskRunner();
+    if (m_importsController)
+        return m_importsController->master()->timerTaskRunner();
+    if (m_contextDocument)
+        return m_contextDocument->timerTaskRunner();
+    return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
 }
 
 DEFINE_TRACE(Document)

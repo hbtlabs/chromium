@@ -180,8 +180,8 @@ source_set("browser") {
     "//third_party/fips181",
     "//third_party/icu",
     "//third_party/libaddressinput:util",
-    "//third_party/libjingle",
     "//third_party/libphonenumber",
+    "//third_party/libxml",
     "//third_party/re2",
     "//ui/base",
     "//ui/gfx",
@@ -217,8 +217,11 @@ source_set("test_support") {
     "test_personal_data_manager.h",
   ]
 
-  deps = [
+  public_deps = [
     ":browser",
+  ]
+
+  deps = [
     "//base",
     "//base:prefs",
     "//base:prefs_test_support",
@@ -309,7 +312,6 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libaddressinput:util",
-    "//third_party/libjingle",
     "//third_party/libphonenumber",
     "//ui/base",
     "//url",

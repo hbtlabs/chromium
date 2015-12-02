@@ -49,7 +49,7 @@ WebInspector.ObjectPropertiesSection = function(object, title, emptyPlaceholder,
     this.element._section = this;
     this.registerRequiredCSS("components/objectValue.css");
     this.registerRequiredCSS("components/objectPropertiesSection.css");
-    this.rootElement().childrenListElement.classList.add("source-code", "object-properties-section")
+    this.rootElement().childrenListElement.classList.add("source-code", "object-properties-section");
 }
 
 /** @const */
@@ -63,8 +63,7 @@ WebInspector.ObjectPropertiesSection._arrayLoadThreshold = 100;
 WebInspector.ObjectPropertiesSection.defaultObjectPresentation = function(object, skipProto)
 {
     var componentRoot = createElementWithClass("span", "source-code");
-    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(componentRoot);
-    shadowRoot.appendChild(WebInspector.Widget.createStyleElement("components/objectValue.css"));
+    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(componentRoot, "components/objectValue.css");
     shadowRoot.appendChild(WebInspector.ObjectPropertiesSection.createValueElement(object, false));
     if (!object.hasChildren)
         return componentRoot;
@@ -157,6 +156,7 @@ WebInspector.ObjectPropertiesSection.RootElement = function(object, emptyPlaceho
     this.setExpandable(true);
     this.selectable = false;
     this.toggleOnClick = true;
+    this.listItemElement.classList.add("object-properties-section-root-element");
 }
 
 WebInspector.ObjectPropertiesSection.RootElement.prototype = {

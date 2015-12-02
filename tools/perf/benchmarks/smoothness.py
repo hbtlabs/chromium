@@ -125,6 +125,7 @@ class SmoothnessKeyMobileSites(_Smoothness):
     return 'smoothness.key_mobile_sites_smooth'
 
 
+@benchmark.Disabled('mac')  # crbug.com/563615
 class SmoothnessToughAnimationCases(_Smoothness):
   test = smoothness.SmoothnessWithRestart
   page_set = page_sets.ToughAnimationCasesPageSet
@@ -272,6 +273,10 @@ class SmoothnessToughPinchZoomCases(_Smoothness):
   def Name(cls):
     return 'smoothness.tough_pinch_zoom_cases'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/564008
+
 
 @benchmark.Enabled('chromeos', 'mac')
 class SmoothnessDesktopToughPinchZoomCases(_Smoothness):
@@ -300,6 +305,10 @@ class SmoothnessGpuRasterizationToughPinchZoomCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.gpu_rasterization.tough_pinch_zoom_cases'
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/564008
 
 
 @benchmark.Enabled('chromeos', 'mac')
@@ -406,6 +415,10 @@ class SmoothnessImageDecodingCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.image_decoding_cases'
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/563974
 
 
 @benchmark.Disabled('android')  # http://crbug.com/513699

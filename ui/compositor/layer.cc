@@ -750,6 +750,10 @@ void Layer::RequestCopyOfOutput(scoped_ptr<cc::CopyOutputRequest> request) {
   cc_layer_->RequestCopyOfOutput(request.Pass());
 }
 
+gfx::Rect Layer::PaintableRegion() {
+  return gfx::Rect(size());
+}
+
 scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
     const gfx::Rect& clip,
     ContentLayerClient::PaintingControlSetting painting_control) {
@@ -812,8 +816,8 @@ class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {
   std::string name_;
 };
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
-Layer::TakeDebugInfo() {
+scoped_refptr<base::trace_event::ConvertableToTraceFormat> Layer::TakeDebugInfo(
+    cc::Layer* layer) {
   return new LayerDebugInfo(name_);
 }
 

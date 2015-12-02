@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ssl/security_state_model.h"
 #include "chrome/browser/ui/android/window_android_helper.h"
 #include "content/public/browser/android/content_view_core.h"
@@ -27,9 +28,9 @@ BluetoothChooserAndroid::BluetoothChooserAndroid(
       content::ContentViewCore::FromWebContents(
           web_contents)->GetWindowAndroid()->GetJavaObject();
 
-  SecurityStateModel* security_model =
-      SecurityStateModel::FromWebContents(web_contents);
-  DCHECK(security_model);
+  ChromeSecurityStateModelClient* security_model_client =
+      ChromeSecurityStateModelClient::FromWebContents(web_contents);
+  DCHECK(security_model_client);
 
   // Create (and show) the BluetoothChooser dialog.
   JNIEnv* env = AttachCurrentThread();
@@ -37,7 +38,7 @@ BluetoothChooserAndroid::BluetoothChooserAndroid(
       ConvertUTF8ToJavaString(env, origin.spec());
   java_dialog_.Reset(Java_BluetoothChooserDialog_create(
       env, window_android.obj(), origin_string.obj(),
-      security_model->GetSecurityInfo().security_level,
+      security_model_client->GetSecurityInfo().security_level,
       reinterpret_cast<intptr_t>(this)));
 }
 
@@ -98,10 +99,11 @@ void BluetoothChooserAndroid::RemoveDevice(const std::string& device_id) {
                                            java_device_id.obj());
 }
 
-void BluetoothChooserAndroid::OnDialogFinished(JNIEnv* env,
-                                               jobject obj,
-                                               jint event_type,
-                                               jstring device_id) {
+void BluetoothChooserAndroid::OnDialogFinished(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint event_type,
+    const JavaParamRef<jstring>& device_id) {
   // Values are defined in BluetoothChooserDialog as DIALOG_FINISHED constants.
   switch (event_type) {
     case 0:
@@ -119,27 +121,32 @@ void BluetoothChooserAndroid::OnDialogFinished(JNIEnv* env,
   NOTREACHED();
 }
 
-void BluetoothChooserAndroid::RestartSearch(JNIEnv* env, jobject obj) {
+void BluetoothChooserAndroid::RestartSearch(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj) {
   event_handler_.Run(Event::RESCAN, "");
 }
 
-void BluetoothChooserAndroid::ShowBluetoothOverviewLink(JNIEnv* env,
-                                                        jobject obj) {
+void BluetoothChooserAndroid::ShowBluetoothOverviewLink(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   event_handler_.Run(Event::SHOW_OVERVIEW_HELP, "");
 }
 
-void BluetoothChooserAndroid::ShowBluetoothPairingLink(JNIEnv* env,
-                                                       jobject obj) {
+void BluetoothChooserAndroid::ShowBluetoothPairingLink(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   event_handler_.Run(Event::SHOW_PAIRING_HELP, "");
 }
 
-void BluetoothChooserAndroid::ShowBluetoothAdapterOffLink(JNIEnv* env,
-                                                          jobject obj) {
+void BluetoothChooserAndroid::ShowBluetoothAdapterOffLink(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   event_handler_.Run(Event::SHOW_ADAPTER_OFF_HELP, "");
 }
 
-void BluetoothChooserAndroid::ShowNeedLocationPermissionLink(JNIEnv* env,
-                                                             jobject obj) {
+void BluetoothChooserAndroid::ShowNeedLocationPermissionLink(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   event_handler_.Run(Event::SHOW_NEED_LOCATION_HELP, "");
 }
 

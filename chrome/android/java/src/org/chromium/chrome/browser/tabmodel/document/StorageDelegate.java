@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tabmodel.document;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import android.os.StrictMode;
 import android.util.SparseArray;
 
 import com.google.protobuf.nano.MessageNano;
@@ -32,7 +33,7 @@ import java.util.List;
  * Contains functions for interacting with the file system.
  */
 public class StorageDelegate extends TabPersister {
-    private static final String TAG = "cr.StorageDelegate";
+    private static final String TAG = "StorageDelegate";
 
     /** Filename to use for the DocumentTabModel that stores regular tabs. */
     private static final String REGULAR_FILE_NAME = "chrome_document_activity.store";
@@ -106,8 +107,14 @@ public class StorageDelegate extends TabPersister {
     /** @return The directory that stores the TabState files. */
     @Override
     public File getStateDirectory() {
-        return ApplicationStatus.getApplicationContext().getDir(
-                STATE_DIRECTORY, Context.MODE_PRIVATE);
+        // Temporarily allowing disk access while fixing. TODO: http://crbug.com/543201
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            return ApplicationStatus.getApplicationContext().getDir(
+                    STATE_DIRECTORY, Context.MODE_PRIVATE);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     /**

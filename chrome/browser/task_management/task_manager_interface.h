@@ -66,8 +66,9 @@ class TaskManagerInterface {
   // refresh cycle. A value of -1 means no valid value is currently available.
   virtual int GetIdleWakeupsPerSecond(TaskId task_id) const = 0;
 
-  // Returns the NaCl GDB debug stub port. A value of -1 means no valid value is
-  // currently available.
+  // Returns the NaCl GDB debug stub port. A value of
+  // |nacl::kGdbDebugStubPortUnknown| means no valid value is currently
+  // available. A value of -2 means NaCl is not enabled for this build.
   virtual int GetNaClDebugStubPort(TaskId task_id) const = 0;
 
   // On Windows, gets the current and peak number of GDI and USER handles in
@@ -79,8 +80,16 @@ class TaskManagerInterface {
                               int64* current,
                               int64* peak) const = 0;
 
+  // Returns whether the task with |task_id| is running on a backgrounded
+  // process.
+  virtual bool IsTaskOnBackgroundedProcess(TaskId task_id) const = 0;
+
   // Returns the title of the task with |task_id|.
   virtual const base::string16& GetTitle(TaskId task_id) const = 0;
+
+  // Returns the canonicalized name of the task with |task_id| that can be used
+  // to represent this task in a Rappor sample via RapporService.
+  virtual const std::string& GetTaskNameForRappor(TaskId task_id) const = 0;
 
   // Returns the name of the profile associated with the browser context of the
   // render view host that the task with |task_id| represents (if that task
@@ -103,6 +112,13 @@ class TaskManagerInterface {
   // currently available or that task has never been notified of any network
   // usage.
   virtual int64 GetNetworkUsage(TaskId task_id) const = 0;
+
+  // Returns the total network usage (in bytes per second) during the current
+  // refresh cycle for the process on which the task with |task_id| is running.
+  // This is the sum of all the network usage of the individual tasks (that
+  // can be gotten by the above GetNetworkUsage()). A value of -1 means network
+  // usage calculation refresh is currently not available.
+  virtual int64 GetProcessTotalNetworkUsage(TaskId task_id) const = 0;
 
   // Returns the Sqlite used memory (in bytes) for the task with |task_id|.
   // A value of -1 means no valid value is currently available.

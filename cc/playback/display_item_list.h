@@ -10,7 +10,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/cc_export.h"
-#include "cc/base/list_container.h"
+#include "cc/base/contiguous_container.h"
 #include "cc/playback/discardable_image_map.h"
 #include "cc/playback/display_item.h"
 #include "cc/playback/display_item_list_settings.h"
@@ -61,12 +61,13 @@ class CC_EXPORT DisplayItemList
   void RasterIntoCanvas(const DisplayItem& display_item);
 
   template <typename DisplayItemType>
-  DisplayItemType* CreateAndAppendItem() {
+  DisplayItemType* CreateAndAppendItem(const gfx::Rect& visual_rect) {
 #if DCHECK_IS_ON()
     needs_process_ = true;
 #endif
+    visual_rects_.push_back(visual_rect);
     ProcessAppendedItemsOnTheFly();
-    return items_.AllocateAndConstruct<DisplayItemType>();
+    return &items_.AllocateAndConstruct<DisplayItemType>();
   }
 
   // Removes the last item. This cannot be called on lists with cached pictures
@@ -95,6 +96,8 @@ class CC_EXPORT DisplayItemList
                                   float raster_scale,
                                   std::vector<DrawImage>* images);
 
+  gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
+
  private:
   DisplayItemList(gfx::Rect layer_rect,
                   const DisplayItemListSettings& display_list_settings,
@@ -112,7 +115,13 @@ class CC_EXPORT DisplayItemList
   bool ProcessAppendedItemsCalled() const { return true; }
 #endif
 
-  ListContainer<DisplayItem> items_;
+  ContiguousContainer<DisplayItem> items_;
+  // The visual rects associated with each of the display items in the
+  // display item list. There is one rect per display item, and the
+  // position in |visual_rects_| matches the position of the item in
+  // |items_| . These rects are intentionally kept separate
+  // because they are not needed while walking the |items_| for raster.
+  std::vector<gfx::Rect> visual_rects_;
   skia::RefPtr<SkPicture> picture_;
 
   scoped_ptr<SkPictureRecorder> recorder_;

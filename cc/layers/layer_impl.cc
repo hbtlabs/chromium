@@ -22,6 +22,7 @@
 #include "cc/output/copy_output_request.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/render_pass.h"
+#include "cc/trees/draw_property_utils.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/layer_tree_settings.h"
@@ -70,6 +71,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       transform_is_invertible_(true),
       is_container_for_fixed_position_layers_(false),
       is_affected_by_page_scale_(true),
+      was_ever_ready_since_last_transform_animation_(true),
       background_color_(0),
       opacity_(1.0),
       blend_mode_(SkXfermode::kSrcOver_Mode),
@@ -305,7 +307,7 @@ void LayerImpl::TakeCopyRequestsAndTransformToTarget(
     gfx::Rect request_in_layer_space = request->area();
     request_in_layer_space.Intersect(gfx::Rect(bounds()));
     request->set_area(MathUtil::MapEnclosingClippedRect(
-        draw_properties_.target_space_transform, request_in_layer_space));
+        DrawTransform(), request_in_layer_space));
   }
 
   layer_tree_impl()->RemoveLayerWithCopyOutputRequest(this);
@@ -700,7 +702,7 @@ base::DictionaryValue* LayerImpl::LayerTreeAsJson() const {
   list->AppendDouble(position_.y());
   result->Set("Position", list);
 
-  const gfx::Transform& gfx_transform = draw_properties_.target_space_transform;
+  const gfx::Transform& gfx_transform = DrawTransform();
   double transform[16];
   gfx_transform.matrix().asColMajord(transform);
   list = new base::ListValue;
@@ -933,6 +935,7 @@ void LayerImpl::OnOpacityAnimated(float opacity) {
 void LayerImpl::OnTransformAnimated(const gfx::Transform& transform) {
   SetTransform(transform);
   UpdatePropertyTreeTransform();
+  was_ever_ready_since_last_transform_animation_ = false;
 }
 
 void LayerImpl::OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset) {
@@ -951,6 +954,7 @@ void LayerImpl::OnAnimationWaitingForDeletion() {}
 
 void LayerImpl::OnTransformIsPotentiallyAnimatingChanged(bool is_animating) {
   UpdatePropertyTreeTransformIsAnimated(is_animating);
+  was_ever_ready_since_last_transform_animation_ = false;
 }
 
 bool LayerImpl::IsActive() const {
@@ -1770,18 +1774,34 @@ void LayerImpl::SetHasRenderSurface(bool should_have_render_surface) {
   render_surface_.reset();
 }
 
+gfx::Transform LayerImpl::DrawTransform() const {
+  // Only drawn layers have up-to-date draw properties when property trees are
+  // enabled.
+  if (layer_tree_impl()->settings().use_property_trees &&
+      !IsDrawnRenderSurfaceLayerListMember()) {
+    if (layer_tree_impl()->property_trees()->non_root_surfaces_enabled) {
+      return DrawTransformFromPropertyTrees(
+          this, layer_tree_impl()->property_trees()->transform_tree);
+    } else {
+      return ScreenSpaceTransformFromPropertyTrees(
+          this, layer_tree_impl()->property_trees()->transform_tree);
+    }
+  }
+
+  return draw_properties().target_space_transform;
+}
+
 Region LayerImpl::GetInvalidationRegion() {
   return Region(update_rect_);
 }
 
 gfx::Rect LayerImpl::GetEnclosingRectInTargetSpace() const {
-  return MathUtil::MapEnclosingClippedRect(
-      draw_properties_.target_space_transform, gfx::Rect(bounds()));
+  return MathUtil::MapEnclosingClippedRect(DrawTransform(),
+                                           gfx::Rect(bounds()));
 }
 
 gfx::Rect LayerImpl::GetScaledEnclosingRectInTargetSpace(float scale) const {
-  gfx::Transform scaled_draw_transform =
-      draw_properties_.target_space_transform;
+  gfx::Transform scaled_draw_transform = DrawTransform();
   scaled_draw_transform.Scale(SK_MScalar1 / scale, SK_MScalar1 / scale);
   gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(bounds(), scale);
   return MathUtil::MapEnclosingClippedRect(scaled_draw_transform,
@@ -1801,10 +1821,8 @@ float LayerImpl::GetIdealContentsScale() const {
     return default_scale;
   }
 
-  // TODO(enne): the transform needs to come from property trees instead of
-  // draw properties.
   gfx::Vector2dF transform_scales = MathUtil::ComputeTransform2dScaleComponents(
-      draw_properties().target_space_transform, default_scale);
+      DrawTransform(), default_scale);
   return std::max(transform_scales.x(), transform_scales.y());
 }
 

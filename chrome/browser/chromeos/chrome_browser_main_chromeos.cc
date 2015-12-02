@@ -65,6 +65,7 @@
 #include "chrome/browser/chromeos/power/power_prefs.h"
 #include "chrome/browser/chromeos/power/renderer_freezer.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/resource_reporter/resource_reporter.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/status/data_promo_notification.h"
@@ -144,9 +145,7 @@
 #include "chrome/browser/chromeos/events/xinput_hierarchy_changed_event_listener.h"
 #endif
 
-#if defined(ENABLE_ARC)
 #include "components/arc/arc_bridge_service.h"
-#endif
 
 namespace chromeos {
 
@@ -390,14 +389,14 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   wake_on_wifi_manager_.reset(new WakeOnWifiManager());
 
-#if defined(ENABLE_ARC)
-  arc_bridge_service_.reset(new arc::ArcBridgeService(
+  arc_bridge_service_ = arc::ArcBridgeService::Create(
       content::BrowserThread::GetMessageLoopProxyForThread(
           content::BrowserThread::IO),
       content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::FILE)));
+          content::BrowserThread::FILE));
   arc_bridge_service_->DetectAvailability();
-#endif
+
+  chromeos::ResourceReporter::GetInstance()->StartMonitoring();
 
   ChromeBrowserMainPartsLinux::PreMainMessageLoopRun();
 }
@@ -710,11 +709,11 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
 
 // Shut down services before the browser process, etc are destroyed.
 void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
+  chromeos::ResourceReporter::GetInstance()->StopMonitoring();
+
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
-#if defined(ENABLE_ARC)
   arc_bridge_service_->Shutdown();
-#endif
 
   // Destroy the application name notifier for Kiosk mode.
   KioskModeIdleAppNameNotification::Shutdown();

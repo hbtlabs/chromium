@@ -236,6 +236,18 @@
         {
             "type": "setting",
             "category": "Appearance",
+            "title": "Theme:",
+            "settingName": "uiTheme",
+            "settingType": "enum",
+            "defaultValue": "default",
+            "options": [
+                ["Default", "default"],
+                ["Dark", "dark"]
+            ]
+        },
+        {
+            "type": "setting",
+            "category": "Appearance",
             "title": "Panel layout:",
             "settingName": "sidebarPosition",
             "settingType": "enum",
@@ -326,6 +338,7 @@
         "Tests.js"
     ],
     "resources": [
+        "errorWarningCounter.css",
         "remoteDebuggingTerminatedScreen.css",
         "renderingOptions.css",
         "targetCrashedScreen.css"

@@ -245,6 +245,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   new_content_rendering_timeout_.reset(new TimeoutMonitor(
       base::Bind(&RenderWidgetHostImpl::ClearDisplayedGraphics,
                  weak_factory_.GetWeakPtr())));
+
+  delegate_->RenderWidgetCreated(this);
 }
 
 RenderWidgetHostImpl::~RenderWidgetHostImpl() {
@@ -911,11 +913,6 @@ void RenderWidgetHostImpl::WaitForSurface() {
       break;
     }
   }
-
-  UMA_HISTOGRAM_CUSTOM_TIMES("OSX.RendererHost.SurfaceWaitTime",
-                             TimeTicks::Now() - start_time,
-                             TimeDelta::FromMilliseconds(1),
-                             TimeDelta::FromMilliseconds(200), 50);
 }
 #endif
 

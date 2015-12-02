@@ -22,6 +22,7 @@
 #include "net/base/socket_performance_watcher.h"
 #include "net/base/socket_performance_watcher_factory.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/single_request_host_resolver.h"
 #include "net/http/http_server_properties.h"
@@ -69,9 +70,6 @@ enum CreateSessionFailure {
   CREATION_ERROR_MAX
 };
 
-// When a connection is idle for 30 seconds it will be closed.
-const int kIdleConnectionTimeoutSeconds = 30;
-
 // The maximum receive window sizes for QUIC sessions and streams.
 const int32 kQuicSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
 const int32 kQuicStreamMaxRecvWindowSize = 6 * 1024 * 1024;    // 6 MB
@@ -93,11 +91,13 @@ bool IsEcdsaSupported() {
   return true;
 }
 
-QuicConfig InitializeQuicConfig(const QuicTagVector& connection_options) {
+QuicConfig InitializeQuicConfig(const QuicTagVector& connection_options,
+                                int idle_connection_timeout_seconds) {
+  DCHECK_GT(idle_connection_timeout_seconds, 0);
   QuicConfig config;
   config.SetIdleConnectionStateLifetime(
-      QuicTime::Delta::FromSeconds(kIdleConnectionTimeoutSeconds),
-      QuicTime::Delta::FromSeconds(kIdleConnectionTimeoutSeconds));
+      QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds),
+      QuicTime::Delta::FromSeconds(idle_connection_timeout_seconds));
   config.SetConnectionOptionsToSend(connection_options);
   return config;
 }
@@ -545,6 +545,7 @@ QuicStreamFactory::QuicStreamFactory(
     CertPolicyEnforcer* cert_policy_enforcer,
     ChannelIDService* channel_id_service,
     TransportSecurityState* transport_security_state,
+    CTVerifier* cert_transparency_verifier,
     SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
     QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
     QuicRandom* random_generator,
@@ -569,21 +570,25 @@ QuicStreamFactory::QuicStreamFactory(
     bool delay_tcp_race,
     bool store_server_configs_in_properties,
     bool close_sessions_on_ip_change,
+    int idle_connection_timeout_seconds,
     const QuicTagVector& connection_options)
     : require_confirmation_(true),
       host_resolver_(host_resolver),
       client_socket_factory_(client_socket_factory),
       http_server_properties_(http_server_properties),
       transport_security_state_(transport_security_state),
+      cert_transparency_verifier_(cert_transparency_verifier),
       quic_crypto_client_stream_factory_(quic_crypto_client_stream_factory),
       random_generator_(random_generator),
       clock_(clock),
       max_packet_length_(max_packet_length),
       socket_performance_watcher_factory_(socket_performance_watcher_factory),
-      config_(InitializeQuicConfig(connection_options)),
+      config_(InitializeQuicConfig(connection_options,
+                                   idle_connection_timeout_seconds)),
       crypto_config_(new ProofVerifierChromium(cert_verifier,
                                                cert_policy_enforcer,
-                                               transport_security_state)),
+                                               transport_security_state,
+                                               cert_transparency_verifier)),
       supported_versions_(supported_versions),
       enable_port_selection_(enable_port_selection),
       always_require_handshake_confirmation_(

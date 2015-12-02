@@ -19,8 +19,8 @@
       'autofill/content/browser/content_autofill_driver_unittest.cc',
       'autofill/content/browser/request_autocomplete_manager_unittest.cc',
       'autofill/content/browser/wallet/full_wallet_unittest.cc',
-      'autofill/content/browser/wallet/wallet_address_unittest.cc',
       'autofill/content/browser/wallet/payments_client_unittest.cc',
+      'autofill/content/browser/wallet/wallet_address_unittest.cc',
       'autofill/content/browser/wallet/wallet_service_url_unittest.cc',
       'autofill/content/renderer/renderer_save_password_progress_logger_unittest.cc',
       'autofill/core/browser/address_field_unittest.cc',
@@ -58,6 +58,7 @@
       'autofill/core/browser/webdata/autofill_table_unittest.cc',
       'autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service_unittest.cc',
       'autofill/core/browser/webdata/web_data_service_unittest.cc',
+      'autofill/core/common/autofill_l10n_util_unittest.cc',
       'autofill/core/common/autofill_regexes_unittest.cc',
       'autofill/core/common/autofill_util_unittest.cc',
       'autofill/core/common/form_data_unittest.cc',
@@ -124,6 +125,7 @@
     ],
     'crash_unittest_sources': [
       'crash/content/app/crash_keys_win_unittest.cc',
+      'crash/core/common/crash_keys_unittest.cc',
       'crash/core/common/objc_zombie_unittest.mm',
     ],
     'crx_file_unittest_sources': [
@@ -205,6 +207,9 @@
       'favicon/core/fallback_url_util_unittest.cc',
       'favicon/core/favicon_handler_unittest.cc',
       'favicon/core/large_icon_service_unittest.cc',
+    ],
+    'flags_ui_unittest_sources': [
+      'flags_ui/flags_state_unittest.cc',
     ],
     'undo_unittest_sources': [
       'undo/bookmark_undo_service_test.cc',
@@ -344,7 +349,6 @@
       'metrics/drive_metrics_provider_unittest.cc',
       'metrics/histogram_encoder_unittest.cc',
       'metrics/machine_id_provider_win_unittest.cc',
-      'metrics/metrics_hashes_unittest.cc',
       'metrics/metrics_log_manager_unittest.cc',
       'metrics/metrics_log_unittest.cc',
       'metrics/metrics_reporting_scheduler_unittest.cc',
@@ -378,6 +382,10 @@
     ],
     'network_time_unittest_sources': [
       'network_time/network_time_tracker_unittest.cc',
+    ],
+    'ntp_snippets_unittest_sources': [
+      'ntp_snippets/inner_iterator_unittest.cc',
+      'ntp_snippets/ntp_snippets_service_unittest.cc',
     ],
     'offline_page_unittest_sources': [
       'offline_pages/offline_page_metadata_store_impl_unittest.cc',
@@ -455,7 +463,7 @@
       'password_manager/core/browser/statistics_table_unittest.cc',
       'password_manager/core/common/credential_manager_types_unittest.cc',
       'password_manager/sync/browser/password_sync_util_unittest.cc',
-      'password_manager/sync/browser/sync_store_result_filter_unittest.cc',
+      'password_manager/sync/browser/sync_credentials_filter_unittest.cc',
       'password_manager/sync/browser/sync_username_test_base.cc',
       'password_manager/sync/browser/sync_username_test_base.h',
     ],
@@ -609,9 +617,10 @@
       'scheduler/child/worker_scheduler_impl_unittest.cc',
       'scheduler/renderer/deadline_task_runner_unittest.cc',
       'scheduler/renderer/idle_time_estimator_unittest.cc',
-      'scheduler/renderer/renderer_scheduler_impl_unittest.cc',
       'scheduler/renderer/render_widget_signals_unittest.cpp',
+      'scheduler/renderer/renderer_scheduler_impl_unittest.cc',
       'scheduler/renderer/task_cost_estimator_unittest.cc',
+      'scheduler/renderer/throttling_helper_unittest.cc',
       'scheduler/renderer/user_model_unittest.cc',
       'scheduler/renderer/web_view_scheduler_impl_unittest.cc',
       'scheduler/renderer/webthread_impl_for_renderer_scheduler_unittest.cc',
@@ -880,6 +889,7 @@
         '<@(enhanced_bookmarks_unittest_sources)',
         '<@(favicon_base_unittest_sources)',
         '<@(favicon_unittest_sources)',
+        '<@(flags_ui_unittest_sources)',
         '<@(gcm_driver_crypto_unittest_sources)',
         '<@(gcm_driver_unittest_sources)',
         '<@(google_unittest_sources)',
@@ -894,6 +904,7 @@
         '<@(metrics_unittest_sources)',
         '<@(mime_util_unittest_sources)',
         '<@(network_time_unittest_sources)',
+        '<@(ntp_snippets_unittest_sources)',
         '<@(offline_page_unittest_sources)',
         '<@(omnibox_unittest_sources)',
         '<@(open_from_clipboard_unittest_sources)',
@@ -989,6 +1000,7 @@
         'components.gyp:enhanced_bookmarks_test_support',
         'components.gyp:favicon_base',
         'components.gyp:favicon_core',
+        'components.gyp:flags_ui',
         'components.gyp:gcm_driver',
         'components.gyp:gcm_driver_test_support',
         'components.gyp:google_core_browser',
@@ -1012,6 +1024,7 @@
         'components.gyp:metrics_ui',
         'components.gyp:net_log',
         'components.gyp:network_time',
+        'components.gyp:ntp_snippets',
         'components.gyp:offline_pages',
         'components.gyp:omnibox_browser',
         'components.gyp:omnibox_test_support',
@@ -1038,6 +1051,7 @@
         'components.gyp:ssl_errors',
         'components.gyp:suggestions',
         'components.gyp:sync_bookmarks',
+        'components.gyp:sync_driver_features',
         'components.gyp:sync_driver_test_support',
         'components.gyp:sync_sessions',
         'components.gyp:sync_sessions_test_support',
@@ -1340,6 +1354,8 @@
           'dependencies': [
             '../device/bluetooth/bluetooth.gyp:device_bluetooth_mocks',
             '../device/core/core.gyp:device_core',
+            '../device/core/core.gyp:device_core_mocks',
+            '../device/hid/hid.gyp:device_hid_mocks',
             '../device/usb/usb.gyp:device_usb',
             '../device/usb/usb.gyp:device_usb_mocks',
             '../google_apis/google_apis.gyp:google_apis_test_support',
@@ -1360,6 +1376,7 @@
         }],
         ['chromeos==1', {
           'sources': [
+            'arc/arc_bridge_service_unittest.cc',
             'pairing/message_buffer_unittest.cc',
             'timers/alarm_timer_unittest.cc',
             'wifi_sync/wifi_config_delegate_chromeos_unittest.cc',
@@ -1375,18 +1392,11 @@
           ],
           'dependencies': [
             '../chromeos/chromeos.gyp:chromeos_test_support',
+            'components.gyp:arc',
             'components.gyp:ownership',
             'components.gyp:pairing',
             'components.gyp:user_manager_test_support',
             'components.gyp:wifi_sync',
-          ],
-        }],
-        ['chromeos==1 and enable_arc==1', {
-          'sources': [
-            'arc/arc_bridge_service_unittest.cc',
-          ],
-          'dependencies': [
-            'components.gyp:arc',
           ],
         }],
         ['OS=="linux"', {

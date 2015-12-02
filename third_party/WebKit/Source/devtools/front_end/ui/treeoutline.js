@@ -286,6 +286,27 @@ TreeOutline.prototype = {
             event.consume(true);
     },
 
+    /**
+     * @param {!TreeElement} treeElement
+     * @param {boolean} center
+     */
+    _deferredScrollIntoView: function(treeElement, center)
+    {
+        if (!this._treeElementToScrollIntoView)
+            this.element.window().requestAnimationFrame(deferredScrollIntoView.bind(this));
+        this._treeElementToScrollIntoView = treeElement;
+        this._centerUponScrollIntoView = center;
+        /**
+         * @this {TreeOutline}
+         */
+        function deferredScrollIntoView()
+        {
+            this._treeElementToScrollIntoView.listItemElement.scrollIntoViewIfNeeded(this._centerUponScrollIntoView);
+            delete this._treeElementToScrollIntoView;
+            delete this._centerUponScrollIntoView;
+        }
+    },
+
     __proto__: WebInspector.Object.prototype
 }
 
@@ -304,8 +325,7 @@ function TreeOutlineInShadow(className)
 
     // Redefine element to the external one.
     this.element = createElement("div");
-    this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element);
-    this._shadowRoot.appendChild(WebInspector.Widget.createStyleElement("ui/treeoutline.css"));
+    this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element, "ui/treeoutline.css");
     this._shadowRoot.appendChild(innerElement);
     this._renderSelection = true;
 }
@@ -316,7 +336,7 @@ TreeOutlineInShadow.prototype = {
      */
     registerRequiredCSS: function(cssFile)
     {
-        this._shadowRoot.appendChild(WebInspector.Widget.createStyleElement(cssFile));
+        WebInspector.appendStyle(this._shadowRoot, cssFile);
     },
 
     __proto__: TreeOutline.prototype
@@ -852,7 +872,10 @@ TreeElement.prototype = {
         }
     },
 
-    reveal: function()
+    /**
+     * @param {boolean=} center
+     */
+    reveal: function(center)
     {
         var currentAncestor = this.parent;
         while (currentAncestor && !currentAncestor.root) {
@@ -861,9 +884,7 @@ TreeElement.prototype = {
             currentAncestor = currentAncestor.parent;
         }
 
-        this.listItemElement.scrollIntoViewIfNeeded();
-
-        this.onreveal();
+        this.treeOutline._deferredScrollIntoView(this, !!center);
     },
 
     /**
@@ -923,7 +944,7 @@ TreeElement.prototype = {
      */
     revealAndSelect: function(omitFocus)
     {
-        this.reveal();
+        this.reveal(true);
         this.select(omitFocus);
     },
 
@@ -1004,10 +1025,6 @@ TreeElement.prototype = {
     ondblclick: function(e)
     {
         return false;
-    },
-
-    onreveal: function()
-    {
     },
 
     /**

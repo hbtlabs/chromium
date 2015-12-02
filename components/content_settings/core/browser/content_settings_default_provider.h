@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/basictypes.h"
-#include "base/containers/scoped_ptr_map.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/synchronization/lock.h"
@@ -36,9 +35,10 @@ class DefaultProvider : public ObservableProvider {
   ~DefaultProvider() override;
 
   // ProviderInterface implementations.
-  RuleIterator* GetRuleIterator(ContentSettingsType content_type,
-                                const ResourceIdentifier& resource_identifier,
-                                bool incognito) const override;
+  scoped_ptr<RuleIterator> GetRuleIterator(
+      ContentSettingsType content_type,
+      const ResourceIdentifier& resource_identifier,
+      bool incognito) const override;
 
   bool SetWebsiteSetting(const ContentSettingsPattern& primary_pattern,
                          const ContentSettingsPattern& secondary_pattern,
@@ -76,8 +76,7 @@ class DefaultProvider : public ObservableProvider {
   void DiscardObsoletePreferences();
 
   // Copies of the pref data, so that we can read it on the IO thread.
-  base::ScopedPtrMap<ContentSettingsType, scoped_ptr<base::Value>>
-      default_settings_;
+  std::map<ContentSettingsType, scoped_ptr<base::Value>> default_settings_;
 
   PrefService* prefs_;
 

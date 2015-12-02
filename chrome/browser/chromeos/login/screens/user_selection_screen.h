@@ -48,8 +48,8 @@ class UserSelectionScreen
 
   virtual void Init(const user_manager::UserList& users, bool show_guest);
   void OnUserImageChanged(const user_manager::User& user);
-  void OnBeforeUserRemoved(const std::string& username);
-  void OnUserRemoved(const std::string& username);
+  void OnBeforeUserRemoved(const AccountId& account_id);
+  void OnUserRemoved(const AccountId& account_id);
 
   void OnPasswordClearTimerExpired();
 
@@ -109,10 +109,6 @@ class UserSelectionScreen
   static bool ShouldForceOnlineSignIn(const user_manager::User* user);
 
  protected:
-  // This call forms full account id of a known user by email.
-  // This is a temporary call while migrating to AccountId.
-  static AccountId GetAccountIdOfKnownUser(const std::string& user_id);
-
   LoginDisplayWebUIHandler* handler_;
   LoginDisplay::Delegate* login_display_delegate_;
   UserBoardView* view_;

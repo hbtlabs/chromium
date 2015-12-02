@@ -212,7 +212,7 @@ public:
     void setZoomFactorForDeviceScaleFactor(float) override;
 
     void setDeviceColorProfile(const WebVector<char>&) override;
-    void resetDeviceColorProfile() override;
+    void resetDeviceColorProfileForTesting() override;
 
     void enableAutoResizeMode(
         const WebSize& minSize,
@@ -701,7 +701,6 @@ private:
     // The popup associated with an input/select element.
     RefPtr<WebPagePopupImpl> m_pagePopup;
 
-    OwnPtrWillBePersistent<InspectorOverlay> m_inspectorOverlay;
     OwnPtrWillBePersistent<DevToolsEmulator> m_devToolsEmulator;
     OwnPtr<PageOverlay> m_pageColorOverlay;
 
@@ -717,14 +716,11 @@ private:
 
     RefPtr<UserGestureToken> m_pointerLockGestureToken;
 
-    IntRect m_rootLayerScrollDamage;
     WebLayerTreeView* m_layerTreeView;
     WebLayer* m_rootLayer;
     GraphicsLayer* m_rootGraphicsLayer;
     OwnPtr<GraphicsLayerFactory> m_graphicsLayerFactory;
     bool m_matchesHeuristicsForGpuRasterization;
-    // If true, the graphics context is being restored.
-    bool m_recreatingGraphicsContext;
     static const WebInputEvent* m_currentInputEvent;
 
     MediaKeysClientImpl m_mediaKeysClientImpl;

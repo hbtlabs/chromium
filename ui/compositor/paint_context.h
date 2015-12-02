@@ -21,9 +21,10 @@ class Canvas;
 class SkPictureRecorder;
 
 namespace ui {
-class ClipTransformRecorder;
+class ClipRecorder;
 class CompositingRecorder;
 class PaintRecorder;
+class TransformRecorder;
 
 class COMPOSITOR_EXPORT PaintContext {
  public:
@@ -71,12 +72,20 @@ class COMPOSITOR_EXPORT PaintContext {
   // The Recorder classes need access to the internal canvas and friends, but we
   // don't want to expose them on this class so that people must go through the
   // recorders to access them.
-  friend class ClipTransformRecorder;
+  friend class ClipRecorder;
   friend class CompositingRecorder;
   friend class PaintRecorder;
+  friend class TransformRecorder;
   // The Cache class also needs to access the DisplayItemList to append its
   // cache contents.
   friend class PaintCache;
+
+  // Returns a rect with the given size in the space of the context's
+  // containing layer.
+  gfx::Rect ToLayerSpaceBounds(const gfx::Size& size_in_layer) const;
+
+  // Returns the given rect translated by the layer space offset.
+  gfx::Rect ToLayerSpaceRect(const gfx::Rect& rect) const;
 
   cc::DisplayItemList* list_;
   scoped_ptr<SkPictureRecorder> owned_recorder_;

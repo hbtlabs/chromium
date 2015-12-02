@@ -452,7 +452,7 @@ TEST_F(RenderViewImplTest, SaveImageFromDataURL) {
 }
 
 // Test that we get form state change notifications when input fields change.
-TEST_F(RenderViewImplTest, DISABLED_OnNavStateChanged) {
+TEST_F(RenderViewImplTest, OnNavStateChanged) {
   // Don't want any delay for form state sync changes. This will still post a
   // message so updates will get coalesced, but as soon as we spin the message
   // loop, it will generate an update.
@@ -462,6 +462,8 @@ TEST_F(RenderViewImplTest, DISABLED_OnNavStateChanged) {
 
   // We should NOT have gotten a form state change notification yet.
   EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
+      FrameHostMsg_UpdateState::ID));
+  EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
       ViewHostMsg_UpdateState::ID));
   render_thread_->sink().ClearMessages();
 
@@ -470,8 +472,13 @@ TEST_F(RenderViewImplTest, DISABLED_OnNavStateChanged) {
   ExecuteJavaScriptForTests(
       "document.getElementById('elt_text').value = 'foo';");
   ProcessPendingMessages();
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      ViewHostMsg_UpdateState::ID));
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+    EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
+        FrameHostMsg_UpdateState::ID));
+  } else {
+    EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
+        ViewHostMsg_UpdateState::ID));
+  }
 }
 
 TEST_F(RenderViewImplTest, OnNavigationHttpPost) {

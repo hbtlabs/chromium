@@ -6,15 +6,10 @@
 
 #include "base/logging.h"
 #include "base/thread_task_runner_handle.h"
+#include "remoting/protocol/video_stream.h"
 
 namespace remoting {
 namespace protocol {
-
-MockConnectionToClient::MockConnectionToClient(scoped_ptr<Session> session,
-                                               HostStub* host_stub)
-    : session_(session.Pass()), host_stub_(host_stub) {}
-
-MockConnectionToClient::~MockConnectionToClient() {}
 
 MockConnectionToClientEventHandler::MockConnectionToClientEventHandler() {}
 

@@ -39,7 +39,6 @@ WebInspector.TimelinePanel = function()
 {
     WebInspector.Panel.call(this, "timeline");
     this.registerRequiredCSS("timeline/timelinePanel.css");
-    this.registerRequiredCSS("ui/filter.css");
     this.element.addEventListener("contextmenu", this._contextMenu.bind(this), false);
     this._dropTarget = new WebInspector.DropTarget(this.element, [WebInspector.DropTarget.Types.Files, WebInspector.DropTarget.Types.URIList], WebInspector.UIString("Drop timeline file or URL here"), this._handleDrop.bind(this));
 
@@ -399,7 +398,7 @@ WebInspector.TimelinePanel.prototype = {
         this._panelToolbar.appendToolbarItem(this._progressToolbarItem);
 
         if (this._filtersControl)
-            this.element.appendChild(this._filtersControl.filtersElement());
+            this._filtersControl.filtersWidget().show(this.element);
     },
 
     /**
@@ -540,7 +539,7 @@ WebInspector.TimelinePanel.prototype = {
         }
         this._flameChart = null;
         if (this._filtersControl)
-            this._filtersControl.setEnabled(viewMode === WebInspector.TimelinePanel.ViewMode.Waterfall);
+            this._filtersControl.filtersWidget().setEnabled(viewMode === WebInspector.TimelinePanel.ViewMode.Waterfall);
         if (viewMode === WebInspector.TimelinePanel.ViewMode.FlameChart) {
             this._flameChart = new WebInspector.TimelineFlameChartView(this, this._model, this._frameModel);
             this._flameChart.enableNetworkPane(this._captureNetworkSetting.get());
@@ -1684,8 +1683,7 @@ WebInspector.TimelineStaticFilter.prototype = {
 WebInspector.TimelinePanel.StatusPane = function()
 {
     WebInspector.VBox.call(this, true);
-    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element);
-    shadowRoot.appendChild(WebInspector.Widget.createStyleElement("timeline/timelineStatusDialog.css"));
+    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element, "timeline/timelineStatusDialog.css");
     this._contentElement = shadowRoot.createChild("div", "timeline-status-dialog");
     this._status = this._contentElement.createChild("div", "status");
     this._time = this._contentElement.createChild("div", "time");
@@ -1895,15 +1893,6 @@ WebInspector.TimelineFilters.prototype = {
     },
 
     /**
-     * @param {boolean} enabled
-     */
-    setEnabled: function(enabled)
-    {
-        this.filterButton().setEnabled(enabled);
-        this.filtersElement().classList.toggle("hidden", !enabled || !this._filterBar.filtersToggled());
-    },
-
-    /**
      * @return {?RegExp}
      */
     searchRegExp: function()
@@ -1920,11 +1909,11 @@ WebInspector.TimelineFilters.prototype = {
     },
 
     /**
-     * @return {!Element}
+     * @return {!WebInspector.Widget}
      */
-    filtersElement: function()
+    filtersWidget: function()
     {
-        return this._filterBar.filtersElement();
+        return this._filterBar;
     },
 
     _createFilterBar: function()

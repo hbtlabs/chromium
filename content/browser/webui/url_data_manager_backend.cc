@@ -26,7 +26,6 @@
 #include "content/browser/net/view_blob_internals_job_factory.h"
 #include "content/browser/net/view_http_cache_job_factory.h"
 #include "content/browser/resource_context_impl.h"
-#include "content/browser/tcmalloc_internals_request_job.h"
 #include "content/browser/webui/shared_resources_data_source.h"
 #include "content/browser/webui/url_data_source_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -119,7 +118,7 @@ class URLRequestChromeJob : public net::URLRequestJob {
   // net::URLRequestJob implementation.
   void Start() override;
   void Kill() override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
   bool GetMimeType(std::string* mime_type) const override;
   int GetResponseCode() const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
@@ -190,8 +189,9 @@ class URLRequestChromeJob : public net::URLRequestJob {
   bool RequiresUnsafeEval() const;
 
   // Do the actual copy from data_ (the data we're serving) into |buf|.
-  // Separate from ReadRawData so we can handle async I/O.
-  void CompleteRead(net::IOBuffer* buf, int buf_size, int* bytes_read);
+  // Separate from ReadRawData so we can handle async I/O. Returns the number of
+  // bytes read.
+  int CompleteRead(net::IOBuffer* buf, int buf_size);
 
   // The actual data we're serving.  NULL until it's been fetched.
   scoped_refptr<base::RefCountedMemory> data_;
@@ -336,22 +336,16 @@ void URLRequestChromeJob::MimeTypeAvailable(const std::string& mime_type) {
 void URLRequestChromeJob::DataAvailable(base::RefCountedMemory* bytes) {
   TRACE_EVENT_ASYNC_END0("browser", "DataManager:Request", this);
   if (bytes) {
-    // The request completed, and we have all the data.
-    // Clear any IO pending status.
-    SetStatus(net::URLRequestStatus());
-
     data_ = bytes;
-    int bytes_read;
     if (pending_buf_.get()) {
       CHECK(pending_buf_->data());
-      CompleteRead(pending_buf_.get(), pending_buf_size_, &bytes_read);
+      int result = CompleteRead(pending_buf_.get(), pending_buf_size_);
       pending_buf_ = NULL;
-      NotifyReadComplete(bytes_read);
+      ReadRawDataComplete(result);
     }
   } else {
     // The request failed.
-    NotifyDone(
-        net::URLRequestStatus(net::URLRequestStatus::FAILED, net::ERR_FAILED));
+    ReadRawDataComplete(net::ERR_FAILED);
   }
 }
 
@@ -359,27 +353,21 @@ base::WeakPtr<URLRequestChromeJob> URLRequestChromeJob::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-bool URLRequestChromeJob::ReadRawData(net::IOBuffer* buf,
-                                      int buf_size,
-                                      int* bytes_read) {
+int URLRequestChromeJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
   if (!data_.get()) {
-    SetStatus(net::URLRequestStatus(net::URLRequestStatus::IO_PENDING, 0));
     DCHECK(!pending_buf_.get());
     CHECK(buf->data());
     pending_buf_ = buf;
     pending_buf_size_ = buf_size;
-    return false;  // Tell the caller we're still waiting for data.
+    return net::ERR_IO_PENDING;
   }
 
   // Otherwise, the data is available.
-  CompleteRead(buf, buf_size, bytes_read);
-  return true;
+  return CompleteRead(buf, buf_size);
 }
 
-void URLRequestChromeJob::CompleteRead(net::IOBuffer* buf,
-                                       int buf_size,
-                                       int* bytes_read) {
-  int remaining = static_cast<int>(data_->size()) - data_offset_;
+int URLRequestChromeJob::CompleteRead(net::IOBuffer* buf, int buf_size) {
+  int remaining = data_->size() - data_offset_;
   if (buf_size > remaining)
     buf_size = remaining;
   if (buf_size > 0) {
@@ -391,7 +379,7 @@ void URLRequestChromeJob::CompleteRead(net::IOBuffer* buf,
     memcpy(buf->data(), data_->front() + data_offset_, buf_size);
     data_offset_ += buf_size;
   }
-  *bytes_read = buf_size;
+  return buf_size;
 }
 
 void URLRequestChromeJob::CheckStoragePartitionMatches(
@@ -494,14 +482,6 @@ class ChromeProtocolHandler
       return ViewBlobInternalsJobFactory::CreateJobForRequest(
           request, network_delegate, blob_storage_context_->context());
     }
-
-#if defined(USE_TCMALLOC)
-    // Next check for chrome://tcmalloc/, which uses its own job type.
-    if (request->url().SchemeIs(kChromeUIScheme) &&
-        request->url().host() == kChromeUITcmallocHost) {
-      return new TcmallocInternalsRequestJob(request, network_delegate);
-    }
-#endif
 
     // Next check for chrome://histograms/, which uses its own job type.
     if (request->url().SchemeIs(kChromeUIScheme) &&

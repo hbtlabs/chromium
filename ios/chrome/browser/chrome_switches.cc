@@ -27,6 +27,9 @@ const char kDisableIOSPasswordGeneration[] = "disable-ios-password-generation";
 const char kDisableIOSPasswordSuggestions[] =
     "disable-ios-password-suggestions";
 
+// Disables the backend service for web resources.
+const char kDisableIOSWebResources[] = "disable-web-resources";
+
 // Disables the use of WKWebView instead of UIWebView.
 const char kDisableIOSWKWebView[] = "disable-wkwebview";
 
@@ -93,6 +96,9 @@ const char kUserAgent[] = "user-agent";
 
 // These mappings only apply to the host resolver.
 const char kIOSHostResolverRules[] = "host-resolver-rules";
+
+// Ignores certificate-related errors.
+const char kIOSIgnoreCertificateErrors[] = "ignore-certificate-errors";
 
 // Allows for forcing socket connections to http/https to use fixed ports.
 const char kIOSTestingFixedHttpPort[] = "testing-fixed-http-port";

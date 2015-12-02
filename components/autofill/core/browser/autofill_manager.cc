@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <limits>
 #include <map>
 #include <set>
@@ -44,6 +45,7 @@
 #include "components/autofill/core/browser/phone_number.h"
 #include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -389,8 +391,8 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
   AutofillField* autofill_field = NULL;
   bool got_autofillable_form =
       GetCachedFormAndField(form, field, &form_structure, &autofill_field) &&
-      // Don't send suggestions or track forms that aren't auto-fillable.
-      form_structure->IsAutofillable();
+      // Don't send suggestions or track forms that should not be parsed.
+      form_structure->ShouldBeParsed();
 
   // Logging interactions of forms that are autofillable.
   if (got_autofillable_form) {
@@ -741,27 +743,29 @@ void AutofillManager::OnSetDataList(const std::vector<base::string16>& values,
 }
 
 void AutofillManager::OnLoadedServerPredictions(
-    const std::string& response_xml,
+    std::string response_xml,
     const std::vector<std::string>& form_signatures) {
   // We obtain the current valid FormStructures represented by
   // |form_signatures|. We invert both lists because most recent forms are at
-  // the end of the list.
+  // the end of the list (and reverse the resulting pointer vector).
   std::vector<FormStructure*> queried_forms;
   for (const std::string& signature : base::Reversed(form_signatures)) {
     for (FormStructure* cur_form : base::Reversed(form_structures_)) {
       if (cur_form->FormSignature() == signature) {
         queried_forms.push_back(cur_form);
-        continue;
+        break;
       }
     }
   }
+  std::reverse(queried_forms.begin(), queried_forms.end());
+
   // If there are no current forms corresponding to the queried signatures, drop
   // the query response.
   if (queried_forms.empty())
     return;
 
   // Parse and store the server predictions.
-  FormStructure::ParseQueryResponse(response_xml, queried_forms,
+  FormStructure::ParseQueryResponse(std::move(response_xml), queried_forms,
                                     client_->GetRapporService());
 
   // Forward form structures to the password generation manager to detect
@@ -886,17 +890,9 @@ bool AutofillManager::IsCreditCardUploadEnabled() {
 }
 
 bool AutofillManager::ShouldUploadForm(const FormStructure& form) {
-  if (!IsAutofillEnabled())
-    return false;
-
-  if (driver_->IsOffTheRecord())
-    return false;
-
-  // Disregard forms that we wouldn't ever autofill in the first place.
-  if (!form.ShouldBeParsed())
-    return false;
-
-  return true;
+  return IsAutofillEnabled() && !driver_->IsOffTheRecord() &&
+         form.ShouldBeParsed() &&
+         form.active_field_count() >= kRequiredFieldsForUpload;
 }
 
 void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
@@ -1494,6 +1490,7 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
   std::vector<FormStructure*> queryable_forms;
   for (const FormData& form : forms) {
     scoped_ptr<FormStructure> form_structure(new FormStructure(form));
+    form_structure->ParseFieldTypesFromAutocompleteAttributes();
 
     if (!form_structure->ShouldBeParsed())
       continue;

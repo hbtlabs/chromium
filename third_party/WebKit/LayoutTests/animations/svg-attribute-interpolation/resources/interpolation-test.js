@@ -118,10 +118,7 @@
   }
 
   function serializeSVGNumberList(numberList) {
-    var elements = [];
-    for (var index = 0; index < numberList.numberOfItems; ++index)
-      elements.push(numberList.getItem(index).value);
-    return String(elements);
+    return Array.from(numberList).map(number => number.value).join(', ');
   }
 
   function serializeSVGPointList(pointList) {
@@ -139,7 +136,7 @@
   }
 
   function serializeSVGRect(rect) {
-    return String([rect.x, rect.y, rect.width, rect.height]);
+    return [rect.x, rect.y, rect.width, rect.height].join(', ');
   }
 
   function serializeSVGTransformList(transformList) {
@@ -260,6 +257,9 @@
   {
     var animateElement;
     if (attributeName.toLowerCase().includes('transform')) {
+      if (isNeutralKeyframe(from) || isNeutralKeyframe(to)) {
+        return null;
+      }
       from = from.split(')');
       to = to.split(')');
       // Discard empty string at end.
@@ -315,7 +315,6 @@
           target.container.pauseAnimations();
           target.container.setCurrentTime(expectation.at);
         } else {
-          console.warn(`Unable to test SMIL from ${params.from} to ${params.to}`);
           target.container.remove();
           target.measure = function() {};
         }
@@ -404,14 +403,14 @@
         } else {
           assertionCode +=
             `  to: '${params.to}',\n` +
-            `  fromComposite: '${params.fromComposite}',\n`;
+            `  toComposite: '${params.toComposite}',\n`;
         }
 
-        assertionCode += `\n}, [\n`;
+        assertionCode += `}, [\n`;
 
         rebaseline.appendChild(document.createTextNode(assertionCode));
-        var rebaselineExpectation;
-        rebaseline.appendChild(rebaselineExpectation = document.createTextNode(''));
+        var rebaselineExpectation = document.createTextNode('');
+        rebaseline.appendChild(rebaselineExpectation);
         rebaseline.appendChild(document.createTextNode(']);\n\n'));
       }
 

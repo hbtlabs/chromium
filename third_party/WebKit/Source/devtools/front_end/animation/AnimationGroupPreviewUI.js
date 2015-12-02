@@ -11,6 +11,8 @@ WebInspector.AnimationGroupPreviewUI = function(model)
     this._model = model;
     this.element = createElementWithClass("div", "animation-buffer-preview");
     this.element.createChild("div", "animation-paused fill");
+    this._removeButton = this.element.createChild("div", "animation-remove-button");
+    this._removeButton.textContent = "\u2715";
     this._replayOverlayElement = this.element.createChild("div", "animation-buffer-preview-animation");
     this._svg = this.element.createSVGChild("svg");
     this._svg.setAttribute("width", "100%");
@@ -37,6 +39,14 @@ WebInspector.AnimationGroupPreviewUI.prototype = {
         return duration;
     },
 
+    /**
+     * @return {!Element}
+     */
+    removeButton: function()
+    {
+        return this._removeButton;
+    },
+
     replay: function()
     {
         this._replayOverlayElement.animate([
@@ -51,7 +61,7 @@ WebInspector.AnimationGroupPreviewUI.prototype = {
         this._svg.removeChildren();
         var maxToShow = 10;
         var numberOfAnimations = Math.min(this._model.animations().length, maxToShow);
-        var timeToPixelRatio = 100 / Math.max(this._groupDuration(), 300);
+        var timeToPixelRatio = 100 / Math.max(this._groupDuration(), 750);
         for (var i = 0; i < numberOfAnimations; i++) {
             var effect = this._model.animations()[i].source();
             var line = this._svg.createSVGChild("line");

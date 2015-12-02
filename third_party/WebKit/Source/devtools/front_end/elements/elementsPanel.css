@@ -180,13 +180,25 @@
     margin-left: 0;
 }
 
+.styles-filter-engaged,
 .styles-section .style-properties li.filter-match,
 .styles-section .simple-selector.filter-match {
     background-color: rgba(255, 255, 0, 0.5);
 }
 
+.-theme-with-dark-background .styles-filter-engaged,
+.-theme-with-dark-background .styles-section .style-properties li.filter-match,
+.-theme-with-dark-background .styles-section .simple-selector.filter-match {
+    background-color: hsla(133, 100%, 30%, 0.5);
+}
+
+
 .styles-section .style-properties li.overloaded.filter-match {
     background-color: rgba(255, 255, 0, 0.25);
+}
+
+.-theme-with-dark-background .styles-section .style-properties li.overloaded.filter-match {
+    background-color: hsla(133, 100%, 30%, 0.25);
 }
 
 .styles-section .style-properties li.not-parsed-ok .exclamation-mark {
@@ -334,11 +346,11 @@
 
 .styles-section.matched-styles .style-properties li.parent .expand-element {
     -webkit-user-select: none;
-    background-image: url(Images/toolbarButtonGlyphs.png);
-    background-size: 352px 168px;
+    -webkit-mask-image: url(Images/toolbarButtonGlyphs.png);
+    -webkit-mask-size: 352px 168px;
     margin-right: 2px;
     margin-left: -6px;
-    opacity: 0.55;
+    background-color: #777;
     width: 8px;
     height: 10px;
     display: inline-block;
@@ -346,16 +358,16 @@
 
 @media (-webkit-min-device-pixel-ratio: 1.5) {
 .styles-section.matched-styles .style-properties li.parent .expand-element {
-    background-image: url(Images/toolbarButtonGlyphs_2x.png);
+    -webkit-mask-image: url(Images/toolbarButtonGlyphs_2x.png);
 }
 } /* media */
 
 .styles-section.matched-styles .style-properties li.parent .expand-element {
-    background-position: -4px -96px;
+    -webkit-mask-position: -4px -96px;
 }
 
 .styles-section.matched-styles .style-properties li.parent.expanded .expand-element {
-    background-position: -20px -96px;
+    -webkit-mask-position: -20px -96px;
 }
 
 .styles-section .style-properties li .info {
@@ -547,6 +559,14 @@
     border-bottom: 1px solid #ccc;
 }
 
+.-theme-with-dark-background .metrics {
+    color: #222;
+}
+
+.-theme-with-dark-background .metrics > div:hover {
+    color: #ccc;
+}
+
 .metrics-and-styles .metrics {
     border-top: 1px solid #ccc;
     border-bottom: none;
@@ -589,10 +609,6 @@
     width: 100%;
     background: transparent;
     margin-left: 4px;
-}
-
-.styles-filter-engaged {
-    background-color: rgba(255, 255, 0, 0.5);
 }
 
 .sidebar-pane.composite .platform-fonts {

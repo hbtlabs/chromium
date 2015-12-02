@@ -87,7 +87,7 @@
 
 namespace {
 
-const char kSupportedAuthSchemes[] = "basic,digest,ntlm,negotiate";
+const char kSupportedAuthSchemes[] = "basic,digest,ntlm";
 
 const char kTCPFastOpenFieldTrialName[] = "TCPFastOpen";
 const char kTCPFastOpenHttpsEnabledGroupName[] = "HttpsEnabled";
@@ -395,7 +395,7 @@ void IOSChromeIOThread::Init() {
 
   globals_->transport_security_state.reset(new net::TransportSecurityState());
 
-  std::vector<scoped_refptr<net::CTLogVerifier>> ct_logs(
+  std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
       net::ct::CreateLogVerifiersForKnownLogs());
 
   net::MultiLogCTVerifier* ct_verifier = new net::MultiLogCTVerifier();

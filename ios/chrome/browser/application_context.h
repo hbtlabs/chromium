@@ -9,12 +9,24 @@
 
 #include "base/macros.h"
 
+namespace component_updater {
+class ComponentUpdateService;
+}
+
+namespace gcm {
+class GCMDriver;
+}
+
 namespace ios {
 class ChromeBrowserStateManager;
 }
 
 namespace metrics {
 class MetricsService;
+}
+
+namespace metrics_services_manager {
+class MetricsServicesManager;
 }
 
 namespace net {
@@ -37,7 +49,12 @@ namespace variations {
 class VariationsService;
 }
 
+namespace web_resource {
+class PromoResourceService;
+}
+
 class ApplicationContext;
+class IOSChromeIOThread;
 class PrefService;
 
 // Gets the global application context. Cannot return null.
@@ -73,6 +90,11 @@ class ApplicationContext {
   // Gets the ChromeBrowserStateManager used by this application.
   virtual ios::ChromeBrowserStateManager* GetChromeBrowserStateManager() = 0;
 
+  // Gets the manager for the various metrics-related service, constructing it
+  // if necessary.
+  virtual metrics_services_manager::MetricsServicesManager*
+  GetMetricsServicesManager() = 0;
+
   // Gets the MetricsService used by this application.
   virtual metrics::MetricsService* GetMetricsService() = 0;
 
@@ -87,6 +109,19 @@ class ApplicationContext {
 
   // Gets the NetworkTimeTracker.
   virtual network_time::NetworkTimeTracker* GetNetworkTimeTracker() = 0;
+
+  // Gets the IOSChromeIOThread.
+  virtual IOSChromeIOThread* GetIOSChromeIOThread() = 0;
+
+  // Gets the GCMDriver.
+  virtual gcm::GCMDriver* GetGCMDriver() = 0;
+
+  // Gets the PromoResourceService.
+  virtual web_resource::PromoResourceService* GetPromoResourceService() = 0;
+
+  // Gets the ComponentUpdateService.
+  virtual component_updater::ComponentUpdateService*
+  GetComponentUpdateService() = 0;
 
  protected:
   // Sets the global ApplicationContext instance.

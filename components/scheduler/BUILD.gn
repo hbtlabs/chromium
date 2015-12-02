@@ -62,6 +62,7 @@ source_set("unit_tests") {
     "renderer/render_widget_signals_unittest.cpp",
     "renderer/renderer_scheduler_impl_unittest.cc",
     "renderer/task_cost_estimator_unittest.cc",
+    "renderer/throttling_helper_unittest.cc",
     "renderer/user_model_unittest.cc",
     "renderer/web_view_scheduler_impl_unittest.cc",
     "renderer/webthread_impl_for_renderer_scheduler_unittest.cc",
@@ -69,6 +70,7 @@ source_set("unit_tests") {
 
   deps = [
     ":scheduler",
+    "//base/test:test_support",
     "//cc:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -76,12 +78,13 @@ source_set("unit_tests") {
 }
 
 # GYP version: components/scheduler.gypi:scheduler_test_support
-static_library("test_support") {
+source_set("test_support") {
   sources = rebase_path(scheduler_gypi_values.scheduler_test_support_sources,
                         ".",
                         "//components/scheduler")
 
-  deps = [
+  public_deps = [
+    ":scheduler",
     "//base",
   ]
 }

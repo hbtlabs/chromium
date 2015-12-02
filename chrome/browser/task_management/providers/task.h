@@ -12,6 +12,8 @@
 #include "third_party/WebKit/public/web/WebCache.h"
 #include "ui/gfx/image/image_skia.h"
 
+class Profile;
+
 namespace task_management {
 
 // Defines a task that corresponds to a tab, an app, an extension, ... etc. It
@@ -37,11 +39,17 @@ class Task {
   };
 
   // Create a task with the given |title| and the given favicon |icon|. This
-  // task runs on a process whose handle is |handle|.
+  // task runs on a process whose handle is |handle|. |rappor_sample| is the
+  // name of the sample to be recorded if this task needs to be reported by
+  // Rappor.
   Task(const base::string16& title,
+       const std::string& rappor_sample,
        const gfx::ImageSkia* icon,
        base::ProcessHandle handle);
   virtual ~Task();
+
+  // Gets the name of the given |profile| from the ProfileInfoCache.
+  static base::string16 GetProfileNameFromProfile(Profile* profile);
 
   // Activates this TaskManager's task by bringing its container to the front
   // (if possible).
@@ -69,8 +77,7 @@ class Task {
   // value is whatever unique IDs of their hosts in the browser process.
   virtual int GetChildProcessUniqueID() const = 0;
 
-  // The name of the profile associated with the browser context of the render
-  // view host that this task represents (if this task represents a renderer).
+  // The name of the profile owning this task.
   virtual base::string16 GetProfileName() const;
 
   // Getting the Sqlite used memory (in bytes). Not all tasks reports Sqlite
@@ -97,12 +104,16 @@ class Task {
   int64 task_id() const { return task_id_; }
   int64 network_usage() const { return network_usage_; }
   const base::string16& title() const { return title_; }
+  const std::string& rappor_sample_name() const { return rappor_sample_name_; }
   const gfx::ImageSkia& icon() const { return icon_; }
   const base::ProcessHandle& process_handle() const { return process_handle_; }
   const base::ProcessId& process_id() const { return process_id_; }
 
  protected:
   void set_title(const base::string16& new_title) { title_ = new_title; }
+  void set_rappor_sample_name(const std::string& sample) {
+    rappor_sample_name_ = sample;
+  }
   void set_icon(const gfx::ImageSkia& new_icon) { icon_ = new_icon; }
 
  private:
@@ -120,6 +131,10 @@ class Task {
 
   // The title of the task.
   base::string16 title_;
+
+  // The name of the sample representing this task when a Rappor sample needs to
+  // be recorded for it.
+  std::string rappor_sample_name_;
 
   // The favicon.
   gfx::ImageSkia icon_;

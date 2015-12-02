@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "components/favicon_base/favicon_callback.h"
 
 class AutocompleteProvider;
@@ -25,24 +27,16 @@ class CardUnmaskPromptController;
 class CardUnmaskPromptView;
 }
 
-namespace metrics {
-class MetricsService;
+namespace browser_sync {
+class SyncedWindowDelegatesGetter;
 }
 
 namespace net {
 class URLRequestContextGetter;
 }
 
-namespace rappor {
-class RapporService;
-}
-
 namespace user_prefs {
 class PrefRegistrySyncable;
-}
-
-namespace variations {
-class VariationsService;
 }
 
 // TODO(ios): Determine the best way to interface with Obj-C code through
@@ -64,7 +58,6 @@ class ChromeBrowserState;
 class ChromeBrowserStateManager;
 class ChromeIdentityService;
 class GeolocationUpdaterProvider;
-class IOSChromeBrowsingDataRemoverProvider;
 class SigninResourcesProvider;
 class StringProvider;
 class LiveTabContextProvider;
@@ -82,8 +75,6 @@ class ChromeBrowserProvider {
   ChromeBrowserProvider();
   virtual ~ChromeBrowserProvider();
 
-  // Gets the system URL request context.
-  virtual net::URLRequestContextGetter* GetSystemURLRequestContext();
   // Asserts all iOS-specific |BrowserContextKeyedServiceFactory| are built.
   virtual void AssertBrowserContextKeyedFactoriesBuilt();
   // Registers all prefs that will be used via the local state PrefService.
@@ -112,8 +103,6 @@ class ChromeBrowserProvider {
   virtual StringProvider* GetStringProvider();
   // Returns an instance of a LiveTabContextProvider.
   virtual LiveTabContextProvider* GetLiveTabContextProvider();
-  virtual scoped_ptr<IOSChromeBrowsingDataRemoverProvider>
-  GetIOSChromeBrowsingDataRemoverProvider(ChromeBrowserState* browser_state);
   virtual GeolocationUpdaterProvider* GetGeolocationUpdaterProvider();
   // Returns "enabled", "disabled", or "default".
   virtual std::string DataReductionProxyAvailability();
@@ -121,18 +110,12 @@ class ChromeBrowserProvider {
   virtual std::string GetDistributionBrandCode();
   // Sets the alpha property of an UIView with an animation.
   virtual void SetUIViewAlphaWithAnimation(UIView* view, float alpha);
-  // Returns the metrics service.
-  virtual metrics::MetricsService* GetMetricsService();
-  // Returns the variations service.
-  virtual variations::VariationsService* GetVariationsService();
   // Returns an instance of a CardUnmaskPromptView used to unmask Wallet cards.
   // The view is responsible for its own lifetime.
   virtual autofill::CardUnmaskPromptView* CreateCardUnmaskPromptView(
       autofill::CardUnmaskPromptController* controller);
   // Returns risk data used in Wallet requests.
   virtual std::string GetRiskData();
-  // Returns the RapporService. May be null.
-  virtual rappor::RapporService* GetRapporService();
   // Returns whether there is an Off-The-Record session active.
   virtual bool IsOffTheRecordSessionActive();
   // Get the favicon for |page_url| and run |callback| with result when loaded.
@@ -150,6 +133,14 @@ class ChromeBrowserProvider {
   // Called when the IOSChromeMetricsServiceClientManager instance is
   // destroyed.
   virtual void OnMetricsServicesManagerClientDestroyed();
+
+  // Returns the SyncedWindowDelegatesGetter implementation.
+  virtual scoped_ptr<browser_sync::SyncedWindowDelegatesGetter>
+  CreateSyncedWindowDelegatesGetter(ios::ChromeBrowserState* browser_state);
+
+  // Gets the URLRequestContextGetter used by the SafeBrowsing service. Returns
+  // null if there is no SafeBrowsing service.
+  virtual net::URLRequestContextGetter* GetSafeBrowsingURLRequestContext();
 };
 
 }  // namespace ios

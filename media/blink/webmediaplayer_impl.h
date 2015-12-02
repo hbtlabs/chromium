@@ -188,9 +188,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Called when the data source is downloading or paused.
   void NotifyDownloading(bool is_downloading);
 
-  // Creates a Renderer that will be used by the |pipeline_|.
-  scoped_ptr<Renderer> CreateRenderer();
-
   // Finishes starting the pipeline due to a call to load().
   void StartPipeline();
 
@@ -233,6 +230,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Updates |paused_time_| to the current media time with consideration for the
   // |ended_| state by clamping current time to duration upon |ended_|.
   void UpdatePausedTime();
+
+  // Notifies |delegate_| that playback has started or was paused; also starts
+  // or stops the memory usage reporting timer respectively.
+  void NotifyPlaybackStarted();
+  void NotifyPlaybackPaused();
 
   // Called at low frequency to tell external observers how much memory we're
   // using for video playback.  Called by |memory_usage_reporting_timer_|.

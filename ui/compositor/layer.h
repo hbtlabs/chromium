@@ -347,6 +347,7 @@ class COMPOSITOR_EXPORT Layer
   void RequestCopyOfOutput(scoped_ptr<cc::CopyOutputRequest> request);
 
   // ContentLayerClient
+  gfx::Rect PaintableRegion() override;
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
       const gfx::Rect& clip,
       ContentLayerClient::PaintingControlSetting painting_control) override;
@@ -369,8 +370,8 @@ class COMPOSITOR_EXPORT Layer
   bool force_render_surface() const { return force_render_surface_; }
 
   // LayerClient
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo()
-      override;
+  scoped_refptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
+      cc::Layer* layer) override;
 
   // LayerAnimationEventObserver
   void OnAnimationStarted(const cc::AnimationEvent& event) override;

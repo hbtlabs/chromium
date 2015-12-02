@@ -398,8 +398,6 @@
       'browser/chrome_quota_permission_context.h',
       'browser/chrome_select_file_dialog_factory_win.cc',
       'browser/chrome_select_file_dialog_factory_win.h',
-      'browser/chrome_webusb_browser_client.cc',
-      'browser/chrome_webusb_browser_client.h',
       'browser/command_observer.h',
       'browser/command_updater.cc',
       'browser/command_updater.h',
@@ -428,10 +426,6 @@
       'browser/component_updater/swiftshader_component_installer.h',
       'browser/crash_upload_list.cc',
       'browser/crash_upload_list.h',
-      'browser/crash_upload_list_mac.cc',
-      'browser/crash_upload_list_mac.h',
-      'browser/crash_upload_list_win.cc',
-      'browser/crash_upload_list_win.h',
       'browser/custom_handlers/protocol_handler_registry.cc',
       'browser/custom_handlers/protocol_handler_registry.h',
       'browser/custom_handlers/protocol_handler_registry_factory.cc',
@@ -573,6 +567,8 @@
       'browser/interests/interests_fetcher.h',
       'browser/internal_auth.cc',
       'browser/internal_auth.h',
+      'browser/interstitials/chrome_controller_client.cc',
+      'browser/interstitials/chrome_controller_client.h',
       'browser/interstitials/chrome_metrics_helper.cc',
       'browser/interstitials/chrome_metrics_helper.h',
       'browser/interstitials/security_interstitial_page.cc',
@@ -1063,6 +1059,8 @@
       'browser/chrome_browser_main_posix.h',
       'browser/chrome_process_singleton.cc',
       'browser/chrome_process_singleton.h',
+      'browser/chrome_webusb_browser_client.cc',
+      'browser/chrome_webusb_browser_client.h',
       'browser/component_updater/widevine_cdm_component_installer.cc',
       'browser/component_updater/widevine_cdm_component_installer.h',
       'browser/custom_handlers/register_protocol_handler_permission_request.cc',
@@ -1142,6 +1140,7 @@
       'browser/importer/profile_writer.h',
       'browser/lifetime/browser_close_manager.cc',
       'browser/lifetime/browser_close_manager.h',
+      'browser/media_galleries/android/mtp_device_delegate_impl_android.cc',
       'browser/media_galleries/fileapi/av_scanning_file_validator.cc',
       'browser/media_galleries/fileapi/av_scanning_file_validator.h',
       'browser/media_galleries/fileapi/device_media_async_file_util.cc',
@@ -1342,6 +1341,8 @@
     ],
     # Sources (generally "desktop OS importers") used only on Mac & Windows.
     'chrome_browser_win_mac_sources': [
+      'browser/crash_upload_list_crashpad.cc',
+      'browser/crash_upload_list_crashpad.h',
       'browser/media_galleries/fileapi/file_path_watcher_util.cc',
       'browser/media_galleries/fileapi/file_path_watcher_util.h',
       'browser/media_galleries/fileapi/iapps_data_provider.cc',
@@ -2779,6 +2780,8 @@
       'browser/ssl/bad_clock_blocking_page.h',
       'browser/ssl/cert_report_helper.cc',
       'browser/ssl/cert_report_helper.h',
+      'browser/ssl/chrome_security_state_model_client.cc',
+      'browser/ssl/chrome_security_state_model_client.h',
       'browser/ssl/chrome_ssl_host_state_delegate.cc',
       'browser/ssl/chrome_ssl_host_state_delegate.h',
       'browser/ssl/chrome_ssl_host_state_delegate_factory.cc',
@@ -2789,6 +2792,7 @@
       'browser/ssl/security_state_model.h',
       'browser/ssl/security_state_model_android.cc',
       'browser/ssl/security_state_model_android.h',
+      'browser/ssl/security_state_model_client.h',
       'browser/ssl/ssl_blocking_page.cc',
       'browser/ssl/ssl_blocking_page.h',
       'browser/ssl/ssl_cert_reporter.h',
@@ -3060,6 +3064,7 @@
         # NOTE: New dependencies should generally be added in the OS!="ios"
         # dependencies block below, rather than here.
         'browser_ui',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_extra_resources',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
@@ -3755,11 +3760,6 @@
               ],
               'export_dependent_settings': [
                 'kasko_dll',
-              ],
-            }],
-            ['win_use_allocator_shim==1', {
-              'dependencies': [
-                '<(allocator_target)',
               ],
             }],
             ['branding!="Chrome"', {

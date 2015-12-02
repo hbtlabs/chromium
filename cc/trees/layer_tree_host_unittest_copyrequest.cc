@@ -36,6 +36,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
 
     layer_tree_host()->SetRootLayer(root);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root->bounds());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -191,6 +192,7 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -289,6 +291,7 @@ class LayerTreeHostCopyRequestTestInHiddenSubtree
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void AddCopyRequest(Layer* layer) {
@@ -389,6 +392,7 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -462,6 +466,7 @@ class LayerTreeHostCopyRequestTestClippedOut
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -491,6 +496,59 @@ class LayerTreeHostCopyRequestTestClippedOut
 SINGLE_AND_MULTI_THREAD_DIRECT_RENDERER_TEST_F(
     LayerTreeHostCopyRequestTestClippedOut);
 
+class LayerTreeHostCopyRequestTestScaledLayer
+    : public LayerTreeHostCopyRequestTest {
+ protected:
+  void SetupTree() override {
+    root_ = Layer::Create(layer_settings());
+    root_->SetBounds(gfx::Size(20, 20));
+
+    gfx::Transform scale;
+    scale.Scale(2, 2);
+
+    copy_layer_ = Layer::Create(layer_settings());
+    copy_layer_->SetBounds(gfx::Size(10, 10));
+    copy_layer_->SetTransform(scale);
+    root_->AddChild(copy_layer_);
+
+    child_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
+    child_layer_->SetBounds(gfx::Size(10, 10));
+    copy_layer_->AddChild(child_layer_);
+
+    layer_tree_host()->SetRootLayer(root_);
+    LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
+  }
+
+  void BeginTest() override {
+    PostSetNeedsCommitToMainThread();
+
+    scoped_ptr<CopyOutputRequest> request =
+        CopyOutputRequest::CreateBitmapRequest(base::Bind(
+            &LayerTreeHostCopyRequestTestScaledLayer::CopyOutputCallback,
+            base::Unretained(this)));
+    request->set_area(gfx::Rect(5, 5));
+    copy_layer_->RequestCopyOfOutput(std::move(request));
+  }
+
+  void CopyOutputCallback(scoped_ptr<CopyOutputResult> result) {
+    // The request area is expressed in layer space, but the result's size takes
+    // into account the transform from layer space to surface space.
+    EXPECT_EQ(gfx::Size(10, 10), result->size());
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+  FakeContentLayerClient client_;
+  scoped_refptr<Layer> root_;
+  scoped_refptr<Layer> copy_layer_;
+  scoped_refptr<FakePictureLayer> child_layer_;
+};
+
+SINGLE_AND_MULTI_THREAD_DIRECT_RENDERER_TEST_F(
+    LayerTreeHostCopyRequestTestScaledLayer);
+
 class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
     : public LayerTreeHostCopyRequestTest {
  protected:
@@ -504,6 +562,7 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void AddCopyRequest(Layer* layer) {
@@ -599,6 +658,7 @@ class LayerTreeHostCopyRequestTestLostOutputSurface
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -723,6 +783,7 @@ class LayerTreeHostCopyRequestTestCountTextures
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -877,6 +938,7 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -954,6 +1016,7 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
 
     layer_tree_host()->SetRootLayer(root_);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root_->bounds());
   }
 
   void BeginTest() override {
@@ -1027,6 +1090,7 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
 
     layer_tree_host()->SetRootLayer(root);
     LayerTreeHostCopyRequestTest::SetupTree();
+    client_.set_bounds(root->bounds());
   }
 
   void BeginTest() override {

@@ -6,6 +6,7 @@
 
 #include "core/layout/ColumnBalancer.h"
 
+#include "core/layout/LayoutMultiColumnFlowThread.h"
 #include "core/layout/LayoutMultiColumnSet.h"
 
 namespace blink {
@@ -246,11 +247,9 @@ void MinimumSpaceShortageFinder::examineBoxAfterEntering(const LayoutBox& box)
     if (isFirstAfterBreak && !box.hasForcedBreakBefore()) {
         // This box is first after a soft break.
         LayoutUnit strut = box.paginationStrut();
-        if (breakability == LayoutBox::ForbidBreaks) {
-            // Since we cannot break inside the box, just figure out how much more space we would
-            // need to prevent it from being pushed to the next column.
-            recordSpaceShortage(box.logicalHeight() - strut);
-        } else if (m_pendingStrut == LayoutUnit::min()) {
+        // Figure out how much more space we would need to prevent it from being pushed to the next column.
+        recordSpaceShortage(box.logicalHeight() - strut);
+        if (breakability != LayoutBox::ForbidBreaks && m_pendingStrut == LayoutUnit::min()) {
             // We now want to look for the first piece of unbreakable content (e.g. a line or a
             // block-displayed image) inside this block. That ought to be a good candidate for
             // minimum space shortage; a much better one than reporting space shortage for the
@@ -271,6 +270,19 @@ void MinimumSpaceShortageFinder::examineBoxAfterEntering(const LayoutBox& box)
             // last column boundary, in case it crosses more than one.
             LayoutUnit spaceUsedInLastColumn = bottomInFlowThread - group().columnLogicalTopForOffset(bottomInFlowThread);
             recordSpaceShortage(spaceUsedInLastColumn);
+        }
+    }
+
+    // If this is an inner multicol container, look for space shortage inside it.
+    if (!box.isLayoutBlockFlow())
+        return;
+    LayoutMultiColumnFlowThread* flowThread = toLayoutBlockFlow(box).multiColumnFlowThread();
+    if (!flowThread)
+        return;
+    for (const LayoutMultiColumnSet* columnSet = flowThread->firstMultiColumnSet(); columnSet; columnSet = columnSet->nextSiblingMultiColumnSet()) {
+        for (const MultiColumnFragmentainerGroup& row : columnSet->fragmentainerGroups()) {
+            MinimumSpaceShortageFinder innerFinder(row);
+            recordSpaceShortage(innerFinder.minimumSpaceShortage());
         }
     }
 }

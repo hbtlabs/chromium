@@ -15,7 +15,7 @@
 #include "grit/theme_resources.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
-#include "ui/compositor/clip_transform_recorder.h"
+#include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image.h"
@@ -69,7 +69,7 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
   // The contents is owned by the LocationBarView.
   set_owned_by_client();
 
-  ui::ThemeProvider* theme = location_bar_view_->GetThemeProvider();
+  const ui::ThemeProvider* theme = location_bar_view_->GetThemeProvider();
   if (ui::MaterialDesignController::IsModeMaterial()) {
     top_shadow_ = theme->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_TOP);
     bottom_shadow_ =
@@ -465,8 +465,8 @@ void OmniboxPopupContentsView::PaintChildren(const ui::PaintContext& context) {
   contents_bounds.Inset(0, views::NonClientFrameView::kClientEdgeThickness, 0,
                         bottom_shadow_->height() - interior);
 
-  ui::ClipTransformRecorder clip_transform_recorder(context);
-  clip_transform_recorder.ClipRect(contents_bounds);
+  ui::ClipRecorder clip_recorder(context, size());
+  clip_recorder.ClipRect(contents_bounds);
   {
     ui::PaintRecorder recorder(context, size());
     SkColor background_color = result_view_at(0)->GetColor(

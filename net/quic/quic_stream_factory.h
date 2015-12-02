@@ -35,6 +35,7 @@ class CertPolicyEnforcer;
 class CertVerifier;
 class ChannelIDService;
 class ClientSocketFactory;
+class CTVerifier;
 class HostResolver;
 class HttpServerProperties;
 class QuicClock;
@@ -52,6 +53,9 @@ class TransportSecurityState;
 namespace test {
 class QuicStreamFactoryPeer;
 }  // namespace test
+
+// When a connection is idle for 30 seconds it will be closed.
+const int kIdleConnectionTimeoutSeconds = 30;
 
 // Encapsulates a pending request for a QuicHttpStream.
 // If the request is still pending when it is destroyed, it will
@@ -114,6 +118,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       CertPolicyEnforcer* cert_policy_enforcer,
       ChannelIDService* channel_id_service,
       TransportSecurityState* transport_security_state,
+      CTVerifier* cert_transparency_verifier,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
       QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
       QuicRandom* random_generator,
@@ -138,6 +143,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       bool delay_tcp_race,
       bool store_server_configs_in_properties,
       bool close_sessions_on_ip_change,
+      int idle_connection_timeout_seconds,
       const QuicTagVector& connection_options);
   ~QuicStreamFactory() override;
 
@@ -330,6 +336,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   ClientSocketFactory* client_socket_factory_;
   base::WeakPtr<HttpServerProperties> http_server_properties_;
   TransportSecurityState* transport_security_state_;
+  CTVerifier* cert_transparency_verifier_;
   scoped_ptr<QuicServerInfoFactory> quic_server_info_factory_;
   QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory_;
   QuicRandom* random_generator_;

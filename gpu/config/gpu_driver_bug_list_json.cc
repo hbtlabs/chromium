@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.32",
+  "version": "8.35",
   "entries": [
     {
       "id": 1,
@@ -1268,10 +1268,10 @@ LONG_STRING_CONST(
     {
       "id": 109,
       "description": "MakeCurrent is slow on Linux with NVIDIA drivers",
+      "vendor_id": "0x10de",
       "os": {
         "type": "linux"
       },
-      "gl_vendor": "NVIDIA.*",
       "features": [
         "use_virtualized_gl_contexts"
       ]
@@ -1524,7 +1524,10 @@ LONG_STRING_CONST(
       "id": 130,
       "description": "NVIDIA fails glReadPixels from incomplete cube map texture",
       "cr_bugs": [518889],
-      "gl_vendor": "NVIDIA.*",
+      "vendor_id": "0x10de",
+      "os": {
+        "type": "linux"
+      },
       "features": [
         "force_cube_complete"
       ]
@@ -1591,10 +1594,49 @@ LONG_STRING_CONST(
         "type": "macosx"
       },
       "vendor_id": "0x1002",
-      "device_id": ["0x9440", "0x944a"],
+      "device_id": ["0x9440", "0x944a", "0x9488", "0x9490"],
       "features": [
         "disable_overlay_ca_layers",
         "disable_post_sub_buffers_for_onscreen_surfaces"
+      ]
+    },
+    {
+      "id": 136,
+      "description": "glGenerateMipmap fails if the zero texture level is not set on some Mac drivers",
+      "cr_bugs": [560499],
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "set_zero_level_before_generating_mipmap"
+      ]
+    },
+    {
+      "id": 137,
+      "description": "NVIDIA fails glReadPixels from incomplete cube map texture",
+      "cr_bugs": [518889],
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "force_cube_complete"
+      ]
+    },
+    {
+      "id": 138,
+      "description": "NVIDIA drivers before 346 lack features in NV_path_rendering and related extensions to implement driver level path rendering.",
+      "cr_bugs": [344330],
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "driver_version": {
+        "op": "<",
+        "value": "346"
+      },
+      "features": [
+        "disable_gl_path_rendering"
       ]
     }
   ]

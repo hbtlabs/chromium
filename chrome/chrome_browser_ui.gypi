@@ -52,11 +52,6 @@
       'browser/ui/autofill/password_generation_popup_view.h',
       'browser/ui/autofill/popup_controller_common.cc',
       'browser/ui/autofill/popup_controller_common.h',
-      'browser/ui/autofill/save_card_bubble_controller.cc',
-      'browser/ui/autofill/save_card_bubble_controller.h',
-      'browser/ui/autofill/save_card_bubble_controller_impl.cc',
-      'browser/ui/autofill/save_card_bubble_controller_impl.h',
-      'browser/ui/autofill/save_card_bubble_view.h',
       'browser/ui/blocked_content/blocked_window_params.cc',
       'browser/ui/blocked_content/blocked_window_params.h',
       'browser/ui/blocked_content/popup_blocker_tab_helper.cc',
@@ -118,6 +113,8 @@
       'browser/ui/passwords/manage_passwords_ui_controller.h',
       'browser/ui/passwords/manage_passwords_view_utils.cc',
       'browser/ui/passwords/manage_passwords_view_utils.h',
+      'browser/ui/passwords/passwords_client_ui_delegate.cc',
+      'browser/ui/passwords/passwords_client_ui_delegate.h',
       'browser/ui/passwords/passwords_model_delegate.cc',
       'browser/ui/passwords/passwords_model_delegate.h',
       'browser/ui/passwords/password_manager_presenter.cc',
@@ -1161,6 +1158,8 @@
       'browser/ui/cocoa/passwords/passwords_bubble_cocoa.mm',
       'browser/ui/cocoa/passwords/passwords_bubble_controller.h',
       'browser/ui/cocoa/passwords/passwords_bubble_controller.mm',
+      'browser/ui/cocoa/passwords/passwords_bubble_utils.h',
+      'browser/ui/cocoa/passwords/passwords_bubble_utils.mm',
       'browser/ui/cocoa/passwords/passwords_list_view_controller.h',
       'browser/ui/cocoa/passwords/passwords_list_view_controller.mm',
       'browser/ui/cocoa/passwords/pending_password_view_controller.h',
@@ -2009,6 +2008,11 @@
       'browser/ui/app_list/app_list_service_views.h',
       'browser/ui/app_list/app_list_shower_views.cc',
       'browser/ui/app_list/app_list_shower_views.h',
+      'browser/ui/autofill/save_card_bubble_controller.cc',
+      'browser/ui/autofill/save_card_bubble_controller.h',
+      'browser/ui/autofill/save_card_bubble_controller_impl.cc',
+      'browser/ui/autofill/save_card_bubble_controller_impl.h',
+      'browser/ui/autofill/save_card_bubble_view.h',
       'browser/ui/browser_dialogs_mac.cc',
       'browser/ui/views/apps/app_info_dialog/app_info_dialog_views.cc',
       'browser/ui/views/apps/app_info_dialog/app_info_dialog_views.h',
@@ -3134,11 +3138,6 @@
             'browser/ui/views/frame/taskbar_decorator.cc'
           ],
           'conditions': [
-            ['win_use_allocator_shim==1', {
-              'dependencies': [
-                '<(allocator_target)',
-              ],
-            }],
             ['branding!="Chrome"', {
               'dependencies!': [
                 '../google_update/google_update.gyp:google_update',

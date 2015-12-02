@@ -500,6 +500,9 @@ bool QuicChromiumClientSession::GetSSLInfo(SSLInfo* ssl_info) const {
   ssl_info->security_bits = security_bits;
   ssl_info->handshake_type = SSLInfo::HANDSHAKE_FULL;
   ssl_info->pinning_failure_log = pinning_failure_log_;
+
+  ssl_info->UpdateSignedCertificateTimestamps(*ct_verify_result_);
+
   return true;
 }
 
@@ -796,10 +799,12 @@ void QuicChromiumClientSession::OnProofVerifyDetailsAvailable(
     const ProofVerifyDetails& verify_details) {
   const ProofVerifyDetailsChromium* verify_details_chromium =
       reinterpret_cast<const ProofVerifyDetailsChromium*>(&verify_details);
-  CertVerifyResult* result_copy = new CertVerifyResult;
-  result_copy->CopyFrom(verify_details_chromium->cert_verify_result);
-  cert_verify_result_.reset(result_copy);
+  cert_verify_result_.reset(new CertVerifyResult);
+  cert_verify_result_->CopyFrom(verify_details_chromium->cert_verify_result);
   pinning_failure_log_ = verify_details_chromium->pinning_failure_log;
+  scoped_ptr<ct::CTVerifyResult> ct_verify_result_copy(
+      new ct::CTVerifyResult(verify_details_chromium->ct_verify_result));
+  ct_verify_result_ = ct_verify_result_copy.Pass();
   logger_->OnCertificateVerified(*cert_verify_result_);
 }
 

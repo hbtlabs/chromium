@@ -8,9 +8,9 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/enhanced_bookmarks/bookmark_server_cluster_service.h"
+#include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
@@ -19,6 +19,7 @@
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/rappor/rappor_service.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/translate_pref_names.h"
@@ -49,6 +50,7 @@ const char kURLsToRestoreOnStartupOld[] = "session.urls_to_restore_on_startup";
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   BrowserStateInfoCache::RegisterPrefs(registry);
+  flags_ui::PrefServiceFlagsStorage::RegisterPrefs(registry);
   gcm::GCMChannelStatusSyncer::RegisterPrefs(registry);
   ios::SigninManagerFactory::RegisterPrefs(registry);
   IOSChromeMetricsServiceClient::RegisterPrefs(registry);
@@ -67,11 +69,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   [OmniboxGeolocationLocalState registerLocalState:registry];
   [MemoryDebuggerManager registerLocalState:registry];
 
-  // TODO(crbug.com/557814): data_reduction_proxy::prefs::kDataReductionProxy
-  // should be registered by data_reduction_proxy::RegisterPrefs() instead of
-  // here.
-  registry->RegisterStringPref(data_reduction_proxy::prefs::kDataReductionProxy,
-                               std::string());
   data_reduction_proxy::RegisterPrefs(registry);
 
   // TODO(shreyasv): Remove this in M49 as almost all users would have the
@@ -124,6 +121,19 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
       prefs::kNetworkPredictionWifiOnly, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(prefs::kContextualSearchEnabled, std::string(),
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      ios::prefs::kSearchSuggestEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(prefs::kSigninAllowed, true);
+  registry->RegisterBooleanPref(ios::prefs::kSavingBrowserHistoryDisabled,
+                                false);
+  registry->RegisterBooleanPref(ios::prefs::kAllowDeletingBrowserHistory, true);
+  registry->RegisterIntegerPref(ios::prefs::kNtpShownPage, 1 << 10);
+  // This comes from components/bookmarks/core/browser/bookmark_model.h
+  // Defaults to 3, which is the id of bookmarkModel_->mobile_node()
+  registry->RegisterInt64Pref(prefs::kNtpShownBookmarksFolder, 3);
 
   // TODO(crbug.com/525079): those preferences are not used on iOS but are
   // required to be able to run unit_tests until componentization of

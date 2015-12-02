@@ -27,6 +27,9 @@
 #include "mojo/public/cpp/environment/environment.h"
 
 namespace mojo {
+
+class AssociatedGroup;
+
 namespace internal {
 
 class InterfaceEndpointClient;
@@ -85,6 +88,10 @@ class MultiplexRouter
   // and notifies all interfaces running on this pipe.
   void RaiseError();
 
+  scoped_ptr<AssociatedGroup> CreateAssociatedGroup();
+
+  static MultiplexRouter* GetRouter(AssociatedGroup* associated_group);
+
   // ---------------------------------------------------------------------------
   // The following public methods are called on the creating thread.
 
@@ -129,6 +136,12 @@ class MultiplexRouter
   bool is_valid() const {
     DCHECK(thread_checker_.CalledOnValidThread());
     return connector_.is_valid();
+  }
+
+  // TODO(yzshen): consider removing this getter.
+  MessagePipeHandle handle() const {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    return connector_.handle();
   }
 
  private:

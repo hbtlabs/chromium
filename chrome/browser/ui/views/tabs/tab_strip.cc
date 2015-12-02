@@ -402,7 +402,7 @@ void NewTabButton::PaintFill(bool pressed,
 
   // Draw the fill background image.
   const gfx::Size size(GetNewTabButtonSize());
-  ui::ThemeProvider* theme_provider = GetThemeProvider();
+  const ui::ThemeProvider* theme_provider = GetThemeProvider();
   gfx::ImageSkia* background = theme_provider->GetImageSkiaNamed(bg_id);
   // For custom tab backgrounds the background starts at the top of the tab
   // strip. Otherwise the background starts at the top of the frame.
@@ -931,11 +931,11 @@ SkAlpha TabStrip::GetInactiveAlpha(bool for_new_tab_button) const {
 
   const chrome::HostDesktopType host_desktop_type =
       chrome::GetHostDesktopTypeForNativeView(GetWidget()->GetNativeView());
+  SkAlpha base_alpha = kInactiveTabAlphaOpaque;
   if (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH)
-    return kInactiveTabAlphaAsh;
-  if (!GetWidget()->ShouldWindowContentsBeTransparent())
-    return kInactiveTabAlphaOpaque;
-  SkAlpha base_alpha = kInactiveTabAlphaGlass;
+    base_alpha = kInactiveTabAlphaAsh;
+  else if (GetWidget()->ShouldWindowContentsBeTransparent())
+    base_alpha = kInactiveTabAlphaGlass;
   return (for_new_tab_button || (GetSelectionModel().size() <= 1)) ?
       base_alpha : static_cast<SkAlpha>(kMultiSelectionMultiplier * base_alpha);
 }
@@ -1205,7 +1205,7 @@ bool TabStrip::IsImmersiveStyle() const {
 }
 
 int TabStrip::GetBackgroundResourceId(bool* custom_image) const {
-  ui::ThemeProvider* theme_provider = GetThemeProvider();
+  const ui::ThemeProvider* theme_provider = GetThemeProvider();
 
   if (GetWidget()->ShouldWindowContentsBeTransparent()) {
     const int kBackgroundIdGlass = IDR_THEME_TAB_BACKGROUND_V;
@@ -1268,7 +1268,8 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     const uint8_t inactive_tab_alpha =
         (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH) ?
             GetInactiveAlpha(false) : 255;
-    ui::CompositingRecorder opacity_recorder(context, inactive_tab_alpha);
+    ui::CompositingRecorder opacity_recorder(context, size(),
+                                             inactive_tab_alpha);
 
     PaintClosingTabs(tab_count(), context);
 

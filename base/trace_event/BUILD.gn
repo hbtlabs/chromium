@@ -17,6 +17,8 @@ source_set("trace_event") {
     "heap_profiler_heap_dump_writer.h",
     "heap_profiler_stack_frame_deduplicator.cc",
     "heap_profiler_stack_frame_deduplicator.h",
+    "heap_profiler_type_name_deduplicator.cc",
+    "heap_profiler_type_name_deduplicator.h",
     "java_heap_dump_provider_android.cc",
     "java_heap_dump_provider_android.h",
     "memory_allocator_dump.cc",
@@ -51,8 +53,6 @@ source_set("trace_event") {
     "trace_event_etw_export_win.h",
     "trace_event_impl.cc",
     "trace_event_impl.h",
-    "trace_event_memory.cc",
-    "trace_event_memory.h",
     "trace_event_memory_overhead.cc",
     "trace_event_memory_overhead.h",
     "trace_event_synthetic_delay.cc",
@@ -68,6 +68,16 @@ source_set("trace_event") {
     "winheap_dump_provider_win.h",
   ]
 
+  configs += [ "//base:base_implementation" ]
+
+  deps = [
+    "//base/debug",
+    "//base/json",
+    "//base/memory",
+    "//base/process",
+    "//base/third_party/dynamic_annotations",
+  ]
+
   if (is_nacl) {
     sources -= [
       "process_memory_totals_dump_provider.cc",
@@ -80,22 +90,12 @@ source_set("trace_event") {
       "malloc_dump_provider.cc",
       "malloc_dump_provider.h",
     ]
+    deps += [ "//base/allocator:extension_thunks" ]
   }
 
   if (is_linux || is_android) {
     sources += [ "process_memory_maps_dump_provider.cc" ]
   }
-
-  configs += [ "//base:base_implementation" ]
-
-  deps = [
-    "//base/debug",
-    "//base/json",
-    "//base/memory",
-    "//base/process",
-    "//base/third_party/dynamic_annotations",
-  ]
-
   if (is_win) {
     deps += [ "//base/trace_event/etw_manifest:chrome_events_win" ]
   }
@@ -116,6 +116,7 @@ source_set("trace_event_unittests") {
     "heap_profiler_allocation_register_unittest.cc",
     "heap_profiler_heap_dump_writer_unittest.cc",
     "heap_profiler_stack_frame_deduplicator_unittest.cc",
+    "heap_profiler_type_name_deduplicator_unittest.cc",
     "java_heap_dump_provider_android_unittest.cc",
     "memory_allocator_dump_unittest.cc",
     "memory_dump_manager_unittest.cc",
@@ -124,7 +125,6 @@ source_set("trace_event_unittests") {
     "trace_config_memory_test_util.h",
     "trace_config_unittest.cc",
     "trace_event_argument_unittest.cc",
-    "trace_event_memory_unittest.cc",
     "trace_event_synthetic_delay_unittest.cc",
     "trace_event_system_stats_monitor_unittest.cc",
     "trace_event_unittest.cc",

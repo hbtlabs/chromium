@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.provider.Browser;
@@ -1085,7 +1086,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      * Called on the foreground tab when the Activity showing the Tab gets started. This is called
      * on both cold and warm starts.
      */
-    public void onActivityStart() {
+    public void onActivityShown() {
         if (isHidden()) {
             show(TabSelectionType.FROM_USER);
         } else {
@@ -1103,7 +1104,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     /**
      * Called on the foreground tab when the Activity showing the Tab gets stopped.
      */
-    public void onActivityStop() {
+    public void onActivityHidden() {
         hide();
     }
 
@@ -1806,7 +1807,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     private void notifyFaviconChanged() {
         RewindableIterator<TabObserver> observers = getTabObservers();
         while (observers.hasNext()) {
-            observers.next().onFaviconUpdated(this);
+            observers.next().onFaviconUpdated(this, null);
         }
     }
 
@@ -2088,7 +2089,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     @CalledByNative
     protected void onFaviconAvailable(Bitmap icon) {
-        boolean needUpdate = false;
         String url = getUrl();
         boolean pageUrlChanged = !url.equals(mFaviconUrl);
         // This method will be called multiple times if the page has more than one favicon.
@@ -2097,17 +2097,10 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         if (pageUrlChanged || (icon.getWidth() == mIdealFaviconSize
                 && icon.getHeight() == mIdealFaviconSize)) {
             mFavicon = Bitmap.createScaledBitmap(icon, mIdealFaviconSize, mIdealFaviconSize, true);
-            needUpdate = true;
-        }
-
-        if (pageUrlChanged) {
             mFaviconUrl = url;
-            needUpdate = true;
         }
 
-        if (!needUpdate) return;
-
-        for (TabObserver observer : mObservers) observer.onFaviconUpdated(this);
+        for (TabObserver observer : mObservers) observer.onFaviconUpdated(this, icon);
     }
     /**
      * Called when the navigation entry containing the history item changed,
@@ -2433,15 +2426,24 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
         if (mTabUma != null) mTabUma.onRendererCrashed();
 
-        // Update the most recent minidump file with the logcat. Doing this asynchronously
-        // adds a race condition in the case of multiple simultaneously renderer crashses
-        // but because the data will be the same for all of them it is innocuous. We can
-        // attempt to do this regardless of whether it was a foreground tab in the event
-        // that it's a real crash and not just android killing the tab.
-        Context context = getApplicationContext();
-        Intent intent = MinidumpUploadService.createFindAndUploadLastCrashIntent(context);
-        context.startService(intent);
-        RecordUserAction.record("MobileBreakpadUploadAttempt");
+        try {
+            // Update the most recent minidump file with the logcat. Doing this asynchronously
+            // adds a race condition in the case of multiple simultaneously renderer crashses
+            // but because the data will be the same for all of them it is innocuous. We can
+            // attempt to do this regardless of whether it was a foreground tab in the event
+            // that it's a real crash and not just android killing the tab.
+            Context context = getApplicationContext();
+            Intent intent = MinidumpUploadService.createFindAndUploadLastCrashIntent(context);
+            context.startService(intent);
+            RecordUserAction.record("MobileBreakpadUploadAttempt");
+        } catch (SecurityException e) {
+            // For KitKat and below, there was a framework bug which cause us to not be able to
+            // find our own crash uploading service. Ignore a SecurityException here on older
+            // OS versions since the crash will eventually get uploaded on next start. crbug/542533
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                throw e;
+            }
+        }
     }
 
     /**

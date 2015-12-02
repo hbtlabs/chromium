@@ -140,7 +140,7 @@ void AppMenuButton::RemoveMenuListener(views::MenuListener* listener) {
 gfx::Size AppMenuButton::GetPreferredSize() const {
   if (ui::MaterialDesignController::IsModeMaterial()) {
     gfx::Size size(image()->GetPreferredSize());
-    ui::ThemeProvider* provider = GetThemeProvider();
+    const ui::ThemeProvider* provider = GetThemeProvider();
     if (provider) {
       gfx::Insets insets(GetLayoutInsets(TOOLBAR_BUTTON));
       size.Enlarge(insets.width(), insets.height());
@@ -211,6 +211,17 @@ void AppMenuButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   SetPaintToLayer(false);
 }
 
+gfx::Point AppMenuButton::CalculateInkDropCenter() const {
+  // ToolbarView extends the bounds of the app button to the right in maximized
+  // mode. So instead of using the center point of local bounds, we use the
+  // center point (adjusted for RTL layouts) of the preferred size, which
+  // doesn't change in maximized mode.
+  const int visible_width = GetPreferredSize().width();
+  return gfx::Point(
+      (GetMirroredXWithWidthInView(0, visible_width) + visible_width) / 2,
+      height() / 2);
+}
+
 const char* AppMenuButton::GetClassName() const {
   return "AppMenuButton";
 }
@@ -259,15 +270,7 @@ bool AppMenuButton::CanDrop(const ui::OSExchangeData& data) {
 
 void AppMenuButton::Layout() {
   MenuButton::Layout();
-
-  // ToolbarView extends the bounds of the app button to the right in maximized
-  // mode. So instead of using the center point of local bounds, we use the
-  // center point (adjusted for RTL layouts) of preferred size which doesn't
-  // change in maximized mode.
-  const int visible_width = GetPreferredSize().width();
-  ink_drop_animation_controller_->SetInkDropCenter(gfx::Point(
-      (GetMirroredXWithWidthInView(0, visible_width) + visible_width) / 2,
-      height() / 2));
+  ink_drop_animation_controller_->SetInkDropCenter(CalculateInkDropCenter());
 }
 
 void AppMenuButton::OnDragEntered(const ui::DropTargetEvent& event) {

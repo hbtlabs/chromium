@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_string.h"
 #include "base/containers/hash_tables.h"
 #include "base/message_loop/message_loop.h"
@@ -68,8 +69,12 @@ namespace chrome {
 
 namespace android {
 
+// static
 const char ExternalDataUseObserver::kExternalDataUseObserverFieldTrial[] =
     "ExternalDataUseObserver";
+
+// static
+const size_t ExternalDataUseObserver::kMaxBufferSize = 100;
 
 ExternalDataUseObserver::ExternalDataUseObserver(
     data_usage::DataUseAggregator* data_use_aggregator,
@@ -142,10 +147,10 @@ void ExternalDataUseObserver::FetchMatchingRulesOnUIThread() const {
 
 void ExternalDataUseObserver::FetchMatchingRulesDone(
     JNIEnv* env,
-    jobject obj,
-    const base::android::JavaParamRef<jobjectArray>& app_package_name,
-    const base::android::JavaParamRef<jobjectArray>& domain_path_regex,
-    const base::android::JavaParamRef<jobjectArray>& label) {
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobjectArray>& app_package_name,
+    const JavaParamRef<jobjectArray>& domain_path_regex,
+    const JavaParamRef<jobjectArray>& label) {
   DCHECK(ui_task_runner_->BelongsToCurrentThread());
   // Convert to native objects.
   std::vector<std::string> app_package_name_native;
@@ -179,9 +184,10 @@ void ExternalDataUseObserver::FetchMatchingRulesDoneOnIOThread(
   // Process buffered reports.
 }
 
-void ExternalDataUseObserver::OnReportDataUseDone(JNIEnv* env,
-                                                  jobject obj,
-                                                  bool success) {
+void ExternalDataUseObserver::OnReportDataUseDone(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    bool success) {
   DCHECK(ui_task_runner_->BelongsToCurrentThread());
   io_task_runner_->PostTask(
       FROM_HERE,
@@ -208,15 +214,16 @@ void ExternalDataUseObserver::OnReportDataUseDoneOnIOThread(bool success) {
   SubmitBufferedDataUseReport();
 }
 
-void ExternalDataUseObserver::OnDataUse(
-    const std::vector<const data_usage::DataUse*>& data_use_sequence) {
+void ExternalDataUseObserver::OnDataUse(const data_usage::DataUse& data_use) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  const base::TimeTicks now_ticks = base::TimeTicks::Now();
+  const base::Time now_time = base::Time::Now();
 
   // If the time when the matching rules were last fetched is more than
   // |fetch_matching_rules_duration_|, fetch them again.
-  if (base::TimeTicks::Now() - last_matching_rules_fetch_time_ >=
+  if (now_ticks - last_matching_rules_fetch_time_ >=
       fetch_matching_rules_duration_) {
-    last_matching_rules_fetch_time_ = base::TimeTicks::Now();
+    last_matching_rules_fetch_time_ = now_ticks;
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&ExternalDataUseObserver::FetchMatchingRulesOnUIThread,
@@ -228,15 +235,10 @@ void ExternalDataUseObserver::OnDataUse(
   }
 
   std::string label;
+  if (data_use_tab_model_->GetLabelForDataUse(data_use, &label))
+    BufferDataUseReport(data_use, label, previous_report_time_, now_time);
 
-  for (const data_usage::DataUse* data_use : data_use_sequence) {
-    if (!data_use_tab_model_->GetLabelForDataUse(*data_use, &label))
-      continue;
-
-    BufferDataUseReport(data_use, label, previous_report_time_,
-                        base::Time::Now());
-  }
-  previous_report_time_ = base::Time::Now();
+  previous_report_time_ = now_time;
 
   // TODO(tbansal): Post SubmitBufferedDataUseReport on IO thread once the
   // task runners are plumbed in.
@@ -244,22 +246,22 @@ void ExternalDataUseObserver::OnDataUse(
 }
 
 void ExternalDataUseObserver::BufferDataUseReport(
-    const data_usage::DataUse* data_use,
+    const data_usage::DataUse& data_use,
     const std::string& label,
     const base::Time& start_time,
     const base::Time& end_time) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!label.empty());
-  DCHECK_LE(0, data_use->rx_bytes);
-  DCHECK_LE(0, data_use->tx_bytes);
-  if (data_use->rx_bytes < 0 || data_use->tx_bytes < 0)
+  DCHECK_LE(0, data_use.rx_bytes);
+  DCHECK_LE(0, data_use.tx_bytes);
+  if (data_use.rx_bytes < 0 || data_use.tx_bytes < 0)
     return;
 
   DataUseReportKey data_use_report_key =
-      DataUseReportKey(label, data_use->connection_type, data_use->mcc_mnc);
+      DataUseReportKey(label, data_use.connection_type, data_use.mcc_mnc);
 
-  DataUseReport report = DataUseReport(start_time, end_time, data_use->rx_bytes,
-                                       data_use->tx_bytes);
+  DataUseReport report =
+      DataUseReport(start_time, end_time, data_use.rx_bytes, data_use.tx_bytes);
 
   // Check if the |data_use_report_key| is already in the buffered reports.
   DataUseReports::iterator it =
@@ -282,9 +284,9 @@ void ExternalDataUseObserver::BufferDataUseReport(
     buffered_data_reports_.insert(
         std::make_pair(data_use_report_key, merged_report));
   }
-  total_bytes_buffered_ += (data_use->rx_bytes + data_use->tx_bytes);
+  total_bytes_buffered_ += (data_use.rx_bytes + data_use.tx_bytes);
 
-  DCHECK_LE(buffered_data_reports_.size(), static_cast<size_t>(kMaxBufferSize));
+  DCHECK_LE(buffered_data_reports_.size(), kMaxBufferSize);
 }
 
 void ExternalDataUseObserver::SubmitBufferedDataUseReport() {

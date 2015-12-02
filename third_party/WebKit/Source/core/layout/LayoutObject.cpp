@@ -161,7 +161,7 @@ static ObjectPaintPropertiesMap& objectPaintPropertiesMap()
 void* LayoutObject::operator new(size_t sz)
 {
     ASSERT(isMainThread());
-    return partitionAlloc(WTF::Partitions::layoutPartition(), sz);
+    return partitionAlloc(WTF::Partitions::layoutPartition(), sz, WTF_HEAP_PROFILER_TYPE_NAME(LayoutObject));
 }
 
 void LayoutObject::operator delete(void* ptr)
@@ -2235,6 +2235,22 @@ FloatPoint LayoutObject::localToContainerPoint(const FloatPoint& localPoint, con
     return transformState.lastPlanarPoint();
 }
 
+void LayoutObject::localToContainerRects(Vector<LayoutRect>& rects, const LayoutBoxModelObject* paintInvalidationContainer, const LayoutPoint& preOffset, const LayoutPoint& postOffset) const
+{
+    for (size_t i = 0; i < rects.size(); ++i) {
+        LayoutRect& rect = rects[i];
+        rect.moveBy(preOffset);
+        FloatQuad containerQuad = localToContainerQuad(FloatQuad(FloatRect(rect)), paintInvalidationContainer);
+        LayoutRect containerRect = LayoutRect(containerQuad.boundingBox());
+        if (containerRect.isEmpty()) {
+            rects.remove(i--);
+            continue;
+        }
+        containerRect.moveBy(postOffset);
+        rects[i] = containerRect;
+    }
+}
+
 FloatPoint LayoutObject::localToInvalidationBackingPoint(const LayoutPoint& localPoint, PaintLayer** backingLayer)
 {
     const LayoutBoxModelObject& paintInvalidationContainer = containerForPaintInvalidationOnRootedTree();
@@ -2387,21 +2403,24 @@ bool LayoutObject::isRooted() const
     return false;
 }
 
-RespectImageOrientationEnum LayoutObject::shouldRespectImageOrientation() const
+RespectImageOrientationEnum LayoutObject::shouldRespectImageOrientation(const LayoutObject* layoutObject)
 {
+    if (!layoutObject)
+        return DoNotRespectImageOrientation;
+
     // Respect the image's orientation if it's being used as a full-page image or
     // it's an <img> and the setting to respect it everywhere is set or the <img>
     // has image-orientation: from-image style. FIXME: crbug.com/498233
-    if (document().isImageDocument())
+    if (layoutObject->document().isImageDocument())
         return RespectImageOrientation;
 
-    if (!isHTMLImageElement(node()))
+    if (!isHTMLImageElement(layoutObject->node()))
         return DoNotRespectImageOrientation;
 
-    if (document().settings() && document().settings()->shouldRespectImageOrientation())
+    if (layoutObject->document().settings() && layoutObject->document().settings()->shouldRespectImageOrientation())
         return RespectImageOrientation;
 
-    if (style() && style()->respectImageOrientation() == RespectImageOrientation)
+    if (layoutObject->style() && layoutObject->style()->respectImageOrientation() == RespectImageOrientation)
         return RespectImageOrientation;
 
     return DoNotRespectImageOrientation;

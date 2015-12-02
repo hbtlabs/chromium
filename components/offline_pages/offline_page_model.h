@@ -173,6 +173,9 @@ class OfflinePageModel : public KeyedService,
   // Wipes out all the data by deleting all saved files and clearing the store.
   void ClearAll(const base::Closure& callback);
 
+  // Returns true if there're offline pages.
+  bool HasOfflinePages() const;
+
   // Gets all available offline pages. Requires that the model is loaded.
   const std::vector<OfflinePageItem> GetAllPages() const;
 
@@ -188,6 +191,10 @@ class OfflinePageModel : public KeyedService,
   // returned if not found.
   const OfflinePageItem* GetPageByOfflineURL(const GURL& offline_url) const;
 
+  // Returns an offline page saved for |online_url|. A nullptr is returned if
+  // not found.
+  const OfflinePageItem* GetPageByOnlineURL(const GURL& online_url) const;
+
   // Checks that all of the offline pages have corresponding offline copies.
   // If a page is discovered to be missing an offline copy, its offline page
   // metadata will be removed and |OfflinePageDeleted| will be sent to model
@@ -201,6 +208,7 @@ class OfflinePageModel : public KeyedService,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OfflinePageModelTest, MarkPageForDeletion);
+  FRIEND_TEST_ALL_PREFIXES(OfflinePageModelTest, BookmarkNodeChangesUrl);
 
   typedef ScopedVector<OfflinePageArchiver> PendingArchivers;
 

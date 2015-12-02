@@ -39,19 +39,19 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '93c69fff535075e86596a2b224f52f454b060be3',
+  'skia_revision': '9323dc6a72de301f23e1187adc2365395b4b23d8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '2280bfa03b1173d32bd2dbad60013d8390ce2ec5',
+  'v8_revision': '2472199b500c7d5f1bd57447d87f98df0bf45f83',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': '05e17879accce360bee999cd9ec891d761056bc2',
+  'swarming_revision': 'df99a00d96fae932bae824dccba13156bf7eddd0',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '847638a64a32df1b357b57507170301195263a1c',
+  'angle_revision': '5ac60fc2a3c0a10f04d9aa945069a68e707a80cb',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -59,15 +59,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '8840ec9b5c54da9dc9aae3afb8585a2ff80758d9',
+  'pdfium_revision': '628f7053cc646c58c61add247c75bc65ac135327',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
-  'openmax_dl_revision': '37b900ccc45cfab71faf4fd332df15369766b94c',
+  'openmax_dl_revision': '7a179b97899cf33d4a12c7ef590176c519016f4d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '3ac32b1eda0da7a99d9c2b6c605fe50af80ccd90',
+  'boringssl_revision': 'fde89b43c347155798dee8b1210c2c5faabe25f8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling nss
   # and whatever else without interference from each other.
@@ -87,7 +87,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': 'b6ec17db8c2958f3455043e29000f17354336fb8',
+  'nacl_revision': 'a0559c4cc7e9f95b41982a8f4ba10a04173c6c75',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.
@@ -127,7 +127,7 @@ deps = {
    Var('chromium_git') + '/external/colorama.git' + '@' + '799604a1041e9b3bc5d2789ecbd7e8db2e18e6b8',
 
   'src/third_party/crashpad/crashpad':
-   Var('chromium_git') + '/crashpad/crashpad.git' + '@' + '97b0f86d0ccb095391ca64b3948f0d6c02975ac1',
+   Var('chromium_git') + '/crashpad/crashpad.git' + '@' + '6bebb10829332dee5c7315abafb0a8bf32840c15',
 
   'src/third_party/icu':
    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '42c58d4e49f2250039f0e98d43e0b76e8f5ca024',
@@ -148,7 +148,7 @@ deps = {
     Var('chromium_git') + '/external/snappy.git' + '@' + '762bb32f0c9d2f31ba4958c7c0933d22e80c20bf',
 
   'src/tools/gyp':
-    Var('chromium_git') + '/external/gyp.git' + '@' + 'e1133480da78cd4a23a8cec604d1d6d46dab35d6',
+    Var('chromium_git') + '/external/gyp.git' + '@' + 'e2313c02ad7b6d589b38fe578f5d39970a9bbc20',
 
   'src/tools/swarming_client':
    Var('chromium_git') + '/external/swarming.client.git' + '@' +  Var('swarming_revision'),
@@ -178,7 +178,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'c8dd77f93df19bd76de9ef727414dcd32b54cdee',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '8673e8623e0739a507ce0f98d8b0be7311437ebd',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -187,10 +187,10 @@ deps = {
    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '204cde580a5f6dd5e7511c932c47c068046d9671',
 
   'src/third_party/ffmpeg':
-   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'c21cf0893cb95476b2a902d6c06a5c2652b832cc',
+   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'f962bcb6a8aed397bb2d418527a4e4a23f5ab955',
 
   'src/third_party/libjingle/source/talk':
-    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + '15bbf6cdc4ce473f93befea563c56d7af4bc6ba2', # commit position 10735
+    Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + '67e7a761483e48f720a388b886b0354225858700', # commit position 10833
 
   'src/third_party/usrsctp/usrsctplib':
     Var('chromium_git') + '/external/usrsctplib.git' + '@' + '36444a999739e9e408f8f587cb4c3ffeef2e50ac', # from svn revision 9215
@@ -214,7 +214,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '3e38ef990fa4264c1dffaee831af26dc9bfc5fbf', # commit position 10736
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'febd8d424cc5ae0ba65a0e1806ed80d76d9e9e5e', # commit position 10836
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -274,7 +274,7 @@ deps = {
 
   'src/third_party/catapult':
     Var('chromium_git') + '/external/github.com/catapult-project/catapult.git' + '@' +
-    '704c40202baaeb9484af0622aedf41c4a48e0df2',
+    '8ee1919cae827e33a3f217366d4a05e64a948615',
 
   'src/third_party/openh264/src':
     Var('chromium_git') + '/external/github.com/cisco/openh264' + '@' + 'b37cda248234162033e3e11b0335f3131cdfe488',
@@ -418,7 +418,11 @@ deps_os = {
 
     # Display server protocol for Linux.
     'src/third_party/wayland/src':
-     Var('chromium_git') + '/external/wayland/wayland.git' + '@' + 'b05668f0ad64ad9ba82e124965163daed4172ead',
+     Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland.git' + '@' + 'b05668f0ad64ad9ba82e124965163daed4172ead',
+
+    # Wayland protocols that add functionality not available in the core protocol.
+    'src/third_party/wayland-protocols/src':
+     Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland-protocols.git' + '@' + '3543bb755c8858b0a70dfd20fd1beb74d865751d',
   },
   'android': {
     'src/third_party/android_protobuf/src':

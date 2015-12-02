@@ -11,6 +11,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/video_frame.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
 #include "media/cast/logging/simple_event_subscriber.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_sender_impl.h"
@@ -183,7 +184,7 @@ class VideoSenderTest : public ::testing::Test {
   }
 
   // If |external| is true then external video encoder (VEA) is used.
-  // |expect_init_sucess| is true if initialization is expected to succeed.
+  // |expect_init_success| is true if initialization is expected to succeed.
   void InitEncoder(bool external, bool expect_init_success) {
     VideoSenderConfig video_config = GetDefaultVideoSenderConfig();
     video_config.use_external_encoder = external;
@@ -253,6 +254,7 @@ class VideoSenderTest : public ::testing::Test {
   int last_pixel_value_;
   base::TimeTicks first_frame_timestamp_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(VideoSenderTest);
 };
 
@@ -338,7 +340,7 @@ TEST_F(VideoSenderTest, RtcpTimer) {
 
   // Make sure that we send at least one RTCP packet.
   base::TimeDelta max_rtcp_timeout =
-      base::TimeDelta::FromMilliseconds(1 + kDefaultRtcpIntervalMs * 3 / 2);
+      base::TimeDelta::FromMilliseconds(1 + kRtcpReportIntervalMs * 3 / 2);
 
   RunTasks(max_rtcp_timeout.InMilliseconds());
   EXPECT_LE(1, transport_.number_of_rtp_packets());

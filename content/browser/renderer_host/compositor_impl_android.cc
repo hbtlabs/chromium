@@ -30,7 +30,7 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/output_surface_client.h"
-#include "cc/raster/task_graph_runner.h"
+#include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/onscreen_display_client.h"
 #include "cc/surfaces/surface_display_output_surface.h"
@@ -39,6 +39,7 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "content/browser/android/child_process_launcher_android.h"
+#include "content/browser/compositor/browser_compositor_overlay_candidate_validator_android.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -85,7 +86,9 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
         populate_gpu_capabilities_callback_(populate_gpu_capabilities_callback),
         swap_buffers_completion_callback_(
             base::Bind(&OutputSurfaceWithoutParent::OnSwapBuffersCompleted,
-                       base::Unretained(this))) {
+                       base::Unretained(this))),
+        overlay_candidate_validator_(
+            new BrowserCompositorOverlayCandidateValidatorAndroid()) {
     capabilities_.adjust_deadline_for_parent = false;
     capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
   }
@@ -112,6 +115,10 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
     compositor_->AddObserver(this);
 
     return true;
+  }
+
+  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
+    return overlay_candidate_validator_.get();
   }
 
  private:
@@ -141,6 +148,7 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
   base::CancelableCallback<void(const std::vector<ui::LatencyInfo>&,
                                 gfx::SwapResult)>
       swap_buffers_completion_callback_;
+  scoped_ptr<cc::OverlayCandidateValidator> overlay_candidate_validator_;
 };
 
 static bool g_initialized = false;
@@ -149,37 +157,24 @@ bool g_use_surface_manager = false;
 base::LazyInstance<cc::SurfaceManager> g_surface_manager =
     LAZY_INSTANCE_INITIALIZER;
 
-
 int g_surface_id_namespace = 0;
 
-class SingleThreadTaskGraphRunner
-    : public cc::TaskGraphRunner,
-      public base::DelegateSimpleThread::Delegate {
+class SingleThreadTaskGraphRunner : public cc::SingleThreadTaskGraphRunner {
  public:
-  SingleThreadTaskGraphRunner()
-      : worker_thread_(
-            this,
-            "CompositorTileWorker1",
-            base::SimpleThread::Options(base::ThreadPriority::BACKGROUND)) {
-    worker_thread_.Start();
+  SingleThreadTaskGraphRunner() {
+    Start("CompositorTileWorker1",
+          base::SimpleThread::Options(base::ThreadPriority::BACKGROUND));
   }
 
   ~SingleThreadTaskGraphRunner() override {
     Shutdown();
-    worker_thread_.Join();
   }
-
- private:
-  // Overridden from base::DelegateSimpleThread::Delegate:
-  void Run() override { cc::TaskGraphRunner::Run(); }
-
-  base::DelegateSimpleThread worker_thread_;
 };
 
 base::LazyInstance<SingleThreadTaskGraphRunner> g_task_graph_runner =
     LAZY_INSTANCE_INITIALIZER;
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // static
 Compositor* Compositor::Create(CompositorClient* client,
@@ -445,8 +440,8 @@ void CompositorImpl::CreateLayerTreeHost() {
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
   settings.initial_debug_state.show_fps_counter =
       command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
-  if (command_line->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
-    settings.use_property_trees = false;
+  settings.use_property_trees =
+      command_line->HasSwitch(cc::switches::kEnableCompositorPropertyTrees);
   // TODO(enne): Update this this compositor to use the scheduler.
   settings.single_thread_proxy_scheduler = false;
 

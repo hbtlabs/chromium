@@ -11,8 +11,6 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/process_resource_usage.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_management/task_manager_observer.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_process_host.h"
@@ -44,19 +42,15 @@ base::string16 GetRendererProfileName(
     const content::RenderProcessHost* render_process_host) {
   Profile* profile =
       Profile::FromBrowserContext(render_process_host->GetBrowserContext());
-  DCHECK(profile);
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
-  size_t index =
-      cache.GetIndexOfProfileWithPath(profile->GetOriginalProfile()->GetPath());
-  if (index != std::string::npos)
-    return cache.GetNameOfProfileAtIndex(index);
-
-  return base::string16();
+  return Task::GetProfileNameFromProfile(profile);
 }
 
 inline bool IsRendererResourceSamplingDisabled(int64 flags) {
   return (flags & (REFRESH_TYPE_V8_MEMORY | REFRESH_TYPE_WEBCACHE_STATS)) == 0;
+}
+
+std::string GetRapporSampleName(content::WebContents* web_contents) {
+  return web_contents->GetVisibleURL().GetOrigin().spec();
 }
 
 }  // namespace
@@ -65,7 +59,10 @@ RendererTask::RendererTask(const base::string16& title,
                            const gfx::ImageSkia* icon,
                            content::WebContents* web_contents,
                            content::RenderProcessHost* render_process_host)
-    : Task(title, icon, render_process_host->GetHandle()),
+    : Task(title,
+           GetRapporSampleName(web_contents),
+           icon,
+           render_process_host->GetHandle()),
       web_contents_(web_contents),
       render_process_host_(render_process_host),
       renderer_resources_sampler_(
@@ -89,6 +86,10 @@ RendererTask::RendererTask(const base::string16& title,
 RendererTask::~RendererTask() {
   favicon::ContentFaviconDriver::FromWebContents(web_contents())->
       RemoveObserver(this);
+}
+
+void RendererTask::UpdateRapporSampleName() {
+  set_rappor_sample_name(GetRapporSampleName(web_contents()));
 }
 
 void RendererTask::Activate() {

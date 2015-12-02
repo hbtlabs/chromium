@@ -9,8 +9,7 @@
 #include "base/logging.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/sync_sessions/local_session_event_router.h"
-#include "ios/public/provider/chrome/browser/browsing_data/ios_chrome_browsing_data_remover_provider.h"
-#include "ios/public/provider/chrome/browser/keyed_service_provider.h"
+#include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "ios/public/provider/chrome/browser/keyed_service_provider.h"
 
 namespace ios {
@@ -33,11 +32,6 @@ ChromeBrowserProvider::~ChromeBrowserProvider() {
 // A dummy implementation of ChromeBrowserProvider.
 
 ChromeBrowserProvider::ChromeBrowserProvider() {
-}
-
-net::URLRequestContextGetter*
-ChromeBrowserProvider::GetSystemURLRequestContext() {
-  return nullptr;
 }
 
 void ChromeBrowserProvider::AssertBrowserContextKeyedFactoriesBuilt() {
@@ -87,12 +81,6 @@ LiveTabContextProvider* ChromeBrowserProvider::GetLiveTabContextProvider() {
   return nullptr;
 }
 
-scoped_ptr<IOSChromeBrowsingDataRemoverProvider>
-ChromeBrowserProvider::GetIOSChromeBrowsingDataRemoverProvider(
-    ChromeBrowserState* browser_state) {
-  return nullptr;
-}
-
 GeolocationUpdaterProvider*
 ChromeBrowserProvider::GetGeolocationUpdaterProvider() {
   return nullptr;
@@ -110,14 +98,6 @@ void ChromeBrowserProvider::SetUIViewAlphaWithAnimation(UIView* view,
                                                         float alpha) {
 }
 
-metrics::MetricsService* ChromeBrowserProvider::GetMetricsService() {
-  return nullptr;
-}
-
-variations::VariationsService* ChromeBrowserProvider::GetVariationsService() {
-  return nullptr;
-}
-
 autofill::CardUnmaskPromptView*
 ChromeBrowserProvider::CreateCardUnmaskPromptView(
     autofill::CardUnmaskPromptController* controller) {
@@ -126,10 +106,6 @@ ChromeBrowserProvider::CreateCardUnmaskPromptView(
 
 std::string ChromeBrowserProvider::GetRiskData() {
   return std::string();
-}
-
-rappor::RapporService* ChromeBrowserProvider::GetRapporService() {
-  return nullptr;
 }
 
 bool ChromeBrowserProvider::IsOffTheRecordSessionActive() {
@@ -148,5 +124,16 @@ bool ChromeBrowserProvider::IsSafeBrowsingEnabled(
 }
 
 void ChromeBrowserProvider::OnMetricsServicesManagerClientDestroyed() {}
+
+scoped_ptr<browser_sync::SyncedWindowDelegatesGetter>
+ChromeBrowserProvider::CreateSyncedWindowDelegatesGetter(
+    ios::ChromeBrowserState* browser_state) {
+  return nullptr;
+}
+
+net::URLRequestContextGetter*
+ChromeBrowserProvider::GetSafeBrowsingURLRequestContext() {
+  return nullptr;
+}
 
 }  // namespace ios

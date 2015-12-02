@@ -305,6 +305,8 @@ InvalidationSet* RuleFeatureSet::invalidationSetForSelector(const CSSSelector& s
         case CSSSelector::PseudoInvalid:
         case CSSSelector::PseudoIndeterminate:
         case CSSSelector::PseudoTarget:
+        case CSSSelector::PseudoInRange:
+        case CSSSelector::PseudoOutOfRange:
         case CSSSelector::PseudoUnresolved:
             return &ensurePseudoInvalidationSet(selector.pseudoType(), type);
         default:
@@ -608,8 +610,7 @@ void RuleFeatureSet::collectInvalidationSetsForClass(InvalidationLists& invalida
             invalidationLists.descendants.append(invalidationData->descendants());
         }
         if (invalidationData->siblings()) {
-            if (element.parentElement())
-                TRACE_SCHEDULE_STYLE_INVALIDATION(*element.parentElement(), *invalidationData->siblings(), classChange, className);
+            TRACE_SCHEDULE_STYLE_INVALIDATION(element, *invalidationData->siblings(), classChange, className);
             invalidationLists.siblings.append(invalidationData->siblings());
         }
     }
@@ -623,8 +624,7 @@ void RuleFeatureSet::collectInvalidationSetsForId(InvalidationLists& invalidatio
             invalidationLists.descendants.append(invalidationData->descendants());
         }
         if (invalidationData->siblings()) {
-            if (element.parentElement())
-                TRACE_SCHEDULE_STYLE_INVALIDATION(*element.parentElement(), *invalidationData->siblings(), idChange, id);
+            TRACE_SCHEDULE_STYLE_INVALIDATION(element, *invalidationData->siblings(), idChange, id);
             invalidationLists.siblings.append(invalidationData->siblings());
         }
     }
@@ -638,8 +638,7 @@ void RuleFeatureSet::collectInvalidationSetsForAttribute(InvalidationLists& inva
             invalidationLists.descendants.append(invalidationData->descendants());
         }
         if (invalidationData->siblings()) {
-            if (element.parentElement())
-                TRACE_SCHEDULE_STYLE_INVALIDATION(*element.parentElement(), *invalidationData->siblings(), attributeChange, attributeName);
+            TRACE_SCHEDULE_STYLE_INVALIDATION(element, *invalidationData->siblings(), attributeChange, attributeName);
             invalidationLists.siblings.append(invalidationData->siblings());
         }
     }
@@ -653,8 +652,7 @@ void RuleFeatureSet::collectInvalidationSetsForPseudoClass(InvalidationLists& in
             invalidationLists.descendants.append(invalidationData->descendants());
         }
         if (invalidationData->siblings()) {
-            if (element.parentElement())
-                TRACE_SCHEDULE_STYLE_INVALIDATION(*element.parentElement(), *invalidationData->siblings(), pseudoChange, pseudo);
+            TRACE_SCHEDULE_STYLE_INVALIDATION(element, *invalidationData->siblings(), pseudoChange, pseudo);
             invalidationLists.siblings.append(invalidationData->siblings());
         }
     }

@@ -108,6 +108,21 @@
 
 namespace blink {
 
+namespace {
+
+// Convenience helper for frame tree helpers in FrameClient to reduce the amount
+// of null-checking boilerplate code. Since the frame tree is maintained in the
+// web/ layer, the frame tree helpers often have to deal with null WebFrames:
+// for example, a frame with no parent will return null for WebFrame::parent().
+// TODO(dcheng): Remove duplication between FrameLoaderClientImpl and
+// RemoteFrameClientImpl somehow...
+Frame* toCoreFrame(WebFrame* frame)
+{
+    return frame ? frame->toImplBase()->frame() : nullptr;
+}
+
+} // namespace
+
 FrameLoaderClientImpl::FrameLoaderClientImpl(WebLocalFrameImpl* frame)
     : m_webFrame(frame)
 {
@@ -670,6 +685,18 @@ void FrameLoaderClientImpl::didDispatchPingLoader(const KURL& url)
 {
     if (m_webFrame->client())
         m_webFrame->client()->didDispatchPingLoader(m_webFrame, url);
+}
+
+void FrameLoaderClientImpl::didDisplayContentWithCertificateErrors(const KURL& url, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo)
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didDisplayContentWithCertificateErrors(url, securityInfo, mainResourceUrl, mainResourceSecurityInfo);
+}
+
+void FrameLoaderClientImpl::didRunContentWithCertificateErrors(const KURL& url, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo)
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didRunContentWithCertificateErrors(url, securityInfo, mainResourceUrl, mainResourceSecurityInfo);
 }
 
 void FrameLoaderClientImpl::didChangePerformanceTiming()

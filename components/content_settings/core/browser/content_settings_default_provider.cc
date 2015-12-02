@@ -256,7 +256,7 @@ bool DefaultProvider::SetWebsiteSetting(
   return true;
 }
 
-RuleIterator* DefaultProvider::GetRuleIterator(
+scoped_ptr<RuleIterator> DefaultProvider::GetRuleIterator(
     ContentSettingsType content_type,
     const ResourceIdentifier& resource_identifier,
     bool incognito) const {
@@ -264,10 +264,11 @@ RuleIterator* DefaultProvider::GetRuleIterator(
   if (resource_identifier.empty()) {
     auto it(default_settings_.find(content_type));
     if (it != default_settings_.end())
-      return new DefaultRuleIterator(it->second);
+      return scoped_ptr<RuleIterator>(
+          new DefaultRuleIterator(it->second.get()));
     NOTREACHED();
   }
-  return new EmptyRuleIterator();
+  return scoped_ptr<RuleIterator>(new EmptyRuleIterator());
 }
 
 void DefaultProvider::ClearAllContentSettingsRules(
@@ -302,12 +303,9 @@ bool DefaultProvider::IsValueEmptyOrDefault(ContentSettingsType content_type,
 
 void DefaultProvider::ChangeSetting(ContentSettingsType content_type,
                                     base::Value* value) {
-  if (!value) {
-    default_settings_.set(content_type,
-                          ContentSettingToValue(GetDefaultValue(content_type)));
-  } else {
-    default_settings_.set(content_type, make_scoped_ptr(value->DeepCopy()));
-  }
+  default_settings_[content_type] =
+      value ? make_scoped_ptr(value->DeepCopy())
+            : ContentSettingToValue(GetDefaultValue(content_type));
 }
 
 void DefaultProvider::WriteToPref(ContentSettingsType content_type,

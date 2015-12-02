@@ -21,6 +21,8 @@ class CommandBuffer;
 class CommandBufferService;
 class GpuScheduler;
 class GpuControlService;
+class SyncPointClient;
+class SyncPointOrderData;
 namespace gles2 {
 class GLES2Decoder;
 }
@@ -67,7 +69,6 @@ class CommandBufferLocal : public gpu::GpuControl {
   void SignalSyncPoint(uint32 sync_point,
                        const base::Closure& callback) override;
   void SignalQuery(uint32 query, const base::Closure& callback) override;
-  void SetSurfaceVisible(bool visible) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
@@ -93,10 +94,13 @@ class CommandBufferLocal : public gpu::GpuControl {
   void OnParseError();
   void OnContextLost(uint32_t reason);
 
+  const uint64_t command_buffer_id_;
   gfx::AcceleratedWidget widget_;
   scoped_refptr<GpuState> gpu_state_;
   scoped_ptr<gpu::CommandBufferService> command_buffer_;
   scoped_ptr<gpu::GpuScheduler> scheduler_;
+  scoped_refptr<gpu::SyncPointOrderData> sync_point_order_data_;
+  scoped_ptr<gpu::SyncPointClient> sync_point_client_;
   scoped_ptr<gpu::gles2::GLES2Decoder> decoder_;
   scoped_refptr<gfx::GLContext> context_;
   scoped_refptr<gfx::GLSurface> surface_;

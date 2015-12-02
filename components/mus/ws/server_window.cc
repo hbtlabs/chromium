@@ -18,6 +18,11 @@ namespace mus {
 namespace ws {
 
 ServerWindow::ServerWindow(ServerWindowDelegate* delegate, const WindowId& id)
+    : ServerWindow(delegate, id, Properties()) {}
+
+ServerWindow::ServerWindow(ServerWindowDelegate* delegate,
+                           const WindowId& id,
+                           const Properties& properties)
     : delegate_(delegate),
       id_(id),
       parent_(nullptr),
@@ -26,6 +31,7 @@ ServerWindow::ServerWindow(ServerWindowDelegate* delegate, const WindowId& id)
       visible_(false),
       opacity_(1),
       can_focus_(true),
+      properties_(properties),
       // Don't notify newly added observers during notification. This causes
       // problems for code that adds an observer as part of an observer
       // notification (such as ServerWindowDrawTracker).
@@ -323,6 +329,14 @@ ServerWindowSurfaceManager* ServerWindow::GetOrCreateSurfaceManager() {
   if (!surface_manager_.get())
     surface_manager_.reset(new ServerWindowSurfaceManager(this));
   return surface_manager_.get();
+}
+
+void ServerWindow::SetUnderlayOffset(const gfx::Vector2d& offset) {
+  if (offset == underlay_offset_)
+    return;
+
+  underlay_offset_ = offset;
+  delegate_->OnScheduleWindowPaint(this);
 }
 
 #if !defined(NDEBUG)

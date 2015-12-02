@@ -699,13 +699,6 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
       skia::SkiaMemoryDumpProvider::GetInstance(), "Skia", nullptr);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       sql::SqlMemoryDumpProvider::GetInstance(), "Sql", nullptr);
-
-#if defined(TCMALLOC_TRACE_MEMORY_SUPPORTED)
-  trace_memory_controller_.reset(new base::trace_event::TraceMemoryController(
-      base::MessageLoop::current()->task_runner(),
-      ::HeapProfilerWithPseudoStackStart, ::HeapProfilerStop,
-      ::GetHeapProfile));
-#endif
 }
 
 int BrowserMainLoop::PreCreateThreads() {
@@ -933,6 +926,7 @@ int BrowserMainLoop::PreMainMessageLoopRun() {
 #if defined(MOJO_SHELL_CLIENT)
   if (IsRunningInMojoShell()) {
     MojoShellConnectionImpl::Create();
+    MojoShellConnectionImpl::Get()->BindToCommandLinePlatformChannel();
 #if defined(USE_AURA)
     views::WindowManagerConnection::Create(
         MojoShellConnection::Get()->GetApplication());
@@ -1007,7 +1001,6 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   aura::Env::DeleteInstance();
 #endif
 
-  trace_memory_controller_.reset();
   system_stats_monitor_.reset();
 
 #if !defined(OS_IOS)

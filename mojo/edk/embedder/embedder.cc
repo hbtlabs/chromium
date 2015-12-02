@@ -7,14 +7,19 @@
 #include "base/atomicops.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/task_runner.h"
 #include "mojo/edk/embedder/embedder_internal.h"
+#include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/process_delegate.h"
 #include "mojo/edk/embedder/simple_platform_support.h"
+#include "mojo/edk/system/broker_state.h"
+#include "mojo/edk/system/child_broker.h"
+#include "mojo/edk/system/child_broker_host.h"
 #include "mojo/edk/system/configuration.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
@@ -49,6 +54,7 @@ void ShutdownIPCSupportHelper(bool wait_for_no_more_channels) {
 namespace internal {
 
 // Declared in embedder_internal.h.
+Broker* g_broker = nullptr;
 PlatformSupport* g_platform_support = nullptr;
 Core* g_core = nullptr;
 
@@ -82,7 +88,41 @@ void SetMaxMessageSize(size_t bytes) {
   GetMutableConfiguration()->max_message_num_bytes = bytes;
 }
 
+void PreInitializeParentProcess() {
+  BrokerState::GetInstance();
+}
+
+void PreInitializeChildProcess() {
+  ChildBroker::GetInstance();
+}
+
+ScopedPlatformHandle ChildProcessLaunched(base::ProcessHandle child_process) {
+#if defined(OS_WIN)
+  PlatformChannelPair token_channel;
+  new ChildBrokerHost(child_process, token_channel.PassServerHandle());
+  return token_channel.PassClientHandle();
+#else
+  // TODO(jam): create this for POSIX. Need to implement channel reading first
+  // so we don't leak handles.
+  return ScopedPlatformHandle();
+#endif
+}
+
+void ChildProcessLaunched(base::ProcessHandle child_process,
+                          ScopedPlatformHandle server_pipe) {
+  new ChildBrokerHost(child_process, server_pipe.Pass());
+}
+
+void SetParentPipeHandle(ScopedPlatformHandle pipe) {
+  ChildBroker::GetInstance()->SetChildBrokerHostHandle(pipe.Pass());
+}
+
 void Init() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch("use-new-edk") && !internal::g_broker)
+    BrokerState::GetInstance();
+
   DCHECK(!internal::g_platform_support);
   internal::g_platform_support = new SimplePlatformSupport();
 

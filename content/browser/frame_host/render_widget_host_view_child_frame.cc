@@ -130,6 +130,9 @@ RenderWidgetHostViewChildFrame::GetNativeViewAccessible() {
 }
 
 void RenderWidgetHostViewChildFrame::SetBackgroundColor(SkColor color) {
+  RenderWidgetHostViewBase::SetBackgroundColor(color);
+  bool opaque = GetBackgroundOpaque();
+  host_->SetBackgroundOpaque(opaque);
 }
 
 gfx::Size RenderWidgetHostViewChildFrame::GetPhysicalBackingSize() const {
@@ -376,6 +379,17 @@ void RenderWidgetHostViewChildFrame::ProcessMouseWheelEvent(
     const blink::WebMouseWheelEvent& event) {
   if (event.deltaX != 0 || event.deltaY != 0)
     host_->ForwardWheelEvent(event);
+}
+
+void RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
+    const gfx::Point& point,
+    gfx::Point* transformed_point) {
+  *transformed_point = point;
+  if (!frame_connector_ || !use_surfaces_)
+    return;
+
+  frame_connector_->TransformPointToRootCoordSpace(point, surface_id_,
+                                                   transformed_point);
 }
 
 #if defined(OS_MACOSX)

@@ -128,10 +128,6 @@ char kTSanDefaultSuppressions[] =
 // http://crbug.com/272095
 "race:base::g_top_manager\n"
 
-// http://crbug.com/273047
-"race:base::*::g_lazy_tls_ptr\n"
-"race:IPC::SyncChannel::ReceivedSyncMsgQueue::lazy_tls_ptr_\n"
-
 // http://crbug.com/280466
 "race:content::WebRtcAudioCapturer::SetCapturerSource\n"
 
@@ -143,9 +139,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/310851
 "race:net::ProxyResolverV8Tracing::Job::~Job\n"
-
-// http://crbug.com/313726
-"race:CallbackWasCalled\n"
 
 // http://crbug.com/327330
 "race:PrepareTextureMailbox\n"
@@ -163,9 +156,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/329225
 "race:blink::currentTimeFunction\n"
-
-// http://crbug.com/329460
-"race:extensions::InfoMap::AddExtension\n"
 
 // http://crbug.com/333244
 "race:content::"
@@ -239,6 +229,13 @@ char kTSanDefaultSuppressions[] =
 // https://code.google.com/p/v8/issues/detail?id=3143
 "race:v8::internal::FLAG_track_double_fields\n"
 
+// https://crbug.com/369257
+// TODO(mtklein): annotate properly and remove suppressions.
+"race:SandboxIPCHandler::HandleFontMatchRequest\n"
+"race:SkFontConfigInterfaceDirect::matchFamilyName\n"
+"race:SkFontConfigInterface::GetSingletonDirectInterface\n"
+"race:FcStrStaticName\n"
+
 // http://crbug.com/374135
 "race:media::AlsaWrapper::PcmWritei\n"
 
@@ -253,9 +250,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/388730
 "race:g_next_user_script_id\n"
-
-// http://crbug.com/389098
-"race:webrtc::voe::TransmitMixer::EnableStereoChannelSwapping\n"
 
 // http://crbug.com/397022
 "deadlock:"
@@ -280,6 +274,7 @@ char kTSanDefaultSuppressions[] =
 // https://crbug.com/448203
 "race:blink::RemoteFrame::detach\n"
 
+// Lock inversion in third party code, won't fix.
 // https://crbug.com/455638
 "deadlock:dbus::Bus::ShutdownAndBlock\n"
 

@@ -120,12 +120,12 @@ TEST_P(QuicSpdyStreamTest, ProcessHeaders) {
   Initialize(kShouldProcessData);
 
   string headers = SpdyUtils::SerializeUncompressedHeaders(headers_);
-  stream_->OnStreamHeadersPriority(QuicUtils::HighestPriority());
+  stream_->OnStreamHeadersPriority(kV3HighestPriority);
   stream_->OnStreamHeaders(headers);
   EXPECT_EQ("", stream_->data());
   EXPECT_EQ(headers, stream_->decompressed_headers());
   stream_->OnStreamHeadersComplete(false, headers.size());
-  EXPECT_EQ(QuicUtils::HighestPriority(), stream_->EffectivePriority());
+  EXPECT_EQ(kV3HighestPriority, stream_->Priority());
   EXPECT_EQ("", stream_->data());
   EXPECT_EQ(headers, stream_->decompressed_headers());
   EXPECT_FALSE(stream_->IsDoneReading());
@@ -135,12 +135,12 @@ TEST_P(QuicSpdyStreamTest, ProcessHeadersWithFin) {
   Initialize(kShouldProcessData);
 
   string headers = SpdyUtils::SerializeUncompressedHeaders(headers_);
-  stream_->OnStreamHeadersPriority(QuicUtils::HighestPriority());
+  stream_->OnStreamHeadersPriority(kV3HighestPriority);
   stream_->OnStreamHeaders(headers);
   EXPECT_EQ("", stream_->data());
   EXPECT_EQ(headers, stream_->decompressed_headers());
   stream_->OnStreamHeadersComplete(true, headers.size());
-  EXPECT_EQ(QuicUtils::HighestPriority(), stream_->EffectivePriority());
+  EXPECT_EQ(kV3HighestPriority, stream_->Priority());
   EXPECT_EQ("", stream_->data());
   EXPECT_EQ(headers, stream_->decompressed_headers());
   EXPECT_FALSE(stream_->IsDoneReading());

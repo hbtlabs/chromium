@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "media/base/android/provision_fetcher.h"
 #include "media/base/cdm_promise_adapter.h"
 #include "media/base/media_export.h"
 #include "media/base/media_keys.h"
@@ -31,8 +32,6 @@ namespace media {
 // This class lives on the thread where it is created. All methods must be
 // called on the |task_runner_| except for the PlayerTracker methods and
 // SetMediaCryptoReadyCB(), which can be called on any thread.
-
-class ProvisionFetcher;
 
 class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
  public:
@@ -79,7 +78,7 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // TODO(xhwang): Is it okay not to update session expiration info?
   static scoped_refptr<MediaDrmBridge> Create(
       const std::string& key_system,
-      scoped_ptr<ProvisionFetcher> provision_fetcher,
+      const CreateFetcherCB& create_fetcher_cb,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
       const LegacySessionErrorCB& legacy_session_error_cb,
@@ -91,7 +90,7 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // use MediaDrmBridge without creating any sessions.
   static scoped_refptr<MediaDrmBridge> CreateWithoutSessionSupport(
       const std::string& key_system,
-      scoped_ptr<ProvisionFetcher> provision_fetcher);
+      const CreateFetcherCB& create_fetcher_cb);
 
   // MediaKeys implementation.
   void SetServerCertificate(
@@ -161,56 +160,68 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // only do minimal work and then post tasks to avoid reentrancy issues.
 
   // Called by Java after a MediaCrypto object is created.
-  void OnMediaCryptoReady(JNIEnv* env, jobject j_media_drm);
+  void OnMediaCryptoReady(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm);
 
   // Called by Java when we need to send a provisioning request,
-  void OnStartProvisioning(JNIEnv* env,
-                           jobject j_media_drm,
-                           jstring j_default_url,
-                           jbyteArray j_request_data);
+  void OnStartProvisioning(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jstring>& j_default_url,
+      const base::android::JavaParamRef<jbyteArray>& j_request_data);
 
   // Callbacks to resolve the promise for |promise_id|.
-  void OnPromiseResolved(JNIEnv* env, jobject j_media_drm, jint j_promise_id);
-  void OnPromiseResolvedWithSession(JNIEnv* env,
-                                    jobject j_media_drm,
-                                    jint j_promise_id,
-                                    jbyteArray j_session_id);
+  void OnPromiseResolved(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      jint j_promise_id);
+  void OnPromiseResolvedWithSession(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      jint j_promise_id,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id);
 
   // Callback to reject the promise for |promise_id| with |error_message|.
   // Note: No |system_error| is available from MediaDrm.
   // TODO(xhwang): Implement Exception code.
-  void OnPromiseRejected(JNIEnv* env,
-                         jobject j_media_drm,
-                         jint j_promise_id,
-                         jstring j_error_message);
+  void OnPromiseRejected(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      jint j_promise_id,
+      const base::android::JavaParamRef<jstring>& j_error_message);
 
   // Session event callbacks.
 
   // TODO(xhwang): Remove |j_legacy_destination_url| when prefixed EME support
   // is removed.
-  void OnSessionMessage(JNIEnv* env,
-                        jobject j_media_drm,
-                        jbyteArray j_session_id,
-                        jint j_message_type,
-                        jbyteArray j_message,
-                        jstring j_legacy_destination_url);
-  void OnSessionClosed(JNIEnv* env,
-                       jobject j_media_drm,
-                       jbyteArray j_session_id);
+  void OnSessionMessage(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id,
+      jint j_message_type,
+      const base::android::JavaParamRef<jbyteArray>& j_message,
+      const base::android::JavaParamRef<jstring>& j_legacy_destination_url);
+  void OnSessionClosed(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id);
 
-  void OnSessionKeysChange(JNIEnv* env,
-                           jobject j_media_drm,
-                           jbyteArray j_session_id,
-                           jobjectArray j_keys_info,
-                           bool has_additional_usable_key);
+  void OnSessionKeysChange(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id,
+      const base::android::JavaParamRef<jobjectArray>& j_keys_info,
+      bool has_additional_usable_key);
 
   // |expiry_time_ms| is the new expiration time for the keys in the session.
   // The time is in milliseconds, relative to the Unix epoch. A time of 0
   // indicates that the keys never expire.
-  void OnSessionExpirationUpdate(JNIEnv* env,
-                                 jobject j_media_drm,
-                                 jbyteArray j_session_id,
-                                 jlong expiry_time_ms);
+  void OnSessionExpirationUpdate(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id,
+      jlong expiry_time_ms);
 
   // Called by the CDM when an error occurred in session |j_session_id|
   // unrelated to one of the MediaKeys calls that accept a |promise|.
@@ -218,20 +229,24 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // - This method is only for supporting prefixed EME API.
   // - This method will be ignored by unprefixed EME. All errors reported
   //   in this method should probably also be reported by one of other methods.
-  void OnLegacySessionError(JNIEnv* env,
-                            jobject j_media_drm,
-                            jbyteArray j_session_id,
-                            jstring j_error_message);
+  void OnLegacySessionError(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jbyteArray>& j_session_id,
+      const base::android::JavaParamRef<jstring>& j_error_message);
 
   // Called by the java object when credential reset is completed.
-  void OnResetDeviceCredentialsCompleted(JNIEnv* env, jobject, bool success);
+  void OnResetDeviceCredentialsCompleted(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&,
+      bool success);
 
  private:
   // For DeleteSoon() in DeleteOnCorrectThread().
   friend class base::DeleteHelper<MediaDrmBridge>;
 
   MediaDrmBridge(const std::vector<uint8>& scheme_uuid,
-                 scoped_ptr<ProvisionFetcher> provision_fetcher,
+                 const CreateFetcherCB& create_fetcher_cb,
                  const SessionMessageCB& session_message_cb,
                  const SessionClosedCB& session_closed_cb,
                  const LegacySessionErrorCB& legacy_session_error_cb,
@@ -262,7 +277,11 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // Java MediaDrm instance.
   base::android::ScopedJavaGlobalRef<jobject> j_media_drm_;
 
-  // The object that requests and receives provisioning data.
+  // The callback to create a ProvisionFetcher.
+  CreateFetcherCB create_fetcher_cb_;
+
+  // The ProvisionFetcher that requests and receives provisioning data.
+  // Non-null iff when a provision request is pending.
   scoped_ptr<ProvisionFetcher> provision_fetcher_;
 
   // Callbacks for firing session events.
@@ -278,8 +297,7 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
 
   PlayerTrackerImpl player_tracker_;
 
-  // TODO(xhwang): Host a CdmPromiseAdapter directly. No need to use scoped_ptr.
-  scoped_ptr<CdmPromiseAdapter> cdm_promise_adapter_;
+  CdmPromiseAdapter cdm_promise_adapter_;
 
   // Default task runner.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

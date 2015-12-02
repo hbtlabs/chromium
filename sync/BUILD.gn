@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//sync/protocol/protocol_sources.gni")
 import("//testing/test.gni")
 
 component("sync") {
@@ -26,10 +27,12 @@ source_set("sync_core") {
     "api/attachments/attachment_store_backend.cc",
     "api/attachments/attachment_store_backend.h",
     "api/data_batch.h",
+    "api/entity_change.cc",
+    "api/entity_change.h",
     "api/entity_data.cc",
     "api/entity_data.h",
     "api/metadata_batch.h",
-    "api/metadata_changes.h",
+    "api/metadata_change_list.h",
     "api/model_type_change_processor.cc",
     "api/model_type_change_processor.h",
     "api/model_type_service.cc",
@@ -91,8 +94,6 @@ source_set("sync_core") {
     "engine/get_updates_delegate.h",
     "engine/get_updates_processor.cc",
     "engine/get_updates_processor.h",
-    "engine/model_type_entity.cc",
-    "engine/model_type_entity.h",
     "engine/model_type_worker.cc",
     "engine/model_type_worker.h",
     "engine/net/server_connection_manager.cc",
@@ -170,6 +171,7 @@ source_set("sync_core") {
     "internal_api/js_sync_encryption_handler_observer.h",
     "internal_api/js_sync_manager_observer.cc",
     "internal_api/js_sync_manager_observer.h",
+    "internal_api/model_type_entity.cc",
     "internal_api/model_type_store_backend.cc",
     "internal_api/model_type_store_impl.cc",
     "internal_api/protocol_event_buffer.cc",
@@ -232,12 +234,15 @@ source_set("sync_core") {
     "internal_api/public/events/normal_get_updates_request_event.h",
     "internal_api/public/events/poll_get_updates_request_event.h",
     "internal_api/public/events/protocol_event.h",
+    "internal_api/public/fully_serialized_metadata_batch.cc",
+    "internal_api/public/fully_serialized_metadata_batch.h",
     "internal_api/public/http_bridge.h",
     "internal_api/public/http_bridge_network_resources.h",
     "internal_api/public/http_post_provider_factory.h",
     "internal_api/public/http_post_provider_interface.h",
     "internal_api/public/internal_components_factory.h",
     "internal_api/public/internal_components_factory_impl.h",
+    "internal_api/public/model_type_entity.h",
     "internal_api/public/model_type_processor.cc",
     "internal_api/public/model_type_processor.h",
     "internal_api/public/model_type_store_backend.h",
@@ -261,6 +266,10 @@ source_set("sync_core") {
     "internal_api/public/sessions/update_counters.h",
     "internal_api/public/shared_model_type_processor.h",
     "internal_api/public/shutdown_reason.h",
+    "internal_api/public/simple_metadata_change_list.cc",
+    "internal_api/public/simple_metadata_change_list.h",
+    "internal_api/public/specifics_only_data_batch.cc",
+    "internal_api/public/specifics_only_data_batch.h",
     "internal_api/public/sync_auth_provider.h",
     "internal_api/public/sync_context.h",
     "internal_api/public/sync_context_proxy.h",
@@ -623,7 +632,6 @@ test("sync_unit_tests") {
     "engine/directory_update_handler_unittest.cc",
     "engine/entity_tracker_unittest.cc",
     "engine/get_updates_processor_unittest.cc",
-    "engine/model_type_entity_unittest.cc",
     "engine/model_type_worker_unittest.cc",
     "engine/sync_scheduler_unittest.cc",
     "engine/syncer_proto_util_unittest.cc",
@@ -645,6 +653,7 @@ test("sync_unit_tests") {
     "internal_api/js_mutation_event_observer_unittest.cc",
     "internal_api/js_sync_encryption_handler_observer_unittest.cc",
     "internal_api/js_sync_manager_observer_unittest.cc",
+    "internal_api/model_type_entity_unittest.cc",
     "internal_api/model_type_store_backend_unittest.cc",
     "internal_api/model_type_store_impl_unittest.cc",
     "internal_api/protocol_event_buffer_unittest.cc",
@@ -836,6 +845,30 @@ if (is_android) {
     jni_package = "sync/test/fake_server"
     sources = [
       "//chrome/android/sync_shell/javatests/src/org/chromium/chrome/browser/sync/FakeServerHelper.java",
+    ]
+  }
+
+  _test_support_sync_prepared_protos_dir =
+      "$root_gen_dir/test_support_sync_proto_java_prepare/"
+  action("test_support_sync_proto_java_prepare") {
+    script = "//sync/protocol/prepare_protos_for_java_tests.py"
+    inputs = sync_protocol_sources
+    outputs = process_file_template(
+            sync_protocol_sources,
+            [ "$_test_support_sync_prepared_protos_dir/{{source_file_part}}" ])
+    args = [
+      "--output_dir",
+      rebase_path(_test_support_sync_prepared_protos_dir, root_build_dir),
+    ]
+    args += rebase_path(sync_protocol_sources, root_build_dir)
+  }
+
+  # GYP: //sync/sync_tests.gypi:test_support_sync_proto_java
+  proto_java_library("test_support_sync_proto_java") {
+    proto_path = _test_support_sync_prepared_protos_dir
+    sources = get_target_outputs(":test_support_sync_proto_java_prepare")
+    deps = [
+      ":test_support_sync_proto_java_prepare",
     ]
   }
 

@@ -92,11 +92,15 @@ public:
     static bool isValidNumericValue(double);
 
 private:
-    CSSPropertyParser(CSSParserValueList*, const CSSParserTokenRange&, const CSSParserContext&,
+    CSSPropertyParser(const CSSParserTokenRange&, const CSSParserContext&,
         WillBeHeapVector<CSSProperty, 256>&);
 
-    bool parseValue(CSSPropertyID, bool important);
+    // TODO(timloh): Rename once the CSSParserValue-based parseValue is removed
+    bool parseValueStart(CSSPropertyID unresolvedProperty, bool important);
+    bool consumeCSSWideKeyword(CSSPropertyID unresolvedProperty, bool important);
     PassRefPtrWillBeRawPtr<CSSValue> parseSingleValue(CSSPropertyID);
+
+    bool parseValue(CSSPropertyID, bool important);
 
     bool inShorthand() const { return m_inParseShorthand; }
     bool inQuirksMode() const { return isQuirksModeBehavior(m_context.mode()); }
@@ -194,11 +198,7 @@ private:
     PassRefPtrWillBeRawPtr<CSSValue> parseColor(const CSSParserValue*, bool acceptQuirkyColors = false);
     bool parseColorFromValue(const CSSParserValue*, RGBA32&, bool acceptQuirkyColors = false);
 
-    bool acceptQuirkyColors(CSSPropertyID) const;
-
     PassRefPtrWillBeRawPtr<CSSValueList> consumeFontFaceSrc();
-
-    bool parseSVGValue(CSSPropertyID propId, bool important);
 
     // CSS3 Parsing Routines (for properties specific to CSS3)
     bool parseBorderImageShorthand(CSSPropertyID, bool important);

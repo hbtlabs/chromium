@@ -13,6 +13,7 @@ extern const char kDisableContextualSearch[];
 extern const char kDisableIOSFastWebScrollViewInsets[];
 extern const char kDisableIOSPasswordGeneration[];
 extern const char kDisableIOSPasswordSuggestions[];
+extern const char kDisableIOSWebResources[];
 extern const char kDisableIOSWKWebView[];
 extern const char kDisableKeyboardCommands[];
 extern const char kDisableNTPFavicons[];
@@ -36,6 +37,7 @@ extern const char kIOSMetricsRecordingOnly[];
 extern const char kUserAgent[];
 
 extern const char kIOSHostResolverRules[];
+extern const char kIOSIgnoreCertificateErrors[];
 extern const char kIOSTestingFixedHttpPort[];
 extern const char kIOSTestingFixedHttpsPort[];
 
