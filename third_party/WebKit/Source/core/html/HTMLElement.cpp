@@ -357,13 +357,15 @@ const AtomicString& HTMLElement::eventNameForAttributeName(const QualifiedName& 
     return attributeNameToEventNameMap.get(attrName.localName());
 }
 
-void HTMLElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void HTMLElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
-    if (name == tabindexAttr)
-        return Element::parseAttribute(name, value);
+    if (name == tabindexAttr || name == XMLNames::langAttr)
+        return Element::parseAttribute(name, oldValue, value);
 
     if (name == dirAttr) {
         dirAttributeChanged(value);
+    } else if (name == langAttr) {
+        pseudoStateChanged(CSSSelector::PseudoLang);
     } else {
         const AtomicString& eventName = eventNameForAttributeName(name);
         if (!eventName.isNull())

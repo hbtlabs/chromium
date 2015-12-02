@@ -124,6 +124,7 @@ extern const char kEnableExtensionActivityLogTesting[];
 extern const char kEnableFastUnload[];
 extern const char kEnableMaterialDesignDownloads[];
 extern const char kEnableMaterialDesignExtensions[];
+extern const char kEnableMaterialDesignHistory[];
 extern const char kEnableMaterialDesignPolicyPage[];
 extern const char kEnableNaCl[];
 extern const char kEnableNavigationTracing[];
@@ -182,7 +183,6 @@ extern const char kInstallSupervisedUserWhitelists[];
 extern const char kInstantProcess[];
 extern const char kInterestsURL[];
 extern const char kIpcDumpDirectory[];
-extern const char kIsolateExtensions[];
 extern const char kJavaScriptHarmony[];
 extern const char kKeepAliveForTest[];
 extern const char kKioskMode[];
@@ -315,6 +315,7 @@ extern const char kEnablePhysicalWeb[];
 extern const char kProgressBarAnimation[];
 extern const char kEnableThemeColorInTabbedMode[];
 extern const char kDisableAutoHidingToolbarThreshold[];
+extern const char kEnableTabSwitcherInDocumentMode[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -398,6 +399,7 @@ extern const char kEnableWaylandServer[];
 
 bool AboutInSettingsEnabled();
 bool MdExtensionsEnabled();
+bool MdHistoryEnabled();
 bool MdPolicyPageEnabled();
 bool PdfMaterialUIEnabled();
 bool SettingsWindowEnabled();

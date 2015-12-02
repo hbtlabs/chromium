@@ -224,6 +224,7 @@
 
 #if defined(MOJO_SHELL_CLIENT)
 #include "content/browser/mojo/mojo_shell_client_host.h"
+#include "content/common/mojo/mojo_shell_connection_impl.h"
 #endif
 
 #if defined(OS_WIN)
@@ -266,12 +267,13 @@ void GetContexts(
     ResourceContext* resource_context,
     scoped_refptr<net::URLRequestContextGetter> request_context,
     scoped_refptr<net::URLRequestContextGetter> media_request_context,
-    const ResourceHostMsg_Request& request,
+    ResourceType resource_type,
+    int origin_pid,
     ResourceContext** resource_context_out,
     net::URLRequestContext** request_context_out) {
   *resource_context_out = resource_context;
-  *request_context_out = GetRequestContext(
-      request_context, media_request_context, request.resource_type);
+  *request_context_out =
+      GetRequestContext(request_context, media_request_context, resource_type);
 }
 
 #if defined(ENABLE_WEBRTC)
@@ -1470,11 +1472,11 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
 #if defined(ENABLE_WEBRTC)
     switches::kDisableWebRtcHWDecoding,
     switches::kDisableWebRtcHWEncoding,
-    switches::kDisableWebRtcMultipleRoutes,
     switches::kEnableWebRtcDtls12,
     switches::kEnableWebRtcHWH264Encoding,
     switches::kEnableWebRtcStunOrigin,
     switches::kEnforceWebRtcIPPermissionCheck,
+    switches::kForceWebRtcIPHandlingPolicy,
     switches::kWebRtcMaxCaptureFramerate,
 #endif
     switches::kEnableLowEndDeviceMode,
@@ -1543,6 +1545,11 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       renderer_cmd->AppendSwitch(switches::kWaitForDebugger);
     }
   }
+
+#if defined(MOJO_SHELL_CLIENT)
+  if (IsRunningInMojoShell())
+    renderer_cmd->AppendSwitch(switches::kEnableMojoShellConnection);
+#endif
 }
 
 base::ProcessHandle RenderProcessHostImpl::GetHandle() const {

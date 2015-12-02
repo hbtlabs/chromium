@@ -427,6 +427,9 @@ const char kEnableMaterialDesignDownloads[] = "enable-md-downloads";
 // Enables the Material Design version of chrome://extensions.
 const char kEnableMaterialDesignExtensions[] = "enable-md-extensions";
 
+// Enables the Material Design version of chrome://history.
+const char kEnableMaterialDesignHistory[] = "enable-md-history";
+
 // Enables the Material Design policy page at chrome://md-policy.
 const char kEnableMaterialDesignPolicyPage[]  = "enable-md-policy-page";
 
@@ -658,9 +661,6 @@ const char kInstantProcess[]                = "instant-process";
 
 // The URL for the interests API.
 const char kInterestsURL[]                  = "interests-url";
-
-// Enables site isolation for all chrome-extension:// urls.
-const char kIsolateExtensions[] = "isolate-extensions";
 
 // Disable latest shipping ECMAScript 6 features.
 const char kDisableJavaScriptHarmonyShipping[] =
@@ -1148,6 +1148,10 @@ const char kEnablePhysicalWeb[] = "enable-physical-web";
 
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
+
+// Enabled tab switcher in document mode.
+const char kEnableTabSwitcherInDocumentMode[] =
+    "enable-tab-switcher-in-document-mode";
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -1336,6 +1340,11 @@ bool AboutInSettingsEnabled() {
 bool MdExtensionsEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableMaterialDesignExtensions);
+}
+
+bool MdHistoryEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ::switches::kEnableMaterialDesignHistory);
 }
 
 bool MdPolicyPageEnabled() {

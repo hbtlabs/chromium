@@ -443,7 +443,7 @@
       'mac_want_real_dsym%': 'default',
 
       # If this is set, the clang plugins used on the buildbot will be used.
-      # Run tools/clang/scripts/update.sh to make sure they are compiled.
+      # Run tools/clang/scripts/update.py to make sure they are compiled.
       # This causes 'clang_chrome_plugins_flags' to be set.
       # Has no effect if 'clang' is not set as well.
       'clang_use_chrome_plugins%': 1,
@@ -756,7 +756,7 @@
         }],
 
         # Flags to use Wayland server support.
-        ['chromeos==1 and use_ozone==1', {
+        ['chromeos==1', {
           'enable_wayland_server%': 1,
         }, {
           'enable_wayland_server%': 0,
@@ -2391,11 +2391,17 @@
                 ],
               }],
             ],
-          }, {
-            # Build all platforms whose deps are in install-build-deps.sh.
-            # Only these platforms will be compile tested by buildbots.
-            'ozone_platform_gbm%': 1,
-            'ozone_platform_egltest%': 1,
+          }, {  # chromecast!=1
+            'conditions': [
+              ['OS=="chromeos"', {
+                'ozone_platform_gbm%': 1,
+                'ozone_platform_egltest%': 1,
+              }, {
+                # Build all platforms whose deps are in install-build-deps.sh.
+                # Only these platforms will be compile tested by buildbots.
+                'ozone_platform_egltest%': 1,
+              }],
+            ],
           }],
         ],
       }],
@@ -3990,13 +3996,6 @@
                       }],
                     ],
                   }],
-                  ['clang==1 and OS!="android"', {
-                    'cflags': [
-                      # We need to disable clang's builtin assembler as it can't
-                      # handle several asm files, crbug.com/124610
-                      '-no-integrated-as',
-                    ],
-                  }],
                   ['arm_tune!=""', {
                     'cflags': [
                       '-mtune=<(arm_tune)',
@@ -4109,11 +4108,6 @@
                           '-fno-tree-sra',
                           '-fno-caller-saves',
                           '-Wno-psabi',
-                        ],
-                        'cflags': [
-                          # TODO(hans) Enable integrated-as (crbug.com/124610).
-                          '-no-integrated-as',
-                          '-B<(android_toolchain)',  # Else /usr/bin/as gets picked up.
                         ],
                       }],
                       ['clang==1 and linux_use_bundled_gold==0', {
@@ -4238,9 +4232,6 @@
                     ],
                   }],
                   ['clang==1 and OS=="android"', {
-                    'cflags': [
-                      '-B<(android_toolchain)',  # Else /usr/bin/as gets picked up.
-                    ],
                     'ldflags': [
                       # Let clang find the ld in the NDK.
                       '--gcc-toolchain=<(android_toolchain)/..',

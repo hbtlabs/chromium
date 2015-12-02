@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/webui/local_state/local_state_ui.h"
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
 #include "chrome/browser/ui/webui/md_downloads/md_downloads_ui.h"
+#include "chrome/browser/ui/webui/md_history_ui.h"
 #include "chrome/browser/ui/webui/memory_internals/memory_internals_ui.h"
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
@@ -130,7 +131,6 @@
 #include "chrome/browser/ui/webui/chromeos/cryptohome_ui.h"
 #include "chrome/browser/ui/webui/chromeos/drive_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/first_run/first_run_ui.h"
-#include "chrome/browser/ui/webui/chromeos/imageburner/imageburner_ui.h"
 #include "chrome/browser/ui/webui/chromeos/keyboard_overlay_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/mobile_setup_ui.h"
@@ -453,8 +453,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::CryptohomeUI>;
   if (url.host() == chrome::kChromeUIDriveInternalsHost)
     return &NewWebUI<chromeos::DriveInternalsUI>;
-  if (url.host() == chrome::kChromeUIImageBurnerHost)
-    return &NewWebUI<ImageBurnUI>;
   if (url.host() == chrome::kChromeUIFirstRunHost)
     return &NewWebUI<chromeos::FirstRunUI>;
   if (url.host() == chrome::kChromeUIKeyboardOverlayHost)
@@ -600,7 +598,11 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       url.host() == dom_distiller::kChromeUIDomDistillerHost) {
     return &NewWebUI<dom_distiller::DomDistillerUi>;
   }
-
+  // Material Design history is on its own host, rather than on an Uber page.
+  if (::switches::MdHistoryEnabled() &&
+      url.host() == chrome::kChromeUIHistoryHost) {
+    return &NewWebUI<MdHistoryUI>;
+  }
   if (SiteEngagementService::IsEnabled() &&
       url.host() == chrome::kChromeUISiteEngagementHost) {
     return &NewWebUI<SiteEngagementUI>;

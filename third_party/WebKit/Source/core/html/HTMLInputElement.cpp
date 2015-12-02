@@ -32,7 +32,6 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
-#include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
@@ -669,21 +668,12 @@ void HTMLInputElement::collectStyleForPresentationAttribute(const QualifiedName&
 
 void HTMLInputElement::attributeChanged(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason reason)
 {
-    if (name == formactionAttr && inDocument()) {
-        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
-        if (activityLogger) {
-            Vector<String> argv;
-            argv.append("input");
-            argv.append(formactionAttr.toString());
-            argv.append(oldValue);
-            argv.append(newValue);
-            activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
-        }
-    }
+    if (name == formactionAttr)
+        logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "input", formactionAttr.toString(), oldValue, newValue);
     HTMLTextFormControlElement::attributeChanged(name, oldValue, newValue, reason);
 }
 
-void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     ASSERT(m_inputType);
     ASSERT(m_inputTypeView);
@@ -692,7 +682,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         removeFromRadioButtonGroup();
         m_name = value;
         addToRadioButtonGroup();
-        HTMLTextFormControlElement::parseAttribute(name, value);
+        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
     } else if (name == autocompleteAttr) {
         if (equalIgnoringCase(value, "off")) {
             m_autocomplete = Off;
@@ -776,10 +766,10 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         setNeedsValidityCheck();
         UseCounter::count(document(), UseCounter::PatternAttribute);
     } else if (name == disabledAttr) {
-        HTMLTextFormControlElement::parseAttribute(name, value);
+        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
         m_inputTypeView->disabledAttributeChanged();
     } else if (name == readonlyAttr) {
-        HTMLTextFormControlElement::parseAttribute(name, value);
+        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
         m_inputTypeView->readonlyAttributeChanged();
     } else if (name == listAttr) {
         m_hasNonEmptyList = !value.isEmpty();
@@ -789,10 +779,10 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         }
         UseCounter::count(document(), UseCounter::ListAttribute);
     } else if (name == webkitdirectoryAttr) {
-        HTMLTextFormControlElement::parseAttribute(name, value);
+        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
         UseCounter::count(document(), UseCounter::PrefixedDirectoryAttribute);
     } else {
-        HTMLTextFormControlElement::parseAttribute(name, value);
+        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
     }
     m_inputTypeView->attributeChanged();
 }
@@ -1522,20 +1512,11 @@ void HTMLInputElement::didChangeForm()
 
 Node::InsertionNotificationRequest HTMLInputElement::insertedInto(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument()) {
-        V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
-        if (activityLogger) {
-            Vector<String> argv;
-            argv.append("input");
-            argv.append(fastGetAttribute(typeAttr));
-            argv.append(fastGetAttribute(formactionAttr));
-            activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
-        }
-    }
     HTMLTextFormControlElement::insertedInto(insertionPoint);
     if (insertionPoint->inDocument() && !form())
         addToRadioButtonGroup();
     resetListAttributeTargetObserver();
+    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "input", fastGetAttribute(typeAttr), fastGetAttribute(formactionAttr));
     return InsertionShouldCallDidNotifySubtreeInsertions;
 }
 

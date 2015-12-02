@@ -710,7 +710,7 @@ public class AwContents implements SmartClipProvider,
         mWebContentsDelegate = new AwWebContentsDelegateAdapter(
                 this, contentsClient, mContentViewClient, mContext, mContainerView);
         mContentsClientBridge = new AwContentsClientBridge(mContext, contentsClient,
-                mBrowserContext.getKeyStore(), AwContentsStatics.getClientCertLookupTable());
+                AwContentsStatics.getClientCertLookupTable());
         mZoomControls = new AwZoomControls(this);
         mBackgroundThreadClient = new BackgroundThreadClientImpl();
         mIoThreadClient = new IoThreadClientImpl();
@@ -2247,7 +2247,9 @@ public class AwContents implements SmartClipProvider,
     void startProcessTextIntent(Intent intent) {
         // on Android M, WebView is not able to replace the text with the processed text.
         // So set the readonly flag for M.
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
+        // TODO(hush): remove the part about VERSION.CODENAME equality with N, after N release.
+        // crbug.com/543272
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M && !"N".equals(Build.VERSION.CODENAME)) {
             intent.putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true);
         }
 

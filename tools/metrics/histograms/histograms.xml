@@ -294,6 +294,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.SeccompStatus.RendererSandbox"
+    enum="AndroidSeccompSandboxStatus">
+  <owner>rsesek@chromium.org</owner>
+  <summary>
+    Reports the status of the seccomp-bpf sandbox in renderer processes.
+    Anything other than &quot;Sandbox Engaged&quot; indicates the sandbox is not
+    turned on. See https://crbug.com/477049.
+  </summary>
+</histogram>
+
 <histogram name="Android.SeccompStatus.Syscall" enum="AndroidSeccompStatus">
   <owner>rsesek@chromium.org</owner>
   <summary>
@@ -4604,9 +4614,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="CloudPrint.ServiceProcessSocketLength">
   <owner>vitalybuka@chromium.org</owner>
+  <obsolete>
+    Deprecated as of 12/2015. Confirm assumption about socket name size.
+    http://crbug.com/466644
+  </obsolete>
   <summary>
     Temporarily histogram with size of IPC sockets in default location.
-    TODO(vitalybuka) Remove after investigation http://crbug.com/466644
   </summary>
 </histogram>
 
@@ -5259,7 +5272,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>estark@chromium.org</owner>
   <summary>
     Number of times a cookie was set with a name prefixed by
-    &quot;$Secure-&quot; or &quot;$Host-&quot; (prefixes reserved by
+    &quot;__Secure-&quot; or &quot;__Host-&quot; (prefixes reserved by
     https://tools.ietf.org/html/draft-west-cookie-prefixes).
   </summary>
 </histogram>
@@ -5268,11 +5281,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>estark@chromium.org</owner>
   <summary>
     Number of times a cookie was set with a name prefixed by
-    &quot;$Secure-&quot; or &quot;$Host-&quot; that violate cookie prefix rules.
-    That is, a $Secure- cookie must be set over a secure connection with the
-    Secure attribute, and a $Host- cookie must be set over a secure connection,
-    with the Secure attribute, with no Domain attribute, and with a Path
-    attribute of &quot;/&quot;. (As defined in
+    &quot;__Secure-&quot; or &quot;__Host-&quot; that violate cookie prefix
+    rules. That is, a __Secure- cookie must be set over a secure connection with
+    the Secure attribute, and a __Host- cookie must be set over a secure
+    connection, with the Secure attribute, with no Domain attribute, and with a
+    Path attribute of &quot;/&quot;. (As defined in
     https://tools.ietf.org/html/draft-west-cookie-prefixes.)
   </summary>
 </histogram>
@@ -48695,6 +48708,34 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Tab.RendererDetailedExitStatus"
+    enum="TabRendererDetailedExitStatus">
+  <owner>wnwen@chromium.org</owner>
+  <summary>
+    Breakdown of renderer exit status for renderers that have strong bindings.
+    An extension of the counts in Tab.RendererExitStatus. Only recorded on
+    Android.
+  </summary>
+</histogram>
+
+<histogram name="Tab.RendererDetailedExitStatusUnbound"
+    enum="TabRendererDetailedExitStatus">
+  <owner>wnwen@chromium.org</owner>
+  <summary>
+    Breakdown of renderer exit status for renderers that do not have strong
+    bindings. An extension of the counts in Tab.RendererExitStatus. Only
+    recorded on Android.
+  </summary>
+</histogram>
+
+<histogram name="Tab.RendererExitStatus" enum="TabRendererExitStatus">
+  <owner>wnwen@chromium.org</owner>
+  <summary>
+    The status of a renderer when the browser notices that the process has
+    exited. Only recorded on Android.
+  </summary>
+</histogram>
+
 <histogram name="Tab.RestoreResult" enum="TabRestoreResult">
   <owner>lliabraa@chromium.org</owner>
   <summary>
@@ -54934,6 +54975,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="TrimMemoryRunningLow"/>
   <int value="2" label="TrimMemoryRunningCritical"/>
   <int value="3" label="LowMemory"/>
+</enum>
+
+<enum name="AndroidSeccompSandboxStatus" type="int">
+  <int value="0" label="Not Supported"/>
+  <int value="1" label="Detection Failed"/>
+  <int value="2" label="Feature Disabled"/>
+  <int value="3" label="Feature Enabled"/>
+  <int value="4" label="Sandbox Engaged"/>
 </enum>
 
 <enum name="AndroidSeccompStatus" type="int">
@@ -63542,6 +63591,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1037" label="SVGSVGElementFragmentSVGViewElement"/>
   <int value="1038" label="PresentationConnectionClose"/>
   <int value="1039" label="SVG1DOMShape"/>
+  <int value="1040" label="SVG1DOMText"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -66382,7 +66432,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="24" label="NETWORK_INVALID_REQUEST"/>
   <int value="30" label="SERVER_FAILED"/>
   <int value="31" label="SERVER_NO_RANGE"/>
-  <int value="32" label="SERVER_PRECONDITION"/>
+  <int value="32" label="SERVER_PRECONDITION (Deprecated)"/>
   <int value="33" label="SERVER_BAD_CONTENT"/>
   <int value="34" label="SERVER_UNAUTHORIZED"/>
   <int value="35" label="SERVER_CERT_PROBLEM"/>
@@ -67440,6 +67490,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-2063014275" label="enable-web-bluetooth"/>
   <int value="-2048732429" label="enable-alternative-services"/>
   <int value="-2047822258" label="enable-avfoundation"/>
+  <int value="-2043128632" label="enable-tab-switcher-in-document-mode"/>
   <int value="-2025367104" label="enable-material-design-ntp"/>
   <int value="-2020721975" label="smart-virtual-keyboard"/>
   <int value="-2020024440" label="scroll-end-effect"/>
@@ -67715,6 +67766,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="121858954" label="enable-supervised-user-safesites"/>
   <int value="125934378" label="enable-password-link"/>
   <int value="147373243" label="enable-deferred-image-decoding"/>
+  <int value="178337215" label="enable-md-history"/>
   <int value="180074362" label="memory-pressure-thresholds"/>
   <int value="203776499" label="enable-virtual-keyboard-overscroll"/>
   <int value="244697230" label="enable-theme-color-in-tabbed-mode"/>
@@ -77026,6 +77078,24 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="Hidden in background app"/>
 </enum>
 
+<enum name="TabRendererDetailedExitStatus" type="int">
+  <int value="0" label="Empty minidump in running app"/>
+  <int value="1" label="Empty minidump in paused app"/>
+  <int value="2" label="Empty minidump in background app"/>
+  <int value="3" label="Valid minidump in running app"/>
+  <int value="4" label="Valid minidump in paused app"/>
+  <int value="5" label="Valid minidump in background app"/>
+</enum>
+
+<enum name="TabRendererExitStatus" type="int">
+  <int value="0" label="OOM protected in running app"/>
+  <int value="1" label="OOM protected in paused app"/>
+  <int value="2" label="OOM protected in background app"/>
+  <int value="3" label="Not protected in running app"/>
+  <int value="4" label="Not protected in paused app"/>
+  <int value="5" label="Not protected in background app"/>
+</enum>
+
 <enum name="TabRestoreResult" type="int">
   <int value="0" label="Failure (other)"/>
   <int value="1" label="Success"/>
@@ -79140,6 +79210,16 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="Periodic"/>
   <suffix name="Unknown"/>
   <affected-histogram name="ChromeOS.MachineIdRegen.AgeSeconds"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="Clients.StaleWhileRevalidateExperiment" separator="."
+    ordering="prefix">
+  <suffix name="Clients.StaleWhileRevalidateExperiment"
+      label="Timing was recorded on one of the domains of focus for
+             stale-while-revalidate"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstLayout"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstTextPaint"/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToLoadEventFired"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ClockResolution" separator=".">

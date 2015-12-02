@@ -994,15 +994,6 @@ AccessibilityExpanded AXNodeObject::isExpanded() const
     return ExpandedUndefined;
 }
 
-bool AXNodeObject::isIndeterminate() const
-{
-    Node* node = this->node();
-    if (!isHTMLInputElement(node))
-        return false;
-
-    return toHTMLInputElement(node)->shouldAppearIndeterminate();
-}
-
 bool AXNodeObject::isPressed() const
 {
     if (!isButton())
@@ -1244,6 +1235,9 @@ String AXNodeObject::text() const
 
 AccessibilityButtonState AXNodeObject::checkboxOrRadioValue() const
 {
+    if (isNativeCheckboxInMixedState())
+        return ButtonStateMixed;
+
     if (isNativeCheckboxOrRadio())
         return isChecked() ? ButtonStateOn : ButtonStateOff;
 
@@ -1479,12 +1473,22 @@ static bool isInSameNonInlineBlockFlow(LayoutObject* r1, LayoutObject* r2)
 
 AXObject* AXNodeObject::findChildWithTagName(const HTMLQualifiedName& tagName) const
 {
-    for (AXObject* child = firstChild(); child; child = child->nextSibling()) {
+    for (AXObject* child = rawFirstChild(); child; child = child->rawFirstSibling()) {
         Node* childNode = child->node();
         if (childNode && childNode->hasTagName(tagName))
             return child;
     }
     return 0;
+}
+
+bool AXNodeObject::isNativeCheckboxInMixedState() const
+{
+    if (!isHTMLInputElement(m_node))
+        return false;
+
+    HTMLInputElement* input = toHTMLInputElement(m_node);
+    return input->type() == InputTypeNames::checkbox
+        && input->shouldAppearIndeterminate();
 }
 
 //
@@ -1588,7 +1592,7 @@ String AXNodeObject::textFromDescendants(AXObjectSet& visited) const
 {
     StringBuilder accumulatedText;
     AXObject* previous = nullptr;
-    for (AXObject* child = firstChild(); child; child = child->nextSibling()) {
+    for (AXObject* child = rawFirstChild(); child; child = child->rawFirstSibling()) {
         // Skip hidden children
         if (child->isInertOrAriaHidden())
             continue;
@@ -1730,7 +1734,7 @@ AXObject* AXNodeObject::computeParentIfExists() const
     return nullptr;
 }
 
-AXObject* AXNodeObject::firstChild() const
+AXObject* AXNodeObject::rawFirstChild() const
 {
     if (!node())
         return 0;
@@ -1743,7 +1747,7 @@ AXObject* AXNodeObject::firstChild() const
     return axObjectCache().getOrCreate(firstChild);
 }
 
-AXObject* AXNodeObject::nextSibling() const
+AXObject* AXNodeObject::rawFirstSibling() const
 {
     if (!node())
         return 0;

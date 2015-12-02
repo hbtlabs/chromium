@@ -115,6 +115,7 @@ WebGL2RenderingContextBase::WebGL2RenderingContextBase(HTMLCanvasElement* passed
     m_supportedInternalFormatsStorage.insert(kSupportedInternalFormatsStorage, kSupportedInternalFormatsStorage + arraysize(kSupportedInternalFormatsStorage));
     m_supportedInternalFormatsStorage.insert(kCompressedTextureFormatsETC2EAC, kCompressedTextureFormatsETC2EAC + arraysize(kCompressedTextureFormatsETC2EAC));
     m_compressedTextureFormatsETC2EAC.insert(kCompressedTextureFormatsETC2EAC, kCompressedTextureFormatsETC2EAC + arraysize(kCompressedTextureFormatsETC2EAC));
+    m_compressedTextureFormats.append(kCompressedTextureFormatsETC2EAC, arraysize(kCompressedTextureFormatsETC2EAC));
 }
 
 WebGL2RenderingContextBase::~WebGL2RenderingContextBase()
@@ -167,6 +168,15 @@ void WebGL2RenderingContextBase::initializeNewContext()
     m_boundIndexedUniformBuffers.clear();
     m_boundIndexedUniformBuffers.resize(maxUniformBufferBindings);
     m_maxBoundUniformBufferIndex = 0;
+
+    m_packRowLength = 0;
+    m_packSkipPixels = 0;
+    m_packSkipRows = 0;
+    m_unpackRowLength = 0;
+    m_unpackImageHeight = 0;
+    m_unpackSkipPixels = 0;
+    m_unpackSkipRows = 0;
+    m_unpackSkipImages = 0;
 
     WebGLRenderingContextBase::initializeNewContext();
 }
@@ -527,6 +537,42 @@ void WebGL2RenderingContextBase::readBuffer(GLenum mode)
     webContext()->readBuffer(mode);
 }
 
+void WebGL2RenderingContextBase::pixelStorei(GLenum pname, GLint param)
+{
+    if (isContextLost())
+        return;
+    switch (pname) {
+    case GL_PACK_ROW_LENGTH:
+        m_packRowLength = param;
+        break;
+    case GL_PACK_SKIP_PIXELS:
+        m_packSkipPixels = param;
+        break;
+    case GL_PACK_SKIP_ROWS:
+        m_packSkipRows = param;
+        break;
+    case GL_UNPACK_ROW_LENGTH:
+        m_unpackRowLength = param;
+        break;
+    case GL_UNPACK_IMAGE_HEIGHT:
+        m_unpackImageHeight = param;
+        break;
+    case GL_UNPACK_SKIP_PIXELS:
+        m_unpackSkipPixels = param;
+        break;
+    case GL_UNPACK_SKIP_ROWS:
+        m_unpackSkipRows = param;
+        break;
+    case GL_UNPACK_SKIP_IMAGES:
+        m_unpackSkipImages = param;
+        break;
+    default:
+        WebGLRenderingContextBase::pixelStorei(pname, param);
+        return;
+    }
+    webContext()->pixelStorei(pname, param);
+}
+
 void WebGL2RenderingContextBase::readPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, DOMArrayBufferView* pixels)
 {
     if (isContextLost())
@@ -683,6 +729,38 @@ void WebGL2RenderingContextBase::renderbufferStorageMultisample(GLenum target, G
     applyStencilTest();
 }
 
+void WebGL2RenderingContextBase::resetUnpackParameters()
+{
+    WebGLRenderingContextBase::resetUnpackParameters();
+
+    if (!m_unpackRowLength)
+        webContext()->pixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    if (!m_unpackImageHeight)
+        webContext()->pixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+    if (!m_unpackSkipPixels)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    if (!m_unpackSkipRows)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    if (!m_unpackSkipImages)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_IMAGES, 0);
+}
+
+void WebGL2RenderingContextBase::restoreUnpackParameters()
+{
+    WebGLRenderingContextBase::restoreUnpackParameters();
+
+    if (!m_unpackRowLength)
+        webContext()->pixelStorei(GL_UNPACK_ROW_LENGTH, m_unpackRowLength);
+    if (!m_unpackImageHeight)
+        webContext()->pixelStorei(GL_UNPACK_IMAGE_HEIGHT, m_unpackImageHeight);
+    if (!m_unpackSkipPixels)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_PIXELS, m_unpackSkipPixels);
+    if (!m_unpackSkipRows)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_ROWS, m_unpackSkipRows);
+    if (!m_unpackSkipImages)
+        webContext()->pixelStorei(GL_UNPACK_SKIP_IMAGES, m_unpackSkipImages);
+}
+
 /* Texture objects */
 bool WebGL2RenderingContextBase::validateTexStorage(const char* functionName, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, TexStorageType functionType)
 {
@@ -764,14 +842,8 @@ void WebGL2RenderingContextBase::texStorage3D(GLenum target, GLsizei levels, GLe
 
 bool WebGL2RenderingContextBase::validateTexImage3D(const char* functionName, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type)
 {
-    switch (target) {
-    case GL_TEXTURE_3D:
-    case GL_TEXTURE_2D_ARRAY:
-        break;
-    default:
-        synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid target");
+    if (!validateTexFunc3DTarget(functionName, target))
         return false;
-    }
 
     if (!validateTexFuncLevel(functionName, target, level))
         return false;
@@ -812,14 +884,8 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target, GLint level, GLint in
 bool WebGL2RenderingContextBase::validateTexSubImage3D(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset,
     GLenum format, GLenum type, GLsizei width, GLsizei height, GLsizei depth)
 {
-    switch (target) {
-    case GL_TEXTURE_3D:
-    case GL_TEXTURE_2D_ARRAY:
-        break;
-    default:
-        synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid target");
+    if (!validateTexFunc3DTarget(functionName, target))
         return false;
-    }
 
     WebGLTexture* tex = validateTextureBinding(functionName, target, false);
     if (!tex)
@@ -883,11 +949,9 @@ void WebGL2RenderingContextBase::texSubImage3DImpl(GLenum target, GLint level, G
         }
     }
 
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     webContext()->texSubImage3D(target, level, xoffset, yoffset, zoffset, imageExtractor.imageWidth(), imageExtractor.imageHeight(), 1, format, type, needConversion ? data.data() : imagePixelData);
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels)
@@ -900,22 +964,17 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
 
     void* data = pixels->baseAddress();
     Vector<uint8_t> tempData;
-    bool changeUnpackAlignment = false;
+    bool changeUnpackParameters = false;
     if (data && (m_unpackFlipY || m_unpackPremultiplyAlpha)) {
-        if (!WebGLImageConversion::extractTextureData(width, height, format, type,
-            m_unpackAlignment,
-            m_unpackFlipY, m_unpackPremultiplyAlpha,
-            data,
-            tempData))
-            return;
-        data = tempData.data();
-        changeUnpackAlignment = true;
+        // FIXME: WebGLImageConversion needs to be updated to accept image depth.
+        notImplemented();
+        changeUnpackParameters = true;
     }
-    if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (changeUnpackParameters)
+        resetUnpackParameters();
     webContext()->texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, data);
-    if (changeUnpackAlignment)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    if (changeUnpackParameters)
+        restoreUnpackParameters();
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLenum format, GLenum type, ImageData* pixels)
@@ -939,11 +998,9 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
             return;
         }
     }
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    resetUnpackParameters();
     webContext()->texSubImage3D(target, level, xoffset, yoffset, zoffset, pixels->width(), pixels->height(), 1, format, type, needConversion ? data.data() : pixels->data()->data());
-    if (m_unpackAlignment != 1)
-        webContext()->pixelStorei(GL_UNPACK_ALIGNMENT, m_unpackAlignment);
+    restoreUnpackParameters();
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLenum format, GLenum type, HTMLImageElement* image, ExceptionState& exceptionState)
@@ -1007,6 +1064,8 @@ void WebGL2RenderingContextBase::compressedTexImage3D(GLenum target, GLint level
 {
     if (isContextLost())
         return;
+    if (!validateTexFunc3DTarget("compressedTexImage3D", target))
+        return;
 
     WebGLTexture* tex = validateTextureBinding("compressedTexImage3D", target, true);
     if (!tex)
@@ -1027,6 +1086,8 @@ void WebGL2RenderingContextBase::compressedTexImage3D(GLenum target, GLint level
 void WebGL2RenderingContextBase::compressedTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, DOMArrayBufferView* data)
 {
     if (isContextLost())
+        return;
+    if (!validateTexFunc3DTarget("compressedTexSubImage3D", target))
         return;
 
     WebGLTexture* tex = validateTextureBinding("compressedTexSubImage3D", target, true);
@@ -2541,11 +2602,11 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* scriptState, G
     case GL_UNPACK_ROW_LENGTH:
         return getIntParameter(scriptState, pname);
     case GL_UNPACK_SKIP_IMAGES:
-        return getBooleanParameter(scriptState, pname);
+        return getIntParameter(scriptState, pname);
     case GL_UNPACK_SKIP_PIXELS:
-        return getBooleanParameter(scriptState, pname);
+        return getIntParameter(scriptState, pname);
     case GL_UNPACK_SKIP_ROWS:
-        return getBooleanParameter(scriptState, pname);
+        return getIntParameter(scriptState, pname);
 
     default:
         return WebGLRenderingContextBase::getParameter(scriptState, pname);
@@ -2834,6 +2895,18 @@ bool WebGL2RenderingContextBase::validateReadPixelsFormatAndType(GLenum format, 
     }
 
     return true;
+}
+
+bool WebGL2RenderingContextBase::validateTexFunc3DTarget(const char* functionName, GLenum target)
+{
+    switch (target) {
+    case GL_TEXTURE_3D:
+    case GL_TEXTURE_2D_ARRAY:
+        return true;
+    default:
+        synthesizeGLError(GL_INVALID_ENUM, functionName, "invalid 3D target");
+        return false;
+    }
 }
 
 DOMArrayBufferView::ViewType WebGL2RenderingContextBase::readPixelsExpectedArrayBufferViewType(GLenum type)

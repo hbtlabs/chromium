@@ -198,7 +198,6 @@ enum AccessibilityState {
     AXFocusedState,
     AXHaspopupState,
     AXHoveredState,
-    AXIndeterminateState,
     AXInvisibleState,
     AXLinkedState,
     AXMultilineState,
@@ -631,7 +630,6 @@ public:
     virtual AccessibilityExpanded isExpanded() const { return ExpandedUndefined; }
     virtual bool isFocused() const { return false; }
     virtual bool isHovered() const { return false; }
-    virtual bool isIndeterminate() const { return false; }
     virtual bool isLinked() const { return false; }
     virtual bool isLoaded() const { return false; }
     virtual bool isMultiSelectable() const { return false; }
@@ -832,8 +830,8 @@ public:
     AXObject* parentObjectUnignored() const;
 
     // Low-level accessibility tree exploration, only for use within the accessibility module.
-    virtual AXObject* firstChild() const { return 0; }
-    virtual AXObject* nextSibling() const { return 0; }
+    virtual AXObject* rawFirstChild() const { return 0; }
+    virtual AXObject* rawFirstSibling() const { return 0; }
     AXObject* firstAccessibleObjectFromNode(const Node*);
     virtual void addChildren() { }
     virtual bool canHaveChildren() const { return true; }

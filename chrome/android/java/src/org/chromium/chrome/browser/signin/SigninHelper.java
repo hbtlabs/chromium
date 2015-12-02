@@ -33,6 +33,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 /**
  * A helper for tasks like re-signin.
  *
@@ -103,7 +105,7 @@ public class SigninHelper {
 
     private final ChromeSigninController mChromeSigninController;
 
-    private final ProfileSyncService mProfileSyncService;
+    @Nullable private final ProfileSyncService mProfileSyncService;
 
     private final SigninManager mSigninManager;
 
@@ -111,7 +113,7 @@ public class SigninHelper {
 
     private final OAuth2TokenService mOAuth2TokenService;
 
-    private final SyncController mSyncController;
+    @Nullable private final SyncController mSyncController;
 
     public static SigninHelper get(Context context) {
         synchronized (LOCK) {
@@ -133,10 +135,8 @@ public class SigninHelper {
     }
 
     public void validateAccountSettings(boolean accountsChanged) {
-        if (accountsChanged) {
-            // Account details have changed so inform AccountTrackerService refresh itself.
-            mAccountTrackerService.forceRefresh();
-        }
+        // Ensure System accounts have been seeded.
+        mAccountTrackerService.checkAndSeedSystemAccounts();
 
         Account syncAccount = mChromeSigninController.getSignedInUser();
         if (syncAccount == null) {
@@ -212,7 +212,7 @@ public class SigninHelper {
             mOAuth2TokenService.validateAccounts(mContext, false);
         }
 
-        if (AndroidSyncSettings.isSyncEnabled(mContext)) {
+        if (mProfileSyncService != null && AndroidSyncSettings.isSyncEnabled(mContext)) {
             if (mProfileSyncService.hasSyncSetupCompleted()) {
                 if (accountsChanged) {
                     // Nudge the syncer to ensure it does a full sync.
@@ -240,7 +240,6 @@ public class SigninHelper {
 
         // Before signing out, remember the current sync state and data types.
         final boolean isSyncWanted = AndroidSyncSettings.isChromeSyncEnabled(mContext);
-        final Set<Integer> dataTypes = mProfileSyncService.getPreferredDataTypes();
 
         // TODO(acleung): Deal with passphrase or just prompt user to re-enter it?
 
@@ -253,26 +252,28 @@ public class SigninHelper {
                 // Otherwise, if re-sign-in fails, we'll just leave chrome
                 // signed-out.
                 clearNewSignedInAccountName(mContext);
-                performResignin(newName, isSyncWanted, dataTypes);
+                performResignin(newName, isSyncWanted);
             }
         });
     }
 
-    private void performResignin(String newName,
-                                 final boolean isSyncWanted,
-                                 final Set<Integer> dataTypes) {
+    private void performResignin(String newName, final boolean isSyncWanted) {
         // This is the correct account now.
         final Account account = AccountManagerHelper.createAccountFromName(newName);
 
         mSigninManager.startSignIn(null, account, true, new SignInFlowObserver() {
             @Override
             public void onSigninComplete() {
-                mProfileSyncService.setSetupInProgress(false);
+                if (mProfileSyncService != null) {
+                    mProfileSyncService.setSetupInProgress(false);
+                }
 
-                if (isSyncWanted) {
-                    mSyncController.start();
-                } else {
-                    mSyncController.stop();
+                if (mSyncController != null) {
+                    if (isSyncWanted) {
+                        mSyncController.start();
+                    } else {
+                        mSyncController.stop();
+                    }
                 }
 
                 validateAccountSettings(true);

@@ -133,11 +133,11 @@ HTMLCanvasElement::~HTMLCanvasElement()
 #endif
 }
 
-void HTMLCanvasElement::parseAttribute(const QualifiedName& name, const AtomicString& value)
+void HTMLCanvasElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == widthAttr || name == heightAttr)
         reset();
-    HTMLElement::parseAttribute(name, value);
+    HTMLElement::parseAttribute(name, oldValue, value);
 }
 
 LayoutObject* HTMLCanvasElement::createLayoutObject(const ComputedStyle& style)
@@ -561,11 +561,9 @@ void HTMLCanvasElement::toBlob(FileCallback* callback, const String& mimeType, c
     RefPtr<DOMUint8ClampedArray> imageDataRef(imageData->data());
 
     RefPtr<CanvasAsyncBlobCreator> asyncCreatorRef = CanvasAsyncBlobCreator::create(imageDataRef.release(), encodingMimeType, imageData->size(), callback);
-    if (Platform::current()->isThreadedCompositingEnabled() && (encodingMimeType == DefaultMimeType)) {
-        asyncCreatorRef->scheduleAsyncBlobCreation(true);
-    } else {
-        asyncCreatorRef->scheduleAsyncBlobCreation(false, quality);
-    }
+
+    // TODO(xlai): Remove idle-periods version of implementation completely, http://crbug.com/564218
+    asyncCreatorRef->scheduleAsyncBlobCreation(false, quality);
 }
 
 SecurityOrigin* HTMLCanvasElement::securityOrigin() const

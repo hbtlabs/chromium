@@ -95,7 +95,6 @@ static_library("common") {
     "//gpu/command_buffer/service",
     "//gpu/config",
     "//net",
-    "//ppapi/shared_impl",
     "//skia",
     "//third_party/icu",
     "//third_party/zlib:zip",
@@ -107,6 +106,10 @@ static_library("common") {
     "//ui/resources:resources",
     "//url",
   ]
+
+  if (enable_plugins) {
+    public_deps += [ "//ppapi/shared_impl" ]
+  }
 
   if (is_ios) {
     sources += [
@@ -219,9 +222,7 @@ static_library("common") {
 
   if (is_android) {
     sources -= [
-      "badge_util.cc",
       "channel_info_posix.cc",
-      "icon_with_badge_image_source.cc",
       "media_galleries/metadata_types.h",
     ]
   } else {

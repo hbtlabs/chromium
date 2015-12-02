@@ -140,6 +140,7 @@ source_set("test_support") {
       "//chrome/utility",
       "//components/autofill/core/browser:test_support",
       "//components/captive_portal:test_support",
+      "//components/gcm_driver/crypto:test_support",
       "//components/guest_view/browser:test_support",
       "//components/infobars/core",
       "//components/sessions:test_support",
@@ -153,13 +154,15 @@ source_set("test_support") {
       "//google_apis:test_support",
       "//ipc:test_support",
       "//media:test_support",
-      "//ppapi/shared_impl",
       "//sql:test_support",
       "//third_party/leveldatabase",
       "//ui/base",
       "//ui/events:events_base",
       "//ui/gl",
     ]
+  }
+  if (enable_plugins) {
+    public_deps += [ "//ppapi/shared_impl" ]
   }
 
   if (is_android) {
@@ -995,10 +998,8 @@ if (!is_android) {
         ]
         if (is_chromeos) {
           sources += [ "//third_party/liblouis/nacl_wrapper/liblouis_wrapper_browsertest.cc" ]
-          deps += [
-            "//chrome/browser/chromeos",
-            #'../third_party/liblouis/liblouis_nacl.gyp:liblouis_test_data',  TODO(GYP) bug 512906
-          ]
+          deps += [ "//chrome/browser/chromeos" ]
+          data_deps += [ "//third_party/liblouis:liblouis_test_data" ]
         }
       }
       if (is_win || is_linux) {
@@ -1612,7 +1613,6 @@ test("unit_tests") {
 
   if (!is_ios) {
     deps += [
-      ":unit_tests_js",
       "//components/autofill/content/browser/wallet:test_support",
       "//components/autofill/content/renderer:test_support",
       "//components/data_reduction_proxy/core/browser:test_support",
@@ -1668,6 +1668,7 @@ test("unit_tests") {
   }
 
   if (!is_android && !is_ios) {
+    deps += [ ":unit_tests_js" ]
     sources += rebase_path(
             chrome_tests_unit_gypi_values.chrome_unit_tests_non_mobile_sources,
             ".",

@@ -25,6 +25,7 @@ mojo_native_application("main") {
   ]
 
   data_deps = [
+    "//mash/shell",
     "//mash/example/views_examples",
     "//mash/example/window_type_launcher",
   ]
