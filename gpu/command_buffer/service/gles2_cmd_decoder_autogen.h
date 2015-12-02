@@ -4909,6 +4909,16 @@ error::Error GLES2DecoderImpl::HandleDrawBuffersEXTImmediate(
   return error::kNoError;
 }
 
+error::Error GLES2DecoderImpl::HandleCommitOverlayPlanesCHROMIUM(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::CommitOverlayPlanesCHROMIUM& c =
+      *static_cast<const gles2::cmds::CommitOverlayPlanesCHROMIUM*>(cmd_data);
+  (void)c;
+  DoCommitOverlayPlanes();
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderImpl::HandleSwapInterval(uint32_t immediate_data_size,
                                                   const void* cmd_data) {
   const gles2::cmds::SwapInterval& c =
@@ -5143,6 +5153,22 @@ bool GLES2DecoderImpl::SetCapabilityState(GLenum cap, bool enabled) {
       if (state_.enable_flags.cached_primitive_restart_fixed_index != enabled ||
           state_.ignore_cached_state) {
         state_.enable_flags.cached_primitive_restart_fixed_index = enabled;
+        return true;
+      }
+      return false;
+    case GL_MULTISAMPLE_EXT:
+      state_.enable_flags.multisample_ext = enabled;
+      if (state_.enable_flags.cached_multisample_ext != enabled ||
+          state_.ignore_cached_state) {
+        state_.enable_flags.cached_multisample_ext = enabled;
+        return true;
+      }
+      return false;
+    case GL_SAMPLE_ALPHA_TO_ONE_EXT:
+      state_.enable_flags.sample_alpha_to_one_ext = enabled;
+      if (state_.enable_flags.cached_sample_alpha_to_one_ext != enabled ||
+          state_.ignore_cached_state) {
+        state_.enable_flags.cached_sample_alpha_to_one_ext = enabled;
         return true;
       }
       return false;

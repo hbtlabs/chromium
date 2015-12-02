@@ -1316,7 +1316,7 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
 
   if (data().network_state != TabRendererData::NETWORK_STATE_NONE) {
     // Paint network activity (aka throbber) animation frame.
-    ui::ThemeProvider* tp = GetThemeProvider();
+    const ui::ThemeProvider* tp = GetThemeProvider();
     if (data().network_state == TabRendererData::NETWORK_STATE_WAITING) {
       if (waiting_start_time_ == base::TimeTicks())
         waiting_start_time_ = base::TimeTicks::Now();
@@ -1324,17 +1324,18 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
       waiting_state_.elapsed_time =
           base::TimeTicks::Now() - waiting_start_time_;
       gfx::PaintThrobberWaiting(
-          canvas, bounds, tp->GetColor(ThemeProperties::COLOR_THROBBER_WAITING),
+          canvas, bounds,
+          tp->GetColor(ThemeProperties::COLOR_TAB_THROBBER_WAITING),
           waiting_state_.elapsed_time);
     } else {
       if (loading_start_time_ == base::TimeTicks())
         loading_start_time_ = base::TimeTicks::Now();
 
       waiting_state_.color =
-          tp->GetColor(ThemeProperties::COLOR_THROBBER_WAITING);
+          tp->GetColor(ThemeProperties::COLOR_TAB_THROBBER_WAITING);
       gfx::PaintThrobberSpinningAfterWaiting(
           canvas, bounds,
-          tp->GetColor(ThemeProperties::COLOR_THROBBER_SPINNING),
+          tp->GetColor(ThemeProperties::COLOR_TAB_THROBBER_SPINNING),
           base::TimeTicks::Now() - loading_start_time_, &waiting_state_);
     }
   } else {
@@ -1453,7 +1454,7 @@ void Tab::SetFaviconHidingOffset(int offset) {
 void Tab::OnButtonColorMaybeChanged() {
   // The theme provider may be null if we're not currently in a widget
   // hierarchy.
-  ui::ThemeProvider* theme_provider = GetThemeProvider();
+  const ui::ThemeProvider* theme_provider = GetThemeProvider();
   if (!theme_provider)
     return;
 

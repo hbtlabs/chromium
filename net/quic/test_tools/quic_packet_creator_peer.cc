@@ -60,5 +60,64 @@ void QuicPacketCreatorPeer::FillPacketHeader(QuicPacketCreator* creator,
   creator->FillPacketHeader(fec_group, fec_flag, header);
 }
 
+// static
+size_t QuicPacketCreatorPeer::CreateStreamFrame(QuicPacketCreator* creator,
+                                                QuicStreamId id,
+                                                QuicIOVector iov,
+                                                size_t iov_offset,
+                                                QuicStreamOffset offset,
+                                                bool fin,
+                                                QuicFrame* frame,
+                                                UniqueStreamBuffer* buffer) {
+  return creator->CreateStreamFrame(id, iov, iov_offset, offset, fin, frame,
+                                    buffer);
+}
+
+// static
+bool QuicPacketCreatorPeer::IsFecProtected(QuicPacketCreator* creator) {
+  return creator->fec_protect_;
+}
+
+// static
+bool QuicPacketCreatorPeer::IsFecEnabled(QuicPacketCreator* creator) {
+  return creator->max_packets_per_fec_group_ > 0;
+}
+
+// static
+void QuicPacketCreatorPeer::StartFecProtectingPackets(
+    QuicPacketCreator* creator) {
+  creator->StartFecProtectingPackets();
+}
+
+// static
+void QuicPacketCreatorPeer::StopFecProtectingPackets(
+    QuicPacketCreator* creator) {
+  creator->StopFecProtectingPackets();
+}
+
+// static
+SerializedPacket QuicPacketCreatorPeer::SerializeFec(QuicPacketCreator* creator,
+                                                     char* buffer,
+                                                     size_t buffer_len) {
+  return creator->SerializeFec(buffer, buffer_len);
+}
+
+// static
+void QuicPacketCreatorPeer::ResetFecGroup(QuicPacketCreator* creator) {
+  creator->ResetFecGroup();
+}
+
+// static
+QuicTime::Delta QuicPacketCreatorPeer::GetFecTimeout(
+    QuicPacketCreator* creator) {
+  return creator->fec_timeout_;
+}
+
+// static
+float QuicPacketCreatorPeer::GetRttMultiplierForFecTimeout(
+    QuicPacketCreator* creator) {
+  return creator->rtt_multiplier_for_fec_timeout_;
+}
+
 }  // namespace test
 }  // namespace net

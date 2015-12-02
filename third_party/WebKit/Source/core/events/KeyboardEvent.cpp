@@ -73,20 +73,21 @@ KeyboardEvent::KeyboardEvent()
 }
 
 KeyboardEvent::KeyboardEvent(const PlatformKeyboardEvent& key, AbstractView* view)
-    : UIEventWithKeyState(eventTypeForKeyboardEventType(key.type()), true, true, view, 0, key.modifiers(), InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
+    : UIEventWithKeyState(eventTypeForKeyboardEventType(key.type()), true, true, view, 0, key.modifiers(), key.timestamp(), InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
     , m_keyEvent(adoptPtr(new PlatformKeyboardEvent(key)))
     , m_keyIdentifier(key.keyIdentifier())
     , m_code(key.code())
     , m_key(key.key())
     , m_location(keyLocationCode(key))
 {
-    setPlatformTimeStamp(key.timestamp());
     initLocationModifiers(m_location);
 }
 
 KeyboardEvent::KeyboardEvent(const AtomicString& eventType, const KeyboardEventInit& initializer)
     : UIEventWithKeyState(eventType, initializer)
     , m_keyIdentifier(initializer.keyIdentifier())
+    , m_code(initializer.code())
+    , m_key(initializer.key())
     , m_location(initializer.location())
 {
     if (initializer.repeat())
@@ -95,8 +96,9 @@ KeyboardEvent::KeyboardEvent(const AtomicString& eventType, const KeyboardEventI
 }
 
 KeyboardEvent::KeyboardEvent(const AtomicString& eventType, bool canBubble, bool cancelable, AbstractView* view,
-    const String& keyIdentifier, const String& code, const String& key, unsigned location, PlatformEvent::Modifiers modifiers)
-    : UIEventWithKeyState(eventType, canBubble, cancelable, view, 0, modifiers, InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
+    const String& keyIdentifier, const String& code, const String& key, unsigned location, PlatformEvent::Modifiers modifiers,
+    double plaformTimeStamp)
+    : UIEventWithKeyState(eventType, canBubble, cancelable, view, 0, modifiers, plaformTimeStamp, InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
     , m_keyIdentifier(keyIdentifier)
     , m_code(code)
     , m_key(key)

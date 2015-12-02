@@ -242,6 +242,8 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetriedTwice) {
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
   // Transient error incurs a retry after 1 second.
+  EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
+      base::TimeDelta::FromMilliseconds(1100));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(1100));
@@ -249,6 +251,8 @@ TEST_F(GaiaCookieManagerServiceTest, MergeSessionRetriedTwice) {
   SimulateMergeSessionFailure(&helper, canceled());
   DCHECK(helper.is_running());
   // Next transient error incurs a retry after 3 seconds.
+  EXPECT_LT(helper.GetBackoffEntry()->GetTimeUntilRelease(),
+      base::TimeDelta::FromMilliseconds(3100));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(3100));
@@ -554,6 +558,35 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsFindsOneAccount) {
 
   SimulateListAccountsSuccess(&helper,
       "[\"f\", [[\"b\", 0, \"n\", \"a@b.com\", \"p\", 0, 0, 0, 0, 1, \"8\"]]]");
+}
+
+TEST_F(GaiaCookieManagerServiceTest, ListAccountsAfterOnCookieChanged) {
+  InstrumentedGaiaCookieManagerService helper(token_service(), signin_client());
+  MockObserver observer(&helper);
+
+  std::vector<gaia::ListedAccount> list_accounts;
+  std::vector<gaia::ListedAccount> empty_list_accounts;
+
+  EXPECT_CALL(helper, StartFetchingListAccounts());
+  EXPECT_CALL(observer,
+              OnGaiaAccountsInCookieUpdated(empty_list_accounts, no_error()));
+  ASSERT_FALSE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+  SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
+
+  // ListAccounts returns cached data.
+  ASSERT_TRUE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+
+  EXPECT_CALL(helper, StartFetchingListAccounts());
+  EXPECT_CALL(observer,
+              OnGaiaAccountsInCookieUpdated(empty_list_accounts, no_error()));
+  helper.ForceOnCookieChangedProcessing();
+
+  // OnCookieChanged should invalidate cached data.
+  ASSERT_FALSE(helper.ListAccounts(&list_accounts));
+  ASSERT_TRUE(list_accounts.empty());
+  SimulateListAccountsSuccess(&helper, "[\"f\",[]]");
 }
 
 TEST_F(GaiaCookieManagerServiceTest, ExternalCcResultFetcher) {

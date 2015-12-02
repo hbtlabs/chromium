@@ -64,7 +64,7 @@ PrefService* TestingApplicationContext::GetLocalState() {
 net::URLRequestContextGetter*
 TestingApplicationContext::GetSystemURLRequestContext() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetSystemURLRequestContext();
+  return nullptr;
 }
 
 const std::string& TestingApplicationContext::GetApplicationLocale() {
@@ -77,6 +77,12 @@ ios::ChromeBrowserStateManager*
 TestingApplicationContext::GetChromeBrowserStateManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return chrome_browser_state_manager_;
+}
+
+metrics_services_manager::MetricsServicesManager*
+TestingApplicationContext::GetMetricsServicesManager() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
 }
 
 metrics::MetricsService* TestingApplicationContext::GetMetricsService() {
@@ -109,4 +115,26 @@ TestingApplicationContext::GetNetworkTimeTracker() {
         make_scoped_ptr(new base::DefaultTickClock), local_state_));
   }
   return network_time_tracker_.get();
+}
+
+IOSChromeIOThread* TestingApplicationContext::GetIOSChromeIOThread() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+gcm::GCMDriver* TestingApplicationContext::GetGCMDriver() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+web_resource::PromoResourceService*
+TestingApplicationContext::GetPromoResourceService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+component_updater::ComponentUpdateService*
+TestingApplicationContext::GetComponentUpdateService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
 }

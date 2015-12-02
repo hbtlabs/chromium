@@ -22,6 +22,10 @@ class CrashesDOMHandler;
 class FlashDOMHandler;
 }
 
+namespace chrome_browser {
+void SetupPreReadFieldTrial();
+}
+
 namespace component_updater {
 class ComponentUpdateService;
 }
@@ -31,6 +35,7 @@ class DomainReliabilityServiceFactory;
 }
 
 namespace extensions {
+class ChromeExtensionWebContentsObserver;
 class FileManagerPrivateIsUMAEnabledFunction;
 class MetricsPrivateGetIsCrashReportingEnabledFunction;
 }
@@ -64,13 +69,15 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ::CrashesDOMHandler;
   friend class ::FlashDOMHandler;
   friend class BrowserProcessImpl;
+  friend void chrome_browser::SetupPreReadFieldTrial();
   friend class ChromeExtensionDownloaderFactory;
   friend class ChromeMetricsServicesManagerClient;
   friend class ChromeRenderMessageFilter;
   friend class DataReductionProxyChromeSettings;
   friend class domain_reliability::DomainReliabilityServiceFactory;
-  friend class extensions::MetricsPrivateGetIsCrashReportingEnabledFunction;
+  friend class extensions::ChromeExtensionWebContentsObserver;
   friend class extensions::FileManagerPrivateIsUMAEnabledFunction;
+  friend class extensions::MetricsPrivateGetIsCrashReportingEnabledFunction;
   friend void InitiateMetricsReportingChange(
       bool, const OnMetricsReportingCallbackType&);
   friend class options::BrowserOptionsHandler;

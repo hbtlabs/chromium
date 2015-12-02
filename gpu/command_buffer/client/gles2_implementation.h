@@ -202,6 +202,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // ContextSupport implementation.
   void Swap() override;
   void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
+  void CommitOverlayPlanes() override;
   void ScheduleOverlayPlane(int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             unsigned overlay_texture_id,
@@ -256,7 +257,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
   void SignalQuery(uint32 query, const base::Closure& callback) override;
-  void SetSurfaceVisible(bool visible) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
 
   // base::trace_event::MemoryDumpProvider implementation.

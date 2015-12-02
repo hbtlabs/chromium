@@ -7,10 +7,8 @@ package org.chromium.android_webview;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import org.chromium.android_webview.policy.AwPolicyProvider;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.net.DefaultAndroidKeyStore;
-import org.chromium.policy.CombinedPolicyProvider;
 
 /**
  * Java side of the Browser Context: contains all the java side objects needed to host one
@@ -25,7 +23,6 @@ public class AwBrowserContext {
     private SharedPreferences mSharedPreferences;
 
     private AwGeolocationPermissions mGeolocationPermissions;
-    private AwCookieManager mCookieManager;
     private AwFormDatabase mFormDatabase;
     private HttpAuthDatabase mHttpAuthDatabase;
     private DefaultAndroidKeyStore mLocalKeyStore;
@@ -33,7 +30,6 @@ public class AwBrowserContext {
 
     public AwBrowserContext(SharedPreferences sharedPreferences, Context applicationContext) {
         mSharedPreferences = sharedPreferences;
-        CombinedPolicyProvider.get().registerProvider(new AwPolicyProvider(applicationContext));
     }
 
     public AwGeolocationPermissions getGeolocationPermissions() {
@@ -41,13 +37,6 @@ public class AwBrowserContext {
             mGeolocationPermissions = new AwGeolocationPermissions(mSharedPreferences);
         }
         return mGeolocationPermissions;
-    }
-
-    public AwCookieManager getCookieManager() {
-        if (mCookieManager == null) {
-            mCookieManager = new AwCookieManager();
-        }
-        return mCookieManager;
     }
 
     public AwFormDatabase getFormDatabase() {

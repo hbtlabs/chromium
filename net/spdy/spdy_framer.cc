@@ -14,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/third_party/valgrind/memcheck.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/spdy_frame_builder.h"
 #include "net/spdy/spdy_frame_reader.h"
@@ -139,7 +138,8 @@ SettingsFlagsAndId SettingsFlagsAndId::FromWireFormat(
   if (version < SPDY3) {
     ConvertFlagsAndIdForSpdy2(&wire);
   }
-  return SettingsFlagsAndId(ntohl(wire) >> 24, ntohl(wire) & 0x00ffffff);
+  return SettingsFlagsAndId(base::NetToHost32(wire) >> 24,
+                            base::NetToHost32(wire) & 0x00ffffff);
 }
 
 SettingsFlagsAndId::SettingsFlagsAndId(uint8 flags, uint32 id)
@@ -149,7 +149,8 @@ SettingsFlagsAndId::SettingsFlagsAndId(uint8 flags, uint32 id)
 
 uint32 SettingsFlagsAndId::GetWireFormat(SpdyMajorVersion version)
     const {
-  uint32 wire = htonl(id_ & 0x00ffffff) | htonl(flags_ << 24);
+  uint32 wire =
+      base::HostToNet32(id_ & 0x00ffffff) | base::HostToNet32(flags_ << 24);
   if (version < SPDY3) {
     ConvertFlagsAndIdForSpdy2(&wire);
   }
@@ -1801,10 +1802,10 @@ bool SpdyFramer::ProcessSetting(const char* data) {
       SettingsFlagsAndId::FromWireFormat(protocol_version(), id_and_flags_wire);
     id_field = id_and_flags.id();
     flags = id_and_flags.flags();
-    value = ntohl(*(reinterpret_cast<const uint32*>(data + 4)));
+    value = base::NetToHost32(*(reinterpret_cast<const uint32*>(data + 4)));
   } else {
-    id_field = ntohs(*(reinterpret_cast<const uint16*>(data)));
-    value = ntohl(*(reinterpret_cast<const uint32*>(data + 2)));
+    id_field = base::NetToHost16(*(reinterpret_cast<const uint16*>(data)));
+    value = base::NetToHost32(*(reinterpret_cast<const uint32*>(data + 2)));
   }
 
   // Validate id.

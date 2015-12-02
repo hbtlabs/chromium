@@ -23,6 +23,7 @@ class CrossSiteResourceHandler;
 class DetachableResourceHandler;
 class ResourceContext;
 class ResourceMessageFilter;
+class WebContents;
 struct GlobalRequestID;
 struct GlobalRoutingID;
 
@@ -74,7 +75,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   int GetChildID() const override;
   int GetRouteID() const override;
   int GetOriginPID() const override;
-  int GetRequestID() const override;
   int GetRenderFrameID() const override;
   bool IsMainFrame() const override;
   bool ParentIsMainFrame() const override;
@@ -93,8 +93,17 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool IsUsingLoFi() const override;
   bool ShouldReportRawHeaders() const;
 
+  // Returns a callback that returns a pointer to the WebContents this request
+  // is associated with, or nullptr if it no longer exists or the request is
+  // not associated with a WebContents. The callback should only run on the UI
+  // thread.
+  // Note: Not all resource requests will be owned by a WebContents. For
+  // example, requests made by a ServiceWorker.
+  base::Callback<WebContents*(void)> GetWebContentsForRequest() const;
+
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
+  CONTENT_EXPORT int GetRequestID() const;
   CONTENT_EXPORT GlobalRequestID GetGlobalRequestID() const;
   GlobalRoutingID GetGlobalRoutingID() const;
 

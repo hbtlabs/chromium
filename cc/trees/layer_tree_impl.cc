@@ -721,7 +721,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         Occlusion occlusion =
             inside_replica ? Occlusion()
                            : occlusion_tracker.GetCurrentOcclusionForLayer(
-                                 it->draw_transform());
+                                 it->DrawTransform());
         it->draw_properties().occlusion_in_content_space = occlusion;
       }
 
@@ -741,7 +741,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
                   ? Occlusion()
                   : occlusion_tracker.GetCurrentOcclusionForContributingSurface(
                         it->render_surface()->draw_transform() *
-                        it->draw_transform());
+                        it->DrawTransform());
           mask->draw_properties().occlusion_in_content_space = mask_occlusion;
         }
         if (LayerImpl* replica = it->replica_layer()) {
@@ -810,6 +810,10 @@ void LayerTreeImpl::BuildPropertyTreesForTesting() {
       OuterViewportScrollLayer(), current_page_scale_factor(),
       device_scale_factor(), gfx::Rect(DrawViewportSize()),
       layer_tree_host_impl_->DrawTransform(), &property_trees_);
+}
+
+void LayerTreeImpl::IncrementRenderSurfaceListIdForTesting() {
+  render_surface_layer_list_id_++;
 }
 
 const LayerImplList& LayerTreeImpl::RenderSurfaceLayerList() const {
@@ -1317,19 +1321,6 @@ void LayerTreeImpl::RemoveLayerWithCopyOutputRequest(LayerImpl* layer) {
     CHECK(layers_with_copy_output_request_[i] != layer)
         << i << " of " << layers_with_copy_output_request_.size();
   }
-}
-
-void LayerTreeImpl::AddSurfaceLayer(LayerImpl* layer) {
-  DCHECK(std::find(surface_layers_.begin(), surface_layers_.end(), layer) ==
-         surface_layers_.end());
-  surface_layers_.push_back(layer);
-}
-
-void LayerTreeImpl::RemoveSurfaceLayer(LayerImpl* layer) {
-  std::vector<LayerImpl*>::iterator it =
-      std::find(surface_layers_.begin(), surface_layers_.end(), layer);
-  DCHECK(it != surface_layers_.end());
-  surface_layers_.erase(it);
 }
 
 const std::vector<LayerImpl*>& LayerTreeImpl::LayersWithCopyOutputRequest()

@@ -166,6 +166,7 @@
       'browser/password_manager/password_store_win_unittest.cc',
       'browser/password_manager/password_store_x_unittest.cc',
       'browser/password_manager/simple_password_store_mac_unittest.cc',
+      'browser/permissions/chooser_context_base_unittest.cc',
       'browser/permissions/permission_context_base_unittest.cc',
       'browser/permissions/permission_manager_unittest.cc',
       'browser/predictors/autocomplete_action_predictor_table_unittest.cc',
@@ -898,6 +899,8 @@
       'browser/task_management/providers/browser_process_task_unittest.cc',
       'browser/task_management/providers/child_process_task_unittest.cc',
       'browser/task_management/task_manager_observer_unittest.cc',
+      'browser/task_management/test_task_manager.cc',
+      'browser/task_management/test_task_manager.h',
       # Old Task Manager Tests Sources:
       'browser/task_manager/task_manager_unittest.cc',
       'browser/task_manager/task_manager_util_unittest.cc',
@@ -1290,6 +1293,7 @@
       'browser/chromeos/printer_detector/printer_detector_unittest.cc',
       'browser/chromeos/profiles/profile_list_chromeos_unittest.cc',
       'browser/chromeos/proxy_config_service_impl_unittest.cc',
+      'browser/chromeos/resource_reporter/resource_reporter_unittest.cc',
       'browser/chromeos/session_length_limiter_unittest.cc',
       'browser/chromeos/settings/cros_settings_unittest.cc',
       'browser/chromeos/settings/device_oauth2_token_service_unittest.cc',
@@ -1587,6 +1591,7 @@
       'browser/ui/webui/options/sync_setup_handler_unittest.cc',
       'browser/ui/webui/settings/sync_handler_unittest.cc',
       'browser/ui/webui/signin/login_ui_service_unittest.cc',
+      'browser/ui/webui/sync_internals_message_handler_unittest.cc',
       'browser/ui/webui/web_dialog_web_contents_delegate_unittest.cc',
       'browser/ui/window_sizer/window_sizer_common_unittest.cc',
       'browser/ui/window_sizer/window_sizer_unittest.cc',
@@ -1657,6 +1662,7 @@
         # NOTE: New dependencies should generally be added in the OS!="ios"
         # dependencies block below, rather than here.
         'browser',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
         'chrome_resources.gyp:theme_resources',
@@ -2057,13 +2063,13 @@
           'include_dirs': [
             '<(DEPTH)/third_party/wtl/include',
           ],
-          'conditions': [
-            ['use_aura==1', {
-              'dependencies': [
-                '../win8/win8.gyp:test_registrar_constants',
-                '../win8/win8.gyp:test_support_win8',
-              ],
-            }],
+          'dependencies': [
+            '../components/components.gyp:crash_component',
+            '../win8/win8.gyp:test_registrar_constants',
+            '../win8/win8.gyp:test_support_win8',
+          ],
+          'sources': [
+            'app/chrome_crash_reporter_client.cc',
           ],
         }],
         ['OS=="win" or OS=="mac"', {
@@ -2201,6 +2207,7 @@
         'test_support_unit',
         # 3) anything tests directly depend on
         '../components/components.gyp:generate_version_info',
+        '../components/components.gyp:sync_driver_features',
         '../courgette/courgette.gyp:courgette_lib',
         '../google_apis/google_apis.gyp:google_apis',
         '../skia/skia.gyp:skia',
@@ -2211,6 +2218,7 @@
         '../ui/base/ui_base.gyp:ui_base_test_support',
         '../ui/gfx/gfx.gyp:gfx_test_support',
         '../ui/resources/ui_resources.gyp:ui_resources',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
       ],
@@ -2337,6 +2345,8 @@
           'sources': [ '<@(chrome_unit_tests_extensions_sources)' ],
           'dependencies': [
             'common/extensions/api/api.gyp:chrome_api',
+            '../device/core/core.gyp:device_core_mocks',
+            '../device/hid/hid.gyp:device_hid_mocks',
             '../device/usb/usb.gyp:device_usb_mocks',
             '../components/components.gyp:audio_modem_test_support',
             '../extensions/extensions_resources.gyp:extensions_resources',
@@ -2814,6 +2824,7 @@
         '<@(chromium_browser_dependencies)',
         '<@(chromium_child_dependencies)',
         '../components/components.gyp:crash_core_common',
+        '../components/components.gyp:flags_ui_switches',
         '../content/content.gyp:content_app_both',
         # 2) test-specific support libraries:
         '../base/base.gyp:run_all_unittests',

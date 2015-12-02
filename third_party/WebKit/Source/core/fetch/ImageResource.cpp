@@ -30,7 +30,6 @@
 #include "core/fetch/ResourceClientWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
-#include "core/layout/LayoutObject.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/Logging.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -215,34 +214,34 @@ bool ImageResource::imageHasRelativeHeight() const
     return false;
 }
 
-LayoutSize ImageResource::imageSizeForLayoutObject(const LayoutObject* layoutObject, float multiplier, SizeType sizeType)
+LayoutSize ImageResource::imageSize(RespectImageOrientationEnum shouldRespectImageOrientation, float multiplier, SizeType sizeType)
 {
     ASSERT(!isPurgeable());
 
     if (!m_image)
         return LayoutSize();
 
-    LayoutSize imageSize;
+    LayoutSize size;
 
-    if (m_image->isBitmapImage() && (layoutObject && layoutObject->shouldRespectImageOrientation() == RespectImageOrientation))
-        imageSize = LayoutSize(toBitmapImage(m_image.get())->sizeRespectingOrientation());
+    if (m_image->isBitmapImage() && shouldRespectImageOrientation == RespectImageOrientation)
+        size = LayoutSize(toBitmapImage(m_image.get())->sizeRespectingOrientation());
     else
-        imageSize = LayoutSize(m_image->size());
+        size = LayoutSize(m_image->size());
 
     if (sizeType == IntrinsicCorrectedToDPR && m_hasDevicePixelRatioHeaderValue && m_devicePixelRatioHeaderValue > 0)
         multiplier = 1.0 / m_devicePixelRatioHeaderValue;
 
     if (multiplier == 1.0f)
-        return imageSize;
+        return size;
 
     // Don't let images that have a width/height >= 1 shrink below 1 when zoomed.
     float widthScale = m_image->hasRelativeWidth() ? 1.0f : multiplier;
     float heightScale = m_image->hasRelativeHeight() ? 1.0f : multiplier;
-    LayoutSize minimumSize(imageSize.width() > 0 ? 1 : 0, imageSize.height() > 0 ? 1 : 0);
-    imageSize.scale(widthScale, heightScale);
-    imageSize.clampToMinimumSize(minimumSize);
-    ASSERT(multiplier != 1.0f || (imageSize.width().fraction() == 0.0f && imageSize.height().fraction() == 0.0f));
-    return imageSize;
+    LayoutSize minimumSize(size.width() > 0 ? 1 : 0, size.height() > 0 ? 1 : 0);
+    size.scale(widthScale, heightScale);
+    size.clampToMinimumSize(minimumSize);
+    ASSERT(multiplier != 1.0f || (size.width().fraction() == 0.0f && size.height().fraction() == 0.0f));
+    return size;
 }
 
 void ImageResource::computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio)
@@ -444,19 +443,6 @@ void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect
     if (!image || image != m_image)
         return;
     notifyObservers(&rect);
-}
-
-bool ImageResource::currentFrameKnownToBeOpaque(const LayoutObject* layoutObject)
-{
-    blink::Image* image = this->image();
-    if (image->isBitmapImage()) {
-        TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(layoutObject, *this));
-        // BitmapImage::currentFrameKnownToBeOpaque() conservatively returns false for uncached
-        // frames. To increase the change of an accurate answer, we pre-cache the current frame
-        // metadata.
-        image->imageForCurrentFrame();
-    }
-    return image->currentFrameKnownToBeOpaque();
 }
 
 bool ImageResource::isAccessAllowed(SecurityOrigin* securityOrigin)

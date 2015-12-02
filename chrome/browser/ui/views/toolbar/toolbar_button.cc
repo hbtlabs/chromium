@@ -79,7 +79,7 @@ gfx::Size ToolbarButton::GetPreferredSize() const {
   // image resource. For Material Design the excess whitespace is being removed
   // from the image assets. Enlarge the button by the theme provided insets.
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    ui::ThemeProvider* provider = GetThemeProvider();
+    const ui::ThemeProvider* provider = GetThemeProvider();
     if (provider) {
       gfx::Insets insets(GetLayoutInsets(TOOLBAR_BUTTON));
       size.Enlarge(insets.width(), insets.height());
@@ -207,7 +207,7 @@ ToolbarButton::CreateDefaultBorder() const {
   scoped_ptr<views::LabelButtonBorder> border =
       views::LabelButton::CreateDefaultBorder();
 
-  ui::ThemeProvider* provider = GetThemeProvider();
+  const ui::ThemeProvider* provider = GetThemeProvider();
   if (provider && provider->UsingSystemTheme())
     border->set_insets(GetLayoutInsets(TOOLBAR_BUTTON));
 
@@ -347,10 +347,10 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
     SetState(STATE_NORMAL);
 }
 
-gfx::Point ToolbarButton::CalculateInkDropCenter() const {
-  return GetLocalBounds().CenterPoint();
-}
-
 const char* ToolbarButton::GetClassName() const {
   return "ToolbarButton";
+}
+
+gfx::Point ToolbarButton::CalculateInkDropCenter() const {
+  return GetLocalBounds().CenterPoint();
 }

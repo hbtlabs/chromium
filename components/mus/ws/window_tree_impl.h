@@ -74,7 +74,8 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
 
   // These functions are synchronous variants of those defined in the mojom. The
   // WindowTree implementations all call into these. See the mojom for details.
-  bool NewWindow(const WindowId& window_id);
+  bool NewWindow(const WindowId& window_id,
+                 const std::map<std::string, std::vector<uint8_t>>& properties);
   bool AddWindow(const WindowId& parent_id, const WindowId& child_id);
   bool AddTransientWindow(const WindowId& window_id,
                           const WindowId& transient_window_id);
@@ -85,6 +86,7 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
              ConnectionSpecificId* connection_id);
+  void DispatchInputEvent(ServerWindow* target, mojom::EventPtr event);
 
   // The following methods are invoked after the corresponding change has been
   // processed. They do the appropriate bookkeeping and update the client as
@@ -190,9 +192,11 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                              mojom::WindowManagerErrorCode error_code);
 
   // WindowTree:
-  void NewWindow(uint32_t change_id, Id transport_window_id) override;
-  void DeleteWindow(Id transport_window_id,
-                    const mojo::Callback<void(bool)>& callback) override;
+  void NewWindow(uint32_t change_id,
+                 Id transport_window_id,
+                 mojo::Map<mojo::String, mojo::Array<uint8_t>>
+                     transport_properties) override;
+  void DeleteWindow(uint32_t change_id, Id transport_window_id) override;
   void AddWindow(Id parent_id,
                  Id child_id,
                  const mojo::Callback<void(bool)>& callback) override;
@@ -222,10 +226,10 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                          Id window_id,
                          const mojo::String& name,
                          mojo::Array<uint8_t> value) override;
-  void RequestSurface(Id window_id,
-                      mojom::SurfaceType type,
-                      mojo::InterfaceRequest<mojom::Surface> surface,
-                      mojom::SurfaceClientPtr client) override;
+  void AttachSurface(Id window_id,
+                     mojom::SurfaceType type,
+                     mojo::InterfaceRequest<mojom::Surface> surface,
+                     mojom::SurfaceClientPtr client) override;
   void Embed(Id transport_window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
@@ -237,6 +241,7 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
+  void OnWindowInputEventAck(uint32_t event_id) override;
   void SetClientArea(Id transport_window_id, mojo::InsetsPtr insets) override;
   void WmResponse(uint32 change_id, bool response) override;
 
@@ -271,6 +276,7 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   // is destroyed or Embed() is invoked on the root.
   scoped_ptr<WindowId> root_;
 
+  uint32_t event_ack_id_;
   bool is_embed_root_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeImpl);

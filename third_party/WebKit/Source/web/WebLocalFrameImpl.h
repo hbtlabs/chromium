@@ -38,6 +38,7 @@
 #include "public/web/WebLocalFrame.h"
 #include "web/FrameLoaderClientImpl.h"
 #include "web/UserMediaClientImpl.h"
+#include "web/WebFrameImplBase.h"
 #include "wtf/Compiler.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
@@ -72,7 +73,7 @@ struct WebPrintParams;
 template <typename T> class WebVector;
 
 // Implementation of WebFrame, note that this is a reference counted object.
-class WebLocalFrameImpl final : public RefCountedWillBeGarbageCollectedFinalized<WebLocalFrameImpl>, public WebLocalFrame {
+class WebLocalFrameImpl final : public WebFrameImplBase, public WebLocalFrame {
 public:
     // WebFrame methods:
     bool isWebLocalFrame() const override;
@@ -227,12 +228,13 @@ public:
 
     void registerTestInterface(const WebString& name, WebTestInterfaceFactory*) override;
 
+    WebFrameImplBase* toImplBase() override { return this; }
+
     // Creates a test interface by name if available, returns an empty handle
     // for unknown names.
     v8::Local<v8::Value> createTestInterface(const AtomicString& name);
 
     // WebLocalFrame methods:
-    void initializeToReplaceRemoteFrame(WebRemoteFrame*, const WebString& name, WebSandboxFlags, const WebFrameOwnerProperties&) override;
     void setAutofillClient(WebAutofillClient*) override;
     WebAutofillClient* autofillClient() override;
     void setDevToolsAgentClient(WebDevToolsAgentClient*) override;
@@ -256,13 +258,16 @@ public:
     void didCallIsSearchProviderInstalled() override;
     void replaceSelection(const WebString&) override;
 
+    // WebFrameImplBase methods:
+    void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& fallbackName) override;
+    LocalFrame* frame() const override { return m_frame.get(); }
+
     void willBeDetached();
     void willDetachParent();
 
     static WebLocalFrameImpl* create(WebTreeScopeType, WebFrameClient*);
+    static WebLocalFrameImpl* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags, const WebFrameOwnerProperties&);
     ~WebLocalFrameImpl() override;
-
-    PassRefPtrWillBeRawPtr<LocalFrame> initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& fallbackName);
 
     PassRefPtrWillBeRawPtr<LocalFrame> createChildFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*);
 
@@ -318,7 +323,6 @@ public:
     // Otherwise, disallow scrolling.
     void setCanHaveScrollbars(bool) override;
 
-    LocalFrame* frame() const { return m_frame.get(); }
     WebFrameClient* client() const { return m_client; }
     void setClient(WebFrameClient* client) { m_client = client; }
 
@@ -351,6 +355,7 @@ private:
     friend class FrameLoaderClientImpl;
 
     WebLocalFrameImpl(WebTreeScopeType, WebFrameClient*);
+    WebLocalFrameImpl(WebRemoteFrame*, WebFrameClient*);
 
     // Sets the local core frame and registers destruction observers.
     void setCoreFrame(PassRefPtrWillBeRawPtr<LocalFrame>);

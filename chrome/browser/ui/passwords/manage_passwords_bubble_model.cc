@@ -11,16 +11,17 @@
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/default_clock.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
@@ -73,15 +74,16 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
     content::WebContents* web_contents,
     DisplayReason display_reason)
     : content::WebContentsObserver(web_contents),
+      password_overridden_(false),
       display_disposition_(metrics_util::AUTOMATIC_WITH_PASSWORD_PENDING),
       dismissal_reason_(metrics_util::NO_DIRECT_INTERACTION),
-      update_password_submission_event_(metrics_util::NO_UPDATE_SUBMISSION) {
+      update_password_submission_event_(metrics_util::NO_UPDATE_SUBMISSION),
+      clock_(new base::DefaultClock) {
   PasswordsModelDelegate* delegate =
       PasswordsModelDelegateFromWebContents(web_contents);
 
   origin_ = delegate->GetOrigin();
   state_ = delegate->GetState();
-  password_overridden_ = delegate->IsPasswordOverridden();
   if (state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
       state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
     pending_password_ = delegate->GetPendingPassword();
@@ -122,7 +124,7 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
     if (GetSmartLockBrandingState(GetProfile()) ==
         password_bubble_experiment::SmartLockBranding::FULL) {
       std::string management_hostname =
-          GURL(chrome::kPasswordManagerAccountDashboardURL).host();
+          GURL(password_manager::kPasswordManagerAccountDashboardURL).host();
       save_confirmation_link = base::UTF8ToUTF16(management_hostname);
       confirmation_text_id =
           IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_SMART_LOCK_TEXT;
@@ -143,13 +145,15 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
   } else if (state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
     interaction_stats_.origin_domain = origin_.GetOrigin();
     interaction_stats_.username_value = pending_password_.username_value;
-    interaction_stats_.update_time = base::Time::Now();
     password_manager::InteractionsStats* stats =
         delegate->GetCurrentInteractionStats();
     if (stats) {
-      // TODO(vasilii): DCHECK that username and origin are the same.
+      DCHECK_EQ(interaction_stats_.username_value, stats->username_value);
+      DCHECK_EQ(interaction_stats_.origin_domain, stats->origin_domain);
       interaction_stats_.dismissal_count = stats->dismissal_count;
     }
+  } else if (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
+    password_overridden_ = delegate->IsPasswordOverridden();
   }
 
   manage_link_ =
@@ -220,6 +224,7 @@ ManagePasswordsBubbleModel::~ManagePasswordsBubbleModel() {
             std::numeric_limits<decltype(
                 interaction_stats_.dismissal_count)>::max())
           interaction_stats_.dismissal_count++;
+        interaction_stats_.update_time = clock_->Now();
         password_manager::PasswordStore* password_store =
             PasswordStoreFactory::GetForProfile(
                 profile, ServiceAccessType::EXPLICIT_ACCESS)
@@ -315,7 +320,7 @@ void ManagePasswordsBubbleModel::OnBrandLinkClicked() {
   switch (GetSmartLockBrandingState(GetProfile())) {
     case password_bubble_experiment::SmartLockBranding::FULL:
       PasswordsModelDelegateFromWebContents(web_contents())
-          ->NavigateToSmartLockPage();
+          ->NavigateToExternalPasswordManager();
       break;
     case password_bubble_experiment::SmartLockBranding::SAVE_BUBBLE_ONLY:
       PasswordsModelDelegateFromWebContents(web_contents())

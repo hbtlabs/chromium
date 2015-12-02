@@ -109,15 +109,14 @@ static PassRefPtrWillBeRawPtr<CSSValue> parseSimpleLengthValue(CSSPropertyID pro
     }
 
     if (unit == CSSPrimitiveValue::UnitType::Number) {
-        bool quirksMode = isQuirksModeBehavior(cssParserMode);
-        bool svgMode = cssParserMode == SVGAttributeMode;
-        if (number && (!quirksMode && !svgMode))
-            return nullptr;
-        if (svgMode)
+        if (cssParserMode == SVGAttributeMode)
             unit = CSSPrimitiveValue::UnitType::UserUnits;
-        else
+        else if (!number)
             unit = CSSPrimitiveValue::UnitType::Pixels;
+        else
+            return nullptr;
     }
+
     if (number < 0 && !acceptsNegativeNumbers)
         return nullptr;
 
@@ -530,6 +529,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueShow || valueID == CSSValueHide;
     case CSSPropertyFloat: // left | right | none
         return valueID == CSSValueLeft || valueID == CSSValueRight || valueID == CSSValueNone;
+    case CSSPropertyFontDisplay: // auto | block | swap | fallback | optional
+        return valueID == CSSValueAuto || valueID == CSSValueBlock || valueID == CSSValueSwap || valueID == CSSValueFallback || valueID == CSSValueOptional;
     case CSSPropertyFontStyle: // normal | italic | oblique
         return valueID == CSSValueNormal || valueID == CSSValueItalic || valueID == CSSValueOblique;
     case CSSPropertyFontStretch: // normal | ultra-condensed | extra-condensed | condensed | semi-condensed | semi-expanded | expanded | extra-expanded | ultra-expanded
@@ -587,6 +588,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueButt || valueID == CSSValueRound || valueID == CSSValueSquare;
     case CSSPropertyTableLayout: // auto | fixed
         return valueID == CSSValueAuto || valueID == CSSValueFixed;
+    case CSSPropertyTextAlign:
+        return (valueID >= CSSValueWebkitAuto && valueID <= CSSValueWebkitMatchParent) || valueID == CSSValueStart || valueID == CSSValueEnd;
     case CSSPropertyTextAlignLast:
         // auto | start | end | left | right | center | justify
         return (valueID >= CSSValueLeft && valueID <= CSSValueJustify) || valueID == CSSValueStart || valueID == CSSValueEnd || valueID == CSSValueAuto;
@@ -604,6 +607,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueInterWord || valueID == CSSValueDistribute || valueID == CSSValueAuto || valueID == CSSValueNone;
     case CSSPropertyTextOrientation: // mixed | upright | sideways | sideways-right
         return valueID == CSSValueMixed || valueID == CSSValueUpright || valueID == CSSValueSideways || valueID == CSSValueSidewaysRight;
+    case CSSPropertyWebkitTextOrientation:
+        return valueID == CSSValueSideways || valueID == CSSValueSidewaysRight || valueID == CSSValueVerticalRight || valueID == CSSValueUpright;
     case CSSPropertyTextOverflow: // clip | ellipsis
         return valueID == CSSValueClip || valueID == CSSValueEllipsis;
     case CSSPropertyTextRendering: // auto | optimizeSpeed | optimizeLegibility | geometricPrecision
@@ -619,6 +624,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueNone || valueID == CSSValueNonScalingStroke;
     case CSSPropertyVisibility: // visible | hidden | collapse
         return valueID == CSSValueVisible || valueID == CSSValueHidden || valueID == CSSValueCollapse;
+    case CSSPropertyWebkitAppRegion:
+        return valueID >= CSSValueDrag && valueID <= CSSValueNoDrag;
     case CSSPropertyWebkitAppearance:
         return (valueID >= CSSValueCheckbox && valueID <= CSSValueTextarea) || valueID == CSSValueNone;
     case CSSPropertyBackfaceVisibility:
@@ -762,18 +769,21 @@ bool CSSParserFastPaths::isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyStrokeLinecap:
     case CSSPropertyStrokeLinejoin:
     case CSSPropertyTableLayout:
+    case CSSPropertyTextAlign:
     case CSSPropertyTextAlignLast:
     case CSSPropertyTextAnchor:
     case CSSPropertyTextCombineUpright:
     case CSSPropertyTextDecorationStyle:
     case CSSPropertyTextJustify:
     case CSSPropertyTextOrientation:
+    case CSSPropertyWebkitTextOrientation:
     case CSSPropertyTextOverflow:
     case CSSPropertyTextRendering:
     case CSSPropertyTextTransform:
     case CSSPropertyUnicodeBidi:
     case CSSPropertyVectorEffect:
     case CSSPropertyVisibility:
+    case CSSPropertyWebkitAppRegion:
     case CSSPropertyWebkitAppearance:
     case CSSPropertyBackfaceVisibility:
     case CSSPropertyWebkitBorderAfterStyle:

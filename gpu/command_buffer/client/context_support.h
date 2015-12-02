@@ -31,10 +31,6 @@ class ContextSupport {
   // passed the glEndQueryEXT() point.
   virtual void SignalQuery(uint32 query, const base::Closure& callback) = 0;
 
-  // For onscreen contexts, indicates that the surface visibility has changed.
-  // Clients aren't expected to draw to an invisible surface.
-  virtual void SetSurfaceVisible(bool visible) = 0;
-
   // Indicates whether the context should aggressively free allocated resources.
   // If set to true, the context will purge all temporary resources when
   // flushed.
@@ -43,9 +39,10 @@ class ContextSupport {
 
   virtual void Swap() = 0;
   virtual void PartialSwapBuffers(const gfx::Rect& sub_buffer) = 0;
+  virtual void CommitOverlayPlanes() = 0;
 
   // Schedule a texture to be presented as an overlay synchronously with the
-  // primary surface during the next buffer swap.
+  // primary surface during the next buffer swap or CommitOverlayPlanes.
   // This method is not stateful and needs to be re-scheduled every frame.
   virtual void ScheduleOverlayPlane(int plane_z_order,
                                     gfx::OverlayTransform plane_transform,

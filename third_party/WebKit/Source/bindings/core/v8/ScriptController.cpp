@@ -89,7 +89,7 @@ bool ScriptController::canAccessFromCurrentOrigin(LocalFrame *frame)
     if (!frame)
         return false;
     v8::Isolate* isolate = toIsolate(frame);
-    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, callingDOMWindow(isolate), frame);
+    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, callingDOMWindow(isolate), frame, ReportSecurityError);
 }
 
 ScriptController::ScriptController(LocalFrame* frame)
@@ -175,7 +175,7 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8:
         // the code. These exceptions should not interfere with
         // javascript code we might evaluate from C++ when returning
         // from here.
-        v8::TryCatch tryCatch;
+        v8::TryCatch tryCatch(isolate());
         tryCatch.SetVerbose(true);
 
         v8::Local<v8::Script> script;

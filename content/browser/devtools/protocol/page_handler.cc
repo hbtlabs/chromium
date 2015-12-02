@@ -277,15 +277,6 @@ Response PageHandler::CaptureScreenshot(DevToolsCommandId command_id) {
   return Response::OK();
 }
 
-Response PageHandler::CanScreencast(bool* result) {
-#if defined(OS_ANDROID)
-  *result = true;
-#else
-  *result = false;
-#endif  // defined(OS_ANDROID)
-  return Response::OK();
-}
-
 Response PageHandler::StartScreencast(const std::string* format,
                                       const int* quality,
                                       const int* max_width,
@@ -306,7 +297,8 @@ Response PageHandler::StartScreencast(const std::string* format,
   ++session_id_;
   frame_counter_ = 0;
   frames_in_flight_ = 0;
-  capture_every_nth_frame_ = every_nth_frame ? *every_nth_frame : 1;
+  capture_every_nth_frame_ =
+      every_nth_frame && *every_nth_frame ? *every_nth_frame : 1;
 
   bool visible = !widget_host->is_hidden();
   NotifyScreencastVisibility(visible);

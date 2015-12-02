@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
+#include "sync/api/entity_change.h"
 #include "sync/api/entity_data.h"
 #include "sync/api/model_type_change_processor.h"
 #include "sync/base/sync_export.h"
@@ -22,7 +23,7 @@ namespace syncer_v2 {
 
 class DataBatch;
 class MetadataBatch;
-class MetadataChanges;
+class MetadataChangeList;
 
 // Interface implemented by model types to receive updates from sync via the
 // SharedModelTypeProcessor. Provides a way for sync to update the data and
@@ -41,18 +42,18 @@ class SYNC_EXPORT ModelTypeService {
 
   // Creates an object used to communicate changes in the sync metadata to the
   // model type store.
-  virtual MetadataChanges* CreateMetadataChanges() = 0;
+  virtual scoped_ptr<MetadataChangeList> CreateMetadataChangeList() = 0;
 
   // Perform the initial merge of data from the sync server. Should only need
   // to be called when sync is first turned on, not on every restart.
-  virtual syncer::SyncError MergeSyncData(MetadataChanges* metadata_changes,
-                                          EntityDataList entity_data_list) = 0;
+  virtual syncer::SyncError MergeSyncData(
+      scoped_ptr<MetadataChangeList> metadata_change_list,
+      EntityDataList entity_data_list) = 0;
 
   // Apply changes from the sync server locally.
-  // TODO(skym): The change type should be in here somehow.
   virtual syncer::SyncError ApplySyncChanges(
-      MetadataChanges* metadata_changes,
-      EntityDataList entity_data_list) = 0;
+      scoped_ptr<MetadataChangeList> metadata_change_list,
+      EntityChangeList entity_changes) = 0;
 
   // Asynchronously retrieve the sync metadata.
   virtual void LoadMetadata(MetadataCallback callback) = 0;
@@ -64,7 +65,7 @@ class SYNC_EXPORT ModelTypeService {
   virtual void GetAllData(DataCallback callback) = 0;
 
   // Get or generate a client tag for |entity_data|.
-  virtual std::string GetClientTag(const EntityData* entity_data) = 0;
+  virtual std::string GetClientTag(const EntityData& entity_data) = 0;
 
   // TODO(skym): See crbug/547087, do we need all these accessors?
   syncer_v2::ModelTypeChangeProcessor* change_processor();

@@ -40,8 +40,7 @@ WebInspector.Toolbar = function(className, parentElement)
     this.element = parentElement ? parentElement.createChild("div") : createElement("div");
     this.element.className = className;
     this.element.classList.add("toolbar");
-    this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element);
-    this._shadowRoot.appendChild(WebInspector.Widget.createStyleElement("ui/toolbar.css"));
+    this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element, "ui/toolbar.css");
     this._contentElement = this._shadowRoot.createChild("div", "toolbar-shadow");
     this._contentElement.createChild("content");
 }
@@ -203,81 +202,6 @@ WebInspector.ToolbarItem.prototype = {
     },
 
     __proto__: WebInspector.Object.prototype
-}
-
-/**
- * @constructor
- * @extends {WebInspector.ToolbarItem}
- * @param {!Array.<string>} counters
- */
-WebInspector.ToolbarCounter = function(counters)
-{
-    WebInspector.ToolbarItem.call(this, createElementWithClass("div", "toolbar-counter hidden"));
-    this.element.addEventListener("click", this._clicked.bind(this), false);
-    /** @type {!Array.<!{element: !Element, counter: string, value: number, title: string}>} */
-    this._counters = [];
-    for (var i = 0; i < counters.length; ++i) {
-        var element = this.element.createChild("span", "toolbar-counter-item");
-        var icon = element.createChild("label", "", "dt-icon-label");
-        icon.type = counters[i];
-        var span = icon.createChild("span");
-        this._counters.push({counter: counters[i], element: element, value: 0, title: "", span: span});
-    }
-    this._update();
-}
-
-WebInspector.ToolbarCounter.prototype = {
-    /**
-     * @param {string} counter
-     * @param {number} value
-     * @param {string} title
-     */
-    setCounter: function(counter, value, title)
-    {
-        for (var i = 0; i < this._counters.length; ++i) {
-            if (this._counters[i].counter === counter) {
-                this._counters[i].value = value;
-                this._counters[i].title = title;
-                this._update();
-                return;
-            }
-        }
-    },
-
-    _update: function()
-    {
-        var total = 0;
-        var title = "";
-        for (var i = 0; i < this._counters.length; ++i) {
-            var counter = this._counters[i];
-            var value = counter.value;
-            if (!counter.value) {
-                counter.element.classList.add("hidden");
-                continue;
-            }
-            counter.element.classList.remove("hidden");
-            counter.element.classList.toggle("toolbar-counter-item-first", !total);
-            counter.span.textContent = value;
-            total += value;
-            if (counter.title) {
-                if (title)
-                    title += ", ";
-                title += counter.title;
-            }
-        }
-        this.element.classList.toggle("hidden", !total);
-        WebInspector.Tooltip.install(this.element, title);
-    },
-
-    /**
-     * @param {!Event} event
-     */
-    _clicked: function(event)
-    {
-        this.dispatchEventToListeners("click", event);
-    },
-
-    __proto__: WebInspector.ToolbarItem.prototype
 }
 
 /**

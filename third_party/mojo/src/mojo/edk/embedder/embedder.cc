@@ -13,7 +13,9 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/task_runner.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/process_delegate.h"
+#include "mojo/edk/system/core.h"
 #include "third_party/mojo/src/mojo/edk/embedder/embedder_internal.h"
 #include "third_party/mojo/src/mojo/edk/embedder/master_process_delegate.h"
 #include "third_party/mojo/src/mojo/edk/embedder/process_delegate.h"
@@ -27,8 +29,6 @@
 #include "third_party/mojo/src/mojo/edk/system/message_pipe_dispatcher.h"
 #include "third_party/mojo/src/mojo/edk/system/platform_handle_dispatcher.h"
 #include "third_party/mojo/src/mojo/edk/system/raw_channel.h"
-#include "../../../../../../mojo/edk/system/core.h"
-#include "../../../../../../mojo/edk/embedder/embedder_internal.h"
 
 namespace mojo {
 namespace embedder {
@@ -92,7 +92,47 @@ system::ChannelId MakeChannelId() {
   return static_cast<system::ChannelId>(-new_counter_value);
 }
 
+edk::ScopedPlatformHandle CreateEDKHandle(ScopedPlatformHandle handle) {
+  return edk::ScopedPlatformHandle(edk::PlatformHandle(
+#if defined(OS_WIN)
+        handle.release().handle));
+#else
+        handle.release().fd));
+#endif
+}
+
+ScopedPlatformHandle CreateHandle(edk::ScopedPlatformHandle handle) {
+  return ScopedPlatformHandle(PlatformHandle(
+#if defined(OS_WIN)
+        handle.release().handle));
+#else
+        handle.release().fd));
+#endif
+}
+
 }  // namespace
+
+void PreInitializeParentProcess() {
+  edk::PreInitializeParentProcess();
+}
+
+void PreInitializeChildProcess() {
+  edk::PreInitializeChildProcess();
+}
+
+ScopedPlatformHandle ChildProcessLaunched(base::ProcessHandle child_process) {
+  return CreateHandle(edk::ChildProcessLaunched(child_process).Pass());
+}
+
+void ChildProcessLaunched(base::ProcessHandle child_process,
+                          ScopedPlatformHandle server_pipe) {
+  return edk::ChildProcessLaunched(
+      child_process, CreateEDKHandle(server_pipe.Pass()));
+}
+
+void SetParentPipeHandle(ScopedPlatformHandle pipe) {
+  edk::SetParentPipeHandle(CreateEDKHandle(pipe.Pass()));
+}
 
 void SetMaxMessageSize(size_t bytes) {
   system::GetMutableConfiguration()->max_message_num_bytes = bytes;
@@ -123,14 +163,9 @@ MojoResult CreatePlatformHandleWrapper(
     MojoHandle* platform_handle_wrapper_handle) {
   DCHECK(platform_handle_wrapper_handle);
   if (UseNewEDK()) {
-    mojo::edk::ScopedPlatformHandle edk_handle(mojo::edk::PlatformHandle(
-#if defined(OS_WIN)
-        platform_handle.release().handle));
-#else
-        platform_handle.release().fd));
-#endif
     return mojo::edk::CreatePlatformHandleWrapper(
-        edk_handle.Pass(), platform_handle_wrapper_handle);
+        CreateEDKHandle(platform_handle.Pass()),
+        platform_handle_wrapper_handle);
   }
 
   scoped_refptr<system::Dispatcher> dispatcher =
@@ -323,13 +358,8 @@ ScopedMessagePipeHandle CreateChannel(
   if (UseNewEDK()) {
     if (!did_create_channel_callback.is_null())
       did_create_channel_callback.Run(nullptr);
-    mojo::edk::ScopedPlatformHandle edk_handle(mojo::edk::PlatformHandle(
-#if defined(OS_WIN)
-        platform_handle.release().handle));
-#else
-        platform_handle.release().fd));
-#endif
-    return mojo::edk::CreateMessagePipe(edk_handle.Pass());
+    return mojo::edk::CreateMessagePipe(
+        CreateEDKHandle(platform_handle.Pass()));
   }
 
   system::ChannelManager* channel_manager =

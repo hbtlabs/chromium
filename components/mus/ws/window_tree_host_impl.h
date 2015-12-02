@@ -5,14 +5,18 @@
 #ifndef COMPONENTS_MUS_WS_WINDOW_TREE_HOST_IMPL_H_
 #define COMPONENTS_MUS_WS_WINDOW_TREE_HOST_IMPL_H_
 
+#include <queue>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/event_dispatcher.h"
 #include "components/mus/ws/event_dispatcher_delegate.h"
 #include "components/mus/ws/focus_controller_delegate.h"
+#include "components/mus/ws/focus_controller_observer.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_observer.h"
 
@@ -31,6 +35,7 @@ class WindowTreeImpl;
 // deleted.
 class WindowTreeHostImpl : public DisplayManagerDelegate,
                            public mojom::WindowTreeHost,
+                           public FocusControllerObserver,
                            public FocusControllerDelegate,
                            public EventDispatcherDelegate,
                            public ServerWindowObserver {
@@ -94,9 +99,23 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   void AddAccelerator(uint32_t id,
                       mojom::EventMatcherPtr event_matcher) override;
   void RemoveAccelerator(uint32_t id) override;
+  void AddActivationParent(uint32_t window_id) override;
+  void RemoveActivationParent(uint32_t window_id) override;
+  void ActivateNextWindow() override;
+  void SetUnderlaySurfaceOffsetAndExtendedHitArea(
+      Id window_id,
+      int32_t x_offset,
+      int32_t y_offset,
+      mojo::InsetsPtr hit_area) override;
+
+  void OnEventAck(mojom::WindowTree* tree);
 
  private:
+  friend class WindowTreeTest;
+
   void OnClientClosed();
+  void OnEventAckTimeout();
+  void DispatchNextEventFromQueue();
 
   // DisplayManagerDelegate:
   ServerWindow* GetRootWindow() override;
@@ -109,7 +128,13 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   void OnCompositorFrameDrawn() override;
 
   // FocusControllerDelegate:
-  void OnFocusChanged(ServerWindow* old_focused_window,
+  bool CanHaveActiveChildren(ServerWindow* window) const override;
+
+  // FocusControllerObserver:
+  void OnActivationChanged(ServerWindow* old_active_window,
+                           ServerWindow* new_active_window) override;
+  void OnFocusChanged(FocusControllerChangeSource change_source,
+                      ServerWindow* old_focused_window,
                       ServerWindow* new_focused_window) override;
 
   // EventDispatcherDelegate:
@@ -131,10 +156,16 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   scoped_ptr<DisplayManager> display_manager_;
   scoped_ptr<FocusController> focus_controller_;
   mojom::WindowManagerPtr window_manager_;
+  mojom::WindowTree* tree_awaiting_input_ack_;
+
+  std::set<WindowId> activation_parents_;
 
   // Set of windows with surfaces that need to be destroyed once the frame
   // draws.
   std::set<ServerWindow*> windows_needing_frame_destruction_;
+
+  std::queue<mojom::EventPtr> event_queue_;
+  base::OneShotTimer event_ack_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeHostImpl);
 };

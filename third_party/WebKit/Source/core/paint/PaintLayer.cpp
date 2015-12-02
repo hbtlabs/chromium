@@ -72,6 +72,7 @@
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FilterEffectBuilder.h"
+#include "core/paint/PaintTiming.h"
 #include "platform/LengthFunctions.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
@@ -1092,7 +1093,7 @@ LayoutRect PaintLayer::paintingExtent(const PaintLayer* rootLayer, const LayoutS
 
 void* PaintLayer::operator new(size_t sz)
 {
-    return partitionAlloc(WTF::Partitions::layoutPartition(), sz);
+    return partitionAlloc(WTF::Partitions::layoutPartition(), sz, WTF_HEAP_PROFILER_TYPE_NAME(PaintLayer));
 }
 
 void PaintLayer::operator delete(void* ptr)
@@ -2748,6 +2749,13 @@ void PaintLayer::clearNeedsRepaintRecursively()
     for (PaintLayer* child = firstChild(); child; child = child->nextSibling())
         child->clearNeedsRepaintRecursively();
     m_needsRepaint = false;
+}
+
+PaintTiming* PaintLayer::paintTiming()
+{
+    if (Node* node = layoutObject()->node())
+        return &PaintTiming::from(node->document());
+    return nullptr;
 }
 
 DisableCompositingQueryAsserts::DisableCompositingQueryAsserts()

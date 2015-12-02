@@ -88,6 +88,7 @@ extern const char kDisableOfflineAutoReloadVisibleOnly[];
 extern const char kDisableOutOfProcessPac[];
 extern const char kDisablePasswordManagerReauthentication[];
 extern const char kDisablePdfMaterialUI[];
+extern const char kDisablePermissionsBlacklist[];
 extern const char kDisablePopupBlocking[];
 extern const char kDisablePreconnect[];
 extern const char kDisablePrintPreview[];
@@ -134,6 +135,7 @@ extern const char kEnableOfflineAutoReload[];
 extern const char kEnableOfflineAutoReloadVisibleOnly[];
 extern const char kEnablePanels[];
 extern const char kEnablePdfMaterialUI[];
+extern const char kEnablePermissionsBlacklist[];
 extern const char kEnablePotentiallyAnnoyingSecurityFeatures[];
 extern const char kEnablePowerOverlay[];
 extern const char kEnablePrintPreviewRegisterPromos[];
@@ -164,8 +166,6 @@ extern const char kExtensionsInstallVerification[];
 extern const char kExtensionsNotWebstore[];
 extern const char kExtensionsUpdateFrequency[];
 extern const char kFastStart[];
-extern const char kFlagSwitchesBegin[];
-extern const char kFlagSwitchesEnd[];
 extern const char kForceAppMode[];
 extern const char kForceFieldTrialParams[];
 extern const char kForceFirstRun[];
@@ -276,7 +276,6 @@ extern const char kEnableAndroidSpellChecker[];
 #endif
 extern const char kDisableMultilingualSpellChecker[];
 extern const char kEnableMultilingualSpellChecker[];
-extern const char kEnableSpellingAutoCorrect[];
 extern const char kEnableSpellingFeedbackFieldTrial[];
 extern const char kSpellingServiceFeedbackUrl[];
 extern const char kSpellingServiceFeedbackIntervalSeconds[];
@@ -355,6 +354,7 @@ extern const char kRelauncherProcessDMGDevice[];
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
+extern const char kCrashpadHandler[];
 extern const char kEnableCloudPrintXps[];
 extern const char kEnableProfileShortcutManager[];
 extern const char kForceDesktop[];

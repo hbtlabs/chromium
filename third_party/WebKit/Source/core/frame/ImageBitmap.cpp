@@ -21,7 +21,7 @@ static inline IntRect normalizeRect(const IntRect& rect)
         std::max(rect.height(), -rect.height()));
 }
 
-static PassRefPtr<StaticBitmapImage> cropImage(StaticBitmapImage* image, const IntRect& cropRect)
+static PassRefPtr<StaticBitmapImage> cropImage(Image* image, const IntRect& cropRect)
 {
     ASSERT(image);
 
@@ -48,7 +48,7 @@ static PassRefPtr<StaticBitmapImage> cropImage(StaticBitmapImage* image, const I
 
 ImageBitmap::ImageBitmap(HTMLImageElement* image, const IntRect& cropRect)
 {
-    m_image = cropImage(static_cast<StaticBitmapImage*>(image->cachedImage()->image()), cropRect);
+    m_image = cropImage(image->cachedImage()->image(), cropRect);
 }
 
 ImageBitmap::ImageBitmap(HTMLVideoElement* video, const IntRect& cropRect)
@@ -71,7 +71,7 @@ ImageBitmap::ImageBitmap(HTMLVideoElement* video, const IntRect& cropRect)
 ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas, const IntRect& cropRect)
 {
     ASSERT(canvas->isPaintable());
-    m_image = cropImage(static_cast<StaticBitmapImage*>(canvas->copiedImage(BackBuffer, PreferAcceleration).get()), cropRect);
+    m_image = cropImage(canvas->copiedImage(BackBuffer, PreferAcceleration).get(), cropRect);
 }
 
 ImageBitmap::ImageBitmap(ImageData* data, const IntRect& cropRect)
@@ -103,7 +103,7 @@ ImageBitmap::ImageBitmap(ImageBitmap* bitmap, const IntRect& cropRect)
 
 ImageBitmap::ImageBitmap(Image* image, const IntRect& cropRect)
 {
-    m_image = cropImage(static_cast<StaticBitmapImage*>(image), cropRect);
+    m_image = cropImage(image, cropRect);
 }
 
 ImageBitmap::ImageBitmap(PassRefPtr<StaticBitmapImage> image)
@@ -185,6 +185,15 @@ IntSize ImageBitmap::size() const
         return IntSize();
     ASSERT(m_image->width() > 0 && m_image->height() > 0);
     return IntSize(m_image->width(), m_image->height());
+}
+
+ScriptPromise ImageBitmap::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+{
+    if (!sw || !sh) {
+        exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
+        return ScriptPromise();
+    }
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, create(this, IntRect(sx, sy, sw, sh)));
 }
 
 void ImageBitmap::notifyImageSourceChanged()

@@ -34,6 +34,7 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/fetch/ImageResource.h"
+#include "core/frame/ImageBitmap.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCanvasElement.h"
@@ -427,7 +428,7 @@ int HTMLImageElement::width()
 
         // if the image is available, use its width
         if (imageLoader().image())
-            return imageLoader().image()->imageSizeForLayoutObject(layoutObject(), 1.0f).width();
+            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).width();
     }
 
     LayoutBox* box = layoutBox();
@@ -448,7 +449,7 @@ int HTMLImageElement::height()
 
         // if the image is available, use its height
         if (imageLoader().image())
-            return imageLoader().image()->imageSizeForLayoutObject(layoutObject(), 1.0f).height();
+            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).height();
     }
 
     LayoutBox* box = layoutBox();
@@ -460,7 +461,7 @@ int HTMLImageElement::naturalWidth() const
     if (!imageLoader().image())
         return 0;
 
-    return imageLoader().image()->imageSizeForLayoutObject(layoutObject(), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).width();
+    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).width();
 }
 
 int HTMLImageElement::naturalHeight() const
@@ -468,7 +469,7 @@ int HTMLImageElement::naturalHeight() const
     if (!imageLoader().image())
         return 0;
 
-    return imageLoader().image()->imageSizeForLayoutObject(layoutObject(), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).height();
+    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).height();
 }
 
 const String& HTMLImageElement::currentSrc() const
@@ -627,7 +628,7 @@ FloatSize HTMLImageElement::elementSize() const
     if (!image)
         return FloatSize();
 
-    return FloatSize(image->imageSizeForLayoutObject(layoutObject(), 1.0f));
+    return FloatSize(image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), 1.0f));
 }
 
 FloatSize HTMLImageElement::defaultDestinationSize() const
@@ -636,7 +637,7 @@ FloatSize HTMLImageElement::defaultDestinationSize() const
     if (!image)
         return FloatSize();
     LayoutSize size;
-    size = image->imageSizeForLayoutObject(layoutObject(), 1.0f);
+    size = image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), 1.0f);
     if (layoutObject() && layoutObject()->isLayoutImage() && image->image() && !image->image()->hasRelativeWidth())
         size.scale(toLayoutImage(layoutObject())->imageDevicePixelRatio());
     return FloatSize(size);
@@ -674,6 +675,33 @@ float HTMLImageElement::sourceSize(Element& element)
 void HTMLImageElement::forceReload() const
 {
     imageLoader().updateFromElement(ImageLoader::UpdateForcedReload, m_referrerPolicy);
+}
+
+ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, ExceptionState& exceptionState)
+{
+    ASSERT(eventTarget.toDOMWindow());
+    if (!cachedImage()) {
+        exceptionState.throwDOMException(InvalidStateError, "No image can be retrieved from the provided element.");
+        return ScriptPromise();
+    }
+    if (cachedImage()->image()->isSVGImage()) {
+        exceptionState.throwDOMException(InvalidStateError, "The image element contains an SVG image, which is unsupported.");
+        return ScriptPromise();
+    }
+    if (!sw || !sh) {
+        exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
+        return ScriptPromise();
+    }
+    if (!cachedImage()->image()->currentFrameHasSingleSecurityOrigin()) {
+        exceptionState.throwSecurityError("The source image contains image data from multiple origins.");
+        return ScriptPromise();
+    }
+    Document* document = eventTarget.toDOMWindow()->document();
+    if (!cachedImage()->passesAccessControlCheck(document->securityOrigin()) && document->securityOrigin()->taintsCanvas(src())) {
+        exceptionState.throwSecurityError("Cross-origin access to the source image is denied.");
+        return ScriptPromise();
+    }
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh)));
 }
 
 void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior behavior)
@@ -773,6 +801,16 @@ bool HTMLImageElement::isOpaque() const
 {
     Image* image = const_cast<HTMLImageElement*>(this)->imageContents();
     return image && image->currentFrameKnownToBeOpaque();
+}
+
+IntSize HTMLImageElement::bitmapSourceSize() const
+{
+    ImageResource* image = cachedImage();
+    if (!image)
+        return IntSize();
+    LayoutSize lSize = image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), 1.0f);
+    ASSERT(lSize.fraction().isZero());
+    return IntSize(lSize.width(), lSize.height());
 }
 
 }

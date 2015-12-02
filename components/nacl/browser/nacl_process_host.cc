@@ -60,6 +60,7 @@
 
 #if defined(OS_POSIX)
 
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -67,6 +68,7 @@
 #include "ipc/ipc_channel_posix.h"
 #elif defined(OS_WIN)
 #include <windows.h>
+#include <winsock2.h>
 
 #include "base/threading/thread.h"
 #include "base/win/scoped_handle.h"
@@ -211,7 +213,8 @@ unsigned NaClProcessHost::keepalive_throttle_interval_milliseconds_ =
 // that this only takes a transferred IPC::ChannelHandle or one to be
 // transferred via IPC.
 class NaClProcessHost::ScopedChannelHandle {
-  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedChannelHandle, RValue);
+  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedChannelHandle);
+
  public:
   ScopedChannelHandle() {
   }
@@ -219,8 +222,8 @@ class NaClProcessHost::ScopedChannelHandle {
       : handle_(handle) {
     DCHECK(IsSupportedHandle(handle_));
   }
-  ScopedChannelHandle(RValue other) : handle_(other.object->handle_) {
-    other.object->handle_ = IPC::ChannelHandle();
+  ScopedChannelHandle(ScopedChannelHandle&& other) : handle_(other.handle_) {
+    other.handle_ = IPC::ChannelHandle();
     DCHECK(IsSupportedHandle(handle_));
   }
   ~ScopedChannelHandle() {

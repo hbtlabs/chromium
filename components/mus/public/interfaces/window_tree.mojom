@@ -44,6 +44,8 @@ enum ErrorCode {
 // embedded apps representation.
 enum SurfaceType {
   // Only the owner of a window may obtain this surface.
+  // The window manager can change the offset of this by way of
+  // SetUnderlaySurfaceOffsetAndExtendedHitArea().
   UNDERLAY,
 
   // Only the embedded app may obtain this surface. If an app is not embedded
@@ -86,15 +88,14 @@ interface WindowTree {
   //   ERROR_CODE_VALUE_IN_USE: a window already exists with the specified id.
   //   ERROR_CODE_ILLEGAL_ARGUMENT: The connection part of |window_id| does not
   //     match the connection id of the client.
-  //
-  // TODO(erg): Once we have default values in mojo, make this take a map of
-  // properties.
-  NewWindow(uint32 change_id, uint32 window_id);
+  NewWindow(uint32 change_id,
+            uint32 window_id,
+            map<string, array<uint8>>? properties);
 
   // Deletes a window. This does not recurse. No hierarchy change notifications
   // are sent as a result of this. Only the connection that created the window
   // can delete it.
-  DeleteWindow(uint32 window_id) => (bool success);
+  DeleteWindow(uint32 change_id, uint32 window_id);
 
   // Sets the specified bounds of the specified window.
   SetWindowBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
@@ -114,11 +115,11 @@ interface WindowTree {
                     string name,
                     array<uint8>? value);
 
-  // Requests a Surface for a particular window.
-  RequestSurface(uint32 window_id,
-                 SurfaceType type,
-                 Surface& surface,
-                 SurfaceClient client);
+  // Attaches a Surface to a particular window.
+  AttachSurface(uint32 window_id,
+                SurfaceType type,
+                Surface& surface,
+                SurfaceClient client);
 
   // Reparents a window.
   // This fails for any of the following reasons:
@@ -210,6 +211,9 @@ interface WindowTree {
   // If state is non-null, the specified window's text input state is updated.
   // Otherwise the existing state is used.
   SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
+
+  // See documentation for WindowTreeClient::OnWindowInputEvent().
+  OnWindowInputEventAck(uint32 event_id);
 
   // --------------------------------------------------------------------------
   // This section is for functions called from the window manager. It is
@@ -304,8 +308,11 @@ interface WindowTreeClient {
                                 string name,
                                 array<uint8>? new_data);
 
-  // Invoked when an event is targeted at the specified window.
-  OnWindowInputEvent(uint32 window, Event event) => ();
+  // Invoked when an event is targeted at the specified window. The client must
+  // call WindowTree::OnWindowInputEventAck() with the same |event_id| to notify
+  // that the event has been processed. The client will not receive farther
+  // events until the event is ack'ed.
+  OnWindowInputEvent(uint32 event_id, uint32 window, Event event);
 
   OnWindowFocused(uint32 focused_window_id);
 

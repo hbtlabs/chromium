@@ -34,8 +34,6 @@ static_library("common") {
     "password_generation_util.h",
     "save_password_progress_logger.cc",
     "save_password_progress_logger.h",
-    "web_element_descriptor.cc",
-    "web_element_descriptor.h",
   ]
 
   deps = [
@@ -56,6 +54,7 @@ static_library("common") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "autofill_l10n_util_unittest.cc",
     "autofill_regexes_unittest.cc",
     "autofill_util_unittest.cc",
     "form_data_unittest.cc",
@@ -68,6 +67,7 @@ source_set("unit_tests") {
     ":common",
     "//base",
     "//base:i18n",
+    "//base/test:test_support",
     "//components/autofill/core/browser",
     "//testing/gmock",
     "//testing/gtest",

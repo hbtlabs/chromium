@@ -276,15 +276,6 @@ public:
     // Return the number of of processors of the current machine.
     virtual size_t numberOfProcessors() { return 0; }
 
-    // Returns private and shared usage, in bytes. Private bytes is the amount of
-    // memory currently allocated to this process that cannot be shared. Returns
-    // false on platform specific error conditions.
-    virtual bool processMemorySizesInBytes(size_t* privateBytes, size_t* sharedBytes) { return false; }
-
-    // Reports number of bytes used by memory allocator for internal needs.
-    // Returns true if the size has been reported, or false otherwise.
-    virtual bool memoryAllocatorWasteInBytes(size_t*) { return false; }
-
     // Allocates discardable memory. May return nullptr, even if the platform supports
     // discardable memory. If nonzero, however, then the WebDiscardableMmeory is
     // returned in an locked state. You may use its underlying data() member
@@ -581,6 +572,17 @@ public:
 
     // Must be called on the thread that called registerMemoryDumpProvider().
     virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) { }
+
+    class TraceLogEnabledStateObserver {
+    public:
+        virtual ~TraceLogEnabledStateObserver() = default;
+        virtual void onTraceLogEnabled() = 0;
+        virtual void onTraceLogDisabled() = 0;
+    };
+
+    // Register or unregister a trace log state observer. Does not take ownership.
+    virtual void addTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
+    virtual void removeTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
 
     // Returns a newly allocated WebProcessMemoryDump instance.
     virtual blink::WebProcessMemoryDump* createProcessMemoryDump() { return nullptr; }

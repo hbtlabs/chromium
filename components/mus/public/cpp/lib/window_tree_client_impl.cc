@@ -150,9 +150,11 @@ void WindowTreeClientImpl::WaitForEmbed() {
   // TODO(sky): deal with pipe being closed before we get OnEmbed().
 }
 
-void WindowTreeClientImpl::DestroyWindow(Id window_id) {
+void WindowTreeClientImpl::DestroyWindow(Window* window) {
   DCHECK(tree_);
-  tree_->DeleteWindow(window_id, ActionCompletedCallback());
+  const uint32_t change_id = ScheduleInFlightChange(make_scoped_ptr(
+      new CrashInFlightChange(window, ChangeType::DELETE_WINDOW)));
+  tree_->DeleteWindow(change_id, window->id());
 }
 
 void WindowTreeClientImpl::AddChild(Id child_id, Id parent_id) {
@@ -263,13 +265,13 @@ void WindowTreeClientImpl::Embed(
   tree_->Embed(window_id, client.Pass(), policy_bitmask, callback);
 }
 
-void WindowTreeClientImpl::RequestSurface(
+void WindowTreeClientImpl::AttachSurface(
     Id window_id,
     mojom::SurfaceType type,
     mojo::InterfaceRequest<mojom::Surface> surface,
     mojom::SurfaceClientPtr client) {
   DCHECK(tree_);
-  tree_->RequestSurface(window_id, type, surface.Pass(), client.Pass());
+  tree_->AttachSurface(window_id, type, surface.Pass(), client.Pass());
 }
 
 void WindowTreeClientImpl::AddWindow(Window* window) {
@@ -306,11 +308,11 @@ void WindowTreeClientImpl::OnRootDestroyed(Window* root) {
 
 InFlightChange* WindowTreeClientImpl::GetOldestInFlightChangeMatching(
     const InFlightChange& change) {
-  for (auto& pair : in_flight_map_) {
+  for (const auto& pair : in_flight_map_) {
     if (pair.second->window() == change.window() &&
         pair.second->change_type() == change.change_type() &&
         pair.second->Matches(change)) {
-      return pair.second;
+      return pair.second.get();
     }
   }
   return nullptr;
@@ -319,7 +321,7 @@ InFlightChange* WindowTreeClientImpl::GetOldestInFlightChangeMatching(
 uint32_t WindowTreeClientImpl::ScheduleInFlightChange(
     scoped_ptr<InFlightChange> change) {
   const uint32_t change_id = next_change_id_++;
-  in_flight_map_.set(change_id, change.Pass());
+  in_flight_map_[change_id] = std::move(change);
   return change_id;
 }
 
@@ -367,15 +369,23 @@ Window* WindowTreeClientImpl::GetFocusedWindow() {
   return focused_window_;
 }
 
-Window* WindowTreeClientImpl::NewWindow() {
+Window* WindowTreeClientImpl::NewWindow(
+    const Window::SharedProperties* properties) {
   DCHECK(tree_);
   Window* window =
       new Window(this, MakeTransportId(connection_id_, next_window_id_++));
+  if (properties)
+    window->properties_ = *properties;
   AddWindow(window);
 
   const uint32_t change_id = ScheduleInFlightChange(
       make_scoped_ptr(new CrashInFlightChange(window, ChangeType::NEW_WINDOW)));
-  tree_->NewWindow(change_id, window->id());
+  mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties;
+  if (properties) {
+    transport_properties =
+        mojo::Map<mojo::String, mojo::Array<uint8_t>>::From(*properties);
+  }
+  tree_->NewWindow(change_id, window->id(), transport_properties.Pass());
   return window;
 }
 
@@ -554,16 +564,15 @@ void WindowTreeClientImpl::OnWindowSharedPropertyChanged(
   WindowPrivate(window).LocalSetSharedProperty(name, new_data.Pass());
 }
 
-void WindowTreeClientImpl::OnWindowInputEvent(
-    Id window_id,
-    mojom::EventPtr event,
-    const mojo::Callback<void()>& ack_callback) {
+void WindowTreeClientImpl::OnWindowInputEvent(uint32_t event_id,
+                                              Id window_id,
+                                              mojom::EventPtr event) {
   Window* window = GetWindowById(window_id);
   if (window) {
     FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(window).observers(),
                       OnWindowInputEvent(window, event));
   }
-  ack_callback.Run();
+  tree_->OnWindowInputEventAck(event_id);
 }
 
 void WindowTreeClientImpl::OnWindowFocused(Id focused_window_id) {
@@ -584,7 +593,8 @@ void WindowTreeClientImpl::OnWindowFocused(Id focused_window_id) {
 }
 
 void WindowTreeClientImpl::OnChangeCompleted(uint32 change_id, bool success) {
-  scoped_ptr<InFlightChange> change(in_flight_map_.take_and_erase(change_id));
+  scoped_ptr<InFlightChange> change(std::move(in_flight_map_[change_id]));
+  in_flight_map_.erase(change_id);
   if (!change)
     return;
 

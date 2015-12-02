@@ -43,13 +43,11 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 
-struct BrowserPluginHostMsg_ResizeGuest_Params;
 struct ViewHostMsg_DateTimeDialogValue_Params;
 
 namespace content {
 class BrowserPluginEmbedder;
 class BrowserPluginGuest;
-class BrowserPluginGuestManager;
 class DateTimeChooserAndroid;
 class DownloadItem;
 class GeolocationServiceContext;
@@ -113,6 +111,8 @@ class CONTENT_EXPORT WebContentsImpl
   static std::vector<WebContentsImpl*> GetAllWebContents();
 
   static WebContentsImpl* FromFrameTreeNode(FrameTreeNode* frame_tree_node);
+  static WebContents* FromRenderFrameHostID(int render_process_host_id,
+                                            int render_frame_host_id);
 
   // Creates a swapped out RenderView. This is used by the browser plugin to
   // create a swapped out RenderView in the embedder render process for the
@@ -440,6 +440,7 @@ class CONTENT_EXPORT WebContentsImpl
       RenderFrameHost* target_rfh,
       SiteInstance* source_site_instance) const override;
   void EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) override;
+  scoped_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(const GURL& url) override;
 #if defined(OS_WIN)
   gfx::NativeViewAccessible GetParentNativeViewAccessible() override;
 #endif
@@ -560,6 +561,7 @@ class CONTENT_EXPORT WebContentsImpl
 
   // RenderWidgetHostDelegate --------------------------------------------------
 
+  void RenderWidgetCreated(RenderWidgetHostImpl* render_widget_host) override;
   void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) override;
   void RenderWidgetGotFocus(RenderWidgetHostImpl* render_widget_host) override;
   void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
@@ -636,7 +638,6 @@ class CONTENT_EXPORT WebContentsImpl
       RenderViewHost* old_host,
       RenderViewHost* new_host) override;
   NavigationControllerImpl& GetControllerForRenderManager() override;
-  scoped_ptr<WebUIImpl> CreateWebUIForRenderManager(const GURL& url) override;
   NavigationEntry* GetLastCommittedNavigationEntryForRenderManager() override;
   bool FocusLocationBarByDefault() override;
   void SetFocusToLocationBar(bool select_all) override;
@@ -840,8 +841,14 @@ class CONTENT_EXPORT WebContentsImpl
                                         const std::string& mime_type,
                                         ResourceType resource_type);
   void OnDidDisplayInsecureContent();
-  void OnDidRunInsecureContent(const std::string& security_origin,
+  void OnDidRunInsecureContent(const GURL& security_origin,
                                const GURL& target_url);
+  void OnDidDisplayContentWithCertificateErrors(
+      const GURL& url,
+      const std::string& security_info);
+  void OnDidRunContentWithCertificateErrors(const GURL& security_origin,
+                                            const GURL& url,
+                                            const std::string& security_info);
   void OnDocumentLoadedInFrame();
   void OnDidFinishLoad(const GURL& url);
   void OnGoToEntryAtOffset(int offset);

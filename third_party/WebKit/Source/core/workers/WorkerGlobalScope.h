@@ -43,6 +43,7 @@
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
+#include "wtf/ListHashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -54,6 +55,7 @@ namespace blink {
 class ConsoleMessage;
 class ConsoleMessageStorage;
 class ExceptionState;
+class V8AbstractEventListener;
 class WorkerClients;
 class WorkerConsole;
 class WorkerInspectorController;
@@ -118,7 +120,6 @@ public:
     bool isContextThread() const final;
     bool isJSExecutionForbidden() const final;
 
-    double timerAlignmentInterval() const final;
     DOMTimerCoordinator* timers() final;
 
     WorkerInspectorController* workerInspectorController() { return m_workerInspectorController.get(); }
@@ -140,6 +141,9 @@ public:
     virtual void scriptLoaded(size_t scriptSize, size_t cachedMetadataSize) { }
 
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;
+
+    void registerEventListener(V8AbstractEventListener*);
+    void deregisterEventListener(V8AbstractEventListener*);
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -200,6 +204,7 @@ private:
 
     unsigned long m_workerExceptionUniqueIdentifier;
     WillBeHeapHashMap<unsigned long, RefPtrWillBeMember<ConsoleMessage>> m_pendingMessages;
+    WillBeHeapListHashSet<RefPtrWillBeMember<V8AbstractEventListener>> m_eventListeners;
 };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope, ExecutionContext, context, context->isWorkerGlobalScope(), context.isWorkerGlobalScope());

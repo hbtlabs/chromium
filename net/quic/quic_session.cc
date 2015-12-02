@@ -19,6 +19,7 @@ using std::map;
 using std::max;
 using std::string;
 using std::vector;
+using net::SpdyPriority;
 
 namespace net {
 
@@ -112,8 +113,7 @@ QuicSession::QuicSession(QuicConnection* connection, const QuicConfig& config)
                        perspective(),
                        kMinimumFlowControlSendWindow,
                        config_.GetInitialSessionFlowControlWindowToSend(),
-                       false),
-      has_pending_handshake_(false) {}
+                       false) {}
 
 void QuicSession::Initialize() {
   connection_->set_visitor(visitor_shim_.get());
@@ -258,12 +258,9 @@ void QuicSession::OnCanWrite() {
       return;
     }
     QuicStreamId stream_id = write_blocked_streams_.PopFront();
-    if (stream_id == kCryptoStreamId) {
-      has_pending_handshake_ = false;  // We just popped it.
-    }
     ReliableQuicStream* stream = GetStream(stream_id);
     if (stream != nullptr && !stream->flow_controller()->IsBlocked()) {
-      // If the stream can't write all bytes, it'll re-add itself to the blocked
+      // If the stream can't write all bytes it'll re-add itself to the blocked
       // list.
       stream->OnCanWrite();
     }
@@ -281,7 +278,7 @@ bool QuicSession::WillingAndAbleToWrite() const {
 }
 
 bool QuicSession::HasPendingHandshake() const {
-  return has_pending_handshake_;
+  return write_blocked_streams_.crypto_stream_blocked();
 }
 
 bool QuicSession::HasOpenDynamicStreams() const {
@@ -295,8 +292,10 @@ QuicConsumedData QuicSession::WritevData(
     bool fin,
     FecProtection fec_protection,
     QuicAckListenerInterface* ack_notifier_delegate) {
-  return connection_->SendStreamData(id, iov, offset, fin, fec_protection,
-                                     ack_notifier_delegate);
+  QuicConsumedData data = connection_->SendStreamData(
+      id, iov, offset, fin, fec_protection, ack_notifier_delegate);
+  write_blocked_streams_.UpdateBytesForStream(id, data.bytes_consumed);
+  return data;
 }
 
 void QuicSession::SendRstStream(QuicStreamId id,
@@ -613,43 +612,21 @@ ReliableQuicStream* QuicSession::GetOrCreateDynamicStream(
   available_streams_.erase(stream_id);
 
   if (stream_id > largest_peer_created_stream_id_) {
-    if (FLAGS_allow_many_available_streams) {
-      // Check if the new number of available streams would cause the number of
-      // available streams to exceed the limit.  Note that the peer can create
-      // only alternately-numbered streams.
-      size_t additional_available_streams =
-          (stream_id - largest_peer_created_stream_id_) / 2 - 1;
-      size_t new_num_available_streams =
-          GetNumAvailableStreams() + additional_available_streams;
-      if (new_num_available_streams > get_max_available_streams()) {
-        DVLOG(1) << "Failed to create a new incoming stream with id:"
-                 << stream_id << ".  There are already "
-                 << GetNumAvailableStreams()
-                 << " streams available, which would become "
-                 << new_num_available_streams << ", which exceeds the limit "
-                 << get_max_available_streams() << ".";
-        CloseConnection(QUIC_TOO_MANY_AVAILABLE_STREAMS);
-        return nullptr;
-      }
-    } else {
-      // Check if the number of streams that will be created (including
-      // available streams) would cause the number of open streams to exceed the
-      // limit.  Note that the peer can create only alternately-numbered
-      // streams.
-      if ((stream_id - largest_peer_created_stream_id_) / 2 +
-              GetNumOpenStreams() >
-          get_max_open_streams()) {
-        DVLOG(1) << "Failed to create a new incoming stream with id:"
-                 << stream_id << ".  Already " << GetNumOpenStreams()
-                 << " streams open, would exceed max " << get_max_open_streams()
-                 << ".";
-        // We may already have sent a connection close due to multiple reset
-        // streams in the same packet.
-        if (connection()->connected()) {
-          connection()->SendConnectionClose(QUIC_TOO_MANY_OPEN_STREAMS);
-        }
-        return nullptr;
-      }
+    // Check if the new number of available streams would cause the number of
+    // available streams to exceed the limit.  Note that the peer can create
+    // only alternately-numbered streams.
+    size_t additional_available_streams =
+        (stream_id - largest_peer_created_stream_id_) / 2 - 1;
+    size_t new_num_available_streams =
+        GetNumAvailableStreams() + additional_available_streams;
+    if (new_num_available_streams > get_max_available_streams()) {
+      DVLOG(1) << "Failed to create a new incoming stream with id:" << stream_id
+               << ".  There are already " << GetNumAvailableStreams()
+               << " streams available, which would become "
+               << new_num_available_streams << ", which exceeds the limit "
+               << get_max_available_streams() << ".";
+      CloseConnection(QUIC_TOO_MANY_AVAILABLE_STREAMS);
+      return nullptr;
     }
     for (QuicStreamId id = largest_peer_created_stream_id_ + 2;
          id < stream_id;
@@ -658,18 +635,16 @@ ReliableQuicStream* QuicSession::GetOrCreateDynamicStream(
     }
     largest_peer_created_stream_id_ = stream_id;
   }
-  if (FLAGS_allow_many_available_streams) {
-    // Check if the new number of open streams would cause the number of
-    // open streams to exceed the limit.
-    if (GetNumOpenStreams() >= get_max_open_streams()) {
-      if (connection()->version() <= QUIC_VERSION_27) {
-        CloseConnection(QUIC_TOO_MANY_OPEN_STREAMS);
-      } else {
-        // Refuse to open the stream.
-        SendRstStream(stream_id, QUIC_REFUSED_STREAM, 0);
-      }
-      return nullptr;
+  // Check if the new number of open streams would cause the number of
+  // open streams to exceed the limit.
+  if (GetNumOpenStreams() >= get_max_open_streams()) {
+    if (connection()->version() <= QUIC_VERSION_27) {
+      CloseConnection(QUIC_TOO_MANY_OPEN_STREAMS);
+    } else {
+      // Refuse to open the stream.
+      SendRstStream(stream_id, QUIC_REFUSED_STREAM, 0);
     }
+    return nullptr;
   }
   ReliableQuicStream* stream = CreateIncomingDynamicStream(stream_id);
   if (stream == nullptr) {
@@ -712,31 +687,12 @@ bool QuicSession::IsClosedStream(QuicStreamId id) {
 }
 
 size_t QuicSession::GetNumOpenStreams() const {
-  if (FLAGS_quic_count_unfinished_as_open_streams) {
-    if (FLAGS_allow_many_available_streams) {
-      return dynamic_stream_map_.size() - draining_streams_.size() +
-             locally_closed_streams_highest_offset_.size();
-    } else {
-      return dynamic_stream_map_.size() + available_streams_.size() -
-             draining_streams_.size() +
-             locally_closed_streams_highest_offset_.size();
-    }
-  } else {
-    if (FLAGS_allow_many_available_streams) {
-      return dynamic_stream_map_.size() - draining_streams_.size();
-    } else {
-      return dynamic_stream_map_.size() + available_streams_.size() -
-             draining_streams_.size();
-    }
-  }
+  return dynamic_stream_map_.size() - draining_streams_.size() +
+         locally_closed_streams_highest_offset_.size();
 }
 
 size_t QuicSession::GetNumActiveStreams() const {
-  if (FLAGS_quic_count_unfinished_as_open_streams) {
-    return GetNumOpenStreams() - locally_closed_streams_highest_offset_.size();
-  } else {
-    return GetNumOpenStreams();
-  }
+  return GetNumOpenStreams() - locally_closed_streams_highest_offset_.size();
 }
 
 size_t QuicSession::GetNumAvailableStreams() const {
@@ -744,28 +700,20 @@ size_t QuicSession::GetNumAvailableStreams() const {
 }
 
 void QuicSession::MarkConnectionLevelWriteBlocked(QuicStreamId id,
-                                                  QuicPriority priority) {
+                                                  SpdyPriority priority) {
 #ifndef NDEBUG
   ReliableQuicStream* stream = GetStream(id);
   if (stream != nullptr) {
-    LOG_IF(DFATAL, priority != stream->EffectivePriority())
+    LOG_IF(DFATAL, priority != stream->Priority())
         << ENDPOINT << "Stream " << id
-        << "Priorities do not match.  Got: " << priority
-        << " Expected: " << stream->EffectivePriority();
+        << "Priorities do not match.  Got: " << static_cast<int>(priority)
+        << " Expected: " << static_cast<int>(stream->Priority());
   } else {
     LOG(DFATAL) << "Marking unknown stream " << id << " blocked.";
   }
 #endif
 
-  if (id == kCryptoStreamId) {
-    DCHECK(!has_pending_handshake_);
-    has_pending_handshake_ = true;
-    // TODO(jar): Be sure to use the highest priority for the crypto stream,
-    // perhaps by adding a "special" priority for it that is higher than
-    // kHighestPriority.
-    priority = kHighestPriority;
-  }
-  write_blocked_streams_.PushBack(id, priority);
+  write_blocked_streams_.AddStream(id, priority);
 }
 
 bool QuicSession::HasDataToWrite() const {
@@ -776,12 +724,7 @@ bool QuicSession::HasDataToWrite() const {
 
 void QuicSession::PostProcessAfterData() {
   STLDeleteElements(&closed_streams_);
-
-  // A buggy client may fail to send FIN/RSTs. Don't tolerate this.
-  if (!FLAGS_quic_count_unfinished_as_open_streams &&
-      locally_closed_streams_highest_offset_.size() > max_open_streams_) {
-    CloseConnection(QUIC_TOO_MANY_UNFINISHED_STREAMS);
-  }
+  closed_streams_.clear();
 }
 
 bool QuicSession::IsConnectionFlowControlBlocked() const {

@@ -424,6 +424,21 @@
    fun:_ZN3ash5Shell14CreateInstanceEPNS_13ShellDelegateE
 }
 
+# According to http://crbug.com/242672, this is a false positive caused by
+# BitVector storing the pointer shifted right by 1. Leak checkers aren't smart
+# enough to comprehend that.
+{
+   bug_242672
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:_ZN3WTF9BitVector13OutOfLineBits6createEm
+   fun:_ZN3WTF9BitVector15resizeOutOfLineEm
+   fun:_ZN3WTF9BitVector10ensureSizeEm
+   fun:_ZN5blink10UseCounterC1Ev
+   fun:_ZN5blink4PageC1ERNS0_11PageClientsE
+}
+
 # http://crbug.com/269278 causes really widespread, flaky leaks in
 # value objects that own some memory.  These suppressions will cover
 # all such objects, even though it's possible to get real leaks that
@@ -1134,18 +1149,6 @@
    fun:_Znw*
    ...
    fun:_ZN2pp5proxy26PPP_Instance_Private_Proxy22OnMsgGetInstanceObjectEiNS0_24SerializedVarReturnValueE
-}
-{
-   bug_90487a
-   Memcheck:Leak
-   fun:_Znw*
-   fun:_ZN9__gnu_cxx13new_allocatorISt10_List_nodeIPN5quota11QuotaClientEEE8allocateEjPKv
-   fun:_ZNSt10_List_baseIPN5quota11QuotaClientESaIS2_EE11_M_get_nodeEv
-   fun:_ZNSt4listIPN5quota11QuotaClientESaIS2_EE14_M_create_nodeERKS2_
-   fun:_ZNSt4listIPN5quota11QuotaClientESaIS2_EE9_M_insertESt14_List_iteratorIS2_ERKS2_
-   fun:_ZNSt4listIPN5quota11QuotaClientESaIS2_EE9push_backERKS2_
-   fun:_ZN5quota12QuotaManager14RegisterClientEPNS_11QuotaClientE
-   fun:_ZN5quota17QuotaManagerProxy14RegisterClientEPNS_11QuotaClientE
 }
 {
    bug_93730_a
@@ -2043,19 +2046,6 @@
    fun:_ZN10extensions16UserScriptMaster7ObserveEiRKN7content18NotificationSourceERKNS1_19NotificationDetailsE
 }
 {
-   bug_234845
-   Memcheck:Leak
-   fun:malloc
-   fun:PORT_Alloc_Util
-   fun:pk11_CreateSymKey
-   fun:PK11_KeyGenWithTemplate
-   fun:pk11_TokenKeyGenWithFlagsAndKeyType
-   fun:pk11_RawPBEKeyGenWithKeyType
-   fun:PK11_PBEKeyGen
-   fun:PK11_ExportEncryptedPrivKeyInfo
-   fun:_ZN6crypto12ECPrivateKey25ExportEncryptedPrivateKeyERKSsiPSt6vectorIhSaIhEE
-}
-{
    bug_235584
    Memcheck:Leak
    fun:_Znw*
@@ -2080,17 +2070,6 @@
    fun:_ZN3WTF9BitVectorC*
    ...
    fun:_ZN5blink10UseCounter17recordMeasurementENS0_7FeatureE
-}
-{
-   bug_242672
-   Memcheck:Leak
-   fun:malloc
-   ...
-   fun:_ZN3WTF9BitVector13OutOfLineBits6createEm
-   fun:_ZN3WTF9BitVector15resizeOutOfLineEm
-   fun:_ZN3WTF9BitVector10ensureSizeEm
-   fun:_ZN5blink10UseCounterC1Ev
-   fun:_ZN5blink4PageC1ERNS0_11PageClientsE
 }
 {
    bug_245714
@@ -3267,6 +3246,15 @@
    fun:_ZN5blink4Heap19processMarkingStackEPNS_7VisitorE
 }
 {
+   bug_515330
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:_ZN3net13CTLogVerifier4InitERKN4base16BasicStringPieceISsEE
+   fun:_ZN3net13CTLogVerifier6CreateERKN4base16BasicStringPieceISsEES5_S5_
+   fun:_ZN3net2ct30CreateLogVerifiersForKnownLogsEv
+}
+{
    bug_521656
    Memcheck:Uninitialized
    fun:_ZN5blink10TraceTraitINS_11WebGLObjectEE5traceEPNS_7VisitorEPv
@@ -3435,4 +3423,79 @@
    fun:_ZN7content23StoragePartitionImplMap3GetERKSsS2_b
    fun:_ZN7content12_GLOBAL__N_129GetStoragePartitionFromConfigEPNS_14BrowserContextERKSsS4_b
    fun:_ZN7content14BrowserContext26GetStoragePartitionForSiteEPS0_RK4GURL
+}
+{
+   bug_561081
+   Memcheck:Leak
+   fun:_Zna*
+   fun:_ZN4mojo6system17UserPointerWriterI22MojoHandleSignalsStateEC2ENS0_11UserPointerIS2_EEm
+   fun:_ZN4mojo6system4Core8WaitManyENS0_11UserPointerIKjEES4_jmNS2_IjEENS2_I22MojoHandleSignalsStateEE
+   fun:MojoWaitMany
+   fun:_ZN4mojo8WaitManyISt6vectorINS_6HandleESaIS2_EES1_IjSaIjEES1_I22MojoHandleSignalsStateSaIS7_EEEENS_14WaitManyResult*
+   fun:_ZN4mojo6common15MessagePumpMojo14DoInternalWorkERKNS1_8RunStateEb
+   fun:_ZN4mojo6common15MessagePumpMojo9DoRunLoopEPNS1_8RunStateEPN4base11MessagePump8DelegateE
+   fun:_ZN4mojo6common15MessagePumpMojo3RunEPN4base11MessagePump8DelegateE
+   fun:_ZN4base11MessageLoop10RunHandlerEv
+}
+{
+   bug_562703
+   Memcheck:Leak
+   fun:_Znw*
+   fun:_ZN7storage12QuotaManager14LazyInitializeEv
+   fun:_ZN7storage12QuotaManager26GetUsageAndQuotaForWebAppsERK4GURLNS_11StorageTypeERKN4base8CallbackIFvNS_15QuotaStatusCodeEllEEE
+}
+{
+   bug_562712
+   Memcheck:Leak
+   fun:_Znw*
+   fun:_ZN4base8internal20PostTaskAndReplyImpl16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIFvvEEESA_
+   fun:_ZN4base10TaskRunner16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIFvvEEES9_
+   fun:_ZN10disk_cache15SimpleEntryImpl13CloseInternalEv
+   fun:_ZN10disk_cache15SimpleEntryImpl24RunNextOperationIfNeededEv
+   fun:_ZN10disk_cache15SimpleEntryImpl5CloseEv
+}
+{
+   bug_562718a
+   Memcheck:Uninitialized
+   fun:_ZN5blink10PaintLayer24removeFilterInfoIfNeededEv
+   fun:_ZN5blink10PaintLayerD1Ev
+   fun:_ZN3WTF15OwnedPtrDeleterIN5blink10PaintLayerEE9deletePtrEPS2_
+   fun:_ZN3WTF6OwnPtrIN5blink10PaintLayerEE5clearEv
+   fun:_ZN3WTF6OwnPtrIN5blink10PaintLayerEEaSEDn
+}
+{
+   bug_562718b
+   Memcheck:Uninitialized
+   fun:_ZN5blink10PaintLayer31setNeedsCompositingInputsUpdateEv
+   fun:_ZN5blink10PaintLayer12styleChangedENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink20LayoutBoxModelObject14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink9LayoutBox14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink11LayoutBlock14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+}
+{
+   bug_562718c
+   Memcheck:Uninitialized
+   fun:_ZN5blink10PaintLayer30updateDescendantDependentFlagsEv
+   fun:_ZN5blink10PaintLayer12styleChangedENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink20LayoutBoxModelObject14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink9LayoutBox14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+   fun:_ZN5blink11LayoutBlock14styleDidChangeENS_15StyleDifferenceEPKNS_13ComputedStyleE
+}
+{
+   bug_562718d
+   Memcheck:Uninitialized
+   fun:_ZN7GrGLGpu18createCopyProgramsEv
+   fun:_ZN7GrGLGpuC1EP11GrGLContextP9GrContext
+   fun:_ZN7GrGLGpu6CreateElRK16GrContextOptionsP9GrContext
+   fun:_ZN5GrGpu6CreateE9GrBackendlRK16GrContextOptionsP9GrContext
+   fun:_ZN9GrContext4initE9GrBackendlRK16GrContextOptions
+}
+{
+   bug_562718e
+   Memcheck:Uninitialized
+   fun:_ZN8GrGLCaps8initGLSLERK15GrGLContextInfo
+   fun:_ZN8GrGLCaps4initERK16GrContextOptionsRK15GrGLContextInfoPK13GrGLInterface
+   fun:_ZN8GrGLCapsC1ERK16GrContextOptionsRK15GrGLContextInfoPK13GrGLInterface
+   fun:_ZN15GrGLContextInfoC1ERKNS_15ConstructorArgsE
+   fun:_ZN11GrGLContextC2ERKN15GrGLContextInfo15ConstructorArgsE
 }

@@ -2503,6 +2503,7 @@ should be able to be added at any place in this file.
 <action name="Cryptohome.PKCS11InitFail">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated as of 11/2015.</obsolete>
 </action>
 
 <action name="CustomTabsCustomActionButtonClick">
@@ -8126,6 +8127,13 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileNTPShown">
+  <owner>knn@chromium.org</owner>
+  <description>
+    The New Tab Page (NTP) was loaded or brought to foreground by the user.
+  </description>
+</action>
+
 <action name="MobileNTPSwitchToBookmarks">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8722,7 +8730,16 @@ should be able to be added at any place in this file.
 <action name="Notifications.Persistent.Clicked">
   <owner>peter@chromium.org</owner>
   <description>
-    Recorded when a persistent notification gets clicked on by the user.
+    Recorded when the main body of a persistent notification gets clicked on by
+    the user (does not include action buttons).
+  </description>
+</action>
+
+<action name="Notifications.Persistent.ClickedActionButton">
+  <owner>peter@chromium.org</owner>
+  <description>
+    Recorded when one of a persistent notification's action buttons gets clicked
+    on by the user.
   </description>
 </action>
 
@@ -9216,13 +9233,15 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Options_AutoSpellCorrection_Disable">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>groby@chromium.org</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated 11/2015</obsolete>
 </action>
 
 <action name="Options_AutoSpellCorrection_Enable">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>groby@chromium.org</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated 11/2015</obsolete>
 </action>
 
 <action name="Options_AutofillAddressAdded">

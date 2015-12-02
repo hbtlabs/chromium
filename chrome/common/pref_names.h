@@ -10,6 +10,7 @@
 #include <stddef.h>
 
 #include "build/build_config.h"
+#include "chrome/common/features.h"
 
 namespace prefs {
 
@@ -282,7 +283,6 @@ extern const char kDeleteHostedAppsData[];
 extern const char kDeauthorizeContentLicenses[];
 extern const char kEnableContinuousSpellcheck[];
 extern const char kSpeechRecognitionFilterProfanities[];
-extern const char kEnableAutoSpellCorrect[];
 extern const char kSavingBrowserHistoryDisabled[];
 extern const char kAllowDeletingBrowserHistory[];
 extern const char kForceGoogleSafeSearch[];
@@ -557,7 +557,7 @@ extern const char kGeolocationAccessToken[];
 extern const char kGeolocationEnabled[];
 #endif
 
-#if defined(ENABLE_GOOGLE_NOW)
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
 extern const char kGoogleGeolocationAccessEnabled[];
 #endif
 extern const char kGoogleNowLauncherEnabled[];
@@ -708,6 +708,7 @@ extern const char kShelfPreferences[];
 
 extern const char kLogoutDialogDurationMs[];
 extern const char kPinnedLauncherApps[];
+extern const char kPolicyPinnedLauncherApps[];
 extern const char kShowLogoutButtonInTray[];
 #endif
 

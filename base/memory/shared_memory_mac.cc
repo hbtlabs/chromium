@@ -53,7 +53,7 @@ SharedMemoryHandle::Type GetABTestMechanism() {
     group = SharedMemoryHandle::POSIX;
     found_group = true;
   } else {
-    group = SharedMemoryHandle::POSIX;
+    group = SharedMemoryHandle::MACH;
   }
 
   return group;
@@ -175,10 +175,20 @@ bool CreateAnonymousSharedMemory(const SharedMemoryCreateOptions& options,
 }  // namespace
 
 SharedMemoryCreateOptions::SharedMemoryCreateOptions()
-    : type(SharedMemoryHandle::POSIX),
+    : type(SharedMemoryHandle::MACH),
       size(0),
       executable(false),
-      share_read_only(false) {}
+      share_read_only(false) {
+  if (mac::IsOSLionOrLater()) {
+    // A/B test the mechanism. Once the experiment is over, this will always be
+    // set to SharedMemoryHandle::MACH.
+    // http://crbug.com/547261
+    type = GetABTestMechanism();
+  } else {
+    // Mach shared memory isn't supported on OSX 10.6 or older.
+    type = SharedMemoryHandle::POSIX;
+  }
+}
 
 SharedMemory::SharedMemory()
     : mapped_memory_mechanism_(SharedMemoryHandle::POSIX),
@@ -263,22 +273,6 @@ bool SharedMemory::CreateAnonymousPosix(size_t size) {
   return Create(options);
 }
 
-bool SharedMemory::CreateAndMapAnonymousMach(size_t size) {
-  SharedMemoryCreateOptions options;
-
-  if (mac::IsOSLionOrLater()) {
-    // A/B test the mechanism. Once the experiment is over, this will always be
-    // set to SharedMemoryHandle::MACH.
-    // http://crbug.com/547261
-    options.type = GetABTestMechanism();
-  } else {
-    // Mach shared memory isn't supported on OSX 10.6 or older.
-    options.type = SharedMemoryHandle::POSIX;
-  }
-  options.size = size;
-  return Create(options) && Map(size);
-}
-
 // static
 bool SharedMemory::GetSizeFromSharedMemoryHandle(
     const SharedMemoryHandle& handle,
@@ -337,7 +331,7 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
   }
   requested_size_ = options.size;
 
-  return PrepareMapFile(fp.Pass(), readonly_fd.Pass());
+  return PrepareMapFile(std::move(fp), std::move(readonly_fd));
 }
 
 bool SharedMemory::MapAt(off_t offset, size_t bytes) {

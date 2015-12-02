@@ -192,7 +192,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
   // Shared code to determine if |form| should be uploaded to the Autofill
   // server. It verifies that uploading is allowed and |form| meets conditions
-  // to be uploadable.
+  // to be uploadable. Exposed for testing.
   bool ShouldUploadForm(const FormStructure& form);
 
  protected:
@@ -247,7 +247,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
  private:
   // AutofillDownloadManager::Observer:
   void OnLoadedServerPredictions(
-      const std::string& response_xml,
+      std::string response_xml,
       const std::vector<std::string>& form_signatures) override;
 
   // CardUnmaskDelegate:

@@ -904,9 +904,6 @@ public:
     PassRefPtrWillBeRawPtr<TouchList> createTouchList(WillBeHeapVector<RefPtrWillBeMember<Touch>>&) const;
 
     const DocumentTiming& timing() const { return m_documentTiming; }
-    void markFirstPaint();
-    void markFirstTextPaint();
-    void markFirstImagePaint();
 
     int requestAnimationFrame(FrameRequestCallback*);
     void cancelAnimationFrame(int id);
@@ -1106,7 +1103,7 @@ private:
     String nodeName() const final;
     NodeType nodeType() const final;
     bool childTypeAllowed(NodeType) const final;
-    PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep = true) final;
+    PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) final;
     void cloneDataFromDocument(const Document&);
 
 #if !ENABLE(OILPAN)
@@ -1118,8 +1115,6 @@ private:
     KURL virtualCompleteURL(const String&) const final; // Same as completeURL() for the same reason as above.
 
     void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
-
-    double timerAlignmentInterval() const final;
 
     void updateTitle(const String&);
     void updateFocusAppearanceTimerFired(Timer<Document>*);

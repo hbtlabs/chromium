@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -19,7 +20,6 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/stl_util.h"
 #include "jni/WebAudioMediaCodecBridge_jni.h"
 #include "media/base/android/webaudio_media_codec_info.h"
 
@@ -126,7 +126,7 @@ bool WebAudioMediaCodecBridge::DecodeInMemoryAudioFile() {
 
 void WebAudioMediaCodecBridge::InitializeDestination(
     JNIEnv* env,
-    jobject /*java object*/,
+    const JavaParamRef<jobject>& /*java object*/,
     jint channel_count,
     jint sample_rate,
     jlong duration_microsec) {
@@ -152,12 +152,11 @@ void WebAudioMediaCodecBridge::InitializeDestination(
 
 void WebAudioMediaCodecBridge::OnChunkDecoded(
     JNIEnv* env,
-    jobject /*java object*/,
-    jobject buf,
+    const JavaParamRef<jobject>& /*java object*/,
+    const JavaParamRef<jobject>& buf,
     jint buf_size,
     jint input_channel_count,
     jint output_channel_count) {
-
   if (buf_size <= 0 || !buf)
     return;
 
@@ -179,7 +178,7 @@ void WebAudioMediaCodecBridge::OnChunkDecoded(
       decoded_data[k] = *data;
       data += 2;
     }
-    buffer = reinterpret_cast<int8_t*>(vector_as_array(&decoded_data));
+    buffer = reinterpret_cast<int8_t*>(decoded_data.data());
     DCHECK(buffer);
     count = frame_count * sizeof(*data);
   }

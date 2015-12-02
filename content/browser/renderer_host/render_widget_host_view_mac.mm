@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #include <OpenGL/gl.h>
 #include <QuartzCore/QuartzCore.h>
+#include <utility>
 
 #include "base/basictypes.h"
 #include "base/bind.h"
@@ -1490,12 +1491,8 @@ void RenderWidgetHostViewMac::OnSwapCompositorFrame(
 
     SendVSyncParametersToRenderer();
 
-    delegated_frame_host_->SwapDelegatedFrame(
-        output_surface_id,
-        frame->delegated_frame_data.Pass(),
-        frame->metadata.device_scale_factor,
-        frame->metadata.latency_info,
-        &frame->metadata.satisfies_sequences);
+    delegated_frame_host_->SwapDelegatedFrame(output_surface_id,
+                                              std::move(frame));
   } else {
     DLOG(ERROR) << "Received unexpected frame type.";
     bad_message::ReceivedBadMessage(render_widget_host_->GetProcess(),
@@ -1617,6 +1614,14 @@ void RenderWidgetHostViewMac::ProcessMouseEvent(
 void RenderWidgetHostViewMac::ProcessMouseWheelEvent(
     const blink::WebMouseWheelEvent& event) {
   render_widget_host_->ForwardWheelEvent(event);
+}
+
+void RenderWidgetHostViewMac::TransformPointToLocalCoordSpace(
+    const gfx::Point& point,
+    cc::SurfaceId original_surface,
+    gfx::Point* transformed_point) {
+  delegated_frame_host_->TransformPointToLocalCoordSpace(
+      point, original_surface, transformed_point);
 }
 
 bool RenderWidgetHostViewMac::Send(IPC::Message* message) {

@@ -10,8 +10,8 @@
 #include <utility>
 
 #include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/move.h"
 #include "base/stl_util.h"
 
 namespace base {
@@ -27,10 +27,7 @@ namespace base {
 // have support for moveable types inside containers).
 template <class Key, class ScopedPtr, class Compare = std::less<Key>>
 class ScopedPtrMap {
-  MOVE_ONLY_TYPE_WITH_MOVE_CONSTRUCTOR_FOR_CPP_03(ScopedPtrMap)
-
   using Container = std::map<Key, typename ScopedPtr::element_type*, Compare>;
-
  public:
   using allocator_type = typename Container::allocator_type;
   using size_type = typename Container::size_type;
@@ -116,7 +113,7 @@ class ScopedPtrMap {
     ScopedPtr ret(position->second);
     // Key-based lookup (cannot use const_iterator overload in C++03 library).
     data_.erase(position->first);
-    return ret.Pass();
+    return ret;
   }
 
   // Like |erase()|, but returns the element instead of deleting it.
@@ -127,7 +124,7 @@ class ScopedPtrMap {
 
     ScopedPtr ret(it->second);
     data_.erase(it);
-    return ret.Pass();
+    return ret;
   }
 
  private:
@@ -140,6 +137,8 @@ class ScopedPtrMap {
       return data_.end();
     return data_.find(it->first);
   };
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedPtrMap);
 };
 
 }  // namespace base

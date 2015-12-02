@@ -48,6 +48,7 @@
 #include "content/common/savable_subframe.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/site_isolation_policy.h"
+#include "content/common/ssl_status_serialization.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/bindings_policy.h"
@@ -86,7 +87,7 @@
 #include "content/renderer/manifest/manifest_manager.h"
 #include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
-#include "content/renderer/media/crypto/render_cdm_factory.h"
+#include "content/renderer/media/cdm/render_cdm_factory.h"
 #include "content/renderer/media/media_permission_dispatcher_impl.h"
 #include "content/renderer/media/media_permission_dispatcher_proxy.h"
 #include "content/renderer/media/media_stream_dispatcher.h"
@@ -184,6 +185,7 @@
 #include "content/renderer/android/synchronous_compositor_factory.h"
 #include "content/renderer/java/gin_java_bridge_dispatcher.h"
 #include "content/renderer/media/android/renderer_media_player_manager.h"
+#include "content/renderer/media/android/renderer_media_session_manager.h"
 #include "content/renderer/media/android/stream_texture_factory_impl.h"
 #include "content/renderer/media/android/webmediaplayer_android.h"
 #include "content/renderer/media/android/webmediasession_android.h"
@@ -194,9 +196,9 @@
 #endif
 
 #if defined(ENABLE_PEPPER_CDMS)
-#include "content/renderer/media/crypto/pepper_cdm_wrapper_impl.h"
+#include "content/renderer/media/cdm/pepper_cdm_wrapper_impl.h"
 #elif defined(ENABLE_BROWSER_CDMS)
-#include "content/renderer/media/crypto/renderer_cdm_manager.h"
+#include "content/renderer/media/cdm/renderer_cdm_manager.h"
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA)
@@ -307,16 +309,37 @@ void GetRedirectChain(WebDataSource* ds, std::vector<GURL>* result) {
   }
 }
 
-// Returns the original request url. If there is no redirect, the original
-// url is the same as ds->request()->url(). If the WebDataSource belongs to a
-// frame was loaded by loadData, the original url will be ds->unreachableURL()
-GURL GetOriginalRequestURL(WebDataSource* ds) {
+// Gets URL that should override the default getter for this data source
+// (if any), storing it in |output|. Returns true if there is an override URL.
+bool MaybeGetOverriddenURL(WebDataSource* ds, GURL* output) {
+  DocumentState* document_state = DocumentState::FromDataSource(ds);
+
+  // If load was from a data URL, then the saved data URL, not the history
+  // URL, should be the URL of the data source.
+  if (document_state->was_load_data_with_base_url_request()) {
+    *output = document_state->data_url();
+    return true;
+  }
+
   // WebDataSource has unreachable URL means that the frame is loaded through
   // blink::WebFrame::loadData(), and the base URL will be in the redirect
   // chain. However, we never visited the baseURL. So in this case, we should
   // use the unreachable URL as the original URL.
-  if (ds->hasUnreachableURL())
-    return ds->unreachableURL();
+  if (ds->hasUnreachableURL()) {
+    *output = ds->unreachableURL();
+    return true;
+  }
+
+  return false;
+}
+
+// Returns the original request url. If there is no redirect, the original
+// url is the same as ds->request()->url(). If the WebDataSource belongs to a
+// frame was loaded by loadData, the original url will be ds->unreachableURL()
+GURL GetOriginalRequestURL(WebDataSource* ds) {
+  GURL overriden_url;
+  if (MaybeGetOverriddenURL(ds, &overriden_url))
+    return overriden_url;
 
   std::vector<GURL> redirects;
   GetRedirectChain(ds, &redirects);
@@ -545,6 +568,38 @@ RenderFrameImpl::CreateRenderFrameImplFunction g_create_render_frame_impl =
 
 void OnGotContentHandlerID(uint32_t content_handler_id) {}
 
+bool IsContentWithCertificateErrorsRelevantToUI(
+    const blink::WebURL& url,
+    const blink::WebCString& security_info,
+    const blink::WebURL& main_resource_url,
+    const blink::WebCString& main_resource_security_info) {
+  content::SSLStatus ssl_status;
+  content::SSLStatus main_resource_ssl_status;
+  CHECK(DeserializeSecurityInfo(security_info, &ssl_status));
+  CHECK(DeserializeSecurityInfo(main_resource_security_info,
+                                &main_resource_ssl_status));
+
+  if (!GURL(main_resource_url).SchemeIsCryptographic())
+    return false;
+
+  // Do not handle subresource certificate errors if they are the same
+  // as errors that occured during the main page load. This compares
+  // most, but not all, fields of SSLStatus. For example, this check
+  // does not compare |content_status| because the navigation entry
+  // might have mixed content but also have the exact same SSL
+  // connection properties as the subresource, thereby making the
+  // subresource errors duplicative.
+  return (!url::Origin(GURL(url))
+               .IsSameOriginWith(url::Origin(GURL(main_resource_url))) ||
+          main_resource_ssl_status.security_style !=
+              ssl_status.security_style ||
+          main_resource_ssl_status.cert_id != ssl_status.cert_id ||
+          main_resource_ssl_status.cert_status != ssl_status.cert_status ||
+          main_resource_ssl_status.security_bits != ssl_status.security_bits ||
+          main_resource_ssl_status.connection_status !=
+              ssl_status.connection_status);
+}
+
 }  // namespace
 
 // static
@@ -641,12 +696,10 @@ void RenderFrameImpl::CreateFrame(
         RenderFrameProxy::FromRoutingID(proxy_routing_id);
     CHECK(proxy);
     render_frame = RenderFrameImpl::Create(proxy->render_view(), routing_id);
-    web_frame =
-        blink::WebLocalFrame::create(replicated_state.scope, render_frame);
     render_frame->proxy_routing_id_ = proxy_routing_id;
-    web_frame->initializeToReplaceRemoteFrame(
-        proxy->web_frame(), WebString::fromUTF8(replicated_state.name),
-        replicated_state.sandbox_flags, frame_owner_properties);
+    web_frame = blink::WebLocalFrame::createProvisional(
+        render_frame, proxy->web_frame(), replicated_state.sandbox_flags,
+        frame_owner_properties);
   }
   render_frame->SetWebFrame(web_frame);
   CHECK(parent_routing_id != MSG_ROUTING_NONE || !web_frame->parent());
@@ -755,6 +808,7 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       midi_dispatcher_(NULL),
 #if defined(OS_ANDROID)
       media_player_manager_(NULL),
+      media_session_manager_(NULL),
 #endif
 #if defined(ENABLE_BROWSER_CDMS)
       cdm_manager_(NULL),
@@ -2228,7 +2282,7 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
 
 blink::WebMediaSession* RenderFrameImpl::createMediaSession() {
 #if defined(OS_ANDROID)
-  return new WebMediaSessionAndroid();
+  return new WebMediaSessionAndroid(GetMediaSessionManager());
 #else
   return nullptr;
 #endif  // defined(OS_ANDROID)
@@ -3202,9 +3256,7 @@ void RenderFrameImpl::didNavigateWithinPage(blink::WebLocalFrame* frame,
 
 void RenderFrameImpl::didUpdateCurrentHistoryItem(blink::WebLocalFrame* frame) {
   DCHECK(!frame_ || frame_ == frame);
-  // TODO(nasko): Move implementation here. Needed methods:
-  // * StartNavStateSyncTimerIfNecessary
-  render_view_->didUpdateCurrentHistoryItem(frame);
+  render_view_->StartNavStateSyncTimerIfNecessary(this);
 }
 
 void RenderFrameImpl::didChangeThemeColor() {
@@ -3635,10 +3687,36 @@ void RenderFrameImpl::didRunInsecureContent(
     const blink::WebSecurityOrigin& origin,
     const blink::WebURL& target) {
   Send(new FrameHostMsg_DidRunInsecureContent(
-      routing_id_, origin.toString().utf8(), target));
+      routing_id_, GURL(origin.toString().utf8()), target));
   GetContentClient()->renderer()->RecordRapporURL(
       "ContentSettings.MixedScript.RanMixedScript",
       GURL(origin.toString().utf8()));
+}
+
+void RenderFrameImpl::didDisplayContentWithCertificateErrors(
+    const blink::WebURL& url,
+    const blink::WebCString& security_info,
+    const blink::WebURL& main_resource_url,
+    const blink::WebCString& main_resource_security_info) {
+  if (!IsContentWithCertificateErrorsRelevantToUI(
+          url, security_info, main_resource_url, main_resource_security_info)) {
+    return;
+  }
+  Send(new FrameHostMsg_DidDisplayContentWithCertificateErrors(routing_id_, url,
+                                                               security_info));
+}
+
+void RenderFrameImpl::didRunContentWithCertificateErrors(
+    const blink::WebURL& url,
+    const blink::WebCString& security_info,
+    const blink::WebURL& main_resource_url,
+    const blink::WebCString& main_resource_security_info) {
+  if (!IsContentWithCertificateErrorsRelevantToUI(
+          url, security_info, main_resource_url, main_resource_security_info)) {
+    return;
+  }
+  Send(new FrameHostMsg_DidRunContentWithCertificateErrors(
+      routing_id_, GURL(main_resource_url).GetOrigin(), url, security_info));
 }
 
 void RenderFrameImpl::didChangePerformanceTiming() {
@@ -3679,9 +3757,7 @@ void RenderFrameImpl::willReleaseScriptContext(blink::WebLocalFrame* frame,
 
 void RenderFrameImpl::didChangeScrollOffset(blink::WebLocalFrame* frame) {
   DCHECK(!frame_ || frame_ == frame);
-  // TODO(nasko): Move implementation here. Needed methods:
-  // * StartNavStateSyncTimerIfNecessary
-  render_view_->didChangeScrollOffset(frame);
+  render_view_->StartNavStateSyncTimerIfNecessary(this);
 
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, DidChangeScrollOffset());
 }
@@ -4840,7 +4916,7 @@ void RenderFrameImpl::NavigateInternal(
     if (!common_params.base_url_for_data_url.is_empty() ||
         (browser_side_navigation &&
          common_params.url.SchemeIs(url::kDataScheme))) {
-      LoadDataURL(common_params, frame_);
+      LoadDataURL(common_params, frame_, load_type);
     } else {
       // Load the request.
       frame_->toWebLocalFrame()->load(request, load_type,
@@ -5080,19 +5156,23 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request) {
 }
 
 void RenderFrameImpl::LoadDataURL(const CommonNavigationParams& params,
-                                  WebFrame* frame) {
+                                  WebFrame* frame,
+                                  blink::WebFrameLoadType load_type) {
   // A loadData request with a specified base URL.
   std::string mime_type, charset, data;
   if (net::DataURL::Parse(params.url, &mime_type, &charset, &data)) {
     const GURL base_url = params.base_url_for_data_url.is_empty() ?
         params.url : params.base_url_for_data_url;
+    bool replace = load_type == blink::WebFrameLoadType::ReloadFromOrigin ||
+                   load_type == blink::WebFrameLoadType::Reload;
     frame->loadData(
         WebData(data.c_str(), data.length()),
         WebString::fromUTF8(mime_type),
         WebString::fromUTF8(charset),
         base_url,
+        // Needed so that history-url-only changes don't become reloads.
         params.history_url_for_data_url,
-        false);
+        replace);
   } else {
     CHECK(false) << "Invalid URL passed: "
                  << params.url.possibly_invalid_spec();
@@ -5156,8 +5236,10 @@ bool RenderFrameImpl::ShouldDisplayErrorPageForFailedLoad(
 
 GURL RenderFrameImpl::GetLoadingUrl() const {
   WebDataSource* ds = frame_->dataSource();
-  if (ds->hasUnreachableURL())
-    return ds->unreachableURL();
+
+  GURL overriden_url;
+  if (MaybeGetOverriddenURL(ds, &overriden_url))
+    return overriden_url;
 
   const WebURLRequest& request = ds->request();
   return request.url();
@@ -5224,6 +5306,16 @@ void RenderFrameImpl::UpdateNavigationState(DocumentState* document_state) {
           base::TimeTicks::Now();
     }
     document_state->set_navigation_state(CreateNavigationStateFromPending());
+
+    const CommonNavigationParams& common_params =
+        pending_navigation_params_->common_params;
+    bool load_data = !common_params.base_url_for_data_url.is_empty() &&
+                     !common_params.history_url_for_data_url.is_empty() &&
+                     common_params.url.SchemeIs(url::kDataScheme);
+    document_state->set_was_load_data_with_base_url_request(load_data);
+    if (load_data)
+      document_state->set_data_url(common_params.url);
+
     pending_navigation_params_.reset();
   } else {
     document_state->set_navigation_state(
@@ -5260,6 +5352,13 @@ RendererMediaPlayerManager* RenderFrameImpl::GetMediaPlayerManager() {
     media_player_manager_ = new RendererMediaPlayerManager(this);
   return media_player_manager_;
 }
+
+RendererMediaSessionManager* RenderFrameImpl::GetMediaSessionManager() {
+  if (!media_session_manager_)
+    media_session_manager_ = new RendererMediaSessionManager(this);
+  return media_session_manager_;
+}
+
 #endif  // defined(OS_ANDROID)
 
 scoped_ptr<media::MediaPermission> RenderFrameImpl::CreateMediaPermissionProxy(
@@ -5349,8 +5448,12 @@ mojo::ServiceProviderPtr RenderFrameImpl::ConnectToApplication(
   mojo::ServiceProviderPtr service_provider;
   mojo::URLRequestPtr request(mojo::URLRequest::New());
   request->url = mojo::String::From(url);
+  mojo::CapabilityFilterPtr filter(mojo::CapabilityFilter::New());
+  mojo::Array<mojo::String> all_interfaces;
+  all_interfaces.push_back("*");
+  filter->filter.insert("*", all_interfaces.Pass());
   mojo_shell_->ConnectToApplication(request.Pass(), GetProxy(&service_provider),
-                                    nullptr, nullptr,
+                                    nullptr, filter.Pass(),
                                     base::Bind(&OnGotContentHandlerID));
   return service_provider.Pass();
 }

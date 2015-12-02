@@ -276,6 +276,15 @@ base::TimeTicks Scheduler::LastBeginImplFrameTime() {
   return begin_impl_frame_tracker_.Current().frame_time;
 }
 
+void Scheduler::BeginImplFrameNotExpectedSoon() {
+  compositor_timing_history_->BeginImplFrameNotExpectedSoon();
+
+  // Tying this to SendBeginMainFrameNotExpectedSoon will have some
+  // false negatives, but we want to avoid running long idle tasks when
+  // we are actually active.
+  client_->SendBeginMainFrameNotExpectedSoon();
+}
+
 void Scheduler::SetupNextBeginFrameIfNeeded() {
   // Never call SetNeedsBeginFrames if the frame source already has the right
   // value.
@@ -289,7 +298,7 @@ void Scheduler::SetupNextBeginFrameIfNeeded() {
                SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE) {
       // Call SetNeedsBeginFrames(false) in between frames only.
       frame_source_->SetNeedsBeginFrames(false);
-      client_->SendBeginMainFrameNotExpectedSoon();
+      BeginImplFrameNotExpectedSoon();
       devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
                                                        false);
     }
@@ -531,6 +540,8 @@ void Scheduler::BeginImplFrameSynchronous(const BeginFrameArgs& args) {
   begin_main_frame_args_.on_critical_path = !ImplLatencyTakesPriority();
 
   BeginImplFrame(args);
+  compositor_timing_history_->WillFinishImplFrame(
+      state_machine_.needs_redraw());
   FinishImplFrame();
 }
 
@@ -555,6 +566,8 @@ void Scheduler::BeginImplFrame(const BeginFrameArgs& args) {
   begin_impl_frame_tracker_.Start(args);
   state_machine_.OnBeginImplFrame();
   devtools_instrumentation::DidBeginFrame(layer_tree_host_id_);
+  compositor_timing_history_->WillBeginImplFrame(
+      state_machine_.NewActiveTreeLikely());
   client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
 
   ProcessScheduledActions();
@@ -640,22 +653,31 @@ void Scheduler::OnBeginImplFrameDeadline() {
   tracked_objects::ScopedTracker tracking_profile1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "461509 Scheduler::OnBeginImplFrameDeadline1"));
+  compositor_timing_history_->WillFinishImplFrame(
+      state_machine_.needs_redraw());
   state_machine_.OnBeginImplFrameDeadline();
   ProcessScheduledActions();
   FinishImplFrame();
 }
 
 void Scheduler::DrawAndSwapIfPossible() {
+  bool drawing_with_new_active_tree =
+      state_machine_.active_tree_needs_first_draw();
   compositor_timing_history_->WillDraw();
+  state_machine_.WillDraw();
   DrawResult result = client_->ScheduledActionDrawAndSwapIfPossible();
-  state_machine_.DidDrawIfPossibleCompleted(result);
-  compositor_timing_history_->DidDraw();
+  state_machine_.DidDraw(result);
+  compositor_timing_history_->DidDraw(drawing_with_new_active_tree);
 }
 
 void Scheduler::DrawAndSwapForced() {
+  bool drawing_with_new_active_tree =
+      state_machine_.active_tree_needs_first_draw();
   compositor_timing_history_->WillDraw();
-  client_->ScheduledActionDrawAndSwapForced();
-  compositor_timing_history_->DidDraw();
+  state_machine_.WillDraw();
+  DrawResult result = client_->ScheduledActionDrawAndSwapForced();
+  state_machine_.DidDraw(result);
+  compositor_timing_history_->DidDraw(drawing_with_new_active_tree);
 }
 
 void Scheduler::SetDeferCommits(bool defer_commits) {
@@ -720,22 +742,16 @@ void Scheduler::ProcessScheduledActions() {
         tracked_objects::ScopedTracker tracking_profile6(
             FROM_HERE_WITH_EXPLICIT_FUNCTION(
                 "461509 Scheduler::ProcessScheduledActions6"));
-        bool did_request_swap = true;
-        state_machine_.WillDraw(did_request_swap);
         DrawAndSwapIfPossible();
         break;
       }
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_FORCED: {
-        bool did_request_swap = true;
-        state_machine_.WillDraw(did_request_swap);
+      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_FORCED:
         DrawAndSwapForced();
         break;
-      }
       case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_ABORT: {
         // No action is actually performed, but this allows the state machine to
-        // advance out of its waiting to draw state without actually drawing.
-        bool did_request_swap = false;
-        state_machine_.WillDraw(did_request_swap);
+        // drain the pipeline without actually drawing.
+        state_machine_.AbortDrawAndSwap();
         break;
       }
       case SchedulerStateMachine::ACTION_BEGIN_OUTPUT_SURFACE_CREATION:

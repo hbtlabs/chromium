@@ -20,17 +20,16 @@ WebInspector.TimelineTreeView = function(model)
         new WebInspector.ExcludeTopLevelFilter()
     ];
 
+    this._populateToolbar(this.element);
+
     var columns = [];
     this._populateColumns(columns);
     this._dataGrid = new WebInspector.SortableDataGrid(columns);
     this._dataGrid.addEventListener(WebInspector.DataGrid.Events.SortingChanged, this._sortingChanged, this);
-    var dataGridContainerWidget = new WebInspector.DataGridContainerWidget();
-    this._populateToolbar(dataGridContainerWidget.element);
-    dataGridContainerWidget.appendDataGrid(this._dataGrid);
 
     this._splitWidget = new WebInspector.SplitWidget(true, true, "timelineTreeViewDetailsSplitWidget");
     this._splitWidget.show(this.element);
-    this._splitWidget.setMainWidget(dataGridContainerWidget);
+    this._splitWidget.setMainWidget(this._dataGrid.asWidget());
     /** @type {?WebInspector.TimelineModel.ProfileTreeNode|undefined} */
     this._lastSelectedNode;
 
@@ -62,6 +61,14 @@ WebInspector.TimelineTreeView.prototype = {
         this._startTime = startTime;
         this._endTime = endTime;
         this._refreshTree();
+    },
+
+    /**
+     * @return {boolean}
+     */
+    _exposePercentages: function()
+    {
+        return false;
     },
 
     /**
@@ -185,6 +192,9 @@ WebInspector.TimelineTreeView.prototype = {
 
     _updateDetailsForSelection: function()
     {
+        // FIXME: remove this as we implement details for all modes.
+        if (!this._detailsView)
+            return;
         var selectedNode = this._dataGrid.selectedNode ? /** @type {!WebInspector.TimelineTreeView.GridNode} */ (this._dataGrid.selectedNode)._profileNode : null;
         if (selectedNode === this._lastSelectedNode)
             return;
@@ -333,25 +343,9 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
     {
         if (columnIdentifier !== "self" && columnIdentifier !== "total" && columnIdentifier !== "startTime")
             return null;
-        /**
-         * @param {number} time
-         * @return {string}
-         */
-        function formatMilliseconds(time)
-        {
-            return WebInspector.UIString("%.1f\u2009ms", time);
-        }
-        /**
-         * @param {number} value
-         * @return {string}
-         */
-        function formatPercent(value)
-        {
-            return WebInspector.UIString("%.1f\u2009%%", value);
-        }
 
+        var showPercents = false;
         var value;
-        var percentText;
         var maxTime;
         switch (columnIdentifier) {
         case "startTime":
@@ -359,13 +353,13 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
             break;
         case "self":
             value = this._profileNode.selfTime;
-            percentText = formatPercent(this._profileNode.selfTime / this._grandTotalTime * 100);
             maxTime = this._maxSelfTime;
+            showPercents = true;
             break;
         case "total":
             value = this._profileNode.totalTime;
-            percentText = formatPercent(this._profileNode.totalTime / this._grandTotalTime * 100);
             maxTime = this._maxTotalTime;
+            showPercents = true;
             break;
         default:
             return null;
@@ -373,13 +367,14 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
         var cell = this.createTD(columnIdentifier);
         cell.className = "numeric-column";
         var textDiv = cell.createChild("div");
-        textDiv.createChild("span").textContent = formatMilliseconds(value);
-        if (percentText) {
-            textDiv.createChild("span", "percent-column").textContent = percentText;
-            textDiv.classList.add("profile-multiple-values");
-        }
-        if (maxTime)
+        textDiv.createChild("span").textContent = WebInspector.UIString("%.1f\u2009ms", value);
+
+        if (showPercents && this._treeView._exposePercentages())
+            textDiv.createChild("span", "percent-column").textContent = WebInspector.UIString("%.1f\u2009%%", value / this._grandTotalTime * 100);
+        if (maxTime) {
+            textDiv.classList.add("background-percent-bar");
             cell.createChild("div", "background-bar-container").createChild("div", "background-bar").style.width = (value * 100 / maxTime).toFixed(1) + "%";
+        }
         return cell;
     },
 
@@ -470,6 +465,15 @@ WebInspector.AggregatedTimelineTreeView.prototype = {
         addGroupingOption.call(this, WebInspector.UIString("Group by Subdomain"), WebInspector.AggregatedTimelineTreeView.GroupBy.Subdomain);
         addGroupingOption.call(this, WebInspector.UIString("Group by URL"), WebInspector.AggregatedTimelineTreeView.GroupBy.URL);
         panelToolbar.appendToolbarItem(this._groupByCombobox);
+    },
+
+    /**
+     * @override
+     * @return {boolean}
+     */
+    _exposePercentages: function()
+    {
+        return true;
     },
 
     _onGroupByChanged: function()
@@ -771,9 +775,9 @@ WebInspector.EventsTimelineTreeView.prototype = {
      */
     _populateToolbar: function(parent)
     {
-        var filtersElement = this._filtersControl.filtersElement();
-        filtersElement.classList.remove("hidden");
-        parent.appendChild(filtersElement);
+        var filtersWidget = this._filtersControl.filtersWidget();
+        filtersWidget.forceShowFilterBar();
+        filtersWidget.show(parent);
     },
 
     /**

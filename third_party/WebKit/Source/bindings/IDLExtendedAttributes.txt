@@ -36,7 +36,7 @@
 ActiveDOMObject
 CachedAttribute=*
 CallWith=ExecutionContext|ScriptState|ScriptArguments|ActiveWindow|FirstWindow|ThisValue
-CheckSecurity=Frame|Node|Window
+CheckSecurity=Receiver|ReturnValue
 Clamp
 Conditional=*
 Constructor
@@ -57,7 +57,6 @@ Exposed=*
 FlexibleArrayBufferView
 GarbageCollected
 Global=|*
-Immutable
 ImplementedAs=*
 ImplementedInPrivateScript
 Iterable
@@ -98,7 +97,6 @@ SetterCallWith=ExecutionContext|ScriptArguments|ActiveWindow|FirstWindow
 TreatNullAs=NullString|EmptyString
 TreatReturnedNullStringAs=Null|Undefined
 TreatUndefinedAs=NullString
-TypeChecking=Interface
 URL
 Unforgeable
 Unscopeable

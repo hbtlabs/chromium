@@ -20,7 +20,9 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
+#include "base/win/metro.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
 #include "chrome/app/chrome_crash_reporter_client.h"
@@ -34,13 +36,15 @@
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/env_vars.h"
+#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/module_util_win.h"
 #include "chrome/installer/util/util_constants.h"
-#include "components/crash/content/app/breakpad_win.h"
 #include "components/crash/content/app/crash_reporter_client.h"
+#include "components/crash/content/app/crashpad.h"
+#include "components/startup_metric_utils/browser/pre_read_field_trial_utils_win.h"
 #include "content/public/app/sandbox_helper_win.h"
 #include "content/public/common/content_switches.h"
 #include "sandbox/win/src/sandbox.h"
@@ -51,19 +55,33 @@ typedef int (*DLL_MAIN)(HINSTANCE, sandbox::SandboxInterfaceInfo*);
 
 typedef void (*RelaunchChromeBrowserWithNewCommandLineIfNeededFunc)();
 
-base::LazyInstance<ChromeCrashReporterClient>::Leaky g_chrome_crash_client =
-    LAZY_INSTANCE_INITIALIZER;
-
 // Loads |module| after setting the CWD to |module|'s directory. Returns a
 // reference to the loaded module on success, or null on error.
 HMODULE LoadModuleWithDirectory(const base::FilePath& module, bool pre_read) {
   ::SetCurrentDirectoryW(module.DirName().value().c_str());
 
-  if (pre_read) {
+  // Get pre-read options from the PreRead field trial.
+  bool trial_should_pre_read = true;
+  bool trial_should_pre_read_high_priority = false;
+  startup_metric_utils::GetPreReadOptions(
+      BrowserDistribution::GetDistribution()->GetRegistryPath(),
+      &trial_should_pre_read, &trial_should_pre_read_high_priority);
+
+  if (pre_read && trial_should_pre_read) {
+    base::ThreadPriority previous_priority = base::ThreadPriority::NORMAL;
+    if (trial_should_pre_read_high_priority) {
+      previous_priority = base::PlatformThread::GetCurrentThreadPriority();
+      base::PlatformThread::SetCurrentThreadPriority(
+          base::ThreadPriority::DISPLAY);
+    }
+
     // We pre-read the binary to warm the memory caches (fewer hard faults to
     // page parts of the binary in).
     const size_t kStepSize = 1024 * 1024;
     PreReadFile(module, kStepSize);
+
+    if (trial_should_pre_read_high_priority)
+      base::PlatformThread::SetCurrentThreadPriority(previous_priority);
   }
 
   return ::LoadLibraryExW(module.value().c_str(), nullptr,
@@ -80,11 +98,6 @@ void ClearDidRun(const base::FilePath& dll_path) {
   GoogleUpdateSettings::UpdateDidRunState(false, system_level);
 }
 
-bool InMetroMode() {
-  return (wcsstr(
-      ::GetCommandLineW(), L" -ServerName:DefaultBrowserServer") != nullptr);
-}
-
 typedef int (*InitMetro)();
 
 }  // namespace
@@ -92,7 +105,7 @@ typedef int (*InitMetro)();
 //=============================================================================
 
 MainDllLoader::MainDllLoader()
-    : dll_(nullptr), metro_mode_(InMetroMode()) {
+    : dll_(nullptr), metro_mode_(base::win::IsMetroProcess()) {
 }
 
 MainDllLoader::~MainDllLoader() {
@@ -204,18 +217,6 @@ int MainDllLoader::Launch(HINSTANCE instance) {
   sandbox::SandboxInterfaceInfo sandbox_info = {0};
   content::InitializeSandboxInfo(&sandbox_info);
 
-  crash_reporter::SetCrashReporterClient(g_chrome_crash_client.Pointer());
-  bool exit_now = true;
-  if (process_type_.empty()) {
-    if (breakpad::ShowRestartDialogIfCrashed(&exit_now)) {
-      // We restarted because of a previous crash. Ask user if we should
-      // Relaunch. Only for the browser process. See crbug.com/132119.
-      if (exit_now)
-        return content::RESULT_CODE_NORMAL_EXIT;
-    }
-  }
-  breakpad::InitCrashReporter(process_type_);
-
   dll_ = Load(&version, &file);
   if (!dll_)
     return chrome::RESULT_CODE_MISSING_DATA;
@@ -228,12 +229,6 @@ int MainDllLoader::Launch(HINSTANCE instance) {
       reinterpret_cast<DLL_MAIN>(::GetProcAddress(dll_, "ChromeMain"));
   int rc = chrome_main(instance, &sandbox_info);
   rc = OnBeforeExit(rc, file);
-  // Sandboxed processes close some system DLL handles after lockdown so ignore
-  // EXCEPTION_INVALID_HANDLE generated on Windows 10 during shutdown of these
-  // processes.
-  // TODO(wfh): Check whether MS have fixed this in Win10 RTM. crbug.com/456193
-  if (base::win::GetVersion() >= base::win::VERSION_WIN10)
-    breakpad::ConsumeInvalidHandleExceptions();
   return rc;
 }
 
@@ -275,7 +270,13 @@ void ChromeDllLoader::OnBeforeLaunch(const std::string& process_type,
     RecordDidRun(dll_path);
 
     // Launch the watcher process if stats collection consent has been granted.
-    if (g_chrome_crash_client.Get().GetCollectStatsConsent()) {
+#if defined(GOOGLE_CHROME_BUILD)
+    const bool stats_collection_consent =
+        GoogleUpdateSettings::GetCollectStatsConsent();
+#else
+    const bool stats_collection_consent = false;
+#endif
+    if (stats_collection_consent) {
       base::FilePath exe_path;
       if (PathService::Get(base::FILE_EXE, &exe_path)) {
         chrome_watcher_client_.reset(new ChromeWatcherClient(

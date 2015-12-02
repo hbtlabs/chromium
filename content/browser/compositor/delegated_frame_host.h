@@ -126,13 +126,8 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // Public interface exposed to RenderWidgetHostView.
 
-  // Note: |satisfies_sequences| is cleared in calls to this function.
-  void SwapDelegatedFrame(
-      uint32 output_surface_id,
-      scoped_ptr<cc::DelegatedFrameData> frame_data,
-      float frame_device_scale_factor,
-      const std::vector<ui::LatencyInfo>& latency_info,
-      std::vector<uint32_t>* satisfies_sequences);
+  void SwapDelegatedFrame(uint32 output_surface_id,
+                          scoped_ptr<cc::CompositorFrame> frame);
   void ClearDelegatedFrame();
   void WasHidden();
   void WasShown(const ui::LatencyInfo& latency_info);
@@ -163,6 +158,14 @@ class CONTENT_EXPORT DelegatedFrameHost
   // a compositor Surface.
   cc::SurfaceId SurfaceIdAtPoint(const gfx::Point& point,
                                  gfx::Point* transformed_point);
+
+  // Given the SurfaceID of a Surface that is contained within this class'
+  // Surface, find the relative transform between the Surfaces and apply it
+  // to a point. If a Surface has not yet been created this returns the
+  // same point with no transform applied.
+  void TransformPointToLocalCoordSpace(const gfx::Point& point,
+                                       cc::SurfaceId original_surface,
+                                       gfx::Point* transformed_point);
 
   // Exposed for tests.
   cc::DelegatedFrameProvider* FrameProviderForTesting() const {

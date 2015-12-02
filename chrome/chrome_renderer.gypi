@@ -239,6 +239,7 @@
       'dependencies': [
         'common',
         'common_mojo_bindings',
+        'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
         '../third_party/re2/re2.gyp:re2',
@@ -390,16 +391,6 @@
           ],
           'include_dirs': [
             '<(DEPTH)/third_party/wtl/include',
-          ],
-          'conditions': [
-            ['win_use_allocator_shim==1', {
-              'dependencies': [
-                '<(allocator_target)',
-              ],
-              'export_dependent_settings': [
-                '<(allocator_target)',
-              ],
-            }],
           ],
         }],
       ],

@@ -91,9 +91,6 @@ source_set("test_support") {
 
   # New deps should go in the non-iOS section below.
   public_deps = [
-    "//content/test:test_support",
-  ]
-  deps = [
     "//base:prefs_test_support",
     "//base/test:test_support",
     "//chrome:resources",
@@ -121,6 +118,7 @@ source_set("test_support") {
     "//components/ui/zoom:test_support",
     "//components/update_client:test_support",
     "//content/public/app:both",
+    "//content/test:test_support",
     "//net",
     "//net:test_support",
     "//skia",
@@ -135,7 +133,7 @@ source_set("test_support") {
   ]
 
   if (!is_ios) {
-    deps += [
+    public_deps += [
       "//chrome/child",
       "//chrome/plugin",
       "//chrome/renderer",
@@ -165,7 +163,7 @@ source_set("test_support") {
   }
 
   if (is_android) {
-    deps -= [ "//ui/message_center:test_support" ]
+    public_deps -= [ "//ui/message_center:test_support" ]
     sources -= [
       "base/dialog_test_browser_window.cc",
       "base/dialog_test_browser_window.h",
@@ -175,37 +173,37 @@ source_set("test_support") {
   }
 
   if (enable_extensions) {
-    deps += [
+    public_deps += [
       "//chrome/common/extensions/api",
       "//extensions:test_support",
     ]
   }
 
   if (is_linux) {
-    deps += [ "//crypto:platform" ]
+    public_deps += [ "//crypto:platform" ]
   }
   if (is_mac) {
     sources += [
       "//chrome/app/chrome_crash_reporter_client.cc",
       "//chrome/app/chrome_crash_reporter_client_mac.mm",
     ]
-    deps += [
+    public_deps += [
       "//breakpad",
       "//components/crash/content/app",
       "//third_party/ocmock",
     ]
   }
   if (is_win) {
-    deps += [ "//third_party/wtl" ]
+    public_deps += [ "//third_party/wtl" ]
     if (use_aura) {
-      deps += [
+      public_deps += [
         "//win8:test_registrar_constants",
         "//win8:test_support_win8",
       ]
     }
   }
   if (is_chromeos) {
-    deps += [ "//components/ownership" ]
+    public_deps += [ "//components/ownership" ]
   }
 
   if (use_aura) {
@@ -216,18 +214,18 @@ source_set("test_support") {
   }
 
   if (enable_plugins && enable_pdf) {
-    deps += [ "//pdf" ]
+    public_deps += [ "//pdf" ]
   }
 
   if (use_ash) {
-    deps += [ "//ash:test_support" ]
+    public_deps += [ "//ash:test_support" ]
   }
   if (toolkit_views) {
-    deps += [ "//ui/views:test_support" ]
+    public_deps += [ "//ui/views:test_support" ]
   }
 
   if (enable_extensions) {
-    deps += [
+    public_deps += [
       "//chrome/common/extensions/api",
       "//extensions:test_support",
     ]
@@ -397,8 +395,10 @@ if (!is_android) {
             # suites, it seems like one or another starts timing out too.
             "../browser/ui/views/keyboard_access_browsertest.cc",
           ]
-          sources += [ "../browser/ui/libgtk2ui/select_file_dialog_interactive_uitest.cc" ]
-          configs += [ "//build/config/linux/gtk2:gtk2_internal_config" ]
+          if (!use_ozone) {
+            sources += [ "../browser/ui/libgtk2ui/select_file_dialog_interactive_uitest.cc" ]
+            configs += [ "//build/config/linux/gtk2:gtk2_internal_config" ]
+          }
         }
       }
       if (is_chromeos || !use_x11) {
@@ -725,6 +725,38 @@ if (!is_android) {
     ]
   }
 
+  # TODO(GYP): Delete this after we've converted everything to GN.
+  # The _run targets exist only for compatibility w/ GYP.
+  group("telemetry_gpu_new_test_run") {
+    testonly = true
+    deps = [
+      ":telemetry_gpu_new_test",
+    ]
+  }
+
+  group("telemetry_gpu_new_test") {
+    deps = [
+      "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+    ]
+
+    data = [
+      # For isolate contract.
+      "//testing/scripts/common.py",
+      "//testing/xvfb.py",
+      "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
+
+      "//content/test/gpu/",
+      "//content/test/data/gpu/",
+
+      # For GpuProcess.video
+      "//content/test/data/media/bear.ogv",
+
+      # For webgl_conformance
+      "//third_party/webgl/",
+      "//content/test/gpu/run_gpu_test.py",
+    ]
+  }
+
   group("telemetry_gpu_unittests_run") {
     testonly = true
     deps = [
@@ -852,8 +884,8 @@ if (!is_android) {
       "//components/autofill/content/browser/wallet:test_support",
       "//components/autofill/content/renderer:test_support",
       "//components/captive_portal:test_support",
-      "//components/dom_distiller/content:content_browser",
-      "//components/dom_distiller/content:content_renderer",
+      "//components/dom_distiller/content/browser",
+      "//components/dom_distiller/content/renderer",
       "//components/dom_distiller/core:test_support",
       "//components/guest_view/browser:test_support",
       "//components/resources",
@@ -952,7 +984,7 @@ if (!is_android) {
         ]
 
         data_deps += [
-          # "test/data/nacl:shared_test_files",  # TODO(GYP) bug 512902
+          "//chrome/test/data/nacl",
           "//ppapi/native_client:irt",
           "//ppapi:ppapi_nacl_tests_all",
 
@@ -1592,6 +1624,7 @@ test("unit_tests") {
       "//components/webdata_services:test_support",
       "//content/app/resources",
       "//device/bluetooth:mocks",
+      "//device/core:mocks",
       "//gpu:test_support",
       "//media:test_support",
 
@@ -1612,14 +1645,14 @@ test("unit_tests") {
             chrome_tests_unit_gypi_values.chrome_unit_tests_offline_pages_sources,
             ".",
             "//chrome")
+    deps += [
+      ":unit_tests_java",
+      "//v8:v8_external_startup_data_assets",
+    ]
     deps -= [ "//third_party/libaddressinput" ]
 
     android_manifest =
         "//chrome/test/android/unit_tests_apk/AndroidManifest.xml"
-    apk_deps = [
-      ":unit_tests_java",
-      "//v8:v8_external_startup_data_assets",
-    ]
     isolate_file = "../unit_tests.isolate"
 
     # Some android targets still depend on --gc-sections to link.
@@ -2103,12 +2136,14 @@ if (is_win || (is_linux && !is_chromeos)) {
     ]
     deps = [
       ":test_support",
+      "//base/allocator",
       "//base/test:run_all_unittests",
       "//base/test:test_support",
       "//breakpad:client",
       "//chrome/browser",
       "//chrome/child",
       "//components/crash/core/common",
+      "//components/flags_ui:switches",
     ]
     if (cld_version == 2) {
       # Use whatever CLD2 data access mode that the
@@ -2130,6 +2165,7 @@ if (is_win || (is_linux && !is_chromeos)) {
       ":test_support_ui",
       "//base",
       "//base:i18n",
+      "//base/allocator",
       "//base/test:test_support",
       "//chrome/browser",
       "//chrome/renderer",
@@ -2175,7 +2211,7 @@ source_set("test_support_unit") {
     "base/run_all_unittests.cc",
   ]
 
-  deps = [
+  public_deps = [
     ":test_support",
     "//base",
     "//chrome:resources",

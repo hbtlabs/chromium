@@ -56,6 +56,7 @@ test("ftp_directory_listing_fuzzer") {
   ]
   deps = [
     "//base",
+    "//base:i18n",
     "//net",
     "//testing/libfuzzer:libfuzzer_main",
   ]
@@ -164,6 +165,7 @@ test("url_parse_fuzzer") {
     "url_parse_fuzzer.cc",
   ]
   deps = [
+    "//base",
     "//base:i18n",
     "//testing/libfuzzer:libfuzzer_main",
     "//url:url",
@@ -192,5 +194,36 @@ test("v8_json_parser_fuzzer") {
   data = [
     "$root_out_dir/natives_blob.bin",
     "$root_out_dir/snapshot_blob.bin",
+  ]
+}
+
+test("base_json_reader_fuzzer") {
+  sources = [
+    "base_json_reader_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//testing/libfuzzer:libfuzzer_main",
+  ]
+}
+
+test("gfx_png_image_fuzzer") {
+  sources = [
+    "gfx_png_image_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//testing/libfuzzer:libfuzzer_main",
+    "//ui/gfx",
+  ]
+}
+
+test("zlib_uncompress_fuzzer") {
+  sources = [
+    "zlib_uncompress_fuzzer.cc",
+  ]
+  deps = [
+    "//testing/libfuzzer:libfuzzer_main",
+    "//third_party/zlib",
   ]
 }

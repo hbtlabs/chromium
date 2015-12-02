@@ -47,6 +47,9 @@ class IPC_EXPORT AttachmentBrokerPrivileged : public IPC::AttachmentBroker {
  protected:
   // Returns the sender whose peer's process id is |id|.
   // Returns nullptr if no sender is found.
+  // The lock returned by get_lock() must already be acquired before calling
+  // this method. The return value is only guaranteed to be valid while the lock
+  // is held.
   Sender* GetSenderWithProcessId(base::ProcessId id);
 
   // Errors that can be reported by subclasses.
@@ -79,6 +82,9 @@ class IPC_EXPORT AttachmentBrokerPrivileged : public IPC::AttachmentBroker {
     ERROR_DECREASE_REF = 10,
     // Couldn't extract a right from the source.
     ERROR_EXTRACT_SOURCE_RIGHT = 11,
+    // The broker did not have a channel of communication with the source
+    // process.
+    ERROR_SOURCE_NOT_FOUND = 12,
     ERROR_MAX
   };
 

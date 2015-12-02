@@ -72,6 +72,7 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_mac.h"
 
 namespace {
 
@@ -198,7 +199,7 @@ NSTextView* BuildFixedWidthTextViewWithLink(
 // Returns the native dialog background color.
 NSColor* GetDialogBackgroundColor() {
   return gfx::SkColorToCalibratedNSColor(
-      ui::NativeTheme::instance()->GetSystemColor(
+      ui::NativeThemeMac::instance()->GetSystemColor(
           ui::NativeTheme::kColorId_DialogBackground));
 }
 
@@ -793,12 +794,10 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     backgroundColor:(NSColor*)backgroundColor {
   if ((self = [super initWithFrame:frameRect])) {
     backgroundColor_.reset([backgroundColor retain]);
-    // Use a color from the common theme, since this button is not trying to
-    // look like a native control.
-    SkColor hoverColor;
-    bool found = ui::CommonThemeGetSystemColor(
-        ui::NativeTheme::kColorId_ButtonHoverBackgroundColor, &hoverColor);
-    DCHECK(found);
+    // Use a color from Aura, since this button is not trying to look like a
+    // native control.
+    SkColor hoverColor = ui::GetAuraColor(
+        ui::NativeTheme::kColorId_ButtonHoverBackgroundColor, nullptr);
     hoverColor_.reset([gfx::SkColorToSRGBNSColor(hoverColor) retain]);
 
     [self setBordered:NO];

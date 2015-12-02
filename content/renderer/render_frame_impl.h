@@ -33,6 +33,7 @@
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
+#include "third_party/WebKit/public/web/WebFrameLoadType.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
@@ -117,6 +118,7 @@ class PushMessagingDispatcher;
 class RendererAccessibility;
 class RendererCdmManager;
 class RendererMediaPlayerManager;
+class RendererMediaSessionManager;
 class RendererPpapiHost;
 class RenderFrameObserver;
 class RenderViewImpl;
@@ -519,6 +521,16 @@ class CONTENT_EXPORT RenderFrameImpl
   void didDisplayInsecureContent() override;
   void didRunInsecureContent(const blink::WebSecurityOrigin& origin,
                              const blink::WebURL& target) override;
+  void didDisplayContentWithCertificateErrors(
+      const blink::WebURL& url,
+      const blink::WebCString& security_info,
+      const blink::WebURL& main_resource_url,
+      const blink::WebCString& main_resource_security_info) override;
+  void didRunContentWithCertificateErrors(
+      const blink::WebURL& url,
+      const blink::WebCString& security_info,
+      const blink::WebURL& main_resource_url,
+      const blink::WebCString& main_resource_security_info) override;
   void didChangePerformanceTiming() override;
   void didAbortLoading(blink::WebLocalFrame* frame) override;
   void didCreateScriptContext(blink::WebLocalFrame* frame,
@@ -615,6 +627,9 @@ class CONTENT_EXPORT RenderFrameImpl
   // callback called on |caller_task_runner|.
   scoped_ptr<media::MediaPermission> CreateMediaPermissionProxy(
       scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner);
+
+  // Sends the current frame's navigation state to the browser.
+  void SendUpdateState();
 
  protected:
   explicit RenderFrameImpl(const CreateParams& params);
@@ -840,10 +855,8 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Loads a data url.
   void LoadDataURL(const CommonNavigationParams& params,
-                   blink::WebFrame* frame);
-
-  // Sends the current frame's navigation state to the browser.
-  void SendUpdateState();
+                   blink::WebFrame* frame,
+                   blink::WebFrameLoadType load_type);
 
   // Sends a proper FrameHostMsg_DidFailProvisionalLoadWithError_Params IPC for
   // the failed request |request|.
@@ -876,6 +889,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const media::WebMediaPlayerParams& params);
 
   RendererMediaPlayerManager* GetMediaPlayerManager();
+
+  RendererMediaSessionManager* GetMediaSessionManager();
 #endif
 
   bool AreSecureCodecsSupported();
@@ -1013,10 +1028,12 @@ class CONTENT_EXPORT RenderFrameImpl
   MidiDispatcher* midi_dispatcher_;
 
 #if defined(OS_ANDROID)
-  // Manages all media players in this render frame for communicating with the
-  // real media player in the browser process. It's okay to use a raw pointer
-  // since it's a RenderFrameObserver.
+  // Manages all media players and sessions in this render frame for
+  // communicating with the real media player and sessions in the
+  // browser process. It's okay to use raw pointers since they're both
+  // RenderFrameObservers.
   RendererMediaPlayerManager* media_player_manager_;
+  RendererMediaSessionManager* media_session_manager_;
 #endif
 
 #if defined(ENABLE_BROWSER_CDMS)

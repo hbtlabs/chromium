@@ -19,14 +19,22 @@ class Shell;
 
 namespace mus {
 class Window;
+namespace mojom {
+class WindowTreeHost;
 }
+}
+
+namespace mash {
+namespace wm {
 
 // Provides the non-client frame for mus Windows.
 class NonClientFrameController : public views::WidgetDelegateView,
                                  public mus::WindowObserver {
  public:
   // NonClientFrameController deletes itself when |window| is destroyed.
-  NonClientFrameController(mojo::Shell* shell, mus::Window* window);
+  NonClientFrameController(mojo::Shell* shell,
+                           mus::Window* window,
+                           mus::mojom::WindowTreeHost* window_tree_host);
 
   // Returns the preferred client area insets.
   static gfx::Insets GetPreferredClientAreaInsets();
@@ -54,7 +62,12 @@ class NonClientFrameController : public views::WidgetDelegateView,
   // is null.
   mus::Window* window_;
 
+  mus::mojom::WindowTreeHost* mus_window_tree_host_;
+
   DISALLOW_COPY_AND_ASSIGN(NonClientFrameController);
 };
+
+}  // namespace wm
+}  // namespace mash
 
 #endif  // MASH_WM_NON_CLIENT_FRAME_CONTROLLER_H_

@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.widget.EmptyAlertEditText;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * The activity that enables the user to modify the title, url and parent folder of a bookmark.
@@ -39,7 +40,7 @@ public class EnhancedBookmarkEditActivity extends EnhancedBookmarkActivityBase {
     public static final String INTENT_BOOKMARK_ID = "EnhancedBookmarkEditActivity.BookmarkId";
     public static final String INTENT_WEB_CONTENTS = "EnhancedBookmarkEditActivity.WebContents";
 
-    private static final String TAG = "cr.BookmarkEdit";
+    private static final String TAG = "BookmarkEdit";
 
     private enum OfflineButtonType {
         NONE,
@@ -311,9 +312,16 @@ public class EnhancedBookmarkEditActivity extends EnhancedBookmarkActivityBase {
     }
 
     private void openBookmark() {
-        Intent intent = new Intent();
-        intent.putExtra(EnhancedBookmarkActivity.INTENT_VISIT_BOOKMARK_ID, mBookmarkId.toString());
-        setResult(RESULT_OK, intent);
+        // TODO(kkimlabs): Refactor this out to handle the intent in ChromeActivity.
+        if (DeviceFormFactor.isTablet(this)) {
+            EnhancedBookmarkUtils.openBookmark(
+                    mEnhancedBookmarksModel, this, mBookmarkId, LaunchLocation.BOOKMARK_EDITOR);
+        } else {
+            Intent intent = new Intent();
+            intent.putExtra(
+                    EnhancedBookmarkActivity.INTENT_VISIT_BOOKMARK_ID, mBookmarkId.toString());
+            setResult(RESULT_OK, intent);
+        }
         finish();
     }
 

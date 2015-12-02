@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "base/android/context_utils.h"
 #include "base/message_loop/message_loop.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/ExternalEstimateProviderAndroid_jni.h"
@@ -107,7 +108,9 @@ void ExternalEstimateProviderAndroid::OnConnectionTypeChanged(
 }
 
 void ExternalEstimateProviderAndroid::
-    NotifyExternalEstimateProviderAndroidUpdate(JNIEnv* env, jobject obj) {
+    NotifyExternalEstimateProviderAndroidUpdate(
+        JNIEnv* env,
+        const JavaParamRef<jobject>& obj) {
   if (!task_runner_)
     return;
   task_runner_->PostTask(

@@ -14,7 +14,6 @@
 #include "base/atomicops.h"
 #include "base/time/time.h"
 #include "base/trace_event/common/trace_event_common.h"
-#include "base/trace_event/trace_event_memory.h"
 #include "base/trace_event/trace_event_system_stats_monitor.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
@@ -299,6 +298,23 @@ TRACE_EVENT_API_CLASS_EXPORT extern \
             trace_event_internal::kNoId, ##__VA_ARGS__); \
       } \
     } while (0)
+
+// Implementation detail: internal macro to create static category and add
+// event if the category is enabled.
+#define INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(phase, category_group, name, \
+                                                timestamp, flags, ...)       \
+  do {                                                                       \
+    INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                  \
+    if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) {  \
+      trace_event_internal::AddTraceEventWithThreadIdAndTimestamp(           \
+          phase, INTERNAL_TRACE_EVENT_UID(category_group_enabled), name,     \
+          trace_event_internal::kNoId, trace_event_internal::kNoId,          \
+          TRACE_EVENT_API_CURRENT_THREAD_ID,                                 \
+          base::TimeTicks::FromInternalValue(timestamp),                     \
+          flags | TRACE_EVENT_FLAG_EXPLICIT_TIMESTAMP,                       \
+          trace_event_internal::kNoId, ##__VA_ARGS__);                       \
+    }                                                                        \
+  } while (0)
 
 // Implementation detail: internal macro to create static category and add
 // event if the category is enabled.

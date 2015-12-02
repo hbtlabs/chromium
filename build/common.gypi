@@ -88,10 +88,11 @@
           # Enable Wayland display server support.
           'enable_wayland_server%' : 0,
 
-          # Build against pre-built sysroot image on linux.  By default
-          # the sysroot image is only used for Official builds or when cross
-          # compiling.
-          'use_sysroot%': 0,
+          # By default we build against a stable sysroot image to avoid
+          # depending on the packages installed on the local machine. Set this
+          # to 0 to build against locally installed headers and libraries (e.g.
+          # if packaging for a linux distro)
+          'use_sysroot%': 1,
 
           # Override buildtype to select the desired build flavor.
           # Dev - everyday build for development/testing
@@ -294,8 +295,8 @@
             'mips_arch_variant%': 'r1',
           }],
 
-          # The system root for cross-compiles. Default: none.
-          ['OS=="linux" and chromeos==0 and ((branding=="Chrome" and buildtype=="Official") or target_arch=="arm" or target_arch=="mipsel" or use_sysroot==1)', {
+          # The system root for linux builds.
+          ['OS=="linux" and chromeos==0 and use_sysroot==1', {
             # sysroot needs to be an absolute path otherwise it generates
             # incorrect results when passed to pkg-config
             'conditions': [
@@ -537,14 +538,8 @@
       # Whether one-click signin is enabled or not.
       'enable_one_click_signin%': 0,
 
-      # Whether to back up data before sync.
-      'enable_pre_sync_backup%': 0,
-
       # Enable Chrome browser extensions
       'enable_extensions%': 1,
-
-      # Enable Google Now.
-      'enable_google_now%': 1,
 
       # Enable basic printing support and UI.
       'enable_basic_printing%': 1,
@@ -662,6 +657,10 @@
       # Automatically select platforms under ozone. Turn this off to
       # build only explicitly selected platforms.
       'ozone_auto_platforms%': 1,
+
+      # Disable the display for a chromecast build. Set to 1 perform an audio-
+      # only build.
+      'disable_display%': 0,
 
       # If this is set clang is used as host compiler, but not as target
       # compiler. Always do this by default.
@@ -810,12 +809,10 @@
 
         ['OS=="win" or OS=="mac" or (OS=="linux" and chromeos==0)', {
           'enable_one_click_signin%': 1,
-          'enable_pre_sync_backup%': 1,
         }],
 
         ['OS=="android"', {
           'enable_extensions%': 0,
-          'enable_google_now%': 0,
           'cld2_table_size%': 0,
           'enable_themes%': 0,
           'remoting%': 0,
@@ -860,9 +857,9 @@
         }],
 
         ['OS=="ios"', {
+          'configuration_policy%': 0,
           'disable_ftp_support%': 1,
           'enable_extensions%': 0,
-          'enable_google_now%': 0,
           'cld2_table_size%': 0,
           'enable_basic_printing%': 0,
           'enable_print_preview%': 0,
@@ -1162,7 +1159,6 @@
     'use_titlecase_in_grd%': '<(use_titlecase_in_grd)',
     'remoting%': '<(remoting)',
     'enable_one_click_signin%': '<(enable_one_click_signin)',
-    'enable_pre_sync_backup%': '<(enable_pre_sync_backup)',
     'enable_media_router%': '<(enable_media_router)',
     'enable_webrtc%': '<(enable_webrtc)',
     'chromium_win_pch%': '<(chromium_win_pch)',
@@ -1216,7 +1212,6 @@
     'enable_print_preview%': '<(enable_print_preview)',
     'enable_spellcheck%': '<(enable_spellcheck)',
     'use_browser_spellchecker%': '<(use_browser_spellchecker)',
-    'enable_google_now%': '<(enable_google_now)',
     'cld_version%': '<(cld_version)',
     'cld2_table_size%': '<(cld2_table_size)',
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
@@ -1516,9 +1511,12 @@
     # Be sure to synchronize with build/module_args/v8.gni
 
     'v8_extra_library_files': [
+      '../third_party/WebKit/Source/core/streams/ReadableStreamTempStub.js',
     ],
     'v8_experimental_extra_library_files': [
       '../third_party/WebKit/Source/core/streams/ByteLengthQueuingStrategy.js',
+      '../third_party/WebKit/Source/core/streams/CountQueuingStrategy.js',
+      '../third_party/WebKit/Source/core/streams/ReadableStream.js',
     ],
 
     # Use brlapi from brltty for braille display support.
@@ -1557,9 +1555,6 @@
     # for robust login screen decoding.
     'libjpeg_ijg_gyp_path': '<(DEPTH)/third_party/libjpeg/libjpeg.gyp',
     'libjpeg_turbo_gyp_path': '<(DEPTH)/third_party/libjpeg_turbo/libjpeg.gyp',
-
-    # ARC instance disabled by default.
-    'enable_arc%': 0,
 
     'conditions': [
       ['buildtype=="Official"', {
@@ -1886,9 +1881,6 @@
           }],
         ],
       }],
-      ['chromecast==1 and OS!="android"', {
-        'ozone_platform_cast%': 1
-      }],
       ['OS=="linux"', {
         'clang%': 1,
       }],  # OS=="mac"
@@ -2178,9 +2170,6 @@
       ['enable_settings_app==1', {
         'grit_defines': ['-D', 'enable_settings_app'],
       }],
-      ['enable_google_now==1', {
-        'grit_defines': ['-D', 'enable_google_now'],
-      }],
       ['use_concatenated_impulse_responses==1', {
         'grit_defines': ['-D', 'use_concatenated_impulse_responses'],
       }],
@@ -2387,12 +2376,28 @@
       ['use_ozone==1 and ozone_auto_platforms==1', {
         # Use headless as the default platform.
         'ozone_platform%': 'headless',
-
-        # Build all platforms whose deps are in install-build-deps.sh.
-        # Only these platforms will be compile tested by buildbots.
-        'ozone_platform_gbm%': 1,
         'ozone_platform_headless%': 1,
-        'ozone_platform_egltest%': 1,
+        'conditions': [
+          ['chromecast==1', {
+            'conditions': [
+              ['disable_display==0', {
+                # Enable the Cast ozone platform on all A/V Cast builds.
+                'ozone_platform_cast%': 1,
+                'conditions': [
+                  ['OS=="linux" and target_arch!="arm"', {
+                    'ozone_platform_egltest%': 1,
+                    'ozone_platform_ozonex%': 1,
+                  }],
+                ],
+              }],
+            ],
+          }, {
+            # Build all platforms whose deps are in install-build-deps.sh.
+            # Only these platforms will be compile tested by buildbots.
+            'ozone_platform_gbm%': 1,
+            'ozone_platform_egltest%': 1,
+          }],
+        ],
       }],
 
       ['desktop_linux==1 and use_aura==1 and use_x11==1', {
@@ -2725,9 +2730,6 @@
       ['enable_one_click_signin==1', {
         'defines': ['ENABLE_ONE_CLICK_SIGNIN'],
       }],
-      ['enable_pre_sync_backup==1', {
-        'defines': ['ENABLE_PRE_SYNC_BACKUP'],
-      }],
       ['image_loader_extension==1', {
         'defines': ['IMAGE_LOADER_EXTENSION=1'],
       }],
@@ -2993,9 +2995,6 @@
       ['enable_background==1', {
         'defines': ['ENABLE_BACKGROUND=1'],
       }],
-      ['enable_google_now==1', {
-        'defines': ['ENABLE_GOOGLE_NOW=1'],
-      }],
       ['enable_basic_printing==1 or enable_print_preview==1', {
         # Convenience define for ENABLE_BASIC_PRINTING || ENABLE_PRINT_PREVIEW.
         'defines': ['ENABLE_PRINTING=1'],
@@ -3100,9 +3099,6 @@
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
-      }],
-      ['<(enable_arc)==1', {
-        'defines': ['ENABLE_ARC=1'],
       }],
       ['chromium_code==0', {
         'variables': {
@@ -4558,9 +4554,13 @@
                   '-fsanitize=memory',
                   '-fsanitize-memory-track-origins=<(msan_track_origins)',
                   '-fsanitize-blacklist=<(msan_blacklist)',
+                  # TODO(eugenis): Remove when msan migrates to new ABI (crbug.com/560589).
+                  '-fPIC',
                 ],
                 'ldflags': [
                   '-fsanitize=memory',
+                  # TODO(eugenis): Remove when msan migrates to new ABI (crbug.com/560589).
+                  '-pie',
                 ],
                 'defines': [
                   'MEMORY_SANITIZER',
@@ -4586,8 +4586,16 @@
           ['order_profiling!=0 and OS=="android"', {
             'target_conditions' : [
               ['_toolset=="target"', {
+                'cflags': ['-finstrument-functions'],
+                'defines': ['CYGPROFILE_INSTRUMENTATION'],
+              }],
+            ],
+          }],
+          # Clang doesn't understand -finstrument-functions-exclude-file-list=.
+          ['order_profiling!=0 and OS=="android" and clang==0', {
+            'target_conditions' : [
+              ['_toolset=="target"', {
                 'cflags': [
-                  '-finstrument-functions',
                   # Allow mmx intrinsics to inline, so that the
                   # compiler can expand the intrinsics.
                   '-finstrument-functions-exclude-file-list=mmintrin.h',
@@ -4595,7 +4603,6 @@
                   # "third_party/android_tools/ndk/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/../lib/gcc/arm-linux-androideabi/4.6/include/arm_neon.h:3426:3: error: argument must be a constant"
                   '-finstrument-functions-exclude-file-list=arm_neon.h',
                 ],
-                'defines': ['CYGPROFILE_INSTRUMENTATION'],
               }],
             ],
           }],

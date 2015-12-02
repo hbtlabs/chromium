@@ -30,6 +30,20 @@ static const size_t kDefaultMaxPacketsPerFecGroup = 10;
 // Lowest max packets in an FEC group.
 static const size_t kLowestMaxPacketsPerFecGroup = 2;
 
+// We want to put some space between a protected packet and the FEC packet to
+// avoid losing them both within the same loss episode. On the other hand, we
+// expect to be able to recover from any loss in about an RTT. We resolve this
+// tradeoff by sending an FEC packet atmost half an RTT, or equivalently, half
+// the max number of in-flight packets,  the first protected packet. Since we
+// don't want to delay an FEC packet past half an RTT, we set the max FEC group
+// size to be half the current congestion window.
+const float kMaxPacketsInFlightMultiplierForFecGroupSize = 0.5;
+const float kRttMultiplierForFecTimeout = 0.5;
+
+// Minimum timeout for FEC alarm, set to half the minimum Tail Loss Probe
+// timeout of 10ms.
+const int64 kMinFecTimeoutMs = 5u;
+
 }  // namespace
 
 // A QuicRandom wrapper that gets a bucket of entropy and distributes it
@@ -69,13 +83,16 @@ class QuicRandomBoolSource {
 
 QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
                                      QuicFramer* framer,
-                                     QuicRandom* random_generator)
-    : connection_id_(connection_id),
+                                     QuicRandom* random_generator,
+                                     DelegateInterface* delegate)
+    : delegate_(delegate),
+      connection_id_(connection_id),
       encryption_level_(ENCRYPTION_NONE),
       framer_(framer),
       random_bool_source_(new QuicRandomBoolSource(random_generator)),
       packet_number_(0),
       should_fec_protect_(false),
+      fec_protect_(false),
       send_version_in_packet_(framer->perspective() == Perspective::IS_CLIENT),
       max_packet_length_(0),
       max_packets_per_fec_group_(kDefaultMaxPacketsPerFecGroup),
@@ -83,7 +100,10 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
       next_packet_number_length_(PACKET_1BYTE_PACKET_NUMBER),
       packet_number_length_(next_packet_number_length_),
       packet_size_(0),
-      needs_padding_(false) {
+      needs_padding_(false),
+      fec_send_policy_(FEC_ANY_TRIGGER),
+      fec_timeout_(QuicTime::Delta::Zero()),
+      rtt_multiplier_for_fec_timeout_(kRttMultiplierForFecTimeout) {
   SetMaxPacketLength(kDefaultMaxPacketSize);
 }
 
@@ -129,13 +149,9 @@ void QuicPacketCreator::set_max_packets_per_fec_group(
   DCHECK_LT(0u, max_packets_per_fec_group_);
 }
 
-QuicFecGroupNumber QuicPacketCreator::fec_group_number() {
-  return fec_group_ != nullptr ? fec_group_->FecGroupNumber() : 0;
-}
-
 bool QuicPacketCreator::ShouldSendFec(bool force_close) const {
-  DCHECK(!HasPendingFrames());
-  return fec_group_.get() != nullptr && fec_group_->NumReceivedPackets() > 0 &&
+  return !HasPendingFrames() && fec_group_.get() != nullptr &&
+         fec_group_->NumReceivedPackets() > 0 &&
          (force_close ||
           fec_group_->NumReceivedPackets() >= max_packets_per_fec_group_);
 }
@@ -154,7 +170,7 @@ bool QuicPacketCreator::IsFecGroupOpen() const {
 }
 
 void QuicPacketCreator::StartFecProtectingPackets() {
-  if (!IsFecEnabled()) {
+  if (max_packets_per_fec_group_ == 0) {
     LOG(DFATAL) << "Cannot start FEC protection when FEC is not enabled.";
     return;
   }
@@ -167,8 +183,8 @@ void QuicPacketCreator::StartFecProtectingPackets() {
     LOG(DFATAL) << "Cannot start FEC protection with pending frames.";
     return;
   }
-  DCHECK(!should_fec_protect_);
-  should_fec_protect_ = true;
+  DCHECK(!fec_protect_);
+  fec_protect_ = true;
 }
 
 void QuicPacketCreator::StopFecProtectingPackets() {
@@ -176,16 +192,8 @@ void QuicPacketCreator::StopFecProtectingPackets() {
     LOG(DFATAL) << "Cannot stop FEC protection with open FEC group.";
     return;
   }
-  DCHECK(should_fec_protect_);
-  should_fec_protect_ = false;
-}
-
-bool QuicPacketCreator::IsFecProtected() const {
-  return should_fec_protect_;
-}
-
-bool QuicPacketCreator::IsFecEnabled() const {
-  return max_packets_per_fec_group_ > 0;
+  DCHECK(fec_protect_);
+  fec_protect_ = false;
 }
 
 InFecGroup QuicPacketCreator::MaybeUpdateLengthsAndStartFec() {
@@ -202,7 +210,7 @@ InFecGroup QuicPacketCreator::MaybeUpdateLengthsAndStartFec() {
   // Update packet number length only on packet and FEC group boundaries.
   packet_number_length_ = next_packet_number_length_;
 
-  if (!should_fec_protect_) {
+  if (!fec_protect_) {
     return NOT_IN_FEC_GROUP;
   }
   // Start a new FEC group since protection is on. Set the fec group number to
@@ -237,15 +245,36 @@ void QuicPacketCreator::UpdatePacketNumberLength(
       QuicFramer::GetMinSequenceNumberLength(delta * 4);
 }
 
+bool QuicPacketCreator::ConsumeData(QuicStreamId id,
+                                    QuicIOVector iov,
+                                    size_t iov_offset,
+                                    QuicStreamOffset offset,
+                                    bool fin,
+                                    bool needs_padding,
+                                    QuicFrame* frame) {
+  if (!HasRoomForStreamFrame(id, offset)) {
+    Flush();
+    return false;
+  }
+
+  UniqueStreamBuffer buffer;
+  CreateStreamFrame(id, iov, iov_offset, offset, fin, frame, &buffer);
+
+  bool success = AddFrame(*frame,
+                          /*save_retransmittable_frames=*/true, needs_padding,
+                          std::move(buffer));
+  DCHECK(success);
+  return true;
+}
+
 bool QuicPacketCreator::HasRoomForStreamFrame(QuicStreamId id,
                                               QuicStreamOffset offset) const {
   // TODO(jri): This is a simple safe decision for now, but make
   // is_in_fec_group a parameter. Same as with all public methods in
   // QuicPacketCreator.
   return BytesFree() >
-      QuicFramer::GetMinStreamFrameSize(id, offset, true,
-                                        should_fec_protect_ ? IN_FEC_GROUP :
-                                                              NOT_IN_FEC_GROUP);
+         QuicFramer::GetMinStreamFrameSize(
+             id, offset, true, fec_protect_ ? IN_FEC_GROUP : NOT_IN_FEC_GROUP);
 }
 
 // static
@@ -256,7 +285,8 @@ size_t QuicPacketCreator::StreamFramePacketOverhead(
     QuicStreamOffset offset,
     InFecGroup is_in_fec_group) {
   return GetPacketHeaderSize(connection_id_length, include_version,
-                             packet_number_length, is_in_fec_group) +
+                             /*include_path_id=*/false, packet_number_length,
+                             is_in_fec_group) +
          // Assumes this is a stream with a single lone packet.
          QuicFramer::GetMinStreamFrameSize(1u, offset, true, is_in_fec_group);
 }
@@ -374,7 +404,7 @@ SerializedPacket QuicPacketCreator::ReserializeAllFrames(
   DCHECK(fec_group_.get() == nullptr);
   const QuicPacketNumberLength saved_length = packet_number_length_;
   const QuicPacketNumberLength saved_next_length = next_packet_number_length_;
-  const bool saved_should_fec_protect = should_fec_protect_;
+  const bool saved_should_fec_protect = fec_protect_;
   const bool needs_padding = needs_padding_;
   const EncryptionLevel default_encryption_level = encryption_level_;
 
@@ -382,7 +412,7 @@ SerializedPacket QuicPacketCreator::ReserializeAllFrames(
   // and change the encryption level.
   packet_number_length_ = original_length;
   next_packet_number_length_ = original_length;
-  should_fec_protect_ = false;
+  fec_protect_ = false;
   encryption_level_ = frames.encryption_level();
   needs_padding_ = frames.needs_padding();
 
@@ -391,7 +421,7 @@ SerializedPacket QuicPacketCreator::ReserializeAllFrames(
       SerializeAllFrames(frames.frames(), buffer, buffer_len);
   packet_number_length_ = saved_length;
   next_packet_number_length_ = saved_next_length;
-  should_fec_protect_ = saved_should_fec_protect;
+  fec_protect_ = saved_should_fec_protect;
   needs_padding_ = needs_padding;
   encryption_level_ = default_encryption_level;
 
@@ -413,6 +443,19 @@ SerializedPacket QuicPacketCreator::SerializeAllFrames(const QuicFrames& frames,
   return packet;
 }
 
+void QuicPacketCreator::Flush() {
+  if (!HasPendingFrames()) {
+    return;
+  }
+
+  // TODO(rtenneti): Change the default 64 alignas value (used the default
+  // value from CACHELINE_SIZE).
+  ALIGNAS(64) char seralized_packet_buffer[kMaxPacketSize];
+  SerializedPacket serialized_packet =
+      SerializePacket(seralized_packet_buffer, kMaxPacketSize);
+  delegate_->OnSerializedPacket(&serialized_packet);
+}
+
 bool QuicPacketCreator::HasPendingFrames() const {
   return !queued_frames_.empty();
 }
@@ -424,7 +467,7 @@ bool QuicPacketCreator::HasPendingRetransmittableFrames() const {
 
 size_t QuicPacketCreator::ExpansionOnNewFrame() const {
   // If packet is FEC protected, there's no expansion.
-  if (should_fec_protect_) {
+  if (fec_protect_) {
       return 0;
   }
   // If the last frame in the packet is a stream frame, then it will expand to
@@ -449,8 +492,8 @@ size_t QuicPacketCreator::PacketSize() const {
     packet_number_length_ = next_packet_number_length_;
   }
   packet_size_ = GetPacketHeaderSize(
-      connection_id_length_, send_version_in_packet_, packet_number_length_,
-      should_fec_protect_ ? IN_FEC_GROUP : NOT_IN_FEC_GROUP);
+      connection_id_length_, send_version_in_packet_, /*include_path_id=*/false,
+      packet_number_length_, fec_protect_ ? IN_FEC_GROUP : NOT_IN_FEC_GROUP);
   return packet_size_;
 }
 
@@ -485,7 +528,8 @@ SerializedPacket QuicPacketCreator::SerializePacket(
   }
   QuicPacketHeader header;
   // FillPacketHeader increments packet_number_.
-  FillPacketHeader(fec_group_number(), false, &header);
+  FillPacketHeader(fec_group_ != nullptr ? fec_group_->FecGroupNumber() : 0,
+                   false, &header);
 
   MaybeAddPadding();
 
@@ -649,6 +693,8 @@ bool QuicPacketCreator::AddFrame(const QuicFrame& frame,
       frame, BytesFree(), queued_frames_.empty(), true, is_in_fec_group,
       packet_number_length_);
   if (frame_len == 0) {
+    // Current open packet is full.
+    Flush();
     return false;
   }
   DCHECK_LT(0u, packet_size_);
@@ -684,6 +730,63 @@ void QuicPacketCreator::MaybeAddPadding() {
 
   bool success = AddFrame(QuicFrame(QuicPaddingFrame()), false, false, nullptr);
   DCHECK(success);
+}
+
+void QuicPacketCreator::MaybeStartFecProtection() {
+  if (max_packets_per_fec_group_ == 0 || fec_protect_) {
+    // Do not start FEC protection when FEC protection is not enabled or FEC
+    // protection is already on.
+    return;
+  }
+  DVLOG(1) << "Turning FEC protection ON";
+  // Flush current open packet.
+  Flush();
+
+  StartFecProtectingPackets();
+  DCHECK(fec_protect_);
+}
+
+void QuicPacketCreator::MaybeSendFecPacketAndCloseGroup(bool force_send_fec,
+                                                        bool is_fec_timeout) {
+  if (ShouldSendFec(force_send_fec)) {
+    if (fec_send_policy_ == FEC_ALARM_TRIGGER && !is_fec_timeout) {
+      ResetFecGroup();
+      delegate_->OnResetFecGroup();
+    } else {
+      // TODO(zhongyi): Change the default 64 alignas value (used the default
+      // value from CACHELINE_SIZE).
+      ALIGNAS(64) char seralized_fec_buffer[kMaxPacketSize];
+      SerializedPacket serialized_fec =
+          SerializeFec(seralized_fec_buffer, kMaxPacketSize);
+      delegate_->OnSerializedPacket(&serialized_fec);
+    }
+  }
+
+  if (!should_fec_protect_ && fec_protect_ && !IsFecGroupOpen()) {
+    StopFecProtectingPackets();
+  }
+}
+
+QuicTime::Delta QuicPacketCreator::GetFecTimeout(
+    QuicPacketNumber packet_number) {
+  // Do not set up FEC alarm for |packet_number| it is not the first packet in
+  // the current group.
+  if (fec_group_.get() != nullptr &&
+      (packet_number == fec_group_->FecGroupNumber())) {
+    return QuicTime::Delta::Max(
+        fec_timeout_, QuicTime::Delta::FromMilliseconds(kMinFecTimeoutMs));
+  }
+  return QuicTime::Delta::Infinite();
+}
+
+void QuicPacketCreator::OnCongestionWindowChange(
+    QuicPacketCount max_packets_in_flight) {
+  set_max_packets_per_fec_group(static_cast<size_t>(
+      kMaxPacketsInFlightMultiplierForFecGroupSize * max_packets_in_flight));
+}
+
+void QuicPacketCreator::OnRttChange(QuicTime::Delta rtt) {
+  fec_timeout_ = rtt.Multiply(rtt_multiplier_for_fec_timeout_);
 }
 
 }  // namespace net

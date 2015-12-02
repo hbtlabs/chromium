@@ -39,6 +39,7 @@ class NotificationDispatcher;
 class PermissionDispatcher;
 class PushDispatcher;
 class ThreadSafeSender;
+class TraceLogObserverAdapter;
 class WebCryptoImpl;
 class WebGeofencingProviderImpl;
 class WebMemoryDumpProviderAdapter;
@@ -77,9 +78,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
   bool isLowEndDeviceMode() override;
   size_t numberOfProcessors() override;
 
-  bool processMemorySizesInBytes(size_t* private_bytes,
-                                 size_t* shared_bytes) override;
-  bool memoryAllocatorWasteInBytes(size_t* size) override;
   blink::WebDiscardableMemory* allocateAndLockDiscardableMemory(
       size_t bytes) override;
   size_t maxDecodedImageBytes() override;
@@ -151,6 +149,10 @@ class CONTENT_EXPORT BlinkPlatformImpl
   blink::WebProcessMemoryDump* createProcessMemoryDump() override;
   blink::Platform::WebMemoryAllocatorDumpGuid createWebMemoryAllocatorDumpGuid(
       const blink::WebString& guidStr) override;
+  void addTraceLogEnabledStateObserver(
+      blink::Platform::TraceLogEnabledStateObserver* observer) override;
+  void removeTraceLogEnabledStateObserver(
+      blink::Platform::TraceLogEnabledStateObserver* observer) override;
 
   blink::WebData loadResource(const char* name) override;
   blink::WebString queryLocalizedString(
@@ -205,6 +207,9 @@ class CONTENT_EXPORT BlinkPlatformImpl
   base::ScopedPtrHashMap<blink::WebMemoryDumpProvider*,
                          scoped_ptr<WebMemoryDumpProviderAdapter>>
       memory_dump_providers_;
+  base::ScopedPtrHashMap<blink::Platform::TraceLogEnabledStateObserver*,
+                         scoped_ptr<TraceLogObserverAdapter>>
+      trace_log_observers_;
 
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<NotificationDispatcher> notification_dispatcher_;

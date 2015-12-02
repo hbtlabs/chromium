@@ -464,7 +464,7 @@ DEFINE_TRACE(HTMLLinkElement)
     DOMSettableTokenListObserver::trace(visitor);
 }
 
-void HTMLLinkElement::attributeWillChange(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue)
+void HTMLLinkElement::attributeChanged(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason reason)
 {
     if (name == hrefAttr && inDocument()) {
         V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
@@ -477,7 +477,7 @@ void HTMLLinkElement::attributeWillChange(const QualifiedName& name, const Atomi
             activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
         }
     }
-    HTMLElement::attributeWillChange(name, oldValue, newValue);
+    HTMLElement::attributeChanged(name, oldValue, newValue, reason);
 }
 
 PassOwnPtrWillBeRawPtr<LinkStyle> LinkStyle::create(HTMLLinkElement* owner)
@@ -603,8 +603,7 @@ void LinkStyle::clearSheet()
 {
     ASSERT(m_sheet);
     ASSERT(m_sheet->ownerNode() == m_owner);
-    m_sheet->clearOwnerNode();
-    m_sheet = nullptr;
+    m_sheet.release()->clearOwnerNode();
 }
 
 bool LinkStyle::styleSheetIsLoading() const

@@ -76,7 +76,7 @@ class MockClientSessionEventHandler : public ClientSession::EventHandler {
   ~MockClientSessionEventHandler() override;
 
   MOCK_METHOD1(OnSessionAuthenticating, void(ClientSession* client));
-  MOCK_METHOD1(OnSessionAuthenticated, bool(ClientSession* client));
+  MOCK_METHOD1(OnSessionAuthenticated, void(ClientSession* client));
   MOCK_METHOD1(OnSessionChannelsConnected, void(ClientSession* client));
   MOCK_METHOD1(OnSessionAuthenticationFailed, void(ClientSession* client));
   MOCK_METHOD1(OnSessionClosed, void(ClientSession* client));
@@ -164,18 +164,6 @@ class MockMouseCursorMonitor : public webrtc::MouseCursorMonitor {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMouseCursorMonitor);
-};
-
-class MockVideoEncoder : public VideoEncoder {
- public:
-  MockVideoEncoder();
-  ~MockVideoEncoder() override;
-
-  MOCK_METHOD1(SetLosslessEncode, void(bool));
-  MOCK_METHOD1(SetLosslessColor, void(bool));
-  MOCK_METHOD1(EncodePtr, VideoPacket*(const webrtc::DesktopFrame&));
-
-  scoped_ptr<VideoPacket> Encode(const webrtc::DesktopFrame& frame) override;
 };
 
 }  // namespace remoting

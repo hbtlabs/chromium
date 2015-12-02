@@ -149,10 +149,7 @@ public:
         SuspendableTimer::trace(visitor);
     }
 
-    WebTaskRunner* timerTaskRunner() override
-    {
-        return m_window->document()->timerTaskRunner();
-    }
+    // TODO(alexclarke): Override timerTaskRunner() to pass in a document specific default task runner.
 
 private:
     void fired() override
@@ -472,6 +469,11 @@ void LocalDOMWindow::dispose()
 ExecutionContext* LocalDOMWindow::executionContext() const
 {
     return m_document.get();
+}
+
+const LocalDOMWindow* LocalDOMWindow::toDOMWindow() const
+{
+    return this;
 }
 
 LocalDOMWindow* LocalDOMWindow::toDOMWindow()
@@ -1434,7 +1436,7 @@ void LocalDOMWindow::finishedLoading()
     }
 }
 
-void LocalDOMWindow::printErrorMessage(const String& message)
+void LocalDOMWindow::printErrorMessage(const String& message) const
 {
     if (!isCurrentlyDisplayedInFrame())
         return;

@@ -19,6 +19,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_switches.h"
@@ -676,6 +677,11 @@ gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers() {
   }
 #endif
 
+  if (!CommitAndClearPendingOverlays()) {
+    DVLOG(1) << "Failed to commit pending overlay planes.";
+    return gfx::SwapResult::SWAP_FAILED;
+  }
+
   if (!eglSwapBuffers(GetDisplay(), surface_)) {
     DVLOG(1) << "eglSwapBuffers failed with error "
              << GetLastEGLErrorString();
@@ -746,6 +752,10 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(int x,
                                                       int width,
                                                       int height) {
   DCHECK(supports_post_sub_buffer_);
+  if (!CommitAndClearPendingOverlays()) {
+    DVLOG(1) << "Failed to commit pending overlay planes.";
+    return gfx::SwapResult::SWAP_FAILED;
+  }
   if (!eglPostSubBufferNV(GetDisplay(), surface_, x, y, width, height)) {
     DVLOG(1) << "eglPostSubBufferNV failed with error "
              << GetLastEGLErrorString();
@@ -754,8 +764,40 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(int x,
   return gfx::SwapResult::SWAP_ACK;
 }
 
+bool NativeViewGLSurfaceEGL::SupportsCommitOverlayPlanes() {
+#if defined(OS_ANDROID)
+  return true;
+#else
+  return false;
+#endif
+}
+
+gfx::SwapResult NativeViewGLSurfaceEGL::CommitOverlayPlanes() {
+  DCHECK(SupportsCommitOverlayPlanes());
+  // Here we assume that the overlays scheduled on this surface will display
+  // themselves to the screen right away in |CommitAndClearPendingOverlays|,
+  // rather than being queued and waiting for a "swap" signal.
+  return CommitAndClearPendingOverlays() ? gfx::SwapResult::SWAP_ACK
+                                         : gfx::SwapResult::SWAP_FAILED;
+}
+
 VSyncProvider* NativeViewGLSurfaceEGL::GetVSyncProvider() {
   return vsync_provider_.get();
+}
+
+bool NativeViewGLSurfaceEGL::ScheduleOverlayPlane(int z_order,
+                                                  OverlayTransform transform,
+                                                  gl::GLImage* image,
+                                                  const Rect& bounds_rect,
+                                                  const RectF& crop_rect) {
+#if !defined(OS_ANDROID)
+  NOTIMPLEMENTED();
+  return false;
+#else
+  pending_overlays_.push_back(
+      GLSurfaceOverlay(z_order, transform, image, bounds_rect, crop_rect));
+  return true;
+#endif
 }
 
 void NativeViewGLSurfaceEGL::OnSetSwapInterval(int interval) {
@@ -768,6 +810,17 @@ NativeViewGLSurfaceEGL::~NativeViewGLSurfaceEGL() {
   if (window_)
     ANativeWindow_release(window_);
 #endif
+}
+
+bool NativeViewGLSurfaceEGL::CommitAndClearPendingOverlays() {
+  if (pending_overlays_.empty())
+    return true;
+
+  bool success = true;
+  for (const auto& overlay : pending_overlays_)
+    success &= overlay.ScheduleOverlayPlane(window_);
+  pending_overlays_.clear();
+  return success;
 }
 
 PbufferGLSurfaceEGL::PbufferGLSurfaceEGL(const gfx::Size& size)

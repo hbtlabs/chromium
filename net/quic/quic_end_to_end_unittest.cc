@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <vector>
+
 #include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_ptr.h"
@@ -13,6 +15,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -78,6 +81,7 @@ class QuicEndToEndTest : public PlatformTest {
   QuicEndToEndTest()
       : host_resolver_impl_(CreateResolverImpl()),
         host_resolver_(host_resolver_impl_.Pass()),
+        cert_transparency_verifier_(new MultiLogCTVerifier()),
         ssl_config_service_(new SSLConfigServiceDefaults),
         proxy_service_(ProxyService::CreateDirect()),
         auth_handler_factory_(
@@ -93,6 +97,7 @@ class QuicEndToEndTest : public PlatformTest {
     params_.host_resolver = &host_resolver_;
     params_.cert_verifier = &cert_verifier_;
     params_.transport_security_state = &transport_security_state_;
+    params_.cert_transparency_verifier = cert_transparency_verifier_.get();
     params_.proxy_service = proxy_service_.get();
     params_.ssl_config_service = ssl_config_service_.get();
     params_.http_auth_handler_factory = auth_handler_factory_.get();
@@ -196,12 +201,11 @@ class QuicEndToEndTest : public PlatformTest {
   // Initializes |request_| for a post of |length| bytes.
   void InitializePostRequest(size_t length) {
     GenerateBody(length);
-    ScopedVector<UploadElementReader> element_readers;
-    element_readers.push_back(
-        new UploadBytesElementReader(request_body_.data(),
-                                     request_body_.length()));
+    std::vector<scoped_ptr<UploadElementReader>> element_readers;
+    element_readers.push_back(make_scoped_ptr(new UploadBytesElementReader(
+        request_body_.data(), request_body_.length())));
     upload_data_stream_.reset(
-        new ElementsUploadDataStream(element_readers.Pass(), 0));
+        new ElementsUploadDataStream(std::move(element_readers), 0));
     request_.method = "POST";
     request_.url = GURL("https://test.example.com/");
     request_.upload_data_stream = upload_data_stream_.get();
@@ -223,6 +227,7 @@ class QuicEndToEndTest : public PlatformTest {
   MappedHostResolver host_resolver_;
   MockCertVerifier cert_verifier_;
   TransportSecurityState transport_security_state_;
+  scoped_ptr<CTVerifier> cert_transparency_verifier_;
   scoped_refptr<SSLConfigServiceDefaults> ssl_config_service_;
   scoped_ptr<ProxyService> proxy_service_;
   scoped_ptr<HttpAuthHandlerFactory> auth_handler_factory_;

@@ -132,7 +132,6 @@
 #include "public/web/WebSerializedScriptValueVersion.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebSpeechRecognizerClient.h"
-#include "public/web/WebTextAffinity.h"
 #include "public/web/WebTextCheckingResult.h"
 #include "public/web/WebTextCheckingType.h"
 #include "public/web/WebTextDecorationType.h"
@@ -532,9 +531,6 @@ STATIC_ASSERT_MATCHING_ENUM(WebSettings::EditingBehaviorWin, EditingWindowsBehav
 STATIC_ASSERT_MATCHING_ENUM(WebSettings::EditingBehaviorUnix, EditingUnixBehavior);
 STATIC_ASSERT_MATCHING_ENUM(WebSettings::EditingBehaviorAndroid, EditingAndroidBehavior);
 
-STATIC_ASSERT_MATCHING_ENUM(WebTextAffinityUpstream, TextAffinity::Upstream);
-STATIC_ASSERT_MATCHING_ENUM(WebTextAffinityDownstream, TextAffinity::Downstream);
-
 STATIC_ASSERT_MATCHING_ENUM(WebIDBDatabaseExceptionUnknownError, UnknownError);
 STATIC_ASSERT_MATCHING_ENUM(WebIDBDatabaseExceptionConstraintError, ConstraintError);
 STATIC_ASSERT_MATCHING_ENUM(WebIDBDatabaseExceptionDataError, DataError);
@@ -706,13 +702,6 @@ STATIC_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsDefault, V8CacheOptionsDe
 STATIC_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsNone, V8CacheOptionsNone);
 STATIC_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsParse, V8CacheOptionsParse);
 STATIC_ASSERT_MATCHING_ENUM(WebSettings::V8CacheOptionsCode, V8CacheOptionsCode);
-
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeNone, PointerTypeNone);
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeCoarse, PointerTypeCoarse);
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::PointerTypeFine, PointerTypeFine);
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeNone, HoverTypeNone);
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeOnDemand, HoverTypeOnDemand);
-STATIC_ASSERT_MATCHING_ENUM(WebSettings::HoverTypeHover, HoverTypeHover);
 
 STATIC_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaNone, SchemeRegistry::PolicyAreaNone);
 STATIC_ASSERT_MATCHING_ENUM(WebSecurityPolicy::PolicyAreaImage, SchemeRegistry::PolicyAreaImage);

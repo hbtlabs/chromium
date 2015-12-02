@@ -126,7 +126,7 @@ SkColor NSSystemColorToSkColor(NSColor* color) {
 namespace ui {
 
 // static
-NativeTheme* NativeTheme::instance() {
+NativeTheme* NativeTheme::GetInstanceForWeb() {
   return NativeThemeMac::instance();
 }
 
@@ -234,15 +234,9 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
       return SkColorSetRGB(140, 140, 140);
 
     default:
-      break;  // TODO(tapted): Handle all values and remove the default case.
+      // TODO(tapted): Handle all values and remove the default case.
+      return GetAuraColor(color_id, this);
   }
-
-  SkColor color;
-  if (CommonThemeGetSystemColor(color_id, &color))
-    return color;
-
-  NOTIMPLEMENTED() << " Invalid color_id: " << color_id;
-  return SK_ColorRED;
 }
 
 void NativeThemeMac::PaintScrollbarTrack(

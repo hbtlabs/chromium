@@ -4,9 +4,10 @@
 
 #include "components/gcm_driver/crypto/gcm_message_cryptographer.h"
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
+#include "components/gcm_driver/crypto/p256_key_util.h"
 #include "crypto/random.h"
 #include "crypto/symmetric_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,6 +21,17 @@ const size_t kKeySizeBits = 128;
 
 // Example plaintext data to use in the tests.
 const char kExamplePlaintext[] = "Example plaintext";
+
+// Fixed local and peer public keys must be used to get consistent results.
+const char kLocalPublicKeyCommon[] =
+    "BIXzEKOFquzVlr_1tS1bhmobZU3IJq2bswDflMJsizixqd_HFSvCJaCAotNjBw6A-iKQk7FshA"
+    "jdAA-T9Rh1a7U";
+
+const char kPeerPublicKeyCommon[] =
+    "BAuzSrdIyKZsHnuOhqklkIKi6fl65V9OdPy6nFwI2SywL5-6I5SkkDtfIL9y7NkoEE345jv2Eo"
+    "5n4NIbLJIBjTM";
+
+const char kAuthSecretCommon[] = "MyAuthenticationSecret";
 
 // A test vector contains the information necessary to either encrypt or decrypt
 // a message. These vectors were created using a JavaScript implementation of
@@ -35,22 +47,22 @@ struct TestVector {
 const TestVector kEncryptionTestVectors[] = {
   // Simple message.
   { "Hello, world!",
-    "AhA6n2oFYPWIh+cXwyv1m2C0JvmjHB4ZkXj8QylESXU=",
-    "tsJYqAGvFDk6lDEv7daecw==",
+    "AhA6n2oFYPWIh-cXwyv1m2C0JvmjHB4ZkXj8QylESXU",
+    "tsJYqAGvFDk6lDEv7daecw",
     4096,
-    "KNXRqBR9VKhtajeMaeKR/rHYIiORcyeFpUwWFGyS"
+    "NFivl-fJJkKHJPvHlDM3P6SHyBdmr5Caqxm1m-Is"
    },
    // Empty message.
    { "",
-    "lMyvTong4VR053jfCpWmMDGW5dEDAqiTZUIU+inhTjU=",
-    "wH3uvZqcN6oey9whiGpn1A==",
+    "lMyvTong4VR053jfCpWmMDGW5dEDAqiTZUIU-inhTjU",
+    "wH3uvZqcN6oey9whiGpn1A",
     4096,
-    "Mnfr+AU5o7D30gjFdVOTFtw="
+    "Pnoyj0pZJ0daULfQFPWUlBA"
    },
    // Message with an invalid salt size.
    { "Hello, world!",
-    "CcdxzkR6z1EY9vSrM7/IxYVxDxu46hV638EZQTPd7XI=",
-    "aRr1fI1YSGVi5XU=",
+    "CcdxzkR6z1EY9vSrM7_IxYVxDxu46hV638EZQTPd7XI",
+    "aRr1fI1YSGVi5XU",
     4096,
     nullptr  // expected to fail
    }
@@ -58,52 +70,45 @@ const TestVector kEncryptionTestVectors[] = {
 
 const TestVector kDecryptionTestVectors[] = {
   // Simple message.
-  { "avAFNhdbQohzizu+ORbU4XHhHSaXzw9lTN7UzB/j",
-    "47ZytAw9qHlm+Q8g+7rH81rUPzaCgGcoFvlS1qxQtQk=",
-    "EuR7EVetcaWpndXd/dKeyA==",
+  { "o7t04QCaL2YHs_UQWqJo_4RZ8rnLCJsoQeAGbvVv",
+    "47ZytAw9qHlm-Q8g-7rH81rUPzaCgGcoFvlS1qxQtQk",
+    "EuR7EVetcaWpndXd_dKeyA",
     4096,
     "Hello, world!"
    },
    // Simple message with 16 bytes of padding.
-   { "0198n7ZJ/ZPMnl4ZU2l9Lma5ktKbuzXCiJEXyYtROmWTP8RSiZd8sUd48xpk6Q==",
-     "MYSsNybwrTzRIzQYUq/yFPc6ugcTrJdEZJDM4NswvUg=",
-     "8sEAMQYnufo2UkKl80cUGQ==",
+   { "mCKryg4tyVSkEM5B5fmV8FzTcMvzB3a8PRii3SY3uM8nXOc4yLpB0XgXjnDKbw",
+     "MYSsNybwrTzRIzQYUq_yFPc6ugcTrJdEZJDM4NswvUg",
+     "8sEAMQYnufo2UkKl80cUGQ",
      4096,
      "Hello, world!"
    },
    // Empty message.
-   { "g+ACk32a4gK2dS2xllKXn4c=",
-     "S3+Ki/+XtzR66gUp/zR75CC5JXO62pyr5fWfneTYwFE=",
-     "4RM6s19jJHdmqiVEJDp9jg==",
+   { "k27iDM90-Jmc6q5Eb9Nx2IM",
+     "S3-Ki_-XtzR66gUp_zR75CC5JXO62pyr5fWfneTYwFE",
+     "4RM6s19jJHdmqiVEJDp9jg",
      4096,
      ""
    },
    // Message with an invalid salt size.
-   { "rt4OiodS087DAQo6e24wA55k0hRPAHgz7OX7m+nj",
-     "wW3Iy5ma803lLd+ysPdHUe2NB3HqXbY0XhCCdG5Y1Gw=",
-     "N7oMH/xohAhMhOY=",
+   { "iGrOpmJC5XTTf7wtgdhZ_qT",
+     "wW3Iy5ma803lLd-ysPdHUe2NB3HqXbY0XhCCdG5Y1Gw",
+     "N7oMH_xohAhMhOY",
      4096,
      nullptr  // expected to fail
    },
    // Message with an invalid record size.
-   { "AsuoRkFtqLE1c0mGCae4OvgZSCSHWCoeRL9mXKjY",
-     "omxWz7tse3lgDpxUP+e7u14Dp1irvV3BdzXTcZOtsHs=",
-     "vKJD3bexto1hY64KVzS7ug==",
-     3,
+   { "iGrOpmJC5XTTf7wtgdhZ_qT",
+     "kR5BMfqMKOD1yrLKE2giObXHI7merrMtnoO2oqneqXA",
+     "SQeJSPrqHvTdSfAMF8bBzQ",
+     8,
      nullptr  // expected to fail
    },
-   // Truncated message.
-   { "AGr4BfZSXW9txWkAG8pjg7IuRWWm1Mo8bDli/PSv",
-    "kR5BMfqMKOD1yrLKE2giObXHI7merrMtnoO2oqneqXA=",
-    "SQeJSPrqHvTdSfAMF8bBzQ==",
-    13,
-    nullptr  // expected to fail
-   },
    // Message with multiple (2) records.
-   { "H2ujfPbpRbVSy+adIG2NRe4VxkX4V0r/zl6e9xnMSF6LSutblGdWLrwQc82Xh7DXAQlihW0q3"
-         "IQzHP+LIxuAiA==",
-     "W3W4gx7sqcfmBnvNNdO9d4MBCC1bvJkvsNjZOGD+CCg=",
-     "xG0TPGi9aIcxjpXKmaYBBQ==",
+   { "RqQVHRXlfYjzW9xhzh3V_KijLKjZiKzGXosqN_IaMzi0zI0tXXhC1urtrk3iWRoqttNXpkD2r"
+         "UCgLy8A1FnTjw",
+     "W3W4gx7sqcfmBnvNNdO9d4MBCC1bvJkvsNjZOGD-CCg",
+     "xG0TPGi9aIcxjpXKmaYBBQ",
      7,
      nullptr  // expected to fail
    }
@@ -119,6 +124,19 @@ class GCMMessageCryptographerTest : public ::testing::Test {
                                                 kKeySizeBits));
 
     ASSERT_TRUE(random_key->GetRawKey(&key_));
+
+    std::string local_public_key, peer_public_key;
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kLocalPublicKeyCommon, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+        &local_public_key));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kPeerPublicKeyCommon, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+        &peer_public_key));
+
+    cryptographer_.reset(
+        new GCMMessageCryptographer(GCMMessageCryptographer::Label::P256,
+                                    local_public_key, peer_public_key,
+                                    kAuthSecretCommon));
   }
 
  protected:
@@ -133,12 +151,12 @@ class GCMMessageCryptographerTest : public ::testing::Test {
     return salt;
   }
 
-  GCMMessageCryptographer* cryptographer() { return &cryptographer_; }
+  GCMMessageCryptographer* cryptographer() { return cryptographer_.get(); }
 
   base::StringPiece key() const { return key_; }
 
  private:
-  GCMMessageCryptographer cryptographer_;
+  scoped_ptr<GCMMessageCryptographer> cryptographer_;
 
   std::string key_;
 };
@@ -205,9 +223,10 @@ TEST_F(GCMMessageCryptographerTest, InvalidRecordPadding) {
 
   const std::string salt = GenerateRandomSalt();
 
-  const std::string nonce = cryptographer()->DeriveNonce(key(), salt);
+  const std::string ikm = cryptographer()->DeriveInputKeyingMaterial(key());
+  const std::string nonce = cryptographer()->DeriveNonce(ikm, salt);
   const std::string content_encryption_key =
-      cryptographer()->DeriveContentEncryptionKey(key(), salt);
+      cryptographer()->DeriveContentEncryptionKey(ikm, salt);
 
   ASSERT_GT(message.size(), 1u);
   const size_t record_size = message.size() + 1;
@@ -254,8 +273,12 @@ TEST_F(GCMMessageCryptographerTest, EncryptionTestVectors) {
   for (size_t i = 0; i < arraysize(kEncryptionTestVectors); ++i) {
     SCOPED_TRACE(i);
 
-    ASSERT_TRUE(base::Base64Decode(kEncryptionTestVectors[i].key, &key));
-    ASSERT_TRUE(base::Base64Decode(kEncryptionTestVectors[i].salt, &salt));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kEncryptionTestVectors[i].key,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &key));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kEncryptionTestVectors[i].salt,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &salt));
 
     const bool has_output = kEncryptionTestVectors[i].output;
     const bool result = cryptographer()->Encrypt(
@@ -267,8 +290,9 @@ TEST_F(GCMMessageCryptographerTest, EncryptionTestVectors) {
     }
 
     EXPECT_TRUE(result);
-    ASSERT_TRUE(base::Base64Decode(kEncryptionTestVectors[i].output,
-                &output));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kEncryptionTestVectors[i].output,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &output));
 
     EXPECT_EQ(kEncryptionTestVectors[i].record_size, record_size);
     EXPECT_EQ(output, ciphertext);
@@ -280,9 +304,15 @@ TEST_F(GCMMessageCryptographerTest, DecryptionTestVectors) {
   for (size_t i = 0; i < arraysize(kDecryptionTestVectors); ++i) {
     SCOPED_TRACE(i);
 
-    ASSERT_TRUE(base::Base64Decode(kDecryptionTestVectors[i].input, &input));
-    ASSERT_TRUE(base::Base64Decode(kDecryptionTestVectors[i].key, &key));
-    ASSERT_TRUE(base::Base64Decode(kDecryptionTestVectors[i].salt, &salt));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kDecryptionTestVectors[i].input,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &input));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kDecryptionTestVectors[i].key,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &key));
+    ASSERT_TRUE(base::Base64UrlDecode(
+        kDecryptionTestVectors[i].salt,
+        base::Base64UrlDecodePolicy::IGNORE_PADDING, &salt));
 
     const bool has_output = kDecryptionTestVectors[i].output;
     const bool result = cryptographer()->Decrypt(
@@ -296,6 +326,175 @@ TEST_F(GCMMessageCryptographerTest, DecryptionTestVectors) {
     EXPECT_TRUE(result);
     EXPECT_EQ(kDecryptionTestVectors[i].output, plaintext);
   }
+}
+
+TEST_F(GCMMessageCryptographerTest, AuthSecretAffectsIKM) {
+  std::string public_key;
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kLocalPublicKeyCommon, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &public_key));
+
+  // Fake IKM to use in the DeriveInputKeyingMaterial calls.
+  const char kFakeIKM[] = "HelloWorld";
+
+  GCMMessageCryptographer hello_cryptographer(
+      GCMMessageCryptographer::Label::P256, public_key, public_key, "Hello");
+
+  GCMMessageCryptographer world_cryptographer(
+      GCMMessageCryptographer::Label::P256, public_key, public_key, "World");
+
+  ASSERT_NE(hello_cryptographer.DeriveInputKeyingMaterial(kFakeIKM), kFakeIKM);
+  ASSERT_NE(world_cryptographer.DeriveInputKeyingMaterial(kFakeIKM), kFakeIKM);
+
+  ASSERT_NE(hello_cryptographer.DeriveInputKeyingMaterial(kFakeIKM),
+            world_cryptographer.DeriveInputKeyingMaterial(kFakeIKM));
+
+  std::string salt = GenerateRandomSalt();
+
+  // Verify that the IKM actually gets used by the transformations.
+  size_t hello_record_size, world_record_size;
+  std::string hello_ciphertext, world_ciphertext;
+
+  ASSERT_TRUE(hello_cryptographer.Encrypt(kExamplePlaintext, key(), salt,
+                                          &hello_record_size,
+                                          &hello_ciphertext));
+  ASSERT_TRUE(world_cryptographer.Encrypt(kExamplePlaintext, key(), salt,
+                                          &world_record_size,
+                                          &world_ciphertext));
+
+  // If the ciphertexts differ despite the same key and salt, it got used.
+  ASSERT_NE(hello_ciphertext, world_ciphertext);
+
+  // Verify that the different ciphertexts can also be translated back to the
+  // plaintext content. This will fail if the auth secret isn't considered.
+  std::string hello_plaintext, world_plaintext;
+
+  ASSERT_TRUE(hello_cryptographer.Decrypt(hello_ciphertext, key(), salt,
+                                          hello_record_size, &hello_plaintext));
+  ASSERT_TRUE(world_cryptographer.Decrypt(world_ciphertext, key(), salt,
+                                          world_record_size, &world_plaintext));
+
+  EXPECT_EQ(kExamplePlaintext, hello_plaintext);
+  EXPECT_EQ(kExamplePlaintext, world_plaintext);
+}
+
+// Reference test against the HTTP encryption coding IETF draft. Both the
+// encrypting and decrypting routines of the GCMMessageCryptographer are
+// covered by this test.
+//
+// https://tools.ietf.org/html/draft-thomson-http-encryption#section-5.5
+TEST_F(GCMMessageCryptographerTest, ReferenceTest) {
+  // base64url-encoded representation of the 16 octet salt.
+  const char kSalt[] = "Qg61ZJRva_XBE9IEUelU3A";
+
+  // base64url-encoded representation of the ciphertext, and the plaintext as
+  // a normal character array.
+  const char kCiphertext[] = "G6j_sfKg0qebO62yXpTCayN2KV24QitNiTvLgcFiEj0";
+  const char kPlaintext[] = "I am the walrus";
+
+  // Private keys of the sender and receiver represented as ASN.1-encoded PKCS
+  // #8 EncryptedPrivateKeyInfo blocks, as required by the ECPrivateKey.
+  const char kReceiverPrivate[] =
+      "MIGxMBwGCiqGSIb3DQEMAQMwDgQIqMt4d7uJdt4CAggABIGQeikRHE3CqUeF-uUtJno9BL0g"
+      "mNRyDihZe8P3nF_g-NYVzvdQowsXfYeza6OQOdDuMXxnGgNToVy2jsiWVN6rxCaSMTY622y8"
+      "ajW5voSdqC2PakQ8ZNTPNHarLDMC9NpgGKrUh8hfRLhvb7vtbKIWmx-22rQB5yTYdqzN2m7A"
+      "GHMWRnVk0mMzMsMjZqYFaa2D";
+
+  const char kSenderPrivate[] =
+      "MIGxMBwGCiqGSIb3DQEMAQMwDgQIFfJ62c9VwXgCAggABIGQkRxDRPQjwuWp1C3-z1pYTDqF"
+      "_NZ1kbPsjmkC3JSv02oAYHtBAtKa2e3oAPqsPfCvoCJBJs6G4WY4EuEO1YFL6RKpNl3DpIUc"
+      "v9ShR27p_je_nyLpNBAxn2drnjlF_K6s4gcJmcvCxuNjAwOlLMPvQqGjOR2K_oMs1Hdq0EKJ"
+      "NwWt3WUVEpuQF_WhYjCVIeGO";
+
+  // Public keys of the sender and receiver represented as uncompressed points,
+  // and X.509 SubjectPublicKeyInfo blocks as required by NSS.
+  const char kReceiverPublicUncompressed[] =
+      "BCEkBjzL8Z3C-oi2Q7oE5t2Np-p7osjGLg93qUP0wvqRT21EEWyf0cQDQcakQMqz4hQKYOQ3"
+      "il2nNZct4HgAUQU";
+  const char kReceiverPublicX509[] =
+      "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEISQGPMvxncL6iLZDugTm3Y2n6nuiyMYuD3ep"
+      "Q_TC-pFPbUQRbJ_RxANBxqRAyrPiFApg5DeKXac1ly3geABRBQ";
+
+  const char kSenderPublicUncompressed[] =
+      "BDgpRKok2GZZDmS4r63vbJSUtcQx4Fq1V58-6-3NbZzSTlZsQiCEDTQy3CZ0ZMsqeqsEb7qW"
+      "2blQHA4S48fynTk";
+  const char kSenderPublicX509[] =
+      "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOClEqiTYZlkOZLivre9slJS1xDHgWrVXnz7r"
+      "7c1tnNJOVmxCIIQNNDLcJnRkyyp6qwRvupbZuVAcDhLjx_KdOQ";
+
+  // Convert the salt and the ciphertext to binary representations.
+  std::string salt, reference_ciphertext;
+
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kSalt, base::Base64UrlDecodePolicy::IGNORE_PADDING, &salt));
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kCiphertext, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &reference_ciphertext));
+
+  // Convert the public and private keys to binary representations.
+  std::string receiver_private, receiver_public, receiver_public_x509;
+  std::string sender_private, sender_public, sender_public_x509;
+
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kReceiverPrivate, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &receiver_private));
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kReceiverPublicUncompressed, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &receiver_public));
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kReceiverPublicX509, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &receiver_public_x509));
+
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kSenderPrivate, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &sender_private));
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kSenderPublicUncompressed, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &sender_public));
+  ASSERT_TRUE(base::Base64UrlDecode(
+      kSenderPublicX509, base::Base64UrlDecodePolicy::IGNORE_PADDING,
+      &sender_public_x509));
+
+  // Compute the shared secret between the sender and the receiver's keys.
+  std::string sender_shared_secret, receiver_shared_secret;
+
+  ASSERT_TRUE(ComputeSharedP256Secret(sender_private, sender_public_x509,
+                                      receiver_public, &sender_shared_secret));
+  ASSERT_TRUE(ComputeSharedP256Secret(receiver_private, receiver_public_x509,
+                                      sender_public, &receiver_shared_secret));
+
+  ASSERT_GT(sender_shared_secret.size(), 0u);
+  ASSERT_EQ(sender_shared_secret, receiver_shared_secret);
+
+  GCMMessageCryptographer cryptographer(
+      GCMMessageCryptographer::Label::P256, receiver_public, sender_public,
+      "" /* auth_secret */);
+
+  // The reference vectors do not use an authentication secret.
+  cryptographer.set_allow_empty_auth_secret_for_tests(true);
+
+  size_t record_size = 0;
+  std::string ciphertext;
+
+  ASSERT_TRUE(cryptographer.Encrypt(kPlaintext, sender_shared_secret, salt,
+                                    &record_size, &ciphertext));
+
+  EXPECT_GT(record_size, 1u);
+  EXPECT_EQ(16u + 1u + strlen(kPlaintext), ciphertext.size());
+
+  // Verify that the created ciphertext matches the reference ciphertext.
+  EXPECT_EQ(reference_ciphertext, ciphertext);
+
+  // Decrypt the ciphertext with the default record size to verify that the
+  // resulting plaintext matches the input text.
+  std::string plaintext;
+
+  ASSERT_TRUE(cryptographer.Decrypt(
+      reference_ciphertext, receiver_shared_secret, salt,
+      4096 /* record size */, &plaintext));
+
+  // Verify that the decrypted plaintext matches the reference plaintext.
+  EXPECT_EQ(kPlaintext, plaintext);
 }
 
 }  // namespace gcm

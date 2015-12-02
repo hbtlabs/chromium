@@ -8,7 +8,7 @@
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://code.google.com/p/chromium/wiki/UpdatingClang
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION=247874
+CLANG_REVISION=254049
 
 # This is incremented when pushing a new build of Clang at the same revision.
 CLANG_SUB_REVISION=1
@@ -53,6 +53,8 @@ if [[ -z "$LLVM_DOWNLOAD_GOLD_PLUGIN" ]]; then
   LLVM_DOWNLOAD_GOLD_PLUGIN=
 fi
 
+OS="$(uname -s)"
+
 if [[ "${OS}" == "Linux" ]] && \
    [[ "$GYP_DEFINES" =~ .*buildtype=Official.* ]] && \
    [[ "$GYP_DEFINES" =~ .*branding=Chrome.* ]] ; then
@@ -71,8 +73,6 @@ if [[ -n ${LLVM_FORCE_HEAD_REVISION:-''} ]]; then
       | grep 'Revision:' | awk '{ printf $2; }')
   PACKAGE_VERSION="${CLANG_REVISION}-0"
 fi
-
-OS="$(uname -s)"
 
 # Parse command line options.
 if_needed=
@@ -165,7 +165,7 @@ if [[ -n ${LLVM_FORCE_HEAD_REVISION:-''} ]]; then
   force_local_build=yes
 
   if ! [[ "$GYP_DEFINES" =~ .*OS=android.* ]]; then
-    # Only build the Android ASan rt when targetting Android.
+    # Only build the Android ASan rt on ToT bots when targetting Android.
     with_android=
   fi
 
@@ -315,10 +315,6 @@ fi
 
 echo Getting clang r"${CLANG_REVISION}" in "${CLANG_DIR}"
 svn co --force "${LLVM_REPO_URL}/cfe/trunk@${CLANG_REVISION}" "${CLANG_DIR}"
-
-# We have moved from building compiler-rt in the LLVM tree, to a separate
-# directory. Nuke any previous checkout to avoid building it.
-rm -rf "${LLVM_DIR}/projects/compiler-rt"
 
 echo Getting compiler-rt r"${CLANG_REVISION}" in "${COMPILER_RT_DIR}"
 svn co --force "${LLVM_REPO_URL}/compiler-rt/trunk@${CLANG_REVISION}" \
@@ -485,6 +481,10 @@ if [[ -n ${LLVM_FORCE_HEAD_REVISION:-''} ]]; then
   CXXFLAGS="${CXXFLAGS} -DLLVM_FORCE_HEAD_REVISION"
 fi
 
+# Pin MSan to the old ABI.
+# TODO(eugenis): Remove when MSan migrates to new ABI (crbug.com/560589).
+CXXFLAGS="${CXXFLAGS} -DMSAN_LINUX_X86_64_OLD_MAPPING"
+
 # Hook the Chromium tools into the LLVM build. Several Chromium tools have
 # dependencies on LLVM/Clang libraries. The LLVM build detects implicit tools
 # in the tools subdirectory, so install a shim CMakeLists.txt that forwards to
@@ -548,25 +548,50 @@ mkdir -p "${COMPILER_RT_BUILD_DIR}"
 pushd "${COMPILER_RT_BUILD_DIR}"
 
 rm -fv CMakeCache.txt
-MACOSX_DEPLOYMENT_TARGET=${deployment_target} CC="" CXX="" cmake -GNinja \
+if [[ -z "${bootstrap}" ]]; then
+  # compiler_rt doesn't build with Xcode 6's clang, but not all bots have
+  # Xcode 7 yet.  So use the just-built clang for building compiler-rt.
+  # However, in bootstrap builds, we delete libc++ to work around PR24068 -- so
+  # compiler_rt's CMake checks can't find <iostream> and decide that no arch
+  # is supported.  So use the installed bootstrap compiler in bootstrap builds,
+  # it has the libc++ headers installed (CXX is already set to that in
+  # bootstrap builds).
+  CC="${ABS_LLVM_BUILD_DIR}/bin/clang"
+  CXX="${ABS_LLVM_BUILD_DIR}/bin/clang++"
+elif [[ "${OS}" = "Darwin" ]]; then
+  # ...except that compiler-rt currently doesn't build with the bootstrap
+  # compiler on Darwin either! So use the system compiler there.
+  # TOOD(thakis): Remove this once http://llvm.org/PR25465 is fixed.
+  CC=cc
+  CXX=c++
+fi
+
+# Pin MSan to the old ABI.
+COMPILER_RT_CXXFLAGS="-DMSAN_LINUX_X86_64_OLD_MAPPING"
+
+MACOSX_DEPLOYMENT_TARGET=${deployment_target} cmake -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DLLVM_ENABLE_THREADS=OFF \
-    -DCMAKE_C_COMPILER="${ABS_LLVM_BUILD_DIR}/bin/clang" \
-    -DCMAKE_CXX_COMPILER="${ABS_LLVM_BUILD_DIR}/bin/clang++" \
+    -DCMAKE_C_COMPILER="${CC}" \
+    -DCMAKE_CXX_COMPILER="${CXX}" \
+    -DCMAKE_CXX_FLAGS="${COMPILER_RT_CXXFLAGS}" \
     -DSANITIZER_MIN_OSX_VERSION="10.7" \
     -DLLVM_CONFIG_PATH="${ABS_LLVM_BUILD_DIR}/bin/llvm-config" \
     "${ABS_COMPILER_RT_DIR}"
 
-ninja
+ninja compiler-rt
 
-# Copy selected output to the main tree.
+# Copy select output to the main tree.
 # Darwin doesn't support cp --parents, so pipe through tar instead.
 CLANG_VERSION=$("${ABS_LLVM_BUILD_DIR}/bin/clang" --version | \
      sed -ne 's/clang version \([0-9]\.[0-9]\.[0-9]\).*/\1/p')
 ABS_LLVM_CLANG_LIB_DIR="${ABS_LLVM_BUILD_DIR}/lib/clang/${CLANG_VERSION}"
+# Blacklists:
 tar -c *blacklist.txt | tar -C ${ABS_LLVM_CLANG_LIB_DIR} -xv
+# Headers:
 tar -c include/sanitizer | tar -C ${ABS_LLVM_CLANG_LIB_DIR} -xv
+# Static and dynamic libraries:
 if [[ "${OS}" = "Darwin" ]]; then
   tar -c lib/darwin | tar -C ${ABS_LLVM_CLANG_LIB_DIR} -xv
 else
@@ -576,7 +601,7 @@ fi
 popd
 
 if [[ -n "${with_android}" ]]; then
-  # Make a standalone Android toolchain.
+  # Make standalone Android toolchains.
   ${ANDROID_NDK_DIR}/build/tools/make-standalone-toolchain.sh \
       --platform=android-19 \
       --install-dir="${LLVM_BUILD_DIR}/android-toolchain-arm" \
@@ -609,7 +634,7 @@ if [[ -n "${with_android}" ]]; then
     mkdir -p ${LLVM_BUILD_DIR}/android-${target_arch}
     pushd ${LLVM_BUILD_DIR}/android-${target_arch}
     rm -fv CMakeCache.txt
-    MACOSX_DEPLOYMENT_TARGET=${deployment_target} cmake -GNinja \
+    cmake -GNinja \
         -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_THREADS=OFF \

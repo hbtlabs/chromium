@@ -112,7 +112,7 @@ enum RTCIceConnectionState {
     // TODO(guidou): The selector argument should the first (nullable,
     // non-optional) argument, and there should be a third failureCallback
     // argument.
-    void getStats(RTCStatsCallback successCallback, [Default=Undefined] optional MediaStreamTrack selector);
+    [LegacyInterfaceTypeChecking] void getStats(RTCStatsCallback successCallback, [Default=Undefined] optional MediaStreamTrack selector);
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
     // TODO(guidou): The label argument should have [TreatNullAs=EmptyString]
@@ -125,8 +125,8 @@ enum RTCIceConnectionState {
     sequence<MediaStream> getLocalStreams();
     sequence<MediaStream> getRemoteStreams();
     MediaStream getStreamById(DOMString streamId);
-    [TypeChecking=Interface, RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
-    [TypeChecking=Interface, RaisesException] void removeStream(MediaStream? stream);
+    [RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
+    [RaisesException] void removeStream(MediaStream? stream);
     [RaisesException] RTCDTMFSender createDTMFSender(MediaStreamTrack track);
     attribute EventHandler onaddstream;
     attribute EventHandler onremovestream;

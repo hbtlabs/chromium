@@ -20,10 +20,12 @@ bool TestWindowTree::GetAndClearChangeId(uint32_t* change_id) {
   return true;
 }
 
-void TestWindowTree::NewWindow(uint32_t change_id, uint32_t window_id) {}
+void TestWindowTree::NewWindow(
+    uint32_t change_id,
+    uint32_t window_id,
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) {}
 
-void TestWindowTree::DeleteWindow(uint32_t window_id,
-                                  const DeleteWindowCallback& callback) {}
+void TestWindowTree::DeleteWindow(uint32_t change_id, uint32_t window_id) {}
 
 void TestWindowTree::SetWindowBounds(uint32_t change_id,
                                      uint32_t window_id,
@@ -48,7 +50,7 @@ void TestWindowTree::SetWindowProperty(uint32_t change_id,
   change_id_ = change_id;
 }
 
-void TestWindowTree::RequestSurface(
+void TestWindowTree::AttachSurface(
     uint32_t window_id,
     mojom::SurfaceType type,
     mojo::InterfaceRequest<mojom::Surface> surface,
@@ -94,6 +96,7 @@ void TestWindowTree::SetImeVisibility(uint32_t window_id,
                                       bool visible,
                                       mojo::TextInputStatePtr state) {}
 
+void TestWindowTree::OnWindowInputEventAck(uint32_t event_id) {}
 void TestWindowTree::WmResponse(uint32_t change_id, bool response) {}
 
 }  // namespace mus

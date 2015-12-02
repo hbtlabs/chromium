@@ -302,6 +302,10 @@ const char kDisablePasswordManagerReauthentication[] =
 // Disable the new material UI - requires out of process PDF plugin.
 const char kDisablePdfMaterialUI[]          = "disable-pdf-material-ui";
 
+// Disables the Permissions Blacklist, which blocks access to permissions
+// for blacklisted sites.
+const char kDisablePermissionsBlacklist[] = "disable-permissions-blacklist";
+
 // Disable pop-up blocking.
 const char kDisablePopupBlocking[]          = "disable-popup-blocking";
 
@@ -462,6 +466,10 @@ const char kEnablePanels[]                  = "enable-panels";
 // Enable the new material UI - requires out of process PDF plugin.
 const char kEnablePdfMaterialUI[]           = "enable-pdf-material-ui";
 
+// Enables the Permissions Blacklist, which blocks access to permissions
+// for blacklisted sites.
+const char kEnablePermissionsBlacklist[] = "enable-permissions-blacklist";
+
 // Enables a number of potentially annoying security features (strict mixed
 // content mode, powerful feature restrictions, etc.)
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
@@ -571,12 +579,6 @@ const char kExtensionsUpdateFrequency[]     = "extensions-update-frequency";
 // already running chrome process via the fast path, ie: before chrome.dll is
 // loaded. It is useful to tell the difference for tracking purposes.
 const char kFastStart[]            = "fast-start";
-
-// These two flags are added around the switches about:flags adds to the
-// command line. This is useful to see which switches were added by about:flags
-// on about:version. They don't have any effect.
-const char kFlagSwitchesBegin[]             = "flag-switches-begin";
-const char kFlagSwitchesEnd[]               = "flag-switches-end";
 
 // Forces application mode. This hides certain system UI elements and forces
 // the app to be installed if it hasn't been already.
@@ -1013,9 +1015,6 @@ const char kDisableMultilingualSpellChecker[] =
 const char kEnableMultilingualSpellChecker[] =
     "enable-multilingual-spellchecker";
 
-// Enables auto correction for misspelled words.
-const char kEnableSpellingAutoCorrect[]     = "enable-spelling-auto-correct";
-
 // Enables participation in the field trial for user feedback to spelling
 // service.
 const char kEnableSpellingFeedbackFieldTrial[] =
@@ -1244,6 +1243,14 @@ const char kRelauncherProcessDMGDevice[]    = "dmg-device";
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
+// A process type (switches::kProcessType) that indicates chrome.exe is being
+// launched as crashpad_handler. This is only used on Windows. We bundle the
+// handler into chrome.exe on Windows because there is high probability of a
+// "new" .exe being blocked or interfered with by application firewalls, AV
+// software, etc. On other platforms, crashpad_handler is a standalone
+// executable.
+const char kCrashpadHandler[]               = "crashpad-handler";
+
 // Fallback to XPS. By default connector uses CDD.
 const char kEnableCloudPrintXps[]           = "enable-cloud-print-xps";
 

@@ -901,6 +901,8 @@
         'browser/chromeos/proxy_cros_settings_parser.cc',
         'browser/chromeos/proxy_cros_settings_parser.h',
         'browser/chromeos/reset/metrics.h',
+        'browser/chromeos/resource_reporter/resource_reporter.cc',
+        'browser/chromeos/resource_reporter/resource_reporter.h',
         'browser/chromeos/session_length_limiter.cc',
         'browser/chromeos/session_length_limiter.h',
         'browser/chromeos/set_time_dialog.cc',
@@ -1113,6 +1115,7 @@
         # browser_chromeos #includes power_supply_properties.pb.h directly.
         '../chromeos/chromeos.gyp:power_manager_proto',
         '../chromeos/ime/input_method.gyp:gencode',
+        '../components/components.gyp:arc',
         '../components/components.gyp:certificate_reporting',
         '../components/components.gyp:cloud_policy_proto',
         '../components/components.gyp:drive',
@@ -1263,11 +1266,6 @@
         ['use_ozone == 1', {
           'dependencies': [
             '../ui/ozone/ozone.gyp:ozone',
-          ],
-        }],
-        ['enable_arc == 1', {
-          'dependencies': [
-            '../components/components.gyp:arc',
           ],
         }],
       ],

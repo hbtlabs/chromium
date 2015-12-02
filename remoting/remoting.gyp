@@ -244,6 +244,7 @@
       ],
       'sources': [
         '<@(remoting_protocol_sources)',
+        '<@(remoting_protocol_nonnacl_sources)',
         '<@(remoting_signaling_sources)',
       ],
       'conditions': [

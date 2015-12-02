@@ -31,6 +31,15 @@
     'dev_gyp_debug': ['gyp', 'debug', 'shared', 'full_symbols'],
     'dev_gyp_release': ['gyp', 'release', 'shared'],
     'embedded_gyp_debug_bot': ['embedded', 'gyp', 'debug_bot'],
+
+    # This is the "deployment" config for the blimp builds. Currently
+    # we want them to be debug, non-optimized builds (and we don't need any
+    # chrome branding), so we don't use the "official" mixin.
+    # We need chromeos and ozone to eliminate any dependencies on X11. We
+    # dont need aura as it is implied by chromeos and ozone.
+    'gn_blimp_debug': ['gn', 'chromeos', 'ozone', 'debug'],
+
+    'gn_cfi_bot': ['gn', 'cfi', 'release_bot'],
     'gn_debug_bot': ['gn', 'debug_bot'],
     'gn_debug_bot_minimal_symbols': ['gn', 'debug_bot_minimal_symbols'],
     'gn_debug_bot_minimal_symbols_x86': ['gn', 'debug_bot_minimal_symbols', 'x86'],
@@ -144,6 +153,11 @@
     'cast': {
       'gn_args': '# TODO: Need the GN equivalents for a Chromecast build.',
       'gyp_defines': 'chromecast=1',
+    },
+
+    'cfi': {
+      'gn_args': 'is_cfi=1',
+      'gyp_defines': 'cfi_vptr=1',
     },
 
     'chromeos': {
@@ -431,6 +445,7 @@
       'Linux GN (dbg)': 'gn_debug_bot'
     },
     'chromium.fyi': {
+      'CFI Linux': 'gn_cfi_bot',
       'CrWinClang64(dbg)': 'win_clang_debug_bot',
       'Libfuzzer Upload Linux': 'libfuzzer_upload_bot',
       'Site Isolation Linux': 'gn_release_trybot',
@@ -444,8 +459,8 @@
       'Linux GN (dbg)': 'gn_debug_bot',
       'Mac GN': 'gn_release_bot',
       'Mac GN (dbg)': 'gn_debug_static_bot',
-      'Win GN': 'gn_release_bot_minimal_symbols_x86',
-      'Win GN (dbg)': 'gn_debug_bot_minimal_symbols_x86',
+      'Win x64 GN': 'gn_release_bot_minimal_symbols',
+      'Win x64 GN (dbg)': 'gn_debug_bot_minimal_symbols',
     },
     'client.skia': {
       'Linux Builder': 'swarming_gn_release_bot',
@@ -459,6 +474,7 @@
     },
     'official.desktop': {
       'precise64': 'gn_official',
+      'blimp-engine': 'gn_blimp_debug',
     },
     'official.desktop.continuous': {
       'precise64 trunk': 'gn_official',
@@ -514,11 +530,11 @@
     'tryserver.chromium.perf': {
       'android_perf_bisect_builder': 'gyp_official_goma_minimal_symbols_android',
       'android_arm64_perf_bisect_builder': 'gyp_official_goma_minimal_symbols_android_arm64',
-      'linux_perf_bisect_builder': 'gyp_official_goma',
+      'linux_perf_bisect_builder': 'gn_official_goma',
       'mac_perf_bisect_builder': 'gyp_official_goma',
       'win_perf_bisect_builder': 'gyp_official_goma_minimal_symbols_x86',
       'winx64_bisect_builder': 'gyp_official_goma_minimal_symbols_x64',
-      'linux_perf_bisect': 'gyp_official_goma',
+      'linux_perf_bisect': 'gn_official_goma',
       'mac_10_11_perf_bisect': 'gyp_official_goma',
       'mac_10_10_perf_bisect': 'gyp_official_goma',
       'mac_retina_perf_bisect': 'gyp_official_goma',
@@ -536,6 +552,9 @@
       'android_nexus6_perf_bisect': 'gyp_official_goma_minimal_symbols_android',
       'android_nexus7_perf_bisect': 'gyp_official_goma_minimal_symbols_android',
       'android_nexus9_perf_bisect': 'gyp_official_goma_minimal_symbols_android_arm64',
+      'linux_fyi_perf_bisect': 'gn_official_goma',
+      'mac_fyi_perf_bisect': 'gyp_official_goma',
+      'win_fyi_perf_bisect': 'gyp_official_goma_minimal_symbols_x86',
     },
     'tryserver.chromium.win': {
       'win_chromium_gn_x64_dbg': 'gn_debug_bot_minimal_symbols',

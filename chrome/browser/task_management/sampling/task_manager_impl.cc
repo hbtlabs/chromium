@@ -92,7 +92,7 @@ int TaskManagerImpl::GetNaClDebugStubPort(TaskId task_id) const {
 #if !defined(DISABLE_NACL)
   return GetTaskGroupByTaskId(task_id)->nacl_debug_stub_port();
 #else
-  return -1;
+  return -2;
 #endif  // !defined(DISABLE_NACL)
 }
 
@@ -122,8 +122,16 @@ void TaskManagerImpl::GetUSERHandles(TaskId task_id,
 #endif  // defined(OS_WIN)
 }
 
+bool TaskManagerImpl::IsTaskOnBackgroundedProcess(TaskId task_id) const {
+  return GetTaskGroupByTaskId(task_id)->is_backgrounded();
+}
+
 const base::string16& TaskManagerImpl::GetTitle(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->title();
+}
+
+const std::string& TaskManagerImpl::GetTaskNameForRappor(TaskId task_id) const {
+  return GetTaskByTaskId(task_id)->rappor_sample_name();
 }
 
 base::string16 TaskManagerImpl::GetProfileName(TaskId task_id) const {
@@ -149,6 +157,10 @@ Task::Type TaskManagerImpl::GetType(TaskId task_id) const {
 
 int64 TaskManagerImpl::GetNetworkUsage(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->network_usage();
+}
+
+int64 TaskManagerImpl::GetProcessTotalNetworkUsage(TaskId task_id) const {
+  return GetTaskGroupByTaskId(task_id)->per_process_network_usage();
 }
 
 int64 TaskManagerImpl::GetSqliteMemoryUsed(TaskId task_id) const {
@@ -305,6 +317,9 @@ void TaskManagerImpl::Refresh() {
 }
 
 void TaskManagerImpl::StartUpdating() {
+  if (is_running_)
+    return;
+
   is_running_ = true;
 
   for (auto& provider : task_providers_)
@@ -314,6 +329,9 @@ void TaskManagerImpl::StartUpdating() {
 }
 
 void TaskManagerImpl::StopUpdating() {
+  if (!is_running_)
+    return;
+
   is_running_ = false;
 
   io_thread_helper_manager_.reset();

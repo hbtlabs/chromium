@@ -185,7 +185,6 @@ class RendererBlinkPlatformImpl::MimeRegistry
                                    const blink::WebString& codecs) override;
   blink::WebString mimeTypeForExtension(
       const blink::WebString& file_extension) override;
-  blink::WebString mimeTypeFromFile(const blink::WebString& file_path) override;
 };
 
 class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
@@ -455,9 +454,6 @@ RendererBlinkPlatformImpl::MimeRegistry::supportsMediaMIMEType(
     const WebString& codecs,
     const WebString& key_system) {
   const std::string mime_type_ascii = ToASCIIOrEmpty(mime_type);
-  // Not supporting the container is a flat-out no.
-  if (!media::IsSupportedMediaMimeType(mime_type_ascii))
-    return IsNotSupported;
 
   if (!key_system.isEmpty()) {
     // Check whether the key system is supported with the mime_type and codecs.
@@ -469,34 +465,21 @@ RendererBlinkPlatformImpl::MimeRegistry::supportsMediaMIMEType(
     std::string key_system_ascii =
         media::GetUnprefixedKeySystemName(base::UTF16ToASCII(
             base::StringPiece16(key_system)));
-    std::vector<std::string> strict_codecs;
-    media::ParseCodecString(ToASCIIOrEmpty(codecs), &strict_codecs, true);
+    std::vector<std::string> codec_vector;
+    media::ParseCodecString(ToASCIIOrEmpty(codecs), &codec_vector, true);
 
     if (!media::PrefixedIsSupportedKeySystemWithMediaMimeType(
-            mime_type_ascii, strict_codecs, key_system_ascii)) {
+            mime_type_ascii, codec_vector, key_system_ascii)) {
       return IsNotSupported;
     }
 
     // Continue processing the mime_type and codecs.
   }
 
-  // Check list of strict codecs to see if it is supported.
-  if (media::IsStrictMediaMimeType(mime_type_ascii)) {
-    // Check if the codecs are a perfect match.
-    std::vector<std::string> strict_codecs;
-    media::ParseCodecString(ToASCIIOrEmpty(codecs), &strict_codecs, false);
-    return static_cast<WebMimeRegistry::SupportsType> (
-        media::IsSupportedStrictMediaMimeType(mime_type_ascii, strict_codecs));
-  }
-
-  // If we don't recognize the codec, it's possible we support it.
-  std::vector<std::string> parsed_codecs;
-  media::ParseCodecString(ToASCIIOrEmpty(codecs), &parsed_codecs, true);
-  if (!media::AreSupportedMediaCodecs(parsed_codecs))
-    return MayBeSupported;
-
-  // Otherwise we have a perfect match.
-  return IsSupported;
+  std::vector<std::string> codec_vector;
+  media::ParseCodecString(ToASCIIOrEmpty(codecs), &codec_vector, false);
+  return static_cast<WebMimeRegistry::SupportsType>(
+      media::IsSupportedMediaFormat(mime_type_ascii, codec_vector));
 }
 
 bool RendererBlinkPlatformImpl::MimeRegistry::supportsMediaSourceMIMEType(
@@ -522,20 +505,6 @@ WebString RendererBlinkPlatformImpl::MimeRegistry::mimeTypeForExtension(
   RenderThread::Get()->Send(
       new MimeRegistryMsg_GetMimeTypeFromExtension(
           base::FilePath::FromUTF16Unsafe(file_extension).value(), &mime_type));
-  return base::ASCIIToUTF16(mime_type);
-}
-
-WebString RendererBlinkPlatformImpl::MimeRegistry::mimeTypeFromFile(
-    const WebString& file_path) {
-  if (IsPluginProcess())
-    return SimpleWebMimeRegistryImpl::mimeTypeFromFile(file_path);
-
-  // The sandbox restricts our access to the registry, so we need to proxy
-  // these calls over to the browser process.
-  std::string mime_type;
-  RenderThread::Get()->Send(new MimeRegistryMsg_GetMimeTypeFromFile(
-      base::FilePath::FromUTF16Unsafe(file_path),
-      &mime_type));
   return base::ASCIIToUTF16(mime_type);
 }
 
@@ -971,17 +940,6 @@ bool RendererBlinkPlatformImpl::SetSandboxEnabledForTesting(bool enable) {
 blink::WebSpeechSynthesizer* RendererBlinkPlatformImpl::createSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
   return GetContentClient()->renderer()->OverrideSpeechSynthesizer(client);
-}
-
-//------------------------------------------------------------------------------
-
-bool RendererBlinkPlatformImpl::processMemorySizesInBytes(
-    size_t* private_bytes,
-    size_t* shared_bytes) {
-  content::RenderThread::Get()->Send(
-      new RenderProcessHostMsg_GetProcessMemorySizes(
-          private_bytes, shared_bytes));
-  return true;
 }
 
 //------------------------------------------------------------------------------

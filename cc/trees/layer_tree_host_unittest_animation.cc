@@ -233,6 +233,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
 
@@ -284,6 +285,7 @@ class LayerTreeHostAnimationTestSynchronizeAnimationStartTimes
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
@@ -366,6 +368,7 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
   void SetupTree() override {
     update_check_layer_->SetOpacity(0.f);
     layer_tree_host()->SetRootLayer(update_check_layer_);
+    client_.set_bounds(update_check_layer_->bounds());
     LayerTreeHostAnimationTest::SetupTree();
   }
 
@@ -555,6 +558,7 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }
@@ -637,6 +641,7 @@ class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
     scroll_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     scroll_layer_->SetScrollClipLayerId(layer_tree_host()->root_layer()->id());
     scroll_layer_->SetBounds(gfx::Size(1000, 1000));
+    client_.set_bounds(scroll_layer_->bounds());
     scroll_layer_->SetScrollOffset(gfx::ScrollOffset(10, 20));
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
   }
@@ -695,6 +700,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     scroll_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     scroll_layer_->SetScrollClipLayerId(layer_tree_host()->root_layer()->id());
     scroll_layer_->SetBounds(gfx::Size(10000, 10000));
+    client_.set_bounds(scroll_layer_->bounds());
     scroll_layer_->SetScrollOffset(gfx::ScrollOffset(100.0, 200.0));
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
 
@@ -882,6 +888,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
 
     layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     layer_->SetBounds(gfx::Size(2, 2));
+    client_.set_bounds(layer_->bounds());
     // Transform the layer to 4,4 to start.
     gfx::Transform start_transform;
     start_transform.Translate(4.0, 4.0);
@@ -923,7 +930,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
     // starting state which is 6,7.
     gfx::Transform expected_transform;
     expected_transform.Translate(6.0, 7.0);
-    EXPECT_EQ(expected_transform, child->draw_transform());
+    EXPECT_EQ(expected_transform, child->DrawTransform());
     // And the sync tree layer should know it is animating.
     EXPECT_TRUE(child->screen_space_transform_is_animating());
 
@@ -1054,6 +1061,7 @@ class LayerTreeHostAnimationTestRemoveAnimation
     LayerTreeHostAnimationTest::SetupTree();
     layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
     layer_tree_host()->root_layer()->AddChild(layer_);
   }
 
@@ -1103,7 +1111,7 @@ class LayerTreeHostAnimationTestRemoveAnimation
         // applied.
         gfx::Transform expected_transform;
         expected_transform.Translate(10.f, 10.f);
-        EXPECT_EQ(expected_transform, child->draw_transform());
+        EXPECT_EQ(expected_transform, child->DrawTransform());
         EXPECT_FALSE(child->screen_space_transform_is_animating());
         EndTest();
         break;
@@ -1129,6 +1137,7 @@ class LayerTreeHostAnimationTestIsAnimating
     LayerTreeHostAnimationTest::SetupTree();
     layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
     layer_tree_host()->root_layer()->AddChild(layer_);
   }
 
@@ -1209,6 +1218,7 @@ class LayerTreeHostAnimationTestAnimationFinishesDuringCommit
     LayerTreeHostAnimationTest::SetupTree();
     layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     layer_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(layer_->bounds());
     layer_tree_host()->root_layer()->AddChild(layer_);
   }
 
@@ -1240,7 +1250,7 @@ class LayerTreeHostAnimationTestAnimationFinishesDuringCommit
         expected_transform.Translate(5.f, 5.f);
         LayerImpl* layer_impl =
             host_impl->sync_tree()->root_layer()->children()[0].get();
-        EXPECT_EQ(expected_transform, layer_impl->draw_transform());
+        EXPECT_EQ(expected_transform, layer_impl->DrawTransform());
         EndTest();
         break;
     }
@@ -1279,6 +1289,7 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
     LayerTreeHostAnimationTest::SetupTree();
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(4, 4));
+    client_.set_bounds(picture_->bounds());
     picture_->set_layer_animation_delegate(this);
     layer_tree_host()->root_layer()->AddChild(picture_);
   }

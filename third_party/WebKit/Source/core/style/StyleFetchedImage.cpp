@@ -83,7 +83,7 @@ bool StyleFetchedImage::errorOccurred() const
 
 LayoutSize StyleFetchedImage::imageSize(const LayoutObject* layoutObject, float multiplier) const
 {
-    return m_image->imageSizeForLayoutObject(layoutObject, multiplier);
+    return m_image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject), multiplier);
 }
 
 bool StyleFetchedImage::imageHasRelativeWidth() const
@@ -126,15 +126,16 @@ void StyleFetchedImage::notifyFinished(Resource* resource)
 
 PassRefPtr<Image> StyleFetchedImage::image(const LayoutObject*, const IntSize& containerSize, float zoom) const
 {
-    RefPtr<Image> image = m_image->image();
-    if (image->isSVGImage())
-        return SVGImageForContainer::create(toSVGImage(image.get()), containerSize, zoom, m_url);
-    return image;
+    if (!m_image->image()->isSVGImage())
+        return m_image->image();
+
+    return SVGImageForContainer::create(toSVGImage(m_image->image()), containerSize, zoom, m_url);
 }
 
 bool StyleFetchedImage::knownToBeOpaque(const LayoutObject* layoutObject) const
 {
-    return m_image->currentFrameKnownToBeOpaque(layoutObject);
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(layoutObject, *m_image.get()));
+    return m_image->image()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
 }
 
 DEFINE_TRACE(StyleFetchedImage)

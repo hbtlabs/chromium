@@ -254,14 +254,11 @@ void AutofillDialogControllerAndroid::Show() {
   }
 
   // Determine what field types should be included in the dialog.
-  bool has_types = false;
-  bool has_sections = false;
-  form_structure_.ParseFieldTypesFromAutocompleteAttributes(
-      &has_types, &has_sections);
+  form_structure_.ParseFieldTypesFromAutocompleteAttributes();
 
   // Fail if the author didn't specify autocomplete types, or
   // if the dialog shouldn't be shown in a given circumstances.
-  if (!has_types) {
+  if (!form_structure_.has_author_specified_types()) {
     callback_.Run(
         AutofillClient::AutocompleteResultErrorDisabled,
         base::ASCIIToUTF16("Form is missing autocomplete attributes."),
@@ -431,8 +428,9 @@ bool AutofillDialogControllerAndroid::
   return RegisterNativesImpl(env);
 }
 
-void AutofillDialogControllerAndroid::DialogCancel(JNIEnv* env,
-                                                   jobject obj) {
+void AutofillDialogControllerAndroid::DialogCancel(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   LogOnCancelMetrics();
   callback_.Run(AutofillClient::AutocompleteResultErrorCancel,
                 base::string16(),
@@ -441,13 +439,13 @@ void AutofillDialogControllerAndroid::DialogCancel(JNIEnv* env,
 
 void AutofillDialogControllerAndroid::DialogContinue(
     JNIEnv* env,
-    jobject obj,
-    jobject wallet,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& wallet,
     jboolean jlast_used_choice_is_autofill,
-    jstring jlast_used_account_name,
-    jstring jlast_used_billing,
-    jstring jlast_used_shipping,
-    jstring jlast_used_card) {
+    const JavaParamRef<jstring>& jlast_used_account_name,
+    const JavaParamRef<jstring>& jlast_used_billing,
+    const JavaParamRef<jstring>& jlast_used_shipping,
+    const JavaParamRef<jstring>& jlast_used_card) {
   const base::string16 email =
       AutofillDialogResult::GetWalletEmail(env, wallet);
   const std::string google_transaction_id =

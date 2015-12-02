@@ -6,7 +6,6 @@
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -337,9 +336,8 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
     EXPECT_TRUE(LookupKey(key_ids[0], &key));
 
     // Update the session with the key ID and key.
-    std::string jwk =
-        GenerateJWKSet(vector_as_array(&key), key.size(),
-                       vector_as_array(&key_ids[0]), key_ids[0].size());
+    std::string jwk = GenerateJWKSet(key.data(), key.size(), key_ids[0].data(),
+                                     key_ids[0].size());
     decryptor->UpdateSession(session_id,
                              std::vector<uint8_t>(jwk.begin(), jwk.end()),
                              CreatePromise(RESOLVED));
@@ -907,6 +905,14 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackLive) {
   // we don't have to truncate our expectations here.
   EXPECT_EQ(TruncateToFFmpegTimeResolution(kLiveTimelineOffset()),
             demuxer_->GetTimelineOffset());
+}
+
+TEST_F(PipelineIntegrationTest, S32PlaybackHashed) {
+  ASSERT_EQ(PIPELINE_OK, Start("sfx_s32le.wav", kHashed));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_HASH_EQ(std::string(kNullVideoHash), GetVideoHash());
+  EXPECT_HASH_EQ("3.03,2.86,2.99,3.31,3.57,4.06,", GetAudioHash());
 }
 
 TEST_F(PipelineIntegrationTest, F32PlaybackHashed) {

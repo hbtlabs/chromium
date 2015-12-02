@@ -4,12 +4,14 @@
 
 #include "sync/internal_api/public/shared_model_type_processor.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
 #include "sync/engine/commit_queue.h"
-#include "sync/engine/model_type_entity.h"
 #include "sync/internal_api/public/activation_context.h"
+#include "sync/internal_api/public/model_type_entity.h"
 #include "sync/syncable/syncable_util.h"
 
 namespace syncer_v2 {
@@ -145,34 +147,40 @@ void SharedModelTypeProcessor::OnConnect(scoped_ptr<CommitQueue> worker) {
   FlushPendingCommitRequests();
 }
 
-void SharedModelTypeProcessor::Put(
-    const std::string& client_tag,
-    const std::string& non_unique_name,
-    const sync_pb::EntitySpecifics& specifics,
-    MetadataChanges* metadata_changes) {
+void SharedModelTypeProcessor::Put(const std::string& client_tag,
+                                   const std::string& non_unique_name,
+                                   const sync_pb::EntitySpecifics& specifics,
+                                   MetadataChangeList* metadata_change_list) {
   // TODO(skym): Update for new approach. Different objects, different caching,
-  // different loopups, metadat_changes, etc.
+  // different loopups, metadata_change_list, etc.
 
   DCHECK_EQ(type_, syncer::GetModelTypeFromSpecifics(specifics));
 
   const std::string client_tag_hash(
       syncer::syncable::GenerateSyncableHash(type_, client_tag));
+  base::Time now = base::Time::Now();
 
+  ModelTypeEntity* entity = nullptr;
+  // TODO(stanisc): crbug/561818: Search by client_tag rather than
+  // client_tag_hash.
   EntityMap::const_iterator it = entities_.find(client_tag_hash);
   if (it == entities_.end()) {
-    scoped_ptr<ModelTypeEntity> entity(ModelTypeEntity::NewLocalItem(
-        client_tag, specifics, base::Time::Now()));
-    entities_.insert(client_tag_hash, entity.Pass());
+    scoped_ptr<ModelTypeEntity> scoped_entity =
+        ModelTypeEntity::CreateNew(client_tag, client_tag_hash, "", now);
+    entity = scoped_entity.get();
+    entities_.insert(
+        std::make_pair(client_tag_hash, std::move(scoped_entity)));
   } else {
-    ModelTypeEntity* entity = it->second;
-    entity->MakeLocalChange(specifics);
+    entity = it->second.get();
   }
 
+  entity->MakeLocalChange(non_unique_name, specifics, now);
   FlushPendingCommitRequests();
 }
 
-void SharedModelTypeProcessor::Delete(const std::string& client_key,
-                                      MetadataChanges* metadata_changes) {
+void SharedModelTypeProcessor::Delete(
+    const std::string& client_key,
+    MetadataChangeList* metadata_change_list) {
   // TODO(skym): Update for new approach. Different caching, different lookup,
   // metadata changes.
 
@@ -186,7 +194,7 @@ void SharedModelTypeProcessor::Delete(const std::string& client_key,
     DLOG(WARNING) << "Attempted to delete missing item."
                   << " client tag: " << client_key;
   } else {
-    ModelTypeEntity* entity = it->second;
+    ModelTypeEntity* entity = it->second.get();
     entity->Delete();
   }
 
@@ -261,23 +269,25 @@ void SharedModelTypeProcessor::OnUpdateReceived(
     // the previous pending updates.
     pending_updates_map_.erase(client_tag_hash);
 
+    ModelTypeEntity* entity = nullptr;
     EntityMap::const_iterator it = entities_.find(client_tag_hash);
     if (it == entities_.end()) {
-      // TODO(stanisc): Pass / share entire EntityData with ModelTypeEntity.
-      scoped_ptr<ModelTypeEntity> entity = ModelTypeEntity::FromServerUpdate(
-          data.id, data.client_tag_hash, data.non_unique_name,
-          response_data.response_version, data.specifics, data.is_deleted(),
-          data.creation_time, data.modification_time,
-          response_data.encryption_key_name);
-      entities_.insert(client_tag_hash, entity.Pass());
-    } else {
-      ModelTypeEntity* entity = it->second;
-      entity->ApplyUpdateFromServer(
-          response_data.response_version, data.is_deleted(), data.specifics,
-          data.modification_time, response_data.encryption_key_name);
+      // TODO(stanisc): crbug/561821: Get client_tag from the service.
+      std::string client_tag = client_tag_hash;
 
-      // TODO(rlarocque): Do something special when conflicts are detected.
+      scoped_ptr<ModelTypeEntity> scoped_entity = ModelTypeEntity::CreateNew(
+          client_tag, client_tag_hash, data.id, data.creation_time);
+      entity = scoped_entity.get();
+      entities_.insert(
+          std::make_pair(client_tag_hash, std::move(scoped_entity)));
+
+    } else {
+      entity = it->second.get();
     }
+
+    entity->ApplyUpdateFromServer(response_data);
+
+    // TODO(stanisc): Do something special when conflicts are detected.
 
     // If the received entity has out of date encryption, we schedule another
     // commit to fix it.
@@ -301,12 +311,12 @@ void SharedModelTypeProcessor::OnUpdateReceived(
     UpdateMap::const_iterator lookup_it =
         pending_updates_map_.find(client_tag_hash);
     if (lookup_it == pending_updates_map_.end()) {
-      pending_updates_map_.insert(
-          client_tag_hash, make_scoped_ptr(new UpdateResponseData(update)));
+      pending_updates_map_.insert(std::make_pair(
+          client_tag_hash, make_scoped_ptr(new UpdateResponseData(update))));
     } else if (lookup_it->second->response_version <= update.response_version) {
       pending_updates_map_.erase(lookup_it);
-      pending_updates_map_.insert(
-          client_tag_hash, make_scoped_ptr(new UpdateResponseData(update)));
+      pending_updates_map_.insert(std::make_pair(
+          client_tag_hash, make_scoped_ptr(new UpdateResponseData(update))));
     } else {
       // Received update is stale, do not overwrite existing.
     }

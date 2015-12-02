@@ -116,7 +116,7 @@ static PlatformMouseEvent createMouseEvent(DragData* dragData)
     return PlatformMouseEvent(dragData->clientPosition(), dragData->globalPosition(),
         LeftButton, PlatformEvent::MouseMoved, 0,
         static_cast<PlatformEvent::Modifiers>(dragData->modifiers()),
-        PlatformMouseEvent::RealOrIndistinguishable, currentTime());
+        PlatformMouseEvent::RealOrIndistinguishable, monotonicallyIncreasingTime());
 }
 
 static DataTransfer* createDraggingDataTransfer(DataTransferAccessPolicy policy, DragData* dragData)
@@ -797,7 +797,7 @@ static PassOwnPtr<DragImage> dragImageForImage(Element* element, Image* image, c
     IntPoint origin;
 
     InterpolationQuality interpolationQuality = element->ensureComputedStyle()->imageRendering() == ImageRenderingPixelated ? InterpolationNone : InterpolationHigh;
-    RespectImageOrientationEnum shouldRespectImageOrientation = element->layoutObject() ? element->layoutObject()->shouldRespectImageOrientation() : DoNotRespectImageOrientation;
+    RespectImageOrientationEnum shouldRespectImageOrientation = LayoutObject::shouldRespectImageOrientation(element->layoutObject());
     ImageOrientation orientation;
 
     if (shouldRespectImageOrientation == RespectImageOrientation && image->isBitmapImage())

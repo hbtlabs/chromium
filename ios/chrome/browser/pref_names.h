@@ -12,6 +12,7 @@ namespace prefs {
 // Non-shared preferences should be in the prefs:: namespace (no ios::).
 extern const char kAcceptLanguages[];
 extern const char kAllowDeletingBrowserHistory[];
+extern const char kApplicationLocale[];
 extern const char kBrowserStateInfoCache[];
 extern const char kBrowserStateLastUsed[];
 extern const char kBrowserStatesLastActive[];
@@ -19,7 +20,7 @@ extern const char kBrowserStatesNumCreated[];
 extern const char kDefaultCharset[];
 extern const char kEnableDoNotTrack[];
 extern const char kHttpServerProperties[];
-extern const char kMaxConnectionsPerProxy[];
+extern const char kNtpShownPage[];
 extern const char kSavingBrowserHistoryDisabled[];
 extern const char kSearchSuggestEnabled[];
 

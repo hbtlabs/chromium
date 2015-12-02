@@ -43,8 +43,15 @@ int64 FLAGS_quic_time_wait_list_max_connections = 600000;
 // Enables server-side support for QUIC stateless rejects.
 bool FLAGS_enable_quic_stateless_reject_support = true;
 
+// If ture, allow Ack Decimation to be used for QUIC when requested by the
+// client connection option ACKD.
+bool FLAGS_quic_ack_decimation = true;
+
 // If true, flow controller may grow the receive window size if necessary.
 bool FLAGS_quic_auto_tune_receive_window = true;
+
+// If true, record received connection options to TransportConnectionStats.
+bool FLAGS_quic_connection_options_to_transport_stats = true;
 
 // Limits QUIC's max CWND to 200 packets.
 bool FLAGS_quic_limit_max_cwnd = true;
@@ -58,25 +65,12 @@ bool FLAGS_quic_require_handshake_confirmation = false;
 // client, a GO_AWAY frame is sent to the client.
 bool FLAGS_send_goaway_after_client_migration = true;
 
-// QUIC-specific flag. If true, Cubic's epoch is reset when the sender is
-// application-limited.
-bool FLAGS_reset_cubic_epoch_when_app_limited = true;
-
 // If true, use an interval set as the internal representation of a packet queue
 // instead of a set.
 bool FLAGS_quic_packet_queue_use_interval_set = true;
 
 // If true, Cubic's epoch is shifted when the sender is application-limited.
 bool FLAGS_shift_quic_cubic_epoch_when_app_limited = true;
-
-// If true, accounts for available (implicitly opened) streams under a separate
-// quota from open streams, which is 10 times larger.
-bool FLAGS_allow_many_available_streams = true;
-
-// If true, QuicPacketReader::ReadAndDispatchPackets will only return true if
-// recvmmsg fills all of the passed in messages. Otherwise, it will return true
-// if recvmmsg read any messages.
-bool FLAGS_quic_read_packets_full_recvmmsg = true;
 
 // If true, QUIC will measure head of line (HOL) blocking due between
 // streams due to packet losses on the headers stream.  The
@@ -87,23 +81,13 @@ bool FLAGS_quic_measure_headers_hol_blocking_time = true;
 // Disable QUIC's userspace pacing.
 bool FLAGS_quic_disable_pacing = false;
 
-// If true, a FIN received on a stream with read_side_closed_ true will be
-// recorded correctly.
-bool FLAGS_quic_fix_fin_accounting = true;
-
-// If true, ReliableQuicStream::StopReading (formerly CloseReadSide) causes
-// incoming data to be ignored but the read side of the stream object is not
-// closed.
-bool FLAGS_quic_implement_stop_reading = true;
+// If true, Use QUIC's GeneralLossAlgorithm implementation instead of
+// TcpLossAlgorithm or TimeLossAlgorithm.
+bool FLAGS_quic_general_loss_algorithm = true;
 
 // Invoke the QuicAckListener directly, instead of going through the AckNotifier
 // and AckNotifierManager.
 bool FLAGS_quic_no_ack_notifier = true;
-
-// If true, QuicSession::GetNumOpenStreams will count unfinished
-// streams as open streams, QuicSession::PostProcessAfterData will not
-// check the quota of unifinished streams.
-bool FLAGS_quic_count_unfinished_as_open_streams = true;
 
 // If true, use the unrolled prefetch path in QuicPacketCreator::CopyToBuffer.
 bool FLAGS_quic_packet_creator_prefetch = false;
@@ -121,5 +105,16 @@ bool FLAGS_quic_use_new_idle_timeout = true;
 bool FLAGS_quic_use_stream_sequencer_buffer = true;
 
 // If true, don't send QUIC packets if the send alarm is set.
-// Disabled until b/25638635 is resolved.
-bool FLAGS_respect_send_alarm = false;
+bool FLAGS_quic_respect_send_alarm = true;
+
+// If ture, sets callback pointer to nullptr after calling Cancel() in
+// QuicCryptoServerStream::CancelOutstandingCallbacks.
+bool FLAGS_quic_set_client_hello_cb_nullptr = true;
+
+// If treu, Only track a single retransmission in QUIC's TransmissionInfo
+// struct.
+bool FLAGS_quic_track_single_retransmission = true;
+
+// If true, allow each quic stream to write 16k blocks rather than doing a round
+// robin of one packet per session when ack clocked or paced.
+bool FLAGS_quic_batch_writes = true;

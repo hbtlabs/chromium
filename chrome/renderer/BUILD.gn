@@ -30,7 +30,6 @@ static_library("renderer") {
   defines = []
 
   deps = [
-    "//base/allocator",
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/common",
@@ -40,7 +39,7 @@ static_library("renderer") {
     "//components/content_settings/content/common",
     "//components/data_reduction_proxy/content/common",
     "//components/data_reduction_proxy/core/common",
-    "//components/dom_distiller/content:content_renderer",
+    "//components/dom_distiller/content/renderer",
     "//components/error_page/renderer",
     "//components/guest_view/renderer",
     "//components/network_hints/renderer",
@@ -125,7 +124,6 @@ static_library("renderer") {
       "//media/cast:net",
       "//media/cast:receiver",
       "//media/cast:sender",
-      "//media/cast/logging/proto",
     ]
     if (!enable_webrtc) {
       sources -= [

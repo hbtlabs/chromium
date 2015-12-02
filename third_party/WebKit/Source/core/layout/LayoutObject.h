@@ -729,12 +729,12 @@ public:
 
     Node* node() const
     {
-        return isAnonymous() ? 0 : m_node;
+        return isAnonymous() ? nullptr : m_node;
     }
 
     Node* nonPseudoNode() const
     {
-        return isPseudoElement() ? 0 : node();
+        return isPseudoElement() ? nullptr : node();
     }
 
     void clearNode() { m_node = nullptr; }
@@ -944,6 +944,7 @@ public:
     // Convert a local quad into the coordinate system of container, taking transforms into account.
     FloatQuad localToContainerQuad(const FloatQuad&, const LayoutBoxModelObject* paintInvalidationContainer, MapCoordinatesFlags = 0, bool* wasFixed = nullptr) const;
     FloatPoint localToContainerPoint(const FloatPoint&, const LayoutBoxModelObject* paintInvalidationContainer, MapCoordinatesFlags = 0, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const;
+    void localToContainerRects(Vector<LayoutRect>&, const LayoutBoxModelObject* paintInvalidationContainer, const LayoutPoint& preOffset, const LayoutPoint& postOffset) const;
 
     // Convert a local point into the coordinate system of backing coordinates. Also returns the backing layer if needed.
     FloatPoint localToInvalidationBackingPoint(const LayoutPoint&, PaintLayer** backingLayer = nullptr);
@@ -1227,7 +1228,7 @@ public:
     // Compute a list of hit-test rectangles per layer rooted at this layoutObject.
     virtual void computeLayerHitTestRects(LayerHitTestRects&) const;
 
-    RespectImageOrientationEnum shouldRespectImageOrientation() const;
+    static RespectImageOrientationEnum shouldRespectImageOrientation(const LayoutObject*);
 
     bool isRelayoutBoundaryForInspector() const;
 
@@ -1538,9 +1539,8 @@ private:
 
     RefPtr<ComputedStyle> m_style;
 
-    // Oilpan: raw pointer back to the owning Node is considered safe.
-    GC_PLUGIN_IGNORE("http://crbug.com/509911")
-    Node* m_node;
+    // Oilpan: This untraced pointer to the owning Node is considered safe.
+    RawPtrWillBeUntracedMember<Node> m_node;
 
     LayoutObject* m_parent;
     LayoutObject* m_previous;

@@ -17,6 +17,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -166,6 +167,7 @@
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/icu/source/common/unicode/unistr.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/event_switches.h"
@@ -432,6 +434,24 @@ std::string UintVectorToString(const std::vector<unsigned>& vector) {
   return str;
 }
 
+// Copies kEnableFeatures and kDisableFeatures to the renderer command line.
+// Generates them from the FeatureList override state, to take into account
+// overrides from FieldTrials.
+void CopyEnableDisableFeatureFlagsToRenderer(base::CommandLine* renderer_cmd) {
+  std::string enabled_features;
+  std::string disabled_features;
+  base::FeatureList::GetInstance()->GetFeatureOverrides(&enabled_features,
+                                                        &disabled_features);
+  if (!enabled_features.empty()) {
+    renderer_cmd->AppendSwitchASCII(switches::kEnableFeatures,
+                                    enabled_features);
+  }
+  if (!disabled_features.empty()) {
+    renderer_cmd->AppendSwitchASCII(switches::kDisableFeatures,
+                                    disabled_features);
+  }
+}
+
 }  // namespace
 
 RendererMainThreadFactoryFunction g_renderer_main_thread_factory = NULL;
@@ -574,6 +594,10 @@ RenderProcessHostImpl::RenderProcessHostImpl(
   IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded();
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 #endif  // USE_ATTACHMENT_BROKER
+
+#if defined(MOJO_SHELL_CLIENT)
+  RegisterChildWithExternalShell(id_, this);
+#endif
 }
 
 // static
@@ -1301,7 +1325,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableDisplayList2dCanvas,
     switches::kDisableDistanceFieldText,
     switches::kDisableEncryptedMedia,
-    switches::kDisableFeatures,
     switches::kDisableFileSystem,
     switches::kDisableGestureRequirementForMediaPlayback,
     switches::kDisableGpuCompositing,
@@ -1340,7 +1363,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableDistanceFieldText,
     switches::kEnableExperimentalCanvasFeatures,
     switches::kEnableExperimentalWebPlatformFeatures,
-    switches::kEnableFeatures,
     switches::kEnableHeapProfiling,
     switches::kEnableGPUClientLogging,
     switches::kEnableGpuClientTracing,
@@ -1421,10 +1443,10 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     // also be added to chrome/browser/chromeos/login/chrome_restart_request.cc.
     cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
-    cc::switches::kDisableCompositorPropertyTrees,
     cc::switches::kDisableMainFrameBeforeActivation,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableBeginFrameScheduling,
+    cc::switches::kEnableCompositorPropertyTrees,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kShowCompositedLayerBorders,
@@ -1440,6 +1462,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     cc::switches::kTopControlsShowThreshold,
 
     scheduler::switches::kEnableVirtualizedTime,
+    scheduler::switches::kDisableBackgroundTimerThrottling,
 
 #if defined(ENABLE_PLUGINS)
     switches::kEnablePepperTesting,
@@ -1481,6 +1504,8 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   };
   renderer_cmd->CopySwitchesFrom(browser_cmd, kSwitchNames,
                                  arraysize(kSwitchNames));
+
+  CopyEnableDisableFeatureFlagsToRenderer(renderer_cmd);
 
   if (browser_cmd.HasSwitch(switches::kTraceStartup) &&
       BrowserMainLoop::GetInstance()->is_tracing_startup_for_duration()) {
@@ -1752,6 +1777,13 @@ void RenderProcessHostImpl::Cleanup() {
     survive_for_worker_start_time_ = base::TimeTicks::Now();
   }
 
+#if defined(ENABLE_WEBRTC)
+  if (is_initialized_) {
+    BrowserMainLoop::GetInstance()->media_stream_manager()->
+        UnregisterNativeLogCallback(GetID());
+  }
+#endif
+
   // When there are no other owners of this object, we can delete ourselves.
   if (listeners_.IsEmpty() && worker_ref_count_ == 0) {
     if (!survive_for_worker_start_time_.is_null()) {
@@ -1905,7 +1937,10 @@ void RenderProcessHostImpl::DisableAudioDebugRecordings() {
 
 void RenderProcessHostImpl::SetWebRtcLogMessageCallback(
     base::Callback<void(const std::string&)> callback) {
-  webrtc_log_message_callback_ = callback;
+#if defined(ENABLE_WEBRTC)
+  BrowserMainLoop::GetInstance()->media_stream_manager()->
+      RegisterNativeLogCallback(GetID(), callback);
+#endif
 }
 
 RenderProcessHostImpl::WebRtcStopRtpDumpCallback
@@ -2091,6 +2126,11 @@ RenderProcessHost* RenderProcessHost::FromID(int render_process_id) {
 bool RenderProcessHost::ShouldTryToUseExistingProcessHost(
     BrowserContext* browser_context,
     const GURL& url) {
+  // This needs to be checked first to ensure that --single-process
+  // and --site-per-process can be used together.
+  if (run_renderer_in_process())
+    return true;
+
   // If --site-per-process is enabled, do not try to reuse renderer processes
   // when over the limit.
   // TODO(nick): This is overly conservative and isn't launchable. Move this
@@ -2099,9 +2139,6 @@ bool RenderProcessHost::ShouldTryToUseExistingProcessHost(
   // also allow non-isolated sites to share processes. https://crbug.com/513036
   if (SiteIsolationPolicy::AreCrossProcessFramesPossible())
     return false;
-
-  if (run_renderer_in_process())
-    return true;
 
   // NOTE: Sometimes it's necessary to create more render processes than
   //       GetMaxRendererProcessCount(), for instance when we want to create
@@ -2307,14 +2344,6 @@ size_t RenderProcessHost::GetActiveViewCount() {
   return num_active_views;
 }
 
-#if defined(ENABLE_WEBRTC)
-void RenderProcessHostImpl::WebRtcLogMessage(const std::string& message) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!webrtc_log_message_callback_.is_null())
-    webrtc_log_message_callback_.Run(message);
-}
-#endif
-
 void RenderProcessHostImpl::ReleaseOnCloseACK(
     RenderProcessHost* host,
     const SessionStorageNamespaceMap& sessions,
@@ -2438,9 +2467,27 @@ void RenderProcessHostImpl::OnProcessLaunched() {
                                          NotificationService::NoDetails());
 
 #if defined(MOJO_SHELL_CLIENT)
-  // Send a handle that the external Mojo shell can use to pass an Application
-  // request to the child.
-  RegisterChildWithExternalShell(id_, GetHandle(), this);
+  // Send the mojo shell handle to the renderer.
+  SendExternalMojoShellHandleToChild(GetHandle(), this);
+#endif
+
+#if defined(OS_WIN)
+  // TODO(jam): enable on POSIX
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk") &&
+      child_process_launcher_.get()) {
+    base::ProcessHandle process_handle =
+        child_process_launcher_->GetProcess().Handle();
+    mojo::embedder::ScopedPlatformHandle client_pipe =
+        mojo::embedder::ChildProcessLaunched(process_handle);
+    Send(new ChildProcessMsg_SetMojoParentPipeHandle(
+        IPC::GetFileHandleForProcess(
+#if defined(OS_WIN)
+                                     client_pipe.release().handle,
+#else
+                                     client_pipe.release().fd,
+#endif
+                                     process_handle, true)));
+  }
 #endif
 
   // Allow Mojo to be setup before the renderer sees any Chrome IPC messages.

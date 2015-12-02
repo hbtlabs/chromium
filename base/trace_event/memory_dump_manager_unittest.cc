@@ -370,19 +370,19 @@ TEST_F(MemoryDumpManagerTest, RespectTaskRunnerAffinity) {
   InitializeMemoryDumpManager(false /* is_coordinator */);
   const uint32 kNumInitialThreads = 8;
 
-  ScopedVector<Thread> threads;
-  ScopedVector<MockMemoryDumpProvider> mdps;
+  std::vector<scoped_ptr<Thread>> threads;
+  std::vector<scoped_ptr<MockMemoryDumpProvider>> mdps;
 
   // Create the threads and setup the expectations. Given that at each iteration
   // we will pop out one thread/MemoryDumpProvider, each MDP is supposed to be
   // invoked a number of times equal to its index.
   for (uint32 i = kNumInitialThreads; i > 0; --i) {
-    Thread* thread = new Thread("test thread");
-    threads.push_back(thread);
-    threads.back()->Start();
+    threads.push_back(make_scoped_ptr(new Thread("test thread")));
+    auto thread = threads.back().get();
+    thread->Start();
     scoped_refptr<SingleThreadTaskRunner> task_runner = thread->task_runner();
-    MockMemoryDumpProvider* mdp = new MockMemoryDumpProvider();
-    mdps.push_back(mdp);
+    mdps.push_back(make_scoped_ptr(new MockMemoryDumpProvider()));
+    auto mdp = mdps.back().get();
     RegisterDumpProvider(mdp, task_runner, kDefaultOptions);
     EXPECT_CALL(*mdp, OnMemoryDump(_, _))
         .Times(i)
@@ -392,7 +392,6 @@ TEST_F(MemoryDumpManagerTest, RespectTaskRunnerAffinity) {
               return true;
             }));
   }
-
   EnableTracingWithLegacyCategories(MemoryDumpManager::kTraceCategory);
 
   while (!threads.empty()) {
@@ -409,7 +408,7 @@ TEST_F(MemoryDumpManagerTest, RespectTaskRunnerAffinity) {
       RunLoop run_loop;
       Closure unregistration =
           Bind(&MemoryDumpManager::UnregisterDumpProvider,
-               Unretained(mdm_.get()), Unretained(mdps.back()));
+               Unretained(mdm_.get()), Unretained(mdps.back().get()));
       threads.back()->task_runner()->PostTaskAndReply(FROM_HERE, unregistration,
                                                       run_loop.QuitClosure());
       run_loop.Run();
@@ -717,8 +716,7 @@ TEST_F(MemoryDumpManagerTest, TraceConfigExpectationsWhenIsCoordinator) {
 
 // Tests against race conditions that might arise when disabling tracing in the
 // middle of a global memory dump.
-// TODO(ssid): Enable this test once crbug.com/555584 is fixed.
-TEST_F(MemoryDumpManagerTest, DISABLED_DisableTracingWhileDumping) {
+TEST_F(MemoryDumpManagerTest, DisableTracingWhileDumping) {
   base::WaitableEvent tracing_disabled_event(false, false);
   InitializeMemoryDumpManager(false /* is_coordinator */);
 

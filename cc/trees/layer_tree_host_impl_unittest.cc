@@ -45,6 +45,7 @@
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_display_list_raster_source.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
+#include "cc/test/fake_mask_layer_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_picture_layer_impl.h"
@@ -1182,6 +1183,107 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingActiveTree) {
   EXPECT_FALSE(did_request_commit_);
 }
 
+class MissingTilesLayer : public LayerImpl {
+ public:
+  MissingTilesLayer(LayerTreeImpl* layer_tree_impl, int id)
+      : LayerImpl(layer_tree_impl, id), has_missing_tiles_(true) {}
+
+  void set_has_missing_tiles(bool has_missing_tiles) {
+    has_missing_tiles_ = has_missing_tiles;
+  }
+
+  void AppendQuads(RenderPass* render_pass,
+                   AppendQuadsData* append_quads_data) override {
+    append_quads_data->num_missing_tiles += has_missing_tiles_;
+  }
+
+ private:
+  bool has_missing_tiles_;
+};
+
+TEST_F(LayerTreeHostImplTest, AnimationSchedulingMarksLayerNotReady) {
+  host_impl_->SetViewportSize(gfx::Size(50, 50));
+
+  host_impl_->active_tree()->SetRootLayer(
+      LayerImpl::Create(host_impl_->active_tree(), 1));
+  LayerImpl* root = host_impl_->active_tree()->root_layer();
+  root->SetBounds(gfx::Size(50, 50));
+  root->SetHasRenderSurface(true);
+
+  root->AddChild(scoped_ptr<MissingTilesLayer>(
+      new MissingTilesLayer(host_impl_->active_tree(), 2)));
+  MissingTilesLayer* child =
+      static_cast<MissingTilesLayer*>(root->children()[0].get());
+  child->SetBounds(gfx::Size(10, 10));
+  child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
+  child->SetDrawsContent(true);
+
+  EXPECT_TRUE(child->was_ever_ready_since_last_transform_animation());
+
+  // Add a translate from 6,7 to 8,9.
+  TransformOperations start;
+  start.AppendTranslate(6.f, 7.f, 0.f);
+  TransformOperations end;
+  end.AppendTranslate(8.f, 9.f, 0.f);
+  int animation_id = AddAnimatedTransformToLayer(child, 4.0, start, end);
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  host_impl_->WillBeginImplFrame(
+      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, now));
+
+  host_impl_->ActivateAnimations();
+  host_impl_->Animate();
+
+  EXPECT_FALSE(child->was_ever_ready_since_last_transform_animation());
+
+  host_impl_->active_tree()->property_trees()->needs_rebuild = true;
+  host_impl_->active_tree()->BuildPropertyTreesForTesting();
+  host_impl_->ResetRequiresHighResToDraw();
+
+  // Child layer has an animating transform but missing tiles.
+  FakeLayerTreeHostImpl::FrameData frame;
+  DrawResult result = host_impl_->PrepareToDraw(&frame);
+  EXPECT_EQ(DRAW_ABORTED_CHECKERBOARD_ANIMATIONS, result);
+  host_impl_->DidDrawAllLayers(frame);
+
+  child->set_has_missing_tiles(false);
+
+  // Child layer has an animating and no missing tiles.
+  result = host_impl_->PrepareToDraw(&frame);
+  EXPECT_EQ(DRAW_SUCCESS, result);
+  EXPECT_TRUE(child->was_ever_ready_since_last_transform_animation());
+  host_impl_->DidDrawAllLayers(frame);
+
+  // Remove the animation.
+  child->set_has_missing_tiles(true);
+  child->layer_animation_controller()->RemoveAnimation(animation_id);
+  child->draw_properties().screen_space_transform_is_animating = false;
+
+  // Child layer doesn't have an animation, but was never ready since the last
+  // time it animated (and has missing tiles).
+  result = host_impl_->PrepareToDraw(&frame);
+  EXPECT_EQ(DRAW_ABORTED_CHECKERBOARD_ANIMATIONS, result);
+  EXPECT_FALSE(child->was_ever_ready_since_last_transform_animation());
+  host_impl_->DidDrawAllLayers(frame);
+
+  child->set_has_missing_tiles(false);
+
+  // Child layer doesn't have an animation and all tiles are ready.
+  result = host_impl_->PrepareToDraw(&frame);
+  EXPECT_EQ(DRAW_SUCCESS, result);
+  EXPECT_TRUE(child->was_ever_ready_since_last_transform_animation());
+  host_impl_->DidDrawAllLayers(frame);
+
+  child->set_has_missing_tiles(true);
+
+  // Child layer doesn't have an animation, and was ready at least once since
+  // the last time it animated.
+  result = host_impl_->PrepareToDraw(&frame);
+  EXPECT_EQ(DRAW_SUCCESS, result);
+  EXPECT_TRUE(child->was_ever_ready_since_last_transform_animation());
+  host_impl_->DidDrawAllLayers(frame);
+}
+
 TEST_F(LayerTreeHostImplTest, ImplPinchZoom) {
   LayerImpl* scroll_layer = SetupScrollAndContentsLayers(gfx::Size(100, 100));
   host_impl_->SetViewportSize(gfx::Size(50, 50));
@@ -2221,7 +2323,7 @@ class LayerTreeHostImplTestScrollbarAnimation : public LayerTreeHostImplTest {
   }
 
   void RunTest(LayerTreeSettings::ScrollbarAnimator animator) {
-    LayerTreeSettings settings;
+    LayerTreeSettings settings = DefaultSettings();
     settings.scrollbar_animator = animator;
     settings.scrollbar_fade_delay_ms = 20;
     settings.scrollbar_fade_duration_ms = 20;
@@ -2334,7 +2436,7 @@ TEST_F(LayerTreeHostImplTestScrollbarAnimation, Thinning) {
 class LayerTreeHostImplTestScrollbarOpacity : public LayerTreeHostImplTest {
  protected:
   void RunTest(LayerTreeSettings::ScrollbarAnimator animator) {
-    LayerTreeSettings settings;
+    LayerTreeSettings settings = DefaultSettings();
     settings.scrollbar_animator = animator;
     settings.scrollbar_fade_delay_ms = 20;
     settings.scrollbar_fade_duration_ms = 20;
@@ -2392,7 +2494,7 @@ TEST_F(LayerTreeHostImplTestScrollbarOpacity, Thinning) {
 }
 
 TEST_F(LayerTreeHostImplTest, ScrollbarInnerLargerThanOuter) {
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   CreateHostImpl(settings, CreateOutputSurface());
 
   gfx::Size inner_viewport_size(315, 200);
@@ -2426,7 +2528,7 @@ TEST_F(LayerTreeHostImplTest, ScrollbarInnerLargerThanOuter) {
 }
 
 TEST_F(LayerTreeHostImplTest, ScrollbarRegistration) {
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   settings.scrollbar_animator = LayerTreeSettings::LINEAR_FADE;
   settings.scrollbar_fade_delay_ms = 20;
   settings.scrollbar_fade_duration_ms = 20;
@@ -2547,7 +2649,7 @@ TEST_F(LayerTreeHostImplTest, ScrollbarRegistration) {
 
 void LayerTreeHostImplTest::SetupMouseMoveAtWithDeviceScale(
     float device_scale_factor) {
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   settings.scrollbar_fade_delay_ms = 500;
   settings.scrollbar_fade_duration_ms = 300;
   settings.scrollbar_animator = LayerTreeSettings::THINNING;
@@ -3317,6 +3419,7 @@ class LayerTreeHostImplTopControlsTest : public LayerTreeHostImplTest {
       const gfx::Size& inner_viewport_size,
       const gfx::Size& outer_viewport_size,
       const gfx::Size& scroll_layer_size) {
+    settings_ = DefaultSettings();
     CreateHostImpl(settings_, CreateOutputSurface());
     host_impl_->sync_tree()->set_top_controls_shrink_blink_size(true);
     host_impl_->sync_tree()->set_top_controls_height(top_controls_height_);
@@ -3664,6 +3767,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, TopControlsScrollableSublayer) {
 // Ensure setting the top controls position explicitly using the setters on the
 // TreeImpl correctly affects the top controls manager and viewport bounds.
 TEST_F(LayerTreeHostImplTopControlsTest, PositionTopControlsExplicitly) {
+  settings_ = DefaultSettings();
   CreateHostImpl(settings_, CreateOutputSurface());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
@@ -3694,6 +3798,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, PositionTopControlsExplicitly) {
 // applied on sync tree activation. The total top controls offset shouldn't
 // change after the activation.
 TEST_F(LayerTreeHostImplTopControlsTest, ApplyDeltaOnTreeActivation) {
+  settings_ = DefaultSettings();
   CreateHostImpl(settings_, CreateOutputSurface());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
@@ -3737,6 +3842,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, ApplyDeltaOnTreeActivation) {
 // height is the amount that the inner viewport container was shrunk outside
 // the compositor to accommodate the top controls.
 TEST_F(LayerTreeHostImplTopControlsTest, TopControlsLayoutHeightChanged) {
+  settings_ = DefaultSettings();
   CreateHostImpl(settings_, CreateOutputSurface());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
@@ -3944,6 +4050,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, TopControlsScrollOuterViewport) {
 
 TEST_F(LayerTreeHostImplTopControlsTest,
        ScrollNonScrollableRootWithTopControls) {
+  settings_ = DefaultSettings();
   CreateHostImpl(settings_, CreateOutputSurface());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
@@ -4255,16 +4362,16 @@ TEST_F(LayerTreeHostImplTest, PageScaleDeltaAppliedToRootScrollLayerOnly) {
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
 
-  EXPECT_EQ(1.f, root->draw_transform().matrix().getDouble(0, 0));
-  EXPECT_EQ(1.f, root->draw_transform().matrix().getDouble(1, 1));
-  EXPECT_EQ(new_page_scale, scroll->draw_transform().matrix().getDouble(0, 0));
-  EXPECT_EQ(new_page_scale, scroll->draw_transform().matrix().getDouble(1, 1));
-  EXPECT_EQ(new_page_scale, child->draw_transform().matrix().getDouble(0, 0));
-  EXPECT_EQ(new_page_scale, child->draw_transform().matrix().getDouble(1, 1));
+  EXPECT_EQ(1.f, root->DrawTransform().matrix().getDouble(0, 0));
+  EXPECT_EQ(1.f, root->DrawTransform().matrix().getDouble(1, 1));
+  EXPECT_EQ(new_page_scale, scroll->DrawTransform().matrix().getDouble(0, 0));
+  EXPECT_EQ(new_page_scale, scroll->DrawTransform().matrix().getDouble(1, 1));
+  EXPECT_EQ(new_page_scale, child->DrawTransform().matrix().getDouble(0, 0));
+  EXPECT_EQ(new_page_scale, child->DrawTransform().matrix().getDouble(1, 1));
   EXPECT_EQ(new_page_scale,
-            grand_child->draw_transform().matrix().getDouble(0, 0));
+            grand_child->DrawTransform().matrix().getDouble(0, 0));
   EXPECT_EQ(new_page_scale,
-            grand_child->draw_transform().matrix().getDouble(1, 1));
+            grand_child->DrawTransform().matrix().getDouble(1, 1));
 }
 
 TEST_F(LayerTreeHostImplTest, ScrollChildAndChangePageScaleOnMainThread) {
@@ -5199,7 +5306,7 @@ TEST_F(LayerTreeHostImplTest, OverscrollChildEventBubbling) {
 
 TEST_F(LayerTreeHostImplTest, OverscrollAlways) {
   InputHandlerScrollResult scroll_result;
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   CreateHostImpl(settings, CreateOutputSurface());
 
   LayerImpl* scroll_layer = SetupScrollAndContentsLayers(gfx::Size(50, 50));
@@ -5911,7 +6018,7 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
 
   // This test creates its own LayerTreeHostImpl, so
   // that we can force partial swap enabled.
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   settings.renderer_settings.partial_swap_enabled = true;
   scoped_ptr<LayerTreeHostImpl> layer_tree_host_impl =
       LayerTreeHostImpl::Create(
@@ -6193,6 +6300,7 @@ TEST_F(LayerTreeHostImplTest, PartialSwap) {
 }
 
 static scoped_ptr<LayerTreeHostImpl> SetupLayersForOpacity(
+    LayerTreeSettings settings,
     bool partial_swap,
     LayerTreeHostImplClient* client,
     TaskRunnerProvider* task_runner_provider,
@@ -6200,7 +6308,6 @@ static scoped_ptr<LayerTreeHostImpl> SetupLayersForOpacity(
     TaskGraphRunner* task_graph_runner,
     RenderingStatsInstrumentation* stats_instrumentation,
     OutputSurface* output_surface) {
-  LayerTreeSettings settings;
   settings.renderer_settings.partial_swap_enabled = partial_swap;
   scoped_ptr<LayerTreeHostImpl> my_host_impl = LayerTreeHostImpl::Create(
       settings, client, task_runner_provider, stats_instrumentation, manager,
@@ -6276,8 +6383,9 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorPartialSwap) {
   scoped_ptr<OutputSurface> output_surface(
       FakeOutputSurface::Create3d(provider));
   scoped_ptr<LayerTreeHostImpl> my_host_impl = SetupLayersForOpacity(
-      true, this, &task_runner_provider_, &shared_bitmap_manager,
-      &task_graph_runner, &stats_instrumentation_, output_surface.get());
+      DefaultSettings(), true, this, &task_runner_provider_,
+      &shared_bitmap_manager, &task_graph_runner, &stats_instrumentation_,
+      output_surface.get());
   {
     LayerTreeHostImpl::FrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, my_host_impl->PrepareToDraw(&frame));
@@ -6305,8 +6413,9 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorNoPartialSwap) {
   scoped_ptr<OutputSurface> output_surface(
       FakeOutputSurface::Create3d(provider));
   scoped_ptr<LayerTreeHostImpl> my_host_impl = SetupLayersForOpacity(
-      false, this, &task_runner_provider_, &shared_bitmap_manager,
-      &task_graph_runner, &stats_instrumentation_, output_surface.get());
+      DefaultSettings(), false, this, &task_runner_provider_,
+      &shared_bitmap_manager, &task_graph_runner, &stats_instrumentation_,
+      output_surface.get());
   {
     LayerTreeHostImpl::FrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, my_host_impl->PrepareToDraw(&frame));
@@ -6499,27 +6608,10 @@ TEST_F(LayerTreeHostImplTestWithDelegatingRenderer, FrameIncludesDamageRect) {
 // TODO(reveman): Remove this test and the ability to prevent on demand raster
 // when delegating renderer supports PictureDrawQuads. crbug.com/342121
 TEST_F(LayerTreeHostImplTestWithDelegatingRenderer, PreventRasterizeOnDemand) {
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   CreateHostImpl(settings, CreateOutputSurface());
   EXPECT_FALSE(host_impl_->GetRendererCapabilities().allow_rasterize_on_demand);
 }
-
-class FakeMaskLayerImpl : public LayerImpl {
- public:
-  static scoped_ptr<FakeMaskLayerImpl> Create(LayerTreeImpl* tree_impl,
-                                              int id) {
-    return make_scoped_ptr(new FakeMaskLayerImpl(tree_impl, id));
-  }
-
-  void GetContentsResourceId(ResourceId* resource_id,
-                             gfx::Size* resource_size) const override {
-    *resource_id = 0;
-  }
-
- private:
-  FakeMaskLayerImpl(LayerTreeImpl* tree_impl, int id)
-      : LayerImpl(tree_impl, id) {}
-};
 
 class GLRendererWithSetupQuadForAntialiasing : public GLRenderer {
  public:
@@ -6721,7 +6813,7 @@ TEST_F(LayerTreeHostImplTest,
 // Checks that we have a non-0 default allocation if we pass a context that
 // doesn't support memory management extensions.
 TEST_F(LayerTreeHostImplTest, DefaultMemoryAllocation) {
-  LayerTreeSettings settings;
+  LayerTreeSettings settings = DefaultSettings();
   host_impl_ = LayerTreeHostImpl::Create(
       settings, this, &task_runner_provider_, &stats_instrumentation_,
       &shared_bitmap_manager_, &gpu_memory_buffer_manager_, &task_graph_runner_,

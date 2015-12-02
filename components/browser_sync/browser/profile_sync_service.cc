@@ -49,6 +49,7 @@
 #include "components/sync_driver/signin_manager_wrapper.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "components/sync_driver/sync_client.h"
+#include "components/sync_driver/sync_driver_features.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/sync_driver/sync_error_controller.h"
 #include "components/sync_driver/sync_stopped_reporter.h"
@@ -296,6 +297,23 @@ void ProfileSyncService::Initialize() {
 
   sync_prefs_.AddSyncPrefObserver(this);
 
+  SyncInitialState sync_state = CAN_START;
+  if (!IsSignedIn()) {
+    sync_state = NOT_SIGNED_IN;
+  } else if (IsManaged()) {
+    sync_state = IS_MANAGED;
+  } else if (!IsSyncRequested()) {
+    if (HasSyncSetupCompleted()) {
+      sync_state = NOT_REQUESTED;
+    } else {
+      sync_state = NOT_REQUESTED_NOT_SETUP;
+    }
+  } else if (!HasSyncSetupCompleted()) {
+    sync_state = NEEDS_CONFIRMATION;
+  }
+  UMA_HISTOGRAM_ENUMERATION("Sync.InitialState", sync_state,
+                            SYNC_INITIAL_STATE_LIMIT);
+
   // If sync isn't allowed, the only thing to do is to turn it off.
   if (!IsSyncAllowed()) {
     RequestStop(CLEAR_DATA);
@@ -338,7 +356,7 @@ void ProfileSyncService::Initialize() {
     need_backup_ = false;
   }
 
-#if defined(ENABLE_PRE_SYNC_BACKUP)
+#if BUILDFLAG(ENABLE_PRE_SYNC_BACKUP)
   if (!running_rollback && !IsSignedIn()) {
     CleanUpBackup();
   }
@@ -2566,7 +2584,7 @@ void ProfileSyncService::ClearBrowsingDataSinceFirstSync() {
 void ProfileSyncService::CheckSyncBackupIfNeeded() {
   DCHECK_EQ(backend_mode_, SYNC);
 
-#if defined(ENABLE_PRE_SYNC_BACKUP)
+#if BUILDFLAG(ENABLE_PRE_SYNC_BACKUP)
   const base::Time last_synced_time = sync_prefs_.GetLastSyncedTime();
   // Check backup once a day.
   if (!last_backup_time_ &&

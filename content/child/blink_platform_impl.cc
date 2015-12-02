@@ -8,7 +8,6 @@
 
 #include <vector>
 
-#include "base/allocator/allocator_extension.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -16,7 +15,6 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/process/process_metrics.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -434,6 +432,22 @@ static int ToMessageID(WebLocalizedString::Name name) {
   return -1;
 }
 
+class TraceLogObserverAdapter
+    : public base::trace_event::TraceLog::EnabledStateObserver {
+ public:
+  TraceLogObserverAdapter(
+      blink::Platform::TraceLogEnabledStateObserver* observer)
+      : observer_(observer) {}
+
+  void OnTraceLogEnabled() override { observer_->onTraceLogEnabled(); }
+
+  void OnTraceLogDisabled() override { observer_->onTraceLogDisabled(); }
+
+ private:
+  blink::Platform::TraceLogEnabledStateObserver* observer_;
+  DISALLOW_COPY_AND_ASSIGN(TraceLogObserverAdapter);
+};
+
 // TODO(skyostil): Ensure that we always have an active task runner when
 // constructing the platform.
 BlinkPlatformImpl::BlinkPlatformImpl()
@@ -558,8 +572,7 @@ blink::WebWaitableEvent* BlinkPlatformImpl::waitMultipleEvents(
   std::vector<base::WaitableEvent*> events;
   for (size_t i = 0; i < web_events.size(); ++i)
     events.push_back(static_cast<WebWaitableEventImpl*>(web_events[i])->impl());
-  size_t idx = base::WaitableEvent::WaitMany(
-      vector_as_array(&events), events.size());
+  size_t idx = base::WaitableEvent::WaitMany(events.data(), events.size());
   DCHECK_LT(idx, web_events.size());
   return web_events[idx];
 }
@@ -743,6 +756,26 @@ BlinkPlatformImpl::createWebMemoryAllocatorDumpGuid(
   return base::trace_event::MemoryAllocatorDumpGuid(guidStr.utf8()).ToUint64();
 }
 
+void BlinkPlatformImpl::addTraceLogEnabledStateObserver(
+    TraceLogEnabledStateObserver* observer) {
+  TraceLogObserverAdapter* adapter = new TraceLogObserverAdapter(observer);
+  bool did_insert =
+      trace_log_observers_.add(observer, make_scoped_ptr(adapter)).second;
+  DCHECK(did_insert);
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(adapter);
+}
+
+void BlinkPlatformImpl::removeTraceLogEnabledStateObserver(
+    TraceLogEnabledStateObserver* observer) {
+  scoped_ptr<TraceLogObserverAdapter> adapter =
+      trace_log_observers_.take_and_erase(observer);
+  DCHECK(adapter);
+  DCHECK(base::trace_event::TraceLog::GetInstance()->HasEnabledStateObserver(
+      adapter.get()));
+  base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(
+      adapter.get());
+}
+
 namespace {
 
 WebData loadAudioSpatializationResource(const char* name) {
@@ -921,9 +954,6 @@ const DataResource kDataResources[] = {
     {"html.css", IDR_UASTYLE_HTML_CSS, ui::SCALE_FACTOR_NONE},
     {"quirks.css", IDR_UASTYLE_QUIRKS_CSS, ui::SCALE_FACTOR_NONE},
     {"view-source.css", IDR_UASTYLE_VIEW_SOURCE_CSS, ui::SCALE_FACTOR_NONE},
-    {"themeChromium.css",
-     IDR_UASTYLE_THEME_CHROMIUM_CSS,
-     ui::SCALE_FACTOR_NONE},
 #if defined(OS_ANDROID)
     {"themeChromiumAndroid.css",
      IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
@@ -940,9 +970,6 @@ const DataResource kDataResources[] = {
      IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
      ui::SCALE_FACTOR_NONE},
 #endif
-    {"themeChromiumSkia.css",
-     IDR_UASTYLE_THEME_CHROMIUM_SKIA_CSS,
-     ui::SCALE_FACTOR_NONE},
     {"themeInputMultipleFields.css",
      IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS,
      ui::SCALE_FACTOR_NONE},
@@ -1249,18 +1276,6 @@ bool BlinkPlatformImpl::isLowEndDeviceMode() {
 
 size_t BlinkPlatformImpl::numberOfProcessors() {
   return static_cast<size_t>(base::SysInfo::NumberOfProcessors());
-}
-
-bool BlinkPlatformImpl::processMemorySizesInBytes(
-    size_t* private_bytes,
-    size_t* shared_bytes) {
-  scoped_ptr<base::ProcessMetrics> current_process_metrics(
-      base::ProcessMetrics::CreateCurrentProcessMetrics());
-  return current_process_metrics->GetMemoryBytes(private_bytes, shared_bytes);
-}
-
-bool BlinkPlatformImpl::memoryAllocatorWasteInBytes(size_t* size) {
-  return base::allocator::GetAllocatorWasteSize(size);
 }
 
 blink::WebDiscardableMemory*

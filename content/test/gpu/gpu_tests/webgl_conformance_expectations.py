@@ -38,8 +38,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         bug=478572)
     self.Fail('conformance/extensions/ext-sRGB.html',
         bug=540900)
-    self.Fail('conformance/extensions/webgl-draw-buffers.html',
-        bug=559359)
     self.Fail('conformance/textures/misc/cube-incomplete-fbo.html',
         bug=559362)
 
@@ -78,11 +76,13 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'amd', 'd3d9'], bug=475095)
 
     # Win / D3D9 failures
-    # Skipping these tests because they're causing assertion failures.
+    # Skipping these two tests because they're causing assertion failures.
     self.Skip('conformance/extensions/oes-texture-float-with-canvas.html',
         ['win', 'd3d9'], bug=896) # angle bug ID
     self.Skip('conformance/extensions/oes-texture-half-float-with-canvas.html',
         ['win', 'd3d9'], bug=896) # angle bug ID
+    self.Fail('conformance/glsl/bugs/floor-div-cos-should-not-truncate.html',
+        ['win', 'd3d9'], bug=1179) # angle bug ID
 
     # WIN / D3D9 / Intel failures
     self.Fail('conformance/ogles/GL/cos/cos_001_to_006.html',
@@ -116,8 +116,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'amd', 'opengl'], bug=1007) # angle bug ID
 
     # Win / OpenGL / Intel failures
-    # self.Fail('conformance/extensions/webgl-draw-buffers.html',
-    #     ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
     self.Fail('conformance/glsl/functions/glsl-function-normalize.html',
         ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
     self.Fail('conformance/glsl/misc/shader-struct-scope.html',
@@ -144,8 +144,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/glsl/functions/' +
         'glsl-function-smoothstep-gentype.html',
         ['mac', ('intel', 0x116)], bug=225642)
-    # self.Fail('conformance/extensions/webgl-draw-buffers.html',
-    #     ['mac', ('intel', 0x116)], bug=369349)
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        ['mac', ('intel', 0x116)], bug=369349)
 
     # Mac 10.8 / Intel HD 3000 failures
     self.Fail('conformance/rendering/gl-scissor-test.html',
@@ -221,10 +221,13 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # NVIDIA
     self.Fail('conformance/textures/misc/default-texture.html',
         ['linux', ('nvidia', 0x104a)], bug=422152)
-    self.Flaky('conformance/extensions/angle-instanced-arrays.html',
-               ['linux', 'nvidia'], bug=544989)
+    self.Fail('conformance/extensions/angle-instanced-arrays.html',
+              ['linux', 'nvidia'], bug=544989) # Too flaky to retry
     self.Flaky('conformance/extensions/oes-element-index-uint.html',
                ['linux', 'nvidia'], bug=524144)
+    # AMD
+    self.Flaky('conformance/more/functions/uniformi.html',
+               ['linux', 'amd'], bug=550989)
     # AMD Radeon 5450
     self.Fail('conformance/programs/program-test.html',
         ['linux', ('amd', 0x68f9)], bug=436212)

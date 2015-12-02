@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_surface.h"
+#include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/application/public/cpp/connect.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
@@ -22,7 +23,7 @@ namespace {
 const uint32_t g_transparent_color = 0x00000000;
 
 void LostContext(void*) {
-  DCHECK(false);
+  // TODO(fsamuel): Figure out if there's something useful to do here.
 }
 
 void OnGotContentHandlerID(uint32_t content_handler_id) {}
@@ -56,7 +57,8 @@ void BitmapUploader::Init(mojo::Shell* shell) {
   request2->url = mojo::String::From("mojo:mus");
   shell->ConnectToApplication(request2.Pass(),
                               mojo::GetProxy(&gpu_service_provider), nullptr,
-                              nullptr, base::Bind(&OnGotContentHandlerID));
+                              mojo::CreatePermissiveCapabilityFilter(),
+                              base::Bind(&OnGotContentHandlerID));
   ConnectToService(gpu_service_provider.get(), &gpu_service_);
 
   mus::mojom::CommandBufferPtr gles2_client;
@@ -64,7 +66,7 @@ void BitmapUploader::Init(mojo::Shell* shell) {
   gles2_context_ = MojoGLES2CreateContext(
       gles2_client.PassInterface().PassHandle().release().value(),
       nullptr,
-      &LostContext, NULL, mojo::Environment::GetDefaultAsyncWaiter());
+      &LostContext, nullptr, mojo::Environment::GetDefaultAsyncWaiter());
   MojoGLES2MakeCurrent(gles2_context_);
 }
 

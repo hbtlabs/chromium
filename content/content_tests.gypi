@@ -294,6 +294,7 @@
       'browser/media/webrtc_browsertest.cc',
       'browser/media/webrtc_getusermedia_browsertest.cc',
       'browser/media/webrtc_internals_browsertest.cc',
+      'browser/media/webrtc_media_recorder_browsertest.cc',
       'browser/media/webrtc_webcam_browsertest.cc',
       'test/webrtc_content_browsertest_base.cc',
       'test/webrtc_content_browsertest_base.h',
@@ -366,6 +367,7 @@
       'browser/cache_storage/cache_storage_cache_unittest.cc',
       'browser/cache_storage/cache_storage_manager_unittest.cc',
       'browser/cache_storage/cache_storage_scheduler_unittest.cc',
+      'browser/cache_storage/cache_storage_unittest.cc',
       'browser/child_process_security_policy_unittest.cc',
       'browser/cocoa/system_hotkey_map_unittest.mm',
       'browser/compositor/buffer_queue_unittest.cc',
@@ -690,8 +692,6 @@
       'renderer/gpu/render_widget_compositor_unittest.cc',
       'renderer/ico_image_decoder_unittest.cc',
       'renderer/input/input_event_filter_unittest.cc',
-      'renderer/input/input_handler_proxy_unittest.cc',
-      'renderer/input/input_scroll_elasticity_controller_unittest.cc',
       'renderer/peripheral_content_heuristic_unittest.cc',
       'renderer/manifest/manifest_parser_unittest.cc',
       'renderer/media/android/media_info_loader_unittest.cc',
@@ -801,6 +801,7 @@
       'common/gpu/client/gpu_memory_buffer_impl_surface_texture_unittest.cc',
       'common/gpu/gpu_memory_buffer_factory_surface_texture_unittest.cc',
       'renderer/java/gin_java_bridge_value_converter_unittest.cc',
+      'renderer/media/android/webmediasession_android_unittest.cc',
     ],
     'content_unittests_mac_sources': [
       'common/gpu/client/gpu_memory_buffer_impl_io_surface_unittest.cc',
@@ -1145,7 +1146,7 @@
             '../third_party/WebKit/public/blink.gyp:blink',
             '../ui/accessibility/accessibility.gyp:accessibility',
             '../ui/base/ui_base.gyp:ui_base',
-            '../ui/events/events.gyp:blink',
+            '../ui/events/blink/events_blink.gyp:events_blink',
             '../ui/gfx/gfx.gyp:gfx',
             '../ui/gfx/gfx.gyp:gfx_geometry',
             '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
@@ -1658,6 +1659,8 @@
     ['chromeos==1 or OS=="win" or OS=="android"', {
       'targets': [
           {
+            # TODO(GYP): Port Windows and ChromeOS logic.
+            # GN: //content/test:video_decode_accelerator_unittest
             'target_name': 'video_decode_accelerator_unittest',
             'type': '<(gtest_target_type)',
             'dependencies': [
@@ -2057,7 +2060,7 @@
           'includes': [ '../build/jni_generator.gypi' ],
         },
         {
-          # TODO(GN)
+          # GN: //content/test:video_decode_accelerator_unittest_apk
           'target_name': 'video_decode_accelerator_unittest_apk',
           'type': 'none',
           'dependencies': [

@@ -183,7 +183,7 @@ bool SnapshotMatches(const base::FilePath& reference, const SkBitmap& bitmap) {
   if (w < kComparisonWidth || h < kComparisonHeight)
     return false;
 
-  int32_t* ref_pixels = reinterpret_cast<int32_t*>(vector_as_array(&decoded));
+  int32_t* ref_pixels = reinterpret_cast<int32_t*>(decoded.data());
   SkAutoLockPixels lock_image(bitmap);
   int32_t* pixels = static_cast<int32_t*>(bitmap.getPixels());
 
@@ -240,8 +240,8 @@ void CompareSnapshotToReference(const base::FilePath& reference,
     ASSERT_TRUE(
         gfx::PNGCodec::EncodeBGRASkBitmap(clipped_bitmap, false, &png_data));
     ASSERT_EQ(static_cast<int>(png_data.size()),
-              base::WriteFile(reference, reinterpret_cast<const char*>(
-                                             vector_as_array(&png_data)),
+              base::WriteFile(reference,
+                              reinterpret_cast<const char*>(png_data.data()),
                               png_data.size()));
   }
 
@@ -547,7 +547,13 @@ IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest,
   SimulateClickAndAwaitMarkedEssential("plugin", gfx::Point(50, 50));
 }
 
-IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, OriginWhitelisting) {
+// Flaky on ASAN bots: crbug.com/560765.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_OriginWhitelisting DISABLED_OriginWhitelisting
+#else
+#define MAYBE_OriginWhitelisting OriginWhitelisting
+#endif
+IN_PROC_BROWSER_TEST_F(PluginPowerSaverBrowserTest, MAYBE_OriginWhitelisting) {
   LoadHTML(
       "<object id='plugin_small' data='http://a.com/fake1.swf' "
       "    type='application/x-ppapi-tests' width='100' height='100'></object>"

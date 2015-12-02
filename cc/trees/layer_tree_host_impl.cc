@@ -43,7 +43,6 @@
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
-#include "cc/layers/surface_layer_impl.h"
 #include "cc/layers/viewport.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/copy_output_request.h"
@@ -59,6 +58,7 @@
 #include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/gpu_tile_task_worker_pool.h"
 #include "cc/raster/one_copy_tile_task_worker_pool.h"
+#include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/raster/tile_task_worker_pool.h"
 #include "cc/raster/zero_copy_tile_task_worker_pool.h"
 #include "cc/resources/memory_history.h"
@@ -129,6 +129,20 @@ void DidVisibilityChange(LayerTreeHostImpl* id, bool visible) {
   }
 
   TRACE_EVENT_ASYNC_END0("cc", "LayerTreeHostImpl::SetVisible", id);
+}
+
+enum ScrollThread { MAIN_THREAD, CC_THREAD };
+
+void RecordCompositorSlowScrollMetric(InputHandler::ScrollInputType type,
+                                      ScrollThread scroll_thread) {
+  bool scroll_on_main_thread = (scroll_thread == ScrollThread::MAIN_THREAD);
+  if (type == InputHandler::WHEEL || type == InputHandler::ANIMATED_WHEEL) {
+    UMA_HISTOGRAM_BOOLEAN("Renderer4.CompositorWheelScrollUpdateThread",
+                          scroll_on_main_thread);
+  } else {
+    UMA_HISTOGRAM_BOOLEAN("Renderer4.CompositorTouchScrollUpdateThread",
+                          scroll_on_main_thread);
+  }
 }
 
 }  // namespace
@@ -954,12 +968,12 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
         append_quads_data.checkerboarded_no_recording_content_area;
     checkerboarded_needs_raster_content_area +=
         append_quads_data.checkerboarded_needs_raster_content_area;
-
-    if (append_quads_data.num_missing_tiles) {
-      bool layer_has_animating_transform =
+    if (append_quads_data.num_missing_tiles > 0) {
+      have_missing_animated_tiles |=
+          !it->was_ever_ready_since_last_transform_animation() ||
           it->screen_space_transform_is_animating();
-      if (layer_has_animating_transform)
-        have_missing_animated_tiles = true;
+    } else {
+      it->set_was_ever_ready_since_last_transform_animation(true);
     }
   }
 
@@ -1563,10 +1577,6 @@ CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() const {
         !OuterViewportScrollLayer()->user_scrollable_vertical();
   }
 
-  for (LayerImpl* surface_layer : active_tree_->SurfaceLayers()) {
-    metadata.referenced_surfaces.push_back(
-        static_cast<SurfaceLayerImpl*>(surface_layer)->surface_id());
-  }
   if (!InnerViewportScrollLayer())
     return metadata;
 
@@ -2151,7 +2161,8 @@ void LayerTreeHostImpl::CreateResourceAndTileTaskWorkerPool(
   TaskGraphRunner* task_graph_runner = task_graph_runner_;
   if (is_synchronous_single_threaded_) {
     DCHECK(!single_thread_synchronous_task_graph_runner_);
-    single_thread_synchronous_task_graph_runner_.reset(new TaskGraphRunner);
+    single_thread_synchronous_task_graph_runner_.reset(
+        new SynchronousTaskGraphRunner);
     task_graph_runner = single_thread_synchronous_task_graph_runner_.get();
   }
 
@@ -2485,6 +2496,10 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBeginImpl(
   active_tree_->SetCurrentlyScrollingLayer(scrolling_layer_impl);
   wheel_scrolling_ = (type == WHEEL || type == ANIMATED_WHEEL);
   client_->RenewTreePriority();
+  RecordCompositorSlowScrollMetric(type, ScrollThread::CC_THREAD);
+
+  // TODO(lanwei): Will remove this metric in M50 when we have used the new
+  // metrics for one milestone, see https://crbug.com/557787.
   UMA_HISTOGRAM_BOOLEAN("TryScroll.SlowScroll", false);
   return SCROLL_STARTED;
 }
@@ -2524,6 +2539,10 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
       &scroll_affects_scroll_handler_);
 
   if (scroll_on_main_thread) {
+    RecordCompositorSlowScrollMetric(type, ScrollThread::MAIN_THREAD);
+
+    // TODO(lanwei): Will remove this metric in M50 when we have used the new
+    // metrics for one milestone, see https://crbug.com/557787.
     UMA_HISTOGRAM_BOOLEAN("TryScroll.SlowScroll", true);
     return SCROLL_ON_MAIN_THREAD;
   }

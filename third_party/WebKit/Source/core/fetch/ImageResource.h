@@ -29,6 +29,7 @@
 #include "platform/geometry/IntSizeHash.h"
 #include "platform/geometry/LayoutSize.h"
 #include "platform/graphics/ImageObserver.h"
+#include "platform/graphics/ImageOrientation.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
@@ -39,7 +40,6 @@ class ResourceFetcher;
 class FloatSize;
 class Length;
 class MemoryCache;
-class LayoutObject;
 class SecurityOrigin;
 
 class CORE_EXPORT ImageResource final : public Resource, public ImageObserver {
@@ -59,14 +59,12 @@ public:
 
     blink::Image* image(); // Returns the nullImage() if the image is not available yet.
     bool hasImage() const { return m_image.get(); }
-    // Side effect: ensures decoded image is in cache, therefore should only be called when about to draw the image.
-    bool currentFrameKnownToBeOpaque(const LayoutObject*);
 
     static std::pair<blink::Image*, float> brokenImage(float deviceScaleFactor); // Returns an image and the image's resolution scale factor.
     bool willPaintBrokenImage() const;
 
     // Assumes that image rotation or scale doesn't effect the image size being empty or not.
-    bool canRender() { return !errorOccurred() && !imageSizeForLayoutObject(nullptr, 1).isEmpty(); }
+    bool canRender() { return !errorOccurred() && !imageSize(DoNotRespectImageOrientation, 1).isEmpty(); }
 
     bool usesImageContainerSize() const;
     bool imageHasRelativeWidth() const;
@@ -80,7 +78,7 @@ public:
         IntrinsicCorrectedToDPR, // Report the intrinsic size corrected to account for image density.
     };
     // This method takes a zoom multiplier that can be used to increase the natural size of the image by the zoom.
-    LayoutSize imageSizeForLayoutObject(const LayoutObject*, float multiplier, SizeType = IntrinsicSize); // returns the size of the complete image.
+    LayoutSize imageSize(RespectImageOrientationEnum shouldRespectImageOrientation, float multiplier, SizeType = IntrinsicSize);
     void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio);
 
     bool isAccessAllowed(SecurityOrigin*);

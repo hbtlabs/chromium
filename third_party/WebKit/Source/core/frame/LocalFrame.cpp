@@ -673,7 +673,7 @@ PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
 
     IntRect rect;
 
-    return paintIntoDragImage(*layoutObject, layoutObject->shouldRespectImageOrientation(),
+    return paintIntoDragImage(*layoutObject, LayoutObject::shouldRespectImageOrientation(layoutObject),
         GlobalPaintFlattenCompositingLayers, layoutObject->paintingRootRect(rect));
 }
 
@@ -756,6 +756,10 @@ EphemeralRange LocalFrame::rangeForPoint(const IntPoint& framePoint)
 
 bool LocalFrame::isURLAllowed(const KURL& url) const
 {
+    // Exempt about: URLs from self-reference check.
+    if (url.protocolIsAbout())
+        return true;
+
     // We allow one level of self-reference because some sites depend on that,
     // but we don't allow more than one.
     bool foundSelfReference = false;
@@ -900,14 +904,10 @@ WebFrameScheduler* LocalFrame::frameScheduler()
     return m_frameScheduler.get();
 }
 
-void LocalFrame::updateFrameSecurityOrigin()
+void LocalFrame::updateSecurityOrigin(SecurityOrigin* origin)
 {
-    SecurityContext* context = securityContext();
-    if (!context)
-        return;
-
-    WebSecurityOrigin securityOrigin(context->securityOrigin());
-    frameScheduler()->setFrameOrigin(&securityOrigin);
+    script().updateSecurityOrigin(origin);
+    frameScheduler()->setFrameOrigin(WebSecurityOrigin(origin));
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(LocalFrame);

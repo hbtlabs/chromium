@@ -21,11 +21,15 @@ namespace mojo {
 
 namespace edk {
 
+class Broker;
 class Core;
 class PlatformSupport;
 class ProcessDelegate;
 
 namespace internal {
+
+// Instance of |Broker| to use.
+extern Broker* g_broker;
 
 // Instance of |PlatformSupport| to use.
 extern PlatformSupport* g_platform_support;

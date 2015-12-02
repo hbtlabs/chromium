@@ -10,7 +10,6 @@
 WebInspector.PromisePane = function()
 {
     WebInspector.VBox.call(this);
-    this.registerRequiredCSS("ui/filter.css");
     this.registerRequiredCSS("promises/promisePane.css");
     this.element.classList.add("promises");
 
@@ -38,7 +37,7 @@ WebInspector.PromisePane = function()
     var asyncCheckbox = new WebInspector.ToolbarCheckbox(WebInspector.UIString("Async"), WebInspector.UIString("Capture async stack traces"), WebInspector.moduleSetting("enableAsyncStackTraces"));
     toolbar.appendToolbarItem(asyncCheckbox);
 
-    this.element.appendChild(this._filterBar.filtersElement());
+    this._filterBar.show(this.element);
 
     this._hiddenByFilterCount = 0;
     this._filterStatusMessageElement = this.element.createChild("div", "promises-filter-status hidden");
@@ -48,8 +47,6 @@ WebInspector.PromisePane = function()
     resetFiltersLink.textContent = WebInspector.UIString("Show all promises.");
     resetFiltersLink.addEventListener("click", this._resetFilters.bind(this), true);
 
-    this._dataGridContainer = new WebInspector.DataGridContainerWidget();
-    this._dataGridContainer.show(this.element);
     // FIXME: Make "status" column width fixed to ~16px.
     var columns = [
         { id: "status", weight: 1 },
@@ -60,7 +57,7 @@ WebInspector.PromisePane = function()
     ];
     this._dataGrid = new WebInspector.ViewportDataGrid(columns, undefined, undefined, undefined, this._onContextMenu.bind(this));
     this._dataGrid.setStickToBottom(true);
-    this._dataGridContainer.appendDataGrid(this._dataGrid);
+    this._dataGrid.asWidget().show(this.element);
 
     this._linkifier = new WebInspector.Linkifier();
 

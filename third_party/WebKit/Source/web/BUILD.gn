@@ -27,6 +27,7 @@ component("web") {
     "//third_party/WebKit/Source/platform",
     "//third_party/angle:translator",
     "//third_party/icu",
+    "//ui/gfx/geometry",
     "//v8",
   ]
 
@@ -139,7 +140,7 @@ test("webkit_unit_tests") {
   }
 
   if (is_android) {
-    apk_deps = [
+    deps += [
       "//base:base_java",
       "//content/shell/android:content_shell_assets",
       "//net/android:net_java",

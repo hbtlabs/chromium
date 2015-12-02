@@ -136,6 +136,7 @@
 #if defined(MOJO_SHELL_CLIENT)
 #include "content/browser/web_contents/web_contents_view_mus.h"
 #include "content/public/common/mojo_shell_connection.h"
+#include "ui/aura/mus/mus_util.h"
 #endif
 
 namespace content {
@@ -429,6 +430,9 @@ WebContentsImpl::~WebContentsImpl() {
   frame_tree_.ForEach(
       base::Bind(&RenderFrameHostManager::ClearRFHsPendingShutdown));
 
+  // Destroy all WebUI instances.
+  frame_tree_.ForEach(base::Bind(&RenderFrameHostManager::ClearWebUIInstances));
+
   ClearAllPowerSaveBlockers();
 
   for (std::set<RenderWidgetHostImpl*>::iterator iter =
@@ -566,6 +570,18 @@ WebContentsImpl* WebContentsImpl::FromFrameTreeNode(
       WebContents::FromRenderFrameHost(frame_tree_node->current_frame_host()));
 }
 
+// static
+WebContents* WebContentsImpl::FromRenderFrameHostID(int render_process_host_id,
+                                                    int render_frame_host_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RenderFrameHost* render_frame_host =
+      RenderFrameHost::FromID(render_process_host_id, render_frame_host_id);
+  if (!render_frame_host)
+    return nullptr;
+
+  return WebContents::FromRenderFrameHost(render_frame_host);
+}
+
 RenderFrameHostManager* WebContentsImpl::GetRenderManagerForTesting() {
   return GetRenderManager();
 }
@@ -629,6 +645,10 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHost* render_view_host,
                         OnDidDisplayInsecureContent)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidRunInsecureContent,
                         OnDidRunInsecureContent)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_DidDisplayContentWithCertificateErrors,
+                        OnDidDisplayContentWithCertificateErrors)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_DidRunContentWithCertificateErrors,
+                        OnDidRunContentWithCertificateErrors)
     IPC_MESSAGE_HANDLER(ViewHostMsg_GoToEntryAtOffset, OnGoToEntryAtOffset)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateZoomLimits, OnUpdateZoomLimits)
     IPC_MESSAGE_HANDLER(ViewHostMsg_PageScaleFactorChanged,
@@ -851,12 +871,13 @@ WebUI* WebContentsImpl::CreateSubframeWebUI(const GURL& url,
 }
 
 WebUI* WebContentsImpl::GetWebUI() const {
-  return GetRenderManager()->web_ui() ? GetRenderManager()->web_ui()
-      : GetRenderManager()->pending_web_ui();
+  WebUI* commited_web_ui = GetCommittedWebUI();
+  return commited_web_ui ? commited_web_ui
+                         : GetRenderManager()->GetNavigatingWebUI();
 }
 
 WebUI* WebContentsImpl::GetCommittedWebUI() const {
-  return GetRenderManager()->web_ui();
+  return frame_tree_.root()->current_frame_host()->web_ui();
 }
 
 void WebContentsImpl::SetUserAgentOverride(const std::string& override) {
@@ -923,8 +944,12 @@ const base::string16& WebContentsImpl::GetTitle() const {
   if (entry) {
     return entry->GetTitleForDisplay(accept_languages);
   }
-  WebUI* our_web_ui = GetRenderManager()->pending_web_ui() ?
-      GetRenderManager()->pending_web_ui() : GetRenderManager()->web_ui();
+
+  WebUI* navigating_web_ui = GetRenderManager()->GetNavigatingWebUI();
+  WebUI* our_web_ui = navigating_web_ui
+                          ? navigating_web_ui
+                          : GetRenderManager()->current_frame_host()->web_ui();
+
   if (our_web_ui) {
     // Don't override the title in view source mode.
     entry = controller_.GetVisibleEntry();
@@ -1379,8 +1404,11 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
   if (MojoShellConnection::Get() &&
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseMusInRenderer)) {
-    view_.reset(new WebContentsViewMus(this, view_.Pass(),
-                                       &render_view_host_delegate_view_));
+    mus::Window* window = aura::GetMusWindow(params.context);
+    if (window) {
+      view_.reset(new WebContentsViewMus(this, window, view_.Pass(),
+                                         &render_view_host_delegate_view_));
+    }
   }
 #endif
 
@@ -1497,17 +1525,20 @@ void WebContentsImpl::LostCapture(RenderWidgetHostImpl* render_widget_host) {
     delegate_->LostCapture();
 }
 
+void WebContentsImpl::RenderWidgetCreated(
+    RenderWidgetHostImpl* render_widget_host) {
+  created_widgets_.insert(render_widget_host);
+}
+
 void WebContentsImpl::RenderWidgetDeleted(
     RenderWidgetHostImpl* render_widget_host) {
-  if (is_being_destroyed_) {
-    // |created_widgets_| might have been destroyed.
-    return;
-  }
+  // Note that |is_being_destroyed_| can be true at this point as
+  // ~WebContentsImpl() calls RFHM::ClearRFHsPendingShutdown(), which might lead
+  // us here.
+  created_widgets_.erase(render_widget_host);
 
-  std::set<RenderWidgetHostImpl*>::iterator iter =
-      created_widgets_.find(render_widget_host);
-  if (iter != created_widgets_.end())
-    created_widgets_.erase(iter);
+  if (is_being_destroyed_)
+    return;
 
   if (render_widget_host &&
       render_widget_host->GetRoutingID() == fullscreen_widget_routing_id_) {
@@ -1923,7 +1954,6 @@ void WebContentsImpl::CreateNewWidget(int32 render_process_id,
 
   RenderWidgetHostImpl* widget_host =
       new RenderWidgetHostImpl(this, process, route_id, IsHidden());
-  created_widgets_.insert(widget_host);
 
   RenderWidgetHostViewBase* widget_view =
       static_cast<RenderWidgetHostViewBase*>(
@@ -3155,14 +3185,47 @@ void WebContentsImpl::OnDidDisplayInsecureContent() {
       GetController().GetBrowserContext());
 }
 
-void WebContentsImpl::OnDidRunInsecureContent(
-    const std::string& security_origin, const GURL& target_url) {
+void WebContentsImpl::OnDidRunInsecureContent(const GURL& security_origin,
+                                              const GURL& target_url) {
   LOG(WARNING) << security_origin << " ran insecure content from "
                << target_url.possibly_invalid_spec();
   RecordAction(base::UserMetricsAction("SSL.RanInsecureContent"));
-  if (base::EndsWith(security_origin, kDotGoogleDotCom,
+  if (base::EndsWith(security_origin.spec(), kDotGoogleDotCom,
                      base::CompareCase::INSENSITIVE_ASCII))
     RecordAction(base::UserMetricsAction("SSL.RanInsecureContentGoogle"));
+  controller_.ssl_manager()->DidRunInsecureContent(security_origin);
+  SSLManager::NotifySSLInternalStateChanged(
+      GetController().GetBrowserContext());
+}
+
+void WebContentsImpl::OnDidDisplayContentWithCertificateErrors(
+    const GURL& url,
+    const std::string& security_info) {
+  SSLStatus ssl;
+  if (!DeserializeSecurityInfo(security_info, &ssl)) {
+    bad_message::ReceivedBadMessage(
+        GetRenderProcessHost(),
+        bad_message::WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO);
+    return;
+  }
+
+  displayed_insecure_content_ = true;
+  SSLManager::NotifySSLInternalStateChanged(
+      GetController().GetBrowserContext());
+}
+
+void WebContentsImpl::OnDidRunContentWithCertificateErrors(
+    const GURL& security_origin,
+    const GURL& url,
+    const std::string& security_info) {
+  SSLStatus ssl;
+  if (!DeserializeSecurityInfo(security_info, &ssl)) {
+    bad_message::ReceivedBadMessage(
+        GetRenderProcessHost(),
+        bad_message::WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO);
+    return;
+  }
+
   controller_.ssl_manager()->DidRunInsecureContent(security_origin);
   SSLManager::NotifySSLInternalStateChanged(
       GetController().GetBrowserContext());
@@ -3879,18 +3942,6 @@ void WebContentsImpl::RenderViewCreated(RenderViewHost* render_view_host) {
       Source<WebContents>(this),
       Details<RenderViewHost>(render_view_host));
 
-  // When we're creating views, we're still doing initial setup, so we always
-  // use the pending Web UI rather than any possibly existing committed one.
-  if (GetRenderManager()->pending_web_ui())
-    GetRenderManager()->pending_web_ui()->RenderViewCreated(render_view_host);
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation) &&
-      GetRenderManager()->speculative_web_ui()) {
-    GetRenderManager()->speculative_web_ui()->RenderViewCreated(
-        render_view_host);
-  }
-
   NavigationEntry* entry = controller_.GetPendingEntry();
   if (entry && entry->IsViewSourceMode()) {
     // Put the renderer in view source mode.
@@ -4305,7 +4356,7 @@ int WebContentsImpl::CreateSwappedOutRenderView(
     GetRenderManager()->CreateRenderFrameProxy(instance);
   } else {
     GetRenderManager()->CreateRenderFrame(
-        instance, nullptr, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
+        instance, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN,
         &render_view_routing_id);
   }
   return render_view_routing_id;
@@ -4479,7 +4530,7 @@ NavigationControllerImpl& WebContentsImpl::GetControllerForRenderManager() {
   return GetController();
 }
 
-scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderManager(
+scoped_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderFrameHost(
     const GURL& url) {
   return scoped_ptr<WebUIImpl>(static_cast<WebUIImpl*>(CreateWebUI(
       url, std::string())));

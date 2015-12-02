@@ -15,16 +15,16 @@
 namespace gcm {
 
 // Messages delivered through GCM may be encrypted according to the IETF Web
-// Push protocol, as described in draft-thomson-webpush-encryption-01:
+// Push protocol, as described in draft-ietf-webpush-encryption:
 //
-// https://tools.ietf.org/html/draft-thomson-webpush-encryption-01
+// https://tools.ietf.org/html/draft-ietf-webpush-encryption
 //
 // This class implements the ability to encrypt or decrypt such messages using
 // AEAD_AES_128_GCM with a 16-octet authentication tag. The encrypted payload
 // will be stored in a single record as described in
-// draft-thomson-http-encryption-01:
+// draft-thomson-http-encryption:
 //
-// https://tools.ietf.org/html/draft-thomson-http-encryption-01
+// https://tools.ietf.org/html/draft-thomson-http-encryption
 //
 // Note that while this class is not responsible for creating or storing the
 // actual keys, it uses a key derivation function for the actual message
@@ -36,7 +36,18 @@ class GCMMessageCryptographer {
   // unique content encryption key for a given message.
   static const size_t kSaltSize;
 
-  GCMMessageCryptographer();
+  // Label of the encryption group used to calculate the shared secret.
+  enum class Label {
+    P256
+  };
+
+  // Creates a new cryptographer with |label|, identifying the group used for
+  // the key agreement, and the public keys of both the recipient and sender.
+  GCMMessageCryptographer(Label label,
+                          const base::StringPiece& recipient_public_key,
+                          const base::StringPiece& sender_public_key,
+                          const std::string& auth_secret);
+
   ~GCMMessageCryptographer();
 
   // Encrypts |plaintext| using the |key| and the |salt|, both of which must be
@@ -60,8 +71,10 @@ class GCMMessageCryptographer {
                std::string* plaintext) const WARN_UNUSED_RESULT;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(GCMMessageCryptographerTest, AuthSecretAffectsIKM);
   FRIEND_TEST_ALL_PREFIXES(GCMMessageCryptographerTest, InvalidRecordPadding);
   FRIEND_TEST_ALL_PREFIXES(GCMMessageCryptographerTest, NonceGeneration);
+  FRIEND_TEST_ALL_PREFIXES(GCMMessageCryptographerTest, ReferenceTest);
 
   // Size, in bytes, of the authentication tag included in the messages.
   static const size_t kAuthenticationTagBytes;
@@ -76,6 +89,11 @@ class GCMMessageCryptographer {
                                     const base::StringPiece& nonce,
                                     std::string* output) const;
 
+  // Derives the input keying material (IKM) to use for deriving the content
+  // encryption key and the nonce. If |auth_secret_| is not the empty string,
+  // another HKDF will be invoked between the |key| and the |auth_secret_|.
+  std::string DeriveInputKeyingMaterial(const base::StringPiece& key) const;
+
   // Derives the content encryption key from |key| and |salt|.
   std::string DeriveContentEncryptionKey(const base::StringPiece& key,
                                          const base::StringPiece& salt) const;
@@ -83,6 +101,23 @@ class GCMMessageCryptographer {
   // Derives the nonce from |key| and |salt|.
   std::string DeriveNonce(const base::StringPiece& key,
                           const base::StringPiece& salt) const;
+
+  // The info parameters to the HKDFs used for deriving the content encryption
+  // key and the nonce. These contain the label of the used curve, as well as
+  // the sender and recipient's public keys.
+  std::string content_encryption_key_info_;
+  std::string nonce_info_;
+
+  // The pre-shared authentication secret associated with the subscription.
+  std::string auth_secret_;
+
+  // Whether an empty auth secret is acceptable when deriving the IKM. This only
+  // is the case when running tests against the reference vectors.
+  bool allow_empty_auth_secret_for_tests_ = false;
+
+  void set_allow_empty_auth_secret_for_tests(bool value) {
+    allow_empty_auth_secret_for_tests_ = value;
+  }
 };
 
 }  // namespace gcm

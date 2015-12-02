@@ -17,6 +17,7 @@
 #include "cc/base/histograms.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface.h"
+#include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/surfaces/onscreen_display_client.h"
 #include "cc/surfaces/surface_display_output_surface.h"
@@ -53,6 +54,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 
+#if defined(MOJO_RUNNER_CLIENT)
+#include "content/common/mojo/mojo_shell_connection_impl.h"
+#endif
+
 #if defined(OS_WIN)
 #include "content/browser/compositor/software_output_device_win.h"
 #elif defined(USE_OZONE)
@@ -68,6 +73,8 @@
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator_mac.h"
 #include "content/browser/compositor/software_output_device_mac.h"
 #include "ui/base/cocoa/remote_layer_api.h"
+#elif defined(OS_ANDROID)
+#include "content/browser/compositor/browser_compositor_overlay_candidate_validator_android.h"
 #endif
 
 using cc::ContextProvider;
@@ -76,24 +83,6 @@ using gpu::gles2::GLES2Interface;
 static const int kNumRetriesBeforeSoftwareFallback = 4;
 
 namespace content {
-namespace {
-
-class RasterThread : public base::SimpleThread {
- public:
-  RasterThread(cc::TaskGraphRunner* task_graph_runner)
-      : base::SimpleThread("CompositorTileWorker1"),
-        task_graph_runner_(task_graph_runner) {}
-
-  // Overridden from base::SimpleThread:
-  void Run() override { task_graph_runner_->Run(); }
-
- private:
-  cc::TaskGraphRunner* task_graph_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(RasterThread);
-};
-
-}  // namespace
 
 struct GpuProcessTransportFactory::PerCompositorData {
   int surface_id;
@@ -106,7 +95,7 @@ struct GpuProcessTransportFactory::PerCompositorData {
 
 GpuProcessTransportFactory::GpuProcessTransportFactory()
     : next_surface_id_namespace_(1u),
-      task_graph_runner_(new cc::TaskGraphRunner),
+      task_graph_runner_(new cc::SingleThreadTaskGraphRunner),
       callback_factory_(this) {
   ui::Layer::InitializeUILayerSettings();
   cc::SetClientNameForMetrics("Browser");
@@ -114,8 +103,8 @@ GpuProcessTransportFactory::GpuProcessTransportFactory()
   if (UseSurfacesEnabled())
     surface_manager_ = make_scoped_ptr(new cc::SurfaceManager);
 
-  raster_thread_.reset(new RasterThread(task_graph_runner_.get()));
-  raster_thread_->Start();
+  task_graph_runner_->Start("CompositorTileWorker1",
+                            base::SimpleThread::Options());
 #if defined(OS_WIN)
   software_backing_.reset(new OutputDeviceBacking);
 #endif
@@ -128,8 +117,6 @@ GpuProcessTransportFactory::~GpuProcessTransportFactory() {
   callback_factory_.InvalidateWeakPtrs();
 
   task_graph_runner_->Shutdown();
-  if (raster_thread_)
-    raster_thread_->Join();
 }
 
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
@@ -150,8 +137,7 @@ scoped_ptr<cc::SoftwareOutputDevice>
 GpuProcessTransportFactory::CreateSoftwareOutputDevice(
     ui::Compositor* compositor) {
 #if defined(MOJO_RUNNER_CLIENT)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          "mojo-platform-channel-handle")) {
+  if (IsRunningInMojoShell()) {
     return scoped_ptr<cc::SoftwareOutputDevice>(
         new SoftwareOutputDeviceMus(compositor));
   }
@@ -177,6 +163,7 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
 
 scoped_ptr<BrowserCompositorOverlayCandidateValidator>
 CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
+  scoped_ptr<BrowserCompositorOverlayCandidateValidator> validator;
 #if defined(USE_OZONE)
   scoped_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
       ui::OzonePlatform::GetInstance()
@@ -186,27 +173,26 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
   if (overlay_candidates &&
       (command_line->HasSwitch(switches::kEnableHardwareOverlays) ||
        command_line->HasSwitch(switches::kOzoneTestSingleOverlaySupport))) {
-    return scoped_ptr<BrowserCompositorOverlayCandidateValidator>(
-        new BrowserCompositorOverlayCandidateValidatorOzone(
-            widget, overlay_candidates.Pass()));
+    validator.reset(new BrowserCompositorOverlayCandidateValidatorOzone(
+        widget, overlay_candidates.Pass()));
   }
 #elif defined(OS_MACOSX)
   // Overlays are only supported through the remote layer API.
   if (ui::RemoteLayerAPISupported()) {
-    return make_scoped_ptr(
-        new BrowserCompositorOverlayCandidateValidatorMac(widget));
+    validator.reset(new BrowserCompositorOverlayCandidateValidatorMac(widget));
   }
+#elif defined(OS_ANDROID)
+  validator.reset(new BrowserCompositorOverlayCandidateValidatorAndroid());
 #endif
-  return scoped_ptr<BrowserCompositorOverlayCandidateValidator>();
+
+  return validator.Pass();
 }
 
 static bool ShouldCreateGpuOutputSurface(ui::Compositor* compositor) {
 #if defined(MOJO_RUNNER_CLIENT)
   // Chrome running as a mojo app currently can only use software compositing.
   // TODO(rjkroege): http://crbug.com/548451
-  // TODO(rjkroege): Make IsRunningInMojoRunner callable from content.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          "mojo-platform-channel-handle")) {
+  if (IsRunningInMojoShell()) {
     return false;
   }
 #endif

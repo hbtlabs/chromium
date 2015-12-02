@@ -548,6 +548,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyGridGap: return 513;
     case CSSPropertyFontFeatureSettings: return 514;
     case CSSPropertyVariable: return 515;
+    case CSSPropertyFontDisplay: return 516;
 
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
@@ -564,7 +565,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 515; }
+static int maximumCSSSampleId() { return 516; }
 
 void UseCounter::muteForInspector()
 {
@@ -930,9 +931,6 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case PrefixedPerformanceResourceTimingBufferFull:
         return replacedBy("Performance.onwebkitresourcetimingbufferfull", "Performance.onresourcetimingbufferfull");
-
-    case FetchAPIRequestContext:
-        return "Request.context is deprecated and will be removed in M46 (see: https://www.chromestatus.com/feature/5534702526005248).";
 
     case HeaderValueNotMatchingRFC7230:
         return "Header values not matching to RFC 7230, will be deprecated (see: https://www.chromestatus.com/feature/6457425448140800).";

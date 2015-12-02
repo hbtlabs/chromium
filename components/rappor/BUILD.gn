@@ -32,11 +32,15 @@ source_set("rappor") {
     "sampler.h",
   ]
 
+  public_deps = [
+    "//components/rappor/proto",
+  ]
+
   deps = [
     "//base",
+    "//base:prefs",
     "//components/data_use_measurement/core",
     "//components/metrics",
-    "//components/rappor/proto",
     "//components/variations",
     "//crypto",
     "//net",
@@ -54,9 +58,12 @@ static_library("test_support") {
     "test_rappor_service.h",
   ]
 
-  deps = [
+  public_deps = [
     ":rappor",
-    "//components/rappor/proto",
+  ]
+  deps = [
+    "//base",
+    "//base:prefs_test_support",
   ]
 }
 
@@ -75,8 +82,13 @@ source_set("unit_tests") {
 
   deps = [
     ":rappor",
+    ":test_support",
+    "//base",
+    "//base:prefs_test_support",
     "//base/test:test_support",
-    "//components/rappor/proto",
+    "//components/metrics",
+    "//net:test_support",
     "//testing/gtest",
+    "//url",
   ]
 }

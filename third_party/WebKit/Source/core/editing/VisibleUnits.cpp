@@ -2177,6 +2177,17 @@ static LayoutObject* associatedLayoutObjectOf(const Node& node, int offsetInNode
     return layoutTextFragment;
 }
 
+int caretMinOffset(const Node* node)
+{
+    LayoutObject* layoutObject = associatedLayoutObjectOf(*node, 0);
+    return layoutObject ? layoutObject->caretMinOffset() : 0;
+}
+
+int caretMaxOffset(const Node* n)
+{
+    return EditingStrategy::caretMaxOffset(*n);
+}
+
 template <typename Strategy>
 static bool inRenderedText(const PositionTemplate<Strategy>& position)
 {

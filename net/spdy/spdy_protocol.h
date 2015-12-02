@@ -419,6 +419,12 @@ enum SpdyGoAwayStatus {
 // number between 0 and 3.
 typedef uint8 SpdyPriority;
 
+// Lowest and Highest here refer to SPDY priorities as described in
+
+// https://www.chromium.org/spdy/spdy-protocol/spdy-protocol-draft3-1#TOC-2.3.3-Stream-priority
+const SpdyPriority kV3HighestPriority = 0;
+const SpdyPriority kV3LowestPriority = 7;
+
 typedef uint64 SpdyPingId;
 
 typedef std::string SpdyProtocolId;
@@ -607,6 +613,8 @@ class NET_EXPORT_PRIVATE SpdyFrameWithFinIR : public SpdyFrameWithStreamIdIR {
 class NET_EXPORT_PRIVATE SpdyFrameWithHeaderBlockIR
     : public NON_EXPORTED_BASE(SpdyFrameWithFinIR) {
  public:
+  ~SpdyFrameWithHeaderBlockIR() override;
+
   const SpdyHeaderBlock& header_block() const { return header_block_; }
   void set_header_block(const SpdyHeaderBlock& header_block) {
     // Deep copy.
@@ -619,7 +627,6 @@ class NET_EXPORT_PRIVATE SpdyFrameWithHeaderBlockIR
 
  protected:
   explicit SpdyFrameWithHeaderBlockIR(SpdyStreamId stream_id);
-  ~SpdyFrameWithHeaderBlockIR() override;
 
  private:
   SpdyHeaderBlock header_block_;
@@ -820,7 +827,7 @@ class NET_EXPORT_PRIVATE SpdyGoAwayIR : public SpdyFrameIR {
     status_ = status;
   }
 
-  const base::StringPiece& description() const;
+  const base::StringPiece& description() const { return description_; }
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 

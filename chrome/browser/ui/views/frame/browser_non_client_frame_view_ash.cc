@@ -617,7 +617,7 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
   int w = toolbar_bounds.width();
   int y = toolbar_bounds.y();
   int h = toolbar_bounds.height();
-  ui::ThemeProvider* tp = GetThemeProvider();
+  const ui::ThemeProvider* tp = GetThemeProvider();
 
   if (ui::MaterialDesignController::IsModeMaterial()) {
     // Paint the main toolbar image.  Since this image is also used to draw the
@@ -639,7 +639,7 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
         canvas,
         ThemeProperties::GetDefaultColor(
             ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
-        toolbar_bounds);
+        toolbar_bounds, true);
   } else {
     // Gross hack: We split the toolbar images into two pieces, since sometimes
     // (popup mode) the toolbar isn't tall enough to show the whole image.  The

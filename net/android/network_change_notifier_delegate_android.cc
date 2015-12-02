@@ -4,6 +4,7 @@
 
 #include "net/android/network_change_notifier_delegate_android.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_array.h"
 #include "base/logging.h"
 #include "jni/NetworkChangeNotifier_jni.h"
@@ -143,7 +144,7 @@ void NetworkChangeNotifierDelegateAndroid::GetCurrentlyConnectedNetworks(
 
 void NetworkChangeNotifierDelegateAndroid::NotifyConnectionTypeChanged(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jint new_connection_type,
     jint default_netid) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -182,7 +183,7 @@ jint NetworkChangeNotifierDelegateAndroid::GetConnectionType(JNIEnv*,
 
 void NetworkChangeNotifierDelegateAndroid::NotifyMaxBandwidthChanged(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jdouble new_max_bandwidth) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -193,7 +194,7 @@ void NetworkChangeNotifierDelegateAndroid::NotifyMaxBandwidthChanged(
 
 void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkConnect(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jint net_id,
     jint connection_type) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -217,7 +218,7 @@ void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkConnect(
 
 void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkSoonToDisconnect(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jint net_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   NetworkHandle network = net_id;
@@ -231,7 +232,7 @@ void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkSoonToDisconnect(
 
 void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkDisconnect(
     JNIEnv* env,
-    jobject obj,
+    const JavaParamRef<jobject>& obj,
     jint net_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   NetworkHandle network = net_id;
@@ -247,8 +248,8 @@ void NetworkChangeNotifierDelegateAndroid::NotifyOfNetworkDisconnect(
 
 void NetworkChangeNotifierDelegateAndroid::NotifyUpdateActiveNetworkList(
     JNIEnv* env,
-    jobject obj,
-    jintArray active_networks) {
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jintArray>& active_networks) {
   DCHECK(thread_checker_.CalledOnValidThread());
   NetworkList active_network_list;
   base::android::JavaIntArrayToIntVector(env, active_networks,

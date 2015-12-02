@@ -8,7 +8,6 @@
 
 #include <string>
 
-#include "base/allocator/allocator_extension.h"
 #include "base/base_switches.h"
 #include "base/basictypes.h"
 #include "base/command_line.h"
@@ -57,10 +56,12 @@
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_logging.h"
+#include "ipc/ipc_platform_file.h"
 #include "ipc/ipc_switches.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "ipc/mojo/ipc_channel_mojo.h"
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 
 #if defined(TCMALLOC_TRACE_MEMORY_SUPPORTED)
 #include "third_party/tcmalloc/chromium/src/gperftools/heap-profiler.h"
@@ -510,12 +511,6 @@ void ChildThreadImpl::Init(const Options& options) {
   g_quit_closure.Get().BindToMainThread();
 #endif
 
-#if defined(TCMALLOC_TRACE_MEMORY_SUPPORTED)
-  trace_memory_controller_.reset(new base::trace_event::TraceMemoryController(
-      message_loop_->task_runner(), ::HeapProfilerWithPseudoStackStart,
-      ::HeapProfilerStop, ::GetHeapProfile));
-#endif
-
   shared_bitmap_manager_.reset(
       new ChildSharedBitmapManager(thread_safe_sender()));
 
@@ -658,8 +653,9 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnProcessBackgrounded)
     IPC_MESSAGE_HANDLER(MojoMsg_BindExternalMojoShellHandle,
                         OnBindExternalMojoShellHandle)
-#if defined(USE_TCMALLOC)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_GetTcmallocStats, OnGetTcmallocStats)
+#if defined(OS_WIN)
+    IPC_MESSAGE_HANDLER(ChildProcessMsg_SetMojoParentPipeHandle,
+                        OnSetMojoParentPipeHandle)
 #endif
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -726,19 +722,16 @@ void ChildThreadImpl::OnBindExternalMojoShellHandle(
   mojo::ScopedMessagePipeHandle message_pipe =
       mojo_shell_channel_init_.Init(handle, GetIOTaskRunner());
   DCHECK(message_pipe.is_valid());
-  MojoShellConnectionImpl::CreateWithMessagePipe(message_pipe.Pass());
+  MojoShellConnectionImpl::Get()->BindToMessagePipe(message_pipe.Pass());
 #endif  // defined(MOJO_SHELL_CLIENT)
 }
 
-#if defined(USE_TCMALLOC)
-void ChildThreadImpl::OnGetTcmallocStats() {
-  std::string result;
-  char buffer[1024 * 32];
-  base::allocator::GetStats(buffer, sizeof(buffer));
-  result.append(buffer);
-  Send(new ChildProcessHostMsg_TcmallocStats(result));
+void ChildThreadImpl::OnSetMojoParentPipeHandle(
+    const IPC::PlatformFileForTransit& file) {
+  mojo::embedder::SetParentPipeHandle(
+      mojo::embedder::ScopedPlatformHandle(mojo::embedder::PlatformHandle(
+          IPC::PlatformFileForTransitToPlatformFile(file))));
 }
-#endif
 
 ChildThreadImpl* ChildThreadImpl::current() {
   return g_lazy_tls.Pointer()->Get();

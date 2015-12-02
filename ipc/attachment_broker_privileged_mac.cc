@@ -8,6 +8,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/process/port_provider_mac.h"
 #include "base/process/process.h"
+#include "base/synchronization/lock.h"
 #include "ipc/attachment_broker_messages.h"
 #include "ipc/brokerable_attachment.h"
 #include "ipc/ipc_channel.h"
@@ -40,13 +41,18 @@ kern_return_t SendMachPort(mach_port_t endpoint,
   send_msg.data.disposition = disposition;
   send_msg.data.type = MACH_MSG_PORT_DESCRIPTOR;
 
-  return mach_msg(&send_msg.header,
-                  MACH_SEND_MSG | MACH_SEND_TIMEOUT,
-                  send_msg.header.msgh_size,
-                  0,                // receive limit
-                  MACH_PORT_NULL,   // receive name
-                  0,                // timeout
-                  MACH_PORT_NULL);  // notification port
+  kern_return_t kr =
+      mach_msg(&send_msg.header, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+               send_msg.header.msgh_size,
+               0,                // receive limit
+               MACH_PORT_NULL,   // receive name
+               0,                // timeout
+               MACH_PORT_NULL);  // notification port
+
+  if (kr != KERN_SUCCESS)
+    mach_port_deallocate(mach_task_self(), endpoint);
+
+  return kr;
 }
 
 }  // namespace
@@ -94,6 +100,36 @@ bool AttachmentBrokerPrivilegedMac::SendAttachmentToProcess(
       return false;
   }
   return false;
+}
+
+void AttachmentBrokerPrivilegedMac::DeregisterCommunicationChannel(
+    Endpoint* endpoint) {
+  AttachmentBrokerPrivileged::DeregisterCommunicationChannel(endpoint);
+
+  if (!endpoint)
+    return;
+
+  base::ProcessId pid = endpoint->GetPeerPID();
+  if (pid == base::kNullProcessId)
+    return;
+
+  {
+    base::AutoLock l(precursors_lock_);
+    auto it = precursors_.find(pid);
+    if (it != precursors_.end()) {
+      delete it->second;
+      precursors_.erase(pid);
+    }
+  }
+
+  {
+    base::AutoLock l(extractors_lock_);
+    auto it = extractors_.find(pid);
+    if (it != extractors_.end()) {
+      delete it->second;
+      extractors_.erase(pid);
+    }
+  }
 }
 
 bool AttachmentBrokerPrivilegedMac::OnMessageReceived(const Message& msg) {
@@ -169,12 +205,13 @@ void AttachmentBrokerPrivilegedMac::RoutePrecursorToSelf(
   HandleReceivedAttachment(attachment);
 }
 
-void AttachmentBrokerPrivilegedMac::RouteWireFormatToAnother(
+bool AttachmentBrokerPrivilegedMac::RouteWireFormatToAnother(
     const MachPortWireFormat& wire_format) {
   DCHECK_NE(wire_format.destination_process, base::Process::Current().Pid());
 
   // Another process is the destination.
   base::ProcessId dest = wire_format.destination_process;
+  base::AutoLock auto_lock(*get_lock());
   Sender* sender = GetSenderWithProcessId(dest);
   if (!sender) {
     // Assuming that this message was not sent from a malicious process, the
@@ -183,11 +220,12 @@ void AttachmentBrokerPrivilegedMac::RouteWireFormatToAnother(
     LOG(ERROR) << "Failed to deliver brokerable attachment to process with id: "
                << dest;
     LogError(DESTINATION_NOT_FOUND);
-    return;
+    return false;
   }
 
   LogError(DESTINATION_FOUND);
   sender->Send(new AttachmentBrokerMsg_MachPortHasBeenDuplicated(wire_format));
+  return true;
 }
 
 mach_port_name_t AttachmentBrokerPrivilegedMac::CreateIntermediateMachPort(
@@ -245,28 +283,13 @@ mach_port_name_t AttachmentBrokerPrivilegedMac::CreateIntermediateMachPort(
   return endpoint;
 }
 
-base::mac::ScopedMachSendRight AttachmentBrokerPrivilegedMac::AcquireSendRight(
-    base::ProcessId pid,
-    mach_port_name_t named_right) {
-  if (pid == base::GetCurrentProcId()) {
-    kern_return_t kr = mach_port_mod_refs(mach_task_self(), named_right,
-                                          MACH_PORT_RIGHT_SEND, 1);
-    if (kr != KERN_SUCCESS)
-      return base::mac::ScopedMachSendRight(MACH_PORT_NULL);
-    return base::mac::ScopedMachSendRight(named_right);
-  }
-
-  mach_port_t task_port = port_provider_->TaskForPid(pid);
-  return ExtractNamedRight(task_port, named_right);
-}
-
 base::mac::ScopedMachSendRight AttachmentBrokerPrivilegedMac::ExtractNamedRight(
     mach_port_t task_port,
     mach_port_name_t named_right) {
   mach_port_t extracted_right = MACH_PORT_NULL;
   mach_msg_type_name_t extracted_right_type;
   kern_return_t kr =
-      mach_port_extract_right(task_port, named_right, MACH_MSG_TYPE_COPY_SEND,
+      mach_port_extract_right(task_port, named_right, MACH_MSG_TYPE_MOVE_SEND,
                               &extracted_right, &extracted_right_type);
   if (kr != KERN_SUCCESS) {
     LogError(ERROR_EXTRACT_SOURCE_RIGHT);
@@ -275,14 +298,6 @@ base::mac::ScopedMachSendRight AttachmentBrokerPrivilegedMac::ExtractNamedRight(
 
   DCHECK_EQ(static_cast<mach_msg_type_name_t>(MACH_MSG_TYPE_PORT_SEND),
             extracted_right_type);
-
-  // Decrement the reference count of the send right from the source process.
-  kr = mach_port_mod_refs(task_port, named_right, MACH_PORT_RIGHT_SEND, -1);
-  if (kr != KERN_SUCCESS) {
-    LogError(ERROR_DECREASE_REF);
-    // Failure does not actually affect attachment brokering, so there's no need
-    // to return |MACH_PORT_NULL|.
-  }
 
   return base::mac::ScopedMachSendRight(extracted_right);
 }
@@ -305,16 +320,33 @@ void AttachmentBrokerPrivilegedMac::SendPrecursorsForProcess(
   // Whether this process is the destination process.
   bool to_self = pid == base::GetCurrentProcId();
 
+  if (!to_self) {
+    base::AutoLock auto_lock(*get_lock());
+    if (!GetSenderWithProcessId(pid)) {
+      // If there is no sender, then the destination process is no longer
+      // running, or never existed to begin with.
+      LogError(DESTINATION_NOT_FOUND);
+      delete it->second;
+      precursors_.erase(it);
+      return;
+    }
+  }
+
   mach_port_t task_port = port_provider_->TaskForPid(pid);
+
+  // It's possible that the destination process has not yet provided the
+  // privileged process with its task port.
   if (!to_self && task_port == MACH_PORT_NULL)
     return;
 
   while (!it->second->empty()) {
     auto precursor_it = it->second->begin();
-    if (to_self)
+    if (to_self) {
       RoutePrecursorToSelf(*precursor_it);
-    else
-      SendPrecursor(*precursor_it, task_port);
+    } else {
+      if (!SendPrecursor(*precursor_it, task_port))
+        break;
+    }
     it->second->erase(precursor_it);
   }
 
@@ -322,7 +354,7 @@ void AttachmentBrokerPrivilegedMac::SendPrecursorsForProcess(
   precursors_.erase(it);
 }
 
-void AttachmentBrokerPrivilegedMac::SendPrecursor(
+bool AttachmentBrokerPrivilegedMac::SendPrecursor(
     AttachmentPrecursor* precursor,
     mach_port_t task_port) {
   DCHECK(task_port);
@@ -334,7 +366,8 @@ void AttachmentBrokerPrivilegedMac::SendPrecursor(
     intermediate_port = CreateIntermediateMachPort(
         task_port, base::mac::ScopedMachSendRight(port_to_insert.release()));
   }
-  RouteWireFormatToAnother(CopyWireFormat(wire_format, intermediate_port));
+  return RouteWireFormatToAnother(
+      CopyWireFormat(wire_format, intermediate_port));
 }
 
 void AttachmentBrokerPrivilegedMac::AddPrecursor(
@@ -357,7 +390,21 @@ void AttachmentBrokerPrivilegedMac::ProcessExtractorsForProcess(
   if (it == extractors_.end())
     return;
 
+  {
+    base::AutoLock auto_lock(*get_lock());
+    if (!GetSenderWithProcessId(pid)) {
+      // If there is no sender, then the source process is no longer running.
+      LogError(ERROR_SOURCE_NOT_FOUND);
+      delete it->second;
+      extractors_.erase(it);
+      return;
+    }
+  }
+
   mach_port_t task_port = port_provider_->TaskForPid(pid);
+
+  // It's possible that the source process has not yet provided the privileged
+  // process with its task port.
   if (task_port == MACH_PORT_NULL)
     return;
 

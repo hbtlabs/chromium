@@ -25,7 +25,16 @@
 #include <cstddef>
 #include <utility>
 
+#include "wtf/Compiler.h"
+
 namespace WTF {
+
+// Returns a string that contains the type name of |T| as a substring.
+template<typename T>
+inline const char* getStringWithTypeName()
+{
+    return WTF_PRETTY_FUNCTION;
+}
 
 template<typename T> class RawPtr;
 
@@ -34,13 +43,6 @@ template<typename T> class RawPtr;
 //   IsConvertibleToInteger<T>::value
 //
 //   IsSameType<T, U>::value
-//
-//   RemovePointer<T>::Type
-//   RemoveReference<T>::Type
-//   RemoveConst<T>::Type
-//   RemoveVolatile<T>::Type
-//   RemoveConstVolatile<T>::Type
-//   RemoveExtent<T>::Type
 //
 //   static_assert's in TypeTraits.cpp illustrate their usage and what they do.
 
@@ -181,58 +183,6 @@ struct RemoveTemplate {
 
 template <typename T, template <class V> class OuterTemplate>
 struct RemoveTemplate<OuterTemplate<T>, OuterTemplate> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveConst {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveConst<const T> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveVolatile {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveVolatile<volatile T> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveConstVolatile {
-    typedef typename RemoveVolatile<typename RemoveConst<T>::Type>::Type Type;
-};
-
-template <typename T> struct RemovePointer {
-    typedef T Type;
-};
-
-template <typename T> struct RemovePointer<T*> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveReference {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveReference<T&> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveReference<T&&> {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveExtent {
-    typedef T Type;
-};
-
-template <typename T> struct RemoveExtent<T[]> {
-    typedef T Type;
-};
-
-template <typename T, size_t N> struct RemoveExtent<T[N]> {
     typedef T Type;
 };
 

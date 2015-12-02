@@ -287,20 +287,6 @@ void TabAndroid::MakeLoadURLParams(
   }
 }
 
-bool TabAndroid::HasOfflinePages() const {
-   if (!offline_pages::IsOfflinePagesEnabled())
-    return false;
-  offline_pages::OfflinePageModel* offline_page_model =
-      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
-          GetProfile());
-  return !offline_page_model->GetAllPages().empty();
-}
-
-void TabAndroid::ShowOfflinePages() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_showOfflinePages(env, weak_java_tab_.get(env).obj());
-}
-
 void TabAndroid::SwapTabContents(content::WebContents* old_contents,
                                  content::WebContents* new_contents,
                                  bool did_start_load,
@@ -407,16 +393,17 @@ void TabAndroid::OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,
                               gfx::ConvertToJavaBitmap(&favicon).obj());
 }
 
-void TabAndroid::Destroy(JNIEnv* env, jobject obj) {
+void TabAndroid::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-void TabAndroid::InitWebContents(JNIEnv* env,
-                                 jobject obj,
-                                 jboolean incognito,
-                                 jobject jcontent_view_core,
-                                 jobject jweb_contents_delegate,
-                                 jobject jcontext_menu_populator) {
+void TabAndroid::InitWebContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean incognito,
+    const JavaParamRef<jobject>& jcontent_view_core,
+    const JavaParamRef<jobject>& jweb_contents_delegate,
+    const JavaParamRef<jobject>& jcontext_menu_populator) {
   content::ContentViewCore* content_view_core =
       content::ContentViewCore::GetNativeContentViewCore(env,
                                                          jcontent_view_core);
@@ -473,7 +460,7 @@ void TabAndroid::InitWebContents(JNIEnv* env,
 }
 
 void TabAndroid::DestroyWebContents(JNIEnv* env,
-                                    jobject obj,
+                                    const JavaParamRef<jobject>& obj,
                                     jboolean delete_native) {
   DCHECK(web_contents());
 
@@ -527,7 +514,7 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
 
 base::android::ScopedJavaLocalRef<jobject> TabAndroid::GetProfileAndroid(
     JNIEnv* env,
-    jobject obj) {
+    const JavaParamRef<jobject>& obj) {
   Profile* profile = GetProfile();
   if (!profile)
     return base::android::ScopedJavaLocalRef<jobject>();
@@ -540,12 +527,12 @@ base::android::ScopedJavaLocalRef<jobject> TabAndroid::GetProfileAndroid(
 
 TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
     JNIEnv* env,
-    jobject obj,
-    jstring url,
-    jstring j_extra_headers,
-    jbyteArray j_post_data,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& url,
+    const JavaParamRef<jstring>& j_extra_headers,
+    const JavaParamRef<jbyteArray>& j_post_data,
     jint page_transition,
-    jstring j_referrer_url,
+    const JavaParamRef<jstring>& j_referrer_url,
     jint referrer_policy,
     jboolean is_renderer_initiated,
     jboolean should_replace_current_entry,
@@ -640,10 +627,11 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
   return DEFAULT_PAGE_LOAD;
 }
 
-void TabAndroid::SetActiveNavigationEntryTitleForUrl(JNIEnv* env,
-                                                     jobject obj,
-                                                     jstring jurl,
-                                                     jstring jtitle) {
+void TabAndroid::SetActiveNavigationEntryTitleForUrl(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jurl,
+    const JavaParamRef<jstring>& jtitle) {
   DCHECK(web_contents());
 
   base::string16 title;
@@ -660,7 +648,7 @@ void TabAndroid::SetActiveNavigationEntryTitleForUrl(JNIEnv* env,
     entry->SetTitle(title);
 }
 
-bool TabAndroid::Print(JNIEnv* env, jobject obj) {
+bool TabAndroid::Print(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   if (!web_contents())
     return false;
 
@@ -679,8 +667,9 @@ void TabAndroid::SetPendingPrint() {
   Java_Tab_setPendingPrint(env, weak_java_tab_.get(env).obj());
 }
 
-ScopedJavaLocalRef<jobject> TabAndroid::GetFavicon(JNIEnv* env,
-                                                   jobject obj) {
+ScopedJavaLocalRef<jobject> TabAndroid::GetFavicon(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   ScopedJavaLocalRef<jobject> bitmap;
   favicon::FaviconDriver* favicon_driver =
       favicon::ContentFaviconDriver::FromWebContents(web_contents_.get());
@@ -738,12 +727,13 @@ void TabAndroid::CreateHistoricalTabFromContents(WebContents* web_contents) {
       sessions::ContentLiveTab::GetForWebContents(web_contents), -1);
 }
 
-void TabAndroid::CreateHistoricalTab(JNIEnv* env, jobject obj) {
+void TabAndroid::CreateHistoricalTab(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj) {
   TabAndroid::CreateHistoricalTabFromContents(web_contents());
 }
 
 void TabAndroid::UpdateTopControlsState(JNIEnv* env,
-                                        jobject obj,
+                                        const JavaParamRef<jobject>& obj,
                                         jint constraints,
                                         jint current,
                                         jboolean animate) {
@@ -764,7 +754,8 @@ void TabAndroid::UpdateTopControlsState(JNIEnv* env,
   }
 }
 
-void TabAndroid::LoadOriginalImage(JNIEnv* env, jobject obj) {
+void TabAndroid::LoadOriginalImage(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
   content::RenderFrameHost* render_frame_host =
       web_contents()->GetFocusedFrame();
   render_frame_host->Send(new ChromeViewMsg_RequestReloadImageForContextNode(
@@ -772,8 +763,12 @@ void TabAndroid::LoadOriginalImage(JNIEnv* env, jobject obj) {
 }
 
 jlong TabAndroid::GetBookmarkId(JNIEnv* env,
-                               jobject obj,
-                               jboolean only_editable) {
+                                const JavaParamRef<jobject>& obj,
+                                jboolean only_editable) {
+  return GetBookmarkIdHelper(only_editable);
+}
+
+int64_t TabAndroid::GetBookmarkIdHelper(bool only_editable) const {
   GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
       web_contents()->GetURL());
   Profile* profile = GetProfile();
@@ -802,9 +797,52 @@ jlong TabAndroid::GetBookmarkId(JNIEnv* env,
   return -1;
 }
 
-jboolean TabAndroid::HasOfflineCopy(JNIEnv* env, jobject obj) {
+bool TabAndroid::HasOfflinePages() const {
+  if (!offline_pages::IsOfflinePagesEnabled())
+    return false;
+  offline_pages::OfflinePageModel* offline_page_model =
+      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
+          GetProfile());
+  return !offline_page_model->GetAllPages().empty();
+}
+
+void TabAndroid::ShowOfflinePages() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_Tab_showOfflinePages(env, weak_java_tab_.get(env).obj());
+}
+
+void TabAndroid::LoadOfflineCopy(const GURL& url) {
+  if (!offline_pages::IsOfflinePagesEnabled())
+    return;
+
   // Offline copy is only saved for a bookmarked page.
-  jlong bookmark_id = GetBookmarkId(env, obj, true);
+  int64_t bookmark_id = GetBookmarkIdHelper(true);
+  if (bookmark_id == -1)
+    return;
+
+  offline_pages::OfflinePageModel* offline_page_model =
+      offline_pages::OfflinePageModelFactory::GetForBrowserContext(
+          GetProfile());
+  if (!offline_page_model)
+    return;
+
+  const offline_pages::OfflinePageItem* offline_page =
+      offline_page_model->GetPageByBookmarkId(bookmark_id);
+  if (!offline_page || offline_page->url != url)
+    return;
+
+  GURL offline_url = offline_page->GetOfflineURL();
+  if (!offline_url.is_valid())
+    return;
+
+  content::NavigationController::LoadURLParams load_params(offline_url);
+  web_contents()->GetController().LoadURLWithParams(load_params);
+}
+
+jboolean TabAndroid::HasOfflineCopy(JNIEnv* env,
+                                    const JavaParamRef<jobject>& obj) {
+  // Offline copy is only saved for a bookmarked page.
+  int64_t bookmark_id = GetBookmarkIdHelper(true);
   if (bookmark_id == -1)
     return false;
 
@@ -818,14 +856,16 @@ jboolean TabAndroid::HasOfflineCopy(JNIEnv* env, jobject obj) {
   return offline_page && !offline_page->file_path.empty();
 }
 
-jboolean TabAndroid::IsOfflinePage(JNIEnv* env, jobject obj) {
+jboolean TabAndroid::IsOfflinePage(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj) {
   GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
       web_contents()->GetURL());
   return GetOfflinePage(url) != nullptr;
 }
 
-ScopedJavaLocalRef<jstring> TabAndroid::GetOfflinePageOriginalUrl(JNIEnv* env,
-                                                                  jobject obj) {
+ScopedJavaLocalRef<jstring> TabAndroid::GetOfflinePageOriginalUrl(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
   GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
       web_contents()->GetURL());
   const offline_pages::OfflinePageItem* offline_page = GetOfflinePage(url);
@@ -853,7 +893,9 @@ const offline_pages::OfflinePageItem* TabAndroid::GetOfflinePage(
   return offline_page_model->GetPageByOfflineURL(url);
 }
 
-bool TabAndroid::HasPrerenderedUrl(JNIEnv* env, jobject obj, jstring url) {
+bool TabAndroid::HasPrerenderedUrl(JNIEnv* env,
+                                   const JavaParamRef<jobject>& obj,
+                                   const JavaParamRef<jstring>& url) {
   GURL gurl(base::android::ConvertJavaStringToUTF8(env, url));
   return HasPrerenderedUrl(gurl);
 }
@@ -877,17 +919,20 @@ class ChromeInterceptNavigationDelegate : public InterceptNavigationDelegate {
 
 }  // namespace
 
-void TabAndroid::SetInterceptNavigationDelegate(JNIEnv* env, jobject obj,
-                                               jobject delegate) {
+void TabAndroid::SetInterceptNavigationDelegate(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& delegate) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   InterceptNavigationDelegate::Associate(
       web_contents(),
       make_scoped_ptr(new ChromeInterceptNavigationDelegate(env, delegate)));
 }
 
-void TabAndroid::AttachToTabContentManager(JNIEnv* env,
-                                           jobject obj,
-                                           jobject jtab_content_manager) {
+void TabAndroid::AttachToTabContentManager(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jtab_content_manager) {
   chrome::android::TabContentManager* tab_content_manager =
       chrome::android::TabContentManager::FromJavaObject(jtab_content_manager);
   if (tab_content_manager == tab_content_manager_)
@@ -900,10 +945,11 @@ void TabAndroid::AttachToTabContentManager(JNIEnv* env,
     tab_content_manager_->AttachLiveLayer(GetAndroidId(), GetContentLayer());
 }
 
-void TabAndroid::AttachOverlayContentViewCore(JNIEnv* env,
-                                              jobject obj,
-                                              jobject jcontent_view_core,
-                                              jboolean visible) {
+void TabAndroid::AttachOverlayContentViewCore(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jcontent_view_core,
+    jboolean visible) {
   content::ContentViewCore* content_view_core =
       content::ContentViewCore::GetNativeContentViewCore(env,
                                                          jcontent_view_core);
@@ -913,9 +959,10 @@ void TabAndroid::AttachOverlayContentViewCore(JNIEnv* env,
   content_layer_->AddChild(content_view_core->GetLayer());
 }
 
-void TabAndroid::DetachOverlayContentViewCore(JNIEnv* env,
-                                              jobject obj,
-                                              jobject jcontent_view_core) {
+void TabAndroid::DetachOverlayContentViewCore(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jcontent_view_core) {
   content::ContentViewCore* content_view_core =
       content::ContentViewCore::GetNativeContentViewCore(env,
                                                          jcontent_view_core);

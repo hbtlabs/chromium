@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_target_iterator.h"
@@ -139,7 +140,7 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
   // first event processor should be handled by |target_handler| instead.
   scoped_ptr<TestEventHandler> target_handler(
       new ReDispatchEventHandler(second_processor.get(), root()->child_at(0)));
-  root()->child_at(0)->set_target_handler(target_handler.get());
+  ignore_result(root()->child_at(0)->SetTargetHandler(target_handler.get()));
 
   // Dispatch a mouse event to the tree of event targets owned by the first
   // event processor, checking in ReDispatchEventHandler that the phase and
@@ -150,11 +151,13 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
 
   // Verify also that |mouse| was seen by the child nodes contained in both
   // event processors and that the event was not handled.
-  EXPECT_TRUE(root()->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
+  EXPECT_EQ(1, target_handler->num_mouse_events());
   EXPECT_TRUE(second_root->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
   EXPECT_FALSE(mouse.handled());
   second_root->child_at(0)->ResetReceivedEvents();
   root()->child_at(0)->ResetReceivedEvents();
+
+  target_handler->Reset();
 
   // Indicate that the child of the second root should handle events, and
   // dispatch another mouse event to verify that it is marked as handled.
@@ -162,7 +165,7 @@ TEST_F(EventProcessorTest, NestedEventProcessing) {
   MouseEvent mouse2(ET_MOUSE_MOVED, gfx::Point(10, 10), gfx::Point(10, 10),
                     EventTimeForNow(), EF_NONE, EF_NONE);
   DispatchEvent(&mouse2);
-  EXPECT_TRUE(root()->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
+  EXPECT_EQ(1, target_handler->num_mouse_events());
   EXPECT_TRUE(second_root->child_at(0)->DidReceiveEvent(ET_MOUSE_MOVED));
   EXPECT_TRUE(mouse2.handled());
 }

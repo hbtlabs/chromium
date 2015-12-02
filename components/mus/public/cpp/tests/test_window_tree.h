@@ -23,9 +23,11 @@ class TestWindowTree : public mojom::WindowTree {
 
  private:
   // mojom::WindowTree:
-  void NewWindow(uint32_t change_id, uint32_t window_id) override;
-  void DeleteWindow(uint32_t window_id,
-                    const DeleteWindowCallback& callback) override;
+  void NewWindow(
+      uint32_t change_id,
+      uint32_t window_id,
+      mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) override;
+  void DeleteWindow(uint32_t change_id, uint32_t window_id) override;
   void SetWindowBounds(uint32_t change_id,
                        uint32_t window_id,
                        mojo::RectPtr bounds) override;
@@ -38,10 +40,10 @@ class TestWindowTree : public mojom::WindowTree {
                          uint32_t window_id,
                          const mojo::String& name,
                          mojo::Array<uint8_t> value) override;
-  void RequestSurface(uint32_t window_id,
-                      mojom::SurfaceType type,
-                      mojo::InterfaceRequest<mojom::Surface> surface,
-                      mojom::SurfaceClientPtr client) override;
+  void AttachSurface(uint32_t window_id,
+                     mojom::SurfaceType type,
+                     mojo::InterfaceRequest<mojom::Surface> surface,
+                     mojom::SurfaceClientPtr client) override;
   void AddWindow(uint32_t parent,
                  uint32_t child,
                  const AddWindowCallback& callback) override;
@@ -70,6 +72,7 @@ class TestWindowTree : public mojom::WindowTree {
   void SetImeVisibility(uint32_t window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
+  void OnWindowInputEventAck(uint32_t event_id) override;
   void WmResponse(uint32_t change_id, bool response) override;
 
   bool got_change_;

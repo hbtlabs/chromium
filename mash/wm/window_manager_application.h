@@ -9,7 +9,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "components/mus/common/types.h"
-#include "components/mus/public/cpp/window_manager_delegate.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
@@ -19,11 +18,6 @@
 #include "mojo/application/public/cpp/interface_factory_impl.h"
 #include "mojo/common/weak_binding_set.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
-
-class BackgroundLayout;
-class ShelfLayout;
-class WindowLayout;
-class WindowManagerImpl;
 
 namespace ui {
 namespace mojo {
@@ -35,13 +29,20 @@ namespace views {
 class AuraInit;
 }
 
+namespace mash {
+namespace wm {
+
+class BackgroundLayout;
+class ShelfLayout;
+class WindowLayout;
+class WindowManagerImpl;
+
 class WindowManagerApplication
     : public mojo::ApplicationDelegate,
       public mus::WindowObserver,
+      public mus::mojom::WindowTreeHostClient,
       public mus::WindowTreeDelegate,
-      public mojo::InterfaceFactory<mus::mojom::WindowManager>,
-      // TODO(sky): make WindowManagerImpl implement this.
-      public mus::WindowManagerDelegate {
+      public mojo::InterfaceFactory<mus::mojom::WindowManager> {
  public:
   WindowManagerApplication();
   ~WindowManagerApplication() override;
@@ -51,16 +52,25 @@ class WindowManagerApplication
   int window_count() { return window_count_; }
   void IncrementWindowCount() { ++window_count_; }
 
-  mus::Window* GetWindowForContainer(mash::wm::mojom::Container container);
+  mus::Window* GetWindowForContainer(mojom::Container container);
   mus::Window* GetWindowById(mus::Id id);
 
   mojo::ApplicationImpl* app() { return app_; }
 
+  mus::mojom::WindowTreeHost* window_tree_host() {
+    return window_tree_host_.get();
+  }
+
  private:
+  void AddAccelerators();
+
   // ApplicationDelegate:
   void Initialize(mojo::ApplicationImpl* app) override;
   bool ConfigureIncomingConnection(
       mojo::ApplicationConnection* connection) override;
+
+  // WindowTreeHostClient:
+  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event) override;
 
   // WindowTreeDelegate:
   void OnEmbed(mus::Window* root) override;
@@ -74,12 +84,6 @@ class WindowManagerApplication
   // mus::WindowObserver:
   void OnWindowDestroyed(mus::Window* window) override;
 
-  // WindowManagerDelegate:
-  bool OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) override;
-  bool OnWmSetProperty(mus::Window* window,
-                       const std::string& name,
-                       scoped_ptr<std::vector<uint8_t>>* new_data) override;
-
   // Sets up the window containers used for z-space management.
   void CreateContainers();
 
@@ -91,7 +95,8 @@ class WindowManagerApplication
 
   mojo::TracingImpl tracing_;
 
-  mus::mojom::WindowTreeHostPtr host_;
+  mus::mojom::WindowTreeHostPtr window_tree_host_;
+  mojo::Binding<mus::mojom::WindowTreeHostClient> host_client_binding_;
 
   scoped_ptr<ui::mojo::UIInit> ui_init_;
   scoped_ptr<views::AuraInit> aura_init_;
@@ -108,5 +113,8 @@ class WindowManagerApplication
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerApplication);
 };
+
+}  // namespace wm
+}  // namespace mash
 
 #endif  // MASH_WM_WINDOW_MANAGER_APPLICATION_H_

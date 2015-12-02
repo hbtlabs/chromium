@@ -91,7 +91,6 @@
     'autofill': {
       'filepath': 'chrome/browser/autofill/|'\
                   'chrome/browser/resources/options/autofill_|'\
-                  'chrome/browser/sync/glue/autofill_|'\
                   'chrome/browser/ui/android/autofill/|'\
                   'chrome/browser/ui/autofill/|'\
                   'chrome/browser/ui/cocoa/autofill/|'\
@@ -101,10 +100,7 @@
                   'chrome/test/data/autofill/|'\
                   'components/autofill/|'\
                   'components/autofill/browser/webdata/|'\
-                  'components/webdata/|'\
-                  'content/public/common/password_|'\
-                  'content/public/renderer/password_|'\
-                  'content/renderer/password_',
+                  'components/webdata/',
     },
     'automation': {
       'filepath': 'chrome/browser/automation/|chrome/test/automation/',
@@ -184,6 +180,16 @@
                   '|chrome/renderer/media/cast'\
                   '|chrome/test/data/extensions/api_test/cast_'\
                   '|content/public/renderer/media_stream_',
+    },
+    'certificate_transparency': {
+      'filepath': 'components/certificate_transparency/'\
+                  '|components/packed_ct_ev_whitelist/'\
+                  '|net/cert/ct_'\
+                  '|net/cert/multi_log_ct_verifier'\
+                  '|net/cert/sct_status_flags.h'\
+                  '|net/cert/signed_certificate_timestamp'\
+                  '|net/cert/signed_tree_head'\
+                  '|net/test/ct_',
     },
     'chromecast': {
       'filepath': 'chromecast/',
@@ -956,7 +962,8 @@
     },
     'blink_css_fragmentation_tests': {
       'filepath': 'third_party/WebKit/LayoutTests/fast/multicol/' \
-                  '|third_party/WebKit/LayoutTests/fast/pagination/'
+                  '|third_party/WebKit/LayoutTests/fast/pagination/' \
+                  '|third_party/WebKit/LayoutTests/printing/'
     },
     'blink_css_regions': {
       'filepath': 'third_party/WebKit/Source/core/rendering/.*(Region|FlowThread)' \
@@ -1278,6 +1285,7 @@
              'miu+watch@chromium.org',
              'xjz+watch@chromium.org'],
     'cc': ['cc-bugs@chromium.org'],
+    'certificate_transparency': ['eranm@chromium.org', 'certificate-transparency-chrome@googlegroups.com'],
     'chrome_elf': ['caitkp+watch@chromium.org',],
     'chrome_views': ['tfarina@chromium.org'],
     'chromecast': ['gunsch+watch@chromium.org',

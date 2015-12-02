@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -273,8 +272,7 @@ v8::Local<v8::Value> ModuleSystem::CallModuleMethod(
     const std::string& module_name,
     const std::string& method_name,
     std::vector<v8::Local<v8::Value>>* args) {
-  return CallModuleMethod(
-      module_name, method_name, args->size(), vector_as_array(args));
+  return CallModuleMethod(module_name, method_name, args->size(), args->data());
 }
 
 v8::Local<v8::Value> ModuleSystem::CallModuleMethod(
@@ -338,8 +336,7 @@ void ModuleSystem::RegisterNativeHandler(
     const std::string& name,
     scoped_ptr<NativeHandler> native_handler) {
   ClobberExistingNativeHandler(name);
-  native_handler_map_[name] =
-      linked_ptr<NativeHandler>(native_handler.release());
+  native_handler_map_[name] = std::move(native_handler);
 }
 
 void ModuleSystem::OverrideNativeHandlerForTest(const std::string& name) {
@@ -747,7 +744,7 @@ void ModuleSystem::OnModuleLoaded(
 void ModuleSystem::ClobberExistingNativeHandler(const std::string& name) {
   NativeHandlerMap::iterator existing_handler = native_handler_map_.find(name);
   if (existing_handler != native_handler_map_.end()) {
-    clobbered_native_handlers_.push_back(existing_handler->second);
+    clobbered_native_handlers_.push_back(std::move(existing_handler->second));
     native_handler_map_.erase(existing_handler);
   }
 }

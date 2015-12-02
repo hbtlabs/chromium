@@ -44,13 +44,16 @@ class TaskManagerImpl :
   void GetUSERHandles(TaskId task_id,
                       int64* current,
                       int64* peak) const override;
+  bool IsTaskOnBackgroundedProcess(TaskId task_id) const override;
   const base::string16& GetTitle(TaskId task_id) const override;
+  const std::string& GetTaskNameForRappor(TaskId task_id) const override;
   base::string16 GetProfileName(TaskId task_id) const override;
   const gfx::ImageSkia& GetIcon(TaskId task_id) const override;
   const base::ProcessHandle& GetProcessHandle(TaskId task_id) const override;
   const base::ProcessId& GetProcessId(TaskId task_id) const override;
   Task::Type GetType(TaskId task_id) const override;
   int64 GetNetworkUsage(TaskId task_id) const override;
+  int64 GetProcessTotalNetworkUsage(TaskId task_id) const override;
   int64 GetSqliteMemoryUsed(TaskId task_id) const override;
   bool GetV8Memory(TaskId task_id,
                    int64* allocated,

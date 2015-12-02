@@ -235,14 +235,14 @@ private:
 #endif
 
     // In 64 bit architectures, we intentionally add 4 byte padding immediately
-    // after the HeapHeaderObject. This is because:
+    // after the HeapObjectHeader. This is because:
     //
-    // | HeapHeaderObject (4 byte) | padding (4 byte) | object payload (8 * n byte) |
+    // | HeapObjectHeader (4 byte) | padding (4 byte) | object payload (8 * n byte) |
     // ^8 byte aligned                                ^8 byte aligned
     //
     // is better than:
     //
-    // | HeapHeaderObject (4 byte) | object payload (8 * n byte) | padding (4 byte) |
+    // | HeapObjectHeader (4 byte) | object payload (8 * n byte) | padding (4 byte) |
     // ^4 byte aligned             ^8 byte aligned               ^4 byte aligned
     //
     // since the former layout aligns both header and payload to 8 byte.
@@ -373,6 +373,7 @@ public:
     virtual void sweep() = 0;
     virtual void makeConsistentForGC() = 0;
     virtual void makeConsistentForMutator() = 0;
+    virtual void invalidateObjectStartBitmap() = 0;
 
 #if defined(ADDRESS_SANITIZER)
     virtual void poisonObjects(BlinkGC::ObjectsToPoison, BlinkGC::Poisoning) = 0;
@@ -457,6 +458,7 @@ public:
     void sweep() override;
     void makeConsistentForGC() override;
     void makeConsistentForMutator() override;
+    void invalidateObjectStartBitmap() override { m_objectStartBitMapComputed = false; }
 #if defined(ADDRESS_SANITIZER)
     void poisonObjects(BlinkGC::ObjectsToPoison, BlinkGC::Poisoning) override;
 #endif
@@ -481,12 +483,10 @@ public:
 
 
     NormalPageHeap* heapForNormalPage();
-    void clearObjectStartBitMap();
 
 private:
     HeapObjectHeader* findHeaderFromAddress(Address);
     void populateObjectStartBitMap();
-    bool isObjectStartBitMapComputed() { return m_objectStartBitMapComputed; }
 
     bool m_objectStartBitMapComputed;
     uint8_t m_objectStartBitMap[reservedForObjectBitMap];
@@ -515,6 +515,7 @@ public:
     void sweep() override;
     void makeConsistentForGC() override;
     void makeConsistentForMutator() override;
+    void invalidateObjectStartBitmap() override { }
 #if defined(ADDRESS_SANITIZER)
     void poisonObjects(BlinkGC::ObjectsToPoison, BlinkGC::Poisoning) override;
 #endif

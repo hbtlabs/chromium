@@ -46,10 +46,6 @@ body {
     color: #222;
 }
 
-body.dark-theme {
-    -webkit-filter: invert(100%) hue-rotate(180deg) saturate(80%);
-}
-
 .platform-linux {
     color: rgb(48, 57, 66);
     font-family: Ubuntu, Arial, sans-serif;
@@ -106,6 +102,10 @@ fieldset[disabled] label:hover input {
 
 .error-message {
     color: red;
+}
+
+.-theme-with-dark-background .error-message {
+    color: hsl(0, 100%, 65%);
 }
 
 .error-input {
@@ -208,18 +208,13 @@ ol.outline-disclosure:focus li.selected * {
 }
 
 .outline-disclosure li::before {
-    float: left;
     -webkit-user-select: none;
     -webkit-mask-image: url(Images/toolbarButtonGlyphs.png);
     -webkit-mask-size: 352px 168px;
-    content: "a";
+    content: "aa";
     color: transparent;
     text-shadow: none;
-    position: relative;
-    top: 2px;
-    margin-right: 1px;
-    width: 10px;
-    height: 10px;
+    margin-right: -2px;
 }
 
 .outline-disclosure li:not(.parent)::before {
@@ -467,9 +462,9 @@ body.inactive li.selected .status .bubble-repeat-count {
     margin-top: 1px;
 }
 
-.sidebar-tree-item.selected {
+.sidebar-tree-item.selected,
+.-theme-selection-color {
     color: white;
-    text-shadow: rgba(0, 0, 0, 0.33) 1px 1px 0;
     background-origin: padding-box;
     background-clip: padding-box;
     background-color: rgb(56, 121, 217);
@@ -550,16 +545,13 @@ body.inactive .sidebar-tree-item.selected {
 }
 
 .root-view {
+    background-color: white;
     overflow: hidden;
     position: absolute !important;
     left: 0;
     top: 0;
     right: 0;
     bottom: 0;
-}
-
-body.dark-theme .root-view {
-    background: white;
 }
 
 .viewport-control-gap-element {

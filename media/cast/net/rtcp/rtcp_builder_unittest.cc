@@ -4,8 +4,8 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "media/cast/cast_defines.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_defines.h"
 #include "media/cast/net/pacing/paced_sender.h"
 #include "media/cast/net/rtcp/receiver_rtcp_event_subscriber.h"
@@ -413,8 +413,9 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportRedundancy) {
         time_base_ms - (num_events - 1) * kResendDelay *
         kTimeBetweenEventsMs);
     for (int i = 0; i < num_events; i++) {
-      p.AddReceiverEventLog(0, FRAME_ACK_SENT,
-        i * kResendDelay * kTimeBetweenEventsMs);
+      p.AddReceiverEventLog(
+          0, FRAME_ACK_SENT,
+          base::checked_cast<uint16>(i * kResendDelay * kTimeBetweenEventsMs));
     }
 
     FrameEvent frame_event;

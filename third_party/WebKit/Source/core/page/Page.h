@@ -169,7 +169,7 @@ public:
     float deviceScaleFactor() const { return m_deviceScaleFactor; }
     void setDeviceScaleFactor(float);
     void setDeviceColorProfile(const Vector<char>&);
-    void resetDeviceColorProfile();
+    void resetDeviceColorProfileForTesting();
 
     static void allVisitedStateChanged();
     static void visitedStateChanged(LinkHash visitedHash);
@@ -184,8 +184,6 @@ public:
     void setIsPainting(bool painting) { m_isPainting = painting; }
     bool isPainting() const { return m_isPainting; }
 #endif
-
-    double timerAlignmentInterval() const;
 
     class CORE_EXPORT MultisamplingChangedObserver : public WillBeGarbageCollectedMixin {
     public:
@@ -212,8 +210,6 @@ public:
 
 private:
     void initGroup();
-
-    void setTimerAlignmentInterval(double);
 
     void setNeedsLayoutInAllFrames();
 
@@ -260,8 +256,6 @@ private:
     bool m_defersLoading;
 
     float m_deviceScaleFactor;
-
-    double m_timerAlignmentInterval;
 
     PageVisibilityState m_visibilityState;
 

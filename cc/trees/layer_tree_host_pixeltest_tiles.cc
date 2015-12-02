@@ -105,6 +105,7 @@ class BlueYellowClient : public ContentLayerClient {
   explicit BlueYellowClient(const gfx::Size& size)
       : size_(size), blue_top_(true) {}
 
+  gfx::Rect PaintableRegion() override { return gfx::Rect(size_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       const gfx::Rect& clip,
       PaintingControlSetting painting_status) override {
@@ -133,7 +134,7 @@ class BlueYellowClient : public ContentLayerClient {
     skia::RefPtr<SkPicture> picture =
         skia::AdoptRef(recorder.endRecordingAsPicture());
 
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>();
+    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>(clip);
     item->SetNew(std::move(picture));
 
     display_list->Finalize();

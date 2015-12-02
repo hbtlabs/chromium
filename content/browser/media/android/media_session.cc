@@ -4,6 +4,7 @@
 
 #include "content/browser/media/android/media_session.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "content/browser/media/android/media_session_observer.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -111,7 +112,9 @@ void MediaSession::RemovePlayers(MediaSessionObserver* observer) {
   AbandonSystemAudioFocusIfNeeded();
 }
 
-void MediaSession::OnSuspend(JNIEnv* env, jobject obj, jboolean temporary) {
+void MediaSession::OnSuspend(JNIEnv* env,
+                             const JavaParamRef<jobject>& obj,
+                             jboolean temporary) {
   // TODO(mlamouri): this check makes it so that if a MediaSession is paused and
   // then loses audio focus, it will still stay in the Suspended state.
   // See https://crbug.com/539998
@@ -128,7 +131,7 @@ void MediaSession::OnSuspend(JNIEnv* env, jobject obj, jboolean temporary) {
   UpdateWebContents();
 }
 
-void MediaSession::OnResume(JNIEnv* env, jobject obj) {
+void MediaSession::OnResume(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   if (audio_focus_state_ != State::SUSPENDED)
     return;
 

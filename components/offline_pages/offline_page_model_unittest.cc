@@ -15,6 +15,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "components/bookmarks/browser/bookmark_node.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/offline_page_metadata_store.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -388,10 +389,12 @@ TEST_F(OfflinePageModelTest, SavePageSuccessful) {
       BuildArchiver(kTestUrl,
                     OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED)
           .Pass());
+  EXPECT_FALSE(model()->HasOfflinePages());
   model()->SavePage(
       kTestUrl, kTestPageBookmarkId1, archiver.Pass(),
       base::Bind(&OfflinePageModelTest::OnSavePageDone, AsWeakPtr()));
   PumpLoop();
+  EXPECT_TRUE(model()->HasOfflinePages());
 
   OfflinePageTestStore* store = GetStore();
   EXPECT_EQ(kTestUrl, store->last_saved_page().url);
@@ -597,6 +600,8 @@ TEST_F(OfflinePageModelTest, MarkPageForDeletion) {
       base::Bind(&OfflinePageModelTest::OnSavePageDone, AsWeakPtr()));
   PumpLoop();
 
+  GURL offline_url = model()->GetAllPages().begin()->GetOfflineURL();
+
   // Delete the page with undo tiggerred.
   model()->MarkPageForDeletion(
       kTestPageBookmarkId1,
@@ -606,6 +611,11 @@ TEST_F(OfflinePageModelTest, MarkPageForDeletion) {
   // GetAllPages will not return the page that is marked for deletion.
   const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
   EXPECT_EQ(0UL, offline_pages.size());
+
+  EXPECT_FALSE(model()->HasOfflinePages());
+  EXPECT_EQ(nullptr, model()->GetPageByOnlineURL(kTestUrl));
+  EXPECT_EQ(nullptr, model()->GetPageByBookmarkId(kTestPageBookmarkId1));
+  EXPECT_EQ(nullptr, model()->GetPageByOfflineURL(offline_url));
 
   // Undo the deletion.
   model()->UndoPageDeletion(kTestPageBookmarkId1);
@@ -843,6 +853,39 @@ TEST_F(OfflinePageModelTest, GetPageByOfflineURL) {
   EXPECT_FALSE(page);
 }
 
+TEST_F(OfflinePageModelTest, GetPageByOnlineURL) {
+  scoped_ptr<OfflinePageTestArchiver> archiver(
+      BuildArchiver(kTestUrl,
+                    OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED)
+          .Pass());
+  model()->SavePage(
+      kTestUrl, kTestPageBookmarkId1, archiver.Pass(),
+      base::Bind(&OfflinePageModelTest::OnSavePageDone, AsWeakPtr()));
+  PumpLoop();
+
+  scoped_ptr<OfflinePageTestArchiver> archiver2(
+      BuildArchiver(kTestUrl2,
+                    OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED)
+          .Pass());
+  model()->SavePage(
+      kTestUrl2, kTestPageBookmarkId2, archiver2.Pass(),
+      base::Bind(&OfflinePageModelTest::OnSavePageDone, AsWeakPtr()));
+  PumpLoop();
+
+  const OfflinePageItem* page = model()->GetPageByOnlineURL(kTestUrl2);
+  EXPECT_TRUE(page);
+  EXPECT_EQ(kTestUrl2, page->url);
+  EXPECT_EQ(kTestPageBookmarkId2, page->bookmark_id);
+
+  page = model()->GetPageByOnlineURL(kTestUrl);
+  EXPECT_TRUE(page);
+  EXPECT_EQ(kTestUrl, page->url);
+  EXPECT_EQ(kTestPageBookmarkId1, page->bookmark_id);
+
+  page = model()->GetPageByOnlineURL(GURL("http://foo"));
+  EXPECT_FALSE(page);
+}
+
 // Test that model returns pages that are older than 30 days as candidates for
 // clean up, hence the numbers in time delta.
 TEST_F(OfflinePageModelTest, GetPagesToCleanUp) {
@@ -948,6 +991,34 @@ TEST_F(OfflinePageModelTest, ClearAll) {
   PumpLoop();
   EXPECT_EQ(1UL, model()->GetAllPages().size());
   EXPECT_EQ(1UL, GetStore()->offline_pages().size());
+}
+
+TEST_F(OfflinePageModelTest, BookmarkNodeChangesUrl) {
+  scoped_ptr<OfflinePageTestArchiver> archiver(
+      BuildArchiver(kTestUrl,
+                    OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED)
+          .Pass());
+  model()->SavePage(
+      kTestUrl, kTestPageBookmarkId1, archiver.Pass(),
+      base::Bind(&OfflinePageModelTest::OnSavePageDone, AsWeakPtr()));
+  PumpLoop();
+
+  EXPECT_EQ(1UL, model()->GetAllPages().size());
+
+  bookmarks::BookmarkNode bookmark_node(kTestPageBookmarkId1, kTestUrl2);
+  model()->BookmarkNodeChanged(nullptr, &bookmark_node);
+  PumpLoop();
+
+  // Offline copy should be removed. Chrome should not crash.
+  // http://crbug.com/558929
+  EXPECT_EQ(0UL, model()->GetAllPages().size());
+
+  // Chrome should not crash when a bookmark with no offline copy is changed.
+  // http://crbug.com/560518
+  bookmark_node.set_url(kTestUrl);
+  model()->BookmarkNodeChanged(nullptr, &bookmark_node);
+  PumpLoop();
+  EXPECT_EQ(0UL, model()->GetAllPages().size());
 }
 
 }  // namespace offline_pages

@@ -12,6 +12,7 @@
 #include "components/mus/gles2/command_buffer_type_conversions.h"
 #include "components/mus/gles2/mojo_buffer_backing.h"
 #include "components/mus/gles2/mojo_gpu_memory_buffer.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/image_factory.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
 
@@ -53,15 +54,19 @@ class CommandBufferClientImpl::SyncClientImpl
  public:
   SyncClientImpl(mus::mojom::CommandBufferSyncClientPtr* ptr,
                  const MojoAsyncWaiter* async_waiter)
-      : initialized_successfully_(false), binding_(this, ptr, async_waiter) {}
+      : initialized_successfully_(false),
+        command_buffer_id_(0),
+        binding_(this, ptr, async_waiter) {}
 
   bool WaitForInitialization() {
+    base::ThreadRestrictions::ScopedAllowWait wait;
     if (!binding_.WaitForIncomingMethodCall())
       return false;
     return initialized_successfully_;
   }
 
   mus::mojom::CommandBufferStatePtr WaitForProgress() {
+    base::ThreadRestrictions::ScopedAllowWait wait;
     if (!binding_.WaitForIncomingMethodCall())
       return mus::mojom::CommandBufferStatePtr();
     return command_buffer_state_.Pass();
@@ -73,11 +78,19 @@ class CommandBufferClientImpl::SyncClientImpl
     return gpu::Capabilities();
   }
 
+  uint64_t GetCommandBufferID() const {
+    return command_buffer_id_;
+  }
+
  private:
   // CommandBufferSyncClient methods:
   void DidInitialize(bool success,
+                     int32_t command_buffer_namespace,
+                     uint64_t command_buffer_id,
                      mus::mojom::GpuCapabilitiesPtr capabilities) override {
+    DCHECK_EQ(command_buffer_namespace, gpu::CommandBufferNamespace::MOJO);
     initialized_successfully_ = success;
+    command_buffer_id_ = command_buffer_id;
     capabilities_ = capabilities.Pass();
   }
   void DidMakeProgress(mus::mojom::CommandBufferStatePtr state) override {
@@ -85,6 +98,7 @@ class CommandBufferClientImpl::SyncClientImpl
   }
 
   bool initialized_successfully_;
+  uint64_t command_buffer_id_;
   mus::mojom::GpuCapabilitiesPtr capabilities_;
   mus::mojom::CommandBufferStatePtr command_buffer_state_;
   mojo::Binding<mus::mojom::CommandBufferSyncClient> binding_;
@@ -100,6 +114,7 @@ class CommandBufferClientImpl::SyncPointClientImpl
       : sync_point_(0u), binding_(this, ptr, async_waiter) {}
 
   uint32_t WaitForInsertSyncPoint() {
+    base::ThreadRestrictions::ScopedAllowWait wait;
     if (!binding_.WaitForIncomingMethodCall())
       return 0u;
     uint32_t result = sync_point_;
@@ -142,8 +157,6 @@ CommandBufferClientImpl::CommandBufferClientImpl(
 CommandBufferClientImpl::~CommandBufferClientImpl() {}
 
 bool CommandBufferClientImpl::Initialize() {
-  base::ThreadRestrictions::ScopedAllowWait wait;
-
   const size_t kSharedStateSize = sizeof(gpu::CommandBufferSharedState);
   void* memory = NULL;
   mojo::ScopedSharedBufferHandle duped;
@@ -332,7 +345,6 @@ int32_t CommandBufferClientImpl::CreateGpuMemoryBufferImage(
 }
 
 uint32_t CommandBufferClientImpl::InsertSyncPoint() {
-  base::ThreadRestrictions::ScopedAllowWait wait;
   command_buffer_->InsertSyncPoint(true);
   return sync_point_client_impl_->WaitForInsertSyncPoint();
 }
@@ -353,11 +365,6 @@ void CommandBufferClientImpl::SignalSyncPoint(uint32_t sync_point,
 
 void CommandBufferClientImpl::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {
-  // TODO(piman)
-  NOTIMPLEMENTED();
-}
-
-void CommandBufferClientImpl::SetSurfaceVisible(bool visible) {
   // TODO(piman)
   NOTIMPLEMENTED();
 }
@@ -403,11 +410,7 @@ gpu::CommandBufferNamespace CommandBufferClientImpl::GetNamespaceID() const {
 }
 
 uint64_t CommandBufferClientImpl::GetCommandBufferID() const {
-  // TODO (rjkroege): This must correspond to the command buffer ID on the
-  // server side. Most likely a combination of the client-specific integer and
-  // the connect id.
-  NOTIMPLEMENTED();
-  return 0;
+  return sync_client_impl_->GetCommandBufferID();
 }
 
 uint64_t CommandBufferClientImpl::GenerateFenceSyncRelease() {
@@ -433,7 +436,16 @@ void CommandBufferClientImpl::SignalSyncToken(const gpu::SyncToken& sync_token,
 
 bool CommandBufferClientImpl::CanWaitUnverifiedSyncToken(
     const gpu::SyncToken* sync_token) {
-  // All sync tokens must be flushed before being waited on.
+  // Right now, MOJO_LOCAL is only used by trusted code, so it is safe to wait
+  // on a sync token in MOJO_LOCAL command buffer.
+  if (sync_token->namespace_id() == gpu::CommandBufferNamespace::MOJO_LOCAL)
+    return true;
+
+  // It is also safe to wait on the same context.
+  if (sync_token->namespace_id() == gpu::CommandBufferNamespace::MOJO &&
+      sync_token->command_buffer_id() == GetCommandBufferID())
+    return true;
+
   return false;
 }
 

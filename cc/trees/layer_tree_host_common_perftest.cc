@@ -55,6 +55,7 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
         ParseTreeFromJson(json_, &content_layer_client_);
     ASSERT_TRUE(root.get());
     layer_tree_host()->SetRootLayer(root);
+    content_layer_client_.set_bounds(viewport);
   }
 
   void SetTestName(const std::string& name) { test_name_ = name; }
@@ -108,6 +109,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
     PropertyTrees property_trees;
     bool verify_property_trees = false;
     bool use_property_trees = false;
+    active_tree->IncrementRenderSurfaceListIdForTesting();
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         active_tree->root_layer(), active_tree->DrawViewportSize(),
         host_impl->DrawTransform(), active_tree->device_scale_factor(),
@@ -121,8 +123,8 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
         host_impl->settings().layers_always_allowed_lcd_text,
         can_render_to_separate_surface,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
-        verify_property_trees, use_property_trees, &update_list, 0,
-        &property_trees);
+        verify_property_trees, use_property_trees, &update_list,
+        active_tree->current_render_surface_list_id(), &property_trees);
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
   }
 };
@@ -156,9 +158,9 @@ class BspTreePerfTest : public CalcDrawPropsTest {
     std::vector<scoped_ptr<DrawPolygon>> polygon_list;
     for (LayerImplList::iterator it = base_list.begin(); it != base_list.end();
          ++it) {
-      DrawPolygon* draw_polygon =
-          new DrawPolygon(NULL, gfx::RectF(gfx::SizeF((*it)->bounds())),
-                          (*it)->draw_transform(), polygon_counter++);
+      DrawPolygon* draw_polygon = new DrawPolygon(
+          NULL, gfx::RectF(gfx::SizeF((*it)->bounds())),
+          (*it)->draw_properties().target_space_transform, polygon_counter++);
       polygon_list.push_back(scoped_ptr<DrawPolygon>(draw_polygon));
     }
 

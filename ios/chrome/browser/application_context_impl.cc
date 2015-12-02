@@ -15,29 +15,56 @@
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/time/default_tick_clock.h"
+#include "components/component_updater/component_updater_service.h"
+#include "components/component_updater/component_updater_service.h"
+#include "components/gcm_driver/gcm_client_factory.h"
+#include "components/gcm_driver/gcm_desktop_utils.h"
+#include "components/gcm_driver/gcm_driver.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/translate/core/browser/translate_download_manager.h"
+#include "components/update_client/configurator.h"
+#include "components/update_client/update_query_params.h"
 #include "components/variations/service/variations_service.h"
+#include "components/web_resource/promo_resource_service.h"
+#include "components/web_resource/web_resource_pref_names.h"
 #include "ios/chrome/browser/chrome_paths.h"
+#include "ios/chrome/browser/chrome_switches.h"
+#include "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/ios_chrome_io_thread.h"
+#include "ios/chrome/browser/metrics/ios_chrome_metrics_services_manager_client.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
+#include "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
+#include "ios/chrome/browser/web_resource/web_resource_util.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#include "ios/web/public/web_thread.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/socket/client_socket_pool_manager.h"
+#include "net/url_request/url_request_context_getter.h"
+
+namespace {
+
+// Dummy flag because iOS does not support disabling background networking.
+extern const char kDummyDisableBackgroundNetworking[] =
+    "dummy-disable-background-networking";
+
+}
 
 ApplicationContextImpl::ApplicationContextImpl(
     base::SequencedTaskRunner* local_state_task_runner,
-    const base::CommandLine& command_line)
+    const base::CommandLine& command_line,
+    const std::string& locale)
     : local_state_task_runner_(local_state_task_runner),
       was_last_shutdown_clean_(false),
       created_local_state_(false) {
@@ -47,6 +74,11 @@ ApplicationContextImpl::ApplicationContextImpl(
   net_log_.reset(new net_log::ChromeNetLog(
       base::FilePath(), net::NetLogCaptureMode::Default(),
       command_line.GetCommandLineString(), GetChannelString()));
+
+  SetApplicationLocale(locale);
+
+  update_client::UpdateQueryParams::SetDelegate(
+      IOSChromeUpdateQueryParamsDelegate::GetInstance());
 }
 
 ApplicationContextImpl::~ApplicationContextImpl() {
@@ -56,17 +88,71 @@ ApplicationContextImpl::~ApplicationContextImpl() {
 
 // static
 void ApplicationContextImpl::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterStringPref(ios::prefs::kApplicationLocale, std::string());
+  registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 false);
   registry->RegisterBooleanPref(prefs::kLastSessionExitedCleanly, true);
   registry->RegisterBooleanPref(prefs::kMetricsReportingWifiOnly, true);
 }
 
-void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {
+void ApplicationContextImpl::PreCreateThreads() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  application_locale_ = locale;
-  translate::TranslateDownloadManager::GetInstance()->set_application_locale(
-      application_locale_);
+  ios_chrome_io_thread_.reset(
+      new IOSChromeIOThread(GetLocalState(), GetNetLog()));
+}
+
+void ApplicationContextImpl::PreMainMessageLoopRun() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (!command_line.HasSwitch(switches::kDisableIOSWebResources)) {
+    DCHECK(!promo_resource_service_.get());
+    promo_resource_service_.reset(new web_resource::PromoResourceService(
+        GetLocalState(), ::GetChannel(), GetApplicationLocale(),
+        GetSystemURLRequestContext(), kDummyDisableBackgroundNetworking,
+        web_resource::GetIOSChromeParseJSONCallback()));
+    promo_resource_service_->StartAfterDelay();
+  }
+}
+
+void ApplicationContextImpl::StartTearDown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // We need to destroy the MetricsServicesManager and PromoResourceService
+  // before the IO thread gets destroyed, since their destructors can call the
+  // URLFetcher destructor, which does a PostDelayedTask operation on the IO
+  // thread. (The IO thread will handle that URLFetcher operation before going
+  // away.)
+  metrics_services_manager_.reset();
+
+  // Need to clear browser states before the IO thread.
+  // TODO(crbug.com/560854): the ShutDown() method can be folded into the
+  // destructor once ApplicationContextImpl owns ChromeBrowserStateManager.
+  GetChromeBrowserStateManager()->ShutDown();
+
+  // PromoResourceService must be destroyed after the keyed services and before
+  // the IO thread.
+  promo_resource_service_.reset();
+
+  // The GCMDriver must shut down while the IO thread is still alive.
+  if (gcm_driver_)
+    gcm_driver_->Shutdown();
+
+  if (local_state_) {
+    local_state_->CommitPendingWrite();
+  }
+}
+
+void ApplicationContextImpl::PostDestroyThreads() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // Resets associated state right after actual thread is stopped as
+  // IOSChromeIOThread::Globals cleanup happens in CleanUp on the IO
+  // thread, i.e. as the thread exits its message loop.
+  //
+  // This is important because in various places, the IOSChromeIOThread
+  // object being NULL is considered synonymous with the IO thread
+  // having stopped.
+  ios_chrome_io_thread_.reset();
 }
 
 void ApplicationContextImpl::OnAppEnterForeground() {
@@ -85,12 +171,6 @@ void ApplicationContextImpl::OnAppEnterForeground() {
   variations::VariationsService* variations_service = GetVariationsService();
   if (variations_service)
     variations_service->OnAppEnterForeground();
-
-  std::vector<ios::ChromeBrowserState*> loaded_browser_state =
-      GetChromeBrowserStateManager()->GetLoadedBrowserStates();
-  for (ios::ChromeBrowserState* browser_state : loaded_browser_state) {
-    browser_state->SetExitType(ios::ChromeBrowserState::EXIT_CRASHED);
-  }
 }
 
 void ApplicationContextImpl::OnAppEnterBackground() {
@@ -105,7 +185,6 @@ void ApplicationContextImpl::OnAppEnterBackground() {
       history_service->HandleBackgrounding();
     }
 
-    browser_state->SetExitType(ios::ChromeBrowserState::EXIT_NORMAL);
     PrefService* browser_state_prefs = browser_state->GetPrefs();
     if (browser_state_prefs)
       browser_state_prefs->CommitPendingWrite();
@@ -140,7 +219,7 @@ PrefService* ApplicationContextImpl::GetLocalState() {
 net::URLRequestContextGetter*
 ApplicationContextImpl::GetSystemURLRequestContext() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetSystemURLRequestContext();
+  return ios_chrome_io_thread_->system_url_request_context_getter();
 }
 
 const std::string& ApplicationContextImpl::GetApplicationLocale() {
@@ -155,19 +234,30 @@ ApplicationContextImpl::GetChromeBrowserStateManager() {
   return ios::GetChromeBrowserProvider()->GetChromeBrowserStateManager();
 }
 
+metrics_services_manager::MetricsServicesManager*
+ApplicationContextImpl::GetMetricsServicesManager() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!metrics_services_manager_) {
+    metrics_services_manager_.reset(
+        new metrics_services_manager::MetricsServicesManager(make_scoped_ptr(
+            new IOSChromeMetricsServicesManagerClient(GetLocalState()))));
+  }
+  return metrics_services_manager_.get();
+}
+
 metrics::MetricsService* ApplicationContextImpl::GetMetricsService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetMetricsService();
+  return GetMetricsServicesManager()->GetMetricsService();
 }
 
 variations::VariationsService* ApplicationContextImpl::GetVariationsService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetVariationsService();
+  return GetMetricsServicesManager()->GetVariationsService();
 }
 
 rappor::RapporService* ApplicationContextImpl::GetRapporService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetRapporService();
+  return GetMetricsServicesManager()->GetRapporService();
 }
 
 net_log::ChromeNetLog* ApplicationContextImpl::GetNetLog() {
@@ -185,6 +275,47 @@ ApplicationContextImpl::GetNetworkTimeTracker() {
   return network_time_tracker_.get();
 }
 
+IOSChromeIOThread* ApplicationContextImpl::GetIOSChromeIOThread() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(ios_chrome_io_thread_.get());
+  return ios_chrome_io_thread_.get();
+}
+
+gcm::GCMDriver* ApplicationContextImpl::GetGCMDriver() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!gcm_driver_)
+    CreateGCMDriver();
+  DCHECK(gcm_driver_);
+  return gcm_driver_.get();
+}
+
+web_resource::PromoResourceService*
+ApplicationContextImpl::GetPromoResourceService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return promo_resource_service_.get();
+}
+
+component_updater::ComponentUpdateService*
+ApplicationContextImpl::GetComponentUpdateService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!component_updater_) {
+    // Creating the component updater does not do anything, components need to
+    // be registered and Start() needs to be called.
+    component_updater_ = component_updater::ComponentUpdateServiceFactory(
+        component_updater::MakeIOSComponentUpdaterConfigurator(
+            base::CommandLine::ForCurrentProcess(),
+            GetSystemURLRequestContext()));
+  }
+  return component_updater_.get();
+}
+
+void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  application_locale_ = locale;
+  translate::TranslateDownloadManager::GetInstance()->set_application_locale(
+      application_locale_);
+}
+
 void ApplicationContextImpl::CreateLocalState() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!created_local_state_ && !local_state_);
@@ -200,11 +331,9 @@ void ApplicationContextImpl::CreateLocalState() {
   local_state_ = ::CreateLocalState(
       local_state_path, local_state_task_runner_.get(), pref_registry);
 
-  const int max_per_proxy =
-      local_state_->GetInteger(ios::prefs::kMaxConnectionsPerProxy);
   net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
-      std::max(std::min(max_per_proxy, 99),
+      std::max(std::min<int>(net::kDefaultMaxSocketsPerProxyServer, 99),
                net::ClientSocketPoolManager::max_sockets_per_group(
                    net::HttpNetworkSession::NORMAL_SOCKET_POOL)));
 
@@ -213,4 +342,24 @@ void ApplicationContextImpl::CreateLocalState() {
     was_last_shutdown_clean_ =
         local_state_->GetBoolean(prefs::kLastSessionExitedCleanly);
   }
+}
+
+void ApplicationContextImpl::CreateGCMDriver() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!gcm_driver_);
+
+  base::FilePath store_path;
+  CHECK(PathService::Get(ios::DIR_GLOBAL_GCM_STORE, &store_path));
+  base::SequencedWorkerPool* worker_pool = web::WebThread::GetBlockingPool();
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
+      worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
+          worker_pool->GetSequenceToken(),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+
+  gcm_driver_ = gcm::CreateGCMDriverDesktop(
+      make_scoped_ptr(new gcm::GCMClientFactory), GetLocalState(), store_path,
+      GetSystemURLRequestContext(), ::GetChannel(),
+      web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
+      web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),
+      blocking_task_runner);
 }

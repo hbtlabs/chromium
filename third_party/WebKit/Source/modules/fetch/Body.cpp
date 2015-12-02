@@ -91,7 +91,7 @@ public:
         ScriptState::Scope scope(resolver()->scriptState());
         v8::Isolate* isolate = resolver()->scriptState()->isolate();
         v8::Local<v8::String> inputString = v8String(isolate, string);
-        v8::TryCatch trycatch;
+        v8::TryCatch trycatch(isolate);
         v8::Local<v8::Value> parsed;
         if (v8Call(v8::JSON::Parse(isolate, inputString), parsed, trycatch))
             resolver()->resolve(parsed);
@@ -110,7 +110,7 @@ ScriptPromise Body::arrayBuffer(ScriptState* scriptState)
 
     // When the main thread sends a V8::TerminateExecution() signal to a worker
     // thread, any V8 API on the worker thread starts returning an empty
-    // handle. This can happen in Body::readAsync. To avoid the situation, we
+    // handle. This can happen in this function. To avoid the situation, we
     // first check the ExecutionContext and return immediately if it's already
     // gone (which means that the V8::TerminateExecution() signal has been sent
     // to this worker thread).
@@ -192,13 +192,23 @@ ScriptPromise Body::text(ScriptState* scriptState)
 
 ReadableByteStream* Body::body()
 {
-    UseCounter::count(executionContext(), UseCounter::FetchBodyStream);
     return bodyBuffer() ? bodyBuffer()->stream() : nullptr;
+}
+
+ReadableByteStream* Body::bodyWithUseCounter()
+{
+    UseCounter::count(executionContext(), UseCounter::FetchBodyStream);
+    return body();
 }
 
 bool Body::bodyUsed()
 {
-    return m_bodyPassed || (body() && body()->isLocked());
+    return body() && body()->isDisturbed();
+}
+
+bool Body::isBodyLocked()
+{
+    return body() && body()->isLocked();
 }
 
 bool Body::hasPendingActivity() const
@@ -210,7 +220,7 @@ bool Body::hasPendingActivity() const
     return bodyBuffer()->hasPendingActivity();
 }
 
-Body::Body(ExecutionContext* context) : ActiveDOMObject(context), m_bodyPassed(false), m_opaque(false)
+Body::Body(ExecutionContext* context) : ActiveDOMObject(context), m_opaque(false)
 {
     suspendIfNeeded();
 }
@@ -219,7 +229,7 @@ ScriptPromise Body::rejectInvalidConsumption(ScriptState* scriptState)
 {
     if (m_opaque)
         return ScriptPromise::reject(scriptState, V8ThrowException::createTypeError(scriptState->isolate(), "The body is opaque."));
-    if (bodyUsed())
+    if (isBodyLocked() || bodyUsed())
         return ScriptPromise::reject(scriptState, V8ThrowException::createTypeError(scriptState->isolate(), "Already read"));
     return ScriptPromise();
 }
