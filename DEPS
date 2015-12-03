@@ -39,15 +39,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'c60b310af7635204b8186c616ffdd190d8bf5fe1',
+  'skia_revision': '222b30d3a84b29b72b32e639751db4e6542d5e48',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'ddbc27f642c6e5b2efce59f8cfddaee82597c6fd',
+  'v8_revision': 'baf869df700a81846de2a0fc9e06ee7d4d1f23e0',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': 'df99a00d96fae932bae824dccba13156bf7eddd0',
+  'swarming_revision': '9cdd76171e517a430a72dcd7d66ade67e109aa00',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
@@ -87,7 +87,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': 'a0559c4cc7e9f95b41982a8f4ba10a04173c6c75',
+  'nacl_revision': '296d9ac73190fbd37f699461600e83b16ec0d2b3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.

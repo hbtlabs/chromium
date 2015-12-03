@@ -6,6 +6,7 @@
 
 #include <fcntl.h>
 #include <sys/syscall.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/debug/leak_annotations.h"
@@ -83,7 +84,11 @@ class SandboxPolicy : public sandbox::BaselinePolicy {
       case __NR_sched_getaffinity:
         return sandbox::RestrictSchedTarget(policy_pid(), sysno);
       case __NR_ftruncate:
+#if defined(__NR_getrlimit)
+      // __NR_getrlimit does not exist on all systems (e.g. in the arm/linux
+      // build).
       case __NR_getrlimit:
+#endif
       case __NR_uname:
       case __NR_getsockopt:
       case __NR_setsockopt:
@@ -135,7 +140,7 @@ void LinuxSandbox::EngageSeccompSandbox() {
   base::ScopedFD proc_fd(HANDLE_EINTR(
       openat(proc_fd_.get(), ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC)));
   CHECK(proc_fd.is_valid());
-  sandbox.SetProcFd(proc_fd.Pass());
+  sandbox.SetProcFd(std::move(proc_fd));
   CHECK(
       sandbox.StartSandbox(sandbox::SandboxBPF::SeccompLevel::SINGLE_THREADED))
       << "Starting the process with a sandbox failed. Missing kernel support.";

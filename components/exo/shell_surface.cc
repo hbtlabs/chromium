@@ -13,8 +13,11 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "components/exo/surface.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_property.h"
 #include "ui/base/hit_test.h"
 #include "ui/views/widget/widget.h"
+
+DECLARE_WINDOW_PROPERTY_TYPE(std::string*)
 
 namespace exo {
 namespace {
@@ -64,11 +67,13 @@ views::Widget::InitParams CreateWidgetInitParams(
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, public:
 
+DEFINE_LOCAL_WINDOW_PROPERTY_KEY(std::string*, kApplicationIdKey, nullptr)
+
 ShellSurface::ShellSurface(Surface* surface) : surface_(surface) {
   surface_->SetSurfaceDelegate(this);
   surface_->AddSurfaceObserver(this);
-  surface_->SetVisible(true);
-  surface_->SetEnabled(true);
+  surface_->Show();
+  set_owned_by_client();
 }
 
 ShellSurface::~ShellSurface() {
@@ -93,6 +98,9 @@ void ShellSurface::SetToplevel() {
   widget_.reset(new views::Widget);
   widget_->Init(params);
   widget_->GetNativeWindow()->set_owned_by_parent(false);
+  widget_->GetNativeWindow()->SetName("ExoShellSurface");
+  widget_->GetNativeWindow()->AddChild(surface_);
+  SetApplicationId(widget_->GetNativeWindow(), &application_id_);
 
   // The position of a standard top level shell surface is managed by Ash.
   ash::wm::GetWindowState(widget_->GetNativeWindow())
@@ -112,6 +120,9 @@ void ShellSurface::SetMaximized() {
   widget_.reset(new views::Widget);
   widget_->Init(params);
   widget_->GetNativeWindow()->set_owned_by_parent(false);
+  widget_->GetNativeWindow()->SetName("ExoShellSurface");
+  widget_->GetNativeWindow()->AddChild(surface_);
+  SetApplicationId(widget_->GetNativeWindow(), &application_id_);
 }
 
 void ShellSurface::SetFullscreen() {
@@ -127,6 +138,9 @@ void ShellSurface::SetFullscreen() {
   widget_.reset(new views::Widget);
   widget_->Init(params);
   widget_->GetNativeWindow()->set_owned_by_parent(false);
+  widget_->GetNativeWindow()->SetName("ExoShellSurface");
+  widget_->GetNativeWindow()->AddChild(surface_);
+  SetApplicationId(widget_->GetNativeWindow(), &application_id_);
 }
 
 void ShellSurface::SetTitle(const base::string16& title) {
@@ -138,11 +152,40 @@ void ShellSurface::SetTitle(const base::string16& title) {
     widget_->UpdateWindowTitle();
 }
 
+// static
+void ShellSurface::SetApplicationId(aura::Window* window,
+                                    std::string* application_id) {
+  window->SetProperty(kApplicationIdKey, application_id);
+}
+
+// static
+const std::string ShellSurface::GetApplicationId(aura::Window* window) {
+  std::string* string_ptr = window->GetProperty(kApplicationIdKey);
+  return string_ptr ? *string_ptr : std::string();
+}
+
+void ShellSurface::SetApplicationId(const std::string& application_id) {
+  TRACE_EVENT1("exo", "ShellSurface::SetApplicationId", "application_id",
+               application_id);
+
+  application_id_ = application_id;
+}
+
+void ShellSurface::Move() {
+  TRACE_EVENT0("exo", "ShellSurface::Move");
+
+  if (widget_) {
+    widget_->RunMoveLoop(gfx::Vector2d(), views::Widget::MOVE_LOOP_SOURCE_MOUSE,
+                         views::Widget::MOVE_LOOP_ESCAPE_BEHAVIOR_DONT_HIDE);
+  }
+}
+
 scoped_refptr<base::trace_event::TracedValue> ShellSurface::AsTracedValue()
     const {
   scoped_refptr<base::trace_event::TracedValue> value =
       new base::trace_event::TracedValue;
   value->SetString("title", base::UTF16ToUTF8(title_));
+  value->SetString("application_id", application_id_);
   return value;
 }
 
@@ -152,10 +195,14 @@ scoped_refptr<base::trace_event::TracedValue> ShellSurface::AsTracedValue()
 void ShellSurface::OnSurfaceCommit() {
   surface_->CommitSurfaceHierarchy();
   if (widget_) {
+    // Update surface bounds and widget size.
+    gfx::Point origin;
+    views::View::ConvertPointToWidget(this, &origin);
+    surface_->SetBounds(gfx::Rect(origin, surface_->layer()->size()));
     widget_->SetSize(widget_->non_client_view()->GetPreferredSize());
 
     // Show widget if not already visible.
-    if (!widget_->GetNativeWindow()->TargetVisibility())
+    if (!widget_->IsClosed() && !widget_->IsVisible())
       widget_->Show();
   }
 }
@@ -189,12 +236,19 @@ const views::Widget* ShellSurface::GetWidget() const {
 }
 
 views::View* ShellSurface::GetContentsView() {
-  return surface_;
+  return this;
 }
 
 views::NonClientFrameView* ShellSurface::CreateNonClientFrameView(
     views::Widget* widget) {
   return new CustomFrameView(widget);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// views::Views overrides:
+
+gfx::Size ShellSurface::GetPreferredSize() const {
+  return surface_ ? surface_->GetPreferredSize() : gfx::Size();
 }
 
 }  // namespace exo

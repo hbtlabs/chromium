@@ -33,12 +33,10 @@
 #include "core/css/CSSContentDistributionValue.h"
 #include "core/css/CSSCounterValue.h"
 #include "core/css/CSSCrossfadeValue.h"
-#include "core/css/CSSCursorImageValue.h"
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSImageSetValue.h"
-#include "core/css/CSSImageValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSProperty.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -260,13 +258,6 @@ inline PassRefPtrWillBeRawPtr<CSSCustomIdentValue> CSSPropertyParser::createPrim
     return CSSCustomIdentValue::create(value->string);
 }
 
-inline PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::createCSSImageValueWithReferrer(const AtomicString& rawValue, const KURL& url)
-{
-    RefPtrWillBeRawPtr<CSSValue> imageValue = CSSImageValue::create(rawValue, url);
-    toCSSImageValue(imageValue.get())->setReferrer(m_context.referrer());
-    return imageValue;
-}
-
 static inline bool isComma(CSSParserValue* value)
 {
     ASSERT(value);
@@ -288,22 +279,13 @@ static inline bool isForwardSlashOperator(CSSParserValue* value)
     return value->m_unit == CSSParserValue::Operator && value->iValue == '/';
 }
 
-static bool isGeneratedImageValue(CSSParserValue* val)
+static bool isGeneratedImageValue(CSSValueID id)
 {
-    if (val->m_unit != CSSParserValue::Function)
-        return false;
-
-    CSSValueID id = val->function->id;
-    return id == CSSValueLinearGradient
-        || id == CSSValueRadialGradient
-        || id == CSSValueRepeatingLinearGradient
-        || id == CSSValueRepeatingRadialGradient
-        || id == CSSValueWebkitLinearGradient
-        || id == CSSValueWebkitRadialGradient
-        || id == CSSValueWebkitRepeatingLinearGradient
-        || id == CSSValueWebkitRepeatingRadialGradient
-        || id == CSSValueWebkitGradient
-        || id == CSSValueWebkitCrossFade;
+    return id == CSSValueLinearGradient || id == CSSValueRadialGradient
+        || id == CSSValueRepeatingLinearGradient || id == CSSValueRepeatingRadialGradient
+        || id == CSSValueWebkitLinearGradient || id == CSSValueWebkitRadialGradient
+        || id == CSSValueWebkitRepeatingLinearGradient || id == CSSValueWebkitRepeatingRadialGradient
+        || id == CSSValueWebkitGradient || id == CSSValueWebkitCrossFade;
 }
 
 inline PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSPropertyParser::parseValidPrimitive(CSSValueID identifier, CSSParserValue* value)
@@ -388,83 +370,6 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
             m_valueList->next();
         break;
 
-    case CSSPropertyCursor: {
-        // Grammar defined by CSS3 UI and modified by CSS4 images:
-        // [ [<image> [<x> <y>]?,]*
-        // [ auto | crosshair | default | pointer | progress | move | e-resize | ne-resize |
-        // nw-resize | n-resize | se-resize | sw-resize | s-resize | w-resize | ew-resize |
-        // ns-resize | nesw-resize | nwse-resize | col-resize | row-resize | text | wait | help |
-        // vertical-text | cell | context-menu | alias | copy | no-drop | not-allowed | all-scroll |
-        // zoom-in | zoom-out | -webkit-grab | -webkit-grabbing | -webkit-zoom-in | -webkit-zoom-out ] ] | inherit
-        RefPtrWillBeRawPtr<CSSValueList> list = nullptr;
-        while (value) {
-            RefPtrWillBeRawPtr<CSSValue> image = nullptr;
-            if (value->m_unit == CSSParserValue::URI) {
-                AtomicString uri = value->string;
-                if (!uri.isNull())
-                    image = createCSSImageValueWithReferrer(uri, completeURL(uri));
-            } else if (value->m_unit == CSSParserValue::Function && value->function->id == CSSValueWebkitImageSet) {
-                image = parseImageSet(m_valueList);
-                if (!image)
-                    break;
-            } else
-                break;
-
-            Vector<int> coords;
-            value = m_valueList->next();
-            while (value && validUnit(value, FNumber)) {
-                coords.append(int(value->fValue));
-                value = m_valueList->next();
-            }
-            bool hotSpotSpecified = false;
-            IntPoint hotSpot(-1, -1);
-            int nrcoords = coords.size();
-            if (nrcoords > 0 && nrcoords != 2)
-                return false;
-            if (nrcoords == 2) {
-                hotSpotSpecified = true;
-                hotSpot = IntPoint(coords[0], coords[1]);
-            }
-
-            if (!list)
-                list = CSSValueList::createCommaSeparated();
-
-            if (image)
-                list->append(CSSCursorImageValue::create(image, hotSpotSpecified, hotSpot));
-
-            if (!consumeComma(m_valueList))
-                return false;
-            value = m_valueList->current();
-        }
-        if (value && m_context.useCounter()) {
-            if (value->id == CSSValueWebkitZoomIn)
-                m_context.useCounter()->count(UseCounter::PrefixedCursorZoomIn);
-            else if (value->id == CSSValueWebkitZoomOut)
-                m_context.useCounter()->count(UseCounter::PrefixedCursorZoomOut);
-        }
-        if (list) {
-            if (!value)
-                return false;
-            if (inQuirksMode() && value->id == CSSValueHand) // MSIE 5 compatibility :/
-                list->append(cssValuePool().createIdentifierValue(CSSValuePointer));
-            else if ((value->id >= CSSValueAuto && value->id <= CSSValueWebkitZoomOut) || value->id == CSSValueCopy || value->id == CSSValueNone)
-                list->append(cssValuePool().createIdentifierValue(value->id));
-            m_valueList->next();
-            parsedValue = list.release();
-            break;
-        } else if (value) {
-            id = value->id;
-            if (inQuirksMode() && value->id == CSSValueHand) { // MSIE 5 compatibility :/
-                id = CSSValuePointer;
-                validPrimitive = true;
-            } else if ((value->id >= CSSValueAuto && value->id <= CSSValueWebkitZoomOut) || value->id == CSSValueCopy || value->id == CSSValueNone)
-                validPrimitive = true;
-        } else {
-            ASSERT_NOT_REACHED();
-            return false;
-        }
-        break;
-    }
     case CSSPropertyImageOrientation:
         if (RuntimeEnabledFeatures::imageOrientationEnabled())
             validPrimitive = value->id == CSSValueFromImage || (value->unit() != CSSPrimitiveValue::UnitType::Number && validUnit(value, FAngle) && value->fValue == 0);
@@ -522,23 +427,8 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyListStyleImage:     // <uri> | none | inherit
     case CSSPropertyBorderImageSource:
     case CSSPropertyWebkitMaskBoxImageSource:
-        if (id == CSSValueNone) {
-            parsedValue = cssValuePool().createIdentifierValue(CSSValueNone);
+        if (parseFillImage(m_valueList, parsedValue))
             m_valueList->next();
-        } else if (value->m_unit == CSSParserValue::URI) {
-            parsedValue = createCSSImageValueWithReferrer(value->string, completeURL(value->string));
-            m_valueList->next();
-        } else if (isGeneratedImageValue(value)) {
-            if (parseGeneratedImage(m_valueList, parsedValue))
-                m_valueList->next();
-            else
-                return false;
-        } else if (value->m_unit == CSSParserValue::Function && value->function->id == CSSValueWebkitImageSet) {
-            parsedValue = parseImageSet(m_valueList);
-            if (!parsedValue)
-                return false;
-            m_valueList->next();
-        }
         break;
 
     case CSSPropertyBorderTopWidth:     //// <border-width> | inherit
@@ -1064,6 +954,7 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyRy:
     case CSSPropertyScale:
     case CSSPropertyTranslate:
+    case CSSPropertyCursor:
         validPrimitive = false;
         break;
 
@@ -1448,7 +1339,7 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSPropertyParser::parseContent()
                 parsedValue = parseCounterContent(args, true);
             } else if (val->function->id == CSSValueWebkitImageSet) {
                 parsedValue = parseImageSet(m_valueList);
-            } else if (isGeneratedImageValue(val)) {
+            } else if (isGeneratedImageValue(val->function->id)) {
                 if (!parseGeneratedImage(m_valueList, parsedValue))
                     return nullptr;
             }
@@ -1557,13 +1448,15 @@ bool CSSPropertyParser::parseFillImage(CSSParserValueList* valueList, RefPtrWill
         return true;
     }
 
-    if (isGeneratedImageValue(valueList->current()))
-        return parseGeneratedImage(valueList, value);
+    if (valueList->current()->m_unit == CSSParserValue::Function) {
+        if (isGeneratedImageValue(valueList->current()->function->id))
+            return parseGeneratedImage(valueList, value);
 
-    if (valueList->current()->m_unit == CSSParserValue::Function && valueList->current()->function->id == CSSValueWebkitImageSet) {
-        value = parseImageSet(m_valueList);
-        if (value)
-            return true;
+        if (valueList->current()->function->id == CSSValueWebkitImageSet) {
+            value = parseImageSet(m_valueList);
+            if (value)
+                return true;
+        }
     }
 
     return false;
@@ -3895,18 +3788,20 @@ bool CSSPropertyParser::buildBorderImageParseContext(CSSPropertyID propId, Borde
         if (!context.canAdvance() && context.allowImage()) {
             if (val->m_unit == CSSParserValue::URI) {
                 context.commitImage(createCSSImageValueWithReferrer(val->string, m_context.completeURL(val->string)));
-            } else if (isGeneratedImageValue(val)) {
-                RefPtrWillBeRawPtr<CSSValue> value = nullptr;
-                if (parseGeneratedImage(m_valueList, value))
-                    context.commitImage(value.release());
-                else
-                    return false;
-            } else if (val->m_unit == CSSParserValue::Function && val->function->id == CSSValueWebkitImageSet) {
-                RefPtrWillBeRawPtr<CSSValue> value = parseImageSet(m_valueList);
-                if (value)
-                    context.commitImage(value.release());
-                else
-                    return false;
+            } else if (val->m_unit == CSSParserValue::Function) {
+                if (isGeneratedImageValue(val->function->id)) {
+                    RefPtrWillBeRawPtr<CSSValue> value = nullptr;
+                    if (parseGeneratedImage(m_valueList, value))
+                        context.commitImage(value.release());
+                    else
+                        return false;
+                } else if (val->function->id == CSSValueWebkitImageSet) {
+                    RefPtrWillBeRawPtr<CSSValue> value = parseImageSet(m_valueList);
+                    if (value)
+                        context.commitImage(value.release());
+                    else
+                        return false;
+                }
             } else if (val->id == CSSValueNone)
                 context.commitImage(cssValuePool().createIdentifierValue(CSSValueNone));
         }

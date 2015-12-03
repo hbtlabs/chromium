@@ -10591,6 +10591,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Event.Latency.HitTest" units="microseconds">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    Duration of a non-resurive hitTest operation. The hit test is non-recursive
+    when the AllowChildFrameContent flag is clear. See also
+    Event.Latency.HitTestRecusrive.
+  </summary>
+</histogram>
+
+<histogram name="Event.Latency.HitTestRecursive" units="microseconds">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    Duration of a recursive hitTest operation. The hit test is recursive when
+    the AllowChildFrameContent flag is set. See also Event.Latency.HitTest.
+  </summary>
+</histogram>
+
 <histogram name="Event.Latency.Renderer" units="microseconds">
   <owner>rbyers@chromium.org</owner>
   <summary>
@@ -29638,6 +29655,55 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.Snippets.CardClicked">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The position of the snippets card on the NTP, that is clicked
+    through to the host website of the content.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardExpanded">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The position of the snippets card on the NTP, that is expanded to
+    reveal more content.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardHidden">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The position of the snippets card on the NTP, for which the
+    expanded content was minimized/hidden.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardShown">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The position of the snippets card that is shown on the NTP.
+    Depending on the device screen size only some of the cards will be shown
+    unless the users scrolls through.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.Interactions" enum="SnippetsInteractions">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: A histogram giving an overall summary of important events like
+    impressions, scroll events, clicks etc.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.NumArticles">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The number of snippet articles available to show on the NTP logged
+    once per NTP load.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.SuggestedSite">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <summary>
@@ -43672,11 +43738,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Settings.StartupURLsMigration" enum="StartupURLsMigration">
+  <obsolete>
+    Deprecated 12/2015.
+  </obsolete>
   <owner>mad@chromium.org</owner>
   <summary>The startup URLs pref migration steps.</summary>
 </histogram>
 
 <histogram name="Settings.StartupURLsResetTime" units="milliseconds">
+  <obsolete>
+    Deprecated 12/2015.
+  </obsolete>
   <owner>mad@chromium.org</owner>
   <summary>
     The time elapsed in milliseconds in between startup URLs pref migration. A
@@ -44973,6 +45045,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>nasko@chromium.org</owner>
   <summary>
     The count of all out-of-process iframes.  Recorded once per UMA ping.
+  </summary>
+</histogram>
+
+<histogram name="SiteIsolation.SiteInstancesPerBrowsingInstance">
+  <owner>nasko@chromium.org</owner>
+  <summary>
+    The count of SiteInstances in a single BrowsingInstance. Recorded once per
+    UMA ping.
   </summary>
 </histogram>
 
@@ -65821,6 +65901,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="6" label="IMPORTER_METRICS_BOOKMARKS_FILE">
     A bookmarks.html file
   </int>
+  <int value="7" label="IMPORTER_METRICS_EDGE">Edge (Windows-only)</int>
 </enum>
 
 <enum name="IncidentType" type="int">
@@ -70057,6 +70138,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="4" label="802.11n"/>
   <int value="5" label="PSB 10MHz-wide"/>
   <int value="6" label="PSB 5MHz-wide"/>
+  <int value="7" label="802.11ac"/>
 </enum>
 
 <enum name="NetworkPortalResult" type="int">
@@ -75324,6 +75406,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="JSON"/>
   <int value="3" label="Plain"/>
   <int value="4" label="Others"/>
+</enum>
+
+<enum name="SnippetsInteractions" type="int">
+  <int value="0" label="Snippets were shown to the user"/>
+  <int value="1" label="User scrolled through the snippets"/>
+  <int value="2" label="User clicked on a snippet into the host website"/>
 </enum>
 
 <enum name="SocketStreamConnectionType" type="int">

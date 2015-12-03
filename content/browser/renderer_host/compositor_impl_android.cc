@@ -97,9 +97,13 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
 
   void SwapBuffers(cc::CompositorFrame* frame) override {
     GetCommandBufferProxy()->SetLatencyInfo(frame->metadata.latency_info);
-    DCHECK(frame->gl_frame_data->sub_buffer_rect ==
-           gfx::Rect(frame->gl_frame_data->size));
-    context_provider_->ContextSupport()->Swap();
+    if (frame->gl_frame_data->sub_buffer_rect.IsEmpty()) {
+      context_provider_->ContextSupport()->CommitOverlayPlanes();
+    } else {
+      DCHECK(frame->gl_frame_data->sub_buffer_rect ==
+             gfx::Rect(frame->gl_frame_data->size));
+      context_provider_->ContextSupport()->Swap();
+    }
     client_->DidSwapBuffers();
   }
 
@@ -445,9 +449,8 @@ void CompositorImpl::CreateLayerTreeHost() {
   // TODO(enne): Update this this compositor to use the scheduler.
   settings.single_thread_proxy_scheduler = false;
 
-  if (command_line->HasSwitch(
-          switches::kEnableAndroidCompositorAnimationTimelines))
-    settings.use_compositor_animation_timelines = true;
+  settings.use_compositor_animation_timelines = !command_line->HasSwitch(
+      switches::kDisableAndroidCompositorAnimationTimelines);
 
   cc::LayerTreeHost::InitParams params;
   params.client = this;

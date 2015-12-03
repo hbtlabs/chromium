@@ -358,6 +358,13 @@ source_set("browser") {
     if (toolkit_views) {
       deps += [ "//ui/views" ]
     }
+
+    if (is_android && use_aura) {
+      sources -= [
+        # Aura Android uses platform_util_aura implementation.
+        "platform_util_android.cc",
+      ]
+    }
   } else {  # iOS
     sources +=
         rebase_path(gypi_values.chrome_browser_ios_sources, ".", "//chrome")
@@ -584,8 +591,11 @@ source_set("browser") {
     sources += [
       "ui/views/frame/browser_frame_mus.cc",
       "ui/views/frame/browser_frame_mus.h",
+      "ui/views/frame/browser_non_client_frame_view_mus.cc",
+      "ui/views/frame/browser_non_client_frame_view_mus.h",
     ]
     deps += [
+      "//components/mus/public/cpp",
       "//content/public/common",
       "//mojo/runner/child:lib",
       "//ui/aura",
