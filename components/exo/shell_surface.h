@@ -28,7 +28,8 @@ class Surface;
 // metadata like title and class, etc.
 class ShellSurface : public SurfaceDelegate,
                      public SurfaceObserver,
-                     public views::WidgetDelegate {
+                     public views::WidgetDelegate,
+                     public views::View {
  public:
   explicit ShellSurface(Surface* surface);
   ~ShellSurface() override;
@@ -44,6 +45,18 @@ class ShellSurface : public SurfaceDelegate,
 
   // Set title for surface.
   void SetTitle(const base::string16& title);
+
+  // Sets the application ID for the window. The application ID identifies the
+  // general class of applications to which the window belongs.
+  static void SetApplicationId(aura::Window* window,
+                               std::string* application_id);
+  static const std::string GetApplicationId(aura::Window* window);
+
+  // Set application id for surface.
+  void SetApplicationId(const std::string& application_id);
+
+  // Start an interactive move of surface.
+  void Move();
 
   // Returns a trace value representing the state of the surface.
   scoped_refptr<base::trace_event::TracedValue> AsTracedValue() const;
@@ -63,10 +76,14 @@ class ShellSurface : public SurfaceDelegate,
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override;
 
+  // Overridden from views::View:
+  gfx::Size GetPreferredSize() const override;
+
  private:
   scoped_ptr<views::Widget> widget_;
   Surface* surface_;
   base::string16 title_;
+  std::string application_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);
 };

@@ -237,7 +237,10 @@ static_library("content_shell_lib") {
     #'copy_test_netscape_plugin',  TODO(GYP)
   ]
   if (enable_plugins) {
-    deps += [ "//content/ppapi_plugin" ]
+    deps += [
+      "//content/ppapi_plugin",
+      "//ppapi:blink_test_plugin",
+    ]
   }
 
   if (is_win) {
@@ -453,7 +456,7 @@ if (!is_android && !is_mac) {
 
 if (is_win) {
   # GYP version: content/content_shell_and_tests.gyp:content_shell_crash_service
-  executable("crash_service") {
+  executable("content_shell_crash_service") {
     sources = [
       "tools/content_shell_crash_service.cc",
     ]

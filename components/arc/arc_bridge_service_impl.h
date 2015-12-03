@@ -38,6 +38,21 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
                            const std::string& device_type,
                            base::ScopedFD fd) override;
 
+  bool SendNotificationEventToAndroid(const std::string& key,
+                                      ArcNotificationEvent event) override;
+
+  // Requests to refresh an app list.
+  bool RefreshAppList() override;
+
+  // Requests to launch an app.
+  bool LaunchApp(const std::string& package,
+                 const std::string& activity) override;
+
+  // Requests to load an icon of specific scale_factor.
+  bool RequestAppIcon(const std::string& package,
+                      const std::string& activity,
+                      ScaleFactor scale_factor) override;
+
  private:
   friend class ArcBridgeTest;
   FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Basic);
@@ -69,6 +84,19 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
 
   // Called when the instance has reached a boot phase
   void OnInstanceBootPhase(InstanceBootPhase phase);
+  // Handler for ArcInstanceHostMsg_NotificationPosted message.
+  void OnNotificationPostedFromAndroid(const ArcNotificationData& data);
+  // Handler for ArcInstanceHostMsg_NotificationRemoved message.
+  void OnNotificationRemovedFromAndroid(const std::string& key);
+
+  // Called whenever ARC sends information about available apps.
+  void OnAppListRefreshed(const std::vector<arc::AppInfo>& apps);
+
+  // Called whenever ARC sends app icon data for specific scale factor.
+  void OnAppIcon(const std::string& package,
+                 const std::string& activity,
+                 ScaleFactor scale_factor,
+                 const std::vector<uint8_t>& icon_png_data);
 
   // IPC::Listener:
   bool OnMessageReceived(const IPC::Message& message) override;

@@ -32,8 +32,6 @@ DiskCacheEntryTest.ExternalAsyncIONoBuffer
 MDnsTest.RefreshQuery
 
 # http://crbug.com/557993
-ProxyResolverV8TracingWrapperTest.Terminate
 ProxyResolverV8TracingTest.Terminate
-
-# http://crbug.com/562414
-NetworkQualityEstimatorTest.TestGetMedianRTTSince
+ProxyResolverV8TracingWrapperTest.Dns
+ProxyResolverV8TracingWrapperTest.Terminate
