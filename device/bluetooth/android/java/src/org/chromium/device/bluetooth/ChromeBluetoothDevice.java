@@ -188,10 +188,12 @@ final class ChromeBluetoothDevice {
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    if (chromeCharacteristic != null) {
-                        chromeCharacteristic.onCharacteristicChanged();
+                    if (chromeCharacteristic == null) {
+                        // Android events arriving with no Chrome object is expected rarely only
+                        // when the event races object destruction.
+                        Log.v(TAG, "onCharacteristicChanged when chromeCharacteristic == null.");
                     } else {
-                        Log.i(TAG, "onCharacteristicChanged called on null chromeCharacteristic.");
+                        chromeCharacteristic.onCharacteristicChanged();
                     }
                 }
             });
