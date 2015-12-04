@@ -4,6 +4,8 @@
 
 package org.chromium.device.bluetooth;
 
+import android.bluetooth.BluetoothGattCharacteristic;
+
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -43,6 +45,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     @CalledByNative
     private void onBluetoothRemoteGattCharacteristicAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattCharacteristic Destroyed.");
+        mChromeBluetoothDevice.mBluetoothGatt.setCharacteristicNotification(mCharacteristic, false);
         mNativeBluetoothRemoteGattCharacteristicAndroid = 0;
         mChromeBluetoothDevice.mWrapperToChromeCharacteristicsMap.remove(mCharacteristic);
     }
@@ -103,6 +106,22 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     // Implements BluetoothRemoteGattCharacteristicAndroid::StartNotifySession.
     @CalledByNative
     private boolean startNotifySession() {
+        // TODO BEFORE LANDING: Clean up:
+        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
+            Log.v(TAG, "startNotifySession PROPERTY_NOTIFY OK.");
+        }
+        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE)
+                != 0) {
+            Log.v(TAG, "startNotifySession PROPERTY_INDICATE OK.");
+        }
+        if ((mCharacteristic.getProperties()
+                    & (BluetoothGattCharacteristic.PROPERTY_NOTIFY
+                              | BluetoothGattCharacteristic.PROPERTY_INDICATE))
+                == 0) {
+            Log.v(TAG, "startNotifySession has neither PROPERTY_NOTIFY | PROPERTY_INDICATE!");
+            return false;
+        }
+
         if (!mChromeBluetoothDevice.mBluetoothGatt.setCharacteristicNotification(
                     mCharacteristic, true)) {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
