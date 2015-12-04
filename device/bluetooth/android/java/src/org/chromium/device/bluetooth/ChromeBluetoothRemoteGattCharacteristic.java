@@ -127,6 +127,13 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
             return false;
         }
+
+        characteristic mCharacteristic
+        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
+        UUID.fromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
+descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+mBluetoothGatt.writeDescriptor(descriptor);
+
         Log.i(TAG, "startNotifySession.");
         return true;
     }
