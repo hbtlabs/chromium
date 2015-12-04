@@ -188,12 +188,13 @@ final class ChromeBluetoothDevice {
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    if (chromeCharacteristic != null) {
-                        Log.v(TAG, "Read.");
-                        chromeCharacteristic.onCharacteristicRead(status);
-                    } else {
+                    if (chromeCharacteristic == null) {
+                        // Android events arriving with no Chrome object is expected rarely only
+                        // when the event races object destruction.
                         Log.v(TAG,
-                                "Read on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
+                                "onCharacteristicRead received, but chromeCharacteristic == null.");
+                    } else {
+                        chromeCharacteristic.onCharacteristicRead(status);
                     }
                 }
             });
@@ -208,12 +209,13 @@ final class ChromeBluetoothDevice {
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    if (chromeCharacteristic != null) {
-                        Log.v(TAG, "Write.");
-                        chromeCharacteristic.onCharacteristicWrite(status);
-                    } else {
+                    if (chromeCharacteristic == null) {
+                        // Android events arriving with no Chrome object is expected rarely only
+                        // when the event races object destruction.
                         Log.v(TAG,
-                                "Write on NUL <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<.");
+                                "onCharacteristicWrite received, but chromeCharacteristic == null.");
+                    } else {
+                        chromeCharacteristic.onCharacteristicWrite(status);
                     }
                 }
             });

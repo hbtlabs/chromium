@@ -233,7 +233,8 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
 
 #if defined(OS_ANDROID)
 // Tests WriteRemoteCharacteristic completing after Chrome objects are deleted.
-TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_AfterDeleted) {
+TEST_F(BluetoothGattCharacteristicTest,
+       WriteRemoteCharacteristic_AfterDeleted) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
   std::vector<uint8_t> empty_vector;
