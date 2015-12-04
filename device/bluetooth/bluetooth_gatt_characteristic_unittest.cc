@@ -198,7 +198,23 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Empty) {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-// Tests ReadRemoteCharacteristic and GetValue with empty value buffer.
+// Tests WriteRemoteCharacteristic with empty value buffer.
+TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Empty) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  std::vector<uint8_t> empty_vector;
+  characteristic1_->WriteRemoteCharacteristic(
+      empty_vector, GetCallback(Call::EXPECTED),
+      GetGattErrorCallback(Call::NOT_EXPECTED));
+  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
+  SimulateGattCharacteristicWrite(characteristic1_);
+
+  EXPECT_EQ(empty_vector, last_write_value_);
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// Tests ReadRemoteCharacteristic completing after Chrome objects are deleted.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
@@ -212,24 +228,23 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicRead(/* use remembered characteristic */ nullptr,
                                  empty_vector);
-
-  // Expect no crash.
 }
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-// Tests WriteRemoteCharacteristic with empty value buffer.
-TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Empty) {
+// Tests WriteRemoteCharacteristic completing after Chrome objects are deleted.
+TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_AfterDeleted) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
-      empty_vector, GetCallback(Call::EXPECTED),
+      empty_vector, GetCallback(Call::NOT_EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
-  SimulateGattCharacteristicWrite(characteristic1_);
 
-  EXPECT_EQ(empty_vector, last_write_value_);
+  RememberCharacteristicForSubsequentAction(characteristic1_);
+  DeleteDevice(device_);
+
+  SimulateGattCharacteristicWrite(characteristic1_);
 }
 #endif  // defined(OS_ANDROID)
 
