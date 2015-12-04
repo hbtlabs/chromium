@@ -206,7 +206,11 @@ final class ChromeBluetoothDevice {
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    if (chromeCharacteristic != null) {
+                    if (chromeCharacteristic == null) {
+                        // Android events arriving with no Chrome object is expected rarely only
+                        // when the event races object destruction.
+                        Log.v(TAG, "onCharacteristicRead when chromeCharacteristic == null.");
+                    } else {
                         chromeCharacteristic.onCharacteristicRead(status);
                     }
                 }
@@ -222,7 +226,11 @@ final class ChromeBluetoothDevice {
                 public void run() {
                     ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic =
                             mWrapperToChromeCharacteristicsMap.get(characteristic);
-                    if (chromeCharacteristic != null) {
+                    if (chromeCharacteristic == null) {
+                        // Android events arriving with no Chrome object is expected rarely only
+                        // when the event races object destruction.
+                        Log.v(TAG, "onCharacteristicWrite when chromeCharacteristic == null.");
+                    } else {
                         chromeCharacteristic.onCharacteristicWrite(status);
                     }
                 }
