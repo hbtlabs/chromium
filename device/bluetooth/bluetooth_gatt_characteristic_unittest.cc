@@ -245,7 +245,7 @@ TEST_F(BluetoothGattCharacteristicTest,
   RememberCharacteristicForSubsequentAction(characteristic1_);
   DeleteDevice(device_);
 
-  SimulateGattCharacteristicWrite(characteristic1_);
+  SimulateGattCharacteristicWrite(/* use remembered characteristic */ nullptr);
 }
 #endif  // defined(OS_ANDROID)
 

@@ -238,7 +238,8 @@ void BluetoothTestAndroid::SimulateGattCharacteristicWrite(
       static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
   Java_FakeBluetoothGattCharacteristic_valueWrite(
       base::android::AttachCurrentThread(),
-      characteristic_android->GetJavaObject().obj(),
+      characteristic_android ? characteristic_android->GetJavaObject().obj()
+                             : nullptr,
       0);  // android.bluetooth.BluetoothGatt.GATT_SUCCESS
 }
 
