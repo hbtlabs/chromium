@@ -176,17 +176,6 @@ void MemoryCache::add(Resource* resource)
     WTF_LOG(ResourceLoading, "MemoryCache::add Added '%s', resource %p\n", resource->url().string().latin1().data(), resource);
 }
 
-void MemoryCache::replace(Resource* newResource, Resource* oldResource)
-{
-    ASSERT(newResource->cacheIdentifier() == oldResource->cacheIdentifier());
-    ResourceMap* resources = ensureResourceMap(oldResource->cacheIdentifier());
-    if (MemoryCacheEntry* oldEntry = resources->get(oldResource->url()))
-        evict(oldEntry);
-    add(newResource);
-    if (newResource->decodedSize() && newResource->hasClients())
-        insertInLiveDecodedResourcesList(resources->get(newResource->url()));
-}
-
 void MemoryCache::remove(Resource* resource)
 {
     // The resource may have already been removed by someone other than our caller,
@@ -342,7 +331,12 @@ void MemoryCache::pruneDeadResources(PruneStrategy strategy)
         while (current) {
             // Protect 'previous' so it can't get deleted during destroyDecodedData().
             MemoryCacheEntry* previous = current->m_previousInAllResourcesList;
-            ASSERT(!previous || contains(previous->m_resource.get()));
+            if (previous) {
+                // These release assertions are for investigating crashes and
+                // should be removed shortly.
+                RELEASE_ASSERT(previous->m_resource);
+                RELEASE_ASSERT(contains(previous->m_resource.get()));
+            }
             if (!current->m_resource->hasClients() && !current->m_resource->isPreloaded() && current->m_resource->isLoaded()) {
                 // Destroy our decoded data. This will remove us from
                 // m_liveDecodedResources, and possibly move us to a different
@@ -363,7 +357,12 @@ void MemoryCache::pruneDeadResources(PruneStrategy strategy)
         current = m_allResources[i].m_tail;
         while (current) {
             MemoryCacheEntry* previous = current->m_previousInAllResourcesList;
-            ASSERT(!previous || contains(previous->m_resource.get()));
+            if (previous) {
+                // These release assertions are for investigating crashes and
+                // should be removed shortly.
+                RELEASE_ASSERT(previous->m_resource);
+                RELEASE_ASSERT(contains(previous->m_resource.get()));
+            }
             if (!current->m_resource->hasClients() && !current->m_resource->isPreloaded()
                 && !current->m_resource->isCacheValidator() && current->m_resource->canDelete()
                 && current->m_resource->type() != Resource::MainResource) {

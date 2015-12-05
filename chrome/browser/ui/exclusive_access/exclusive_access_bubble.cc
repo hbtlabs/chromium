@@ -31,6 +31,7 @@ const int ExclusiveAccessBubble::kSlideInRegionHeightPx = 4;
 const int ExclusiveAccessBubble::kSlideInDurationMs = 350;
 const int ExclusiveAccessBubble::kSlideOutDurationMs = 700;
 const int ExclusiveAccessBubble::kPopupTopPx = 45;
+const int ExclusiveAccessBubble::kSimplifiedPopupTopPx = 16;
 
 ExclusiveAccessBubble::ExclusiveAccessBubble(
     ExclusiveAccessManager* manager,
@@ -41,6 +42,27 @@ ExclusiveAccessBubble::ExclusiveAccessBubble(
 }
 
 ExclusiveAccessBubble::~ExclusiveAccessBubble() {
+}
+
+void ExclusiveAccessBubble::OnUserInput() {
+  if (!ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled())
+    return;
+
+  // We got some user input; reset the idle timer.
+  idle_timeout_.Stop();  // If the timer isn't running, this is a no-op.
+  idle_timeout_.Start(FROM_HERE,
+                      base::TimeDelta::FromMilliseconds(kIdleTimeMs), this,
+                      &ExclusiveAccessBubble::CheckMousePosition);
+
+  // If the notification suppression timer has elapsed, re-show it.
+  if (!suppress_notify_timeout_.IsRunning()) {
+    ShowAndStartTimers();
+    return;
+  }
+
+  // The timer has not elapsed, but the user provided some input. Reset the
+  // timer. (We only want to re-show the message after a period of inactivity.)
+  suppress_notify_timeout_.Reset();
 }
 
 void ExclusiveAccessBubble::StartWatchingMouse() {
@@ -97,25 +119,16 @@ void ExclusiveAccessBubble::CheckMousePosition() {
 
   // Check to see whether the mouse is idle.
   if (cursor_pos != last_mouse_pos_) {
-    // The mouse moved; reset the idle timer.
-    idle_timeout_.Stop();  // If the timer isn't running, this is a no-op.
-    idle_timeout_.Start(FROM_HERE,
-                        base::TimeDelta::FromMilliseconds(kIdleTimeMs), this,
-                        &ExclusiveAccessBubble::CheckMousePosition);
-
-    if (ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled()) {
-      // If the notification suppression timer has elapsed, show the
-      // notification regardless of where the mouse is on the screen.
-      if (!suppress_notify_timeout_.IsRunning()) {
-        ShowAndStartTimers();
-        return;
-      } else {
-        // The timer has not elapsed, but the user moved the mouse. Reset the
-        // timer. (We only want to re-show the message after a period of
-        // inactivity.)
-        suppress_notify_timeout_.Reset();
-      }
+    if (!ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled()) {
+      // OnUserInput() will reset the idle timer in simplified mode. In classic
+      // mode, we need to do this here.
+      idle_timeout_.Stop();  // If the timer isn't running, this is a no-op.
+      idle_timeout_.Start(FROM_HERE,
+                          base::TimeDelta::FromMilliseconds(kIdleTimeMs), this,
+                          &ExclusiveAccessBubble::CheckMousePosition);
     }
+
+    OnUserInput();
   }
   last_mouse_pos_ = cursor_pos;
 

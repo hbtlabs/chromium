@@ -468,6 +468,7 @@
       'browser/ui/webui/browsing_history_handler_unittest.cc',
       'browser/ui/webui/fileicon_source_unittest.cc',
       'browser/ui/webui/log_web_ui_url_unittest.cc',
+      'browser/ui/startup/startup_browser_creator_win_unittest.cc',
       'browser/update_client/chrome_update_query_params_delegate_unittest.cc',
       'common/chrome_content_client_unittest.cc',
       'common/chrome_paths_unittest.cc',
@@ -1647,6 +1648,10 @@
     'chrome_unit_tests_app_list_chromeos_sources': [
       'browser/ui/app_list/search/launcher_search/launcher_search_icon_image_loader_unittest.cc',
     ],
+    # ARC only sources of app_list.
+    'chrome_unit_tests_app_list_chromeos_arc_sources': [
+      'browser/ui/app_list/arc/arc_app_unittest.cc',
+    ],
     # Sources for Offline pages. For now only for Android.
     'chrome_unit_tests_offline_pages_sources': [
       'browser/android/offline_pages/offline_page_mhtml_archiver_unittest.cc',
@@ -2070,6 +2075,7 @@
           ],
           'dependencies': [
             '../components/components.gyp:crash_component',
+            '../third_party/crashpad/crashpad/handler/handler.gyp:crashpad_handler',
             '../win8/win8.gyp:test_registrar_constants',
             '../win8/win8.gyp:test_support_win8',
           ],
@@ -2764,6 +2770,12 @@
         }],
         ['enable_app_list==1 and chromeos==1', {
           'sources': [ '<@(chrome_unit_tests_app_list_chromeos_sources)' ],
+        }],
+        ['enable_app_list==1 and chromeos==1', {
+          'sources': [ '<@(chrome_unit_tests_app_list_chromeos_arc_sources)' ],
+          'dependencies': [
+            '../components/components.gyp:arc_test_support',
+          ],
         }],
         ['enable_plugin_installation==0', {
           'sources!': [

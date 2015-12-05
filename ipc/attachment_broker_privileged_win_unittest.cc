@@ -115,6 +115,13 @@ bool CheckContentsOfTestMessage(const IPC::Message& message) {
   return success;
 }
 
+// Returns 0 on error.
+DWORD GetCurrentProcessHandleCount() {
+  DWORD handle_count = 0;
+  BOOL success = ::GetProcessHandleCount(::GetCurrentProcess(), &handle_count);
+  return success ? handle_count : 0;
+}
+
 enum TestResult {
   RESULT_UNKNOWN,
   RESULT_SUCCESS,
@@ -230,9 +237,14 @@ class IPCAttachmentBrokerPrivilegedWinTest : public IPCTestBase {
     broker_->DesignateBrokerCommunicationChannel(channel());
     ASSERT_TRUE(ConnectChannel());
     ASSERT_TRUE(StartClient());
+
+    handle_count_ = GetCurrentProcessHandleCount();
+    EXPECT_NE(handle_count_, 0u);
   }
 
   void CommonTearDown() {
+    EXPECT_EQ(handle_count_, handle_count_);
+
     // Close the channel so the client's OnChannelError() gets fired.
     channel()->Close();
 
@@ -268,6 +280,7 @@ class IPCAttachmentBrokerPrivilegedWinTest : public IPCTestBase {
   ProxyListener proxy_listener_;
   scoped_ptr<IPC::AttachmentBrokerUnprivilegedWin> broker_;
   MockObserver observer_;
+  DWORD handle_count_;
 };
 
 // A broker which always sets the current process as the destination process
@@ -288,7 +301,7 @@ class MockBroker : public IPC::AttachmentBrokerUnprivilegedWin {
 // file HANDLE is sent to the privileged process using the attachment broker.
 // The privileged process dups the HANDLE into its own HANDLE table. This test
 // checks that the file has the same contents in the privileged process.
-TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandle) {
+TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendHandle) {
   Init("SendHandle");
 
   CommonSetUp();
@@ -310,7 +323,7 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandle) {
 // Similar to SendHandle, except the file HANDLE attached to the message has
 // neither read nor write permissions.
 TEST_F(IPCAttachmentBrokerPrivilegedWinTest,
-       DISABLED_SendHandleWithoutPermissions) {
+       SendHandleWithoutPermissions) {
   Init("SendHandleWithoutPermissions");
 
   CommonSetUp();
@@ -338,7 +351,7 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest,
 // Similar to SendHandle, except the attachment's destination process is this
 // process. This is an unrealistic scenario, but simulates an unprivileged
 // process sending an attachment to another unprivileged process.
-TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandleToSelf) {
+TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendHandleToSelf) {
   Init("SendHandleToSelf");
 
   set_broker(new MockBroker);
@@ -358,12 +371,11 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandleToSelf) {
   get_broker()->GetAttachmentWithId(*id, &received_attachment);
   ASSERT_NE(received_attachment.get(), nullptr);
 
-  // Check that it's a new entry in the HANDLE table.
+  // Check that it's the same entry in the HANDLE table.
   HANDLE h2 = GetHandleFromBrokeredAttachment(received_attachment);
-  EXPECT_NE(h2, h);
-  EXPECT_NE(h2, nullptr);
+  EXPECT_EQ(h2, h);
 
-  // But it still points to the same file.
+  // And still points to the same file.
   std::string contents = ReadFromFile(h);
   EXPECT_EQ(contents, std::string(kDataBuffer));
 
@@ -372,7 +384,7 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandleToSelf) {
 
 // Similar to SendHandle, but sends a message with two instances of the same
 // handle.
-TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendTwoHandles) {
+TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendTwoHandles) {
   Init("SendTwoHandles");
 
   CommonSetUp();
@@ -380,8 +392,12 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendTwoHandles) {
   get_proxy_listener()->set_listener(&result_listener);
 
   HANDLE h = CreateTempFile();
+  HANDLE h2;
+  BOOL result = ::DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(),
+                                  &h2, 0, FALSE, DUPLICATE_SAME_ACCESS);
+  ASSERT_TRUE(result);
   IPC::HandleWin handle_win1(h, IPC::HandleWin::FILE_READ_WRITE);
-  IPC::HandleWin handle_win2(h, IPC::HandleWin::FILE_READ_WRITE);
+  IPC::HandleWin handle_win2(h2, IPC::HandleWin::FILE_READ_WRITE);
   IPC::Message* message = new TestTwoHandleWinMsg(handle_win1, handle_win2);
   sender()->Send(message);
   base::MessageLoop::current()->Run();
@@ -395,7 +411,7 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendTwoHandles) {
 }
 
 // Similar to SendHandle, but sends the same message twice.
-TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandleTwice) {
+TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendHandleTwice) {
   Init("SendHandleTwice");
 
   CommonSetUp();
@@ -403,8 +419,12 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, DISABLED_SendHandleTwice) {
   get_proxy_listener()->set_listener(&result_listener);
 
   HANDLE h = CreateTempFile();
+  HANDLE h2;
+  BOOL result = ::DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(),
+                                  &h2, 0, FALSE, DUPLICATE_SAME_ACCESS);
+  ASSERT_TRUE(result);
   SendMessageWithAttachment(h);
-  SendMessageWithAttachment(h);
+  SendMessageWithAttachment(h2);
   base::MessageLoop::current()->Run();
 
   // Check the result.

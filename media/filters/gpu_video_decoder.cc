@@ -174,7 +174,10 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
 
   vda_ = factories_->CreateVideoDecodeAccelerator().Pass();
-  if (!vda_ || !vda_->Initialize(config.profile(), this)) {
+
+  VideoDecodeAccelerator::Config vda_config(config);
+
+  if (!vda_ || !vda_->Initialize(vda_config, this)) {
     DVLOG(1) << "VDA initialization failed.";
     bound_init_cb.Run(false);
     return;
@@ -455,8 +458,10 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
 
   DCHECK(decoder_texture_target_);
 
+  bool opaque = IsOpaque(config_.format());
+
   scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTexture(
-      PIXEL_FORMAT_ARGB,
+      opaque ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB,
       gpu::MailboxHolder(pb.texture_mailbox(), gpu::SyncToken(),
                          decoder_texture_target_),
       BindToCurrentLoop(base::Bind(

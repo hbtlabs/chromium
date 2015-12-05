@@ -31,7 +31,10 @@ class TestWindowTree : public mojom::WindowTree {
   void SetWindowBounds(uint32_t change_id,
                        uint32_t window_id,
                        mojo::RectPtr bounds) override;
-  void SetClientArea(uint32_t window_id, mojo::InsetsPtr insets) override;
+  void SetClientArea(
+      uint32_t window_id,
+      mojo::InsetsPtr insets,
+      mojo::Array<mojo::RectPtr> additional_client_areas) override;
   void SetWindowVisibility(uint32_t change_id,
                            uint32_t window_id,
                            bool visible) override;
@@ -43,29 +46,28 @@ class TestWindowTree : public mojom::WindowTree {
                      mojom::SurfaceType type,
                      mojo::InterfaceRequest<mojom::Surface> surface,
                      mojom::SurfaceClientPtr client) override;
-  void AddWindow(uint32_t parent,
-                 uint32_t child,
-                 const AddWindowCallback& callback) override;
-  void RemoveWindowFromParent(
-      uint32_t window_id,
-      const RemoveWindowFromParentCallback& callback) override;
+  void AddWindow(uint32_t change_id, uint32_t parent, uint32_t child) override;
+  void RemoveWindowFromParent(uint32_t change_id, uint32_t window_id) override;
   void AddTransientWindow(uint32_t change_id,
                           uint32_t window_id,
                           uint32_t transient_window_id) override;
   void RemoveTransientWindowFromParent(uint32_t change_id,
                                        uint32_t window_id) override;
-  void ReorderWindow(uint32_t window_id,
+  void ReorderWindow(uint32_t change_id,
+                     uint32_t window_id,
                      uint32_t relative_window_id,
-                     mojom::OrderDirection direction,
-                     const ReorderWindowCallback& callback) override;
+                     mojom::OrderDirection direction) override;
   void GetWindowTree(uint32_t window_id,
                      const GetWindowTreeCallback& callback) override;
   void Embed(uint32_t window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
              const EmbedCallback& callback) override;
-  void SetFocus(uint32_t window_id) override;
+  void SetFocus(uint32_t change_id, uint32_t window_id) override;
   void SetCanFocus(uint32_t window_id, bool can_focus) override;
+  void SetPredefinedCursor(uint32_t change_id,
+                           uint32_t window_id,
+                           mus::mojom::Cursor cursor_id) override;
   void SetWindowTextInputState(uint32_t window_id,
                                mojo::TextInputStatePtr state) override;
   void SetImeVisibility(uint32_t window_id,

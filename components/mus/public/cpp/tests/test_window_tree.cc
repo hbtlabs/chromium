@@ -34,8 +34,10 @@ void TestWindowTree::SetWindowBounds(uint32_t change_id,
   change_id_ = change_id;
 }
 
-void TestWindowTree::SetClientArea(uint32_t window_id, mojo::InsetsPtr insets) {
-}
+void TestWindowTree::SetClientArea(
+    uint32_t window_id,
+    mojo::InsetsPtr insets,
+    mojo::Array<mojo::RectPtr> additional_client_areas) {}
 
 void TestWindowTree::SetWindowVisibility(uint32_t change_id,
                                          uint32_t window_id,
@@ -58,13 +60,12 @@ void TestWindowTree::AttachSurface(
     mojo::InterfaceRequest<mojom::Surface> surface,
     mojom::SurfaceClientPtr client) {}
 
-void TestWindowTree::AddWindow(uint32_t parent,
-                               uint32_t child,
-                               const AddWindowCallback& callback) {}
+void TestWindowTree::AddWindow(uint32_t change_id,
+                               uint32_t parent,
+                               uint32_t child) {}
 
-void TestWindowTree::RemoveWindowFromParent(
-    uint32_t window_id,
-    const RemoveWindowFromParentCallback& callback) {}
+void TestWindowTree::RemoveWindowFromParent(uint32_t change_id,
+                                            uint32_t window_id) {}
 
 void TestWindowTree::AddTransientWindow(uint32_t change_id,
                                         uint32_t window_id,
@@ -74,10 +75,10 @@ void TestWindowTree::RemoveTransientWindowFromParent(
     uint32_t change_id,
     uint32_t transient_window_id) {}
 
-void TestWindowTree::ReorderWindow(uint32_t window_id,
+void TestWindowTree::ReorderWindow(uint32_t change_id,
+                                   uint32_t window_id,
                                    uint32_t relative_window_id,
-                                   mojom::OrderDirection direction,
-                                   const ReorderWindowCallback& callback) {}
+                                   mojom::OrderDirection direction) {}
 
 void TestWindowTree::GetWindowTree(uint32_t window_id,
                                    const GetWindowTreeCallback& callback) {}
@@ -87,9 +88,16 @@ void TestWindowTree::Embed(uint32_t window_id,
                            uint32_t policy_bitmask,
                            const EmbedCallback& callback) {}
 
-void TestWindowTree::SetFocus(uint32_t window_id) {}
+void TestWindowTree::SetFocus(uint32_t change_id, uint32_t window_id) {
+  got_change_ = true;
+  change_id_ = change_id;
+}
 
 void TestWindowTree::SetCanFocus(uint32_t window_id, bool can_focus) {}
+
+void TestWindowTree::SetPredefinedCursor(uint32_t change_id,
+                                         uint32_t window_id,
+                                         mus::mojom::Cursor cursor_id) {}
 
 void TestWindowTree::SetWindowTextInputState(uint32_t window_id,
                                              mojo::TextInputStatePtr state) {}

@@ -213,8 +213,8 @@ void HTMLOptionElement::parseAttribute(const QualifiedName& name, const AtomicSt
                 LayoutTheme::theme().controlStateChanged(*layoutObject(), EnabledControlState);
         }
     } else if (name == selectedAttr) {
-        if (bool willBeSelected = !value.isNull())
-            setSelected(willBeSelected);
+        if (oldValue.isNull() != value.isNull() && !m_isDirty)
+            setSelected(!value.isNull());
     } else if (name == labelAttr) {
         updateLabel();
     } else {
@@ -263,6 +263,17 @@ void HTMLOptionElement::setSelected(bool selected)
         select->optionSelectionStateChanged(this, selected);
 }
 
+bool HTMLOptionElement::selectedForBinding() const
+{
+    return selected();
+}
+
+void HTMLOptionElement::setSelectedForBinding(bool selected)
+{
+    setSelected(selected);
+    m_isDirty = true;
+}
+
 void HTMLOptionElement::setSelectedState(bool selected)
 {
     if (m_isSelected == selected)
@@ -284,6 +295,11 @@ void HTMLOptionElement::setSelectedState(bool selected)
             }
         }
     }
+}
+
+void HTMLOptionElement::setDirty(bool value)
+{
+    m_isDirty = true;
 }
 
 void HTMLOptionElement::childrenChanged(const ChildrenChange& change)

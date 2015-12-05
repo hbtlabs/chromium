@@ -70,6 +70,7 @@ class EXTTextureFilterAnisotropic;
 class ExceptionState;
 class HTMLImageElement;
 class HTMLVideoElement;
+class ImageBitmap;
 class ImageBuffer;
 class ImageData;
 class IntSize;
@@ -301,6 +302,8 @@ public:
         GLenum format, GLenum type, HTMLCanvasElement*, ExceptionState&);
     void texImage2D(GLenum target, GLint level, GLenum internalformat,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
+    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>);
 
     void texParameterf(GLenum target, GLenum pname, GLfloat param);
     void texParameteri(GLenum target, GLenum pname, GLint param);
@@ -316,6 +319,8 @@ public:
         GLenum format, GLenum type, HTMLCanvasElement*, ExceptionState&);
     void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>);
 
     void uniform1f(const WebGLUniformLocation*, GLfloat x);
     void uniform1fv(const WebGLUniformLocation*, const FlexibleFloat32ArrayView&);
@@ -497,6 +502,8 @@ protected:
     PassRefPtr<Image> videoFrameToImage(HTMLVideoElement*);
 
     WebGLRenderbuffer* ensureEmulatedStencilBuffer(GLenum target, WebGLRenderbuffer*);
+
+    virtual const WebGLSamplerState* getTextureUnitSamplerState(GLenum target, GLuint unit) const;
 
     // Structure for rendering to a DrawingBuffer, instead of directly
     // to the back-buffer of m_context.
@@ -916,6 +923,7 @@ protected:
         SourceHTMLImageElement,
         SourceHTMLCanvasElement,
         SourceHTMLVideoElement,
+        SourceImageBitmap,
     };
 
     // Helper function for tex{Sub}Image2D to check if the input format/type/level/target/width/height/border/xoffset/yoffset are valid.

@@ -996,11 +996,6 @@ void FrameLoader::stopAllLoaders()
     m_frame->navigationScheduler().cancel();
 
     m_inStopAllLoaders = false;
-
-    // LocalFrame::detach() can be called multiple times which
-    // means we may no longer have a FrameLoaderClient to talk to.
-    if (client())
-        client()->didStopAllLoaders();
 }
 
 void FrameLoader::didAccessInitialDocument()
@@ -1118,8 +1113,14 @@ FrameLoadType FrameLoader::loadType() const
 void FrameLoader::restoreScrollPositionAndViewState()
 {
     FrameView* view = m_frame->view();
-    if (!m_frame->page() || !view || !view->layoutViewportScrollableArea() || !m_currentItem || !m_stateMachine.committedFirstRealDocumentLoad())
+    if (!m_frame->page()
+        || !view
+        || !view->layoutViewportScrollableArea()
+        || !m_currentItem
+        || !m_stateMachine.committedFirstRealDocumentLoad()
+        || !documentLoader()) {
         return;
+    }
 
     if (!needsHistoryItemRestore(m_loadType))
         return;

@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '222b30d3a84b29b72b32e639751db4e6542d5e48',
+  'skia_revision': '95f53fbc5ddf14ddb1e51c7ebced2b80fb069f81',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'baf869df700a81846de2a0fc9e06ee7d4d1f23e0',
+  'v8_revision': '132a07cb3f741ad1601eff46050b5aa7ca9a0be8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,11 +51,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'dd5c5b79333fdde7858a77d39e91cc3d30b74c9e',
+  'angle_revision': 'fc1a44a1fe23f100a3164baf90a1b1693748450b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '818123dac34899ec230840936fc15b8b2b5556f9',
+  'buildtools_revision': 'b747a9e091cb8212a62343258406eaf53a6c032e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
@@ -67,7 +67,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': 'fde89b43c347155798dee8b1210c2c5faabe25f8',
+  'boringssl_revision': '6d9e5a74482bb832a6b4d9ae3d20d8f10f250bbd',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling nss
   # and whatever else without interference from each other.
@@ -187,7 +187,7 @@ deps = {
    Var('chromium_git') + '/webm/libvpx.git' + '@' +  '23831545a0a148a066b905c0f1e011375c97d790',
 
   'src/third_party/ffmpeg':
-   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'ddfb37c83df5385cb1ef0bcdb94449d69b96b9d5',
+   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'b5b1d0e988d68b2bba2eb2deeacf77079f70ddfa',
 
   'src/third_party/libjingle/source/talk':
     Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + 'b92be1202589b4530e348aca9cf2a0dcd1263c6a', # commit position 10864

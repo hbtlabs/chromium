@@ -95,10 +95,11 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                                   const gfx::Rect& old_bounds,
                                   const gfx::Rect& new_bounds,
                                   bool originated_change);
-  void ProcessClientAreaChanged(const ServerWindow* window,
-                                const gfx::Insets& old_client_area,
-                                const gfx::Insets& new_client_area,
-                                bool originated_change);
+  void ProcessClientAreaChanged(
+      const ServerWindow* window,
+      const gfx::Insets& new_client_area,
+      const std::vector<gfx::Rect>& new_additional_client_areas,
+      bool originated_change);
   void ProcessViewportMetricsChanged(const mojom::ViewportMetrics& old_metrics,
                                      const mojom::ViewportMetrics& new_metrics,
                                      bool originated_change);
@@ -121,6 +122,9 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
   void ProcessWindowDeleted(const WindowId& window, bool originated_change);
   void ProcessWillChangeWindowVisibility(const ServerWindow* window,
                                          bool originated_change);
+  void ProcessCursorChanged(const ServerWindow* window,
+                            int32_t cursor_id,
+                            bool originated_change);
   void ProcessFocusChanged(const ServerWindow* old_focused_window,
                            const ServerWindow* new_focused_window);
   void ProcessTransientWindowAdded(const ServerWindow* window,
@@ -197,21 +201,17 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
                  mojo::Map<mojo::String, mojo::Array<uint8_t>>
                      transport_properties) override;
   void DeleteWindow(uint32_t change_id, Id transport_window_id) override;
-  void AddWindow(Id parent_id,
-                 Id child_id,
-                 const mojo::Callback<void(bool)>& callback) override;
-  void RemoveWindowFromParent(
-      Id window_id,
-      const mojo::Callback<void(bool)>& callback) override;
+  void AddWindow(uint32_t change_id, Id parent_id, Id child_id) override;
+  void RemoveWindowFromParent(uint32_t change_id, Id window_id) override;
   void AddTransientWindow(uint32_t change_id,
                           Id window_id,
                           Id transient_window_id) override;
   void RemoveTransientWindowFromParent(uint32_t change_id,
                                        Id transient_window_id) override;
-  void ReorderWindow(Id window_id,
+  void ReorderWindow(uint32_t change_Id,
+                     Id window_id,
                      Id relative_window_id,
-                     mojom::OrderDirection direction,
-                     const mojo::Callback<void(bool)>& callback) override;
+                     mojom::OrderDirection direction) override;
   void GetWindowTree(
       Id window_id,
       const mojo::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
@@ -234,15 +234,21 @@ class WindowTreeImpl : public mojom::WindowTree, public AccessPolicyDelegate {
              mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
              const EmbedCallback& callback) override;
-  void SetFocus(uint32_t window_id) override;
-  void SetCanFocus(uint32_t window_id, bool can_focus) override;
-  void SetWindowTextInputState(uint32_t window_id,
+  void SetFocus(uint32_t change_id, Id window_id) override;
+  void SetCanFocus(Id window_id, bool can_focus) override;
+  void SetPredefinedCursor(uint32_t change_id,
+                           Id window_id,
+                           mus::mojom::Cursor cursor_id) override;
+  void SetWindowTextInputState(Id window_id,
                                mojo::TextInputStatePtr state) override;
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
   void OnWindowInputEventAck(uint32_t event_id) override;
-  void SetClientArea(Id transport_window_id, mojo::InsetsPtr insets) override;
+  void SetClientArea(
+      Id transport_window_id,
+      mojo::InsetsPtr insets,
+      mojo::Array<mojo::RectPtr> transport_additional_client_areas) override;
   void WmResponse(uint32 change_id, bool response) override;
 
   // AccessPolicyDelegate:

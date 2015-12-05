@@ -163,6 +163,7 @@ color-interpolation inherited, svg
 color-interpolation-filters inherited, svg, type_name=EColorInterpolation
 color-rendering inherited, svg
 column-fill runtime_flag=ColumnFill, type_name=ColumnFill
+contain runtime_flag=CSSContainment, converter=convertFlags<Containment>
 content custom_all
 counter-increment custom_all
 counter-reset custom_all
@@ -249,7 +250,7 @@ page-break-before type_name=EPageBreak, initial=initialPageBreak
 page-break-inside type_name=EPageBreak, initial=initialPageBreak
 paint-order inherited, svg, converter=convertPaintOrder
 perspective interpolable, converter=convertPerspective
-perspective-origin interpolable, converter=convertPerspectiveOrigin
+perspective-origin interpolable, converter=convertPosition
 pointer-events inherited
 position
 quotes inherited, converter=convertQuotes
@@ -447,7 +448,7 @@ animation longhands=animation-name;animation-duration;animation-timing-function;
 background longhands=background-image;background-position-x;background-position-y;background-size;background-repeat-x;background-repeat-y;background-attachment;background-origin;background-clip;background-color
 background-position longhands=background-position-x;background-position-y
 background-repeat longhands=background-repeat-x;background-repeat-y
-border longhands=border-top-color;border-top-style;border-top-width;border-right-color;border-right-style;border-right-width;border-bottom-color;border-bottom-style;border-bottom-width;border-left-color;border-left-style;border-left-width
+border longhands=border-top-color;border-top-style;border-top-width;border-right-color;border-right-style;border-right-width;border-bottom-color;border-bottom-style;border-bottom-width;border-left-color;border-left-style;border-left-width;border-image-source;border-image-slice;border-image-width;border-image-outset;border-image-repeat
 border-bottom longhands=border-bottom-width;border-bottom-style;border-bottom-color
 border-color longhands=border-top-color;border-right-color;border-bottom-color;border-left-color
 border-image longhands=border-image-source;border-image-slice;border-image-width;border-image-outset;border-image-repeat

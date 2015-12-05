@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_PRIVATE_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_PRIVATE_H_
 
+#include <vector>
+
 #include "components/mus/public/cpp/window.h"
 #include "mojo/public/cpp/bindings/array.h"
 
@@ -63,11 +65,16 @@ class WindowPrivate {
                       const gfx::Rect& new_bounds) {
     window_->LocalSetBounds(old_bounds, new_bounds);
   }
-  void LocalSetClientArea(const gfx::Insets& new_client_area) {
-    window_->LocalSetClientArea(new_client_area);
+  void LocalSetClientArea(
+      const gfx::Insets& client_area,
+      const std::vector<gfx::Rect>& additional_client_areas) {
+    window_->LocalSetClientArea(client_area, additional_client_areas);
   }
   void LocalSetDrawn(bool drawn) { window_->LocalSetDrawn(drawn); }
   void LocalSetVisible(bool visible) { window_->LocalSetVisible(visible); }
+  void LocalSetPredefinedCursor(mojom::Cursor cursor) {
+    window_->LocalSetPredefinedCursor(cursor);
+  }
   void LocalSetSharedProperty(const std::string& name,
                               mojo::Array<uint8_t> new_data);
   void LocalSetSharedProperty(const std::string& name,

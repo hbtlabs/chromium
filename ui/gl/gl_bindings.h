@@ -135,6 +135,9 @@
 // GL_CHROMIUM_ycbcr_422_image
 #define GL_RGB_YCBCR_422_CHROMIUM                        0x78FB
 
+// GL_CHROMIUM_ycbcr_420v_image
+#define GL_RGB_YCBCR_420V_CHROMIUM 0x78FC
+
 // GL_CHROMIUM_schedule_overlay_plane
 #define GL_OVERLAY_TRANSFORM_NONE_CHROMIUM               0x9245
 #define GL_OVERLAY_TRANSFORM_FLIP_HORIZONTAL_CHROMIUM    0x9246
@@ -330,6 +333,16 @@
 #ifndef GL_FRAGMENT_INPUT_NV
 #define GL_FRAGMENT_INPUT_NV 0x936D
 #endif
+
+#ifndef GL_EXT_blend_func_extended
+#define GL_EXT_blend_func_extended 1
+#define GL_SRC_ALPHA_SATURATE_EXT 0x0308
+#define GL_SRC1_ALPHA_EXT 0x8589  // OpenGL 1.5 token value
+#define GL_SRC1_COLOR_EXT 0x88F9
+#define GL_ONE_MINUS_SRC1_COLOR_EXT 0x88FA
+#define GL_ONE_MINUS_SRC1_ALPHA_EXT 0x88FB
+#define GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT 0x88FC
+#endif /* GL_EXT_blend_func_extended */
 
 #define GL_GLEXT_PROTOTYPES 1
 

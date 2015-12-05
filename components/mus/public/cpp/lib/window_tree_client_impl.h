@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
@@ -48,13 +49,13 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // These methods take TransportIds. For windows owned by the current
   // connection, the connection id high word can be zero. In all cases, the
   // TransportId 0x1 refers to the root window.
-  void AddChild(Id child_id, Id parent_id);
-  void RemoveChild(Id child_id, Id parent_id);
+  void AddChild(Window* parent, Id child_id);
+  void RemoveChild(Window* parent, Id child_id);
 
   void AddTransientWindow(Window* window, Id transient_window_id);
   void RemoveTransientWindowFromParent(Window* window);
 
-  void Reorder(Id window_id,
+  void Reorder(Window* window,
                Id relative_window_id,
                mojom::OrderDirection direction);
 
@@ -64,9 +65,12 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void SetBounds(Window* window,
                  const gfx::Rect& old_bounds,
                  const gfx::Rect& bounds);
-  void SetClientArea(Id window_id, const gfx::Insets& client_area);
-  void SetFocus(Id window_id);
+  void SetClientArea(Id window_id,
+                     const gfx::Insets& client_area,
+                     const std::vector<gfx::Rect>& additional_client_areas);
+  void SetFocus(Window* window);
   void SetCanFocus(Id window_id, bool can_focus);
+  void SetPredefinedCursor(Id window_id, mus::mojom::Cursor cursor_id);
   void SetVisible(Window* window, bool visible);
   void SetProperty(Window* window,
                    const std::string& name,
@@ -85,6 +89,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                      mojom::SurfaceType type,
                      mojo::InterfaceRequest<mojom::Surface> surface,
                      mojom::SurfaceClientPtr client);
+
+  // Sets focus to |window| without notifying the server.
+  void LocalSetFocus(Window* window);
 
   // Start/stop tracking windows. While tracked, they can be retrieved via
   // WindowTreeConnection::GetWindowById.
@@ -108,11 +115,13 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
 
+  // See InFlightChange for details on how InFlightChanges are used.
   uint32_t ScheduleInFlightChange(scoped_ptr<InFlightChange> change);
 
   // Returns true if there is an InFlightChange that matches |change|. If there
   // is an existing change SetRevertValueFrom() is invoked on it. Returns false
   // if there is no InFlightChange matching |change|.
+  // See InFlightChange for details on how InFlightChanges are used.
   bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
 
   // OnEmbed() calls into this. Exposed as a separate function for testing.
@@ -129,6 +138,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   Window* NewWindow(const Window::SharedProperties* properties) override;
   bool IsEmbedRoot() override;
   ConnectionSpecificId GetConnectionId() override;
+  void AddObserver(WindowTreeConnectionObserver* observer) override;
+  void RemoveObserver(WindowTreeConnectionObserver* observer) override;
 
   // Overridden from WindowTreeClient:
   void OnEmbed(ConnectionSpecificId connection_id,
@@ -141,9 +152,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnWindowBoundsChanged(Id window_id,
                              mojo::RectPtr old_bounds,
                              mojo::RectPtr new_bounds) override;
-  void OnClientAreaChanged(uint32_t window_id,
-                           mojo::InsetsPtr old_client_area,
-                           mojo::InsetsPtr new_client_area) override;
+  void OnClientAreaChanged(
+      uint32_t window_id,
+      mojo::InsetsPtr new_client_area,
+      mojo::Array<mojo::RectPtr> new_additional_client_areas) override;
   void OnTransientWindowAdded(uint32_t window_id,
                               uint32_t transient_window_id) override;
   void OnTransientWindowRemoved(uint32_t window_id,
@@ -169,6 +181,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                           Id window_id,
                           mojom::EventPtr event) override;
   void OnWindowFocused(Id focused_window_id) override;
+  void OnWindowPredefinedCursorChanged(Id window_id,
+                                       mojom::Cursor cursor) override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
@@ -210,6 +224,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   bool is_embed_root_;
 
   bool in_destructor_;
+
+  base::ObserverList<WindowTreeConnectionObserver> observers_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(WindowTreeClientImpl);
 };

@@ -76,7 +76,7 @@ class SCHEDULER_EXPORT TimeDomain {
   // UpdateWorkQueue on.
   void RegisterAsUpdatableTaskQueue(internal::TaskQueueImpl* queue);
 
-  // Schedules a call to TaskQueueImpl::MoveReadyDelayedTasksToIncomingQueue
+  // Schedules a call to TaskQueueImpl::MoveReadyDelayedTasksToDelayedWorkQueue
   // when this TimeDomain reaches |delayed_run_time|.
   void ScheduleDelayedWork(internal::TaskQueueImpl* queue,
                            base::TimeTicks delayed_run_time,
@@ -98,20 +98,22 @@ class SCHEDULER_EXPORT TimeDomain {
 
   // Called by the TaskQueueManager when the TimeDomain is registered.
   virtual void OnRegisterWithTaskQueueManager(
-      TaskQueueManagerDelegate* task_queue_manager_delegate,
-      base::Closure do_work_closure) = 0;
+      TaskQueueManager* task_queue_manager) = 0;
 
   // The implementaion will secedule task processing to run with |delay| with
-  // respect to the TimeDomain's time source.
+  // respect to the TimeDomain's time source.  Always called on the main thread.
   virtual void RequestWakeup(LazyNow* lazy_now, base::TimeDelta delay) = 0;
 
   // For implementation specific tracing.
   virtual void AsValueIntoInternal(
       base::trace_event::TracedValue* state) const = 0;
 
-  // Call TaskQueueImpl::MoveReadyDelayedTasksToIncomingQueue for each
-  // queue where the delay has elapsed.
-  void WakeupReadyDelayedQueues(LazyNow* lazy_now);
+  // Call TaskQueueImpl::UpdateDelayedWorkQueue for each queue where the delay
+  // has elapsed.
+  void WakeupReadyDelayedQueues(
+      LazyNow* lazy_now,
+      bool should_trigger_wakeup,
+      const internal::TaskQueueImpl::Task* previous_task);
 
  private:
   void MoveNewlyUpdatableQueuesIntoUpdatableQueueSet();

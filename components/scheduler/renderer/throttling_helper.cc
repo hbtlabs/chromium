@@ -41,7 +41,7 @@ void ThrottlingHelper::Throttle(TaskQueue* task_queue) {
   task_queue->SetTimeDomain(time_domain_.get());
   task_queue->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  MaybeSchedulePumpThrottledTasksLocked();
+  MaybeSchedulePumpThrottledTasksLocked(FROM_HERE);
 }
 
 void ThrottlingHelper::Unthrottle(TaskQueue* task_queue) {
@@ -59,13 +59,13 @@ void ThrottlingHelper::OnTimeDomainHasImmediateWork() {
   }
   TRACE_EVENT0(tracing_category_,
                "ThrottlingHelper::OnTimeDomainHasImmediateWork");
-  MaybeSchedulePumpThrottledTasksLocked();
+  MaybeSchedulePumpThrottledTasksLocked(FROM_HERE);
 }
 
 void ThrottlingHelper::OnTimeDomainHasDelayedWork() {
   TRACE_EVENT0(tracing_category_,
                "ThrottlingHelper::OnTimeDomainHasDelayedWork");
-  MaybeSchedulePumpThrottledTasksLocked();
+  MaybeSchedulePumpThrottledTasksLocked(FROM_HERE);
 }
 
 void ThrottlingHelper::PumpThrottledTasks() {
@@ -75,15 +75,15 @@ void ThrottlingHelper::PumpThrottledTasks() {
   time_domain_->AdvanceTo(tick_clock_->NowTicks());
   bool work_to_do = false;
   for (TaskQueue* task_queue : throttled_queues_) {
-    if (task_queue->GetQueueState() == TaskQueue::QueueState::EMPTY)
+    if (task_queue->IsEmpty())
       continue;
 
     work_to_do = true;
-    task_queue->PumpQueue();
+    task_queue->PumpQueue(false);
   }
 
   if (work_to_do)
-    MaybeSchedulePumpThrottledTasksLocked();
+    MaybeSchedulePumpThrottledTasksLocked(FROM_HERE);
 }
 
 /* static */
@@ -93,13 +93,14 @@ base::TimeDelta ThrottlingHelper::DelayToNextRunTimeInSeconds(
   return one_second - ((now - base::TimeTicks()) % one_second);
 }
 
-void ThrottlingHelper::MaybeSchedulePumpThrottledTasksLocked() {
+void ThrottlingHelper::MaybeSchedulePumpThrottledTasksLocked(
+    const tracked_objects::Location& from_here) {
   if (pending_pump_throttled_tasks_)
     return;
 
   pending_pump_throttled_tasks_ = true;
   task_runner_->PostDelayedTask(
-      FROM_HERE, pump_throttled_tasks_closure_,
+      from_here, pump_throttled_tasks_closure_,
       DelayToNextRunTimeInSeconds(tick_clock_->NowTicks()));
 }
 

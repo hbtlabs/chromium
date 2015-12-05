@@ -568,3 +568,16 @@ VISIT_GL_CALL(ProgramPathFragmentInputGenCHROMIUM,
 VISIT_GL_CALL(GetGraphicsResetStatusKHR, GLenum, (), ())
 VISIT_GL_CALL(BlendBarrierKHR, void, (), ())
 VISIT_GL_CALL(ApplyScreenSpaceAntialiasingCHROMIUM, void, (), ())
+VISIT_GL_CALL(
+    BindFragDataLocationIndexedEXT,
+    void,
+    (GLuint program, GLuint colorNumber, GLuint index, const char* name),
+    (program, colorNumber, index, name))
+VISIT_GL_CALL(BindFragDataLocationEXT,
+              void,
+              (GLuint program, GLuint colorNumber, const char* name),
+              (program, colorNumber, name))
+VISIT_GL_CALL(GetFragDataIndexEXT,
+              GLint,
+              (GLuint program, const char* name),
+              (program, name))

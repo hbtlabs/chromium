@@ -159,7 +159,7 @@ WebInspector.ResourceScriptMapping.prototype = {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
         if (!this._networkMapping.networkURL(uiSourceCode))
             return;
-        if (uiSourceCode.project().isServiceProject())
+        if (uiSourceCode.isFromServiceProject())
             return;
 
         var scripts = this._scriptsForUISourceCode(uiSourceCode);
@@ -177,7 +177,7 @@ WebInspector.ResourceScriptMapping.prototype = {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
         if (!this._networkMapping.networkURL(uiSourceCode))
             return;
-        if (uiSourceCode.project().isServiceProject())
+        if (uiSourceCode.isFromServiceProject())
             return;
 
         this._unbindUISourceCode(uiSourceCode);
@@ -303,7 +303,7 @@ WebInspector.ResourceScriptFile = function(resourceScriptMapping, uiSourceCode, 
     this._uiSourceCode = uiSourceCode;
     this._uiSourceCode.forceLoadOnCheckContent();
 
-    if (this._uiSourceCode.contentType() === WebInspector.resourceTypes.Script)
+    if (this._uiSourceCode.contentType().isScript())
         this._script = scripts[0];
 
     this._uiSourceCode.addEventListener(WebInspector.UISourceCode.Events.WorkingCopyChanged, this._workingCopyChanged, this);

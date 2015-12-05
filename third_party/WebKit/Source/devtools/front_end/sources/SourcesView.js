@@ -253,7 +253,7 @@ WebInspector.SourcesView.prototype = {
      */
     _addUISourceCode: function(uiSourceCode)
     {
-        if (uiSourceCode.project().isServiceProject())
+        if (uiSourceCode.isFromServiceProject())
             return;
         this._editorContainer.addUISourceCode(uiSourceCode);
         // Replace debugger script-based uiSourceCode with a network-based one.
@@ -262,7 +262,7 @@ WebInspector.SourcesView.prototype = {
             return;
         var networkURL = WebInspector.networkMapping.networkURL(uiSourceCode);
         var currentNetworkURL = WebInspector.networkMapping.networkURL(currentUISourceCode);
-        if (currentUISourceCode.project().isServiceProject() && currentUISourceCode !== uiSourceCode && currentNetworkURL === networkURL && networkURL) {
+        if (currentUISourceCode.isFromServiceProject() && currentUISourceCode !== uiSourceCode && currentNetworkURL === networkURL && networkURL) {
             this._showFile(uiSourceCode);
             this._editorContainer.removeUISourceCode(currentUISourceCode);
         }
@@ -345,20 +345,13 @@ WebInspector.SourcesView.prototype = {
     _createSourceFrame: function(uiSourceCode)
     {
         var sourceFrame;
-        switch (uiSourceCode.contentType()) {
-        case WebInspector.resourceTypes.Script:
+        var contentType = uiSourceCode.contentType();
+        if (contentType.hasScripts())
             sourceFrame = new WebInspector.JavaScriptSourceFrame(this._sourcesPanel, uiSourceCode);
-            break;
-        case WebInspector.resourceTypes.Document:
-            sourceFrame = new WebInspector.JavaScriptSourceFrame(this._sourcesPanel, uiSourceCode);
-            break;
-        case WebInspector.resourceTypes.Stylesheet:
+        else if (contentType.isStyleSheet())
             sourceFrame = new WebInspector.CSSSourceFrame(uiSourceCode);
-            break;
-        default:
+        else
             sourceFrame = new WebInspector.UISourceCodeFrame(uiSourceCode);
-        break;
-        }
         sourceFrame.setHighlighterType(WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode));
         this._sourceFramesByUISourceCode.set(uiSourceCode, sourceFrame);
         this._historyManager.trackSourceFrameCursorJumps(sourceFrame);
@@ -381,15 +374,11 @@ WebInspector.SourcesView.prototype = {
      */
     _sourceFrameMatchesUISourceCode: function(sourceFrame, uiSourceCode)
     {
-        switch (uiSourceCode.contentType()) {
-        case WebInspector.resourceTypes.Script:
-        case WebInspector.resourceTypes.Document:
+        if (uiSourceCode.contentType().hasScripts())
             return sourceFrame instanceof WebInspector.JavaScriptSourceFrame;
-        case WebInspector.resourceTypes.Stylesheet:
+        if (uiSourceCode.contentType().isStyleSheet())
             return sourceFrame instanceof WebInspector.CSSSourceFrame;
-        default:
-            return !(sourceFrame instanceof WebInspector.JavaScriptSourceFrame);
-        }
+        return !(sourceFrame instanceof WebInspector.JavaScriptSourceFrame);
     },
 
     /**
@@ -646,18 +635,18 @@ WebInspector.SourcesView.prototype = {
         if (!uiSourceCode)
             return false;
 
-        switch (uiSourceCode.contentType()) {
-        case WebInspector.resourceTypes.Document:
-        case WebInspector.resourceTypes.Script:
+        if (uiSourceCode.contentType().hasScripts()) {
             WebInspector.JavaScriptOutlineDialog.show(uiSourceCode, this.showSourceLocation.bind(this, uiSourceCode));
             return true;
-        case WebInspector.resourceTypes.Stylesheet:
+        }
+
+        if (uiSourceCode.contentType().isStyleSheet()) {
             WebInspector.StyleSheetOutlineDialog.show(uiSourceCode, this.showSourceLocation.bind(this, uiSourceCode));
             return true;
-        default:
-            // We don't want default browser shortcut to be executed, so pretend to handle this event.
-            return true;
         }
+
+        // We don't want default browser shortcut to be executed, so pretend to handle this event.
+        return true;
     },
 
     /**

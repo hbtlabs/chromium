@@ -34,6 +34,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/FlexibleArrayBufferView.h"
 #include "core/fetch/ImageResource.h"
+#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
@@ -2044,6 +2045,33 @@ WebGLRenderbuffer* WebGLRenderingContextBase::ensureEmulatedStencilBuffer(GLenum
         webContext()->bindRenderbuffer(target, objectOrZero(m_renderbufferBinding.get()));
     }
     return renderbuffer->emulatedStencilBuffer();
+}
+
+const WebGLSamplerState* WebGLRenderingContextBase::getTextureUnitSamplerState(GLenum target, GLuint unit) const
+{
+    ASSERT(unit < m_textureUnits.size());
+
+    WebGLTexture* texture = nullptr;
+
+    switch (target) {
+    case GL_TEXTURE_2D:
+        texture = m_textureUnits[unit].m_texture2DBinding;
+        break;
+    case GL_TEXTURE_CUBE_MAP:
+        texture = m_textureUnits[unit].m_textureCubeMapBinding;
+        break;
+    case GL_TEXTURE_2D_ARRAY:
+        texture = m_textureUnits[unit].m_texture2DArrayBinding;
+        break;
+    case GL_TEXTURE_3D:
+        texture = m_textureUnits[unit].m_texture3DBinding;
+        break;
+    }
+
+    if (texture)
+        return texture->getSamplerState();
+
+    return nullptr;
 }
 
 void WebGLRenderingContextBase::setBoundVertexArrayObject(ScriptState* scriptState, WebGLVertexArrayObjectBase* arrayObject)
@@ -4312,6 +4340,10 @@ void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum in
         synthesizeGLError(GL_INVALID_VALUE, "texImage2D", "no image data");
         return;
     }
+    if (pixels->data()->bufferBase()->isNeutered()) {
+        synthesizeGLError(GL_INVALID_VALUE, "texImage2D", "The source data has been neutered.");
+        return;
+    }
     if (isContextLost() || !validateTexFunc("texImage2D", NotTexSubImage2D, SourceImageData, target, level, internalformat, pixels->width(), pixels->height(), 0, format, type, 0, 0))
         return;
     if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
@@ -4505,6 +4537,20 @@ void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum in
     texImage2DImpl(target, level, internalformat, format, type, image.get(), WebGLImageConversion::HtmlDomVideo, m_unpackFlipY, m_unpackPremultiplyAlpha);
 }
 
+void WebGLRenderingContextBase::texImage2D(GLenum target, GLint level, GLenum internalformat,
+    GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap> bitmap)
+{
+    ASSERT(bitmap->bitmapImage());
+    if (bitmap->isNeutered()) {
+        synthesizeGLError(GL_INVALID_VALUE, "texImage2D", "The source data has been neutered.");
+        return;
+    }
+    if (isContextLost() || !validateTexFunc("texImage2D", NotTexSubImage2D, SourceImageBitmap, target, level, 0, bitmap->width(), bitmap->height(), 0, format, type, 0, 0))
+        return;
+    StaticBitmapImage* imageForRender = bitmap->bitmapImage();
+    texImage2DImpl(target, level, internalformat, format, type, imageForRender, WebGLImageConversion::HtmlDomImage, m_unpackFlipY, m_unpackPremultiplyAlpha);
+}
+
 void WebGLRenderingContextBase::texParameter(GLenum target, GLenum pname, GLfloat paramf, GLint parami, bool isFloat)
 {
     if (isContextLost())
@@ -4633,6 +4679,10 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint 
         synthesizeGLError(GL_INVALID_VALUE, "texSubImage2D", "no image data");
         return;
     }
+    if (pixels->data()->bufferBase()->isNeutered()) {
+        synthesizeGLError(GL_INVALID_VALUE, "texSubImage2D", "The source data has been neutered.");
+        return;
+    }
     if (isContextLost() || !validateTexFunc("texSubImage2D", TexSubImage2D, SourceImageData, target, level, 0,  pixels->width(), pixels->height(), 0, format, type, xoffset, yoffset))
         return;
     if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
@@ -4711,6 +4761,20 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint 
     if (!image)
         return;
     texSubImage2DImpl(target, level, xoffset, yoffset, format, type, image.get(), WebGLImageConversion::HtmlDomVideo, m_unpackFlipY, m_unpackPremultiplyAlpha);
+}
+
+void WebGLRenderingContextBase::texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+    GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap> bitmap)
+{
+    ASSERT(bitmap->bitmapImage());
+    if (bitmap->isNeutered()) {
+        synthesizeGLError(GL_INVALID_VALUE, "texSubImage2D", "The source data has been neutered.");
+        return;
+    }
+    if (isContextLost() || !validateTexFunc("texSubImage2D", TexSubImage2D, SourceImageBitmap, target, level, 0, bitmap->width(), bitmap->height(), 0, format, type, 0, 0))
+        return;
+    StaticBitmapImage* imageForRender = bitmap->bitmapImage();
+    texSubImage2DImpl(target, level, xoffset, yoffset, format, type, imageForRender, WebGLImageConversion::HtmlDomImage, m_unpackFlipY, m_unpackPremultiplyAlpha);
 }
 
 void WebGLRenderingContextBase::uniform1f(const WebGLUniformLocation* location, GLfloat x)
@@ -5392,8 +5456,10 @@ void WebGLRenderingContextBase::handleTextureCompleteness(const char* functionNa
     WebGLTexture::TextureExtensionFlag flag = static_cast<WebGLTexture::TextureExtensionFlag>((extensionEnabled(OESTextureFloatLinearName) ? WebGLTexture::TextureFloatLinearExtensionEnabled : 0)
         | ((extensionEnabled(OESTextureHalfFloatLinearName) || isWebGL2OrHigher()) ? WebGLTexture::TextureHalfFloatLinearExtensionEnabled : 0));
     for (unsigned ii = 0; ii < m_onePlusMaxNonDefaultTextureUnit; ++ii) {
-        if ((m_textureUnits[ii].m_texture2DBinding.get() && m_textureUnits[ii].m_texture2DBinding->needToUseBlackTexture(flag))
-            || (m_textureUnits[ii].m_textureCubeMapBinding.get() && m_textureUnits[ii].m_textureCubeMapBinding->needToUseBlackTexture(flag))) {
+        const WebGLSamplerState* samplerState2D = getTextureUnitSamplerState(GL_TEXTURE_2D, ii);
+        const WebGLSamplerState* samplerStateCubeMap = getTextureUnitSamplerState(GL_TEXTURE_CUBE_MAP, ii);
+        if ((m_textureUnits[ii].m_texture2DBinding.get() && m_textureUnits[ii].m_texture2DBinding->needToUseBlackTexture(flag, samplerState2D))
+            || (m_textureUnits[ii].m_textureCubeMapBinding.get() && m_textureUnits[ii].m_textureCubeMapBinding->needToUseBlackTexture(flag, samplerStateCubeMap))) {
             if (ii != m_activeTextureUnit) {
                 webContext()->activeTexture(GL_TEXTURE0 + ii);
                 resetActiveUnit = true;
@@ -5414,9 +5480,9 @@ void WebGLRenderingContextBase::handleTextureCompleteness(const char* functionNa
                 tex2D = m_textureUnits[ii].m_texture2DBinding.get();
                 texCubeMap = m_textureUnits[ii].m_textureCubeMapBinding.get();
             }
-            if (m_textureUnits[ii].m_texture2DBinding && m_textureUnits[ii].m_texture2DBinding->needToUseBlackTexture(flag))
+            if (m_textureUnits[ii].m_texture2DBinding && m_textureUnits[ii].m_texture2DBinding->needToUseBlackTexture(flag, samplerState2D))
                 webContext()->bindTexture(GL_TEXTURE_2D, objectOrZero(tex2D));
-            if (m_textureUnits[ii].m_textureCubeMapBinding && m_textureUnits[ii].m_textureCubeMapBinding->needToUseBlackTexture(flag))
+            if (m_textureUnits[ii].m_textureCubeMapBinding && m_textureUnits[ii].m_textureCubeMapBinding->needToUseBlackTexture(flag, samplerStateCubeMap))
                 webContext()->bindTexture(GL_TEXTURE_CUBE_MAP, objectOrZero(texCubeMap));
         }
     }

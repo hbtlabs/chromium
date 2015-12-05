@@ -66,6 +66,7 @@
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 #include "chrome/browser/ui/webui/plugins_ui.h"
 #include "chrome/browser/ui/webui/print_preview/sticky_settings.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -116,10 +117,8 @@
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/ui/webui/extensions/extension_settings_handler.h"
 #include "extensions/browser/extension_prefs.h"
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "chrome/browser/extensions/api/copresence/copresence_api.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
-#endif
 #endif  // defined(ENABLE_EXTENSIONS)
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
@@ -138,7 +137,7 @@
 #include "chrome/browser/ui/webui/local_discovery/local_discovery_ui.h"
 #endif
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
 #include "chrome/browser/android/most_visited_sites.h"
 #include "chrome/browser/android/new_tab_page_prefs.h"
@@ -200,6 +199,7 @@
 #endif
 
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/google_now_extension.h"
 #endif
 
@@ -298,10 +298,18 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   TaskManager::RegisterPrefs(registry);
 #endif  // defined(ENABLE_TASK_MANAGER)
 
-#if !defined(OS_ANDROID)
+#if defined(ENABLE_BACKGROUND)
   BackgroundModeManager::RegisterPrefs(registry);
-  ChromeTracingDelegate::RegisterPrefs(registry);
+#endif
+
+  // TODO(bshe): Use !defined(ANDROID_JAVA_UI) once
+  // codereview.chromium.org/1459793002 landed.
+#if !defined(OS_ANDROID) || defined(USE_AURA)
   RegisterBrowserPrefs(registry);
+#endif
+
+#if !defined(OS_ANDROID)
+  ChromeTracingDelegate::RegisterPrefs(registry);
   StartupBrowserCreator::RegisterLocalStatePrefs(registry);
   // The native GCM is used on Android instead.
   gcm::GCMChannelStatusSyncer::RegisterPrefs(registry);
@@ -422,10 +430,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   extensions::launch_util::RegisterProfilePrefs(registry);
   ExtensionWebUI::RegisterProfilePrefs(registry);
   extensions::ExtensionPrefs::RegisterProfilePrefs(registry);
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
   ToolbarActionsBar::RegisterProfilePrefs(registry);
   extensions::CopresenceService::RegisterProfilePrefs(registry);
-#endif
   RegisterAnimationPolicyPrefs(registry);
 #endif  // defined(ENABLE_EXTENSIONS)
 
@@ -462,7 +468,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   SupervisedUserWhitelistService::RegisterProfilePrefs(registry);
 #endif
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   variations::VariationsService::RegisterProfilePrefs(registry);
   MostVisitedSites::RegisterProfilePrefs(registry);
   NewTabPagePrefs::RegisterProfilePrefs(registry);
@@ -484,7 +490,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   signin::RegisterProfilePrefs(registry);
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  // TODO(bshe): Revisit this once it is more clear on what should we do with
+  // default apps on Aura Android. See crbug.com/564738
+#if (!defined(OS_ANDROID) || defined(USE_AURA)) && !defined(OS_CHROMEOS)
   default_apps::RegisterProfilePrefs(registry);
 #endif
 
@@ -501,6 +509,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   extensions::EnterprisePlatformKeysPrivateChallengeUserKeyFunction::
       RegisterProfilePrefs(registry);
   flags_ui::PrefServiceFlagsStorage::RegisterProfilePrefs(registry);
+#endif
+
+#if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
+  ArcAppListPrefs::RegisterProfilePrefs(registry);
 #endif
 
 #if defined(OS_WIN)

@@ -143,32 +143,35 @@ std::string SBFullHashToString(const SBFullHash& hash) {
 
 std::string Unescape(const std::string& url) {
   std::string unescaped_str(url);
-  std::string old_unescaped_str;
   const int kMaxLoopIterations = 1024;
+  size_t old_size = 0;
   int loop_var = 0;
   do {
-    old_unescaped_str = unescaped_str;
+    old_size = unescaped_str.size();
     unescaped_str = net::UnescapeURLComponent(
-        old_unescaped_str, net::UnescapeRule::SPOOFING_AND_CONTROL_CHARS |
-                               net::UnescapeRule::SPACES |
-                               net::UnescapeRule::URL_SPECIAL_CHARS);
-  } while (unescaped_str != old_unescaped_str && ++loop_var <=
-           kMaxLoopIterations);
+        unescaped_str, net::UnescapeRule::SPOOFING_AND_CONTROL_CHARS |
+                           net::UnescapeRule::SPACES |
+                           net::UnescapeRule::URL_SPECIAL_CHARS);
+  } while (old_size != unescaped_str.size() &&
+           ++loop_var <= kMaxLoopIterations);
 
   return unescaped_str;
 }
 
 std::string Escape(const std::string& url) {
   std::string escaped_str;
+  // The escaped string is larger so allocate double the length to reduce the
+  // chance of the string being grown.
+  escaped_str.reserve(url.length() * 2);
   const char* kHexString = "0123456789ABCDEF";
   for (size_t i = 0; i < url.length(); i++) {
     unsigned char c = static_cast<unsigned char>(url[i]);
     if (c <= ' ' || c > '~' || c == '#' || c == '%') {
-      escaped_str.push_back('%');
-      escaped_str.push_back(kHexString[c >> 4]);
-      escaped_str.push_back(kHexString[c & 0xf]);
+      escaped_str += '%';
+      escaped_str += kHexString[c >> 4];
+      escaped_str += kHexString[c & 0xf];
     } else {
-      escaped_str.push_back(c);
+      escaped_str += c;
     }
   }
 
@@ -230,22 +233,21 @@ void CanonicalizeUrl(const GURL& url,
                         &parsed);
 
   // 3. In hostname, remove all leading and trailing dots.
-  const std::string host =
-      (parsed.host.len > 0)
-          ? url_unescaped_str.substr(parsed.host.begin, parsed.host.len)
-          : std::string();
-  std::string host_without_end_dots;
-  base::TrimString(host, ".", &host_without_end_dots);
+  base::StringPiece host;
+  if (parsed.host.len > 0)
+    host.set(url_unescaped_str.data() + parsed.host.begin, parsed.host.len);
+
+  base::StringPiece host_without_end_dots =
+      base::TrimString(host, ".", base::TrimPositions::TRIM_ALL);
 
   // 4. In hostname, replace consecutive dots with a single dot.
   std::string host_without_consecutive_dots(RemoveConsecutiveChars(
       host_without_end_dots, '.'));
 
   // 5. In path, replace runs of consecutive slashes with a single slash.
-  std::string path =
-      (parsed.path.len > 0)
-          ? url_unescaped_str.substr(parsed.path.begin, parsed.path.len)
-          : std::string();
+  base::StringPiece path;
+  if (parsed.path.len > 0)
+    path.set(url_unescaped_str.data() + parsed.path.begin, parsed.path.len);
   std::string path_without_consecutive_slash(RemoveConsecutiveChars(path, '/'));
 
   url::Replacements<char> hp_replacements;

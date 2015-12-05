@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 
+import devil_chromium
 from devil.android import battery_utils
 from devil.android import device_blacklist
 from devil.android import device_errors
@@ -103,7 +104,8 @@ def ProvisionDevice(device, blacklist, options):
 
   try:
     if should_run_phase(_PHASES.WIPE):
-      if options.chrome_specific_wipe:
+      if (options.chrome_specific_wipe or device.build_version_sdk >=
+          version_codes.MARSHMALLOW):
         run_phase(WipeChromeData)
       else:
         run_phase(WipeDevice)
@@ -489,6 +491,8 @@ def main():
   constants.SetBuildType(args.target)
 
   run_tests_helper.SetLogLevel(args.verbose)
+
+  devil_chromium.Initialize()
 
   return ProvisionDevices(args)
 

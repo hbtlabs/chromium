@@ -192,13 +192,15 @@ void Window::SetBounds(const gfx::Rect& bounds) {
   LocalSetBounds(bounds_, bounds);
 }
 
-void Window::SetClientArea(const gfx::Insets& client_area) {
+void Window::SetClientArea(
+    const gfx::Insets& client_area,
+    const std::vector<gfx::Rect>& additional_client_areas) {
   if (!OwnsWindowOrIsRoot(this))
     return;
 
   if (connection_)
-    tree_client()->SetClientArea(id_, client_area);
-  LocalSetClientArea(client_area);
+    tree_client()->SetClientArea(id_, client_area, additional_client_areas);
+  LocalSetClientArea(client_area, additional_client_areas);
 }
 
 void Window::SetVisible(bool value) {
@@ -210,6 +212,15 @@ void Window::SetVisible(bool value) {
   LocalSetVisible(value);
 }
 
+void Window::SetPredefinedCursor(mus::mojom::Cursor cursor_id) {
+  if (cursor_id_ == cursor_id)
+    return;
+
+  if (connection_)
+    tree_client()->SetPredefinedCursor(id_, cursor_id);
+  LocalSetPredefinedCursor(cursor_id);
+}
+
 bool Window::IsDrawn() const {
   if (!visible_)
     return false;
@@ -219,15 +230,15 @@ bool Window::IsDrawn() const {
 scoped_ptr<WindowSurface> Window::RequestSurface(mojom::SurfaceType type) {
   scoped_ptr<WindowSurfaceBinding> surface_binding;
   scoped_ptr<WindowSurface> surface = WindowSurface::Create(&surface_binding);
-  AttachSurface(type, surface_binding.Pass());
+  AttachSurface(type, std::move(surface_binding));
   return surface;
 }
 
 void Window::AttachSurface(mojom::SurfaceType type,
                            scoped_ptr<WindowSurfaceBinding> surface_binding) {
-  tree_client()->AttachSurface(id_, type,
-                               surface_binding->surface_request_.Pass(),
-                               surface_binding->surface_client_.Pass());
+  tree_client()->AttachSurface(
+      id_, type, std::move(surface_binding->surface_request_),
+      mojo::MakeProxy(std::move(surface_binding->surface_client_)));
 }
 
 void Window::ClearSharedProperty(const std::string& name) {
@@ -260,7 +271,7 @@ void Window::AddChild(Window* child) {
     CHECK_EQ(child->connection(), connection_);
   LocalAddChild(child);
   if (connection_)
-    tree_client()->AddChild(child->id(), id_);
+    tree_client()->AddChild(this, child->id());
 }
 
 void Window::RemoveChild(Window* child) {
@@ -270,14 +281,14 @@ void Window::RemoveChild(Window* child) {
     CHECK_EQ(child->connection(), connection_);
   LocalRemoveChild(child);
   if (connection_)
-    tree_client()->RemoveChild(child->id(), id_);
+    tree_client()->RemoveChild(this, child->id());
 }
 
 void Window::Reorder(Window* relative, mojom::OrderDirection direction) {
   if (!LocalReorder(relative, direction))
     return;
   if (connection_)
-    tree_client()->Reorder(id_, relative->id(), direction);
+    tree_client()->Reorder(this, relative->id(), direction);
 }
 
 void Window::MoveToFront() {
@@ -349,8 +360,8 @@ void Window::SetImeVisibility(bool visible, mojo::TextInputStatePtr state) {
 }
 
 void Window::SetFocus() {
-  if (connection_)
-    tree_client()->SetFocus(id_);
+  if (connection_ && IsDrawn())
+    tree_client()->SetFocus(this);
 }
 
 bool Window::HasFocus() const {
@@ -562,11 +573,17 @@ void Window::LocalSetBounds(const gfx::Rect& old_bounds,
   bounds_ = new_bounds;
 }
 
-void Window::LocalSetClientArea(const gfx::Insets& new_client_area) {
+void Window::LocalSetClientArea(
+    const gfx::Insets& new_client_area,
+    const std::vector<gfx::Rect>& additional_client_areas) {
+  const std::vector<gfx::Rect> old_additional_client_areas =
+      additional_client_areas_;
   const gfx::Insets old_client_area = client_area_;
   client_area_ = new_client_area;
+  additional_client_areas_ = additional_client_areas;
   FOR_EACH_OBSERVER(WindowObserver, observers_,
-                    OnWindowClientAreaChanged(this, old_client_area));
+                    OnWindowClientAreaChanged(this, old_client_area,
+                                              old_additional_client_areas));
 }
 
 void Window::LocalSetViewportMetrics(
@@ -602,6 +619,15 @@ void Window::LocalSetVisible(bool visible) {
                     OnWindowVisibilityChanging(this));
   visible_ = visible;
   NotifyWindowVisibilityChanged(this);
+}
+
+void Window::LocalSetPredefinedCursor(mojom::Cursor cursor_id) {
+  if (cursor_id_ == cursor_id)
+    return;
+
+  cursor_id_ = cursor_id;
+  FOR_EACH_OBSERVER(WindowObserver, observers_,
+                    OnWindowPredefinedCursorChanged(this, cursor_id));
 }
 
 void Window::LocalSetSharedProperty(const std::string& name,

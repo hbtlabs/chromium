@@ -14,10 +14,11 @@
 #include "components/scheduler/base/task_queue_impl.h"
 #include "components/scheduler/base/task_queue_manager_delegate_for_test.h"
 #include "components/scheduler/base/task_queue_selector.h"
-#include "components/scheduler/base/task_queue_sets.h"
 #include "components/scheduler/base/test_always_fail_time_source.h"
 #include "components/scheduler/base/test_time_source.h"
 #include "components/scheduler/base/virtual_time_domain.h"
+#include "components/scheduler/base/work_queue.h"
+#include "components/scheduler/base/work_queue_sets.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using testing::ElementsAre;
@@ -216,12 +217,12 @@ TEST_F(TaskQueueManagerTest, QueuePolling) {
   Initialize(1u);
 
   std::vector<int> run_order;
-  EXPECT_FALSE(runners_[0]->HasPendingImmediateTask());
+  EXPECT_FALSE(runners_[0]->HasPendingImmediateWork());
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
-  EXPECT_TRUE(runners_[0]->HasPendingImmediateTask());
+  EXPECT_TRUE(runners_[0]->HasPendingImmediateWork());
 
   test_task_runner_->RunUntilIdle();
-  EXPECT_FALSE(runners_[0]->HasPendingImmediateTask());
+  EXPECT_FALSE(runners_[0]->HasPendingImmediateWork());
 }
 
 TEST_F(TaskQueueManagerTest, DelayedTaskPosting) {
@@ -232,8 +233,7 @@ TEST_F(TaskQueueManagerTest, DelayedTaskPosting) {
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                delay);
   EXPECT_EQ(delay, test_task_runner_->DelayToNextTaskTime());
-  EXPECT_EQ(TaskQueue::QueueState::NO_IMMEDIATE_WORK,
-            runners_[0]->GetQueueState());
+  EXPECT_FALSE(runners_[0]->HasPendingImmediateWork());
   EXPECT_TRUE(run_order.empty());
 
   // The task doesn't run before the delay has completed.
@@ -243,7 +243,7 @@ TEST_F(TaskQueueManagerTest, DelayedTaskPosting) {
   // After the delay has completed, the task runs normally.
   test_task_runner_->RunForPeriod(base::TimeDelta::FromMilliseconds(1));
   EXPECT_THAT(run_order, ElementsAre(1));
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, runners_[0]->GetQueueState());
+  EXPECT_FALSE(runners_[0]->HasPendingImmediateWork());
 }
 
 bool MessageLoopTaskCounter(size_t* count) {
@@ -377,10 +377,10 @@ TEST_F(TaskQueueManagerTest, ManualPumping) {
   EXPECT_FALSE(test_task_runner_->HasPendingTasks());
 
   // However polling still works.
-  EXPECT_TRUE(runners_[0]->HasPendingImmediateTask());
+  EXPECT_TRUE(runners_[0]->HasPendingImmediateWork());
 
   // After pumping the task runs normally.
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
   EXPECT_TRUE(test_task_runner_->HasPendingTasks());
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1));
@@ -462,13 +462,13 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithDelayedTask) {
                                delay);
 
   // After pumping but before the delay period has expired, task does not run.
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
   test_task_runner_->RunForPeriod(base::TimeDelta::FromMilliseconds(5));
   EXPECT_TRUE(run_order.empty());
 
   // Once the delay has expired, pumping causes the task to run.
   now_src_->Advance(base::TimeDelta::FromMilliseconds(5));
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
   EXPECT_TRUE(test_task_runner_->HasPendingTasks());
   test_task_runner_->RunPendingTasks();
   EXPECT_THAT(run_order, ElementsAre(1));
@@ -496,7 +496,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithMultipleDelayedTasks) {
   EXPECT_TRUE(run_order.empty());
 
   // Once the delay has expired, pumping causes the task to run.
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1, 2));
 }
@@ -522,11 +522,11 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithNonEmptyWorkQueue) {
   // Posting two tasks and pumping twice should result in two tasks in the work
   // queue.
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
-  runners_[0]->PumpQueue();
+  runners_[0]->PumpQueue(true);
 
-  EXPECT_EQ(2u, runners_[0]->WorkQueueSizeForTest());
+  EXPECT_EQ(2u, runners_[0]->immediate_work_queue()->Size());
 }
 
 void ReentrantTestTask(scoped_refptr<base::SingleThreadTaskRunner> runner,
@@ -596,7 +596,7 @@ TEST_F(TaskQueueManagerTest, DoWorkCantPostItselfMultipleTimes) {
       FROM_HERE, base::Bind(&RePostingTestTask, runners_[0], &run_count));
 
   test_task_runner_->RunPendingTasks();
-  // NOTE without the executing_task_ check in MaybePostDoWorkOnMainRunner there
+  // NOTE without the executing_task_ check in MaybeScheduleDoWork there
   // will be two tasks here.
   EXPECT_EQ(1u, test_task_runner_->NumPendingTasks());
   EXPECT_EQ(1, run_count);
@@ -691,7 +691,7 @@ TEST_F(TaskQueueManagerTest,
   // This still shouldn't wake TQM as manual queue was not pumped.
   EXPECT_TRUE(run_order.empty());
 
-  runners_[1]->PumpQueue();
+  runners_[1]->PumpQueue(true);
   test_task_runner_->RunUntilIdle();
   // Executing a task on an auto pumped queue should wake the TQM.
   EXPECT_THAT(run_order, ElementsAre(2, 1));
@@ -1005,83 +1005,152 @@ TEST_F(TaskQueueManagerTest, GetAndClearSystemIsQuiescentBit) {
   EXPECT_TRUE(manager_->GetAndClearSystemIsQuiescentBit());
 }
 
-TEST_F(TaskQueueManagerTest, HasPendingImmediateTask) {
+TEST_F(TaskQueueManagerTest, HasPendingImmediateWork) {
   Initialize(2u);
   internal::TaskQueueImpl* queue0 = runners_[0].get();
   internal::TaskQueueImpl* queue1 = runners_[1].get();
   queue0->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
   queue1->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  EXPECT_FALSE(queue0->HasPendingImmediateTask());
-  EXPECT_FALSE(queue1->HasPendingImmediateTask());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue1->HasPendingImmediateWork());
 
   queue0->PostTask(FROM_HERE, base::Bind(NullTask));
   queue1->PostTask(FROM_HERE, base::Bind(NullTask));
-  EXPECT_TRUE(queue0->HasPendingImmediateTask());
-  EXPECT_TRUE(queue1->HasPendingImmediateTask());
+  EXPECT_TRUE(queue0->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
 
   test_task_runner_->RunUntilIdle();
-  EXPECT_FALSE(queue0->HasPendingImmediateTask());
-  EXPECT_TRUE(queue1->HasPendingImmediateTask());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
 
-  queue1->PumpQueue();
-  EXPECT_FALSE(queue0->HasPendingImmediateTask());
-  EXPECT_TRUE(queue1->HasPendingImmediateTask());
+  queue1->PumpQueue(true);
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
 
   test_task_runner_->RunUntilIdle();
-  EXPECT_FALSE(queue0->HasPendingImmediateTask());
-  EXPECT_FALSE(queue1->HasPendingImmediateTask());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue1->HasPendingImmediateWork());
 }
 
-TEST_F(TaskQueueManagerTest, GetQueueState) {
+TEST_F(TaskQueueManagerTest, HasPendingImmediateWorkAndNeedsPumping) {
   Initialize(2u);
   internal::TaskQueueImpl* queue0 = runners_[0].get();
   internal::TaskQueueImpl* queue1 = runners_[1].get();
   queue0->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
   queue1->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue1->GetQueueState());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue0->NeedsPumping());
+  EXPECT_FALSE(queue1->HasPendingImmediateWork());
+  EXPECT_FALSE(queue1->NeedsPumping());
 
   queue0->PostTask(FROM_HERE, base::Bind(NullTask));
   queue0->PostTask(FROM_HERE, base::Bind(NullTask));
   queue1->PostTask(FROM_HERE, base::Bind(NullTask));
-  EXPECT_EQ(TaskQueue::QueueState::NEEDS_PUMPING, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::NEEDS_PUMPING, queue1->GetQueueState());
+  EXPECT_TRUE(queue0->HasPendingImmediateWork());
+  EXPECT_TRUE(queue0->NeedsPumping());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->NeedsPumping());
 
   test_task_runner_->SetRunTaskLimit(1);
   test_task_runner_->RunPendingTasks();
-  EXPECT_EQ(TaskQueue::QueueState::HAS_WORK, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::NEEDS_PUMPING, queue1->GetQueueState());
+  EXPECT_TRUE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue0->NeedsPumping());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->NeedsPumping());
 
   test_task_runner_->ClearRunTaskLimit();
   test_task_runner_->RunUntilIdle();
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::NEEDS_PUMPING, queue1->GetQueueState());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue0->NeedsPumping());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
+  EXPECT_TRUE(queue1->NeedsPumping());
 
-  queue1->PumpQueue();
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::HAS_WORK, queue1->GetQueueState());
+  queue1->PumpQueue(true);
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue0->NeedsPumping());
+  EXPECT_TRUE(queue1->HasPendingImmediateWork());
+  EXPECT_FALSE(queue1->NeedsPumping());
 
   test_task_runner_->RunUntilIdle();
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue0->GetQueueState());
-  EXPECT_EQ(TaskQueue::QueueState::EMPTY, queue1->GetQueueState());
+  EXPECT_FALSE(queue0->HasPendingImmediateWork());
+  EXPECT_FALSE(queue0->NeedsPumping());
+  EXPECT_FALSE(queue1->HasPendingImmediateWork());
+  EXPECT_FALSE(queue1->NeedsPumping());
 }
 
-TEST_F(TaskQueueManagerTest, DelayedTaskDoesNotSkipAHeadOfNonDelayedTask) {
+void ExpensiveTestTask(int value,
+                       base::SimpleTestTickClock* clock,
+                       std::vector<int>* out_result) {
+  out_result->push_back(value);
+  clock->Advance(base::TimeDelta::FromMilliseconds(1));
+}
+
+TEST_F(TaskQueueManagerTest, ImmediateAndDelayedTaskRoundRobbin) {
+  Initialize(1u);
+
+  std::vector<int> run_order;
+  base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
+  runners_[0]->PostDelayedTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 10, now_src_.get(), &run_order),
+      delay);
+  runners_[0]->PostDelayedTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 11, now_src_.get(), &run_order),
+      delay);
+  runners_[0]->PostDelayedTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 12, now_src_.get(), &run_order),
+      delay);
+  runners_[0]->PostDelayedTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 13, now_src_.get(), &run_order),
+      delay);
+
+  test_task_runner_->RunForPeriod(delay);
+
+  runners_[0]->PostTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 0, now_src_.get(), &run_order));
+  runners_[0]->PostTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 1, now_src_.get(), &run_order));
+  runners_[0]->PostTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 2, now_src_.get(), &run_order));
+  runners_[0]->PostTask(
+      FROM_HERE, base::Bind(&ExpensiveTestTask, 3, now_src_.get(), &run_order));
+
+  test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
+  test_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(run_order, ElementsAre(10, 0, 11, 1, 12, 2, 13, 3));
+}
+
+TEST_F(TaskQueueManagerTest,
+       DelayedTaskDoesNotSkipAHeadOfNonDelayedTask_SameQueue) {
+  Initialize(1u);
+
+  std::vector<int> run_order;
+  base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
+  runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
+  runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
+  runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
+                               delay);
+
+  now_src_->Advance(delay * 2);
+  test_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(run_order, ElementsAre(2, 3, 1));
+}
+
+TEST_F(TaskQueueManagerTest,
+       DelayedTaskDoesNotSkipAHeadOfNonDelayedTask_DifferentQueues) {
   Initialize(2u);
 
   std::vector<int> run_order;
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
-  runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
-                               delay);
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
+  runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
+                               delay);
 
   now_src_->Advance(delay * 2);
-  // After task 2 has run, the automatic selector will have to choose between
-  // tasks 1 and 3.  The sequence numbers are used to choose between the two
-  // tasks and if they are correct task 1 will run last.
   test_task_runner_->RunUntilIdle();
 
   EXPECT_THAT(run_order, ElementsAre(2, 3, 1));
@@ -1171,7 +1240,7 @@ TEST_F(TaskQueueManagerTest, SequenceNumSetWhenTaskIsPosted) {
 
   // The sequence numbers are a zero-based monotonically incrememting counter
   // which should be set when the task is posted rather than when it's enqueued
-  // onto the incomming queue.
+  // onto the Incoming queue.
   EXPECT_THAT(observer.sequence_numbers(), ElementsAre(3, 2, 1, 0));
 
   manager_->RemoveTaskObserver(&observer);
@@ -1373,11 +1442,13 @@ TEST_F(TaskQueueManagerTest, TimeDomainsAreIndependant) {
                                base::TimeDelta::FromMilliseconds(30));
 
   domain_b->AdvanceTo(start_time + base::TimeDelta::FromMilliseconds(50));
+  manager_->MaybeScheduleImmediateWork(FROM_HERE);
 
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(4, 5, 6));
 
   domain_a->AdvanceTo(start_time + base::TimeDelta::FromMilliseconds(50));
+  manager_->MaybeScheduleImmediateWork(FROM_HERE);
 
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(4, 5, 6, 1, 2, 3));
@@ -1406,6 +1477,7 @@ TEST_F(TaskQueueManagerTest, TimeDomainMigration) {
                                base::TimeDelta::FromMilliseconds(40));
 
   domain_a->AdvanceTo(start_time + base::TimeDelta::FromMilliseconds(20));
+  manager_->MaybeScheduleImmediateWork(FROM_HERE);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1, 2));
 
@@ -1415,6 +1487,7 @@ TEST_F(TaskQueueManagerTest, TimeDomainMigration) {
   runners_[0]->SetTimeDomain(domain_b.get());
 
   domain_b->AdvanceTo(start_time + base::TimeDelta::FromMilliseconds(50));
+  manager_->MaybeScheduleImmediateWork(FROM_HERE);
 
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1, 2, 3, 4));
@@ -1445,6 +1518,187 @@ TEST_F(TaskQueueManagerTest, NumberOfPendingTasksOnChromiumRunLoop) {
         base::TimeDelta::FromMilliseconds(i));
   }
   test_task_runner_->RunUntilIdle();
+}
+
+namespace {
+
+class QuadraticTask {
+ public:
+  QuadraticTask(scoped_refptr<internal::TaskQueueImpl> task_queue,
+                base::TimeDelta delay,
+                base::SimpleTestTickClock* now_src)
+      : count_(0), task_queue_(task_queue), delay_(delay), now_src_(now_src) {}
+
+  void SetShouldExit(base::Callback<bool()> should_exit) {
+    should_exit_ = should_exit;
+  }
+
+  void Run() {
+    if (should_exit_.Run())
+      return;
+    count_++;
+    task_queue_->PostDelayedTask(
+        FROM_HERE, base::Bind(&QuadraticTask::Run, base::Unretained(this)),
+        delay_);
+    task_queue_->PostDelayedTask(
+        FROM_HERE, base::Bind(&QuadraticTask::Run, base::Unretained(this)),
+        delay_);
+    now_src_->Advance(base::TimeDelta::FromMilliseconds(5));
+  }
+
+  int count() const { return count_; }
+
+ private:
+  int count_;
+  scoped_refptr<internal::TaskQueueImpl> task_queue_;
+  base::TimeDelta delay_;
+  base::Callback<bool()> should_exit_;
+  base::SimpleTestTickClock* now_src_;
+};
+
+class LinearTask {
+ public:
+  LinearTask(scoped_refptr<internal::TaskQueueImpl> task_queue,
+             base::TimeDelta delay,
+             base::SimpleTestTickClock* now_src)
+      : count_(0), task_queue_(task_queue), delay_(delay), now_src_(now_src) {}
+
+  void SetShouldExit(base::Callback<bool()> should_exit) {
+    should_exit_ = should_exit;
+  }
+
+  void Run() {
+    if (should_exit_.Run())
+      return;
+    count_++;
+    task_queue_->PostDelayedTask(
+        FROM_HERE, base::Bind(&LinearTask::Run, base::Unretained(this)),
+        delay_);
+    now_src_->Advance(base::TimeDelta::FromMilliseconds(5));
+  }
+
+  int count() const { return count_; }
+
+ private:
+  int count_;
+  scoped_refptr<internal::TaskQueueImpl> task_queue_;
+  base::TimeDelta delay_;
+  base::Callback<bool()> should_exit_;
+  base::SimpleTestTickClock* now_src_;
+};
+
+bool ShouldExit(QuadraticTask* quadratic_task, LinearTask* linear_task) {
+  return quadratic_task->count() == 1000 || linear_task->count() == 1000;
+}
+
+}  // namespace
+
+TEST_F(TaskQueueManagerTest, DelayedTasksDontStarveNonDelayedWork_SameQueue) {
+  Initialize(1u);
+
+  QuadraticTask quadratic_delayed_task(
+      runners_[0], base::TimeDelta::FromMilliseconds(10), now_src_.get());
+  LinearTask linear_immediate_task(runners_[0], base::TimeDelta(),
+                                   now_src_.get());
+  base::Callback<bool()> should_exit =
+      base::Bind(ShouldExit, &quadratic_delayed_task, &linear_immediate_task);
+  quadratic_delayed_task.SetShouldExit(should_exit);
+  linear_immediate_task.SetShouldExit(should_exit);
+
+  quadratic_delayed_task.Run();
+  linear_immediate_task.Run();
+
+  test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
+  test_task_runner_->RunUntilIdle();
+
+  double ratio = static_cast<double>(linear_immediate_task.count()) /
+                 static_cast<double>(quadratic_delayed_task.count());
+
+  EXPECT_GT(ratio, 0.9);
+  EXPECT_LT(ratio, 1.1);
+}
+
+TEST_F(TaskQueueManagerTest, ImmediateWorkCanStarveDelayedTasks_SameQueue) {
+  Initialize(1u);
+
+  QuadraticTask quadratic_immediate_task(runners_[0], base::TimeDelta(),
+                                         now_src_.get());
+  LinearTask linear_delayed_task(
+      runners_[0], base::TimeDelta::FromMilliseconds(10), now_src_.get());
+  base::Callback<bool()> should_exit =
+      base::Bind(&ShouldExit, &quadratic_immediate_task, &linear_delayed_task);
+
+  quadratic_immediate_task.SetShouldExit(should_exit);
+  linear_delayed_task.SetShouldExit(should_exit);
+
+  quadratic_immediate_task.Run();
+  linear_delayed_task.Run();
+
+  test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
+  test_task_runner_->RunUntilIdle();
+
+  double ratio = static_cast<double>(linear_delayed_task.count()) /
+                 static_cast<double>(quadratic_immediate_task.count());
+
+  // This is by design, we want to enforce a strict ordering in task execution
+  // where by delayed tasks can not skip ahead of non-delayed work.
+  EXPECT_GT(ratio, 0.0);
+  EXPECT_LT(ratio, 0.1);
+}
+
+TEST_F(TaskQueueManagerTest,
+       DelayedTasksDontStarveNonDelayedWork_DifferentQueue) {
+  Initialize(2u);
+
+  QuadraticTask quadratic_delayed_task(
+      runners_[0], base::TimeDelta::FromMilliseconds(10), now_src_.get());
+  LinearTask linear_immediate_task(runners_[1], base::TimeDelta(),
+                                   now_src_.get());
+  base::Callback<bool()> should_exit =
+      base::Bind(ShouldExit, &quadratic_delayed_task, &linear_immediate_task);
+  quadratic_delayed_task.SetShouldExit(should_exit);
+  linear_immediate_task.SetShouldExit(should_exit);
+
+  quadratic_delayed_task.Run();
+  linear_immediate_task.Run();
+
+  test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
+  test_task_runner_->RunUntilIdle();
+
+  double ratio = static_cast<double>(linear_immediate_task.count()) /
+                 static_cast<double>(quadratic_delayed_task.count());
+
+  EXPECT_GT(ratio, 0.9);
+  EXPECT_LT(ratio, 1.1);
+}
+
+TEST_F(TaskQueueManagerTest,
+       ImmediateWorkCanStarveDelayedTasks_DifferentQueue) {
+  Initialize(2u);
+
+  QuadraticTask quadratic_immediate_task(runners_[0], base::TimeDelta(),
+                                         now_src_.get());
+  LinearTask linear_delayed_task(
+      runners_[1], base::TimeDelta::FromMilliseconds(10), now_src_.get());
+  base::Callback<bool()> should_exit =
+      base::Bind(&ShouldExit, &quadratic_immediate_task, &linear_delayed_task);
+
+  quadratic_immediate_task.SetShouldExit(should_exit);
+  linear_delayed_task.SetShouldExit(should_exit);
+
+  quadratic_immediate_task.Run();
+  linear_delayed_task.Run();
+
+  test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
+  test_task_runner_->RunUntilIdle();
+
+  double ratio = static_cast<double>(linear_delayed_task.count()) /
+                 static_cast<double>(quadratic_immediate_task.count());
+
+  // This is by design, we want to enforce a strict ordering in task execution
+  // where by delayed tasks can not skip ahead of non-delayed work.
+  EXPECT_GT(ratio, 0.0);
+  EXPECT_LT(ratio, 0.1);
 }
 
 }  // namespace scheduler

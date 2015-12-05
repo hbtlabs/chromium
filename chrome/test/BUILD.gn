@@ -197,7 +197,11 @@ source_set("test_support") {
     ]
   }
   if (is_win) {
-    public_deps += [ "//third_party/wtl" ]
+    sources += [ "//chrome/app/chrome_crash_reporter_client.cc" ]
+    public_deps += [
+      "//components/crash/content/app",
+      "//third_party/wtl",
+    ]
     if (use_aura) {
       public_deps += [
         "//win8:test_registrar_constants",
@@ -1667,12 +1671,14 @@ test("unit_tests") {
         [ "../browser/download/download_request_infobar_delegate_unittest.cc" ]
   }
 
-  if (!is_android && !is_ios) {
+  if (!is_ios) {
     deps += [ ":unit_tests_js" ]
-    sources += rebase_path(
-            chrome_tests_unit_gypi_values.chrome_unit_tests_non_mobile_sources,
-            ".",
-            "//chrome")
+    if (!is_android) {
+      sources += rebase_path(
+              chrome_tests_unit_gypi_values.chrome_unit_tests_non_mobile_sources,
+              ".",
+              "//chrome")
+    }
   }
 
   if (is_ios || is_chromeos) {
@@ -2110,6 +2116,11 @@ test("unit_tests") {
             chrome_tests_unit_gypi_values.chrome_unit_tests_app_list_chromeos_sources,
             ".",
             "//chrome")
+    sources += rebase_path(
+            chrome_tests_unit_gypi_values.chrome_unit_tests_app_list_chromeos_arc_sources,
+            ".",
+            "//chrome")
+    deps += [ "//components/arc:arc_test_support" ]
   }
   if (enable_plugins && !enable_plugin_installation) {
     sources -= [ "../browser/plugins/plugin_installer_unittest.cc" ]

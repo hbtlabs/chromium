@@ -49,6 +49,7 @@
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -347,6 +348,9 @@ void AutofillManager::OnTextFieldDidChange(const FormData& form,
   if (!IsValidFormData(form) || !IsValidFormFieldData(field))
     return;
 
+  if (test_delegate_)
+    test_delegate_->OnTextFieldChanged();
+
   FormStructure* form_structure = NULL;
   AutofillField* autofill_field = NULL;
   if (!GetCachedFormAndField(form, field, &form_structure, &autofill_field))
@@ -407,6 +411,12 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
       got_autofillable_form) {
     AutofillType type = autofill_field->Type();
     bool is_filling_credit_card = (type.group() == CREDIT_CARD);
+    // On desktop, don't return non credit card related suggestions for forms or
+    // fields that have the "autocomplete" attribute set to off.
+    if (IsDesktopPlatform() && !is_filling_credit_card &&
+        !field.should_autocomplete) {
+      return;
+    }
     if (is_filling_credit_card) {
       suggestions = GetCreditCardSuggestions(field, type);
     } else {

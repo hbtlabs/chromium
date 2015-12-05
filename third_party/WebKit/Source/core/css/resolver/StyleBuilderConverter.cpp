@@ -639,7 +639,21 @@ static Length convertPositionLength(StyleResolverState& state, const CSSValue& v
         return length.subtractFromOneHundredPercent();
     }
 
-    return StyleBuilderConverter::convertLength(state, value);
+    const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(value);
+    if (primitiveValue.isValueID()) {
+        switch (primitiveValue.getValueID()) {
+        case cssValueFor0:
+            return Length(0, Percent);
+        case cssValueFor100:
+            return Length(100, Percent);
+        case CSSValueCenter:
+            return Length(50, Percent);
+        default:
+            ASSERT_NOT_REACHED();
+        }
+    }
+
+    return StyleBuilderConverter::convertLength(state, primitiveValue);
 }
 
 LengthPoint StyleBuilderConverter::convertPosition(StyleResolverState& state, const CSSValue& value)
@@ -682,20 +696,6 @@ static Length convertOriginLength(StyleResolverState& state, const CSSPrimitiveV
     }
 
     return StyleBuilderConverter::convertLength(state, primitiveValue);
-}
-
-LengthPoint StyleBuilderConverter::convertPerspectiveOrigin(StyleResolverState& state, const CSSValue& value)
-{
-    const CSSValueList& list = toCSSValueList(value);
-    ASSERT(list.length() == 2);
-
-    const CSSPrimitiveValue& primitiveValueX = toCSSPrimitiveValue(*list.item(0));
-    const CSSPrimitiveValue& primitiveValueY = toCSSPrimitiveValue(*list.item(1));
-
-    return LengthPoint(
-        convertOriginLength<CSSValueLeft, CSSValueRight>(state, primitiveValueX),
-        convertOriginLength<CSSValueTop, CSSValueBottom>(state, primitiveValueY)
-    );
 }
 
 EPaintOrder StyleBuilderConverter::convertPaintOrder(StyleResolverState&, const CSSValue& cssPaintOrder)

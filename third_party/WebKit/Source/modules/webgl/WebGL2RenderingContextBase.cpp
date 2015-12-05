@@ -2366,8 +2366,10 @@ String WebGL2RenderingContextBase::getActiveUniformBlockName(WebGLProgram* progr
         return String();
     }
     OwnPtr<GLchar[]> name = adoptArrayPtr(new GLchar[maxNameLength]);
-    GLsizei length;
+
+    GLsizei length = 0;
     webContext()->getActiveUniformBlockName(objectOrZero(program), uniformBlockIndex, maxNameLength, &length, name.get());
+
     return String(name.get(), length);
 }
 
@@ -3296,6 +3298,18 @@ GLenum WebGL2RenderingContextBase::boundFramebufferColorFormat()
     if (m_requestedAttributes.alpha())
         return GL_RGBA;
     return GL_RGB;
+}
+
+const WebGLSamplerState* WebGL2RenderingContextBase::getTextureUnitSamplerState(GLenum target, GLuint unit) const
+{
+    ASSERT(unit < m_samplerUnits.size());
+
+    WebGLSampler* sampler = m_samplerUnits[unit];
+
+    if (sampler)
+        return sampler->getSamplerState();
+
+    return WebGLRenderingContextBase::getTextureUnitSamplerState(target, unit);
 }
 
 } // namespace blink

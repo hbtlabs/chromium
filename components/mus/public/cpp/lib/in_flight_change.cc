@@ -5,6 +5,7 @@
 #include "components/mus/public/cpp/lib/in_flight_change.h"
 
 #include "components/mus/public/cpp/lib/window_private.h"
+#include "components/mus/public/cpp/lib/window_tree_client_impl.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 
 namespace mus {
@@ -58,6 +59,41 @@ void CrashInFlightChange::Revert() {
   CHECK(false);
 }
 
+// InFlightFocusChange --------------------------------------------------------
+
+InFlightFocusChange::InFlightFocusChange(WindowTreeClientImpl* connection,
+                                         Window* window)
+    : InFlightChange(nullptr, ChangeType::FOCUS),
+      connection_(connection),
+      revert_window_(nullptr) {
+  SetRevertWindow(window);
+}
+
+InFlightFocusChange::~InFlightFocusChange() {
+  SetRevertWindow(nullptr);
+}
+
+void InFlightFocusChange::SetRevertValueFrom(const InFlightChange& change) {
+  SetRevertWindow(
+      static_cast<const InFlightFocusChange&>(change).revert_window_);
+}
+
+void InFlightFocusChange::Revert() {
+  connection_->LocalSetFocus(revert_window_);
+}
+
+void InFlightFocusChange::SetRevertWindow(Window* window) {
+  if (revert_window_)
+    revert_window_->RemoveObserver(this);
+  revert_window_ = window;
+  if (revert_window_)
+    revert_window_->AddObserver(this);
+}
+
+void InFlightFocusChange::OnWindowDestroying(Window* window) {
+  SetRevertWindow(nullptr);
+}
+
 // InFlightPropertyChange -----------------------------------------------------
 
 InFlightPropertyChange::InFlightPropertyChange(
@@ -83,6 +119,26 @@ void InFlightPropertyChange::SetRevertValueFrom(const InFlightChange& change) {
 void InFlightPropertyChange::Revert() {
   WindowPrivate(window())
       .LocalSetSharedProperty(property_name_, revert_value_.Pass());
+}
+
+// InFlightPredefinedCursorChange ---------------------------------------------
+
+InFlightPredefinedCursorChange::InFlightPredefinedCursorChange(
+    Window* window,
+    mojom::Cursor revert_value)
+    : InFlightChange(window, ChangeType::PREDEFINED_CURSOR),
+      revert_cursor_(revert_value) {}
+
+InFlightPredefinedCursorChange::~InFlightPredefinedCursorChange() {}
+
+void InFlightPredefinedCursorChange::SetRevertValueFrom(
+    const InFlightChange& change) {
+  revert_cursor_ =
+      static_cast<const InFlightPredefinedCursorChange&>(change).revert_cursor_;
+}
+
+void InFlightPredefinedCursorChange::Revert() {
+  WindowPrivate(window()).LocalSetPredefinedCursor(revert_cursor_);
 }
 
 // InFlightVisibleChange -------------------------------------------------------

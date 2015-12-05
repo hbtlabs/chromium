@@ -272,7 +272,7 @@ void AddResetStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "powerwashDialogTitle", IDS_OPTIONS_FACTORY_RESET_HEADING);
   html_source->AddLocalizedString(
-      "powerwashDialogBody", IDS_OPTIONS_FACTORY_RESET_WARNING);
+      "powerwashDialogExplanation", IDS_OPTIONS_FACTORY_RESET_WARNING);
   html_source->AddLocalizedString(
       "powerwashDialogButton", IDS_RELAUNCH_BUTTON);
   html_source->AddLocalizedString(
@@ -607,14 +607,14 @@ void AddSyncStrings(content::WebUIDataSource* html_source) {
                                   IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE);
   html_source->AddLocalizedString("syncDisconnectConfirm",
                                   IDS_SETTINGS_SYNC_DISCONNECT_CONFIRM);
+  html_source->AddLocalizedString("manageOtherPeople",
+                                  IDS_SETTINGS_SYNC_MANAGE_OTHER_PEOPLE);
 
   html_source->AddLocalizedString("syncPageTitle", IDS_SETTINGS_SYNC);
   html_source->AddLocalizedString("syncLoading", IDS_SETTINGS_SYNC_LOADING);
   html_source->AddLocalizedString("syncTimeout", IDS_SETTINGS_SYNC_TIMEOUT);
-  html_source->AddLocalizedString("syncEverythingMenuOption",
-                                  IDS_SETTINGS_SYNC_EVERYTHING_MENU_OPTION);
-  html_source->AddLocalizedString("chooseWhatToSyncMenuOption",
-                                  IDS_SETTINGS_CHOOSE_WHAT_TO_SYNC_MENU_OPTION);
+  html_source->AddLocalizedString("syncEverythingCheckboxLabel",
+                                  IDS_SETTINGS_SYNC_EVERYTHING_CHECKBOX_LABEL);
   html_source->AddLocalizedString("appCheckboxLabel",
                                   IDS_SETTINGS_APPS_CHECKBOX_LABEL);
   html_source->AddLocalizedString("extensionsCheckboxLabel",

@@ -10,6 +10,7 @@
 #include "components/scheduler/base/task_queue_manager.h"
 #include "components/scheduler/base/task_queue_manager_delegate_for_test.h"
 #include "components/scheduler/base/test_time_source.h"
+#include "components/scheduler/base/work_queue.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using testing::_;
@@ -41,8 +42,7 @@ class MockTimeDomain : public TimeDomain {
   bool MaybeAdvanceTime() override { return false; }
   const char* GetName() const override { return "Test"; }
   void OnRegisterWithTaskQueueManager(
-      TaskQueueManagerDelegate* task_queue_manager_delegate,
-      base::Closure do_work_closure) override {}
+      TaskQueueManager* task_queue_manager) override {}
 
   MOCK_METHOD2(RequestWakeup, void(LazyNow* lazy_now, base::TimeDelta delay));
 
@@ -159,14 +159,14 @@ TEST_F(TimeDomainTest, UpdateWorkQueues) {
       task_queue_manager.NewTaskQueue(TaskQueue::Spec("test_queue"));
 
   // Post a delayed task on |dummy_queue| and advance the queue's clock so that
-  // next time MoveReadyDelayedTasksToIncomingQueue is called, the task will
-  // get moved onto the incomming queue.
+  // next time MoveReadyDelayedTasksToDelayedWorkQueue is called, the task will
+  // get moved onto the Incoming queue.
   base::TimeDelta dummy_delay = base::TimeDelta::FromMilliseconds(10);
   dummy_queue->PostDelayedTask(FROM_HERE, base::Closure(), dummy_delay);
   dummy_time_source.Advance(dummy_delay);
 
   // Now we can test that ScheduleDelayedWork triggers calls to
-  // MoveReadyDelayedTasksToIncomingQueue as expected.
+  // MoveReadyDelayedTasksToDelayedWorkQueue as expected.
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(50);
   base::TimeTicks delayed_runtime = time_domain_->Now() + delay;
   EXPECT_CALL(*time_domain_.get(), RequestWakeup(_, delay));
@@ -175,11 +175,11 @@ TEST_F(TimeDomainTest, UpdateWorkQueues) {
                                     &lazy_now);
 
   time_domain_->UpdateWorkQueues(false, nullptr);
-  EXPECT_EQ(0UL, dummy_queue->IncomingQueueSizeForTest());
+  EXPECT_EQ(0UL, dummy_queue->delayed_work_queue()->Size());
 
   time_domain_->SetNow(delayed_runtime);
   time_domain_->UpdateWorkQueues(false, nullptr);
-  EXPECT_EQ(1UL, dummy_queue->IncomingQueueSizeForTest());
+  EXPECT_EQ(1UL, dummy_queue->delayed_work_queue()->Size());
 }
 
 namespace {

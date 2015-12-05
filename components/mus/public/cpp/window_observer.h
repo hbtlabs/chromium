@@ -22,8 +22,7 @@ class Window;
 // If the change originated from another connection to the window manager, it's
 // possible that the change has already been applied to the service-side model
 // prior to being called, so for example in the case of OnWindowDestroying(),
-// it's
-// possible the window has already been destroyed on the service side.
+// it's possible the window has already been destroyed on the service side.
 
 class WindowObserver {
  public:
@@ -54,8 +53,10 @@ class WindowObserver {
   virtual void OnWindowBoundsChanged(Window* window,
                                      const gfx::Rect& old_bounds,
                                      const gfx::Rect& new_bounds) {}
-  virtual void OnWindowClientAreaChanged(Window* window,
-                                         const gfx::Insets& old_client_area) {}
+  virtual void OnWindowClientAreaChanged(
+      Window* window,
+      const gfx::Insets& old_client_area,
+      const std::vector<gfx::Rect>& old_additional_client_areas) {}
 
   virtual void OnWindowViewportMetricsChanged(
       Window* window,
@@ -63,6 +64,9 @@ class WindowObserver {
       const mojom::ViewportMetrics& new_metrics) {}
 
   virtual void OnWindowFocusChanged(Window* gained_focus, Window* lost_focus) {}
+
+  virtual void OnWindowPredefinedCursorChanged(Window* window,
+                                               mojom::Cursor cursor) {}
 
   virtual void OnWindowInputEvent(Window* window,
                                   const mojom::EventPtr& event) {}
