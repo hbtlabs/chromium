@@ -37,6 +37,13 @@ from util import md5_check
 
 import write_ordered_libraries
 
+
+# Types that should never be used as a dependency of another build config.
+_ROOT_TYPES = ('android_apk', 'deps_dex', 'java_binary', 'resource_rewriter')
+# Types that should not allow code deps to pass through.
+_RESOURCE_TYPES = ('android_assets', 'android_resources')
+
+
 class AndroidManifest(object):
   def __init__(self, path):
     self.path = path
@@ -143,6 +150,16 @@ def _MergeAssets(all_assets):
   return create_list(compressed), create_list(uncompressed)
 
 
+def _FilterUnwantedDepsPaths(dep_paths, target_type):
+  # Don't allow root targets to be considered as a dep.
+  ret = [p for p in dep_paths if GetDepConfig(p)['type'] not in _ROOT_TYPES]
+
+  # Don't allow java libraries to cross through assets/resources.
+  if target_type in _RESOURCE_TYPES:
+    ret = [p for p in ret if GetDepConfig(p)['type'] in _RESOURCE_TYPES]
+  return ret
+
+
 def main(argv):
   parser = optparse.OptionParser()
   build_utils.AddDepfileOption(parser)
@@ -206,6 +223,7 @@ def main(argv):
     parser.error('No positional arguments should be given.')
 
   required_options_map = {
+      'java_binary': ['build_config', 'jar_path'],
       'java_library': ['build_config', 'jar_path'],
       'android_assets': ['build_config'],
       'android_resources': ['build_config', 'resources_zip'],
@@ -242,8 +260,11 @@ def main(argv):
 
   direct_deps_config_paths = [
       c for c in possible_deps_config_paths if not c in unknown_deps]
+  direct_deps_config_paths = _FilterUnwantedDepsPaths(direct_deps_config_paths,
+                                                      options.type)
 
   deps = Deps(direct_deps_config_paths)
+
   direct_library_deps = deps.Direct('java_library')
   all_library_deps = deps.All('java_library')
 
@@ -265,12 +286,13 @@ def main(argv):
       'name': os.path.basename(options.build_config),
       'path': options.build_config,
       'type': options.type,
-      'deps_configs': direct_deps_config_paths,
+      'deps_configs': direct_deps_config_paths
     }
   }
   deps_info = config['deps_info']
 
-  if options.type == 'java_library' and not options.bypass_platform_checks:
+  if (options.type in ('java_binary', 'java_library') and
+      not options.bypass_platform_checks):
     deps_info['requires_android'] = options.requires_android
     deps_info['supports_android'] = options.supports_android
 
@@ -287,7 +309,7 @@ def main(argv):
       raise Exception('Not all deps support the Android platform: ' +
           str(deps_not_support_android))
 
-  if options.type in ['java_library', 'android_apk']:
+  if options.type in ('java_binary', 'java_library', 'android_apk'):
     javac_classpath = [c['jar_path'] for c in direct_library_deps]
     java_full_classpath = [c['jar_path'] for c in all_library_deps]
     deps_info['resources_deps'] = [c['path'] for c in all_resources_deps]
@@ -303,7 +325,7 @@ def main(argv):
       'full_classpath': java_full_classpath
     }
 
-  if options.type == 'java_library':
+  if options.type in ('java_binary', 'java_library'):
     # Only resources might have srcjars (normal srcjar targets are listed in
     # srcjar_deps). A resource's srcjar contains the R.java file for those
     # resources, and (like Android's default build system) we allow a library to

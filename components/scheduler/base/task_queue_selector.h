@@ -10,7 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/pending_task.h"
 #include "base/threading/thread_checker.h"
-#include "components/scheduler/base/task_queue_sets.h"
+#include "components/scheduler/base/work_queue_sets.h"
 #include "components/scheduler/scheduler_export.h"
 
 namespace scheduler {
@@ -39,11 +39,11 @@ class SCHEDULER_EXPORT TaskQueueSelector {
   void RemoveQueue(internal::TaskQueueImpl* queue);
 
   // Called to choose the work queue from which the next task should be taken
-  // and run. Return true if |out_queue| indicates the queue to service or
+  // and run. Return true if |out_work_queue| indicates the queue to service or
   // false to avoid running any task.
   //
   // This function is called on the main thread.
-  bool SelectQueueToService(internal::TaskQueueImpl** out_queue);
+  bool SelectWorkQueueToService(WorkQueue** out_work_queue);
 
   // Serialize the selector state for tracing.
   void AsValueInto(base::trace_event::TracedValue* state) const;
@@ -60,22 +60,38 @@ class SCHEDULER_EXPORT TaskQueueSelector {
   // on the main thread. If |observer| is null, then no callbacks will occur.
   void SetTaskQueueSelectorObserver(Observer* observer);
 
-  TaskQueueSets* GetTaskQueueSets() { return &task_queue_sets_; }
+  WorkQueueSets* delayed_task_queue_sets() { return &delayed_work_queue_sets_; }
+  WorkQueueSets* immediate_task_queue_sets() {
+    return &immediate_work_queue_sets_;
+  }
 
   // Returns true if all the enabled work queues are empty. Returns false
   // otherwise.
   bool EnabledWorkQueuesEmpty() const;
+
+ protected:
+  // Return true if |out_queue| contains the queue with the oldest pending task
+  // from the set of queues of |priority|, or false if all queues of that
+  // priority are empty.
+  bool ChooseOldestWithPriority(TaskQueue::QueuePriority priority,
+                                WorkQueue** out_work_queue) const;
+
+  void SetForceSelectImmediateForTest(bool force_select_immediate);
 
  private:
   // Returns the priority which is next after |priority|.
   static TaskQueue::QueuePriority NextPriority(
       TaskQueue::QueuePriority priority);
 
-  // Return true if |out_queue| contains the queue with the oldest pending task
-  // from the set of queues of |priority|, or false if all queues of that
-  // priority are empty.
-  bool ChooseOldestWithPriority(TaskQueue::QueuePriority priority,
-                                internal::TaskQueueImpl** out_queue) const;
+  bool ChooseOldestImmediateTaskWithPriority(TaskQueue::QueuePriority priority,
+                                             WorkQueue** out_work_queue) const;
+
+  bool ChooseOldestDelayedTaskWithPriority(TaskQueue::QueuePriority priority,
+                                           WorkQueue** out_work_queue) const;
+
+  bool ChooseOldestImmediateOrDelayedTaskWithPriority(
+      TaskQueue::QueuePriority priority,
+      WorkQueue** out_work_queue) const;
 
   // Called whenever the selector chooses a task queue for execution with the
   // priority |priority|.
@@ -86,8 +102,11 @@ class SCHEDULER_EXPORT TaskQueueSelector {
   // TODO(rmcilroy): Check if this is a good value.
   static const size_t kMaxStarvationTasks = 5;
 
+ private:
   base::ThreadChecker main_thread_checker_;
-  TaskQueueSets task_queue_sets_;
+  WorkQueueSets delayed_work_queue_sets_;
+  WorkQueueSets immediate_work_queue_sets_;
+  bool force_select_immediate_;
 
   size_t starvation_count_;
   Observer* task_queue_selector_observer_;  // NOT OWNED

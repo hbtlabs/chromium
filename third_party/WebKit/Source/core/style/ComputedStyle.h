@@ -271,6 +271,7 @@ protected:
         unsigned styleType : 6; // PseudoId
         unsigned pseudoBits : 8;
         unsigned explicitInheritance : 1; // Explicitly inherits a non-inherited property
+        unsigned variableReference : 1; // A non-inherited property references a variable.
         unsigned unique : 1; // Style can not be shared.
 
         unsigned emptyState : 1;
@@ -284,7 +285,7 @@ protected:
 
         mutable unsigned hasRemUnits : 1;
         // If you add more style bits here, you will also need to update ComputedStyle::copyNonInheritedFromCached()
-        // 63 bits
+        // 62 bits
     } noninherited_flags;
 
 // !END SYNC!
@@ -326,6 +327,7 @@ protected:
         noninherited_flags.styleType = NOPSEUDO;
         noninherited_flags.pseudoBits = 0;
         noninherited_flags.explicitInheritance = false;
+        noninherited_flags.variableReference = false;
         noninherited_flags.unique = false;
         noninherited_flags.emptyState = false;
         noninherited_flags.hasViewportUnits = false;
@@ -821,6 +823,8 @@ public:
     // through their self-painting layers. So the layout code doesn't account for them.
     bool hasVisualOverflowingEffect() const { return boxShadow() || hasBorderImageOutsets() || hasOutline(); }
 
+    Containment contain() const { return static_cast<Containment>(rareNonInheritedData->m_contain); }
+
     EBoxSizing boxSizing() const { return m_box->boxSizing(); }
     EUserModify userModify() const { return static_cast<EUserModify>(rareInheritedData->userModify); }
     EUserDrag userDrag() const { return static_cast<EUserDrag>(rareNonInheritedData->userDrag); }
@@ -1304,6 +1308,7 @@ public:
     void setBoxShadow(PassRefPtr<ShadowList>);
     void setBoxReflect(PassRefPtr<StyleReflection> reflect) { if (rareNonInheritedData->m_boxReflect != reflect) rareNonInheritedData.access()->m_boxReflect = reflect; }
     void setBoxSizing(EBoxSizing s) { SET_VAR(m_box, m_boxSizing, s); }
+    void setContain(Containment contain) { SET_VAR(rareNonInheritedData, m_contain, contain); }
     void setFlexGrow(float f) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexGrow, f); }
     void setFlexShrink(float f) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexShrink, f); }
     void setFlexBasis(const Length& length) { SET_VAR(rareNonInheritedData.access()->m_flexibleBox, m_flexBasis, length); }
@@ -1601,6 +1606,9 @@ public:
     void setHasExplicitlyInheritedProperties() { noninherited_flags.explicitInheritance = true; }
     bool hasExplicitlyInheritedProperties() const { return noninherited_flags.explicitInheritance; }
 
+    void setHasVariableReferenceFromNonInheritedProperty() { noninherited_flags.variableReference = true; }
+    bool hasVariableReferenceFromNonInheritedProperty() const { return noninherited_flags.variableReference; }
+
     bool hasChildDependentFlags() const { return emptyState() || hasExplicitlyInheritedProperties(); }
     void copyChildDependentFlagsFrom(const ComputedStyle&);
 
@@ -1623,6 +1631,7 @@ public:
     static ECaptionSide initialCaptionSide() { return CAPTOP; }
     static EClear initialClear() { return CNONE; }
     static LengthBox initialClip() { return LengthBox(); }
+    static Containment initialContain() { return ContainsNone; }
     static TextDirection initialDirection() { return LTR; }
     static WritingMode initialWritingMode() { return TopToBottomWritingMode; }
     static TextCombine initialTextCombine() { return TextCombineNone; }

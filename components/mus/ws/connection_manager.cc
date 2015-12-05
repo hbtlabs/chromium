@@ -286,11 +286,11 @@ void ConnectionManager::ProcessWindowBoundsChanged(
 
 void ConnectionManager::ProcessClientAreaChanged(
     const ServerWindow* window,
-    const gfx::Insets& old_client_area,
-    const gfx::Insets& new_client_area) {
+    const gfx::Insets& new_client_area,
+    const std::vector<gfx::Rect>& new_additional_client_areas) {
   for (auto& pair : connection_map_) {
     pair.second->service()->ProcessClientAreaChanged(
-        window, old_client_area, new_client_area,
+        window, new_client_area, new_additional_client_areas,
         IsOperationSource(pair.first));
   }
 }
@@ -336,6 +336,20 @@ void ConnectionManager::ProcessWindowDeleted(const WindowId& window) {
     pair.second->service()->ProcessWindowDeleted(window,
                                                  IsOperationSource(pair.first));
   }
+}
+
+void ConnectionManager::ProcessWillChangeWindowPredefinedCursor(
+    ServerWindow* window,
+    int32_t cursor_id) {
+  for (auto& pair : connection_map_) {
+    pair.second->service()->ProcessCursorChanged(window, cursor_id,
+                                                 IsOperationSource(pair.first));
+  }
+
+  // Pass the cursor change to the native window.
+  WindowTreeHostImpl* host = GetWindowTreeHostByWindow(window);
+  if (host)
+    host->OnCursorUpdated(window);
 }
 
 void ConnectionManager::ProcessViewportMetricsChanged(
@@ -434,12 +448,13 @@ void ConnectionManager::OnWindowBoundsChanged(ServerWindow* window,
 
 void ConnectionManager::OnWindowClientAreaChanged(
     ServerWindow* window,
-    const gfx::Insets& old_client_area,
-    const gfx::Insets& new_client_area) {
+    const gfx::Insets& new_client_area,
+    const std::vector<gfx::Rect>& new_additional_client_areas) {
   if (in_destructor_)
     return;
 
-  ProcessClientAreaChanged(window, old_client_area, new_client_area);
+  ProcessClientAreaChanged(window, new_client_area,
+                           new_additional_client_areas);
 }
 
 void ConnectionManager::OnWindowReordered(ServerWindow* window,
@@ -466,6 +481,14 @@ void ConnectionManager::OnWillChangeWindowVisibility(ServerWindow* window) {
     pair.second->service()->ProcessWillChangeWindowVisibility(
         window, IsOperationSource(pair.first));
   }
+}
+
+void ConnectionManager::OnWindowPredefinedCursorChanged(ServerWindow* window,
+                                                        int32_t cursor_id) {
+  if (in_destructor_)
+    return;
+
+  ProcessWillChangeWindowPredefinedCursor(window, cursor_id);
 }
 
 void ConnectionManager::OnWindowSharedPropertyChanged(

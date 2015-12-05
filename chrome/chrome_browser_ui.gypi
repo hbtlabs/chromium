@@ -15,8 +15,6 @@
       'browser/ui/android/android_about_app_info.h',
       'browser/ui/android/external_protocol_dialog_android.cc',
       'browser/ui/android/status_tray_android.cc',
-      'browser/ui/android/tab_model/tab_model_list.cc',
-      'browser/ui/android/tab_model/tab_model_list.h',
       'browser/ui/app_list/app_list_util.cc',
       'browser/ui/app_list/app_list_util.h',
       # All other browser/ui/app_list files go in chrome_browser_ui_app_list_sources.
@@ -425,7 +423,7 @@
       'browser/ui/zoom/chrome_zoom_level_prefs.cc',
       'browser/ui/zoom/chrome_zoom_level_prefs.h',
     ],
-    'chrome_browser_ui_android_non_aura_sources': [
+    'chrome_browser_ui_android_java_ui_sources': [
       'browser/ui/android/autofill/autofill_dialog_controller_android.cc',
       'browser/ui/android/autofill/autofill_dialog_controller_android.h',
       'browser/ui/android/autofill/autofill_dialog_result.cc',
@@ -494,6 +492,10 @@
       'browser/ui/android/tab_model/tab_model.h',
       'browser/ui/android/tab_model/tab_model_jni_bridge.cc',
       'browser/ui/android/tab_model/tab_model_jni_bridge.h',
+      'browser/ui/android/tab_model/tab_model_list.cc',
+      'browser/ui/android/tab_model/tab_model_list.h',
+      'browser/ui/android/toolbar/toolbar_model_android.cc',
+      'browser/ui/android/toolbar/toolbar_model_android.h',
       'browser/ui/android/website_settings_popup_android.cc',
       'browser/ui/android/website_settings_popup_android.h',
       'browser/ui/android/window_android_helper.cc',
@@ -719,6 +721,19 @@
       'browser/ui/views/select_file_dialog_extension.h',
       'browser/ui/views/select_file_dialog_extension_factory.cc',
       'browser/ui/views/select_file_dialog_extension_factory.h',
+    ],
+    # ARC-only sources.
+    'chrome_browser_ui_chromeos_arc_sources': [
+      'browser/ui/app_list/arc/arc_app_icon.cc',
+      'browser/ui/app_list/arc/arc_app_icon.h',
+      'browser/ui/app_list/arc/arc_app_item.cc',
+      'browser/ui/app_list/arc/arc_app_item.h',
+      'browser/ui/app_list/arc/arc_app_list_prefs_factory.cc',
+      'browser/ui/app_list/arc/arc_app_list_prefs_factory.h',
+      'browser/ui/app_list/arc/arc_app_list_prefs.cc',
+      'browser/ui/app_list/arc/arc_app_list_prefs.h',
+      'browser/ui/app_list/arc/arc_app_model_builder.cc',
+      'browser/ui/app_list/arc/arc_app_model_builder.h',
     ],
     # ChromeOS sources that should not be included in the official build.
     'chrome_browser_ui_chromeos_non_official_sources': [
@@ -2541,6 +2556,8 @@
       'browser/ui/app_list/app_list_controller_delegate_impl.h',
       'browser/ui/app_list/app_list_icon_win.cc',
       'browser/ui/app_list/app_list_icon_win.h',
+      'browser/ui/app_list/app_list_model_builder.cc',
+      'browser/ui/app_list/app_list_model_builder.h',
       'browser/ui/app_list/app_list_positioner.cc',
       'browser/ui/app_list/app_list_positioner.h',
       'browser/ui/app_list/app_list_prefs.cc',
@@ -2770,8 +2787,6 @@
       'browser/ui/webui/local_discovery/local_discovery_ui_handler.h',
     ],
     'chrome_browser_ui_toolbar_model_sources': [
-      'browser/ui/android/toolbar/toolbar_model_android.cc',
-      'browser/ui/android/toolbar/toolbar_model_android.h',
       'browser/ui/toolbar/chrome_toolbar_model.cc',
       'browser/ui/toolbar/chrome_toolbar_model.h',
       'browser/ui/toolbar/toolbar_model_delegate.h',
@@ -2807,6 +2822,7 @@
         'chrome_resources.gyp:platform_locale_settings',
         'chrome_resources.gyp:theme_resources',
         'common',
+        '../base/base.gyp:base_debugging_flags',
         '../components/components.gyp:auto_login_parser',
         '../components/components.gyp:certificate_reporting',
         '../components/components.gyp:device_event_log_component',
@@ -2957,6 +2973,9 @@
             '../ui/chromeos/ui_chromeos.gyp:ui_chromeos_resources',
           ],
         }],
+        ['enable_app_list==1 and chromeos==1', {
+          'sources': [ '<@(chrome_browser_ui_chromeos_arc_sources)' ],
+        }],
         ['use_cups==1', {
           'dependencies': [
             '../printing/printing.gyp:cups',
@@ -3060,15 +3079,21 @@
         }],
         ['OS=="android"', {
           'dependencies': [
-            '../components/components.gyp:web_contents_delegate_android',
             '../third_party/boringssl/boringssl.gyp:boringssl',
-            'chrome_browser_jni_headers',
           ],
-          'dependencies!': [
-             '../ui/events/events.gyp:events',
-             'chrome_browser_ui_views.gyp:browser_ui_views',
+          'conditions': [
+            ['android_java_ui == 1', {
+              'sources': [ '<@(chrome_browser_ui_android_java_ui_sources)' ],
+              'dependencies': [
+                '../components/components.gyp:web_contents_delegate_android',
+                'chrome_browser_jni_headers',
+              ],
+              'dependencies!': [
+                '../ui/events/events.gyp:events',
+                'chrome_browser_ui_views.gyp:browser_ui_views',
+              ],
+            }]
           ],
-          'sources': [ '<@(chrome_browser_ui_android_non_aura_sources)' ],
         }],
         ['OS=="mac"', {
           'sources': [ '<@(chrome_browser_ui_mac_sources)' ],

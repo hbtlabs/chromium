@@ -52,16 +52,7 @@ class ClientSideDetectionHost : public content::WebContentsObserver,
   void OnSafeBrowsingHit(
       const SafeBrowsingUIManager::UnsafeResource& resource) override;
 
-  // Called when the SafeBrowsingService finds a match on the SB lists.
-  // Called on the UI thread. Called even if the resource is whitelisted.
-  void OnSafeBrowsingMatch(
-      const SafeBrowsingUIManager::UnsafeResource& resource) override;
-
   virtual scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
-
-  // Returns whether the current page contains a malware or phishing safe
-  // browsing match.
-  bool DidPageReceiveSafeBrowsingMatch() const;
 
  protected:
   explicit ClientSideDetectionHost(content::WebContents* tab);

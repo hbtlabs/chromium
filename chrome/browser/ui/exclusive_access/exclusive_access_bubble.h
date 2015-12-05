@@ -34,6 +34,10 @@ class ExclusiveAccessBubble : public gfx::AnimationDelegate {
                                  ExclusiveAccessBubbleType bubble_type);
   ~ExclusiveAccessBubble() override;
 
+  // Informs the ExclusiveAccessBubble of some user input, which may update
+  // internal timers and/or re-display the bubble.
+  void OnUserInput();
+
  protected:
   static const int kPaddingPx;        // Amount of padding around the link
   static const int kInitialDelayMs;   // Initial time bubble remains onscreen
@@ -46,6 +50,8 @@ class ExclusiveAccessBubble : public gfx::AnimationDelegate {
   static const int kSlideOutDurationMs;  // Duration of slide-out animation
   // Space between the popup and the top of the screen (excluding shadow).
   static const int kPopupTopPx;
+  // Space between top of screen and popup, in simplified UI.
+  static const int kSimplifiedPopupTopPx;
 
   // Returns the current desirable rect for the popup window.  If
   // |ignore_animation_state| is true this returns the rect assuming the popup
@@ -113,7 +119,7 @@ class ExclusiveAccessBubble : public gfx::AnimationDelegate {
   // the user moving the mouse to the top of the screen and holding it there).
   base::OneShotTimer hide_timeout_;
 
-  // Timer to see how long the mouse has been idle.
+  // Timer to see how long the user has been idle (from all input sources).
   base::OneShotTimer idle_timeout_;
 
   // When this timer has elapsed, on the next mouse input, we will notify the

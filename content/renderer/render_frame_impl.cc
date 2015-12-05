@@ -827,6 +827,7 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       renderer_accessibility_(NULL),
       media_player_delegate_(NULL),
       is_using_lofi_(false),
+      is_pasting_(false),
       weak_factory_(this) {
   std::pair<RoutingIDFrameMap::iterator, bool> result =
       g_routing_id_frame_map.Get().insert(std::make_pair(routing_id_, this));
@@ -1487,6 +1488,7 @@ void RenderFrameImpl::OnCopy() {
 
 void RenderFrameImpl::OnPaste() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
+  base::AutoReset<bool> handling_paste(&is_pasting_, true);
   frame_->executeCommand(WebString::fromUTF8("Paste"), GetFocusedElement());
 }
 
@@ -1751,10 +1753,7 @@ void RenderFrameImpl::OnExtendSelectionAndDelete(int before, int after) {
   if (!GetRenderWidget()->ShouldHandleImeEvent())
     return;
 
-  DCHECK(!WebUserGestureIndicator::isProcessingUserGesture());
-
   ImeEventGuard guard(GetRenderWidget());
-  blink::WebScopedUserGesture gesture_indicator;
   frame_->extendSelectionAndDelete(before, after);
 }
 
@@ -2158,6 +2157,10 @@ void RenderFrameImpl::AddMessageToConsole(ConsoleMessageLevel level,
 
 bool RenderFrameImpl::IsUsingLoFi() const {
   return is_using_lofi_;
+}
+
+bool RenderFrameImpl::IsPasting() const {
+  return is_pasting_;
 }
 
 // blink::WebFrameClient implementation ----------------------------------------
@@ -3369,6 +3372,10 @@ bool RenderFrameImpl::runModalBeforeUnloadDialog(
 
 void RenderFrameImpl::showContextMenu(const blink::WebContextMenuData& data) {
   ContextMenuParams params = ContextMenuParamsBuilder::Build(data);
+  blink::WebRect position_in_window(params.x, params.y, 0, 0);
+  GetRenderWidget()->convertViewportToWindow(&position_in_window);
+  params.x = position_in_window.x;
+  params.y = position_in_window.y;
   params.source_type = GetRenderWidget()->context_menu_source_type();
   GetRenderWidget()->OnShowHostContextMenu(&params);
   if (GetRenderWidget()->has_host_context_menu_location()) {
@@ -3721,16 +3728,6 @@ void RenderFrameImpl::didChangePerformanceTiming() {
   FOR_EACH_OBSERVER(RenderFrameObserver,
                     observers_,
                     DidChangePerformanceTiming());
-}
-
-void RenderFrameImpl::didAbortLoading(blink::WebLocalFrame* frame) {
-  DCHECK(!frame_ || frame_ == frame);
-#if defined(ENABLE_PLUGINS)
-  if (frame != render_view_->webview()->mainFrame())
-    return;
-  PluginChannelHost::Broadcast(
-      new PluginHostMsg_DidAbortLoading(render_view_->GetRoutingID()));
-#endif
 }
 
 void RenderFrameImpl::didCreateScriptContext(blink::WebLocalFrame* frame,

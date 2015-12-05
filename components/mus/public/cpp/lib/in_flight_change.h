@@ -10,20 +10,31 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "components/mus/public/cpp/window_observer.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace mus {
 
+namespace mojom {
+enum Cursor : int32_t;
+}
+
 class Window;
+class WindowTreeClientImpl;
 
 enum class ChangeType {
+  ADD_CHILD,
   ADD_TRANSIENT_WINDOW,
   BOUNDS,
   DELETE_WINDOW,
+  FOCUS,
   NEW_WINDOW,
+  PREDEFINED_CURSOR,
   PROPERTY,
+  REMOVE_CHILD,
   REMOVE_TRANSIENT_WINDOW_FROM_PARENT,
+  REORDER,
   VISIBLE,
 };
 
@@ -49,11 +60,41 @@ enum class ChangeType {
 //   InFlightChange for the same window outstanding, then ChangeFailed() is
 //   invoked followed by Revert(). The expectation is Revert() sets the
 //   appropriate value back on the Window.
+//
+// In general there are two classes of changes:
+// 1. We are the only side allowed to make the change.
+// 2. The change can also be applied by another client. For example, the
+//    window manager may change the bounds as well as the local client.
+//
+// For (1) use CrashInFlightChange. As the name implies this change CHECKs that
+// the change succeeded. Use the following pattern for this. This code goes
+// where the change is sent to the server (in WindowTreeClientImpl):
+//   const uint32_t change_id =
+//   ScheduleInFlightChange(make_scoped_ptr(new CrashInFlightChange(
+//       window, ChangeType::REORDER)));
+//
+// For (2) use the same pattern as (1), but in the on change callback from the
+// server (e.g. OnWindowBoundsChanged()) add the following:
+//   // value_from_server is the value supplied from the server. It corresponds
+//   // to the value of the property at the time the server processed the
+//   // change. If the local change fails, this is the value reverted to.
+//   InFlightBoundsChange new_change(window, value_from_server);
+//   if (ApplyServerChangeToExistingInFlightChange(new_change)) {
+//     // There was an in flight change for the same property. The in flight
+//     // change takes the value to revert from |new_change|.
+//     return;
+//   }
+//
+//   // else case is no flight in change and the new value can be applied
+//   // immediately.
+//   WindowPrivate(window).LocalSetValue(new_value_from_server);
+//
 class InFlightChange {
  public:
   InFlightChange(Window* window, ChangeType type);
   virtual ~InFlightChange();
 
+  // NOTE: for properties not associated with any window window is null.
   Window* window() { return window_; }
   const Window* window() const { return window_; }
   ChangeType change_type() const { return change_type_; }
@@ -112,6 +153,31 @@ class CrashInFlightChange : public InFlightChange {
   DISALLOW_COPY_AND_ASSIGN(CrashInFlightChange);
 };
 
+// Focus is really a property of the WindowTreeConnection and not the Window.
+// As such, InFlightFocusChange is special in that it is not associated with
+// a particular window (InFlightFocusChange::window() returns null). Internally
+// InFlightFocusChange tracks a window to give focus to, but it may be null.
+class InFlightFocusChange : public InFlightChange, public WindowObserver {
+ public:
+  InFlightFocusChange(WindowTreeClientImpl* connection, Window* revert_window);
+  ~InFlightFocusChange() override;
+
+  // InFlightChange:
+  void SetRevertValueFrom(const InFlightChange& change) override;
+  void Revert() override;
+
+ private:
+  void SetRevertWindow(Window* window);
+
+  // WindowObserver:
+  void OnWindowDestroying(Window* window) override;
+
+  WindowTreeClientImpl* connection_;
+  Window* revert_window_;
+
+  DISALLOW_COPY_AND_ASSIGN(InFlightFocusChange);
+};
+
 class InFlightPropertyChange : public InFlightChange {
  public:
   InFlightPropertyChange(Window* window,
@@ -129,6 +195,21 @@ class InFlightPropertyChange : public InFlightChange {
   mojo::Array<uint8_t> revert_value_;
 
   DISALLOW_COPY_AND_ASSIGN(InFlightPropertyChange);
+};
+
+class InFlightPredefinedCursorChange : public InFlightChange {
+ public:
+  InFlightPredefinedCursorChange(Window* window, mojom::Cursor revert_value);
+  ~InFlightPredefinedCursorChange() override;
+
+  // InFlightChange:
+  void SetRevertValueFrom(const InFlightChange& change) override;
+  void Revert() override;
+
+ private:
+  mojom::Cursor revert_cursor_;
+
+  DISALLOW_COPY_AND_ASSIGN(InFlightPredefinedCursorChange);
 };
 
 class InFlightVisibleChange : public InFlightChange {

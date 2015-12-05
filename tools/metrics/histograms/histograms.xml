@@ -367,6 +367,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="AppBanners.MinutesFromFirstVisitToBannerShown" units="minutes">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    App banners promote an application related to the current website, and are
+    requested specifically through the current page's HTML.  This stat tracks
+    the number of minutes between the first recorded visit to an origin and the
+    time when the banner is actually shown.
+  </summary>
+</histogram>
+
 <histogram name="AppBanners.UserResponse" enum="AppBannersUserResponse">
   <owner>dominickn@chromium.org</owner>
   <summary>
@@ -10756,6 +10766,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Event.PassiveListeners" enum="EventResultType">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    The result of handling of MouseWheel, TouchStart, TouchMove, TouchEnd events
+    in the renderer.
+  </summary>
+</histogram>
+
+<histogram name="Event.PassiveListeners.Latency" units="microseconds">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    Time between when a cancelable event was generated and the event processed
+    yet no action was executed for the event. This histogram tracks the
+    potential benefit of using passive events listeners.
+  </summary>
+</histogram>
+
 <histogram name="Event.SingleTapType" enum="TapDelayType">
   <owner>rbyers@chromium.org</owner>
   <summary>
@@ -20351,6 +20378,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Android: Records the first action the user does within 10s of starting
     Chrome. Recorded in DocumentActivity and ChromeTabbedActivity only when the
     starting intent is not of type MAIN, e.g. VIEW, etc.
+  </summary>
+</histogram>
+
+<histogram name="MobileStartup.TimeSinceLastUse" units="minutes">
+  <owner>knn@chromium.org</owner>
+  <summary>
+    Android: The time since last use until Chrome is launched from the home
+    screen. This is measured from the time the last tab is closed until a Main
+    intent is received. Has a minute level precision for first 10 minutes
+    increasing exponentially till 30 days.
   </summary>
 </histogram>
 
@@ -50551,6 +50588,33 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="UpdateEngine.CertificateCheck.Download"
+    enum="UpdateEngineCertificateCheckStatus">
+  <owner>deymo@chromium.org</owner>
+  <summary>
+    The status of the certificate check done when downloading a payload over
+    HTTPS. Note that most downloads are done over HTTP.
+
+    This is reported on every HTTPS connection to the payload download server.
+    Connection drops on the same payload may report different values.
+
+    This metric is specific to ChromeOS.
+  </summary>
+</histogram>
+
+<histogram name="UpdateEngine.CertificateCheck.UpdateCheck"
+    enum="UpdateEngineCertificateCheckStatus">
+  <owner>deymo@chromium.org</owner>
+  <summary>
+    The status of the certificate check done when querying Omaha for a new
+    version.
+
+    This is reported on every update check.
+
+    This metric is specific to ChromeOS.
+  </summary>
+</histogram>
+
 <histogram name="UpdateEngine.Check.DownloadErrorCode"
     enum="UpdateEngineDownloadErrorCode">
   <owner>zeuthen@chromium.org</owner>
@@ -51218,6 +51282,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Time spent doing a full GC during an IdleNotification.</summary>
 </histogram>
 
+<histogram name="V8.GCFinalizeMC" units="milliseconds">
+  <owner>ulan@chromium.org</owner>
+  <owner>hpayer@chromium.org</owner>
+  <summary>Time spent in finalize incremental mark-sweep phase of GC.</summary>
+</histogram>
+
 <histogram name="V8.GCFinalizeMCReduceMemory" units="milliseconds">
   <owner>ulan@chromium.org</owner>
   <owner>hpayer@chromium.org</owner>
@@ -51227,6 +51297,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="V8.GCFinalzeMC" units="milliseconds">
+  <obsolete>
+    This histogram has been replaced by V8.GCFinalizeMC because of typo in the
+    name.
+  </obsolete>
   <owner>ulan@chromium.org</owner>
   <owner>hpayer@chromium.org</owner>
   <summary>Time spent in finalize incremental mark-sweep phase of GC.</summary>
@@ -55989,6 +56063,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="98" label="BDH_CHARACTERISTIC_ALREADY_SUBSCRIBED"/>
   <int value="99" label="RFH_OWNER_PROPERTY"/>
   <int value="100" label="BDH_EMPTY_OR_INVALID_FILTERS"/>
+  <int value="101" label="WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO"/>
+  <int value="102" label="RFMF_RENDERER_FAKED_ITS_OWN_DEATH"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions" type="int">
@@ -57854,6 +57930,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="7010" label="SBOX_FATAL_CLOSEHANDLES"/>
   <int value="7011" label="SBOX_FATAL_MITIGATION"/>
   <int value="7012" label="SBOX_FATAL_MEMORY_EXCEEDED"/>
+  <int value="7013" label="SBOX_FATAL_WARMUP"/>
   <int value="529697949" label="CPP_EH_EXCEPTION"/>
   <int value="533692099" label="STATUS_GUARD_PAGE_VIOLATION"/>
   <int value="1073740791" label="STATUS_STACK_BUFFER_OVERRUN"/>
@@ -60409,6 +60486,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="32" label="Inner pseudo node matched."/>
   <int value="64" label="Inner node matched."/>
   <int value="128" label="Request type matched."/>
+</enum>
+
+<enum name="EventResultType" type="int">
+  <int value="0" label="Passive"/>
+  <int value="1" label="Uncancelable"/>
+  <int value="2" label="Cancelable and not canceled"/>
+  <int value="3" label="Cancelable and canceled"/>
 </enum>
 
 <enum name="EVWhitelistStatus" type="int">
@@ -63672,6 +63756,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1038" label="PresentationConnectionClose"/>
   <int value="1039" label="SVG1DOMShape"/>
   <int value="1040" label="SVG1DOMText"/>
+  <int value="1041" label="RTCPeerConnectionConstructorConstraints"/>
+  <int value="1042" label="RTCPeerConnectionConstructorCompliant"/>
+  <int value="1043"
+      label="RTCPeerConnectionCreateOfferLegacyNoFailureCallback"/>
+  <int value="1044" label="RTCPeerConnectionCreateOfferLegacyFailureCallback"/>
+  <int value="1045" label="RTCPeerConnectionCreateOfferLegacyConstraints"/>
+  <int value="1046" label="RTCPeerConnectionCreateOfferLegacyOfferOptions"/>
+  <int value="1047" label="RTCPeerConnectionCreateOfferLegacyCompliant"/>
+  <int value="1048"
+      label="RTCPeerConnectionCreateAnswerLegacyNoFailureCallback"/>
+  <int value="1049" label="RTCPeerConnectionCreateAnswerLegacyFailureCallback"/>
+  <int value="1050" label="RTCPeerConnectionCreateAnswerLegacyConstraints"/>
+  <int value="1051" label="RTCPeerConnectionCreateAnswerLegacyCompliant"/>
+  <int value="1052"
+      label="RTCPeerConnectionSetLocalDescriptionLegacyNoSuccessCallback"/>
+  <int value="1053"
+      label="RTCPeerConnectionSetLocalDescriptionLegacyNoFailureCallback"/>
+  <int value="1054"
+      label="RTCPeerConnectionSetLocalDescriptionLegacyCompliant"/>
+  <int value="1055"
+      label="RTCPeerConnectionSetRemoteDescriptionLegacyNoSuccessCallback"/>
+  <int value="1056"
+      label="RTCPeerConnectionSetRemoteDescriptionLegacyNoFailureCallback"/>
+  <int value="1057"
+      label="RTCPeerConnectionSetRemoteDescriptionLegacyCompliant"/>
+  <int value="1058" label="RTCPeerConnectionGetStatsLegacyNonCompliant"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -66575,6 +66685,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="12" label="ERROR_SOURCE_NOT_FOUND">
     Broker didn't have a channel of communication with the source process.
   </int>
+  <int value="13" label="ERROR_COULD_NOT_OPEN_SOURCE_OR_DEST">
+    Broker could not open the source or destination process with extra
+    privileges.
+  </int>
+  <int value="14" label="ERROR_INVALID_PERMISSIONS">
+    Broker was asked to transfer a HANDLE with invalid permissions.
+  </int>
 </enum>
 
 <enum name="IPCAttachmentBrokerUnprivilegedBrokerAttachmentError" type="int">
@@ -67579,6 +67696,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-2008272679" label="disable-webrtc-hw-encoding"/>
   <int value="-2003354337"
       label="enable-search-button-in-omnibox-for-str-or-iip"/>
+  <int value="-1999892428" label="force-ui-direction"/>
   <int value="-1998927516" label="enable-md-settings"/>
   <int value="-1985025593" label="file-manager-enable-new-gallery"/>
   <int value="-1980328793" label="trace-upload-url"/>
@@ -77629,6 +77747,20 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="8" label="Verification Failed"/>
   <int value="9" label="Post-install Failed"/>
   <int value="10" label="Abnormal Termination"/>
+</enum>
+
+<enum name="UpdateEngineCertificateCheckStatus" type="int">
+  <int value="0" label="Valid certificate">
+    The certificate is valid and the same as seen before or the first time we
+    see a certificate.
+  </int>
+  <int value="1" label="Changed certificate">
+    The certificate is valid, but is different than a previously seen
+    certificate for the selected server.
+  </int>
+  <int value="2" label="Certificate check failed">
+    The certificate validation failed.
+  </int>
 </enum>
 
 <enum name="UpdateEngineCheckReaction" type="int">

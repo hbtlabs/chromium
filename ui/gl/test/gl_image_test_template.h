@@ -17,6 +17,7 @@
 #include "ui/gfx/buffer_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_helper.h"
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
@@ -89,7 +90,10 @@ TYPED_TEST_CASE_P(GLImageCopyTest);
 
 TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
   const gfx::Size image_size(256, 256);
-  const uint8_t image_color[] = {0xff, 0xff, 0, 0xff};
+  // These values are picked so that RGB -> YUV on the CPU converted
+  // back to RGB on the GPU produces the original RGB values without
+  // any error.
+  const uint8_t image_color[] = {0x10, 0x20, 0, 0xff};
   const uint8_t texture_color[] = {0, 0, 0xff, 0xff};
 
   GLuint framebuffer =
@@ -112,7 +116,7 @@ TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
       image_size.width(), image_size.height(),
       static_cast<int>(RowSizeForBufferFormat(image_size.width(),
                                               gfx::BufferFormat::RGBA_8888, 0)),
-      gfx::BufferFormat::RGBA_8888, texture_color, pixels.get());
+      0, gfx::BufferFormat::RGBA_8888, texture_color, pixels.get());
   // Note: This test assume that |image| can be used with GL_TEXTURE_2D but
   // that might not be the case for some GLImage implementations.
   glBindTexture(GL_TEXTURE_2D, texture);
@@ -126,11 +130,10 @@ TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
   // clang-format off
   const char kVertexShader[] = STRINGIZE(
     attribute vec2 a_position;
-    attribute vec2 a_texCoord;
     varying vec2 v_texCoord;
     void main() {
       gl_Position = vec4(a_position.x, a_position.y, 0.0, 1.0);
-      v_texCoord = a_texCoord;
+      v_texCoord = (a_position + vec2(1.0, 1.0)) * 0.5;
     }
   );
   const char kFragmentShader[] = STRINGIZE(
@@ -146,14 +149,14 @@ TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
   // clang-format on
 
   GLuint vertex_shader =
-      GLTestHelper::LoadShader(GL_VERTEX_SHADER, kVertexShader);
+      gfx::GLHelper::LoadShader(GL_VERTEX_SHADER, kVertexShader);
   bool is_gles = gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2;
-  GLuint fragment_shader = GLTestHelper::LoadShader(
+  GLuint fragment_shader = gfx::GLHelper::LoadShader(
       GL_FRAGMENT_SHADER,
       base::StringPrintf("%s%s", is_gles ? kShaderFloatPrecision : "",
                          kFragmentShader)
           .c_str());
-  GLuint program = GLTestHelper::SetupProgram(vertex_shader, fragment_shader);
+  GLuint program = gfx::GLHelper::SetupProgram(vertex_shader, fragment_shader);
   EXPECT_NE(program, 0u);
   glUseProgram(program);
 
@@ -161,33 +164,10 @@ TYPED_TEST_P(GLImageCopyTest, CopyTexImage) {
   ASSERT_NE(sampler_location, -1);
   glUniform1i(sampler_location, 0);
 
-  // clang-format off
-  static GLfloat vertices[] = {
-    -1.f, -1.f, 0.f, 0.f,
-     1.f, -1.f, 1.f, 0.f,
-    -1.f,  1.f, 0.f, 1.f,
-     1.f,  1.f, 1.f, 1.f
-  };
-  // clang-format on
-
-  GLuint vertex_buffer;
-  glGenBuffersARB(1, &vertex_buffer);
-  glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  GLint position_location = glGetAttribLocation(program, "a_position");
-  ASSERT_NE(position_location, -1);
-  glEnableVertexAttribArray(position_location);
-  glVertexAttribPointer(position_location, 2, GL_FLOAT, GL_FALSE,
-                        sizeof(GLfloat) * 4, 0);
-  GLint tex_coord_location = glGetAttribLocation(program, "a_texCoord");
-  EXPECT_NE(tex_coord_location, -1);
-  glEnableVertexAttribArray(tex_coord_location);
-  glVertexAttribPointer(tex_coord_location, 2, GL_FLOAT, GL_FALSE,
-                        sizeof(GLfloat) * 4,
-                        reinterpret_cast<void*>(sizeof(GLfloat) * 2));
-
+  GLuint vertex_buffer = gfx::GLHelper::SetupQuadVertexBuffer();
   // Draw |texture| to viewport and read back pixels to check expectations.
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  gfx::GLHelper::DrawQuad(vertex_buffer);
+
   GLTestHelper::CheckPixels(0, 0, image_size.width(), image_size.height(),
                             image_color);
 

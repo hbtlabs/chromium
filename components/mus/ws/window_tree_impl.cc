@@ -221,14 +221,14 @@ void WindowTreeImpl::ProcessWindowBoundsChanged(const ServerWindow* window,
 
 void WindowTreeImpl::ProcessClientAreaChanged(
     const ServerWindow* window,
-    const gfx::Insets& old_client_area,
     const gfx::Insets& new_client_area,
+    const std::vector<gfx::Rect>& new_additional_client_areas,
     bool originated_change) {
   if (originated_change || !IsWindowKnown(window))
     return;
-  client()->OnClientAreaChanged(WindowIdToTransportId(window->id()),
-                                mojo::Insets::From(old_client_area),
-                                mojo::Insets::From(new_client_area));
+  client()->OnClientAreaChanged(
+      WindowIdToTransportId(window->id()), mojo::Insets::From(new_client_area),
+      mojo::Array<mojo::RectPtr>::From(new_additional_client_areas));
 }
 
 void WindowTreeImpl::ProcessViewportMetricsChanged(
@@ -362,6 +362,15 @@ void WindowTreeImpl::ProcessWillChangeWindowVisibility(
   }
 
   NotifyDrawnStateChanged(window, window_target_drawn_state);
+}
+
+void WindowTreeImpl::ProcessCursorChanged(const ServerWindow* window,
+                                          int32_t cursor_id,
+                                          bool originated_change) {
+  if (originated_change)
+    return;
+  client()->OnWindowPredefinedCursorChanged(WindowIdToTransportId(window->id()),
+                                            mojom::Cursor(cursor_id));
 }
 
 void WindowTreeImpl::ProcessFocusChanged(
@@ -648,16 +657,13 @@ void WindowTreeImpl::DeleteWindow(uint32_t change_id, Id transport_window_id) {
   client_->OnChangeCompleted(change_id, success);
 }
 
-void WindowTreeImpl::AddWindow(Id parent_id,
-                               Id child_id,
-                               const Callback<void(bool)>& callback) {
-  callback.Run(AddWindow(WindowIdFromTransportId(parent_id),
-                         WindowIdFromTransportId(child_id)));
+void WindowTreeImpl::AddWindow(uint32_t change_id, Id parent_id, Id child_id) {
+  client_->OnChangeCompleted(change_id,
+                             AddWindow(WindowIdFromTransportId(parent_id),
+                                       WindowIdFromTransportId(child_id)));
 }
 
-void WindowTreeImpl::RemoveWindowFromParent(
-    Id window_id,
-    const Callback<void(bool)>& callback) {
+void WindowTreeImpl::RemoveWindowFromParent(uint32_t change_id, Id window_id) {
   bool success = false;
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   if (window && window->parent() &&
@@ -667,7 +673,7 @@ void WindowTreeImpl::RemoveWindowFromParent(
                  OperationType::REMOVE_WINDOW_FROM_PARENT);
     window->parent()->Remove(window);
   }
-  callback.Run(success);
+  client_->OnChangeCompleted(change_id, success);
 }
 
 void WindowTreeImpl::AddTransientWindow(uint32_t change_id,
@@ -694,10 +700,10 @@ void WindowTreeImpl::RemoveTransientWindowFromParent(uint32_t change_id,
   client_->OnChangeCompleted(change_id, success);
 }
 
-void WindowTreeImpl::ReorderWindow(Id window_id,
+void WindowTreeImpl::ReorderWindow(uint32_t change_id,
+                                   Id window_id,
                                    Id relative_window_id,
-                                   mojom::OrderDirection direction,
-                                   const Callback<void(bool)>& callback) {
+                                   mojom::OrderDirection direction) {
   bool success = false;
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   ServerWindow* relative_window =
@@ -709,7 +715,7 @@ void WindowTreeImpl::ReorderWindow(Id window_id,
     connection_manager_->ProcessWindowReorder(window, relative_window,
                                               direction);
   }
-  callback.Run(success);
+  client_->OnChangeCompleted(change_id, success);
 }
 
 void WindowTreeImpl::GetWindowTree(
@@ -787,7 +793,7 @@ void WindowTreeImpl::AttachSurface(
   window->CreateSurface(type, surface.Pass(), client.Pass());
 }
 
-void WindowTreeImpl::SetWindowTextInputState(uint32_t window_id,
+void WindowTreeImpl::SetWindowTextInputState(Id window_id,
                                              mojo::TextInputStatePtr state) {
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   bool success = window && access_policy_->CanSetWindowTextInputState(window);
@@ -820,14 +826,18 @@ void WindowTreeImpl::OnWindowInputEventAck(uint32_t event_id) {
   GetHost()->OnEventAck(this);
 }
 
-void WindowTreeImpl::SetClientArea(Id transport_window_id,
-                                   mojo::InsetsPtr insets) {
+void WindowTreeImpl::SetClientArea(
+    Id transport_window_id,
+    mojo::InsetsPtr insets,
+    mojo::Array<mojo::RectPtr> transport_additional_client_areas) {
   ServerWindow* window =
       GetWindow(WindowIdFromTransportId(transport_window_id));
   if (!window || !access_policy_->CanSetClientArea(window))
     return;
 
-  window->SetClientArea(insets.To<gfx::Insets>());
+  std::vector<gfx::Rect> additional_client_areas =
+      transport_additional_client_areas.To<std::vector<gfx::Rect>>();
+  window->SetClientArea(insets.To<gfx::Insets>(), additional_client_areas);
 }
 
 void WindowTreeImpl::Embed(Id transport_window_id,
@@ -840,22 +850,39 @@ void WindowTreeImpl::Embed(Id transport_window_id,
   callback.Run(result, connection_id);
 }
 
-void WindowTreeImpl::SetFocus(uint32_t window_id) {
+void WindowTreeImpl::SetFocus(uint32_t change_id, Id window_id) {
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   // TODO(beng): consider shifting non-policy drawn check logic to VTH's
   //             FocusController.
-  if (window && window->IsDrawn() && access_policy_->CanSetFocus(window)) {
+  WindowTreeHostImpl* host = GetHost();
+  const bool success = window && window->IsDrawn() &&
+                       access_policy_->CanSetFocus(window) && host;
+  if (success) {
     Operation op(this, connection_manager_, OperationType::SET_FOCUS);
-    WindowTreeHostImpl* host = GetHost();
-    if (host)
-      host->SetFocusedWindow(window);
+    host->SetFocusedWindow(window);
   }
+  client_->OnChangeCompleted(change_id, success);
 }
 
-void WindowTreeImpl::SetCanFocus(uint32_t window_id, bool can_focus) {
+void WindowTreeImpl::SetCanFocus(Id window_id, bool can_focus) {
   ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
   if (window && ShouldRouteToWindowManager(window))
     window->set_can_focus(can_focus);
+}
+
+void WindowTreeImpl::SetPredefinedCursor(uint32_t change_id,
+                                         Id window_id,
+                                         mus::mojom::Cursor cursor_id) {
+  ServerWindow* window = GetWindow(WindowIdFromTransportId(window_id));
+
+  // Only the owner of the window can change the bounds.
+  bool success = window && access_policy_->CanSetCursorProperties(window);
+  if (success) {
+    Operation op(this, connection_manager_,
+                 OperationType::SET_WINDOW_PREDEFINED_CURSOR);
+    window->SetPredefinedCursor(cursor_id);
+  }
+  client_->OnChangeCompleted(change_id, success);
 }
 
 void WindowTreeImpl::WmResponse(uint32 change_id, bool response) {

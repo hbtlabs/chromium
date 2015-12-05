@@ -143,9 +143,10 @@ class ConnectionManager : public ServerWindowDelegate,
   void ProcessWindowBoundsChanged(const ServerWindow* window,
                                   const gfx::Rect& old_bounds,
                                   const gfx::Rect& new_bounds);
-  void ProcessClientAreaChanged(const ServerWindow* window,
-                                const gfx::Insets& old_client_area,
-                                const gfx::Insets& new_client_area);
+  void ProcessClientAreaChanged(
+      const ServerWindow* window,
+      const gfx::Insets& new_client_area,
+      const std::vector<gfx::Rect>& new_additional_client_areas);
   void ProcessViewportMetricsChanged(const mojom::ViewportMetrics& old_metrics,
                                      const mojom::ViewportMetrics& new_metrics);
   void ProcessWillChangeWindowHierarchy(const ServerWindow* window,
@@ -158,6 +159,8 @@ class ConnectionManager : public ServerWindowDelegate,
                             const ServerWindow* relative_window,
                             const mojom::OrderDirection direction);
   void ProcessWindowDeleted(const WindowId& window);
+  void ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
+                                               int32_t cursor_id);
 
  private:
   friend class Operation;
@@ -214,9 +217,10 @@ class ConnectionManager : public ServerWindowDelegate,
   void OnWindowBoundsChanged(ServerWindow* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
-  void OnWindowClientAreaChanged(ServerWindow* window,
-                                 const gfx::Insets& old_client_area,
-                                 const gfx::Insets& new_client_area) override;
+  void OnWindowClientAreaChanged(
+      ServerWindow* window,
+      const gfx::Insets& new_client_area,
+      const std::vector<gfx::Rect>& new_additional_client_areas) override;
   void OnWindowReordered(ServerWindow* window,
                          ServerWindow* relative,
                          mojom::OrderDirection direction) override;
@@ -225,6 +229,8 @@ class ConnectionManager : public ServerWindowDelegate,
       ServerWindow* window,
       const std::string& name,
       const std::vector<uint8_t>* new_data) override;
+  void OnWindowPredefinedCursorChanged(ServerWindow* window,
+                                       int32_t cursor_id) override;
   void OnWindowTextInputStateChanged(ServerWindow* window,
                                      const ui::TextInputState& state) override;
   void OnTransientWindowAdded(ServerWindow* window,

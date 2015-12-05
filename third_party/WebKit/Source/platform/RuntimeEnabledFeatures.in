@@ -44,6 +44,7 @@ CSS3TextDecorations status=experimental
 CSSAttributeCaseSensitivity status=experimental
 CSSBackdropFilter status=experimental
 CSSCompositing status=stable
+CSSContainment status=experimental
 CSSFontDisplay status=experimental
 CSSFontSizeAdjust status=experimental
 CSSGridLayout status=experimental
@@ -137,8 +138,7 @@ Presentation status=stable
 PresentationReceiver status=test
 PromiseRejectionEvent status=stable
 PushMessaging status=stable
-// Push messaging payloads are blocked on the Push API supporting encryption.
-PushMessagingData status=test
+PushMessagingData status=experimental
 QuotaPromise status=experimental
 ReducedReferrerGranularity
 RenderingPipelineThrottling status=experimental

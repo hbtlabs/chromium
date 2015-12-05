@@ -47,6 +47,8 @@ class SafeBrowsingUIManager
     UnsafeResource();
     ~UnsafeResource();
 
+    bool IsMainPageLoadBlocked() const;
+
     GURL url;
     GURL original_url;
     std::vector<GURL> redirect_urls;
@@ -65,13 +67,6 @@ class SafeBrowsingUIManager
   // was found.
   class Observer {
    public:
-    // The |resource| was classified as unsafe by SafeBrowsing.
-    // This method will be called every time an unsafe resource is
-    // loaded, even if it has already been whitelisted by the user.
-    // The |resource| must not be accessed after OnSafeBrowsingHit returns.
-    // This method will be called on the UI thread.
-    virtual void OnSafeBrowsingMatch(const UnsafeResource& resource) = 0;
-
     // The |resource| was classified as unsafe by SafeBrowsing, and is
     // not whitelisted.
     // The |resource| must not be accessed after OnSafeBrowsingHit returns.

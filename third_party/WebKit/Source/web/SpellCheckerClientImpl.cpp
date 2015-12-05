@@ -115,21 +115,6 @@ void SpellCheckerClientImpl::toggleContinuousSpellChecking()
     }
 }
 
-// TODO(yosin): We should get rid of
-// |SepllCheckerClient::isGrammarCheckingEnabled()| as it always true.
-bool SpellCheckerClientImpl::isGrammarCheckingEnabled()
-{
-    return true;
-}
-
-// TODO(yosin): We should get rid of
-// |TextCheckerClient::shouldEraseMarkersAfterChangeSelection()| as it always
-// false.
-bool SpellCheckerClientImpl::shouldEraseMarkersAfterChangeSelection(TextCheckingType type) const
-{
-    return false;
-}
-
 void SpellCheckerClientImpl::checkSpellingOfString(const String& text, int* misspellingLocation, int* misspellingLength)
 {
     // SpellCheckWord will write (0, 0) into the output vars, which is what our

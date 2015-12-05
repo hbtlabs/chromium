@@ -25,7 +25,6 @@
 #include "components/url_formatter/url_formatter.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -33,7 +32,6 @@
 #include "base/win/windows_version.h"
 #endif
 
-using blink::WebURLError;
 using error_page::OfflinePageStatus;
 
 // Some error pages have no details.
@@ -774,7 +772,6 @@ void LocalizedError::GetStrings(int error_code,
       base::string16 button_text =
           l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_COPY);
       show_offline_copy_button->SetString("msg", button_text);
-      show_offline_copy_button->SetString("title", button_text);
       error_strings->Set("showOfflineCopyButton", show_offline_copy_button);
     } else if (offline_page_status ==
                OfflinePageStatus::HAS_OTHER_OFFLINE_PAGES) {
@@ -783,7 +780,6 @@ void LocalizedError::GetStrings(int error_code,
       base::string16 button_text =
           l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_PAGES);
       show_offline_pages_button->SetString("msg", button_text);
-      show_offline_pages_button->SetString("title", button_text);
       error_strings->Set("showOfflinePagesButton", show_offline_pages_button);
     }
   }
@@ -925,10 +921,11 @@ void LocalizedError::GetStrings(int error_code,
   }
 }
 
-base::string16 LocalizedError::GetErrorDetails(const blink::WebURLError& error,
+base::string16 LocalizedError::GetErrorDetails(const std::string& error_domain,
+                                               int error_code,
                                                bool is_post) {
   const LocalizedErrorMap* error_map =
-      LookupErrorMap(error.domain.utf8(), error.reason, is_post);
+      LookupErrorMap(error_domain, error_code, is_post);
   if (error_map)
     return l10n_util::GetStringUTF16(error_map->details_resource_id);
   else

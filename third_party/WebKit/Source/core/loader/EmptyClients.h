@@ -273,7 +273,6 @@ class CORE_EXPORT EmptyTextCheckerClient : public TextCheckerClient {
 public:
     ~EmptyTextCheckerClient() { }
 
-    bool shouldEraseMarkersAfterChangeSelection(TextCheckingType) const override { return true; }
     void checkSpellingOfString(const String&, int*, int*) override {}
     void checkGrammarOfString(const String&, Vector<GrammarDetail>&, int*, int*) override {}
     void requestCheckingOfString(PassRefPtrWillBeRawPtr<TextCheckingRequest>) override;
@@ -287,7 +286,6 @@ public:
 
     bool isContinuousSpellCheckingEnabled() override { return false; }
     void toggleContinuousSpellChecking() override {}
-    bool isGrammarCheckingEnabled() override { return false; }
 
     TextCheckerClient& textChecker() override { return m_textCheckerClient; }
 
