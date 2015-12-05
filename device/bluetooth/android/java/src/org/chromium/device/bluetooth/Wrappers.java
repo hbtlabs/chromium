@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
@@ -251,11 +252,15 @@ class Wrappers {
         private final BluetoothDevice mDevice;
         private final HashMap<BluetoothGattCharacteristic, BluetoothGattCharacteristicWrapper>
                 mCharacteristicsToWrappers;
+        private final HashMap<BluetoothGattDescriptor, BluetoothGattDescriptorWrapper>
+                mDescriptorsToWrappers;
 
         public BluetoothDeviceWrapper(BluetoothDevice device) {
             mDevice = device;
             mCharacteristicsToWrappers =
                     new HashMap<BluetoothGattCharacteristic, BluetoothGattCharacteristicWrapper>();
+            mDescriptorsToWrappers =
+                    new HashMap<BluetoothGattDescriptor, BluetoothGattDescriptorWrapper>();
         }
 
         public BluetoothGattWrapper connectGatt(
@@ -325,6 +330,10 @@ class Wrappers {
         boolean writeCharacteristic(BluetoothGattCharacteristicWrapper characteristic) {
             return mGatt.writeCharacteristic(characteristic.mCharacteristic);
         }
+
+        boolean writeDescriptor(BluetoothGattDescriptorWrapper descriptor) {
+            return mGatt.writeDescriptor(descriptor.mDescriptor);
+        }
     }
 
     /**
@@ -368,6 +377,13 @@ class Wrappers {
         }
 
         @Override
+        public void onDescriptorWrite(
+                BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            mWrapperCallback.onDescriptorWrite(
+                    mDeviceWrapper.mDescriptorsToWrappers.get(descriptor), status);
+        }
+
+        @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             mWrapperCallback.onConnectionStateChange(status, newState);
         }
@@ -395,6 +411,8 @@ class Wrappers {
                 BluetoothGattCharacteristicWrapper characteristic, int status);
         public abstract void onCharacteristicWrite(
                 BluetoothGattCharacteristicWrapper characteristic, int status);
+        public abstract void onDescriptorWrite(
+                BluetoothGattDescriptorWrapper descriptor, int status);
         public abstract void onConnectionStateChange(int status, int newState);
         public abstract void onServicesDiscovered(int status);
     }
@@ -403,8 +421,8 @@ class Wrappers {
      * Wraps android.bluetooth.BluetoothGattService.
      */
     static class BluetoothGattServiceWrapper {
-        private final BluetoothGattService mService;
-        private final BluetoothDeviceWrapper mDeviceWrapper;
+        final BluetoothGattService mService;
+        final BluetoothDeviceWrapper mDeviceWrapper;
 
         public BluetoothGattServiceWrapper(
                 BluetoothGattService service, BluetoothDeviceWrapper deviceWrapper) {
@@ -414,13 +432,15 @@ class Wrappers {
 
         public List<BluetoothGattCharacteristicWrapper> getCharacteristics() {
             List<BluetoothGattCharacteristic> characteristics = mService.getCharacteristics();
+
             ArrayList<BluetoothGattCharacteristicWrapper> characteristicsWrapped =
                     new ArrayList<BluetoothGattCharacteristicWrapper>(characteristics.size());
             for (BluetoothGattCharacteristic characteristic : characteristics) {
                 BluetoothGattCharacteristicWrapper characteristicWrapper =
                         mDeviceWrapper.mCharacteristicsToWrappers.get(characteristic);
                 if (characteristicWrapper == null) {
-                    characteristicWrapper = new BluetoothGattCharacteristicWrapper(characteristic);
+                    characteristicWrapper =
+                            new BluetoothGattCharacteristicWrapper(characteristic, mDeviceWrapper);
                     mDeviceWrapper.mCharacteristicsToWrappers.put(
                             characteristic, characteristicWrapper);
                 }
@@ -442,10 +462,26 @@ class Wrappers {
      * Wraps android.bluetooth.BluetoothGattCharacteristic.
      */
     static class BluetoothGattCharacteristicWrapper {
-        private final BluetoothGattCharacteristic mCharacteristic;
+        final BluetoothGattCharacteristic mCharacteristic;
+        final BluetoothDeviceWrapper mDeviceWrapper;
 
-        public BluetoothGattCharacteristicWrapper(BluetoothGattCharacteristic characteristic) {
+        public BluetoothGattCharacteristicWrapper(
+                BluetoothGattCharacteristic characteristic, BluetoothDeviceWrapper deviceWrapper) {
             mCharacteristic = characteristic;
+            mDeviceWrapper = deviceWrapper;
+        }
+
+        public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
+            BluetoothGattDescriptor descriptor = mCharacteristic.getDescriptor(uuid);
+
+            BluetoothGattDescriptorWrapper descriptorWrapper =
+                    mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
+
+            if (descriptorWrapper == null) {
+                descriptorWrapper = new BluetoothGattDescriptorWrapper(descriptor);
+                mDeviceWrapper.mDescriptorsToWrappers.put(descriptor, descriptorWrapper);
+            }
+            return descriptorWrapper;
         }
 
         public int getInstanceId() {
@@ -466,6 +502,21 @@ class Wrappers {
 
         public boolean setValue(byte[] value) {
             return mCharacteristic.setValue(value);
+        }
+    }
+
+    /**
+     * Wraps android.bluetooth.BluetoothGattDescriptor.
+     */
+    static class BluetoothGattDescriptorWrapper {
+        private final BluetoothGattDescriptor mDescriptor;
+
+        public BluetoothGattDescriptorWrapper(BluetoothGattDescriptor descriptor) {
+            mDescriptor = descriptor;
+        }
+
+        public boolean setValue(byte[] value) {
+            return mDescriptor.setValue(value);
         }
     }
 }

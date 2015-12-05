@@ -361,6 +361,17 @@ class Fakes {
                     mDevice.mAdapter.mNativeBluetoothTestAndroid, characteristic.getValue());
             return true;
         }
+
+        @Override
+        boolean writeDescriptor(Wrappers.BluetoothGattDescriptorWrapper descriptor) {
+            if (mWriteDescriptorWillFailSynchronouslyOnce) {
+                mWriteDescriptorWillFailSynchronouslyOnce = false;
+                return false;
+            }
+            nativeOnFakeBluetoothGattWriteDescriptor(
+                    mDevice.mAdapter.mNativeBluetoothTestAndroid, descriptor.getValue());
+            return true;
+        }
     }
 
     /**
@@ -530,6 +541,11 @@ class Fakes {
         // Wrappers.BluetoothGattCharacteristicWrapper overrides:
 
         @Override
+        public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
+            // TODO
+        }
+
+        @Override
         public int getInstanceId() {
             return mInstanceId;
         }
@@ -580,5 +596,9 @@ class Fakes {
 
     // Binds to BluetoothTestAndroid::OnFakeBluetoothGattWriteCharacteristic.
     private static native void nativeOnFakeBluetoothGattWriteCharacteristic(
+            long nativeBluetoothTestAndroid, byte[] value);
+
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattWriteDescriptor.
+    private static native void nativeOnFakeBluetoothGattWriteDescriptor(
             long nativeBluetoothTestAndroid, byte[] value);
 }

@@ -276,6 +276,36 @@ void BluetoothTestAndroid::
       characteristic_android->GetJavaObject().obj());
 }
 
+void BluetoothTestAndroid::SimulateGattDescriptorWrite(
+    BluetoothGattDescriptor* descriptor) {
+  BluetoothRemoteGattDescriptorAndroid* descriptor_android =
+      static_cast<BluetoothRemoteGattDescriptorAndroid*>(descriptor);
+  Java_FakeBluetoothGattDescriptor_valueWrite(
+      base::android::AttachCurrentThread(),
+      descriptor_android ? descriptor_android->GetJavaObject().obj() : nullptr,
+      0);  // android.bluetooth.BluetoothGatt.GATT_SUCCESS
+}
+
+void BluetoothTestAndroid::SimulateGattDescriptorWriteError(
+    BluetoothGattDescriptor* descriptor,
+    BluetoothGattService::GattErrorCode error_code) {
+  BluetoothRemoteGattDescriptorAndroid* descriptor_android =
+      static_cast<BluetoothRemoteGattDescriptorAndroid*>(descriptor);
+  Java_FakeBluetoothGattDescriptor_valueWrite(
+      base::android::AttachCurrentThread(),
+      descriptor_android->GetJavaObject().obj(),
+      BluetoothRemoteGattServiceAndroid::GetAndroidErrorCode(error_code));
+}
+
+void BluetoothTestAndroid::SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
+    BluetoothGattDescriptor* descriptor) {
+  BluetoothRemoteGattDescriptorAndroid* descriptor_android =
+      static_cast<BluetoothRemoteGattDescriptorAndroid*>(descriptor);
+  Java_FakeBluetoothGattDescriptor_setWriteDescriptorWillFailSynchronouslyOnce(
+      base::android::AttachCurrentThread(),
+      descriptor_android->GetJavaObject().obj());
+}
+
 void BluetoothTestAndroid::OnFakeBluetoothDeviceConnectGattCalled(
     JNIEnv* env,
     const JavaParamRef<jobject>& caller) {
@@ -311,6 +341,14 @@ void BluetoothTestAndroid::OnFakeBluetoothGattWriteCharacteristic(
     const JavaParamRef<jobject>& caller,
     const JavaParamRef<jbyteArray>& value) {
   gatt_write_characteristic_attempts_++;
+  base::android::JavaByteArrayToByteVector(env, value, &last_write_value_);
+}
+
+void BluetoothTestAndroid::OnFakeBluetoothGattWriteDescriptor(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& caller,
+    const JavaParamRef<jbyteArray>& value) {
+  gatt_write_descriptor_attempts_++;
   base::android::JavaByteArrayToByteVector(env, value, &last_write_value_);
 }
 

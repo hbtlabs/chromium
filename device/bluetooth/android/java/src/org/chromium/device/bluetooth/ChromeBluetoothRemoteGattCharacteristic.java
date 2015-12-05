@@ -5,10 +5,13 @@
 package org.chromium.device.bluetooth;
 
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+
+import java.util.UUID;
 
 /**
  * Exposes android.bluetooth.BluetoothGattCharacteristic as necessary
@@ -106,35 +109,44 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     // Implements BluetoothRemoteGattCharacteristicAndroid::StartNotifySession.
     @CalledByNative
     private boolean startNotifySession() {
-        // TODO BEFORE LANDING: Clean up:
-        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
-            Log.v(TAG, "startNotifySession PROPERTY_NOTIFY OK.");
-        }
-        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE)
-                != 0) {
-            Log.v(TAG, "startNotifySession PROPERTY_INDICATE OK.");
-        }
-        if ((mCharacteristic.getProperties()
-                    & (BluetoothGattCharacteristic.PROPERTY_NOTIFY
-                              | BluetoothGattCharacteristic.PROPERTY_INDICATE))
-                == 0) {
-            Log.v(TAG, "startNotifySession has neither PROPERTY_NOTIFY | PROPERTY_INDICATE!");
-            return false;
-        }
-
         if (!mChromeBluetoothDevice.mBluetoothGatt.setCharacteristicNotification(
                     mCharacteristic, true)) {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
             return false;
         }
 
-        characteristic mCharacteristic
-        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-        UUID.fromString(SampleGattAttributes.CLIENT_CHARACTERISTIC_CONFIG));
-descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-mBluetoothGatt.writeDescriptor(descriptor);
+        Wrappers.BluetoothGattDescriptorWrapper clientCharacteristicConfigurationDescriptor =
+                mCharacteristic.getDescriptor(UUID.fromString(
+                        "00002902-0000-1000-8000-00805F9B34FB" /* Config's standard UUID*/));
 
-        Log.i(TAG, "startNotifySession.");
+        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
+            if (!clientCharacteristicConfigurationDescriptor.setValue(
+                        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                Log.v(TAG, "startNotifySession NOTIFY failed!");
+                return false;
+            }
+            Log.v(TAG, "startNotifySession NOTIFY.");
+        } else if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE)
+                != 0) {
+            if (!clientCharacteristicConfigurationDescriptor.setValue(
+                        BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
+                Log.v(TAG, "startNotifySession INDICATE failed!");
+                return false;
+            }
+            Log.v(TAG, "startNotifySession INDICATE.");
+        } else {
+            Log.v(TAG,
+                    "startNotifySession failed! Characteristic has neither PROPERTY_NOTIFY or PROPERTY_INDICATE.");
+            return false;
+        }
+
+        if (!mChromeBluetoothDevice.mBluetoothGatt.writeDescriptor(
+                    clientCharacteristicConfigurationDescriptor)) {
+            Log.i(TAG, "startNotifySession writeDescriptor failed!");
+            return false;
+        }
+
+        // TODO confirm only after descriptor write succeeds.
         return true;
     }
 

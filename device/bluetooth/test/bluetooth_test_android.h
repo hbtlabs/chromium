@@ -63,6 +63,13 @@ class BluetoothTestAndroid : public BluetoothTestBase {
       BluetoothGattService::GattErrorCode) override;
   void SimulateGattCharacteristicWriteWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) override;
+  void SimulateGattDescriptorWrite(
+      BluetoothGattDescriptor* descriptor) override;
+  void SimulateGattDescriptorWriteError(
+      BluetoothGattDescriptor* descriptor,
+      BluetoothGattService::GattErrorCode) override;
+  void SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
+      BluetoothGattDescriptor* descriptor) override;
 
   // Records that Java FakeBluetoothDevice connectGatt was called.
   void OnFakeBluetoothDeviceConnectGattCalled(
@@ -92,6 +99,12 @@ class BluetoothTestAndroid : public BluetoothTestBase {
 
   // Records that Java FakeBluetoothGatt writeCharacteristic was called.
   void OnFakeBluetoothGattWriteCharacteristic(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& caller,
+      const base::android::JavaParamRef<jbyteArray>& value);
+
+  // Records that Java FakeBluetoothGatt writeDescriptor was called.
+  void OnFakeBluetoothGattWriteDescriptor(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& caller,
       const base::android::JavaParamRef<jbyteArray>& value);

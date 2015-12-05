@@ -13,6 +13,7 @@
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
+#include "device/bluetooth/bluetooth_gatt_descriptor.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -173,6 +174,22 @@ class BluetoothTestBase : public testing::Test {
   virtual void SimulateGattCharacteristicWriteWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) {}
 
+  // Simulates a Descriptor Write operation succeeding, returning |value|.
+  // If |descriptor| is null, acts upon the descriptor provided to
+  // RememberDescriptorForSubsequentAction.
+  virtual void SimulateGattDescriptorWrite(
+      BluetoothGattDescriptor* descriptor) {}
+
+  // Simulates a Descriptor Write operation failing with a GattErrorCode.
+  virtual void SimulateGattDescriptorWriteError(
+      BluetoothGattDescriptor* descriptor,
+      BluetoothGattService::GattErrorCode) {}
+
+  // Simulates a Descriptor Write operation failing synchronously once for
+  // an unknown reason.
+  virtual void SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
+      BluetoothGattDescriptor* descriptor) {}
+
   // Removes the device from the adapter and deletes it.
   virtual void DeleteDevice(BluetoothDevice* device);
 
@@ -229,6 +246,7 @@ class BluetoothTestBase : public testing::Test {
   int gatt_notify_characteristic_attempts_ = 0;
   int gatt_read_characteristic_attempts_ = 0;
   int gatt_write_characteristic_attempts_ = 0;
+  int gatt_write_descriptor_attempts_ = 0;
 
   // The following values are used to make sure the correct callbacks
   // have been called. They are not reset when calling ResetEventCounts().
