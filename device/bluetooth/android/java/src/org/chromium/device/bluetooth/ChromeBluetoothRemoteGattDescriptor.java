@@ -44,7 +44,6 @@ final class ChromeBluetoothRemoteGattDescriptor {
     @CalledByNative
     private void onBluetoothRemoteGattDescriptorAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor Destroyed.");
-        mChromeBluetoothDevice.mBluetoothGatt.setDescriptorNotification(mDescriptor, false);
         mNativeBluetoothRemoteGattDescriptorAndroid = 0;
         mChromeCharacteristic.mChromeBluetoothDevice.mWrapperToChromeDescriptorsMap.remove(
                 mDescriptor);
@@ -57,11 +56,11 @@ final class ChromeBluetoothRemoteGattDescriptor {
     // TODO(http://crbug.com/505554): Replace 'Object' with specific type when JNI fixed.
     @CalledByNative
     private static ChromeBluetoothRemoteGattDescriptor create(
-            long nativeBluetoothRemoteGattDescriptorAndroid,
-            Object bluetoothGattCarachteristicWrapper, Object chromeBluetoothDevice) {
+            long nativeBluetoothRemoteGattDescriptorAndroid, Object bluetoothGattDescriptorWrapper,
+            Object chromeCharacteristic) {
         return new ChromeBluetoothRemoteGattDescriptor(nativeBluetoothRemoteGattDescriptorAndroid,
-                (Wrappers.BluetoothGattDescriptorWrapper) bluetoothGattCarachteristicWrapper,
-                (ChromeBluetoothDevice) chromeBluetoothDevice);
+                (Wrappers.BluetoothGattDescriptorWrapper) bluetoothGattDescriptorWrapper,
+                (ChromeBluetoothRemoteGattCharacteristic) chromeCharacteristic);
     }
 
     // ---------------------------------------------------------------------------------------------
