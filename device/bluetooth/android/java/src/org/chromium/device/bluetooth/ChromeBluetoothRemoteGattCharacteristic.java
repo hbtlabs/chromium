@@ -146,7 +146,6 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             return false;
         }
 
-        // TODO confirm only after descriptor write succeeds.
         return true;
     }
 
