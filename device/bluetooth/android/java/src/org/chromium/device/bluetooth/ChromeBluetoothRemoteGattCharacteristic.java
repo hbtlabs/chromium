@@ -11,6 +11,7 @@ import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -173,16 +174,36 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         return true;
     }
 
+    // Implements BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated
+    @CalledByNative
+    private void ensureDescriptorsCreated() {
+        List<Wrappers.BluetoothGattDescriptorWrapper> descriptors =
+                mCharacteristic.getDescriptors();
+        for (Wrappers.BluetoothGattDescriptorWrapper descriptor : descriptors) {
+            // Create an adapter unique descriptor ID. getInstanceId only differs between
+            // descriptor instances with the same UUID on this service.
+            String descriptorInstanceId = mInstanceId + "/" + descriptor.getUuid().toString();
+            nativeCreateGattRemoteDescriptor(mNativeBluetoothRemoteGattServiceAndroid,
+                    descriptorInstanceId, descriptor, mChromeBluetoothDevice);
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------
     // BluetoothAdapterDevice C++ methods declared for access from java:
 
-    // Binds to BluetoothRemoteGattServiceAndroid::OnChanged.
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnChanged.
     native void nativeOnChanged(long nativeBluetoothRemoteGattCharacteristicAndroid, byte[] value);
 
-    // Binds to BluetoothRemoteGattServiceAndroid::OnRead.
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnRead.
     native void nativeOnRead(
             long nativeBluetoothRemoteGattCharacteristicAndroid, int status, byte[] value);
 
-    // Binds to BluetoothRemoteGattServiceAndroid::OnWrite.
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnWrite.
     native void nativeOnWrite(long nativeBluetoothRemoteGattCharacteristicAndroid, int status);
+
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::CreateGattRemoteDescriptor.
+    // TODO(http://crbug.com/505554): Replace 'Object' with specific type when JNI fixed.
+    private native void nativeCreateGattRemoteDescriptor(
+            long nativeBluetoothRemoteGattServiceAndroid, String instanceId,
+            Object bluetoothGattDescriptorWrapper, Object chromeBluetoothCharacteristic);
 }
