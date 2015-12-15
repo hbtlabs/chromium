@@ -71,7 +71,8 @@ bool BluetoothRemoteGattDescriptorAndroid::IsLocal() const {
 const std::vector<uint8>& BluetoothRemoteGattDescriptorAndroid::GetValue()
     const {
   NOTIMPLEMENTED();
-  return std::vector<uint8>();
+  static std::vector<uint8> empty_value;
+  return empty_value;
 }
 
 BluetoothGattCharacteristic*

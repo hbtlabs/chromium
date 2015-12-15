@@ -36,7 +36,7 @@ BluetoothRemoteGattCharacteristicAndroid::Create(
       Java_ChromeBluetoothRemoteGattCharacteristic_create(
           env, reinterpret_cast<intptr_t>(characteristic.get()),
           bluetooth_gatt_characteristic_wrapper,
-          base::android::ConvertUTF8ToJavaString(env, instanceId).obj(),
+          base::android::ConvertUTF8ToJavaString(env, instance_id).obj(),
           chrome_bluetooth_device));
 
   return characteristic;
