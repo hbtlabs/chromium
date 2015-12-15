@@ -12,6 +12,7 @@
 #include "base/message_loop/message_loop.h"
 #include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
+#include "device/bluetooth/bluetooth_remote_gatt_descriptor_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothRemoteGattCharacteristic_jni.h"
 
@@ -30,11 +31,13 @@ BluetoothRemoteGattCharacteristicAndroid::Create(
   scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> characteristic(
       new BluetoothRemoteGattCharacteristicAndroid(adapter, instanceId));
 
+  JNIEnv* env = AttachCurrentThread();
   characteristic->j_characteristic_.Reset(
       Java_ChromeBluetoothRemoteGattCharacteristic_create(
-          AttachCurrentThread(),
-          reinterpret_cast<intptr_t>(characteristic.get()),
-          bluetooth_gatt_characteristic_wrapper, chrome_bluetooth_device));
+          env, reinterpret_cast<intptr_t>(characteristic.get()),
+          bluetooth_gatt_characteristic_wrapper, 
+          base::android::ConvertUTF8ToJavaString(env, instanceId).obj(),
+          chrome_bluetooth_device));
 
   return characteristic;
 }
@@ -295,8 +298,8 @@ void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated() const 
     return;
 
   // Java call
-  Java_ChromeBluetoothRemoteGattService_ensureDescriptorsCreated(
-      AttachCurrentThread(), j_service_.obj());
+  Java_ChromeBluetoothRemoteGattCharacteristic_ensureDescriptorsCreated(
+      AttachCurrentThread(), j_characteristic_.obj());
 }
 
 }  // namespace device

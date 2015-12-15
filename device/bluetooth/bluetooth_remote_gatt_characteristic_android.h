@@ -6,6 +6,7 @@
 #define DEVICE_BLUETOOTH_BLUETOOTH_REMOTE_GATT_CHARACTERISTIC_ANDROID_H_
 
 #include "base/android/jni_android.h"
+#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
 

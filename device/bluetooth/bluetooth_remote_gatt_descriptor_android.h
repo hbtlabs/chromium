@@ -42,16 +42,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
   // BluetoothGattDescriptor interface:
-  virtual std::string GetIdentifier() override;
-  virtual BluetoothUUID GetUUID() override;
-  virtual bool IsLocal() override;
-  virtual const std::vector<uint8>& GetValue() override;
-  virtual BluetoothGattCharacteristic* GetCharacteristic() override;
-  virtual BluetoothGattCharacteristic::Permissions GetPermissions() override;
-  virtual void ReadRemoteDescriptor(
+  std::string GetIdentifier() const override;
+  BluetoothUUID GetUUID() const override;
+  bool IsLocal() const override;
+  const std::vector<uint8>& GetValue() const override;
+  BluetoothGattCharacteristic* GetCharacteristic() const override;
+  BluetoothGattCharacteristic::Permissions GetPermissions() const override;
+  void ReadRemoteDescriptor(
       const ValueCallback& callback,
       const ErrorCallback& error_callback) override;
-  virtual void WriteRemoteDescriptor(
+  void WriteRemoteDescriptor(
       const std::vector<uint8>& new_value,
       const base::Closure& callback,
       const ErrorCallback& error_callback) override;

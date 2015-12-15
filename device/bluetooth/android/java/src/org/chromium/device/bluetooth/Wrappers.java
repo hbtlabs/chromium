@@ -484,6 +484,25 @@ class Wrappers {
             return descriptorWrapper;
         }
 
+        public List<BluetoothGattDescriptorWrapper> getDescriptors() {
+            List<BluetoothGattDescriptor> descriptors = mCharacteristic.getDescriptors();
+
+            ArrayList<BluetoothGattDescriptorWrapper> descriptorsWrapped =
+                    new ArrayList<BluetoothGattDescriptorWrapper>(descriptors.size());
+            for (BluetoothGattDescriptor descriptor : descriptors) {
+                BluetoothGattDescriptorWrapper descriptorWrapper =
+                        mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
+                if (descriptorWrapper == null) {
+                    descriptorWrapper =
+                            new BluetoothGattDescriptorWrapper(descriptor);
+                    mDeviceWrapper.mDescriptorsToWrappers.put(
+                            descriptor, descriptorWrapper);
+                }
+                descriptorsWrapped.add(descriptorWrapper);
+            }
+            return descriptorsWrapped;
+        }
+
         public int getInstanceId() {
             return mCharacteristic.getInstanceId();
         }
@@ -513,6 +532,10 @@ class Wrappers {
 
         public BluetoothGattDescriptorWrapper(BluetoothGattDescriptor descriptor) {
             mDescriptor = descriptor;
+        }
+
+        public UUID getUuid() {
+            return mCharacteristic.getUuid();
         }
 
         public boolean setValue(byte[] value) {
