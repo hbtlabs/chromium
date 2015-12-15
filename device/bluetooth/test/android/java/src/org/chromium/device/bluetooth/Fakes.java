@@ -552,12 +552,12 @@ class Fakes {
                     fakeCharacteristic.mDescriptors) {
                 if (descriptor.getUuid().equals(uuid)) {
                     throw new IllegalArgumentException(
-                            "FakeBluetoothGattCharacteristic addDescriptor called with uuid '" + 
-                            uuidString + "' that has already been added to this characteristic.");
-
+                            "FakeBluetoothGattCharacteristic addDescriptor called with uuid '"
+                            + uuidString + "' that has already been added to this characteristic.");
                 }
             }
-            fakeCharacteristic.mDescriptors.add(new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid));
+            fakeCharacteristic.mDescriptors.add(
+                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid));
         }
 
         // -----------------------------------------------------------------------------------------
@@ -565,8 +565,7 @@ class Fakes {
 
         @Override
         public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
-            for (Wrappers.BluetoothGattDescriptorWrapper descriptor :
-                    mDescriptors) {
+            for (Wrappers.BluetoothGattDescriptorWrapper descriptor : mDescriptors) {
                 if (descriptor.getUuid().equals(uuid)) {
                     return descriptor;
                 }
@@ -609,8 +608,7 @@ class Fakes {
     /**
      * Fakes android.bluetooth.BluetoothGattDescriptor.
      */
-    static class FakeBluetoothGattDescriptor
-            extends Wrappers.BluetoothGattDescriptorWrapper {
+    static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
 

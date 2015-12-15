@@ -35,7 +35,7 @@ BluetoothRemoteGattCharacteristicAndroid::Create(
   characteristic->j_characteristic_.Reset(
       Java_ChromeBluetoothRemoteGattCharacteristic_create(
           env, reinterpret_cast<intptr_t>(characteristic.get()),
-          bluetooth_gatt_characteristic_wrapper, 
+          bluetooth_gatt_characteristic_wrapper,
           base::android::ConvertUTF8ToJavaString(env, instanceId).obj(),
           chrome_bluetooth_device));
 
@@ -290,10 +290,10 @@ void BluetoothRemoteGattCharacteristicAndroid::CreateGattRemoteDescriptor(
 BluetoothRemoteGattCharacteristicAndroid::
     BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
                                              const std::string& instanceId)
-    : adapter_(adapter), instance_id_(instanceId) {
-}
+    : adapter_(adapter), instance_id_(instanceId) {}
 
-void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated() const {
+void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated()
+    const {
   if (!descriptors_.empty())
     return;
 

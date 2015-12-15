@@ -32,8 +32,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
 
     private ChromeBluetoothRemoteGattCharacteristic(
             long nativeBluetoothRemoteGattCharacteristicAndroid,
-            Wrappers.BluetoothGattCharacteristicWrapper characteristicWrapper,
-            String instanceId,
+            Wrappers.BluetoothGattCharacteristicWrapper characteristicWrapper, String instanceId,
             ChromeBluetoothDevice chromeBluetoothDevice) {
         mNativeBluetoothRemoteGattCharacteristicAndroid =
                 nativeBluetoothRemoteGattCharacteristicAndroid;
@@ -90,12 +89,12 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     @CalledByNative
     private static ChromeBluetoothRemoteGattCharacteristic create(
             long nativeBluetoothRemoteGattCharacteristicAndroid,
-            Object bluetoothGattCharacteristicWrapper, String instanceId, Object chromeBluetoothDevice) {
+            Object bluetoothGattCharacteristicWrapper, String instanceId,
+            Object chromeBluetoothDevice) {
         return new ChromeBluetoothRemoteGattCharacteristic(
                 nativeBluetoothRemoteGattCharacteristicAndroid,
                 (Wrappers.BluetoothGattCharacteristicWrapper) bluetoothGattCharacteristicWrapper,
-                instanceId,
-                (ChromeBluetoothDevice) chromeBluetoothDevice);
+                instanceId, (ChromeBluetoothDevice) chromeBluetoothDevice);
     }
 
     // Implements BluetoothRemoteGattCharacteristicAndroid::GetUUID.

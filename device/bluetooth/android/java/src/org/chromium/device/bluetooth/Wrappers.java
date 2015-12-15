@@ -493,10 +493,8 @@ class Wrappers {
                 BluetoothGattDescriptorWrapper descriptorWrapper =
                         mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
                 if (descriptorWrapper == null) {
-                    descriptorWrapper =
-                            new BluetoothGattDescriptorWrapper(descriptor);
-                    mDeviceWrapper.mDescriptorsToWrappers.put(
-                            descriptor, descriptorWrapper);
+                    descriptorWrapper = new BluetoothGattDescriptorWrapper(descriptor);
+                    mDeviceWrapper.mDescriptorsToWrappers.put(descriptor, descriptorWrapper);
                 }
                 descriptorsWrapped.add(descriptorWrapper);
             }
