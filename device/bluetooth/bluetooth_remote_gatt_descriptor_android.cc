@@ -23,13 +23,13 @@ namespace device {
 scoped_ptr<BluetoothRemoteGattDescriptorAndroid>
 BluetoothRemoteGattDescriptorAndroid::Create(
     BluetoothAdapterAndroid* adapter,
-    const std::string& instanceId,
+    const std::string& instance_id,
     jobject /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
     jobject /* ChromeBluetoothCharacteristic */
     chrome_bluetooth_characteristic) {
   scoped_ptr<BluetoothRemoteGattDescriptorAndroid> descriptor(
-      new BluetoothRemoteGattDescriptorAndroid(adapter, instanceId));
+      new BluetoothRemoteGattDescriptorAndroid(adapter, instance_id));
 
   descriptor->j_descriptor_.Reset(
       Java_ChromeBluetoothRemoteGattDescriptor_create(
@@ -107,7 +107,7 @@ void BluetoothRemoteGattDescriptorAndroid::WriteRemoteDescriptor(
 
 BluetoothRemoteGattDescriptorAndroid::BluetoothRemoteGattDescriptorAndroid(
     BluetoothAdapterAndroid* adapter,
-    const std::string& instanceId)
-    : adapter_(adapter), instance_id_(instanceId) {}
+    const std::string& instance_id)
+    : adapter_(adapter), instance_id_(instance_id) {}
 
 }  // namespace device

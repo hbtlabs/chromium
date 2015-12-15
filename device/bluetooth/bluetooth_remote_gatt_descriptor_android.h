@@ -66,6 +66,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
   // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattDescriptor.
   base::android::ScopedJavaGlobalRef<jobject> j_descriptor_;
 
+  // Adapter unique instance ID.
+  std::string instance_id_;
+
   DISALLOW_COPY_AND_ASSIGN(BluetoothRemoteGattDescriptorAndroid);
 };
 
