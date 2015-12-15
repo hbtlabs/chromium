@@ -30,7 +30,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
       const std::string& instanceId,
       jobject /* BluetoothGattDescriptorWrapper */
       bluetooth_gatt_descriptor_wrapper,
-      jobject  // ChromeBluetoothCharacteristic
+      jobject /* ChromeBluetoothCharacteristic */
       chrome_bluetooth_characteristic);
 
   ~BluetoothRemoteGattDescriptorAndroid() override;

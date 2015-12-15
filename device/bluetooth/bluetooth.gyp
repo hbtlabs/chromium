@@ -89,6 +89,8 @@
         'bluetooth_low_energy_win.h',
         'bluetooth_remote_gatt_characteristic_android.cc',
         'bluetooth_remote_gatt_characteristic_android.h',
+        'bluetooth_remote_gatt_descriptor_android.cc',
+        'bluetooth_remote_gatt_descriptor_android.h',
         'bluetooth_remote_gatt_service_android.cc',
         'bluetooth_remote_gatt_service_android.h',
         'bluetooth_rfcomm_channel_mac.mm',

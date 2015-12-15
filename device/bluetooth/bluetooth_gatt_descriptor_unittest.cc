@@ -17,9 +17,9 @@
 namespace device {
 
 #if defined(OS_ANDROID) || defined(OS_MACOSX)
-class BluetoothGattCharacteristicTest : public BluetoothTest {
+class BluetoothGattDescriptorTest : public BluetoothTest {
  public:
-  // Creates adapter_, device_, service_, characteristic1_, & characteristic2_.
+  // Creates adapter_, device_, service_, characteristic_, descriptor_.
   void FakeCharacteristicBoilerplate() {
     InitWithFakeAdapter();
     StartLowEnergyDiscoverySession();
@@ -34,85 +34,23 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     ASSERT_EQ(1u, device_->GetGattServices().size());
     service_ = device_->GetGattServices()[0];
     SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
-    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
-    ASSERT_EQ(2u, service_->GetCharacteristics().size());
-    characteristic1_ = service_->GetCharacteristics()[0];
-    characteristic2_ = service_->GetCharacteristics()[1];
+    ASSERT_EQ(1u, service_->GetCharacteristics().size());
+    characteristic_ = service_->GetCharacteristics()[0];
+    SimulateGattDescriptor(service_, uuid);
+    ASSERT_EQ(1u, characteristic_ ->GetDescriptors().size());
+    descriptor_ = characteristic_ ->GetDescriptors()[0];
     ResetEventCounts();
   }
 
   BluetoothDevice* device_ = nullptr;
   BluetoothGattService* service_ = nullptr;
-  BluetoothGattCharacteristic* characteristic1_ = nullptr;
-  BluetoothGattCharacteristic* characteristic2_ = nullptr;
+  BluetoothGattCharacteristic* characteristic_ = nullptr;
+  BluetoothGattDescriptor* descriptor_ = nullptr;
 };
 #endif
 
 #if defined(OS_ANDROID)
-TEST_F(BluetoothGattCharacteristicTest, GetIdentifier) {
-  InitWithFakeAdapter();
-  StartLowEnergyDiscoverySession();
-  // 2 devices to verify unique IDs across them.
-  BluetoothDevice* device1 = DiscoverLowEnergyDevice(3);
-  BluetoothDevice* device2 = DiscoverLowEnergyDevice(4);
-  device1->CreateGattConnection(GetGattConnectionCallback(Call::EXPECTED),
-                                GetConnectErrorCallback(Call::NOT_EXPECTED));
-  device2->CreateGattConnection(GetGattConnectionCallback(Call::EXPECTED),
-                                GetConnectErrorCallback(Call::NOT_EXPECTED));
-  SimulateGattConnection(device1);
-  SimulateGattConnection(device2);
-
-  // 3 services (all with same UUID).
-  //   1 on the first device (to test characteristic instances across devices).
-  //   2 on the second device (to test same device, multiple service instances).
-  std::vector<std::string> services;
-  std::string uuid = "00000000-0000-1000-8000-00805f9b34fb";
-  services.push_back(uuid);
-  SimulateGattServicesDiscovered(device1, services);
-  services.push_back(uuid);
-  SimulateGattServicesDiscovered(device2, services);
-  BluetoothGattService* service1 = device1->GetGattServices()[0];
-  BluetoothGattService* service2 = device2->GetGattServices()[0];
-  BluetoothGattService* service3 = device2->GetGattServices()[1];
-  // 6 characteristics (same UUID), 2 on each service.
-  SimulateGattCharacteristic(service1, uuid, /* properties */ 0);
-  SimulateGattCharacteristic(service1, uuid, /* properties */ 0);
-  SimulateGattCharacteristic(service2, uuid, /* properties */ 0);
-  SimulateGattCharacteristic(service2, uuid, /* properties */ 0);
-  SimulateGattCharacteristic(service3, uuid, /* properties */ 0);
-  SimulateGattCharacteristic(service3, uuid, /* properties */ 0);
-  BluetoothGattCharacteristic* char1 = service1->GetCharacteristics()[0];
-  BluetoothGattCharacteristic* char2 = service1->GetCharacteristics()[1];
-  BluetoothGattCharacteristic* char3 = service2->GetCharacteristics()[0];
-  BluetoothGattCharacteristic* char4 = service2->GetCharacteristics()[1];
-  BluetoothGattCharacteristic* char5 = service3->GetCharacteristics()[0];
-  BluetoothGattCharacteristic* char6 = service3->GetCharacteristics()[1];
-
-  // All IDs are unique, even though they have the same UUID.
-  EXPECT_NE(char1->GetIdentifier(), char2->GetIdentifier());
-  EXPECT_NE(char1->GetIdentifier(), char3->GetIdentifier());
-  EXPECT_NE(char1->GetIdentifier(), char4->GetIdentifier());
-  EXPECT_NE(char1->GetIdentifier(), char5->GetIdentifier());
-  EXPECT_NE(char1->GetIdentifier(), char6->GetIdentifier());
-
-  EXPECT_NE(char2->GetIdentifier(), char3->GetIdentifier());
-  EXPECT_NE(char2->GetIdentifier(), char4->GetIdentifier());
-  EXPECT_NE(char2->GetIdentifier(), char5->GetIdentifier());
-  EXPECT_NE(char2->GetIdentifier(), char6->GetIdentifier());
-
-  EXPECT_NE(char3->GetIdentifier(), char4->GetIdentifier());
-  EXPECT_NE(char3->GetIdentifier(), char5->GetIdentifier());
-  EXPECT_NE(char3->GetIdentifier(), char6->GetIdentifier());
-
-  EXPECT_NE(char4->GetIdentifier(), char5->GetIdentifier());
-  EXPECT_NE(char4->GetIdentifier(), char6->GetIdentifier());
-
-  EXPECT_NE(char5->GetIdentifier(), char6->GetIdentifier());
-}
-#endif  // defined(OS_ANDROID)
-
-#if defined(OS_ANDROID)
-TEST_F(BluetoothGattCharacteristicTest, GetUUID) {
+TEST_F(BluetoothGattDescriptorTest, GetUUID) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
   BluetoothDevice* device = DiscoverLowEnergyDevice(3);
@@ -122,30 +60,30 @@ TEST_F(BluetoothGattCharacteristicTest, GetUUID) {
   std::vector<std::string> services;
   services.push_back("00000000-0000-1000-8000-00805f9b34fb");
   SimulateGattServicesDiscovered(device, services);
+  ASSERT_EQ(1u, device->GetGattServices().size());
   BluetoothGattService* service = device->GetGattServices()[0];
 
-  // Create 3 characteristics. Two of them are duplicates.
+  SimulateGattCharacteristic(service, "00000000-0000-1000-8000-00805f9b34fb", /* properties */ 0);
+  ASSERT_EQ(1u, service->GetCharacteristics().size());
+  BluetoothGattCharacteristic* characteristic = service_->GetCharacteristics()[0];
+
+  // Create 2 descriptors. Two of them are duplicates.
   std::string uuid_str1("11111111-0000-1000-8000-00805f9b34fb");
   std::string uuid_str2("22222222-0000-1000-8000-00805f9b34fb");
   BluetoothUUID uuid1(uuid_str1);
   BluetoothUUID uuid2(uuid_str2);
-  SimulateGattCharacteristic(service, uuid_str1, /* properties */ 0);
-  SimulateGattCharacteristic(service, uuid_str2, /* properties */ 0);
-  SimulateGattCharacteristic(service, uuid_str2, /* properties */ 0);
-  BluetoothGattCharacteristic* char1 = service->GetCharacteristics()[0];
-  BluetoothGattCharacteristic* char2 = service->GetCharacteristics()[1];
-  BluetoothGattCharacteristic* char3 = service->GetCharacteristics()[2];
+  SimulateGattDescriptor(characteristic, uuid_str1);
+  SimulateGattDescriptor(characteristic, uuid_str2);
+  ASSERT_EQ(1u, characteristic->GetDescriptors().size());
+  BluetoothGattDescriptor* descriptor1 = service->GetDescriptors()[0];
+  BluetoothGattDescriptor* descriptor2 = service->GetDescriptors()[1];
 
-  // Swap as needed to have char1 point to the the characteristic with uuid1.
-  if (char2->GetUUID() == uuid1) {
-    std::swap(char1, char2);
-  } else if (char3->GetUUID() == uuid1) {
-    std::swap(char1, char3);
-  }
+  // Swap as needed to have descriptor1 be the one with uuid1.
+  if (descriptor2->GetUUID() == uuid1) 
+    std::swap(descriptor1, descriptor2);
 
-  EXPECT_EQ(uuid1, char1->GetUUID());
-  EXPECT_EQ(uuid2, char2->GetUUID());
-  EXPECT_EQ(uuid2, char3->GetUUID());
+  EXPECT_EQ(uuid1, descriptor1->GetUUID());
+  EXPECT_EQ(uuid2, descriptor2->GetUUID());
 }
 #endif  // defined(OS_ANDROID)
 
