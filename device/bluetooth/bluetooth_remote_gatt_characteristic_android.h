@@ -99,7 +99,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
 
  private:
   BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-const std::string& instance_id);
+                                           const std::string& instance_id);
 
   // Populates |descriptors_| from Java objects if necessary.
   void EnsureDescriptorsCreated() const;
