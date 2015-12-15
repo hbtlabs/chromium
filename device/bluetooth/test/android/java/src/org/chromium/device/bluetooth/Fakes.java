@@ -361,17 +361,6 @@ class Fakes {
                     mDevice.mAdapter.mNativeBluetoothTestAndroid, characteristic.getValue());
             return true;
         }
-
-        @Override
-        boolean writeDescriptor(Wrappers.BluetoothGattDescriptorWrapper descriptor) {
-            if (mWriteDescriptorWillFailSynchronouslyOnce) {
-                mWriteDescriptorWillFailSynchronouslyOnce = false;
-                return false;
-            }
-            nativeOnFakeBluetoothGattWriteDescriptor(
-                    mDevice.mAdapter.mNativeBluetoothTestAndroid, descriptor.getValue());
-            return true;
-        }
     }
 
     /**
@@ -564,7 +553,7 @@ class Fakes {
         // Wrappers.BluetoothGattCharacteristicWrapper overrides:
 
         @Override
-        public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
+        public Wrappers.BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
             for (Wrappers.BluetoothGattDescriptorWrapper descriptor : mDescriptors) {
                 if (descriptor.getUuid().equals(uuid)) {
                     return descriptor;
