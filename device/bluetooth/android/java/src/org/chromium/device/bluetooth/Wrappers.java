@@ -535,7 +535,7 @@ class Wrappers {
         }
 
         public UUID getUuid() {
-            return mCharacteristic.getUuid();
+            return mDescriptor.getUuid();
         }
 
         public boolean setValue(byte[] value) {
