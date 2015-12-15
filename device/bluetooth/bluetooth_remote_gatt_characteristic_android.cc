@@ -24,12 +24,12 @@ namespace device {
 scoped_ptr<BluetoothRemoteGattCharacteristicAndroid>
 BluetoothRemoteGattCharacteristicAndroid::Create(
     BluetoothAdapterAndroid* adapter,
-    const std::string& instanceId,
+    const std::string& instance_id,
     jobject /* BluetoothGattCharacteristicWrapper */
     bluetooth_gatt_characteristic_wrapper,
     jobject /* ChromeBluetoothDevice */ chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> characteristic(
-      new BluetoothRemoteGattCharacteristicAndroid(adapter, instanceId));
+      new BluetoothRemoteGattCharacteristicAndroid(adapter, instance_id));
 
   JNIEnv* env = AttachCurrentThread();
   characteristic->j_characteristic_.Reset(
@@ -289,8 +289,8 @@ void BluetoothRemoteGattCharacteristicAndroid::CreateGattRemoteDescriptor(
 
 BluetoothRemoteGattCharacteristicAndroid::
     BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                             const std::string& instanceId)
-    : adapter_(adapter), instance_id_(instanceId) {}
+                                             const std::string& instance_id)
+    : adapter_(adapter), instance_id_(instance_id) {}
 
 void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated()
     const {

@@ -34,7 +34,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
   // to |bluetooth_gatt_characteristic_wrapper|.
   static scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> Create(
       BluetoothAdapterAndroid* adapter,
-      const std::string& instanceId,
+      const std::string& instance_id,
       jobject /* BluetoothGattCharacteristicWrapper */
       bluetooth_gatt_characteristic_wrapper,
       jobject /* ChromeBluetoothDevice */ chrome_bluetooth_device);
@@ -99,7 +99,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
 
  private:
   BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                           const std::string& instanceId);
+const std::string& instance_id);
 
   // Populates |descriptors_| from Java objects if necessary.
   void EnsureDescriptorsCreated() const;
