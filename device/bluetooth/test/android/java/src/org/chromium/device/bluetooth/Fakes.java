@@ -531,7 +531,7 @@ class Fakes {
         // Create a descriptor and add it to this characteristic.
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void addDescriptor(
-                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, String uuidString, int properties) {
+                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, String uuidString) {
             FakeBluetoothGattCharacteristic fakeCharacteristic =
                     (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
             UUID uuid = UUID.fromString(uuidString);
@@ -546,7 +546,7 @@ class Fakes {
                 }
             }
             fakeCharacteristic.mDescriptors.add(
-                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid, properties));
+                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid));
         }
 
         // -----------------------------------------------------------------------------------------

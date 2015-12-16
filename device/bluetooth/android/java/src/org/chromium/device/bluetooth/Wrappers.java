@@ -532,10 +532,6 @@ class Wrappers {
             mDescriptor = descriptor;
         }
 
-        public int getProperties() {
-            return mCharacteristic.getProperties();
-        }
-
         public UUID getUuid() {
             return mDescriptor.getUuid();
         }

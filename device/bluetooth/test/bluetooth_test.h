@@ -176,8 +176,7 @@ class BluetoothTestBase : public testing::Test {
 
   // Simulates a Descriptor on a service.
   virtual void SimulateGattDescriptor(BluetoothGattCharacteristic* characteristic,
-                                          const std::string& uuid,
-                                          int properties) {}
+                                          const std::string& uuid) {}
 
   // Simulates a Descriptor Write operation succeeding, returning |value|.
   // If |descriptor| is null, acts upon the descriptor provided to
