@@ -276,6 +276,19 @@ void BluetoothTestAndroid::
       characteristic_android->GetJavaObject().obj());
 }
 
+void BluetoothTestAndroid::SimulateGattDescriptor(
+    BluetoothGattCharacteristic* characteristic,
+    const std::string& uuid,
+    int properties) {
+  BluetoothRemoteGattCharacteristicAndroid* characteristic_android =
+      static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
+  JNIEnv* env = base::android::AttachCurrentThread();
+
+  Java_FakeBluetoothGattCharacteristic_addDescriptor(
+      env, characteristic_android->GetJavaObject().obj(),
+      base::android::ConvertUTF8ToJavaString(env, uuid).obj(), properties);
+}
+
 void BluetoothTestAndroid::SimulateGattDescriptorWrite(
     BluetoothGattDescriptor* descriptor) {
   BluetoothRemoteGattDescriptorAndroid* descriptor_android =

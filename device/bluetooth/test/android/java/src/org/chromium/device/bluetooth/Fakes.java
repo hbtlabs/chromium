@@ -433,7 +433,7 @@ class Fakes {
 
         public FakeBluetoothGattCharacteristic(
                 FakeBluetoothGattService service, int instanceId, int properties, UUID uuid) {
-            super(null);
+            super(null, null);
             mService = service;
             mInstanceId = instanceId;
             mProperties = properties;
@@ -531,7 +531,7 @@ class Fakes {
         // Create a descriptor and add it to this characteristic.
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void addDescriptor(
-                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, String uuidString) {
+                ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, String uuidString, int properties) {
             FakeBluetoothGattCharacteristic fakeCharacteristic =
                     (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
             UUID uuid = UUID.fromString(uuidString);
@@ -546,7 +546,7 @@ class Fakes {
                 }
             }
             fakeCharacteristic.mDescriptors.add(
-                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid));
+                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid, properties));
         }
 
         // -----------------------------------------------------------------------------------------
@@ -600,20 +600,35 @@ class Fakes {
     static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
+        final int mProperties;
+        byte[] mValue;
 
         public FakeBluetoothGattDescriptor(
-                FakeBluetoothGattCharacteristic characteristic, UUID uuid) {
+                FakeBluetoothGattCharacteristic characteristic, UUID uuid, int properties) {
             super(null);
             mCharacteristic = characteristic;
             mUuid = uuid;
+            mProperties = properties;
+            mValue = new byte[0];
         }
 
         // -----------------------------------------------------------------------------------------
         // Wrappers.BluetoothGattDescriptorWrapper overrides:
 
         @Override
+        public int getProperties() {
+            return mProperties;
+        }
+
+        @Override
         public UUID getUuid() {
             return mUuid;
+        }
+
+        @Override
+        public boolean setValue(byte[] value) {
+            mValue = value;
+            return true;
         }
     }
 

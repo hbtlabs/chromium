@@ -174,6 +174,11 @@ class BluetoothTestBase : public testing::Test {
   virtual void SimulateGattCharacteristicWriteWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) {}
 
+  // Simulates a Descriptor on a service.
+  virtual void SimulateGattDescriptor(BluetoothGattCharacteristic* characteristic,
+                                          const std::string& uuid,
+                                          int properties) {}
+
   // Simulates a Descriptor Write operation succeeding, returning |value|.
   // If |descriptor| is null, acts upon the descriptor provided to
   // RememberDescriptorForSubsequentAction.
