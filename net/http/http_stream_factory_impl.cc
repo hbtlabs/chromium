@@ -14,8 +14,13 @@
 #include "net/http/http_stream_factory_impl_job.h"
 #include "net/http/http_stream_factory_impl_request.h"
 #include "net/log/net_log.h"
+#include "net/quic/quic_server_id.h"
 #include "net/spdy/spdy_http_stream.h"
 #include "url/gurl.h"
+
+#if defined(ENABLE_BIDIRECTIONAL_STREAM)
+#include "net/spdy/bidirectional_stream_spdy_job.h"
+#endif
 
 namespace net {
 
@@ -75,6 +80,34 @@ HttpStreamRequest* HttpStreamFactoryImpl::RequestWebSocketHandshakeStream(
                                net_log);
 }
 
+HttpStreamRequest* HttpStreamFactoryImpl::RequestBidirectionalStreamJob(
+    const HttpRequestInfo& request_info,
+    RequestPriority priority,
+    const SSLConfig& server_ssl_config,
+    const SSLConfig& proxy_ssl_config,
+    HttpStreamRequest::Delegate* delegate,
+    const BoundNetLog& net_log) {
+  DCHECK(!for_websockets_);
+  DCHECK(request_info.url.SchemeIs(url::kHttpsScheme));
+
+// TODO(xunjieli): Create QUIC's version of BidirectionalStreamJob.
+#if defined(ENABLE_BIDIRECTIONAL_STREAM)
+  Request* request =
+      new Request(request_info.url, this, delegate, nullptr, net_log,
+                  Request::BIDIRECTIONAL_STREAM_SPDY_JOB);
+  Job* job = new Job(this, session_, request_info, priority, server_ssl_config,
+                     proxy_ssl_config, net_log.net_log());
+  request->AttachJob(job);
+
+  job->Start(request);
+  return request;
+
+#else
+  DCHECK(false);
+  return nullptr;
+#endif
+}
+
 HttpStreamRequest* HttpStreamFactoryImpl::RequestStreamInternal(
     const HttpRequestInfo& request_info,
     RequestPriority priority,
@@ -84,17 +117,16 @@ HttpStreamRequest* HttpStreamFactoryImpl::RequestStreamInternal(
     WebSocketHandshakeStreamBase::CreateHelper*
         websocket_handshake_stream_create_helper,
     const BoundNetLog& net_log) {
-  Request* request = new Request(request_info.url,
-                                 this,
-                                 delegate,
+  Request* request = new Request(request_info.url, this, delegate,
                                  websocket_handshake_stream_create_helper,
-                                 net_log);
+                                 net_log, Request::HTTP_STREAM);
   Job* job = new Job(this, session_, request_info, priority, server_ssl_config,
                      proxy_ssl_config, net_log.net_log());
   request->AttachJob(job);
 
   const AlternativeServiceVector alternative_service_vector =
-      GetAlternativeServicesFor(request_info.url);
+      GetAlternativeServicesFor(request_info.url, delegate);
+
   if (!alternative_service_vector.empty()) {
     // TODO(bnc): Pass on multiple alternative services to Job.
     const AlternativeService& alternative_service =
@@ -129,10 +161,16 @@ void HttpStreamFactoryImpl::PreconnectStreams(
   DCHECK(!for_websockets_);
   AlternativeService alternative_service;
   AlternativeServiceVector alternative_service_vector =
-      GetAlternativeServicesFor(request_info.url);
+      GetAlternativeServicesFor(request_info.url, nullptr);
   if (!alternative_service_vector.empty()) {
     // TODO(bnc): Pass on multiple alternative services to Job.
     alternative_service = alternative_service_vector[0];
+    if (session_->params().quic_disable_preconnect_if_0rtt &&
+        alternative_service.protocol == QUIC &&
+        session_->quic_stream_factory()->ZeroRTTEnabledFor(QuicServerId(
+            alternative_service.host_port_pair(), request_info.privacy_mode))) {
+      return;
+    }
   }
 
   // Due to how the socket pools handle priorities and idle sockets, only IDLE
@@ -151,7 +189,8 @@ const HostMappingRules* HttpStreamFactoryImpl::GetHostMappingRules() const {
 }
 
 AlternativeServiceVector HttpStreamFactoryImpl::GetAlternativeServicesFor(
-    const GURL& original_url) {
+    const GURL& original_url,
+    HttpStreamRequest::Delegate* delegate) {
   if (original_url.SchemeIs("ftp"))
     return AlternativeServiceVector();
 
@@ -163,6 +202,9 @@ AlternativeServiceVector HttpStreamFactoryImpl::GetAlternativeServicesFor(
   if (alternative_service_vector.empty())
     return AlternativeServiceVector();
 
+  bool quic_advertised = false;
+  bool quic_all_broken = true;
+
   const bool enable_different_host =
       session_->params().use_alternative_services;
 
@@ -170,6 +212,8 @@ AlternativeServiceVector HttpStreamFactoryImpl::GetAlternativeServicesFor(
   for (const AlternativeService& alternative_service :
        alternative_service_vector) {
     DCHECK(IsAlternateProtocolValid(alternative_service.protocol));
+    if (!quic_advertised && alternative_service.protocol == QUIC)
+      quic_advertised = true;
     if (http_server_properties.IsAlternativeServiceBroken(
             alternative_service)) {
       HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_BROKEN);
@@ -205,18 +249,20 @@ AlternativeServiceVector HttpStreamFactoryImpl::GetAlternativeServicesFor(
     }
 
     DCHECK_EQ(QUIC, alternative_service.protocol);
+    quic_all_broken = false;
     if (!session_->params().enable_quic)
       continue;
 
     if (session_->quic_stream_factory()->IsQuicDisabled(origin.port()))
       continue;
 
-    if (!original_url.SchemeIs("https")) {
+    if (!original_url.SchemeIs("https"))
       continue;
-    }
 
     enabled_alternative_service_vector.push_back(alternative_service);
   }
+  if (quic_advertised && quic_all_broken && delegate != nullptr)
+    delegate->OnQuicBroken();
   return enabled_alternative_service_vector;
 }
 
@@ -259,12 +305,18 @@ void HttpStreamFactoryImpl::OnNewSpdySessionReady(
       // TODO(ricea): Restore this code path when WebSocket over SPDY
       // implementation is ready.
       NOTREACHED();
+    } else if (request->for_bidirectional()) {
+#if defined(ENABLE_BIDIRECTIONAL_STREAM)
+      request->OnBidirectionalStreamJobReady(
+          nullptr, used_ssl_config, used_proxy_info,
+          new BidirectionalStreamSpdyJob(spdy_session));
+#else
+      DCHECK(false);
+#endif
     } else {
       bool use_relative_url = direct || request->url().SchemeIs("https");
       request->OnStreamReady(
-          NULL,
-          used_ssl_config,
-          used_proxy_info,
+          nullptr, used_ssl_config, used_proxy_info,
           new SpdyHttpStream(spdy_session, use_relative_url));
     }
   }

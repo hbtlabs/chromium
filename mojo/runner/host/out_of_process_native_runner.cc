@@ -4,6 +4,10 @@
 
 #include "mojo/runner/host/out_of_process_native_runner.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
@@ -28,6 +32,7 @@ void OutOfProcessNativeRunner::Start(
     const base::FilePath& app_path,
     bool start_sandboxed,
     InterfaceRequest<Application> application_request,
+    const base::Callback<void(base::ProcessId)>& pid_available_callback,
     const base::Closure& app_completed_callback) {
   app_path_ = app_path;
 
@@ -36,10 +41,10 @@ void OutOfProcessNativeRunner::Start(
 
   child_process_host_.reset(
       new ChildProcessHost(launch_process_runner_, start_sandboxed, app_path));
-  child_process_host_->Start();
+  child_process_host_->Start(pid_available_callback);
 
   child_process_host_->StartApp(
-      application_request.Pass(),
+      std::move(application_request),
       base::Bind(&OutOfProcessNativeRunner::AppCompleted,
                  base::Unretained(this)));
 }
@@ -47,9 +52,9 @@ void OutOfProcessNativeRunner::Start(
 void OutOfProcessNativeRunner::InitHost(
     ScopedHandle channel,
     InterfaceRequest<Application> application_request) {
-  child_process_host_.reset(new ChildProcessHost(channel.Pass()));
+  child_process_host_.reset(new ChildProcessHost(std::move(channel)));
   child_process_host_->StartApp(
-      application_request.Pass(),
+      std::move(application_request),
       base::Bind(&OutOfProcessNativeRunner::AppCompleted,
                  base::Unretained(this)));
 }

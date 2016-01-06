@@ -1,5 +1,4 @@
-{% from 'conversions.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
-
+{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_api_experiment %}
 
 {##############################################################################}
 {% macro generate_method(method, world_suffix) %}
@@ -511,6 +510,9 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% if method.deprecate_as %}
     UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
     {% endif %}
+    {% if method.is_api_experiment_enabled %}
+    {{check_api_experiment(method) | indent}}
+    {% endif %}
     {% endif %}{# not method.overloads #}
     {% if world_suffix in method.activity_logging_world_list %}
     ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
@@ -591,10 +593,10 @@ bool {{v8_class}}::PrivateScript::{{method.name}}Method({{method.argument_declar
     v8::HandleScope handleScope(toIsolate(frame));
     ScriptForbiddenScope::AllowUserAgentScript script;
     ScriptState* scriptState = ScriptState::forWorld(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return false;
     ScriptState* scriptStateInUserScript = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptStateInUserScript)
         return false;
 
     ScriptState::Scope scope(scriptState);
@@ -673,7 +675,7 @@ v8SetReturnValue(info, wrapper);
 
 {##############################################################################}
 {% macro method_configuration(method) %}
-{% from 'conversions.cpp' import property_location %}
+{% from 'utilities.cpp' import property_location %}
 {% set method_callback =
        '%sV8Internal::%sMethodCallback' % (cpp_class_or_partial, method.name) %}
 {% set method_callback_for_main_world =

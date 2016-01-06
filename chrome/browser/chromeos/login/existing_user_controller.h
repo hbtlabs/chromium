@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_EXISTING_USER_CONTROLLER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_EXISTING_USER_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -92,7 +94,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void SetDisplayEmail(const std::string& email) override;
   void ShowWrongHWIDScreen() override;
   void Signout() override;
-  bool IsUserWhitelisted(const std::string& user_id) override;
+  bool IsUserWhitelisted(const AccountId& account_id) override;
 
   // content::NotificationObserver implementation.
   void Observe(int type,

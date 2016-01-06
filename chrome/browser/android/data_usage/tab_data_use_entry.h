@@ -16,6 +16,8 @@ namespace chrome {
 
 namespace android {
 
+class DataUseTabModel;
+
 // TabDataUseTrackingSession maintains the information about a single tracking
 // session within a browser tab.
 struct TabDataUseTrackingSession {
@@ -38,7 +40,7 @@ struct TabDataUseTrackingSession {
 // single browser tab.
 class TabDataUseEntry {
  public:
-  TabDataUseEntry();
+  explicit TabDataUseEntry(DataUseTabModel* tab_model);
 
   TabDataUseEntry(const TabDataUseEntry& other);
 
@@ -81,25 +83,25 @@ class TabDataUseEntry {
   // time will be null if no tracking session was ever started or ended.
   const base::TimeTicks GetLatestStartOrEndTime() const;
 
+  // Returns the tracking label for the active tracking session. Empty string is
+  // returned if tracking session is not active.
+  const std::string GetActiveTrackingSessionLabel() const;
+
+  bool is_custom_tab_package_match() const {
+    return is_custom_tab_package_match_;
+  }
+
+  void set_custom_tab_package_match(bool is_custom_tab_package_match);
+
  private:
   friend class TabDataUseEntryTest;
-  friend class MockTabDataUseEntryTest;
-  FRIEND_TEST_ALL_PREFIXES(TabDataUseEntryTest, SingleTabSessionCloseEvent);
   FRIEND_TEST_ALL_PREFIXES(TabDataUseEntryTest, MultipleTabSessionCloseEvent);
-  FRIEND_TEST_ALL_PREFIXES(TabDataUseEntryTest, EndTrackingWithLabel);
-  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEvent);
+  FRIEND_TEST_ALL_PREFIXES(TabDataUseEntryTest, SingleTabSessionCloseEvent);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
                            ExpiredInactiveTabEntryRemovaltimeHistogram);
-  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
-                           ExpiredActiveTabEntryRemovaltimeHistogram);
-  FRIEND_TEST_ALL_PREFIXES(MockTabDataUseEntryTest, CompactTabSessionHistory);
-  FRIEND_TEST_ALL_PREFIXES(MockTabDataUseEntryTest,
-                           OldInactiveSessionRemovaltimeHistogram);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEvent);
 
   typedef std::deque<TabDataUseTrackingSession> TabSessions;
-
-  // Virtualized for unit test support.
-  virtual base::TimeTicks Now() const;
 
   // Compacts the history of tracking sessions by removing oldest sessions to
   // keep the size of |sessions_| within |kMaxSessionsPerTab| entries.
@@ -114,13 +116,11 @@ class TabDataUseEntry {
   // the tab is still open.
   base::TimeTicks tab_close_time_;
 
-  // Maximum number of tracking sessions to maintain per tab.
-  const size_t max_sessions_per_tab_;
+  // True if tracking was started in a custom tab due to package name match.
+  bool is_custom_tab_package_match_;
 
-  // Expiration duration for a closed tab entry and an open tab entry
-  // respectively.
-  const base::TimeDelta closed_tab_expiration_duration_;
-  const base::TimeDelta open_tab_expiration_duration_;
+  // Pointer to the DataUseTabModel that owns |this|.
+  const DataUseTabModel* tab_model_;
 };
 
 }  // namespace android

@@ -5,7 +5,9 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 
 #include <algorithm>
+#include <utility>
 
+#include "build/build_config.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -330,7 +332,7 @@ void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
 
 void BubbleFrameView::SetBubbleBorder(scoped_ptr<BubbleBorder> border) {
   bubble_border_ = border.get();
-  SetBorder(border.Pass());
+  SetBorder(std::move(border));
 
   // Update the background, which relies on the border.
   set_background(new views::BubbleBackground(bubble_border_));

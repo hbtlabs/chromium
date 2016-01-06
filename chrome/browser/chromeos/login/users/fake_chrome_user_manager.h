@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/user_manager_interface.h"
@@ -62,11 +63,6 @@ class FakeChromeUserManager : public user_manager::FakeUserManager,
   void RemoveUser(const AccountId& account_id,
                   user_manager::RemoveUserDelegate* delegate) override;
   void RemoveUserFromList(const AccountId& account_id) override;
-  bool FindKnownUserPrefs(const AccountId& account_id,
-                          const base::DictionaryValue** out_value) override;
-  void UpdateKnownUserPrefs(const AccountId& account_id,
-                            const base::DictionaryValue& values,
-                            bool clear) override;
 
   void set_owner_id(const AccountId& owner_account_id) {
     owner_account_id_ = owner_account_id;

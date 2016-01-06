@@ -4,6 +4,9 @@
 
 #include "chrome/browser/media/router/media_router_mojo_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -44,7 +47,7 @@ ConvertToPresentationSessionMessage(interfaces::RouteMessagePtr input) {
       output.reset(new content::PresentationSessionMessage(
           content::PresentationMessageType::TEXT));
       input->message.Swap(&output->message);
-      return output.Pass();
+      return output;
     }
     case interfaces::RouteMessage::Type::TYPE_BINARY: {
       DCHECK(!input->data.is_null());
@@ -53,12 +56,12 @@ ConvertToPresentationSessionMessage(interfaces::RouteMessagePtr input) {
           content::PresentationMessageType::ARRAY_BUFFER));
       output->data.reset(new std::vector<uint8_t>);
       input->data.Swap(output->data.get());
-      return output.Pass();
+      return output;
     }
   }
 
   NOTREACHED() << "Invalid route message type " << input->type;
-  return output.Pass();
+  return output;
 }
 
 }  // namespace
@@ -121,7 +124,7 @@ void MediaRouterMojoImpl::BindToRequest(
       MediaRouterFactory::GetApiForBrowserContext(context));
   DCHECK(impl);
 
-  impl->BindToMojoRequest(request.Pass(), extension_id);
+  impl->BindToMojoRequest(std::move(request), extension_id);
 }
 
 void MediaRouterMojoImpl::BindToMojoRequest(
@@ -130,7 +133,7 @@ void MediaRouterMojoImpl::BindToMojoRequest(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   binding_.reset(
-      new mojo::Binding<interfaces::MediaRouter>(this, request.Pass()));
+      new mojo::Binding<interfaces::MediaRouter>(this, std::move(request)));
   binding_->set_connection_error_handler(base::Bind(
       &MediaRouterMojoImpl::OnConnectionError, base::Unretained(this)));
 
@@ -171,7 +174,7 @@ void MediaRouterMojoImpl::RegisterMediaRouteProvider(
     return;
   }
 
-  media_route_provider_ = media_route_provider_ptr.Pass();
+  media_route_provider_ = std::move(media_route_provider_ptr);
   media_route_provider_.set_connection_error_handler(base::Bind(
       &MediaRouterMojoImpl::OnConnectionError, base::Unretained(this)));
   callback.Run(instance_id_);
@@ -314,11 +317,19 @@ void MediaRouterMojoImpl::JoinRoute(
                         callbacks));
 }
 
-void MediaRouterMojoImpl::CloseRoute(const MediaRoute::Id& route_id) {
+void MediaRouterMojoImpl::TerminateRoute(const MediaRoute::Id& route_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  SetWakeReason(MediaRouteProviderWakeReason::CLOSE_ROUTE);
-  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoCloseRoute,
+  SetWakeReason(MediaRouteProviderWakeReason::TERMINATE_ROUTE);
+  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoTerminateRoute,
+                        base::Unretained(this), route_id));
+}
+
+void MediaRouterMojoImpl::DetachRoute(const MediaRoute::Id& route_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  SetWakeReason(MediaRouteProviderWakeReason::DETACH_ROUTE);
+  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoDetachRoute,
                         base::Unretained(this), route_id));
 }
 
@@ -335,14 +346,14 @@ void MediaRouterMojoImpl::SendRouteMessage(
 
 void MediaRouterMojoImpl::SendRouteBinaryMessage(
     const MediaRoute::Id& route_id,
-    scoped_ptr<std::vector<uint8>> data,
+    scoped_ptr<std::vector<uint8_t>> data,
     const SendRouteMessageCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   SetWakeReason(MediaRouteProviderWakeReason::SEND_SESSION_BINARY_MESSAGE);
   RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoSendSessionBinaryMessage,
                         base::Unretained(this), route_id,
-                        base::Passed(data.Pass()), callback));
+                        base::Passed(std::move(data)), callback));
 }
 
 void MediaRouterMojoImpl::AddIssue(const Issue& issue) {
@@ -353,14 +364,6 @@ void MediaRouterMojoImpl::AddIssue(const Issue& issue) {
 void MediaRouterMojoImpl::ClearIssue(const Issue::Id& issue_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   issue_manager_.ClearIssue(issue_id);
-}
-
-void MediaRouterMojoImpl::OnPresentationSessionDetached(
-    const MediaRoute::Id& route_id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  SetWakeReason(MediaRouteProviderWakeReason::PRESENTATION_SESSION_DETACHED);
-  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoOnPresentationSessionDetached,
-                        base::Unretained(this), route_id));
 }
 
 bool MediaRouterMojoImpl::RegisterMediaSinksObserver(
@@ -551,9 +554,14 @@ void MediaRouterMojoImpl::DoJoinRoute(
           base::Unretained(this), presentation_id, callbacks));
 }
 
-void MediaRouterMojoImpl::DoCloseRoute(const MediaRoute::Id& route_id) {
-  DVLOG_WITH_INSTANCE(1) << "DoCloseRoute " << route_id;
-  media_route_provider_->CloseRoute(route_id);
+void MediaRouterMojoImpl::DoTerminateRoute(const MediaRoute::Id& route_id) {
+  DVLOG_WITH_INSTANCE(1) << "DoTerminateRoute " << route_id;
+  media_route_provider_->TerminateRoute(route_id);
+}
+
+void MediaRouterMojoImpl::DoDetachRoute(const MediaRoute::Id& route_id) {
+  DVLOG_WITH_INSTANCE(1) << "DoDetachRoute " << route_id;
+  media_route_provider_->DetachRoute(route_id);
 }
 
 void MediaRouterMojoImpl::DoSendSessionMessage(
@@ -566,12 +574,12 @@ void MediaRouterMojoImpl::DoSendSessionMessage(
 
 void MediaRouterMojoImpl::DoSendSessionBinaryMessage(
     const MediaRoute::Id& route_id,
-    scoped_ptr<std::vector<uint8>> data,
+    scoped_ptr<std::vector<uint8_t>> data,
     const SendRouteMessageCallback& callback) {
   DVLOG_WITH_INSTANCE(1) << "SendRouteBinaryMessage " << route_id;
-  mojo::Array<uint8> mojo_array;
+  mojo::Array<uint8_t> mojo_array;
   mojo_array.Swap(data.get());
-  media_route_provider_->SendRouteBinaryMessage(route_id, mojo_array.Pass(),
+  media_route_provider_->SendRouteBinaryMessage(route_id, std::move(mojo_array),
                                                 callback);
 }
 
@@ -626,7 +634,7 @@ void MediaRouterMojoImpl::OnRouteMessagesReceived(
     session_messages.reserve(messages.size());
     for (size_t i = 0; i < messages.size(); ++i) {
       session_messages.push_back(
-          ConvertToPresentationSessionMessage(messages[i].Pass()).Pass());
+          ConvertToPresentationSessionMessage(std::move(messages[i])));
     }
     base::ObserverList<PresentationSessionMessagesObserver>::Iterator
         observer_it(observer_list);
@@ -677,12 +685,6 @@ void MediaRouterMojoImpl::OnPresentationConnectionStateChanged(
 
   NotifyPresentationConnectionStateChange(
       route_id, mojo::PresentationConnectionStateFromMojo(state));
-}
-
-void MediaRouterMojoImpl::DoOnPresentationSessionDetached(
-    const MediaRoute::Id& route_id) {
-  DVLOG_WITH_INSTANCE(1) << "DoOnPresentationSessionDetached " << route_id;
-  media_route_provider_->OnPresentationSessionDetached(route_id);
 }
 
 bool MediaRouterMojoImpl::HasLocalDisplayRoute() const {

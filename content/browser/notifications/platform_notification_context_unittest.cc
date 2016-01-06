@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -18,9 +20,6 @@
 #include "url/gurl.h"
 
 namespace content {
-
-// Fake render process id to use in tests requiring one.
-const int kFakeRenderProcessId = 99;
 
 // Fake Service Worker registration id to use in tests requiring one.
 const int64_t kFakeServiceWorkerRegistrationId = 42;
@@ -230,7 +229,7 @@ TEST_F(PlatformNotificationContextTest, DeleteNotification) {
 
 TEST_F(PlatformNotificationContextTest, ServiceWorkerUnregistered) {
   scoped_ptr<EmbeddedWorkerTestHelper> embedded_worker_test_helper(
-      new EmbeddedWorkerTestHelper(base::FilePath(), kFakeRenderProcessId));
+      new EmbeddedWorkerTestHelper(base::FilePath()));
 
   // Manually create the PlatformNotificationContextImpl so that the Service
   // Worker context wrapper can be passed in.

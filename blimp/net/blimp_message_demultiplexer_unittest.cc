@@ -1,8 +1,6 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
-// Unit test for data encryption functions.
 
 #include "blimp/net/blimp_message_demultiplexer.h"
 
@@ -60,5 +58,12 @@ TEST_F(BlimpMessageDemultiplexerTest, ProcessMessageFailed) {
   EXPECT_EQ(net::ERR_FAILED, cb2.WaitForResult());
 }
 
+TEST_F(BlimpMessageDemultiplexerTest, ProcessMessageNoRegisteredHandler) {
+  net::TestCompletionCallback cb;
+  scoped_ptr<BlimpMessage> unknown_message(new BlimpMessage);
+  unknown_message->set_type(BlimpMessage::UNKNOWN);
+  demux_.ProcessMessage(std::move(unknown_message), cb.callback());
+  EXPECT_EQ(net::ERR_NOT_IMPLEMENTED, cb.WaitForResult());
+}
 
 }  // namespace blimp

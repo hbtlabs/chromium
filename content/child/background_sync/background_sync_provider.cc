@@ -4,6 +4,9 @@
 
 #include "content/child/background_sync/background_sync_provider.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
@@ -25,7 +28,7 @@ namespace {
 
 // Returns the id of the given |service_worker_registration|, which
 // is only available on the implementation of the interface.
-int64 GetServiceWorkerRegistrationId(
+int64_t GetServiceWorkerRegistrationId(
     blink::WebServiceWorkerRegistration* service_worker_registration) {
   return static_cast<WebServiceWorkerRegistrationImpl*>(
              service_worker_registration)->registration_id();
@@ -35,7 +38,7 @@ void ConnectToServiceOnMainThread(
     mojo::InterfaceRequest<BackgroundSyncService> request) {
   DCHECK(ChildThreadImpl::current());
   ChildThreadImpl::current()->service_registry()->ConnectToRemoteService(
-      request.Pass());
+      std::move(request));
 }
 
 LazyInstance<ThreadLocalPointer<BackgroundSyncProvider>>::Leaky
@@ -89,7 +92,7 @@ void BackgroundSyncProvider::registerBackgroundSync(
   DCHECK(options);
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  int64 service_worker_registration_id =
+  int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
   scoped_ptr<const blink::WebSyncRegistration> optionsPtr(options);
   scoped_ptr<blink::WebSyncRegistrationCallbacks> callbacksPtr(callbacks);
@@ -100,7 +103,8 @@ void BackgroundSyncProvider::registerBackgroundSync(
       mojo::ConvertTo<SyncRegistrationPtr>(*(optionsPtr.get())),
       service_worker_registration_id, requested_from_service_worker,
       base::Bind(&BackgroundSyncProvider::RegisterCallback,
-                 base::Unretained(this), base::Passed(callbacksPtr.Pass())));
+                 base::Unretained(this),
+                 base::Passed(std::move(callbacksPtr))));
 }
 
 void BackgroundSyncProvider::unregisterBackgroundSync(
@@ -109,7 +113,7 @@ void BackgroundSyncProvider::unregisterBackgroundSync(
     blink::WebSyncUnregistrationCallbacks* callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  int64 service_worker_registration_id =
+  int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
   scoped_ptr<blink::WebSyncUnregistrationCallbacks> callbacksPtr(callbacks);
 
@@ -118,7 +122,8 @@ void BackgroundSyncProvider::unregisterBackgroundSync(
   GetBackgroundSyncServicePtr()->Unregister(
       handle_id, service_worker_registration_id,
       base::Bind(&BackgroundSyncProvider::UnregisterCallback,
-                 base::Unretained(this), base::Passed(callbacksPtr.Pass())));
+                 base::Unretained(this),
+                 base::Passed(std::move(callbacksPtr))));
 }
 
 void BackgroundSyncProvider::getRegistration(
@@ -128,7 +133,7 @@ void BackgroundSyncProvider::getRegistration(
     blink::WebSyncRegistrationCallbacks* callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  int64 service_worker_registration_id =
+  int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
   scoped_ptr<blink::WebSyncRegistrationCallbacks> callbacksPtr(callbacks);
 
@@ -138,7 +143,8 @@ void BackgroundSyncProvider::getRegistration(
       mojo::ConvertTo<BackgroundSyncPeriodicity>(periodicity), tag.utf8(),
       service_worker_registration_id,
       base::Bind(&BackgroundSyncProvider::GetRegistrationCallback,
-                 base::Unretained(this), base::Passed(callbacksPtr.Pass())));
+                 base::Unretained(this),
+                 base::Passed(std::move(callbacksPtr))));
 }
 
 void BackgroundSyncProvider::getRegistrations(
@@ -147,7 +153,7 @@ void BackgroundSyncProvider::getRegistrations(
     blink::WebSyncGetRegistrationsCallbacks* callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  int64 service_worker_registration_id =
+  int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
   scoped_ptr<blink::WebSyncGetRegistrationsCallbacks> callbacksPtr(callbacks);
 
@@ -157,7 +163,8 @@ void BackgroundSyncProvider::getRegistrations(
       mojo::ConvertTo<BackgroundSyncPeriodicity>(periodicity),
       service_worker_registration_id,
       base::Bind(&BackgroundSyncProvider::GetRegistrationsCallback,
-                 base::Unretained(this), base::Passed(callbacksPtr.Pass())));
+                 base::Unretained(this),
+                 base::Passed(std::move(callbacksPtr))));
 }
 
 void BackgroundSyncProvider::getPermissionStatus(
@@ -166,7 +173,7 @@ void BackgroundSyncProvider::getPermissionStatus(
     blink::WebSyncGetPermissionStatusCallbacks* callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  int64 service_worker_registration_id =
+  int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
   scoped_ptr<blink::WebSyncGetPermissionStatusCallbacks> callbacksPtr(
       callbacks);
@@ -177,7 +184,8 @@ void BackgroundSyncProvider::getPermissionStatus(
       mojo::ConvertTo<BackgroundSyncPeriodicity>(periodicity),
       service_worker_registration_id,
       base::Bind(&BackgroundSyncProvider::GetPermissionStatusCallback,
-                 base::Unretained(this), base::Passed(callbacksPtr.Pass())));
+                 base::Unretained(this),
+                 base::Passed(std::move(callbacksPtr))));
 }
 
 void BackgroundSyncProvider::releaseRegistration(int64_t handle_id) {
@@ -195,9 +203,9 @@ void BackgroundSyncProvider::notifyWhenFinished(
   // base::Unretained is safe here, as the mojo channel will be deleted (and
   // will wipe its callbacks) before 'this' is deleted.
   GetBackgroundSyncServicePtr()->NotifyWhenFinished(
-      handle_id,
-      base::Bind(&BackgroundSyncProvider::NotifyWhenFinishedCallback,
-                 base::Unretained(this), base::Passed(callbacks_ptr.Pass())));
+      handle_id, base::Bind(&BackgroundSyncProvider::NotifyWhenFinishedCallback,
+                            base::Unretained(this),
+                            base::Passed(std::move(callbacks_ptr))));
 }
 
 void BackgroundSyncProvider::DuplicateRegistrationHandle(

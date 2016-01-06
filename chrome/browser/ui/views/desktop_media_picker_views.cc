@@ -4,9 +4,13 @@
 
 #include "chrome/browser/ui/views/desktop_media_picker_views.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/desktop_media_list.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_switches.h"
@@ -207,9 +211,7 @@ void DesktopMediaSourceView::OnGestureEvent(ui::GestureEvent* event) {
 DesktopMediaListView::DesktopMediaListView(
     DesktopMediaPickerDialogView* parent,
     scoped_ptr<DesktopMediaList> media_list)
-    : parent_(parent),
-      media_list_(media_list.Pass()),
-      weak_factory_(this) {
+    : parent_(parent), media_list_(std::move(media_list)), weak_factory_(this) {
   media_list_->SetThumbnailSize(gfx::Size(kThumbnailWidth, kThumbnailHeight));
   SetFocusable(true);
 }
@@ -395,7 +397,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
       app_name_(app_name),
       label_(new views::Label()),
       scroll_view_(views::ScrollView::CreateScrollViewWithBorder()),
-      list_view_(new DesktopMediaListView(this, media_list.Pass())) {
+      list_view_(new DesktopMediaListView(this, std::move(media_list))) {
   if (app_name == target_name) {
     label_->SetText(
         l10n_util::GetStringFUTF16(IDS_DESKTOP_MEDIA_PICKER_TEXT, app_name));
@@ -584,8 +586,9 @@ void DesktopMediaPickerViews::Show(content::WebContents* web_contents,
                                    scoped_ptr<DesktopMediaList> media_list,
                                    const DoneCallback& done_callback) {
   callback_ = done_callback;
-  dialog_ = new DesktopMediaPickerDialogView(
-      web_contents, context, this, app_name, target_name, media_list.Pass());
+  dialog_ =
+      new DesktopMediaPickerDialogView(web_contents, context, this, app_name,
+                                       target_name, std::move(media_list));
 }
 
 void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {

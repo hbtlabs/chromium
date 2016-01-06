@@ -27,13 +27,36 @@ crbug.com/410145 [ Win ] fast/writing-mode/english-lr-text.html [ Failure ]
 crbug.com/377567 [ Debug ] editing/selection/extend-selection-character.html [ Timeout Pass ]
 crbug.com/377567 [ Debug ] editing/selection/programmatic-selection-on-mac-is-directionless.html [ Timeout Pass ]
 crbug.com/377567 [ Debug ] fast/css/large-list-of-rules-crash.html [ Timeout Pass ]
-crbug.com/243871 [ Win Debug ] virtual/threaded_animation_timelines/fast/scroll-behavior/overflow-scroll-root-frame-animates.html [ Timeout Pass ]
 
-# Times out on the Mac Debug Oilpan bot.
 crbug.com/389648 [ Mac Debug ] fast/text-autosizing/table-inflation-crash.html [ Timeout ]
 
 crbug.com/344239 [ Release ] inspector-protocol/heap-profiler/heap-objects-tracking.html [ Slow ]
 
 crbug.com/501229 fast/forms/associatedFormControls-leak-nodes.html [ Failure ]
 
+crbug.com/569901 [ Debug ] http/tests/serviceworker/navigation-redirect.html [ Pass Failure ]
+
+crbug.com/399951 http/tests/mime/javascript-mimetype-usecounters.html [ Pass Failure ]
+
 crbug.com/417181 http/tests/xmlhttprequest/abort-on-changestate-headers-received.html [ Failure Pass ]
+
+crbug.com/299010 [ Win ] fast/forms/text/text-font-height-mismatch.html [ Failure ]
+
+crbug.com/571711 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
+crbug.com/571719 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-deep.html [ Failure ]
+
+crbug.com/451577 [ Linux ] http/tests/inspector/elements/styles/edit-css-with-source-url.html [ Slow ]
+crbug.com/451577 [ Linux ] http/tests/inspector-enabled/shadow-dom-rules-restart.html [ Slow ]
+
+crbug.com/24182 [ Win Debug ] jquery/manipulation.html [ Slow Timeout Pass ]
+
+crbug.com/385014 [ Win Debug ] accessibility/canvas-fallback-content-2.html [ Pass Timeout Failure ]
+
+crbug.com/518993 imported/web-platform-tests/user-timing/test_user_timing_measure_navigation_timing.html [ Skip ]
+
+crbug.com/420008 inspector/tracing/worker-js-frames.html [ Pass Timeout Slow Failure ]
+
+crbug.com/572710 [ Linux Debug ] inspector/extensions/extensions-sidebar.html [ Pass Timeout ]
+
+crbug.com/572723 inspector/sources/debugger/debugger-autocontinue-on-syntax-error.html [ Pass Failure ]
+crbug.com/572723 inspector/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]

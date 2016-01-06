@@ -5,6 +5,11 @@
 #ifndef COMPONENTS_NACL_RENDERER_PLUGIN_TEMPORARY_FILE_H_
 #define COMPONENTS_NACL_RENDERER_PLUGIN_TEMPORARY_FILE_H_
 
+#include <stdint.h>
+
+#include "base/files/file.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "native_client/src/include/nacl_macros.h"
 #include "native_client/src/trusted/desc/nacl_desc_wrapper.h"
 
@@ -51,17 +56,25 @@ class TempFile {
   nacl::DescWrapper* write_wrapper() { return write_wrapper_.get(); }
   nacl::DescWrapper* read_wrapper() { return read_wrapper_.get(); }
 
-  // Returns the handle to the file repesented and resets the internal handle
-  // and all wrappers.
+  // Returns a handle to the file, transferring ownership of it.  Note that
+  // the objects returned by write_wrapper() and read_wrapper() remain
+  // valid after TakeFileHandle() is called.
   PP_FileHandle TakeFileHandle();
+
+  // Returns a handle to the file, without transferring ownership of it.
+  // This handle remains valid until the TempFile object is destroyed or
+  // TakeFileHandle() is called.
+  PP_FileHandle GetFileHandle();
 
  private:
   NACL_DISALLOW_COPY_AND_ASSIGN(TempFile);
 
+  nacl::DescWrapper* MakeDescWrapper(int nacl_file_flags);
+
   Plugin* plugin_;
-  nacl::scoped_ptr<nacl::DescWrapper> read_wrapper_;
-  nacl::scoped_ptr<nacl::DescWrapper> write_wrapper_;
-  PP_FileHandle internal_handle_;
+  scoped_ptr<nacl::DescWrapper> read_wrapper_;
+  scoped_ptr<nacl::DescWrapper> write_wrapper_;
+  base::File file_handle_;
 };
 
 }  // namespace plugin

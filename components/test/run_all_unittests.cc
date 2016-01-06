@@ -4,11 +4,13 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
+#include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -30,6 +32,10 @@
 #include "net/android/net_jni_registrar.h"
 #include "ui/base/android/ui_base_jni_registrar.h"
 #include "ui/gfx/android/gfx_jni_registrar.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 #endif
 
 namespace {
@@ -136,6 +142,10 @@ int main(int argc, char** argv) {
   testing::TestEventListeners& listeners =
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new ComponentsUnitTestEventListener());
+
+#if defined(OS_CHROMEOS)
+  mojo::embedder::Init();
+#endif
 
   return base::LaunchUnitTests(
       argc, argv, base::Bind(&base::TestSuite::Run,

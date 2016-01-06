@@ -4,6 +4,8 @@
 
 #include "ui/accessibility/ax_node_data.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <set>
 
@@ -178,17 +180,17 @@ bool AXNodeData::HasIntListAttribute(AXIntListAttribute attribute) const {
   return iter != intlist_attributes.end();
 }
 
-const std::vector<int32>& AXNodeData::GetIntListAttribute(
+const std::vector<int32_t>& AXNodeData::GetIntListAttribute(
     AXIntListAttribute attribute) const {
-  CR_DEFINE_STATIC_LOCAL(std::vector<int32>, empty_vector, ());
+  CR_DEFINE_STATIC_LOCAL(std::vector<int32_t>, empty_vector, ());
   auto iter = FindInVectorOfPairs(attribute, intlist_attributes);
   if (iter != intlist_attributes.end())
     return iter->second;
   return empty_vector;
 }
 
-bool AXNodeData::GetIntListAttribute(
-    AXIntListAttribute attribute, std::vector<int32>* value) const {
+bool AXNodeData::GetIntListAttribute(AXIntListAttribute attribute,
+                                     std::vector<int32_t>* value) const {
   auto iter = FindInVectorOfPairs(attribute, intlist_attributes);
   if (iter != intlist_attributes.end()) {
     *value = iter->second;
@@ -240,8 +242,8 @@ void AXNodeData::AddBoolAttribute(
   bool_attributes.push_back(std::make_pair(attribute, value));
 }
 
-void AXNodeData::AddIntListAttribute(
-    AXIntListAttribute attribute, const std::vector<int32>& value) {
+void AXNodeData::AddIntListAttribute(AXIntListAttribute attribute,
+                                     const std::vector<int32_t>& value) {
   intlist_attributes.push_back(std::make_pair(attribute, value));
 }
 
@@ -428,22 +430,23 @@ std::string AXNodeData::ToString() const {
             result += " text_direction=btt";
             break;
         }
-        case AX_ATTR_TEXT_STYLE: {
-          unsigned int text_style = int_attributes[i].second;
-          if (text_style == AX_TEXT_STYLE_NONE)
-            break;
-          std::string text_style_value(" text_style=");
-          if (text_style & AX_TEXT_STYLE_BOLD)
-            text_style_value += "bold,";
-          if (text_style & AX_TEXT_STYLE_ITALIC)
-            text_style_value += "italic,";
-          if (text_style & AX_TEXT_STYLE_UNDERLINE)
-            text_style_value += "underline,";
-          if (text_style & AX_TEXT_STYLE_LINE_THROUGH)
-            text_style_value += "line-through,";
-          result += text_style_value.substr(0, text_style_value.size() - 1);;
-        }
         break;
+      case AX_ATTR_TEXT_STYLE: {
+        unsigned int text_style = int_attributes[i].second;
+        if (text_style == AX_TEXT_STYLE_NONE)
+          break;
+        std::string text_style_value(" text_style=");
+        if (text_style & AX_TEXT_STYLE_BOLD)
+          text_style_value += "bold,";
+        if (text_style & AX_TEXT_STYLE_ITALIC)
+          text_style_value += "italic,";
+        if (text_style & AX_TEXT_STYLE_UNDERLINE)
+          text_style_value += "underline,";
+        if (text_style & AX_TEXT_STYLE_LINE_THROUGH)
+          text_style_value += "line-through,";
+        result += text_style_value.substr(0, text_style_value.size() - 1);
+        break;
+      }
       case AX_ATTR_SET_SIZE:
         result += " setsize=" + value;
         break;
@@ -589,7 +592,7 @@ std::string AXNodeData::ToString() const {
   }
 
   for (size_t i = 0; i < intlist_attributes.size(); ++i) {
-    const std::vector<int32>& values = intlist_attributes[i].second;
+    const std::vector<int32_t>& values = intlist_attributes[i].second;
     switch (intlist_attributes[i].first) {
       case AX_ATTR_INDIRECT_CHILD_IDS:
         result += " indirect_child_ids=" + IntVectorToString(values);

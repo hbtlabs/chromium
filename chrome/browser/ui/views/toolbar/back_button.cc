@@ -9,10 +9,10 @@
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
 
-BackButton::BackButton(views::ButtonListener* listener,
+BackButton::BackButton(Profile* profile,
+                       views::ButtonListener* listener,
                        ui::MenuModel* model)
-    : ToolbarButton(listener, model),
-      margin_leading_(0) {}
+    : ToolbarButton(profile, listener, model), margin_leading_(0) {}
 
 BackButton::~BackButton() {}
 
@@ -52,7 +52,7 @@ scoped_ptr<views::LabelButtonBorder> BackButton::CreateDefaultBorder() const {
   border->set_insets(gfx::Insets(insets.top(), insets.left() + margin_leading_,
                                  insets.bottom(), insets.right()));
 
-  return border.Pass();
+  return border;
 }
 
 gfx::Rect BackButton::GetThemePaintRect() const {

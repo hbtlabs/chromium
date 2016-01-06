@@ -4,10 +4,14 @@
 
 #include "google_apis/drive/base_requests.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -211,14 +215,14 @@ scoped_ptr<base::Value> ParseJson(const std::string& json) {
     LOG(WARNING) << "Error while parsing entry response: " << error_message
                  << ", code: " << error_code << ", json:\n" << trimmed_json;
   }
-  return value.Pass();
+  return value;
 }
 
 void GenerateMultipartBody(MultipartType multipart_type,
                            const std::string& predetermined_boundary,
                            const std::vector<ContentTypeAndData>& parts,
                            ContentTypeAndData* output,
-                           std::vector<uint64>* data_offset) {
+                           std::vector<uint64_t>* data_offset) {
   std::string boundary;
   // Generate random boundary.
   if (predetermined_boundary.empty()) {
@@ -450,8 +454,8 @@ void UrlFetchRequestBase::StartAfterPrepare(
     url_fetcher_->SetUploadData(upload_content_type, upload_content);
   } else {
     base::FilePath local_file_path;
-    int64 range_offset = 0;
-    int64 range_length = 0;
+    int64_t range_offset = 0;
+    int64_t range_length = 0;
     if (GetContentFile(&local_file_path, &range_offset, &range_length,
                        &upload_content_type)) {
       url_fetcher_->SetUploadFilePath(
@@ -492,8 +496,8 @@ bool UrlFetchRequestBase::GetContentData(std::string* upload_content_type,
 }
 
 bool UrlFetchRequestBase::GetContentFile(base::FilePath* local_file_path,
-                                         int64* range_offset,
-                                         int64* range_length,
+                                         int64_t* range_offset,
+                                         int64_t* range_length,
                                          std::string* upload_content_type) {
   return false;
 }
@@ -600,7 +604,7 @@ InitiateUploadRequestBase::InitiateUploadRequestBase(
     RequestSender* sender,
     const InitiateUploadCallback& callback,
     const std::string& content_type,
-    int64 content_length)
+    int64_t content_length)
     : UrlFetchRequestBase(sender),
       callback_(callback),
       content_type_(content_type),
@@ -651,12 +655,11 @@ UploadRangeResponse::UploadRangeResponse()
 }
 
 UploadRangeResponse::UploadRangeResponse(DriveApiErrorCode code,
-                                         int64 start_position_received,
-                                         int64 end_position_received)
+                                         int64_t start_position_received,
+                                         int64_t end_position_received)
     : code(code),
       start_position_received(start_position_received),
-      end_position_received(end_position_received) {
-}
+      end_position_received(end_position_received) {}
 
 UploadRangeResponse::~UploadRangeResponse() {
 }
@@ -692,8 +695,8 @@ void UploadRangeRequestBase::ProcessURLFetchResults(
     // The Range header is appeared only if there is at least one received
     // byte. So, initialize the positions by 0 so that the [0,0) will be
     // returned via the |callback_| for empty data case.
-    int64 start_position_received = 0;
-    int64 end_position_received = 0;
+    int64_t start_position_received = 0;
+    int64_t end_position_received = 0;
     std::string range_received;
     hdrs->EnumerateHeader(NULL, kUploadResponseRange, &range_received);
     if (!range_received.empty()) {  // Parse the range header.
@@ -740,7 +743,7 @@ void UploadRangeRequestBase::OnDataParsed(DriveApiErrorCode code,
   DCHECK(CalledOnValidThread());
   DCHECK(code == HTTP_CREATED || code == HTTP_SUCCESS);
 
-  OnRangeRequestComplete(UploadRangeResponse(code, -1, -1), value.Pass());
+  OnRangeRequestComplete(UploadRangeResponse(code, -1, -1), std::move(value));
   OnProcessURLFetchResultsComplete();
 }
 
@@ -755,9 +758,9 @@ void UploadRangeRequestBase::RunCallbackOnPrematureFailure(
 ResumeUploadRequestBase::ResumeUploadRequestBase(
     RequestSender* sender,
     const GURL& upload_location,
-    int64 start_position,
-    int64 end_position,
-    int64 content_length,
+    int64_t start_position,
+    int64_t end_position,
+    int64_t content_length,
     const std::string& content_type,
     const base::FilePath& local_file_path)
     : UploadRangeRequestBase(sender, upload_location),
@@ -798,11 +801,10 @@ ResumeUploadRequestBase::GetExtraRequestHeaders() const {
   return headers;
 }
 
-bool ResumeUploadRequestBase::GetContentFile(
-    base::FilePath* local_file_path,
-    int64* range_offset,
-    int64* range_length,
-    std::string* upload_content_type) {
+bool ResumeUploadRequestBase::GetContentFile(base::FilePath* local_file_path,
+                                             int64_t* range_offset,
+                                             int64_t* range_length,
+                                             std::string* upload_content_type) {
   if (start_position_ == end_position_) {
     // No content data.
     return false;
@@ -819,7 +821,7 @@ bool ResumeUploadRequestBase::GetContentFile(
 
 GetUploadStatusRequestBase::GetUploadStatusRequestBase(RequestSender* sender,
                                                        const GURL& upload_url,
-                                                       int64 content_length)
+                                                       int64_t content_length)
     : UploadRangeRequestBase(sender, upload_url),
       content_length_(content_length) {}
 
@@ -846,7 +848,7 @@ MultipartUploadRequestBase::MultipartUploadRequestBase(
     base::SequencedTaskRunner* blocking_task_runner,
     const std::string& metadata_json,
     const std::string& content_type,
-    int64 content_length,
+    int64_t content_length,
     const base::FilePath& local_file_path,
     const FileResourceCallback& callback,
     const ProgressCallback& progress_callback)
@@ -939,8 +941,8 @@ void MultipartUploadRequestBase::NotifyError(DriveApiErrorCode code) {
 
 void MultipartUploadRequestBase::NotifyUploadProgress(
     const net::URLFetcher* source,
-    int64 current,
-    int64 total) {
+    int64_t current,
+    int64_t total) {
   if (!progress_callback_.is_null())
     progress_callback_.Run(current, total);
 }
@@ -994,8 +996,8 @@ void DownloadFileRequestBase::GetOutputFilePath(
 
 void DownloadFileRequestBase::OnURLFetchDownloadProgress(
     const URLFetcher* source,
-    int64 current,
-    int64 total) {
+    int64_t current,
+    int64_t total) {
   if (!progress_callback_.is_null())
     progress_callback_.Run(current, total);
 }

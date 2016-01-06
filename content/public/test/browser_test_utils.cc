@@ -4,10 +4,14 @@
 
 #include "content/public/test/browser_test_utils.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,6 +20,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -30,6 +35,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "net/base/filename_util.h"
 #include "net/cookies/cookie_store.h"
@@ -49,10 +55,12 @@
 #include "ui/resources/grit/webui_resources.h"
 
 #if defined(USE_AURA)
+#include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "ui/aura/test/window_event_dispatcher_test_api.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/events/event.h"
 #endif  // USE_AURA
 
 namespace content {
@@ -61,8 +69,8 @@ namespace {
 class DOMOperationObserver : public NotificationObserver,
                              public WebContentsObserver {
  public:
-  explicit DOMOperationObserver(RenderViewHost* rvh)
-      : WebContentsObserver(WebContents::FromRenderViewHost(rvh)),
+  explicit DOMOperationObserver(RenderFrameHost* rfh)
+      : WebContentsObserver(WebContents::FromRenderFrameHost(rfh)),
         did_respond_(false) {
     registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
                    Source<WebContents>(web_contents()));
@@ -139,7 +147,7 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
   //                automation id.
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host->GetRenderViewHost());
+  DOMOperationObserver dom_op_observer(render_frame_host);
   render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
       base::UTF8ToUTF16(script));
   std::string json;
@@ -175,7 +183,7 @@ bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
                                         scoped_ptr<base::Value>* result) {
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host->GetRenderViewHost());
+  DOMOperationObserver dom_op_observer(render_frame_host);
   render_frame_host->ExecuteJavaScriptInIsolatedWorld(
       base::UTF8ToUTF16(script),
       content::RenderFrameHost::JavaScriptResultCallback(), world_id);
@@ -302,7 +310,7 @@ scoped_ptr<net::test_server::HttpResponse> CrossSiteRedirectResponseHandler(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
   http_response->AddCustomHeader("Location", redirect_target.spec());
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 }  // namespace
@@ -310,19 +318,12 @@ scoped_ptr<net::test_server::HttpResponse> CrossSiteRedirectResponseHandler(
 bool NavigateIframeToURL(WebContents* web_contents,
                          std::string iframe_id,
                          const GURL& url) {
-  // TODO(creis): This should wait for LOAD_STOP, but cross-site subframe
-  // navigations generate extra DidStartLoading and DidStopLoading messages.
-  // Until we replace swappedout:// with frame proxies, we need to listen for
-  // something else.  For now, we trigger NEW_SUBFRAME navigations and listen
-  // for commit.  See https://crbug.com/436250.
   std::string script = base::StringPrintf(
       "setTimeout(\""
       "var iframes = document.getElementById('%s');iframes.src='%s';"
       "\",0)",
       iframe_id.c_str(), url.spec().c_str());
-  WindowedNotificationObserver load_observer(
-      NOTIFICATION_NAV_ENTRY_COMMITTED,
-      Source<NavigationController>(&web_contents->GetController()));
+  TestNavigationObserver load_observer(web_contents);
   bool result = ExecuteScript(web_contents, script);
   load_observer.Wait();
   return result;
@@ -526,13 +527,14 @@ void SimulateTapWithModifiersAt(WebContents* web_contents,
   widget_host->ForwardGestureEvent(tap);
 }
 
+#if defined(USE_AURA)
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point) {
-  SyntheticWebTouchEvent touch;
-  touch.PressPoint(point.x(), point.y());
-  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
-      web_contents->GetRenderViewHost()->GetWidget());
-  widget_host->ForwardTouchEventWithLatencyInfo(touch, ui::LatencyInfo());
+  ui::TouchEvent touch(ui::ET_TOUCH_PRESSED, point, 0, base::TimeDelta());
+  static_cast<RenderWidgetHostViewAura*>(
+      web_contents->GetRenderWidgetHostView())
+      ->OnTouchEvent(&touch);
 }
+#endif
 
 void SimulateKeyPress(WebContents* web_contents,
                       ui::KeyboardCode key_code,

@@ -9,7 +9,9 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
@@ -382,11 +384,6 @@ gfx::Rect AutofillPopupControllerImpl::GetRowBounds(size_t index) {
       top,
       popup_bounds_.width() - 2 * kPopupBorderThickness,
       GetRowHeightFromId(suggestions_[index].frontend_id));
-}
-
-void AutofillPopupControllerImpl::SetPopupBounds(const gfx::Rect& bounds) {
-  popup_bounds_ = bounds;
-  UpdateBoundsAndRedrawPopup();
 }
 
 const gfx::Rect& AutofillPopupControllerImpl::popup_bounds() const {

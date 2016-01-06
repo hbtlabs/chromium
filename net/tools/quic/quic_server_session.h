@@ -7,12 +7,14 @@
 #ifndef NET_TOOLS_QUIC_QUIC_SERVER_SESSION_H_
 #define NET_TOOLS_QUIC_QUIC_SERVER_SESSION_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/quic/quic_crypto_server_stream.h"
 #include "net/quic/quic_protocol.h"
@@ -77,20 +79,6 @@ class QuicServerSession : public QuicSpdySession {
   // Override base class to process FEC config received from client.
   void OnConfigNegotiated() override;
 
-  bool UsingStatelessRejectsIfPeerSupported() {
-    if (GetCryptoStream() == nullptr) {
-      return false;
-    }
-    return GetCryptoStream()->UseStatelessRejectsIfPeerSupported();
-  }
-
-  bool PeerSupportsStatelessRejects() {
-    if (GetCryptoStream() == nullptr) {
-      return false;
-    }
-    return GetCryptoStream()->PeerSupportsStatelessRejects();
-  }
-
   void set_serving_region(const std::string& serving_region) {
     serving_region_ = serving_region;
   }
@@ -98,8 +86,14 @@ class QuicServerSession : public QuicSpdySession {
  protected:
   // QuicSession methods:
   QuicSpdyStream* CreateIncomingDynamicStream(QuicStreamId id) override;
-  QuicSpdyStream* CreateOutgoingDynamicStream() override;
+  QuicSpdyStream* CreateOutgoingDynamicStream(SpdyPriority priority) override;
   QuicCryptoServerStreamBase* GetCryptoStream() override;
+
+  // If an outgoing stream can be created, return true.
+  // Return false when connection is closed or forward secure encryption hasn't
+  // established yet or number of server initiated streams already reaches the
+  // upper limit.
+  bool ShouldCreateOutgoingDynamicStream();
 
   // If we should create an incoming stream, returns true. Otherwise
   // does error handling, including communicating the error to the client and
@@ -132,7 +126,7 @@ class QuicServerSession : public QuicSpdySession {
   QuicTime last_scup_time_;
 
   // Number of packets sent to the peer, at the time we last sent a SCUP.
-  int64 last_scup_packet_number_;
+  int64_t last_scup_packet_number_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicServerSession);
 };

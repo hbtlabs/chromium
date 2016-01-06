@@ -4,8 +4,11 @@
 
 #include "chrome/browser/chromeos/file_manager/file_tasks.h"
 
+#include <stddef.h>
+
 #include "apps/launcher.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_split.h"
@@ -403,10 +406,6 @@ void FindFileHandlerTasks(
     // Check that the extension can be launched via an event. This includes all
     // platform apps plus whitelisted extensions.
     if (!CanLaunchViaEvent(extension))
-      continue;
-
-    // Ephemeral apps cannot be file handlers.
-    if (extensions::util::IsEphemeralApp(extension->id(), profile))
       continue;
 
     if (profile->IsOffTheRecord() &&

@@ -57,6 +57,7 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="2485422356828889247">Uninstall</translation>
 <translation id="2576431527583832481">Chrome just got better! A new version is available.</translation>
 <translation id="2580411288591421699">Cannot install the same Google Chrome version that is currently running. Please close Google Chrome and try again.</translation>
+<translation id="2582790009689336987">This computer will soon stop receiving Google Chrome updates because this Linux system will no longer be supported.</translation>
 <translation id="2588322182880276190">Chrome logo</translation>
 <translation id="2664962310688259219">Chrome OS open source licences</translation>
 <translation id="2665296953892887393">Help make Google Chrome better by sending crash reports and <ph name="UMA_LINK" /> to Google</translation>
@@ -76,6 +77,7 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="3149510190863420837">Chrome Apps</translation>
 <translation id="3197823471738295152">Your device is up to date.</translation>
 <translation id="3282568296779691940">Sign in to Chrome</translation>
+<translation id="3311976847535831054">This computer will no longer receive 32-bit Google Chrome updates. Please upgrade to 64-bit Google Chrome.</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
 <translation id="3396977131400919238">An operating system error occurred during installation. Please download Google Chrome again.</translation>
 <translation id="3398288718845740432">Hide in Chrome Menu</translation>
@@ -102,6 +104,7 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="4251615635259297716">Link my Chrome data to this account</translation>
 <translation id="4309555186815777032">(requires Chrome <ph name="BEGIN_BUTTON" />restart<ph name="END_BUTTON" />)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="437002079035561265">This computer will no longer receive Google Chrome updates because this Linux system is no longer supported.</translation>
 <translation id="4407807842708586359">Google Chrome OS</translation>
 <translation id="4458285410772214805">Please sign out and sign in again for this change to take effect.</translation>
 <translation id="4480040274068703980">Chrome OS could not sync your data due to an error signing in.</translation>
@@ -114,6 +117,7 @@ Signing in anyway will merge Chrome information like bookmarks, history and othe
 <translation id="4728575227883772061">Installation failed due to unspecified error. If Google Chrome is currently running, please close it and try again.</translation>
 <translation id="473775607612524610">Update</translation>
 <translation id="4743926867934016338">Accept &amp; Search</translation>
+<translation id="4751441238232965030">This computer will soon stop receiving 32-bit Google Chrome updates. Please upgrade to 64-bit Google Chrome.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4794050651896644714">Save details in Chrome</translation>
 <translation id="4891791193823137474">Let Google Chrome run in the background</translation>
@@ -144,29 +148,18 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="5563479599352954471">Search with one touch</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="5620765574781326016">Learn about topics on websites without leaving the page.</translation>
-<translation id="5626352146162055517"><ph name="SITE" /> normally uses encryption to protect your information. When Chrome tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" /> or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Chrome stopped the connection before any data was exchanged.</translation>
 <translation id="568643307450491754">Find your bookmarks in the Chrome menu or on the bookmarks bar.</translation>
 <translation id="573759479754913123">About Chrome OS</translation>
 <translation id="5749068826913805084">Chrome needs storage access to download files.</translation>
 <translation id="5785746630574083988">Relaunching in Windows 8 mode will close and relaunch your Chrome apps.</translation>
 <translation id="5855036575689098185">Software running on your computer is incompatible with Google Chrome.</translation>
 <translation id="5877064549588274448">Channel changed. Restart your device to apply changes.</translation>
-<translation id="5890698319714066019">Google Chrome can't display the web page because your computer isn't connected to the Internet.</translation>
 <translation id="5931853610562009806">On Mac, passwords may be saved to your Keychain and accessed or synced by other Chrome users sharing this OS X account.</translation>
 <translation id="5940385492829620908">Your web, bookmarks and other Chrome stuff live here.</translation>
 <translation id="5941830788786076944">Make Google Chrome the default browser</translation>
 <translation id="597770749449734237">Enables additional keyboard shortcuts that are useful for debugging Google Chrome.</translation>
-<translation id="6011049234605203654">Go to
-          the Chrome menu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          and make sure your configuration is set to "no proxy" or "direct."</translation>
 <translation id="6012342843556706400">Chrome needs location access to share it with this site.</translation>
 <translation id="6014844626092547096">You're now signed in to Chrome! Sync is disabled by your administrator.</translation>
-<translation id="6049075767726609708">An administrator has installed Google Chrome on this system, and it is available for all users. The system-level Google Chrome will replace your user-level installation now.</translation>
 <translation id="6113794647360055231">Chrome just got better</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Update the &amp;Chrome OS</translation>
@@ -184,16 +177,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="6676384891291319759">Access the Internet</translation>
 <translation id="6757767188268205357">Don't bother me</translation>
 <translation id="683440813066116847">Inbound rule for Google Chrome Canary to allow mDNS traffic.</translation>
-<translation id="6855094794438142393">Go to
-          the Chrome menu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN Settings
-          and deselect "Use a proxy server for your LAN".</translation>
 <translation id="6883876366448858277">sends a word and its surrounding context to Google Search, returning definitions, pictures and other search results.</translation>
 <translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">Updating your device...</translation>
@@ -215,8 +198,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="7282192067747128786">Chrome - Notifications (<ph name="QUANTITY" /> unread)</translation>
 <translation id="729375352412857283">This computer will soon stop receiving Google Chrome updates because Windows XP and Windows Vista will no longer be supported.</translation>
 <translation id="7339898014177206373">New window</translation>
-<translation id="7396375882099008034">Allow Chrome to access the network in your firewall or antivirus
-        settings.</translation>
 <translation id="7398801000654795464">You were signed in to Chrome as <ph name="USER_EMAIL_ADDRESS" />. Please use the same account to sign in again.</translation>
 <translation id="7400722733683201933">About Google Chrome</translation>
 <translation id="7408085963519505752">Chrome OS terms</translation>
@@ -238,7 +219,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="781069973841903133">Relaunching in Chrome immersive mode will close and relaunch your Chrome apps.</translation>
 <translation id="7825851276765848807">Installation failed due to unspecified error. Please download Google Chrome again.</translation>
 <translation id="7890208801193284374">If you share a computer, friends and family can browse separately and set up Chrome just the way they want.</translation>
-<translation id="7984945080620862648">You cannot visit <ph name="SITE" /> at the moment because the website sent scrambled credentials that Chrome cannot process. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="8000275528373650868">Google Chrome requires Windows Vista or Windows XP with SP2 or higher.</translation>
 <translation id="8005540215158006229">Chrome is almost ready.</translation>
 <translation id="8008534537613507642">Reinstall Chrome</translation>
@@ -246,9 +226,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="8032142183999901390">After removing your account from Chrome, you may need to reload your open tabs to take effect.</translation>
 <translation id="8037887340639533879">No installation of Google Chrome found to update.</translation>
 <translation id="8129812357326543296">About &amp;Google Chrome</translation>
-<translation id="8187289872471304532">Go to
-          Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies
-          and deselect any proxies that have been selected.</translation>
 <translation id="8205111949707227942">Optional: Help make Chrome OS better by sending usage statistics and crash reports automatically to Google.</translation>
 <translation id="8227755444512189073">Google Chrome needs to launch an external application to handle <ph name="SCHEME" /> links. The link requested is <ph name="PROTOLINK" />.</translation>
 <translation id="8255190535488645436">Google Chrome is using your camera and microphone.</translation>
@@ -274,7 +251,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">You do not have appropriate rights for system-level installation. Try running the installer again as Administrator.</translation>
 <translation id="8889942196804715220">Relaunch in Chrome immersive mode</translation>
-<translation id="8987477933582888019">Web Browser</translation>
 <translation id="9026991721384951619">Chrome OS could not sync your data because your account sign-in details are out of date.</translation>
 <translation id="9102715433345326100">This file is malicious and Chrome has blocked it.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Warning:<ph name="END_BOLD" /> Google Chrome cannot prevent extensions from recording your browsing history. To disable this extension in incognito mode, unselect this option.</translation>

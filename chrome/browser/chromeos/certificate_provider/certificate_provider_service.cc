@@ -4,11 +4,15 @@
 
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/task_runner.h"
@@ -310,7 +314,7 @@ void CertificateProviderService::SetDelegate(scoped_ptr<Delegate> delegate) {
   DCHECK(!delegate_);
   DCHECK(delegate);
 
-  delegate_ = delegate.Pass();
+  delegate_ = std::move(delegate);
   cert_key_provider_.reset(
       new CertKeyProviderImpl(base::ThreadTaskRunnerHandle::Get(),
                               weak_factory_.GetWeakPtr(), &certificate_map_));

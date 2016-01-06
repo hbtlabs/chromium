@@ -7,7 +7,9 @@
 #include <map>
 #include <tuple>
 
+#include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -49,6 +51,7 @@ CommandType CommandFromString(const std::string& source) {
   RETURN_IF_IS(CANVAS_DIMENSIONS);
   RETURN_IF_IS(CLIP);
   RETURN_IF_IS(DISABLE_AA);
+  RETURN_IF_IS(FLIPS_IN_RTL);
   RETURN_IF_IS(END);
 #undef RETURN_IF_IS
 
@@ -82,6 +85,7 @@ void PaintPath(Canvas* canvas,
   std::vector<SkPath> paths;
   std::vector<SkPaint> paints;
   SkRect clip_rect = SkRect::MakeEmpty();
+  bool flips_in_rtl = false;
 
   for (size_t i = 0; path_elements[i].type != END; i++) {
     if (paths.empty() || path_elements[i].type == NEW_PATH) {
@@ -248,10 +252,20 @@ void PaintPath(Canvas* canvas,
         break;
       }
 
+      case FLIPS_IN_RTL: {
+        flips_in_rtl = true;
+        break;
+      }
+
       case END:
         NOTREACHED();
         break;
     }
+  }
+
+  if (flips_in_rtl && base::i18n::IsRTL()) {
+    canvas->Scale(-1, 1);
+    canvas->Translate(gfx::Vector2d(-static_cast<int>(canvas_size), 0));
   }
 
   if (dip_size != canvas_size) {

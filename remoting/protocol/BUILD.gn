@@ -46,8 +46,10 @@ source_set("protocol") {
       ]
     } else {
       sources -= [
+        "webrtc_connection_to_client.cc",
         "webrtc_transport.cc",
         "webrtc_video_capturer_adapter.cc",
+        "webrtc_video_stream.cc",
       ]
     }
   }
@@ -96,8 +98,9 @@ source_set("unit_tests") {
     "clipboard_filter_unittest.cc",
     "connection_tester.cc",
     "connection_tester.h",
+    "connection_unittest.cc",
     "content_description_unittest.cc",
-    "ice_connection_to_client_unittest.cc",
+    "ice_transport_unittest.cc",
     "input_event_tracker_unittest.cc",
     "input_filter_unittest.cc",
     "jingle_messages_unittest.cc",

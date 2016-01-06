@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -100,7 +103,7 @@ class HistoryBrowserTest : public InProcessBrowserTest {
     scoped_ptr<history::HistoryDBTask> task(new WaitForHistoryTask());
     history::HistoryService* history = HistoryServiceFactory::GetForProfile(
         GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-    history->ScheduleDBTask(task.Pass(), &task_tracker);
+    history->ScheduleDBTask(std::move(task), &task_tracker);
     content::RunMessageLoop();
   }
 
@@ -325,6 +328,19 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, InvalidURLNoHistory) {
       base::FilePath().AppendASCII("History"),
       base::FilePath().AppendASCII("non_existant_file.html"));
   ui_test_utils::NavigateToURL(browser(), non_existant);
+  ExpectEmptyHistory();
+}
+
+// URLs with special schemes should not go in history.
+IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, InvalidSchemeNoHistory) {
+  GURL about_blank("about:blank");
+  ui_test_utils::NavigateToURL(browser(), about_blank);
+  ExpectEmptyHistory();
+  GURL view_source("view-source:about:blank");
+  ui_test_utils::NavigateToURL(browser(), view_source);
+  ExpectEmptyHistory();
+  GURL chrome("chrome://about");
+  ui_test_utils::NavigateToURL(browser(), chrome);
   ExpectEmptyHistory();
 }
 

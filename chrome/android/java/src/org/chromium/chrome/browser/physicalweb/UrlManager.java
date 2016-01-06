@@ -10,29 +10,42 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.SystemClock;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
-import android.text.TextUtils;
 
+import org.chromium.base.Log;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * This class stores URLs and surfaces notifications to the user.
+ * This class stores URLs which are discovered by scanning for Physical Web beacons, and updates a
+ * Notification as the set changes.
+ *
+ * There are two sets of URLs maintained:
+ * - Those which are currently nearby, as tracked by calls to addUrl/removeUrl
+ * - Those which have ever resolved through the Physical Web Service (e.g. are known to produce
+ *     good results).
+ *
+ * Whenever either list changes, we update the Physical Web Notification, based on the intersection
+ * of currently-nearby and known-resolved URLs.
  */
-public class UrlManager {
-    public static final String REFERER_KEY = "referer";
-    public static final int NOTIFICATION_REFERER = 1;
+class UrlManager {
     private static final String TAG = "PhysicalWeb";
     private static final String PREFS_NAME = "org.chromium.chrome.browser.physicalweb.URL_CACHE";
     private static final String PREFS_VERSION_KEY = "version";
-    private static final String PREFS_URLS_KEY = "urls";
-    private static final int PREFS_VERSION = 1;
+    private static final String PREFS_NEARBY_URLS_KEY = "nearby_urls";
+    private static final String PREFS_RESOLVED_URLS_KEY = "resolved_urls";
+    private static final String DEPRECATED_PREFS_URLS_KEY = "urls";
+    private static final int PREFS_VERSION = 2;
     private static UrlManager sInstance = null;
     private final Context mContext;
     private final NotificationManagerCompat mNotificationManager;
@@ -46,6 +59,7 @@ public class UrlManager {
         mContext = context;
         mNotificationManager = NotificationManagerCompat.from(context);
         mPwsClient = new PwsClient();
+        initSharedPreferences();
     }
 
     /**
@@ -66,10 +80,25 @@ public class UrlManager {
      * @param url The URL to add.
      */
     public void addUrl(String url) {
-        Set<String> urls = getCachedUrls();
-        urls.add(url);
-        putCachedUrls(urls);
-        updateNotification(urls);
+        Log.d(TAG, "URL found: " + url);
+        boolean isOnboarding = PhysicalWeb.isOnboarding(mContext);
+        Set<String> nearbyUrls = getCachedNearbyUrls();
+
+        boolean wasUrlListEmpty = (isOnboarding && nearbyUrls.isEmpty())
+                || (!isOnboarding && getUrls().isEmpty());
+
+        nearbyUrls.add(url);
+        putCachedNearbyUrls(nearbyUrls);
+
+        if (!isOnboarding) {
+            resolveUrl(url);
+        }
+
+        boolean isUrlListEmpty = !isOnboarding && getUrls().isEmpty();
+
+        if (wasUrlListEmpty && !isUrlListEmpty) {
+            showNotification();
+        }
     }
 
     /**
@@ -78,17 +107,48 @@ public class UrlManager {
      * @param url The URL to remove.
      */
     public void removeUrl(String url) {
-        Set<String> urls = getCachedUrls();
-        urls.remove(url);
-        putCachedUrls(urls);
-        updateNotification(urls);
+        Log.d(TAG, "URL lost: " + url);
+        boolean isOnboarding = PhysicalWeb.isOnboarding(mContext);
+        Set<String> nearbyUrls = getCachedNearbyUrls();
+        nearbyUrls.remove(url);
+        putCachedNearbyUrls(nearbyUrls);
+
+        boolean isUrlListEmpty = (isOnboarding && nearbyUrls.isEmpty())
+                || (!isOnboarding && getUrls().isEmpty());
+
+        if (isUrlListEmpty) {
+            clearNotification();
+        }
     }
 
     /**
-     * Get the stored URLs.
+     * Get the list of URLs which are both nearby and resolved through PWS.
+     * @return A set of nearby and resolved URLs.
      */
     public Set<String> getUrls() {
-        return getCachedUrls();
+        return getUrls(false);
+    }
+
+    /**
+     * Get the list of URLs which are both nearby and resolved through PWS.
+     * @param allowUnresolved If true, include unresolved URLs only if the
+     * resolved URL list is empty.
+     * @return A set of nearby URLs.
+     */
+    public Set<String> getUrls(boolean allowUnresolved) {
+        Set<String> nearbyUrls = getCachedNearbyUrls();
+        Set<String> resolvedUrls = getCachedResolvedUrls();
+        Set<String> intersection = new HashSet<String>(nearbyUrls);
+        intersection.retainAll(resolvedUrls);
+        Log.d(TAG, "Get URLs With: " + nearbyUrls.size() + " nearby, "
+                      + resolvedUrls.size() + " resolved, and "
+                      + intersection.size() + " in intersection.");
+
+        if (allowUnresolved && resolvedUrls.isEmpty()) {
+            intersection = nearbyUrls;
+        }
+
+        return intersection;
     }
 
     /**
@@ -96,98 +156,190 @@ public class UrlManager {
      */
     public void clearUrls() {
         Set<String> emptySet = Collections.emptySet();
-        putCachedUrls(emptySet);
-        updateNotification(emptySet);
+        putCachedNearbyUrls(emptySet);
+        putCachedResolvedUrls(emptySet);
+        clearNotification();
     }
 
-    private Set<String> getCachedUrls() {
-        // Check the version.
+    private void addResolvedUrl(String url) {
+        Log.d(TAG, "PWS resolved: " + url);
+        Set<String> resolvedUrls = getCachedResolvedUrls();
+
+        boolean wasUrlListEmpty = getUrls().isEmpty();
+
+        resolvedUrls.add(url);
+        putCachedResolvedUrls(resolvedUrls);
+
+        boolean isUrlListEmpty = getUrls().isEmpty();
+
+        if (wasUrlListEmpty && !isUrlListEmpty) {
+            showNotification();
+        }
+    }
+
+    private void removeResolvedUrl(String url) {
+        Log.d(TAG, "PWS unresolved: " + url);
+        Set<String> resolvedUrls = getCachedResolvedUrls();
+        resolvedUrls.remove(url);
+        putCachedResolvedUrls(resolvedUrls);
+
+        if (getUrls().isEmpty()) {
+            clearNotification();
+        }
+    }
+
+    private void initSharedPreferences() {
         SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int prefsVersion = prefs.getInt(PREFS_VERSION_KEY, 0);
-        if (prefsVersion != PREFS_VERSION) {
-            return new HashSet<String>();
+
+        // Check the version.
+        if (prefsVersion == PREFS_VERSION) {
+            return;
         }
 
-        // Restore the cached urls.
-        return prefs.getStringSet(PREFS_URLS_KEY, new HashSet<String>());
+        // Stored preferences are old, upgrade to the current version.
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.remove(DEPRECATED_PREFS_URLS_KEY);
+        editor.putInt(PREFS_VERSION_KEY, PREFS_VERSION);
+        editor.apply();
+
+        clearUrls();
     }
 
-    private void putCachedUrls(Set<String> urls) {
+    private Set<String> getStringSetFromSharedPreferences(String preferenceName) {
+        // Check the version.
+        SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getStringSet(preferenceName, new HashSet<String>());
+    }
+
+    private void setStringSetInSharedPreferences(String preferenceName,
+                                                 Set<String> preferenceValue) {
         // Write the version.
         SharedPreferences prefs = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
-        editor.putInt(PREFS_VERSION_KEY, PREFS_VERSION);
-
-        // Write the urls.
-        editor.putStringSet(PREFS_URLS_KEY, urls);
+        editor.putStringSet(preferenceName, preferenceValue);
         editor.apply();
+    }
+
+    private Set<String> getCachedNearbyUrls() {
+        return getStringSetFromSharedPreferences(PREFS_NEARBY_URLS_KEY);
+    }
+
+    private void putCachedNearbyUrls(Set<String> urls) {
+        setStringSetInSharedPreferences(PREFS_NEARBY_URLS_KEY, urls);
+    }
+
+    private Set<String> getCachedResolvedUrls() {
+        return getStringSetFromSharedPreferences(PREFS_RESOLVED_URLS_KEY);
+    }
+
+    private void putCachedResolvedUrls(Set<String> urls) {
+        setStringSetInSharedPreferences(PREFS_RESOLVED_URLS_KEY, urls);
     }
 
     private PendingIntent createListUrlsIntent() {
         Intent intent = new Intent(mContext, ListUrlsActivity.class);
-        intent.putExtra(REFERER_KEY, NOTIFICATION_REFERER);
+        intent.putExtra(ListUrlsActivity.REFERER_KEY, ListUrlsActivity.NOTIFICATION_REFERER);
         PendingIntent pendingIntent = PendingIntent.getActivity(mContext, 0, intent, 0);
         return pendingIntent;
     }
 
-    private void updateNotification(Set<String> urls) {
-        if (urls.isEmpty()) {
-            mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB);
-            return;
-        }
+    private PendingIntent createOptInIntent() {
+        Intent intent = new Intent(mContext, PhysicalWebOptInActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(mContext, 0, intent, 0);
+        return pendingIntent;
+    }
 
+    private void resolveUrl(final String url) {
+        Set<String> urls = new HashSet<String>(Arrays.asList(url));
+        final long timestamp = SystemClock.elapsedRealtime();
         mPwsClient.resolve(urls, new PwsClient.ResolveScanCallback() {
             @Override
             public void onPwsResults(Collection<PwsResult> pwsResults) {
-                // filter out duplicate site URLs
-                Set<String> siteUrls = new HashSet<>();
+                long duration = SystemClock.elapsedRealtime() - timestamp;
+                PhysicalWebUma.onBackgroundPwsResolution(mContext, duration);
+
                 for (PwsResult pwsResult : pwsResults) {
-                    String siteUrl = pwsResult.siteUrl;
-                    if (siteUrl != null && !siteUrls.contains(siteUrl)) {
-                        siteUrls.add(siteUrl);
+                    String requestUrl = pwsResult.requestUrl;
+                    if (url.equalsIgnoreCase(requestUrl)) {
+                        addResolvedUrl(url);
+                        return;
                     }
                 }
-
-                int urlCount = siteUrls.size();
-
-                if (urlCount == 0) {
-                    mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB);
-                } else {
-                    Resources resources = mContext.getResources();
-                    String title = resources.getQuantityString(
-                            R.plurals.physical_web_notification_title, urlCount, urlCount);
-                    String text = null;
-
-                    // when only one URL is found, display its title and description in the
-                    // notification (but avoid displaying a blank notification)
-                    if (urlCount == 1) {
-                        PwsResult onlyResult = pwsResults.iterator().next();
-                        if (!TextUtils.isEmpty(onlyResult.title)) {
-                            title = onlyResult.title;
-                            text = onlyResult.description;
-                        }
-                    }
-
-                    createNotification(title, text);
-                }
+                removeResolvedUrl(url);
             }
         });
     }
 
-    private void createNotification(String title, String text) {
-        // Get values to display.
+    private void showNotification() {
+        if (PhysicalWeb.isOnboarding(mContext)) {
+            if (PhysicalWeb.getOptInNotifyCount(mContext) < PhysicalWeb.OPTIN_NOTIFY_MAX_TRIES) {
+                // high priority notification
+                createOptInNotification(true);
+                PhysicalWeb.recordOptInNotification(mContext);
+                PhysicalWebUma.onOptInHighPriorityNotificationShown(mContext);
+            } else {
+                // min priority notification
+                createOptInNotification(false);
+                PhysicalWebUma.onOptInMinPriorityNotificationShown(mContext);
+            }
+            return;
+        }
+
+        if (PhysicalWeb.isPhysicalWebPreferenceEnabled(mContext)) {
+            createNotification();
+        }
+    }
+
+    private void createNotification() {
         PendingIntent pendingIntent = createListUrlsIntent();
+
+        // Get values to display.
+        Resources resources = mContext.getResources();
+        String title = resources.getString(R.string.physical_web_notification_title);
+        Bitmap largeIcon = BitmapFactory.decodeResource(resources,
+                R.drawable.physical_web_notification_large);
 
         // Create the notification.
         Notification notification = new NotificationCompat.Builder(mContext)
-                .setSmallIcon(R.drawable.ic_physical_web_notification)
+                .setLargeIcon(largeIcon)
+                .setSmallIcon(R.drawable.ic_chrome)
                 .setContentTitle(title)
-                .setContentText(text)
                 .setContentIntent(pendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
         mNotificationManager.notify(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB,
                                     notification);
+    }
+
+    private void createOptInNotification(boolean highPriority) {
+        PendingIntent pendingIntent = createOptInIntent();
+
+        int priority = highPriority ? NotificationCompat.PRIORITY_HIGH
+                : NotificationCompat.PRIORITY_MIN;
+
+        // Get values to display.
+        Resources resources = mContext.getResources();
+        String title = resources.getString(R.string.physical_web_optin_notification_title);
+        Bitmap largeIcon = BitmapFactory.decodeResource(resources,
+                R.drawable.physical_web_notification_large);
+
+        // Create the notification.
+        Notification notification = new NotificationCompat.Builder(mContext)
+                .setLargeIcon(largeIcon)
+                .setSmallIcon(R.drawable.ic_chrome)
+                .setContentTitle(title)
+                .setContentIntent(pendingIntent)
+                .setPriority(priority)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .build();
+        mNotificationManager.notify(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB,
+                                    notification);
+    }
+
+    private void clearNotification() {
+        mNotificationManager.cancel(NotificationConstants.NOTIFICATION_ID_PHYSICAL_WEB);
     }
 }

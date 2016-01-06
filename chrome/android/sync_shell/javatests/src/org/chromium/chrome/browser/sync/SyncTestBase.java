@@ -138,6 +138,10 @@ public class SyncTestBase extends ChromeActivityTestCaseBase<ChromeActivity> {
                 mProfileSyncService.requestStart();
             }
         });
+    }
+
+    protected void startSyncAndWait() throws InterruptedException {
+        startSync();
         SyncTestUtil.waitForSyncActive();
     }
 
@@ -163,8 +167,7 @@ public class SyncTestBase extends ChromeActivityTestCaseBase<ChromeActivity> {
                     }
 
                     @Override
-                    public void onSigninCancelled() {
-                    }
+                    public void onSigninCancelled() {}
                 });
             }
         });
@@ -176,7 +179,7 @@ public class SyncTestBase extends ChromeActivityTestCaseBase<ChromeActivity> {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SigninManager.get(mContext).signOut(getActivity(), new Runnable() {
+                SigninManager.get(mContext).signOut(new Runnable() {
                     @Override
                     public void run() {
                         s.release();

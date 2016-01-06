@@ -4,6 +4,9 @@
 
 #include "content/renderer/browser_plugin/browser_plugin.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -84,6 +87,8 @@ BrowserPlugin::BrowserPlugin(
 }
 
 BrowserPlugin::~BrowserPlugin() {
+  Detach();
+
   if (compositing_helper_.get())
     compositing_helper_->OnContainerDestroy();
 
@@ -213,8 +218,7 @@ void BrowserPlugin::OnCompositorFrameSwapped(const IPC::Message& message) {
 
   EnableCompositing(true);
   compositing_helper_->OnCompositorFrameSwapped(
-      frame.Pass(),
-      base::get<1>(param).producing_route_id,
+      std::move(frame), base::get<1>(param).producing_route_id,
       base::get<1>(param).output_surface_id,
       base::get<1>(param).producing_host_id,
       base::get<1>(param).shared_memory_handle);
@@ -488,6 +492,8 @@ blink::WebInputEventResult BrowserPlugin::handleInputEvent(
     blink::WebCursorInfo& cursor_info) {
   if (guest_crashed_ || !attached())
     return blink::WebInputEventResult::NotHandled;
+
+  DCHECK(!blink::WebInputEvent::isTouchEventType(event.type));
 
   if (event.type == blink::WebInputEvent::MouseWheel) {
     auto wheel_event = static_cast<const blink::WebMouseWheelEvent&>(event);

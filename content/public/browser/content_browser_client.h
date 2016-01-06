@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_CONTENT_BROWSER_CLIENT_H_
 #define CONTENT_PUBLIC_BROWSER_CONTENT_BROWSER_CLIENT_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <utility>
@@ -15,6 +17,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/content_client.h"
@@ -361,7 +364,7 @@ class CONTENT_EXPORT ContentBrowserClient {
                               ResourceContext* context,
                               int render_process_id,
                               int render_frame_id,
-                              net::CookieOptions* options);
+                              const net::CookieOptions& options);
 
   // This is called on the IO thread.
   virtual bool AllowSaveLocalState(ResourceContext* context);

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
@@ -15,6 +16,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,6 +66,7 @@ class DefaultBrowserInfoBarDelegate : public ConfirmInfoBarDelegate {
 
   // ConfirmInfoBarDelegate:
   Type GetInfoBarType() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   int GetIconId() const override;
   gfx::VectorIconId GetVectorIconId() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
@@ -124,6 +127,11 @@ infobars::InfoBarDelegate::Type DefaultBrowserInfoBarDelegate::GetInfoBarType()
 #else
   return PAGE_ACTION_TYPE;
 #endif
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+DefaultBrowserInfoBarDelegate::GetIdentifier() const {
+  return DEFAULT_BROWSER_INFOBAR_DELEGATE;
 }
 
 int DefaultBrowserInfoBarDelegate::GetIconId() const {

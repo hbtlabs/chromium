@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/public/model_type_entity.h"
 
+#include <stdint.h>
+
 #include "base/base64.h"
 #include "base/sha1.h"
 #include "base/time/time.h"
@@ -58,11 +60,11 @@ bool ModelTypeEntity::RequiresCommitRequest() const {
   return metadata_.sequence_number() > commit_requested_sequence_number_;
 }
 
-bool ModelTypeEntity::UpdateIsReflection(int64 update_version) const {
+bool ModelTypeEntity::UpdateIsReflection(int64_t update_version) const {
   return metadata_.server_version() >= update_version;
 }
 
-bool ModelTypeEntity::UpdateIsInConflict(int64 update_version) const {
+bool ModelTypeEntity::UpdateIsInConflict(int64_t update_version) const {
   return IsUnsynced() && !UpdateIsReflection(update_version);
 }
 
@@ -92,8 +94,7 @@ void ModelTypeEntity::ApplyUpdateFromServer(
   encryption_key_name_ = response_data.encryption_key_name;
 }
 
-void ModelTypeEntity::MakeLocalChange(const std::string& non_unique_name,
-                                      const sync_pb::EntitySpecifics& specifics,
+void ModelTypeEntity::MakeLocalChange(scoped_ptr<EntityData> entity_data,
                                       base::Time modification_time) {
   DCHECK(metadata_.has_client_tag_hash());
   DCHECK(!metadata_.client_tag_hash().empty());
@@ -102,21 +103,15 @@ void ModelTypeEntity::MakeLocalChange(const std::string& non_unique_name,
   metadata_.set_modification_time(syncer::TimeToProtoTime(modification_time));
   metadata_.set_is_deleted(false);
   IncrementSequenceNumber();
-  UpdateSpecificsHash(specifics);
+  UpdateSpecificsHash(entity_data->specifics);
 
-  // Build and cache commit data.
-  // TODO(stanisc): Consider moving this out to make caching the data
-  // optional.
-  EntityData data;
-  data.client_tag_hash = metadata_.client_tag_hash();
-  data.id = metadata_.server_id();
-  data.non_unique_name = non_unique_name;
-  data.creation_time = syncer::ProtoTimeToTime(metadata_.creation_time());
-  data.modification_time = modification_time;
-  // TODO(stanisc): Consider taking over specifics value without copying.
-  data.specifics.CopyFrom(specifics);
+  entity_data->client_tag_hash = metadata_.client_tag_hash();
+  entity_data->id = metadata_.server_id();
+  entity_data->creation_time =
+      syncer::ProtoTimeToTime(metadata_.creation_time());
+  entity_data->modification_time = modification_time;
 
-  CacheCommitData(&data);
+  CacheCommitData(entity_data.get());
 }
 
 void ModelTypeEntity::UpdateDesiredEncryptionKey(const std::string& name) {
@@ -161,8 +156,8 @@ void ModelTypeEntity::SetCommitRequestInProgress() {
 
 void ModelTypeEntity::ReceiveCommitResponse(
     const std::string& id,
-    int64 sequence_number,
-    int64 response_version,
+    int64_t sequence_number,
+    int64_t response_version,
     const std::string& encryption_key_name) {
   // The server can assign us a new ID in a commit response.
   metadata_.set_server_id(id);

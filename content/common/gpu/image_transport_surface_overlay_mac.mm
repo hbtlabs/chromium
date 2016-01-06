@@ -4,12 +4,14 @@
 
 #include "content/common/gpu/image_transport_surface_overlay_mac.h"
 
-#include <algorithm>
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOSurface/IOSurface.h>
 #include <OpenGL/CGLRenderers.h>
 #include <OpenGL/CGLTypes.h>
 #include <OpenGL/gl.h>
+#include <stddef.h>
+
+#include <algorithm>
 
 // This type consistently causes problem on Mac, and needs to be dealt with
 // in a systemic way.
@@ -22,7 +24,6 @@ typedef void* GLeglImageOES;
 #include "base/mac/scoped_cftyperef.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "ui/accelerated_widget_mac/io_surface_context.h"
-#include "ui/accelerated_widget_mac/surface_handle_types.h"
 #include "ui/base/cocoa/animation_utils.h"
 #include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/base/ui_base_switches.h"
@@ -103,7 +104,7 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
     transform.Translate(pixel_frame_rect.x(), pixel_frame_rect.y());
     return linked_ptr<OverlayPlane>(
         new OverlayPlane(z_order, io_surface_id, io_surface, contents_rect, 1.f,
-                         base::ScopedCFTypeRef<CGColorRef>(),
+                         base::ScopedCFTypeRef<CGColorRef>(), 0,
                          pixel_frame_rect.size(), transform, pixel_frame_rect));
   }
 
@@ -114,13 +115,15 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
       const gfx::RectF& contents_rect,
       float opacity,
       base::ScopedCFTypeRef<CGColorRef> background_color,
+      unsigned int edge_aa_mask,
       const gfx::SizeF& bounds_size,
       const gfx::Transform& transform) {
     gfx::RectF pixel_frame_rect = gfx::RectF(bounds_size);
     transform.TransformRect(&pixel_frame_rect);
     return linked_ptr<OverlayPlane>(new OverlayPlane(
         z_order, io_surface_id, io_surface, contents_rect, opacity,
-        background_color, bounds_size, transform, pixel_frame_rect));
+        background_color, edge_aa_mask, bounds_size, transform,
+        pixel_frame_rect));
   }
 
   ~OverlayPlane() { DCHECK(!ca_layer); }
@@ -134,6 +137,7 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
   const gfx::RectF contents_rect;
   float opacity;
   const base::ScopedCFTypeRef<CGColorRef> background_color;
+  unsigned int edge_aa_mask;
   const gfx::SizeF bounds_size;
   const gfx::Transform transform;
 
@@ -168,6 +172,7 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
       } else {
         [ca_layer setBackgroundColor:CGColorGetConstantColor(kCGColorClear)];
       }
+      [ca_layer setEdgeAntialiasingMask:edge_aa_mask];
 
       [ca_layer setAnchorPoint:CGPointZero];
       [ca_layer setBounds:gfx::RectF(bounds_size).ToCGRect()];
@@ -214,6 +219,7 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
                const gfx::RectF& contents_rect,
                float opacity,
                base::ScopedCFTypeRef<CGColorRef> background_color,
+               unsigned edge_aa_mask,
                const gfx::SizeF& bounds_size,
                const gfx::Transform& transform,
                const gfx::RectF& pixel_frame_rect)
@@ -223,6 +229,7 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
         contents_rect(contents_rect),
         opacity(opacity),
         background_color(background_color),
+        edge_aa_mask(edge_aa_mask),
         bounds_size(bounds_size),
         transform(transform),
         pixel_frame_rect(pixel_frame_rect),
@@ -457,11 +464,10 @@ void ImageTransportSurfaceOverlayMac::DisplayFirstPendingSwapImmediately() {
   // Send acknowledgement to the browser.
   GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params params;
   if (use_remote_layer_api_) {
-    params.surface_handle =
-        ui::SurfaceHandleFromCAContextID([ca_context_ contextId]);
+    params.ca_context_id = [ca_context_ contextId];
   } else {
-    params.surface_handle =
-        ui::SurfaceHandleFromIOSurfaceID(current_root_plane_->io_surface_id);
+    params.io_surface.reset(
+        IOSurfaceCreateMachPort(current_root_plane_->io_surface));
   }
   params.size = swap->pixel_size;
   params.scale_factor = swap->scale_factor;
@@ -760,7 +766,10 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
     const gfx::RectF& contents_rect,
     float opacity,
     unsigned background_color,
-    const gfx::SizeF& bounds_size,
+    unsigned edge_aa_mask,
+    const gfx::RectF& bounds_rect,
+    bool is_clipped,
+    const gfx::RectF& clip_rect,
     const gfx::Transform& transform) {
   // Extract the IOSurface, if this layer is not just a solid color.
   int io_surface_id = 0;
@@ -784,7 +793,8 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
 
   pending_overlay_planes_.push_back(OverlayPlane::CreateWithTransform(
       next_ca_layer_z_order_++, io_surface_id, io_surface, contents_rect,
-      opacity, srgb_background_color, bounds_size, transform));
+      opacity, srgb_background_color, edge_aa_mask, bounds_rect.size(),
+      transform));
   return true;
 }
 
@@ -807,7 +817,8 @@ void ImageTransportSurfaceOverlayMac::OnBufferPresented(
 }
 
 bool ImageTransportSurfaceOverlayMac::Resize(const gfx::Size& pixel_size,
-                                             float scale_factor) {
+                                             float scale_factor,
+                                             bool has_alpha) {
   // Flush through any pending frames.
   DisplayAndClearAllPendingSwaps();
   pixel_size_ = pixel_size;

@@ -4,6 +4,9 @@
 
 #include "components/safe_browsing_db/util.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "crypto/sha2.h"
 #include "net/base/escape.h"
@@ -293,6 +296,36 @@ void CanonicalizeUrl(const GURL& url,
   if (canonicalized_query && final_parsed.query.len > 0) {
     *canonicalized_query = escaped_canon_url_str.substr(
         final_parsed.query.begin, final_parsed.query.len);
+  }
+}
+
+void UrlToFullHashes(const GURL& url,
+                     bool include_whitelist_hashes,
+                     std::vector<SBFullHash>* full_hashes) {
+  std::vector<std::string> hosts;
+  if (url.HostIsIPAddress()) {
+    hosts.push_back(url.host());
+  } else {
+    GenerateHostsToCheck(url, &hosts);
+  }
+
+  std::vector<std::string> paths;
+  GeneratePathsToCheck(url, &paths);
+
+  for (const std::string& host : hosts) {
+    for (const std::string& path : paths) {
+      full_hashes->push_back(
+          SBFullHashForString(host + path));
+
+      // We may have /foo as path-prefix in the whitelist which should
+      // also match with /foo/bar and /foo?bar.  Hence, for every path
+      // that ends in '/' we also add the path without the slash.
+      if (include_whitelist_hashes && path.size() > 1 &&
+          path[path.size() - 1] == '/') {
+        full_hashes->push_back(SBFullHashForString(
+            host + path.substr(0, path.size() - 1)));
+      }
+    }
   }
 }
 

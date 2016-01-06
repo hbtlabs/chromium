@@ -9,11 +9,11 @@
 #include <string>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -22,6 +22,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_driver/backup_rollback_controller.h"
@@ -64,7 +65,6 @@ namespace browser_sync {
 class BackendMigrator;
 class FaviconCache;
 class SessionsSyncManager;
-class SyncedWindowDelegatesGetter;
 }  // namespace browser_sync
 
 namespace sync_driver {
@@ -185,6 +185,7 @@ class ProfileSyncService : public sync_driver::SyncService,
                            public SigninManagerBase::Observer {
  public:
   typedef browser_sync::SyncBackendHost::Status Status;
+  typedef base::Callback<bool(void)> PlatformSyncAllowedProvider;
 
   enum SyncEventCodes  {
     MIN_SYNC_EVENT_CODE = 0,
@@ -230,19 +231,35 @@ class ProfileSyncService : public sync_driver::SyncService,
     ROLLBACK    // Backend for rollback.
   };
 
-  ProfileSyncService(
-      scoped_ptr<sync_driver::SyncClient> sync_client,
-      scoped_ptr<SigninManagerWrapper> signin_wrapper,
-      ProfileOAuth2TokenService* oauth2_token_service,
-      browser_sync::ProfileSyncServiceStartBehavior start_behavior,
-      const syncer::NetworkTimeUpdateCallback& network_time_update_callback,
-      base::FilePath base_directory,
-      scoped_refptr<net::URLRequestContextGetter> url_request_context,
-      std::string debug_identifier,
-      version_info::Channel channel,
-      scoped_refptr<base::SingleThreadTaskRunner> db_thread,
-      scoped_refptr<base::SingleThreadTaskRunner> file_thread,
-      base::SequencedWorkerPool* blocking_pool);
+  // Bundles the arguments for ProfileSyncService construction. This is a
+  // movable struct. Because of the non-POD data members, it needs out-of-line
+  // constructors, so in particular the move constructor needs to be
+  // explicitly defined.
+  struct InitParams {
+    InitParams();
+    ~InitParams();
+    InitParams(InitParams&& other);  // NOLINT
+
+    scoped_ptr<sync_driver::SyncClient> sync_client;
+    scoped_ptr<SigninManagerWrapper> signin_wrapper;
+    ProfileOAuth2TokenService* oauth2_token_service = nullptr;
+    browser_sync::ProfileSyncServiceStartBehavior start_behavior =
+        browser_sync::MANUAL_START;
+    syncer::NetworkTimeUpdateCallback network_time_update_callback;
+    base::FilePath base_directory;
+    scoped_refptr<net::URLRequestContextGetter> url_request_context;
+    std::string debug_identifier;
+    version_info::Channel channel = version_info::Channel::UNKNOWN;
+    scoped_refptr<base::SingleThreadTaskRunner> db_thread;
+    scoped_refptr<base::SingleThreadTaskRunner> file_thread;
+    base::SequencedWorkerPool* blocking_pool = nullptr;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(InitParams);
+  };
+
+  explicit ProfileSyncService(InitParams init_params);
+
   ~ProfileSyncService() override;
 
   // Initializes the object. This must be called at most once, and
@@ -326,14 +343,6 @@ class ProfileSyncService : public sync_driver::SyncService,
 
   void RegisterAuthNotifications();
   void UnregisterAuthNotifications();
-
-  // Return whether OAuth2 refresh token is loaded and available for the backend
-  // to start up. Virtual to enable mocking in tests.
-  virtual bool IsOAuthRefreshTokenAvailable();
-
-  // Returns the SyncedWindowDelegatesGetter from the embedded sessions manager.
-  virtual browser_sync::SyncedWindowDelegatesGetter*
-  GetSyncedWindowDelegatesGetter() const;
 
   // Returns the SyncableService for syncer::SESSIONS.
   virtual syncer::SyncableService* GetSessionsSyncableService();
@@ -431,6 +440,9 @@ class ProfileSyncService : public sync_driver::SyncService,
   // This function can be called from any thread, and the implementation doesn't
   // assume it's running on the UI thread.
   static bool IsSyncAllowedByFlag();
+
+  // Returns whether sync is currently allowed on this platform.
+  bool IsSyncAllowedByPlatform() const;
 
   // Returns whether sync is managed, i.e. controlled by configuration
   // management. If so, the user is not allowed to configure sync.
@@ -569,6 +581,10 @@ class ProfileSyncService : public sync_driver::SyncService,
   // SyncPrefs. Will return the empty string if no bootstrap token exists.
   std::string GetCustomPassphraseKey() const;
 
+  // Set the provider for whether sync is currently allowed by the platform.
+  void SetPlatformSyncAllowedProvider(
+      const PlatformSyncAllowedProvider& platform_sync_allowed_provider);
+
   // Needed to test whether the directory is deleted properly.
   base::FilePath GetDirectoryPathForTest() const;
 
@@ -642,10 +658,9 @@ class ProfileSyncService : public sync_driver::SyncService,
 
   // The initial state of sync, for the Sync.InitialState histogram. Even if
   // this value is CAN_START, sync startup might fail for reasons that we may
-  // want to consider logging in the future, such as sync being disabled via
-  // Google Dashboard (birthday error), a passphrase needed for decryption, or
-  // the version of Chrome being too old. This enum is used to back a UMA
-  // histogram, and should therefore be treated as append-only.
+  // want to consider logging in the future, such as a passphrase needed for
+  // decryption, or the version of Chrome being too old. This enum is used to
+  // back a UMA histogram, and should therefore be treated as append-only.
   enum SyncInitialState {
     CAN_START,                // Sync can attempt to start up.
     NOT_SIGNED_IN,            // There is no signed in user.
@@ -654,6 +669,7 @@ class ProfileSyncService : public sync_driver::SyncService,
                               // is false. Might indicate a stop-and-clear.
     NEEDS_CONFIRMATION,       // The user must confirm sync settings.
     IS_MANAGED,               // Sync is disallowed by enterprise policy.
+    NOT_ALLOWED_BY_PLATFORM,  // Sync is disallowed by the platform.
     SYNC_INITIAL_STATE_LIMIT
   };
 
@@ -1012,6 +1028,10 @@ class ProfileSyncService : public sync_driver::SyncService,
   // the user. This logic is only enabled on platforms that consume the
   // IsPassphrasePrompted sync preference.
   bool passphrase_prompt_triggered_by_version_;
+
+  // An object that lets us check whether sync is currently allowed on this
+  // platform.
+  PlatformSyncAllowedProvider platform_sync_allowed_provider_;
 
   // Used to ensure that certain operations are performed on the thread that
   // this object was created on.

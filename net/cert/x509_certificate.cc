@@ -4,6 +4,7 @@
 
 #include "net/cert/x509_certificate.h"
 
+#include <limits.h>
 #include <stdlib.h>
 
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"

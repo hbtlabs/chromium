@@ -4,6 +4,7 @@
 
 #include "ui/views/style/platform_style.h"
 
+#include "build/build_config.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -22,7 +23,7 @@ scoped_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
   scoped_ptr<LabelButtonBorder> border(new views::LabelButtonBorder());
   border->set_insets(views::LabelButtonAssetBorder::GetDefaultInsetsForStyle(
       Button::STYLE_TEXTBUTTON));
-  return border.Pass();
+  return border;
 }
 #endif
 

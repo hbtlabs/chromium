@@ -5,10 +5,12 @@
 #ifndef NET_QUIC_QUIC_HTTP_STREAM_H_
 #define NET_QUIC_QUIC_HTTP_STREAM_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <list>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/io_buffer.h"
 #include "net/http/http_stream.h"
@@ -60,6 +62,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
   void Drain(HttpNetworkSession* session) override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
 
   // QuicReliableClientStream::Delegate implementation
@@ -111,7 +114,7 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   State next_state_;
 
   base::WeakPtr<QuicChromiumClientSession> session_;
-  int session_error_;  // Error code from the connection shutdown.
+  int session_error_;             // Error code from the connection shutdown.
   bool was_handshake_confirmed_;  // True if the crypto handshake succeeded.
   QuicChromiumClientSession::StreamRequest stream_request_;
   QuicReliableClientStream* stream_;  // Non-owning.
@@ -167,6 +170,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   scoped_refptr<DrainableIOBuffer> request_body_buf_;
 
   BoundNetLog stream_net_log_;
+
+  QuicErrorCode quic_connection_error_;
 
   base::WeakPtrFactory<QuicHttpStream> weak_factory_;
 

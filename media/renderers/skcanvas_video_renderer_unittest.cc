@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
@@ -156,7 +159,7 @@ SkCanvasVideoRendererTest::SkCanvasVideoRendererTest()
   // Each color region in the cropped frame is on a 2x2 block granularity, to
   // avoid sharing UV samples between regions.
 
-  static const uint8 cropped_y_plane[] = {
+  static const uint8_t cropped_y_plane[] = {
       0,   0,   0,   0,   0,   0,   0,   0,   76, 76, 76, 76, 76, 76, 76, 76,
       0,   0,   0,   0,   0,   0,   0,   0,   76, 76, 76, 76, 76, 76, 76, 76,
       0,   0,   0,   0,   0,   0,   0,   0,   76, 76, 76, 76, 76, 76, 76, 76,
@@ -175,14 +178,14 @@ SkCanvasVideoRendererTest::SkCanvasVideoRendererTest()
       149, 149, 149, 149, 149, 149, 149, 149, 29, 29, 29, 29, 29, 29, 29, 29,
   };
 
-  static const uint8 cropped_u_plane[] = {
+  static const uint8_t cropped_u_plane[] = {
       128, 128, 128, 128, 84,  84,  84,  84,  128, 128, 128, 128, 84,
       84,  84,  84,  128, 128, 128, 128, 84,  84,  84,  84,  128, 128,
       128, 128, 84,  84,  84,  84,  43,  43,  43,  43,  255, 255, 255,
       255, 43,  43,  43,  43,  255, 255, 255, 255, 43,  43,  43,  43,
       255, 255, 255, 255, 43,  43,  43,  43,  255, 255, 255, 255,
   };
-  static const uint8 cropped_v_plane[] = {
+  static const uint8_t cropped_v_plane[] = {
       128, 128, 128, 128, 255, 255, 255, 255, 128, 128, 128, 128, 255,
       255, 255, 255, 128, 128, 128, 128, 255, 255, 255, 255, 128, 128,
       128, 128, 255, 255, 255, 255, 21,  21,  21,  21,  107, 107, 107,

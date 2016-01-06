@@ -5,10 +5,13 @@
 #ifndef IOS_WEB_PUBLIC_WEB_STATE_WEB_STATE_H_
 #define IOS_WEB_PUBLIC_WEB_STATE_WEB_STATE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
@@ -46,6 +49,7 @@ class NavigationManager;
 class WebInterstitial;
 class WebStateObserver;
 class WebStatePolicyDecider;
+class WebStateWeakPtrFactory;
 
 // Core interface for interaction with the web.
 class WebState : public base::SupportsUserData {
@@ -217,6 +221,14 @@ class WebState : public base::SupportsUserData {
   virtual void RemovePolicyDecider(WebStatePolicyDecider* decider) = 0;
 
   WebState() {}
+
+ private:
+  friend class WebStateWeakPtrFactory;  // For AsWeakPtr.
+
+  // Returns a WeakPtr<WebState> to the current WebState. Must remain private
+  // and only call must be in WebStateWeakPtrFactory. Please consult that class
+  // for more details. Remove as part of http://crbug.com/556736.
+  virtual base::WeakPtr<WebState> AsWeakPtr() = 0;
 };
 
 }  // namespace web

@@ -9,10 +9,10 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -160,8 +160,8 @@ class SigninScreenHandlerDelegate {
   // Cancels user adding.
   virtual void CancelUserAdding() = 0;
 
-  // Load wallpaper for given |username|.
-  virtual void LoadWallpaper(const std::string& username) = 0;
+  // Load wallpaper for given |account_id|.
+  virtual void LoadWallpaper(const AccountId& account_id) = 0;
 
   // Loads the default sign-in wallpaper.
   virtual void LoadSigninWallpaper() = 0;
@@ -189,7 +189,7 @@ class SigninScreenHandlerDelegate {
   virtual void CheckUserStatus(const AccountId& account_id) = 0;
 
   // Returns true if user is allowed to log in by domain policy.
-  virtual bool IsUserWhitelisted(const std::string& user_id) = 0;
+  virtual bool IsUserWhitelisted(const AccountId& account_id) = 0;
 
  protected:
   virtual ~SigninScreenHandlerDelegate() {}

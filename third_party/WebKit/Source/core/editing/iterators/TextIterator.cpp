@@ -24,7 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/iterators/TextIterator.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -53,6 +52,7 @@
 #include "platform/fonts/Font.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
+#include <algorithm>
 #include <unicode/utf16.h>
 
 using namespace WTF::Unicode;
@@ -210,13 +210,13 @@ TextIteratorAlgorithm<Strategy>::~TextIteratorAlgorithm()
 }
 
 template<typename Strategy>
-bool TextIteratorAlgorithm<Strategy>::isInsideReplacedElement() const
+bool TextIteratorAlgorithm<Strategy>::isInsideAtomicInlineElement() const
 {
     if (atEnd() || length() != 1 || !m_node)
         return false;
 
     LayoutObject* layoutObject = m_node->layoutObject();
-    return layoutObject && layoutObject->isReplaced();
+    return layoutObject && layoutObject->isAtomicInlineLevel();
 }
 
 template<typename Strategy>

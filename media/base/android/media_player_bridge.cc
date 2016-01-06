@@ -4,10 +4,11 @@
 
 #include "media/base/android/media_player_bridge.h"
 
+#include <utility>
+
 #include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "jni/MediaPlayerBridge_jni.h"
@@ -110,7 +111,7 @@ void MediaPlayerBridge::SetDuration(base::TimeDelta duration) {
 }
 
 void MediaPlayerBridge::SetVideoSurface(gfx::ScopedJavaSurface surface) {
-  surface_ =  surface.Pass();
+  surface_ = std::move(surface);
 
   if (j_media_player_bridge_.is_null())
     return;
@@ -144,8 +145,8 @@ void MediaPlayerBridge::SetDataSource(const std::string& url) {
   CHECK(env);
 
   int fd;
-  int64 offset;
-  int64 size;
+  int64_t offset;
+  int64_t size;
   if (InterceptMediaUrl(url, &fd, &offset, &size)) {
     if (!Java_MediaPlayerBridge_setDataSourceFromFd(
         env, j_media_player_bridge_.obj(), fd, offset, size)) {
@@ -186,8 +187,10 @@ void MediaPlayerBridge::SetDataSource(const std::string& url) {
     OnMediaError(MEDIA_ERROR_FORMAT);
 }
 
-bool MediaPlayerBridge::InterceptMediaUrl(
-    const std::string& url, int* fd, int64* offset, int64* size) {
+bool MediaPlayerBridge::InterceptMediaUrl(const std::string& url,
+                                          int* fd,
+                                          int64_t* offset,
+                                          int64_t* size) {
   // Sentinel value to check whether the output arguments have been set.
   const int kUnsetValue = -1;
 
@@ -246,8 +249,8 @@ void MediaPlayerBridge::ExtractMediaMetadata(const std::string& url) {
   }
 
   int fd;
-  int64 offset;
-  int64 size;
+  int64_t offset;
+  int64_t size;
   if (InterceptMediaUrl(url, &fd, &offset, &size)) {
     manager()->GetMediaResourceGetter()->ExtractMediaMetadata(
         fd, offset, size,
@@ -416,7 +419,7 @@ void MediaPlayerBridge::OnMediaPrepared() {
   }
 
   if (!surface_.IsEmpty())
-    SetVideoSurface(surface_.Pass());
+    SetVideoSurface(std::move(surface_));
 
   if (pending_play_) {
     StartInternal();
@@ -504,8 +507,12 @@ bool MediaPlayerBridge::SeekInternal(base::TimeDelta current_time,
 }
 
 void MediaPlayerBridge::OnTimeUpdateTimerFired() {
-  manager()->OnTimeUpdate(
-      player_id(), GetCurrentTime(), base::TimeTicks::Now());
+  base::TimeDelta current_timestamp = GetCurrentTime();
+  if (last_time_update_timestamp_ == current_timestamp)
+    return;
+  manager()->OnTimeUpdate(player_id(), current_timestamp,
+                          base::TimeTicks::Now());
+  last_time_update_timestamp_ = current_timestamp;
 }
 
 bool MediaPlayerBridge::RegisterMediaPlayerBridge(JNIEnv* env) {

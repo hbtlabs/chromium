@@ -5,6 +5,7 @@
 #ifndef NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_H_
 #define NET_HTTP_HTTP_STREAM_FACTORY_IMPL_JOB_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -26,6 +27,7 @@
 
 namespace net {
 
+class BidirectionalStreamJob;
 class ClientSocketHandle;
 class HttpAuthController;
 class HttpNetworkSession;
@@ -86,6 +88,7 @@ class HttpStreamFactoryImpl::Job {
   NextProto protocol_negotiated() const;
   bool using_spdy() const;
   const BoundNetLog& net_log() const { return net_log_; }
+  bool for_bidirectional() const { return for_bidirectional_; }
 
   const SSLConfig& server_ssl_config() const;
   const SSLConfig& proxy_ssl_config() const;
@@ -194,6 +197,7 @@ class HttpStreamFactoryImpl::Job {
   };
 
   void OnStreamReadyCallback();
+  void OnBidirectionalStreamJobReadyCallback();
   void OnWebSocketHandshakeStreamReadyCallback();
   // This callback function is called when a new SPDY session is created.
   void OnNewSpdySessionReadyCallback();
@@ -228,9 +232,12 @@ class HttpStreamFactoryImpl::Job {
   int DoRestartTunnelAuth();
   int DoRestartTunnelAuthComplete(int result);
 
-  // Creates a SpdyHttpStream from the given values and sets to |stream_|. Does
+  // Creates a SpdyHttpStream or a BidirectionalStreamJob from the given values
+  // and sets to |stream_| or |bidirectional_stream_job_| respectively. Does
   // nothing if |stream_factory_| is for WebSockets.
-  int SetSpdyHttpStream(base::WeakPtr<SpdySession> session, bool direct);
+  int SetSpdyHttpStreamOrBidirectionalStreamJob(
+      base::WeakPtr<SpdySession> session,
+      bool direct);
 
   // Returns to STATE_INIT_CONNECTION and resets some state.
   void ReturnToStateInitConnection(bool close_connection);
@@ -368,6 +375,9 @@ class HttpStreamFactoryImpl::Job {
 
   scoped_ptr<HttpStream> stream_;
   scoped_ptr<WebSocketHandshakeStreamBase> websocket_stream_;
+#if defined(ENABLE_BIDIRECTIONAL_STREAM)
+  scoped_ptr<BidirectionalStreamJob> bidirectional_stream_job_;
+#endif
 
   // True if we negotiated NPN.
   bool was_npn_negotiated_;
@@ -392,6 +402,9 @@ class HttpStreamFactoryImpl::Job {
 
   JobStatus job_status_;
   JobStatus other_job_status_;
+
+  // True if BidirectionalStreamJob is requested.
+  bool for_bidirectional_;
 
   base::WeakPtrFactory<Job> ptr_factory_;
 

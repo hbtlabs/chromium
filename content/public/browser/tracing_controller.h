@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_TRACING_CONTROLLER_H_
 #define CONTENT_PUBLIC_BROWSER_TRACING_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
@@ -13,6 +15,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/tracing_delegate.h"
 
 namespace content {
 
@@ -37,25 +40,36 @@ class TracingController {
   class CONTENT_EXPORT TraceDataSink
       : public base::RefCountedThreadSafe<TraceDataSink> {
    public:
+    TraceDataSink();
+
     virtual void AddTraceChunk(const std::string& chunk) {}
-    virtual void SetSystemTrace(const std::string& data) {}
+
+    // Add a TracingAgent's trace to the data sink.
+    virtual void AddAgentTrace(const std::string& trace_label,
+                               const std::string& trace_data);
 
     // Notice that TracingController adds some default metadata when
-    // DisableRecording is called, which may override metadata that you would
+    // StopTracing is called, which may override metadata that you would
     // set beforehand in case of key collision.
     virtual void AddMetadata(const base::DictionaryValue& data);
-    virtual const base::DictionaryValue& GetMetadata() const;
-    // TODO(prabhur) Replace all the Set* functions with a generic function:
-    // TraceDataSink::AppendAdditionalData(const std::string& name,
-    // const std::string& trace_data)
-    virtual void SetPowerTrace(const std::string& data) {}
+    virtual scoped_ptr<const base::DictionaryValue> GetMetadataCopy() const;
+    virtual void SetMetadataFilterPredicate(
+        const MetadataFilterPredicate& metadata_filter_predicate);
     virtual void Close() {}
 
    protected:
     friend class base::RefCountedThreadSafe<TraceDataSink>;
-    virtual ~TraceDataSink() {}
+
+    // Get a map of TracingAgent's data, which is previously added by
+    // AddAgentTrace(). The map's key is the trace label and the map's value is
+    // the trace data.
+    virtual const std::map<std::string, std::string>& GetAgentTrace() const;
+
+    virtual ~TraceDataSink();
 
    private:
+    std::map<std::string, std::string> additional_tracing_agent_trace_;
+    MetadataFilterPredicate metadata_filter_predicate_;
     base::DictionaryValue metadata_;
   };
 

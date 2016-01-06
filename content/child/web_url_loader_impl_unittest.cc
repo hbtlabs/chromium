@@ -4,7 +4,9 @@
 
 #include "content/child/web_url_loader_impl.h"
 
+#include <stdint.h>
 #include <string.h>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -691,7 +693,7 @@ TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
   stream_override->stream_url = kStreamURL;
   stream_override->response.mime_type = kMimeType;
   RequestExtraData* extra_data = new RequestExtraData();
-  extra_data->set_stream_override(stream_override.Pass());
+  extra_data->set_stream_override(std::move(stream_override));
   request.setExtraData(extra_data);
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableBrowserSideNavigation);

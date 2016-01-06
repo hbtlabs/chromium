@@ -5,20 +5,22 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base_switches.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/captive_portal/captive_portal_service.h"
 #include "chrome/browser/captive_portal/captive_portal_service_factory.h"
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
@@ -444,7 +446,7 @@ URLRequestMockCaptivePortalJobFactory::CreateInterceptor() {
   EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
   scoped_ptr<Interceptor> interceptor(new Interceptor(behind_captive_portal_));
   interceptors_.push_back(interceptor.get());
-  return interceptor.Pass();
+  return std::move(interceptor);
 }
 
 void URLRequestMockCaptivePortalJobFactory::AddUrlHandlersOnIOThread() {

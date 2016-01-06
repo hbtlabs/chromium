@@ -6,8 +6,10 @@
 #define REMOTING_CLIENT_PLUGIN_PEPPER_PORT_ALLOCATOR_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ppapi/cpp/instance_handle.h"
+#include "remoting/protocol/port_allocator_factory.h"
 #include "third_party/webrtc/p2p/client/httpportallocator.h"
 
 namespace remoting {
@@ -45,6 +47,20 @@ class PepperPortAllocator : public cricket::HttpPortAllocatorBase {
   scoped_ptr<rtc::PacketSocketFactory> socket_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PepperPortAllocator);
+};
+
+class PepperPortAllocatorFactory : public protocol::PortAllocatorFactory {
+ public:
+  PepperPortAllocatorFactory(const pp::InstanceHandle& instance);
+  ~PepperPortAllocatorFactory() override;
+
+   // PortAllocatorFactory interface.
+  scoped_ptr<cricket::HttpPortAllocatorBase> CreatePortAllocator() override;
+
+ private:
+  pp::InstanceHandle instance_;
+
+  DISALLOW_COPY_AND_ASSIGN(PepperPortAllocatorFactory);
 };
 
 }  // namespace remoting

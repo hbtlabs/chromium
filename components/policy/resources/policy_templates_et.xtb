@@ -105,7 +105,6 @@
 <translation id="1426410128494586442">Jah</translation>
 <translation id="1427655258943162134">Puhverserveri aadress või URL</translation>
 <translation id="1435659902881071157">Seadme tasemel võrgukonfigureerimine</translation>
-<translation id="1445397020763995734">HTTP läbirääkimiste autentimisel kasutatava konto tüüp</translation>
 <translation id="1454846751303307294">Võimaldab teil määrata URL-i mustrite loendi, mis määrab saidid, millel on keelatud JavaScripti käitada.
 
           Kui jätate selle reegli määramata, siis kasutatakse kõikide saitide puhul globaalset vaikeväärtust, mis pärineb reeglist „DefaultJavaScriptSetting”, kui see on määratud, või kasutaja isiklikku konfigureerimist.</translation>
@@ -287,18 +286,6 @@
       Kui HardwareAccelerationModeEnabled on seatud väärtusele Väär, eiratakse atribuuti Disable3DAPIs, mis on võrdväärne atribuudi Disable3DAPIs seadmisega väärtusele Tõene.</translation>
 <translation id="2168397434410358693">Jõudeoleku viiteaeg võrgutoite kasutamisel</translation>
 <translation id="2170233653554726857">WPAD-optimeerimise lubamine</translation>
-<translation id="2175836933294053665">Seadistab hallatud järjehoidjate loendi.
-
-      Reegel koosneb järjehoidjate loendist, kusjuures iga järjehoidja on
-      sõnastik, mis sisaldab võtmeid „name” ja „url”, kus hoiustatakse järjehoidja
-      nime ja selle siht-URL-i. Alamkausta saab seadistada, määrates järjehoidja
-      ilma võtmeta „url”, kuid täiendava võtmega „children”, mis sisaldab ise
-      järjehoidjate loendit, nagu on ülal määratud (millest mõned võivad olla
-      kaustad). <ph name="PRODUCT_NAME" />
-      täiendab poolikuid URL-e, nagu need oleksid edastatud omnikastikese kaudu,
-      nt „google.com-ist” saab „https://google.com/”.
-
-      Need järjehoidjad asuvad kaustas Hallatud järjehoidjad, mida kasutaja muuta ei saa, kuid kasutaja saab selle kausta soovi korral järjehoidjaribalt peita. Hallatud järjehoidjad ei ole kasutajakontoga sünkroonitud ja laiendused ei saa neid muuta.</translation>
 <translation id="2188979373208322108">Lubab järjehoidjariba rakenduses <ph name="PRODUCT_NAME" />.
 
       Seade lubamisel kuvab <ph name="PRODUCT_NAME" /> järjehoidjariba.
@@ -372,21 +359,6 @@
 
           Kui seda seadet ei määrata, lubab teenus <ph name="PRODUCT_NAME" />
           kasutada kasutaja tasemel omasõnumside hoste.</translation>
-<translation id="2393996789386329927">Blokeerib juurdepääsu loetletud URL-idele.
-
-      See reegel keelab kasutajal laadida keelatud URL-ide loendis olevaid veebilehti. Keelatute loendis on loend URL-i mustritest, milles määratakse, millised URL-id keelatute loendisse lisatakse.
-
-      Iga URL-i muster võib olla muster kohalike failide jaoks või üldine URL-i muster. Kohalikud failimustrid on vormingus „file://path”, kus „path” peaks olema blokeeritav absoluutne tee. Kõik failisüsteemi asukohad, mille eesliide see tee on, blokeeritakse.
-
-      Üldine URL-i muster on vormingus „scheme://host:port/path”.
-      Selle olemasolul blokeeritakse ainult määratud skeem. Kui eesliidet scheme:// ei määrata, blokeeritakse kõik skeemid.
-      Host on kohustuslik ja see võib olla hosti nimi või IP-aadress. Blokeeritakse ka hosti nime alamdomeenid. Alamdomeenide blokeerimise vältimiseks lisage hosti nime ette „.”. Spetsiaalne hosti nimi „*” blokeerib kõik domeenid.
-      Valikuline port on kehtiv pordi number vahemikus 1–65535. Kui seda ei määrata, blokeeritakse kõik pordid.
-      Kui määratakse valikuline tee, blokeeritakse ainult selle eesliitega teed.
-
-      Erandid saab määrata lubatud URL-ide loendi reegliga. Need reeglid kehtivad vaid 1000 kirje puhul, järgnevaid kirjeid eiratakse.
-
-      Kui seda reeglit ei määrata, ei lisata brauseris keelatute loendisse ühtegi URL-i.</translation>
 <translation id="240213793013362302">Seadistab taustapildi.
 
       Reegel võimaldab seadistada taustapildi, mis kuvatakse kasutaja töölaual ja sisselogimisekraani taustal. Reegli seadistamiseks määrake URL, millelt <ph name="PRODUCT_OS_NAME" /> saab alla laadida taustapildi ja allalaaditava sisu terviklikkuse kinnitamiseks kasutatava krüptograafilise räsi. Pilt peab olema JPEG-vormingus ja faili maht ei tohi olla suurem kui 16 MB. URL peab olema juurdepääsetav autentimiseta.
@@ -419,6 +391,38 @@
       Kui seade on lubatud, ei salvestata sirvimisajalugu. Seade keelab ka vahelehtede sünkroonimise.
 
       Kui seade on keelatud või määramata, salvestatakse sirvimisajalugu.</translation>
+<translation id="2424023834246613232">Alistatakse rakenduse <ph name="PRODUCT_NAME" /> vaikeprinteri valimise reeglid.
+
+      Selle reegliga määratakse reeglid rakenduses <ph name="PRODUCT_NAME" /> vaikeprinteri valimiseks, mis toimub esimesel korral, kui profiilil printimisfunktsiooni kasutatakse.
+
+      Kui reegel on määratud, üritab rakendus <ph name="PRODUCT_NAME" /> leida printeri, mis vastab kõigile määratud atribuutidele, ja valib selle vaikeprinteriks. Valitakse esimene printer, mis reeglitele vastab. Kui reeglitele vastavaid printereid on mitu, saab nende avastamise järjekorrast olenevalt valida mis tahes sobiva printeri.
+
+      Kui seda reeglit ei määrata või määratud aja jooksul ei leita reeglitele vastavat printerit, määratakse vaikimisi printeriks sisseehitatud PDF-printer. Kui PDF-printer pole saadaval, siis printerit ei valita.
+
+      Väärtus sõelutakse JSON-objektina, mis vastab järgmisele skeemile:
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Kas piirata sobiva printeri otsing konkreetse printerite komplektiga?",
+            "type": {
+              "enum": [ "local", "cloud" ]
+            }
+          },
+          "idPattern": {
+            "description": "Regulaaravaldis, mis ühtib printeri ID-ga.",
+            "type": "string"
+          },
+          "namePattern": {
+            "description": "Regulaaravaldis, mis ühtib printeri kuvatava nimega.",
+            "type": "string"
+          }
+        }
+      }
+
+      Rakendusega <ph name="CLOUD_PRINT_NAME" /> ühendatud printerid loetakse gruppi <ph name="PRINTER_TYPE_CLOUD" /> kuuluvateks, ülejäänud printerid kuuluvad gruppi <ph name="PRINTER_TYPE_LOCAL" />.
+      Välja vahelejätmine tähendab, et kõik väärtused ühtivad. Näiteks kui ühenduvust ei määrata, käivitab printimise eelvaade igat tüüpi printerite (nii kohalike kui ka pilves olevate printerite) otsimise.
+      Regulaaravaldise mustrid peavad järgima atribuudi JavaScript RegExp süntaksit ja vasted on tõstutundlikud.</translation>
 <translation id="2426782419955104525">Lubab toote <ph name="PRODUCT_NAME" /> funktsiooni Instant ja takistab kasutajatel seda seadet muuta.
 
       Kui lubate selle seade, on <ph name="PRODUCT_NAME" /> Instant lubatud.
@@ -594,6 +598,7 @@
       Määrab, kas TLS-i domeenisuunaline sertifikaatide laiendus peab olema lubatud.
 
       Selle seadega lubatakse testimiseks TLS-i domeenisuunaline sertifikaatide laiendus. See katseline seade eemaldatakse tulevikus.</translation>
+<translation id="2957513448235202597">Üksuse <ph name="HTTP_NEGOTIATE" /> autentimisel kasutatava konto tüüp</translation>
 <translation id="2959898425599642200">Puhverserveri möödumisreeglid</translation>
 <translation id="2960691910306063964">Kaugjuurdepääsu hostide PIN-koodita autentimise lubamine või keelamine</translation>
 <translation id="2976002782221275500">Määrab aja, pärast mida hämardatakse akutoitega töötamisel ekraan, kui kasutaja pole midagi sisestanud.
@@ -612,38 +617,6 @@
       Kui selle seade lubate, kuvatakse kõik kontrollportaalide autentimislehed (nt kõik veebilehed alates kontrollportaali sisselogimislehest, kuni teenus <ph name="PRODUCT_NAME" /> tuvastab toimiva Interneti-ühenduse) eraldi aknas, eirates kõiki praeguse kasutaja reegliseadeid ja piiranguid.
 
       Kui selle seade keelate või jätate selle määramata, kuvatakse kõik kontrollportaali autentimislehed (tavapärasel) brauseri uuel vahelehel, kasutades praeguse kasutaja puhverserveri seadeid.</translation>
-<translation id="3001569025430882724">Alistatakse rakenduse <ph name="PRODUCT_NAME" /> vaikeprinteri valimise reeglid.
-
-      Selle reegliga määratakse reeglid rakenduses <ph name="PRODUCT_NAME" /> vaikeprinteri valimiseks, mis toimub esimesel korral, kui profiilil printimisfunktsiooni kasutatakse.
-
-      Kui reegel on määratud, üritab rakendus <ph name="PRODUCT_NAME" /> leida printeri, mis vastab kõigile määratud atribuutidele, ja valib selle vaikeprinteriks. Valitakse esimene printer, mis reeglitele vastab. Kui reeglitele vastavaid printereid on mitu, saab nende avastamise järjekorrast olenevalt valida mis tahes sobiva printeri.
-
-      Kui seda reeglit ei määrata või määratud aja jooksul ei leita reeglitele vastavat printerit, määratakse printeriks vaikimisi sisseehitatud PDF-printer. Kui PDF-printer pole saadaval, siis printerit ei valita.
-
-      Väärtus sõelutakse JSON-objektina, mis vastab järgmisele skeemile:
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "description": "Kas piirata sobiva printeri otsing konkreetse printerite komplektiga?",
-            "type": {
-              "enum": [ "local", "cloud" ]
-            }
-          },
-          "idPattern": {
-            "description": "Regulaaravaldis, mis ühtib printeri ID-ga.",
-            "type": "string"
-          },
-          "namePattern": {
-            "description": "Regulaaravaldis, mis ühtib printeri kuvatava nimega.",
-            "type": "string"
-          }
-        }
-      }
-
-      Google'i pilvprintimisega ühendatud printerid loetakse gruppi „cloud” kuuluvateks, ülejäänud printerid kuuluvad gruppi „local”.
-      Välja vahelejätmine tähendab, et kõik väljad ühtivad. Näiteks kui ühenduvust ei määrata, käivitab printimise eelvaade igat tüüpi printerite otsimise („local” ja „cloud”).
-      Regulaaravaldise mustrid peavad järgima atribuudi JavaScript RegExp süntaksit ja vasted on tõstutundlikud.</translation>
 <translation id="3021409116652377124">Keela pistikprogrammide leidja</translation>
 <translation id="3030000825273123558">Luba mõõdikute aruandlus</translation>
 <translation id="3034580675120919256">Võimaldab määrata, kas veebisaitidel on lubatud käitada JavaScripti. JavaScripti käitamise saab kõikidel veebisaitidel lubada või keelata.
@@ -731,24 +704,6 @@
       Kui seade on lubatud või seadistamata, saavad kasutajad lubada pilvprintimise puhverserveri Google'i kontoga autentides.
 
       Kui seade on keelatud, ei saa kasutajad puhverserverit lubada ja seadmel ei ole lubatud jagada printereid teenusega <ph name="CLOUD_PRINT_NAME" />.</translation>
-<translation id="3357181471604560535">Nii Chromium kui ka Google Chrome toetavad sama reeglite komplekti.
-      Pange tähele, et see dokument võib sisaldada reegleid, mis on
-      suunatud avaldamata tarkvaraversioonidele (st et kirje „toetatud versioonis”
-      viitab avaldamata versioonile), ja sellised reeglid võivad ette teatamata
-      muutuda või need võidakse eemaldada.
-
-      Need reeglid on mõeldud ainult teie organisatsioonisiseste
-      teenuse <ph name="PRODUCT_NAME" /> eksemplaride seadistamiseks.
-      Nende reeglite organisatsioonivälist kasutamist (näiteks
-      avalikult levitatavas programmis) loetakse pahavaraks ning
-      Google ja viirusetõrjeteenuse pakkujad tähistavad selle tõenäoliselt pahavarana.
-
-      Need seaded ei vaja käsitsi seadistamist! Lihtsalt kasutatavad
-      mallid Windowsi, Maci ja Linuxi jaoks saab alla laadida aadressilt <ph name="POLICY_TEMPLATE_DOWNLOAD_URL" />.
-
-      Soovituslik viis selle reegli seadistamiseks Windowsis on GPO kaudu, kuigi
-      reegli varustamist registri kaudu toetatakse endiselt Windowsi eksemplarides,
-      mis on liidetud Active Directory domeeniga.</translation>
 <translation id="3381968327636295719">Kasuta vaikimisi hostbrauserit</translation>
 <translation id="3417418267404583991">Kui lubate selle reegli või jätate seadistamata, siis lubab <ph name="PRODUCT_OS_NAME" /> külastajatel sisse logida. Külastajana sisse logides kasutatakse anonüümseid seansse ja selleks ei ole vaja parooli sisestada.
 
@@ -1331,9 +1286,6 @@
 
       Kui seda reeglit pole määratud või on selle olekuks määratud Väär, siis kasutab <ph name="PRODUCT_NAME" /> olemasolevaid tühistamise kontrollimise veebiseadeid.</translation>
 <translation id="5732972008943405952">Esmakordsel käivitamisel vaikebrauserist automaatselt täidetud vormi andmete importimine</translation>
-<translation id="5751004203256768694">Määrab HTTP läbirääkimiste autentimist (nt Kerberose autentimine) toetava Androidi autentimisrakenduse kontode tüübi. See teave on saadaval autentimisrakenduse pakkuja kaudu. Vaadake lisateavet aadressilt  https://goo.gl/hajyfN.
-
-          Kui seadet ei määrata, on HTTP läbirääkimiste autentimine Androidis keelatud.</translation>
 <translation id="5761030451068906335">Seadistab rakenduse <ph name="PRODUCT_NAME" /> puhverserveri seaded. See reegel ei ole veel valmis, seetõttu ärge kasutage seda.</translation>
 <translation id="5765780083710877561">Kirjeldus:</translation>
 <translation id="5770738360657678870">Arendaja kanal (võib olla ebastabiilne)</translation>
@@ -1874,6 +1826,9 @@
           Kui jätate selle reegli määramata, kasutatakse vaikeaega.
 
           Reegli väärtus tuleb määrata millisekundites. Väärtused tuleb kinnitada väiksematena kui jõudeoleku viiteaeg või sellega võrdsetena.</translation>
+<translation id="7329968046053403405">Määrab üksuse <ph name="HTTP_NEGOTIATE" /> autentimist (nt Kerberose autentimine) toetava Androidi autentimisrakenduse kontode tüübi. See teave on saadaval autentimisrakenduse pakkuja kaudu. Vaadake lisateavet aadressilt https://goo.gl/hajyfN.
+
+          Kui seadet ei määrata, on üksuse <ph name="HTTP_NEGOTIATE" /> autentimine Androidis keelatud.</translation>
 <translation id="7331962793961469250">Kui valite „Tõene”, siis ei ilmu Chrome'i veebipoe rakenduste reklaamid uuel vahelehel.
 
       Kui valite „Väär” või jätate seade määramata, siis ilmuvad uuel vahelehel Chrome'i veebipoe rakenduste reklaamid</translation>
@@ -1893,6 +1848,9 @@
 <translation id="7417972229667085380">Esitlusrežiimis tegevusetu oleku viivituse skaleerimise määr protsentides (tugi on katkestatud)</translation>
 <translation id="7421483919690710988">Määrake meediumiketta vahemälu suurus baitides</translation>
 <translation id="7424751532654212117">Keelatud pistikprogrammide loendi erandite loend</translation>
+<translation id="7426112309807051726">Määrab, kas üksuse <ph name="TLS_FALSE_START" /> optimeerimine peaks olema keelatud. Ajaloolistel põhjustel on selle reegli nimi DisableSSLRecordSplitting.
+
+      Kui reegel on määramata või selle väärtuseks on määratud Väär, siis <ph name="TLS_FALSE_START" /> lubatakse. Kui väärtuseks on määratud Tõene, siis <ph name="TLS_FALSE_START" /> keelatakse.</translation>
 <translation id="7433714841194914373">Luba Instant</translation>
 <translation id="7443616896860707393">Erineva päritoluga HTTP Basic Authi viibad</translation>
 <translation id="7468416082528382842">Windowsi registri asukoht:</translation>
@@ -2171,13 +2129,45 @@
 <translation id="8519264904050090490">Kasutaja käsitsi sisestatavate URL-ide erandite haldamine</translation>
 <translation id="8544375438507658205">Rakenduse <ph name="PRODUCT_FRAME_NAME" /> HTML-i vaikerenderdaja</translation>
 <translation id="8549772397068118889">Hoiatamine sisupakettidest väljaspool olevate saitide külastamisel</translation>
-<translation id="8566842294717252664">Veebipoe peitmine uuel vahelehel ja rakenduste käivitajas</translation>
-<translation id="857925079934558818">Määrab, kas TLS-i valekäivitamise optimeerimine peaks olema keelatud. Ajaloolistel põhjustel on selle reegli nimi DisableSSLRecordSplitting.
+<translation id="855339549837475534">Nii Chromium kui ka Google Chrome toetavad sama reeglite komplekti.
+      Pange tähele, et see dokument võib sisaldada reegleid, mis on
+      suunatud avaldamata tarkvaraversioonidele (seega kirje „toetatud versioonis”
+      viitab avaldamata versioonile), ja sellised reeglid võivad ette teatamata
+      muutuda või need võidakse eemaldada.
 
-      Kui reegel on määramata või selle väärtuseks on määratud Väär, siis TLS-i valekäivitamine lubatakse. Kui väärtuseks on määratud Tõene, siis TLS-i valekäivitamine keelatakse.</translation>
+      Need reeglid on mõeldud ainult teie organisatsioonisiseste
+      teenuse <ph name="PRODUCT_NAME" /> eksemplaride seadistamiseks.
+      Nende reeglite organisatsioonivälist kasutamist (näiteks
+      avalikult levitatavas programmis) loetakse pahavaraks ning
+      Google ja viirusetõrjeteenuse pakkujad tähistavad selle tõenäoliselt pahavarana.
+
+      Need seaded ei vaja käsitsi seadistamist! Lihtsalt kasutatavad
+      mallid Windowsi, Maci ja Linuxi jaoks saab alla laadida aadressilt <ph name="POLICY_TEMPLATE_DOWNLOAD_URL" />.
+
+      Soovituslik viis selle reegli seadistamiseks Windowsis on GPO kaudu, kuigi
+      reegli varustamist registri kaudu toetatakse endiselt Windowsi eksemplarides,
+      mis on liidetud Active Directory domeeniga.</translation>
+<translation id="8566842294717252664">Veebipoe peitmine uuel vahelehel ja rakenduste käivitajas</translation>
 <translation id="8587229956764455752">Luba uute kasutajakontode loomine</translation>
 <translation id="8614804915612153606">Keelab automaatvärskenduse</translation>
 <translation id="8631434304112909927">versioonini <ph name="UNTIL_VERSION" /></translation>
+<translation id="863712305404093038">Blokeerib juurdepääsu loetletud URL-idele.
+
+      See reegel keelab kasutajal laadida keelatud URL-ide loendis olevaid veebilehti. Keelatute loendis on loend URL-i mustritest, milles määratakse, millised URL-id keelatute loendisse lisatakse.
+
+      Iga URL-i muster võib olla muster kohalike failide jaoks või üldine URL-i muster. Kohalikud failimustrid on vormingus „file://path”, kus „path” peaks olema blokeeritav absoluutne tee. Kõik failisüsteemi asukohad, mille eesliide see tee on, blokeeritakse.
+
+      Üldine URL-i muster on vormingus „scheme://host:port/path”.
+      Selle olemasolul blokeeritakse ainult määratud skeem. Kui eesliidet scheme:// ei määrata, blokeeritakse kõik skeemid.
+      Host on kohustuslik ja see võib olla hosti nimi või IP-aadress. Blokeeritakse ka hosti nime alamdomeenid. Alamdomeenide blokeerimise vältimiseks lisage hosti nime ette „.”. Spetsiaalne hosti nimi „*” blokeerib kõik domeenid.
+      Valikuline port on kehtiv pordi number vahemikus 1 kuni 65 535. Kui seda ei määrata, blokeeritakse kõik pordid.
+      Kui määratakse valikuline tee, blokeeritakse ainult selle eesliitega teed.
+
+      Erandid saab määrata lubatud URL-ide loendi reegliga. Need reeglid kehtivad vaid 1000 kirje puhul, järgnevaid kirjeid eiratakse.
+
+      Pange tähele, et me ei soovita blokeerida sisemisi URL-e „chrome://*”, kuna see võib tekitada ootamatuid vigu.
+
+      Kui seda reeglit ei määrata, ei lisata brauseris keelatute loendisse ühtegi URL-i.</translation>
 <translation id="8649763579836720255">Chrome OS-i seadmed saavad kasutada kaugatesteerimist (kinnitatud juurdepääs), et saada Chrome OS CA välja antav sertifikaat, mis kinnitab seadme sobilikkust kaitstud sisu esitamiseks.  Protsess hõlmab riistvara kinnitusteabe saatmist Chrome OS CA-le seadme kordumatuks tuvastamiseks.
 
           Kui seade väärtuseks on Vale, ei kasuta seade sisu kaitsmiseks kaugatesteerimist ja seade ei pruugi saada kaitstud sisu esitada.

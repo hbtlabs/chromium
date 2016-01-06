@@ -21,7 +21,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/LayoutBlock.h"
 
 #include "core/HTMLNames.h"
@@ -60,7 +59,6 @@
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
-#include "core/layout/svg/LayoutSVGResourceClipper.h"
 #include "core/page/Page.h"
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxPainter.h"
@@ -110,6 +108,7 @@ static TrackedContainerMap* gPositionedContainerMap = nullptr;
 static TrackedContainerMap* gPercentHeightContainerMap = nullptr;
 
 struct ScrollInfo {
+    ScrollInfo() : autoHorizontalScrollBarChanged(false), autoVerticalScrollBarChanged(false) {}
     DoubleSize scrollOffset;
     bool autoHorizontalScrollBarChanged;
     bool autoVerticalScrollBarChanged;
@@ -227,7 +226,7 @@ void LayoutBlock::styleWillChange(StyleDifference diff, const ComputedStyle& new
 {
     const ComputedStyle* oldStyle = style();
 
-    setReplaced(newStyle.isDisplayInlineType());
+    setIsAtomicInlineLevel(newStyle.isDisplayInlineType());
 
     if (oldStyle && parent()) {
         bool oldHasTransformRelatedProperty = oldStyle->hasTransformRelatedProperty();
@@ -864,6 +863,7 @@ void LayoutBlock::finishDelayUpdateScrollInfo()
             if (block.key->hasOverflowClip()) {
                 PaintLayerScrollableArea* scrollableArea = block.key->layer()->scrollableArea();
                 ScrollInfo& scrollInfo = block.value;
+                scrollableArea->updateScrollDimensions(scrollInfo.scrollOffset, scrollInfo.autoHorizontalScrollBarChanged, scrollInfo.autoVerticalScrollBarChanged);
                 scrollableArea->finalizeScrollDimensions(scrollInfo.scrollOffset, scrollInfo.autoHorizontalScrollBarChanged, scrollInfo.autoVerticalScrollBarChanged);
             }
         }
@@ -943,7 +943,7 @@ void LayoutBlock::addOverflowFromChildren()
         addOverflowFromBlockChildren();
 }
 
-void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge)
+void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
 {
     m_overflow.clear();
 
@@ -1008,7 +1008,7 @@ bool LayoutBlock::createsNewFormattingContext() const
 {
     return isInlineBlockOrInlineTable() || isFloatingOrOutOfFlowPositioned() || hasOverflowClip() || isFlexItemIncludingDeprecated()
         || style()->specifiesColumns() || isLayoutFlowThread() || isTableCell() || isTableCaption() || isFieldset() || isWritingModeRoot()
-        || isDocumentElement() || isColumnSpanAll() || isGridItem();
+        || isDocumentElement() || isColumnSpanAll() || isGridItem() || style()->containsPaint();
 }
 
 void LayoutBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, LayoutBox& child)
@@ -1040,7 +1040,7 @@ void LayoutBlock::simplifiedNormalFlowLayout()
         ASSERT_WITH_SECURITY_IMPLICATION(isLayoutBlockFlow());
         for (InlineWalker walker(toLayoutBlockFlow(this)); !walker.atEnd(); walker.advance()) {
             LayoutObject* o = walker.current();
-            if (!o->isOutOfFlowPositioned() && (o->isReplaced() || o->isFloating())) {
+            if (!o->isOutOfFlowPositioned() && (o->isAtomicInlineLevel() || o->isFloating())) {
                 o->layoutIfNeeded();
                 if (toLayoutBox(o)->inlineBoxWrapper()) {
                     RootInlineBox& box = toLayoutBox(o)->inlineBoxWrapper()->root();
@@ -1109,7 +1109,7 @@ bool LayoutBlock::simplifiedLayout()
         // computeOverflow expects the bottom edge before we clamp our height. Since this information isn't available during
         // simplifiedLayout, we cache the value in m_overflow.
         LayoutUnit oldClientAfterEdge = hasOverflowModel() ? m_overflow->layoutClientAfterEdge() : clientLogicalBottom();
-        computeOverflow(oldClientAfterEdge);
+        computeOverflow(oldClientAfterEdge, true);
     }
 
     updateLayerTransformAfterLayout();
@@ -1548,6 +1548,7 @@ void LayoutBlock::dirtyForLayoutFromPercentageHeightDescendants(SubtreeLayoutSco
         return;
 
     for (auto* box : *descendants) {
+        ASSERT(box->isDescendantOf(this));
         while (box != this) {
             if (box->normalChildNeedsLayout())
                 break;
@@ -1631,6 +1632,8 @@ Node* LayoutBlock::nodeForHitTest() const
     return isAnonymousBlockContinuation() ? continuation()->node() : node();
 }
 
+// TODO(pdr): This is too similar to LayoutBox::nodeAtPoint and should share
+//            more code, or merge into LayoutBox::nodeAtPoint entirely.
 bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction hitTestAction)
 {
     LayoutPoint adjustedLocation(accumulatedOffset + location());
@@ -1655,65 +1658,14 @@ bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
             return true;
     }
 
-    if (style()->clipPath()) {
-        switch (style()->clipPath()->type()) {
-        case ClipPathOperation::SHAPE: {
-            ShapeClipPathOperation* clipPath = toShapeClipPathOperation(style()->clipPath());
-            // FIXME: handle marginBox etc.
-            if (!clipPath->path(FloatRect(borderBoxRect())).contains(FloatPoint(locationInContainer.point() - localOffset), clipPath->windRule()))
-                return false;
-            break;
-        }
-        case ClipPathOperation::REFERENCE:
-            ReferenceClipPathOperation* referenceClipPathOperation = toReferenceClipPathOperation(style()->clipPath());
-            Element* element = document().getElementById(referenceClipPathOperation->fragment());
-            if (isSVGClipPathElement(element) && element->layoutObject()) {
-                LayoutSVGResourceClipper* clipper = toLayoutSVGResourceClipper(toLayoutSVGResourceContainer(element->layoutObject()));
-                if (!clipper->hitTestClipContent(FloatRect(borderBoxRect()), FloatPoint(locationInContainer.point() - localOffset)))
-                    return false;
-            }
-            break;
-        }
-    }
+    // TODO(pdr): We should also include checks for hit testing border radius at
+    //            the layer level (see: crbug.com/568904).
 
-    // If we have clipping, then we can't have any spillout.
-    bool useOverflowClip = hasOverflowClip() && !hasSelfPaintingLayer();
-    bool useClip = (hasControlClip() || useOverflowClip);
-    bool checkChildren = !useClip;
-    if (!checkChildren) {
-        if (hasControlClip()) {
-            checkChildren = locationInContainer.intersects(controlClipRect(adjustedLocation));
-        } else {
-            LayoutRect clipRect = overflowClipRect(adjustedLocation, IncludeOverlayScrollbarSize);
-            if (style()->hasBorderRadius())
-                checkChildren = locationInContainer.intersects(style()->getRoundedBorderFor(clipRect));
-            else
-                checkChildren = locationInContainer.intersects(clipRect);
-        }
-    }
-    if (checkChildren) {
-        // Hit test descendants first.
-        LayoutSize scrolledOffset(localOffset);
-        if (hasOverflowClip())
-            scrolledOffset -= scrolledContentOffset();
+    if (hitTestChildren(result, locationInContainer, adjustedLocation, hitTestAction))
+        return true;
 
-        // Hit test contents
-        if (hitTestContents(result, locationInContainer, toLayoutPoint(scrolledOffset), hitTestAction)) {
-            updateHitTestResult(result, flipForWritingMode(locationInContainer.point() - localOffset));
-            return true;
-        }
-        if (hitTestAction == HitTestFloat && hitTestFloats(result, locationInContainer, toLayoutPoint(scrolledOffset)))
-            return true;
-    }
-
-    // Check if the point is outside radii.
-    if (style()->hasBorderRadius()) {
-        LayoutRect borderRect = borderBoxRect();
-        borderRect.moveBy(adjustedLocation);
-        FloatRoundedRect border = style()->getRoundedBorderFor(borderRect);
-        if (!locationInContainer.intersects(border))
-            return false;
-    }
+    if (hitTestClippedOutByRoundedBorder(locationInContainer, adjustedLocation))
+        return false;
 
     // Now hit test our background
     if (hitTestAction == HitTestBlockBackground || hitTestAction == HitTestChildBlockBackground) {
@@ -1728,23 +1680,47 @@ bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
     return false;
 }
 
-bool LayoutBlock::hitTestContents(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction hitTestAction)
+bool LayoutBlock::hitTestChildren(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction hitTestAction)
 {
+    // TODO(pdr): We should also check for css clip in the !isSelfPaintingLayer
+    //            case, similar to overflow clip below.
+    if (hasOverflowClip() && !hasSelfPaintingLayer()) {
+        if (style()->hasBorderRadius()) {
+            LayoutRect borderRect = borderBoxRect();
+            borderRect.moveBy(accumulatedOffset);
+            if (!locationInContainer.intersects(style()->getRoundedInnerBorderFor(borderRect)))
+                return false;
+        } else {
+            if (!locationInContainer.intersects(overflowClipRect(accumulatedOffset, IncludeOverlayScrollbarSize)))
+                return false;
+        }
+    }
+
+    // A control clip can also clip out child hit testing.
+    if (hasControlClip() && !locationInContainer.intersects(controlClipRect(accumulatedOffset)))
+        return false;
+
+    LayoutPoint scrolledOffset(hasOverflowClip() ? accumulatedOffset - scrolledContentOffset() : accumulatedOffset);
     if (childrenInline() && !isTable()) {
-        // We have to hit-test our line boxes.
-        if (m_lineBoxes.hitTest(LineLayoutBoxModel(this), result, locationInContainer, accumulatedOffset, hitTestAction))
+        if (m_lineBoxes.hitTest(LineLayoutBoxModel(this), result, locationInContainer, scrolledOffset, hitTestAction)) {
+            updateHitTestResult(result, flipForWritingMode(toLayoutPoint(locationInContainer.point() - accumulatedOffset)));
             return true;
+        }
     } else {
-        // Hit test our children.
         HitTestAction childHitTest = hitTestAction;
         if (hitTestAction == HitTestChildBlockBackgrounds)
             childHitTest = HitTestChildBlockBackground;
         for (LayoutBox* child = lastChildBox(); child; child = child->previousSiblingBox()) {
-            LayoutPoint childPoint = flipForWritingModeForChild(child, accumulatedOffset);
-            if (!child->hasSelfPaintingLayer() && !child->isFloating() && !child->isColumnSpanAll() && child->nodeAtPoint(result, locationInContainer, childPoint, childHitTest))
+            LayoutPoint childPoint = flipForWritingModeForChild(child, scrolledOffset);
+            if (!child->hasSelfPaintingLayer() && !child->isFloating() && !child->isColumnSpanAll() && child->nodeAtPoint(result, locationInContainer, childPoint, childHitTest)) {
+                updateHitTestResult(result, flipForWritingMode(toLayoutPoint(locationInContainer.point() - accumulatedOffset)));
                 return true;
+            }
         }
     }
+
+    if (hitTestAction == HitTestFloat && hitTestFloats(result, locationInContainer, scrolledOffset))
+        return true;
 
     return false;
 }
@@ -1876,7 +1852,7 @@ PositionWithAffinity LayoutBlock::positionForPointWithInlineChildren(const Layou
         LayoutPoint point(pointInLogicalContents.x(), closestBox->root().blockDirectionPointInLine());
         if (!isHorizontalWritingMode())
             point = point.transposedPoint();
-        if (closestBox->lineLayoutItem().isReplaced())
+        if (closestBox->lineLayoutItem().isAtomicInlineLevel())
             return positionForPointRespectingEditingBoundaries(this, LineLayoutBox(closestBox->lineLayoutItem()), point);
         return closestBox->lineLayoutItem().positionForPoint(point);
     }
@@ -1905,7 +1881,7 @@ PositionWithAffinity LayoutBlock::positionForPoint(const LayoutPoint& point)
     if (isTable())
         return LayoutBox::positionForPoint(point);
 
-    if (isReplaced()) {
+    if (isAtomicInlineLevel()) {
         // FIXME: This seems wrong when the object's writing-mode doesn't match the line's writing-mode.
         LayoutUnit pointLogicalLeft = isHorizontalWritingMode() ? point.x() : point.y();
         LayoutUnit pointLogicalTop = isHorizontalWritingMode() ? point.y() : point.x();
@@ -2142,6 +2118,17 @@ void LayoutBlock::computeChildPreferredLogicalWidths(LayoutObject& child, Layout
     }
     minPreferredLogicalWidth = child.minPreferredLogicalWidth();
     maxPreferredLogicalWidth = child.maxPreferredLogicalWidth();
+
+    // For non-replaced blocks if the inline size is min|max-content or a definite size the min|max-content contribution
+    // is that size plus border, padding and margin https://drafts.csswg.org/css-sizing/#block-intrinsic
+    if (child.isLayoutBlock()) {
+        const Length& computedInlineSize = child.styleRef().logicalWidth();
+        if (computedInlineSize.isMaxContent())
+            minPreferredLogicalWidth = maxPreferredLogicalWidth;
+        else if (computedInlineSize.isMinContent())
+            maxPreferredLogicalWidth = minPreferredLogicalWidth;
+    }
+
     if (child.isLayoutBlock() && toLayoutBlock(child).needsRecalcLogicalWidthAfterLayoutChildren())
         m_needsRecalcLogicalWidthAfterLayoutChildren = true;
 }
@@ -2166,7 +2153,7 @@ LayoutUnit LayoutBlock::lineHeight(bool firstLine, LineDirectionMode direction, 
     // the base class.  If we're being queried as though we're the root line
     // box, then the fact that we're an inline-block is irrelevant, and we behave
     // just like a block.
-    if (isReplaced() && linePositionMode == PositionOnContainingLine)
+    if (isAtomicInlineLevel() && linePositionMode == PositionOnContainingLine)
         return LayoutBox::lineHeight(firstLine, direction, linePositionMode);
 
     const ComputedStyle& style = styleRef(firstLine && document().styleEngine().usesFirstLineRules());
@@ -2292,18 +2279,7 @@ int LayoutBlock::inlineBlockBaseline(LineDirectionMode lineDirection) const
     return -1;
 }
 
-static inline bool isLayoutBlockFlowOrLayoutButton(LayoutObject* layoutObject)
-{
-    // We include isLayoutButton in this check because buttons are implemented
-    // using flex box but should still support first-line|first-letter.
-    // The flex box and grid specs require that flex box and grid do not
-    // support first-line|first-letter, though.
-    // FIXME: Remove when buttons are implemented with align-items instead
-    // of flex box.
-    return layoutObject->isLayoutBlockFlow() || layoutObject->isLayoutButton();
-}
-
-LayoutBlock* LayoutBlock::firstLineBlock() const
+LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const
 {
     LayoutBlock* firstLineBlock = const_cast<LayoutBlock*>(this);
     bool hasPseudo = false;
@@ -2312,9 +2288,9 @@ LayoutBlock* LayoutBlock::firstLineBlock() const
         if (hasPseudo)
             break;
         LayoutObject* parentBlock = firstLineBlock->parent();
-        if (firstLineBlock->isReplaced() || firstLineBlock->isFloatingOrOutOfFlowPositioned()
+        if (firstLineBlock->isAtomicInlineLevel() || firstLineBlock->isFloatingOrOutOfFlowPositioned()
             || !parentBlock
-            || !isLayoutBlockFlowOrLayoutButton(parentBlock))
+            || !parentBlock->canHaveFirstLineOrFirstLetterStyle())
             break;
         ASSERT_WITH_SECURITY_IMPLICATION(parentBlock->isLayoutBlock());
         if (toLayoutBlock(parentBlock)->firstChild() != firstLineBlock)
@@ -2326,6 +2302,17 @@ LayoutBlock* LayoutBlock::firstLineBlock() const
         return nullptr;
 
     return firstLineBlock;
+}
+
+LayoutBlockFlow* LayoutBlock::nearestInnerBlockWithFirstLine() const
+{
+    if (childrenInline())
+        return toLayoutBlockFlow(const_cast<LayoutBlock*>(this));
+    for (LayoutObject* child = firstChild(); child && !child->isFloatingOrOutOfFlowPositioned() && child->isLayoutBlockFlow(); child = toLayoutBlock(child)->firstChild()) {
+        if (child->childrenInline())
+            return toLayoutBlockFlow(child);
+    }
+    return nullptr;
 }
 
 // Helper methods for obtaining the last line, computing line counts and heights for line counts
@@ -2844,7 +2831,7 @@ bool LayoutBlock::recalcOverflowAfterStyleChange()
         return false;
 
     LayoutUnit oldClientAfterEdge = hasOverflowModel() ? m_overflow->layoutClientAfterEdge() : clientLogicalBottom();
-    computeOverflow(oldClientAfterEdge);
+    computeOverflow(oldClientAfterEdge, true);
 
     if (hasOverflowClip())
         layer()->scrollableArea()->updateAfterOverflowRecalc();

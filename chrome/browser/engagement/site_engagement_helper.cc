@@ -4,6 +4,8 @@
 
 #include "chrome/browser/engagement/site_engagement_helper.h"
 
+#include <utility>
+
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -51,7 +53,7 @@ bool SiteEngagementHelper::PeriodicTracker::IsTimerRunning() {
 
 void SiteEngagementHelper::PeriodicTracker::SetPauseTimerForTesting(
     scoped_ptr<base::Timer> timer) {
-  pause_timer_ = timer.Pass();
+  pause_timer_ = std::move(timer);
 }
 
 void SiteEngagementHelper::PeriodicTracker::StartTimer(
@@ -111,26 +113,32 @@ void SiteEngagementHelper::InputTracker::DidGetUserInteraction(
 SiteEngagementHelper::MediaTracker::MediaTracker(
     SiteEngagementHelper* helper,
     content::WebContents* web_contents)
-    : PeriodicTracker(helper), content::WebContentsObserver(web_contents),
-      is_hidden_(false),
-      is_playing_(false) {}
+    : PeriodicTracker(helper),
+      content::WebContentsObserver(web_contents),
+      is_hidden_(false) {}
+
+SiteEngagementHelper::MediaTracker::~MediaTracker() {}
 
 void SiteEngagementHelper::MediaTracker::TrackingStarted() {
-  if (is_playing_)
+  if (!active_media_players_.empty())
     helper()->RecordMediaPlaying(is_hidden_);
 
   Pause();
 }
 
-void SiteEngagementHelper::MediaTracker::MediaStartedPlaying() {
+void SiteEngagementHelper::MediaTracker::MediaStartedPlaying(
+    const MediaPlayerId& id) {
   // Only begin engagement detection when media actually starts playing.
-  is_playing_ = true;
+  active_media_players_.push_back(id);
   if (!IsTimerRunning())
     Start(base::TimeDelta::FromSeconds(g_seconds_delay_after_media_starts));
 }
 
-void SiteEngagementHelper::MediaTracker::MediaPaused() {
-  is_playing_ = false;
+void SiteEngagementHelper::MediaTracker::MediaStoppedPlaying(
+    const MediaPlayerId& id) {
+  active_media_players_.erase(std::remove(active_media_players_.begin(),
+                                          active_media_players_.end(), id),
+                              active_media_players_.end());
 }
 
 void SiteEngagementHelper::MediaTracker::WasShown() {

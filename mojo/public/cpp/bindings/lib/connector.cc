@@ -4,6 +4,9 @@
 
 #include "mojo/public/cpp/bindings/lib/connector.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
@@ -42,7 +45,7 @@ Connector::Connector(ScopedMessagePipeHandle message_pipe,
                      ConnectorConfig config,
                      const MojoAsyncWaiter* waiter)
     : waiter_(waiter),
-      message_pipe_(message_pipe.Pass()),
+      message_pipe_(std::move(message_pipe)),
       incoming_receiver_(nullptr),
       async_wait_id_(0),
       error_(false),
@@ -70,7 +73,7 @@ void Connector::CloseMessagePipe() {
 
   CancelWait();
   MayAutoLock locker(lock_.get());
-  Close(message_pipe_.Pass());
+  Close(std::move(message_pipe_));
 }
 
 ScopedMessagePipeHandle Connector::PassMessagePipe() {
@@ -78,7 +81,7 @@ ScopedMessagePipeHandle Connector::PassMessagePipe() {
 
   CancelWait();
   MayAutoLock locker(lock_.get());
-  return message_pipe_.Pass();
+  return std::move(message_pipe_);
 }
 
 void Connector::RaiseError() {
@@ -261,7 +264,13 @@ void Connector::ReadAllAvailableMessages() {
       return;
 
     if (rv == MOJO_RESULT_SHOULD_WAIT) {
-      WaitToReadMore();
+      // ReadSingleMessage could end up calling HandleError which resets
+      // message_pipe_ to a dummy one that is closed. The old EDK will see the
+      // that the peer is closed immediately, while the new one is asynchronous
+      // because of thread hops. In that case, there'll still be an async
+      // waiter.
+      if (!async_wait_id_)
+        WaitToReadMore();
       break;
     }
   }
@@ -292,9 +301,9 @@ void Connector::HandleError(bool force_pipe_reset, bool force_async_handler) {
   if (force_pipe_reset) {
     CancelWait();
     MayAutoLock locker(lock_.get());
-    Close(message_pipe_.Pass());
+    Close(std::move(message_pipe_));
     MessagePipe dummy_pipe;
-    message_pipe_ = dummy_pipe.handle0.Pass();
+    message_pipe_ = std::move(dummy_pipe.handle0);
   } else {
     CancelWait();
   }

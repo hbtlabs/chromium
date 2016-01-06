@@ -8,6 +8,8 @@
 #include <string>
 
 #include "base/process/process_handle.h"
+#include "mojo/application/public/interfaces/shell.mojom.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
 
 namespace content {
 
@@ -29,6 +31,17 @@ std::string GetMojoApplicationInstanceURL(
 // Shares a client handle to the Mojo Shell with the child via Chrome IPC.
 void SendExternalMojoShellHandleToChild(base::ProcessHandle process_handle,
                                         RenderProcessHost* render_process_host);
+
+// Constructs a Capability Filter for the renderer's application instance in the
+// external shell. This contains the restrictions imposed on what applications
+// and interfaces the renderer can see. The implementation lives in
+// renderer_capability_filter.cc so that it can be subject to specific security
+// review.
+mojo::CapabilityFilterPtr CreateCapabilityFilterForRenderer();
+
+// Used for the broker in the new EDK.
+mojo::embedder::ScopedPlatformHandle RegisterProcessWithBroker(
+    base::ProcessId pid);
 
 }  // namespace content
 

@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
@@ -82,7 +86,7 @@ class AudioDecoderSelectorTest : public ::testing::Test {
   void MockOnDecoderSelected(scoped_ptr<AudioDecoder> decoder,
                              scoped_ptr<DecryptingDemuxerStream> stream) {
     OnDecoderSelected(decoder.get(), stream.get());
-    selected_decoder_ = decoder.Pass();
+    selected_decoder_ = std::move(decoder);
   }
 
   void UseClearStream() {
@@ -134,9 +138,8 @@ class AudioDecoderSelectorTest : public ::testing::Test {
     all_decoders_.erase(
         all_decoders_.begin() + num_decoders, all_decoders_.end());
 
-    decoder_selector_.reset(
-        new AudioDecoderSelector(message_loop_.task_runner(),
-                                 all_decoders_.Pass(), new MediaLog()));
+    decoder_selector_.reset(new AudioDecoderSelector(
+        message_loop_.task_runner(), std::move(all_decoders_), new MediaLog()));
   }
 
   void SelectDecoder() {

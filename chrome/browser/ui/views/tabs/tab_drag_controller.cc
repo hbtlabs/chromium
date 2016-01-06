@@ -10,6 +10,8 @@
 #include "base/auto_reset.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -1687,11 +1689,14 @@ gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
       break; // Nothing to do for DETACH_ABOVE_OR_BELOW.
   }
 
-  // To account for the extra vertical on restored windows that is absent on
-  // maximized windows, add an additional vertical offset extracted from the tab
-  // strip.
-  if (source->GetWidget()->IsMaximized())
-    new_bounds.Offset(0, -source->kNewTabButtonVerticalOffset);
+  // Account for the extra space above the tabstrip on restored windows versus
+  // maximized windows.
+  if (source->GetWidget()->IsMaximized()) {
+    const auto* frame_view = static_cast<BrowserNonClientFrameView*>(
+        source->GetWidget()->non_client_view()->frame_view());
+    new_bounds.Offset(
+        0, frame_view->GetTopInset(false) - frame_view->GetTopInset(true));
+  }
   return new_bounds;
 }
 

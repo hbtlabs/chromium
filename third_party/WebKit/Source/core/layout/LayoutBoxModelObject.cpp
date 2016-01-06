@@ -23,7 +23,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutBoxModelObject.h"
 
 #include "core/dom/NodeComputedStyle.h"
@@ -129,7 +128,7 @@ LayoutBoxModelObject::~LayoutBoxModelObject()
 
 void LayoutBoxModelObject::willBeDestroyed()
 {
-    ImageQualityController::remove(this);
+    ImageQualityController::remove(*this);
 
     // A continuation of this LayoutObject should be destroyed at subclasses.
     ASSERT(!continuation());
@@ -402,7 +401,7 @@ void LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRe
     }
 }
 
-void LayoutBoxModelObject::invalidateDisplayItemClientOnBacking(const DisplayItemClientWrapper& displayItemClient, PaintInvalidationReason invalidationReason, const LayoutRect* paintInvalidationRect) const
+void LayoutBoxModelObject::invalidateDisplayItemClientOnBacking(const DisplayItemClient& displayItemClient, PaintInvalidationReason invalidationReason, const LayoutRect* paintInvalidationRect) const
 {
     if (layer()->groupedMapping()) {
         if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer()) {
@@ -413,13 +412,7 @@ void LayoutBoxModelObject::invalidateDisplayItemClientOnBacking(const DisplayIte
             squashingLayer->invalidateDisplayItemClient(displayItemClient, invalidationReason, paintInvalidationRect ? &paintInvalidationRectOnSquashingLayer : nullptr);
         }
     } else if (CompositedLayerMapping* compositedLayerMapping = layer()->compositedLayerMapping()) {
-        if (this->displayItemClient() != displayItemClient.displayItemClient() && isBox() && toLayoutBox(this)->usesCompositedScrolling()) {
-            // This paint invalidation container is using composited scrolling, and we are invalidating a scrolling content,
-            // so we should invalidate on the scrolling contents layer only.
-            compositedLayerMapping->invalidateDisplayItemClientOnScrollingContentsLayer(displayItemClient, invalidationReason, paintInvalidationRect);
-        } else {
-            compositedLayerMapping->invalidateDisplayItemClient(displayItemClient, invalidationReason, paintInvalidationRect);
-        }
+        compositedLayerMapping->invalidateDisplayItemClient(displayItemClient, invalidationReason, paintInvalidationRect);
     }
 }
 
@@ -448,7 +441,7 @@ void LayoutBoxModelObject::addOutlineRectsForDescendant(const LayoutObject& desc
     if (descendant.hasLayer()) {
         Vector<LayoutRect> layerOutlineRects;
         descendant.addOutlineRects(layerOutlineRects, LayoutPoint(), includeBlockOverflows);
-        descendant.localToContainerRects(layerOutlineRects, this, LayoutPoint(), additionalOffset);
+        descendant.localToAncestorRects(layerOutlineRects, this, LayoutPoint(), additionalOffset);
         rects.appendVector(layerOutlineRects);
         return;
     }
@@ -1010,6 +1003,19 @@ void LayoutBoxModelObject::moveChildTo(LayoutBoxModelObject* toBoxModelObject, L
 
     ASSERT(this == child->parent());
     ASSERT(!beforeChild || toBoxModelObject == beforeChild->parent());
+
+    // If a child is moving from a block-flow to an inline-flow parent then any floats currently intruding into
+    // the child can no longer do so. This can happen if a block becomes floating or out-of-flow and is moved
+    // to an anonymous block. Remove all floats from their float-lists immediately as markAllDescendantsWithFloatsForLayout
+    // won't attempt to remove floats from parents that have inline-flow if we try later.
+    if (child->isLayoutBlockFlow() && toBoxModelObject->childrenInline() && !childrenInline()) {
+        toLayoutBlockFlow(child)->removeFloatingObjectsFromDescendants();
+        ASSERT(!toLayoutBlockFlow(child)->containsFloats());
+    }
+
+    if (fullRemoveInsert && isLayoutBlock() && child->isBox())
+        LayoutBlock::removePercentHeightDescendantIfNeeded(toLayoutBox(child));
+
     if (fullRemoveInsert && (toBoxModelObject->isLayoutBlock() || toBoxModelObject->isLayoutInline())) {
         // Takes care of adding the new child correctly if toBlock and fromBlock
         // have different kind of children (block vs inline).
@@ -1027,6 +1033,7 @@ void LayoutBoxModelObject::moveChildrenTo(LayoutBoxModelObject* toBoxModelObject
     if (fullRemoveInsert && isLayoutBlock()) {
         LayoutBlock* block = toLayoutBlock(this);
         block->removePositionedObjects(nullptr);
+        LayoutBlock::removePercentHeightDescendantIfNeeded(block);
         if (block->isLayoutBlockFlow())
             toLayoutBlockFlow(block)->removeFloatingObjects();
     }

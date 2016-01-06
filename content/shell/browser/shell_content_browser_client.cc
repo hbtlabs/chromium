@@ -4,12 +4,18 @@
 
 #include "content/shell/browser/shell_content_browser_client.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
+#include "base/strings/pattern.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
@@ -35,6 +41,7 @@
 #include "content/shell/common/shell_switches.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -146,6 +153,19 @@ BrowserMainParts* ShellContentBrowserClient::CreateBrowserMainParts(
   return shell_browser_main_parts_;
 }
 
+bool ShellContentBrowserClient::DoesSiteRequireDedicatedProcess(
+    BrowserContext* browser_context,
+    const GURL& effective_url) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  DCHECK(command_line->HasSwitch(switches::kIsolateSitesForTesting));
+  std::string pattern =
+      command_line->GetSwitchValueASCII(switches::kIsolateSitesForTesting);
+  // Practically |origin| is the same as |effective_url.spec()|, except Origin
+  // serialization strips the trailing "/", which makes for cleaner patterns.
+  std::string origin = url::Origin(effective_url).Serialize();
+  return base::MatchPattern(origin, pattern);
+}
+
 net::URLRequestContextGetter* ShellContentBrowserClient::CreateRequestContext(
     BrowserContext* content_browser_context,
     ProtocolHandlerMap* protocol_handlers,
@@ -153,7 +173,7 @@ net::URLRequestContextGetter* ShellContentBrowserClient::CreateRequestContext(
   ShellBrowserContext* shell_browser_context =
       ShellBrowserContextForBrowserContext(content_browser_context);
   return shell_browser_context->CreateRequestContext(
-      protocol_handlers, request_interceptors.Pass());
+      protocol_handlers, std::move(request_interceptors));
 }
 
 net::URLRequestContextGetter*
@@ -166,10 +186,8 @@ ShellContentBrowserClient::CreateRequestContextForStoragePartition(
   ShellBrowserContext* shell_browser_context =
       ShellBrowserContextForBrowserContext(content_browser_context);
   return shell_browser_context->CreateRequestContextForStoragePartition(
-      partition_path,
-      in_memory,
-      protocol_handlers,
-      request_interceptors.Pass());
+      partition_path, in_memory, protocol_handlers,
+      std::move(request_interceptors));
 }
 
 bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
@@ -250,6 +268,13 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
         switches::kEnableLeakDetection,
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             switches::kEnableLeakDetection));
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kIsolateSitesForTesting)) {
+    command_line->AppendSwitchASCII(
+        switches::kIsolateSitesForTesting,
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kIsolateSitesForTesting));
   }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kRegisterFontFiles)) {

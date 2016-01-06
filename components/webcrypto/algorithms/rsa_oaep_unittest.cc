@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/base64url.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "components/webcrypto/algorithm_dispatch.h"
 #include "components/webcrypto/algorithms/test_helpers.h"
 #include "components/webcrypto/crypto_data.h"
@@ -45,7 +49,7 @@ scoped_ptr<base::DictionaryValue> CreatePublicKeyJwkDict() {
                  Base64EncodeUrlSafe(HexStringToBytes(kPublicKeyModulusHex)));
   jwk->SetString("e",
                  Base64EncodeUrlSafe(HexStringToBytes(kPublicKeyExponentHex)));
-  return jwk.Pass();
+  return jwk;
 }
 
 class WebCryptoRsaOaepTest : public WebCryptoTestBase {};

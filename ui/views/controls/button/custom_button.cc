@@ -55,29 +55,28 @@ CustomButton* CustomButton::AsCustomButton(views::View* view) {
   return NULL;
 }
 
-CustomButton::~CustomButton() {
-}
+CustomButton::~CustomButton() {}
 
 void CustomButton::SetState(ButtonState state) {
   if (state == state_)
     return;
 
   if (animate_on_state_change_ &&
-      (!is_throbbing_ || !hover_animation_->is_animating())) {
+      (!is_throbbing_ || !hover_animation_.is_animating())) {
     is_throbbing_ = false;
     if ((state_ == STATE_HOVERED) && (state == STATE_NORMAL)) {
       // For HOVERED -> NORMAL, animate from hovered (1) to not hovered (0).
-      hover_animation_->Hide();
+      hover_animation_.Hide();
     } else if (state != STATE_HOVERED) {
       // For HOVERED -> PRESSED/DISABLED, or any transition not involving
       // HOVERED at all, simply set the state to not hovered (0).
-      hover_animation_->Reset();
+      hover_animation_.Reset();
     } else if (state_ == STATE_NORMAL) {
       // For NORMAL -> HOVERED, animate from not hovered (0) to hovered (1).
-      hover_animation_->Show();
+      hover_animation_.Show();
     } else {
       // For PRESSED/DISABLED -> HOVERED, simply set the state to hovered (1).
-      hover_animation_->Reset(1);
+      hover_animation_.Reset(1);
     }
   }
 
@@ -88,18 +87,18 @@ void CustomButton::SetState(ButtonState state) {
 
 void CustomButton::StartThrobbing(int cycles_til_stop) {
   is_throbbing_ = true;
-  hover_animation_->StartThrobbing(cycles_til_stop);
+  hover_animation_.StartThrobbing(cycles_til_stop);
 }
 
 void CustomButton::StopThrobbing() {
-  if (hover_animation_->is_animating()) {
-    hover_animation_->Stop();
+  if (hover_animation_.is_animating()) {
+    hover_animation_.Stop();
     SchedulePaint();
   }
 }
 
 void CustomButton::SetAnimationDuration(int duration) {
-  hover_animation_->SetSlideDuration(duration);
+  hover_animation_.SetSlideDuration(duration);
 }
 
 void CustomButton::SetHotTracked(bool is_hot_tracked) {
@@ -140,8 +139,11 @@ const char* CustomButton::GetClassName() const {
 bool CustomButton::OnMousePressed(const ui::MouseEvent& event) {
   if (state_ == STATE_DISABLED)
     return true;
-  if (ShouldEnterPushedState(event) && HitTestPoint(event.location()))
+  if (ShouldEnterPushedState(event) && HitTestPoint(event.location())) {
     SetState(STATE_PRESSED);
+    if (ink_drop_delegate_)
+      ink_drop_delegate_->OnAction(views::InkDropState::ACTION_PENDING);
+  }
   if (request_focus_on_press_)
     RequestFocus();
   if (IsTriggerableEvent(event) && notify_action_ == NOTIFY_ON_PRESS) {
@@ -241,7 +243,7 @@ void CustomButton::OnGestureEvent(ui::GestureEvent* event) {
     // STATE_NORMAL beginning the fade out animation. See
     // http://crbug.com/131184.
     SetState(STATE_HOVERED);
-    hover_animation_->Reset(1.0);
+    hover_animation_.Reset(1.0);
     NotifyClick(*event);
     event->StopPropagation();
   } else if (event->type() == ui::ET_GESTURE_TAP_DOWN &&
@@ -334,13 +336,16 @@ void CustomButton::AnimationProgressed(const gfx::Animation* animation) {
 CustomButton::CustomButton(ButtonListener* listener)
     : Button(listener),
       state_(STATE_NORMAL),
+      hover_animation_(this),
       animate_on_state_change_(true),
       is_throbbing_(false),
       triggerable_event_flags_(ui::EF_LEFT_MOUSE_BUTTON),
       request_focus_on_press_(true),
-      notify_action_(NOTIFY_ON_RELEASE) {
-  hover_animation_.reset(new gfx::ThrobAnimation(this));
-  hover_animation_->SetSlideDuration(kHoverFadeDurationMs);
+      ink_drop_delegate_(nullptr),
+      notify_action_(NOTIFY_ON_RELEASE),
+      has_ink_drop_action_on_click_(false),
+      ink_drop_action_on_click_(InkDropState::QUICK_ACTION) {
+  hover_animation_.SetSlideDuration(kHoverFadeDurationMs);
 }
 
 void CustomButton::StateChanged() {
@@ -381,11 +386,6 @@ bool CustomButton::ShouldEnterHoveredState() {
   return check_mouse_position && IsMouseHovered();
 }
 
-void CustomButton::SetInkDropDelegate(
-    scoped_ptr<InkDropDelegate> ink_drop_delegate) {
-  ink_drop_delegate_ = ink_drop_delegate.Pass();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // CustomButton, View overrides (protected):
 
@@ -404,6 +404,18 @@ void CustomButton::ViewHierarchyChanged(
 void CustomButton::OnBlur() {
   if (IsHotTracked())
     SetState(STATE_NORMAL);
+}
+
+void CustomButton::NotifyClick(const ui::Event& event) {
+  if (ink_drop_delegate() && has_ink_drop_action_on_click_)
+    ink_drop_delegate()->OnAction(ink_drop_action_on_click_);
+  Button::NotifyClick(event);
+}
+
+void CustomButton::OnClickCanceled(const ui::Event& event) {
+  if (ink_drop_delegate())
+    ink_drop_delegate()->OnAction(views::InkDropState::HIDDEN);
+  Button::OnClickCanceled(event);
 }
 
 bool CustomButton::IsChildWidget() const {

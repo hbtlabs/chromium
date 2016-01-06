@@ -70,6 +70,7 @@
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_EAST_RESIZE" file="common/pointers/top_left_corner.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_RESIZE" file="common/pointers/sb_v_double_arrow.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_SOUTH_WEST_RESIZE" file="common/pointers/top_right_corner.png" />
+        <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_THROBBER" file="common/pointers/throbber.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_WEST_RESIZE" file="common/pointers/sb_h_double_arrow.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_XTERM_HORIZ" file="common/pointers/xterm_horiz.png" />
         <structure type="chrome_scaled_image" name="IDR_AURA_CURSOR_ZOOM_IN" file="common/pointers/zoom_in.png" />
@@ -120,9 +121,8 @@
       <structure type="chrome_scaled_image" name="IDR_EASY_UNLOCK_UNLOCKED_PRESSED" file="common/easy_unlock_unlocked_pressed.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED" file="common/folder_closed.png" />
       <structure type="chrome_scaled_image" name="IDR_FOLDER_CLOSED_RTL" file="common/folder_closed_rtl.png" />
-      <structure type="chrome_scaled_image" name="IDR_MENU_CHECK_CHECKED" file="common/menu_check.png" />
-      <if expr="not is_macosx and not is_ios">
-        <structure type="chrome_scaled_image" name="IDR_MENU_HIERARCHY_ARROW" file="common/menu_hierarchy_arrow.png" />
+      <if expr="is_macosx">
+        <structure type="chrome_scaled_image" name="IDR_MENU_CHECK_CHECKED" file="legacy/menu_check.png" />
       </if>
       <if expr="is_macosx or is_ios">
         <structure type="chrome_scaled_image" name="IDR_MENU_HIERARCHY_ARROW" file="mac/menu_hierarchy_arrow.png" />
@@ -165,9 +165,6 @@
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_HOVER" file="common/notification_settings_hover.png"/>
         <structure type="chrome_scaled_image" name="IDR_NOTIFICATION_SETTINGS_PRESSED" file="common/notification_settings_pressed.png"/>
       </if>
-      <!-- TODO(calamity): The 1x local ntp resources require a proper version.
-           See crbug.com/363519. -->
-      <structure type="chrome_scaled_image" name="IDR_LOCAL_NTP_IMAGES_LOGO_PNG" file="common/ntp_google_logo.png" />
       <if expr="not is_android and not is_ios">
         <structure type="chrome_scaled_image" name="IDR_NTP_DEFAULT_FAVICON" file="common/ntp_default_favicon.png" />
       </if>
@@ -181,12 +178,6 @@
         <structure type="chrome_scaled_image" name="IDR_PANEL_TOP_RIGHT_CORNER" file="panel_top_right_corner.png" />
         <structure type="chrome_scaled_image" name="IDR_PANEL_BOTTOM_LEFT_CORNER" file="panel_bottom_left_corner.png" />
         <structure type="chrome_scaled_image" name="IDR_PANEL_BOTTOM_RIGHT_CORNER" file="panel_bottom_right_corner.png" />
-      </if>
-      <if expr="use_aura or toolkit_views or (is_posix and not is_macosx and not is_ios)">
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BAR" file="linux/linux-progress-bar.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BORDER_LEFT" file="linux/linux-progress-border-left.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_BORDER_RIGHT" file="linux/linux-progress-border-right.png" />
-        <structure type="chrome_scaled_image" name="IDR_PROGRESS_VALUE" file="linux/linux-progress-value.png" />
       </if>
       <if expr="use_aura">
         <structure type="chrome_scaled_image" name="IDR_SCROLLBAR_ARROW_BUTTON_BASE_HOVER_BOTTOM" file="common/aura_scrollbar_arrow_button_base_hover_bottom.png" />
@@ -273,7 +264,9 @@
         <structure type="chrome_scaled_image" name="IDR_TEXT_SELECTION_HANDLE_LEFT" file="common/text_selection_handle_left.png" />
         <structure type="chrome_scaled_image" name="IDR_TEXT_SELECTION_HANDLE_RIGHT" file="common/text_selection_handle_right.png" />
       </if>
-      <structure type="chrome_scaled_image" name="IDR_THROBBER" file="throbber.png" />
+      <if expr="is_macosx">
+        <structure type="chrome_scaled_image" name="IDR_THROBBER" file="legacy/throbber.png" />
+      </if>
       <if expr="toolkit_views">
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_COPY" file="common/drag_tip_copy.png" />
         <structure type="chrome_scaled_image" name="IDR_TOUCH_DRAG_TIP_MOVE" file="common/drag_tip_move.png" />

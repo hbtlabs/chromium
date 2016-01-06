@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/layout/LayoutPart.h"
 
 #include "core/html/HTMLElement.h"
@@ -27,10 +26,10 @@ TEST_F(LayoutPartTest, DestroyUpdatesImageQualityController)
     RefPtrWillBeRawPtr<Element> element = HTMLElement::create(HTMLNames::divTag, document());
     LayoutObject* part = new OverriddenLayoutPart(element.get());
     // The third and forth arguments are not important in this test.
-    ImageQualityController::imageQualityController()->set(part, 0, this, LayoutSize(1, 1));
-    EXPECT_TRUE(ImageQualityController::has(part));
+    ImageQualityController::imageQualityController()->set(*part, 0, this, LayoutSize(1, 1));
+    EXPECT_TRUE(ImageQualityController::has(*part));
     part->destroy();
-    EXPECT_FALSE(ImageQualityController::has(part));
+    EXPECT_FALSE(ImageQualityController::has(*part));
 }
 
 }

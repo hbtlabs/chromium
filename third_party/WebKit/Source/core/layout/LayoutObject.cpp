@@ -24,7 +24,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutObject.h"
 
 #include "core/HTMLNames.h"
@@ -132,7 +131,7 @@ LayoutObject::SetLayoutNeededForbiddenScope::~SetLayoutNeededForbiddenScope()
 
 struct SameSizeAsLayoutObject {
     virtual ~SameSizeAsLayoutObject() { } // Allocate vtable pointer.
-    void* pointers[5];
+    void* pointers[6];
 #if ENABLE(ASSERT)
     unsigned m_debugBitfields : 2;
 #endif
@@ -349,7 +348,7 @@ void LayoutObject::addChild(LayoutObject* newChild, LayoutObject* beforeChild)
             table = toLayoutTable(afterChild);
         } else {
             table = LayoutTable::createAnonymousWithParent(this);
-            addChild(table, beforeChild);
+            children->insertChildNode(this, table, beforeChild);
         }
         table->addChild(newChild);
     } else {
@@ -725,11 +724,6 @@ bool LayoutObject::skipInvalidationWhenLaidOutChildren() const
     return !hasBoxEffect();
 }
 
-LayoutBlock* LayoutObject::firstLineBlock() const
-{
-    return nullptr;
-}
-
 static inline bool objectIsRelayoutBoundary(const LayoutObject* object)
 {
     // FIXME: In future it may be possible to broaden these conditions in order to improve performance.
@@ -871,7 +865,7 @@ LayoutObject* LayoutObject::containerForAbsolutePosition(const LayoutBoxModelObj
     // we may not have one if we're part of an uninstalled
     // subtree. We'll climb as high as we can though.
     for (LayoutObject* object = parent(); object; object = object->parent()) {
-        if (object->style()->position() != StaticPosition)
+        if (object->isPositioned())
             return object;
 
         if (object->canContainFixedPositionObjects())
@@ -907,7 +901,7 @@ LayoutBlock* LayoutObject::containingBlockForAbsolutePosition() const
     // list in all LayoutInlines and lets us return a strongly-typed LayoutBlock* result
     // from this method.  The container() method can actually be used to obtain the
     // inline directly.
-    if (o && o->isInline() && !o->isReplaced()) {
+    if (o && o->isInline() && !o->isAtomicInlineLevel()) {
         ASSERT(o->style()->hasInFlowPosition());
         o = o->containingBlock();
     }
@@ -938,7 +932,7 @@ LayoutBlock* LayoutObject::containingBlock() const
     if (isColumnSpanAll()) {
         o = spannerPlaceholder()->containingBlock();
     } else {
-        while (o && ((o->isInline() && !o->isReplaced()) || !o->isLayoutBlock()))
+        while (o && ((o->isInline() && !o->isAtomicInlineLevel()) || !o->isLayoutBlock()))
             o = o->parent();
     }
 
@@ -1037,7 +1031,7 @@ IntRect LayoutObject::absoluteElementBoundingBoxRect() const
 {
     Vector<LayoutRect> rects;
     const LayoutBoxModelObject* container = enclosingLayer()->layoutObject();
-    addElementVisualOverflowRects(rects, LayoutPoint(localToContainerPoint(FloatPoint(), container)));
+    addElementVisualOverflowRects(rects, LayoutPoint(localToAncestorPoint(FloatPoint(), container)));
     return container->localToAbsoluteQuad(FloatQuad(FloatRect(unionRect(rects)))).enclosingBoundingBox();
 }
 
@@ -1144,6 +1138,11 @@ String LayoutObject::debugName() const
     return name.toString();
 }
 
+IntRect LayoutObject::visualRect() const
+{
+    return enclosingIntRect(previousPaintInvalidationRect());
+}
+
 bool LayoutObject::isPaintInvalidationContainer() const
 {
     return hasLayer() && toLayoutBoxModelObject(this)->layer()->isPaintInvalidationContainer();
@@ -1234,7 +1233,7 @@ void LayoutObject::invalidatePaintUsingContainer(const LayoutBoxModelObject& pai
         paintInvalidationContainer.setBackingNeedsPaintInvalidationInRect(dirtyRect, invalidationReason);
 }
 
-void LayoutObject::invalidateDisplayItemClient(const DisplayItemClientWrapper& displayItemClient) const
+void LayoutObject::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient) const
 {
     // TODO(wangxianzhu): Ensure correct bounds for the client will be or has been passed to PaintController. crbug.com/547119.
     // Not using enclosingCompositedContainer() directly because this object may be in an orphaned subtree.
@@ -1522,6 +1521,11 @@ void LayoutObject::adjustPreviousPaintInvalidationForScrollIfNeeded(const Double
     m_previousPaintInvalidationRect.move(LayoutSize(scrollDelta));
 }
 
+void LayoutObject::clearPreviousPaintInvalidationRects()
+{
+    setPreviousPaintInvalidationRect(LayoutRect());
+}
+
 void LayoutObject::incrementallyInvalidatePaint(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationBacking)
 {
     ASSERT(oldBounds.location() == newBounds.location());
@@ -1583,27 +1587,29 @@ LayoutRect LayoutObject::clippedOverflowRectForPaintInvalidation(const LayoutBox
     return LayoutRect();
 }
 
-void LayoutObject::mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
+void LayoutObject::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
 {
-    if (paintInvalidationContainer == this)
+    if (ancestor == this)
         return;
 
-    if (paintInvalidationState && paintInvalidationState->canMapToContainer(paintInvalidationContainer)) {
+    if (paintInvalidationState && paintInvalidationState->canMapToContainer(ancestor)) {
         rect.move(paintInvalidationState->paintOffset());
         if (paintInvalidationState->isClipped())
             rect.intersect(paintInvalidationState->clipRect());
         return;
     }
 
-    if (LayoutObject* o = parent()) {
-        if (o->hasOverflowClip()) {
-            LayoutBox* boxParent = toLayoutBox(o);
-            boxParent->applyCachedClipAndScrollOffsetForPaintInvalidation(rect);
+    if (LayoutObject* parent = this->parent()) {
+        if (parent->hasOverflowClip()) {
+            LayoutBox* parentBox = toLayoutBox(parent);
+            parentBox->mapScrollingContentsRectToBoxSpace(rect);
+            if (parent != ancestor)
+                parentBox->applyOverflowClip(rect);
             if (rect.isEmpty())
                 return;
         }
 
-        o->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, paintInvalidationState);
+        parent->mapToVisibleRectInAncestorSpace(ancestor, rect, paintInvalidationState);
     }
 }
 
@@ -1789,7 +1795,9 @@ StyleDifference LayoutObject::adjustStyleDifference(StyleDifference diff) const
             // skipped or we will miss invalidating decorations (e.g., underlines).
             || (isText() && !isBR() && toLayoutText(this)->hasTextBoxes())
             // Caret is painted in text color.
-            || (isLayoutBlock() && toLayoutBlock(this)->hasCaret()))
+            || (isLayoutBlock() && toLayoutBlock(this)->hasCaret())
+            || (isSVG() && style()->svgStyle().isFillColorCurrentColor())
+            || (isSVG() && style()->svgStyle().isStrokeColorCurrentColor()))
             diff.setNeedsPaintInvalidationObject();
     }
 
@@ -1837,12 +1845,33 @@ void LayoutObject::setPseudoStyle(PassRefPtr<ComputedStyle> pseudoStyle)
 void LayoutObject::firstLineStyleDidChange(const ComputedStyle& oldStyle, const ComputedStyle& newStyle)
 {
     StyleDifference diff = oldStyle.visualInvalidationDiff(newStyle);
-    if (diff.hasDifference()) {
-        // TODO(rune@opera.com): We should use the diff to determine whether a repaint vs. layout
-        // is needed, but for now just assume a layout will be required. The diff code
-        // in LayoutObject::setStyle would need to be factored out so that it could be reused.
-        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::StyleChange);
+
+    if (diff.needsPaintInvalidation() || diff.textDecorationOrColorChanged()) {
+        // We need to invalidate all inline boxes in the first line, because they need to be
+        // repainted with the new style, e.g. background, font style, etc.
+        LayoutBlockFlow* firstLineContainer = nullptr;
+        if (canHaveFirstLineOrFirstLetterStyle()) {
+            // This object is a LayoutBlock having FIRST_LINE pseudo style changed.
+            firstLineContainer = toLayoutBlock(this)->nearestInnerBlockWithFirstLine();
+        } else if (isLayoutInline()) {
+            // This object is a LayoutInline having FIRST_LINE_INHERITED pesudo style changed.
+            // This method can be called even if the LayoutInline doesn't intersect the first line,
+            // but we only need to invalidate if it does.
+            if (InlineBox* firstLineBox = toLayoutInline(this)->firstLineBoxIncludingCulling()) {
+                if (firstLineBox->isFirstLineStyle())
+                    firstLineContainer = toLayoutBlockFlow(containingBlock());
+            }
+        }
+        if (firstLineContainer) {
+            firstLineContainer->invalidateDisplayItemClientsOfFirstLine();
+            // The following is for rect invalidation. For slimming paint v2, we can invalidate the rects
+            // of the first line display item clients instead of the whole rect of the container.
+            if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+                firstLineContainer->setShouldDoFullPaintInvalidation();
+        }
     }
+    if (diff.needsLayout())
+        setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::StyleChange);
 }
 
 void LayoutObject::markContainingBlocksForOverflowRecalc()
@@ -2114,7 +2143,7 @@ LayoutRect LayoutObject::viewRect() const
 FloatPoint LayoutObject::localToAbsolute(const FloatPoint& localPoint, MapCoordinatesFlags mode) const
 {
     TransformState transformState(TransformState::ApplyTransformDirection, localPoint);
-    mapLocalToContainer(0, transformState, mode | ApplyContainerFlip);
+    mapLocalToAncestor(0, transformState, mode | ApplyContainerFlip);
     transformState.flatten();
 
     return transformState.lastPlanarPoint();
@@ -2137,9 +2166,9 @@ FloatQuad LayoutObject::absoluteToLocalQuad(const FloatQuad& quad, MapCoordinate
     return transformState.lastPlanarQuad();
 }
 
-void LayoutObject::mapLocalToContainer(const LayoutBoxModelObject* paintInvalidationContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
+void LayoutObject::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
-    if (paintInvalidationContainer == this)
+    if (ancestor == this)
         return;
 
     LayoutObject* o = parent();
@@ -2159,7 +2188,7 @@ void LayoutObject::mapLocalToContainer(const LayoutBoxModelObject* paintInvalida
     if (o->hasOverflowClip())
         transformState.move(-toLayoutBox(o)->scrolledContentOffset());
 
-    o->mapLocalToContainer(paintInvalidationContainer, transformState, mode, wasFixed, paintInvalidationState);
+    o->mapLocalToAncestor(ancestor, transformState, mode, wasFixed, paintInvalidationState);
 }
 
 const LayoutObject* LayoutObject::pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap& geometryMap) const
@@ -2207,32 +2236,32 @@ void LayoutObject::getTransformFromContainer(const LayoutObject* containerObject
     }
 }
 
-FloatQuad LayoutObject::localToContainerQuad(const FloatQuad& localQuad, const LayoutBoxModelObject* paintInvalidationContainer, MapCoordinatesFlags mode, bool* wasFixed) const
+FloatQuad LayoutObject::localToAncestorQuad(const FloatQuad& localQuad, const LayoutBoxModelObject* ancestor, MapCoordinatesFlags mode, bool* wasFixed) const
 {
-    // Track the point at the center of the quad's bounding box. As mapLocalToContainer() calls offsetFromContainer(),
+    // Track the point at the center of the quad's bounding box. As mapLocalToAncestor() calls offsetFromContainer(),
     // it will use that point as the reference point to decide which column's transform to apply in multiple-column blocks.
     TransformState transformState(TransformState::ApplyTransformDirection, localQuad.boundingBox().center(), localQuad);
-    mapLocalToContainer(paintInvalidationContainer, transformState, mode | ApplyContainerFlip | UseTransforms, wasFixed);
+    mapLocalToAncestor(ancestor, transformState, mode | ApplyContainerFlip | UseTransforms, wasFixed);
     transformState.flatten();
 
     return transformState.lastPlanarQuad();
 }
 
-FloatPoint LayoutObject::localToContainerPoint(const FloatPoint& localPoint, const LayoutBoxModelObject* paintInvalidationContainer, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
+FloatPoint LayoutObject::localToAncestorPoint(const FloatPoint& localPoint, const LayoutBoxModelObject* ancestor, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
     TransformState transformState(TransformState::ApplyTransformDirection, localPoint);
-    mapLocalToContainer(paintInvalidationContainer, transformState, mode | ApplyContainerFlip | UseTransforms, wasFixed, paintInvalidationState);
+    mapLocalToAncestor(ancestor, transformState, mode | ApplyContainerFlip | UseTransforms, wasFixed, paintInvalidationState);
     transformState.flatten();
 
     return transformState.lastPlanarPoint();
 }
 
-void LayoutObject::localToContainerRects(Vector<LayoutRect>& rects, const LayoutBoxModelObject* paintInvalidationContainer, const LayoutPoint& preOffset, const LayoutPoint& postOffset) const
+void LayoutObject::localToAncestorRects(Vector<LayoutRect>& rects, const LayoutBoxModelObject* ancestor, const LayoutPoint& preOffset, const LayoutPoint& postOffset) const
 {
     for (size_t i = 0; i < rects.size(); ++i) {
         LayoutRect& rect = rects[i];
         rect.moveBy(preOffset);
-        FloatQuad containerQuad = localToContainerQuad(FloatQuad(FloatRect(rect)), paintInvalidationContainer);
+        FloatQuad containerQuad = localToAncestorQuad(FloatQuad(FloatRect(rect)), ancestor);
         LayoutRect containerRect = LayoutRect(containerQuad.boundingBox());
         if (containerRect.isEmpty()) {
             rects.remove(i--);
@@ -2250,7 +2279,7 @@ FloatPoint LayoutObject::localToInvalidationBackingPoint(const LayoutPoint& loca
 
     if (backingLayer)
         *backingLayer = paintInvalidationContainer.layer();
-    FloatPoint containerPoint = localToContainerPoint(FloatPoint(localPoint), &paintInvalidationContainer, TraverseDocumentBoundaries);
+    FloatPoint containerPoint = localToAncestorPoint(FloatPoint(localPoint), &paintInvalidationContainer, TraverseDocumentBoundaries);
 
     // A layoutObject can have no invalidation backing if it is from a detached frame,
     // or when forced compositing is disabled.
@@ -2276,9 +2305,9 @@ LayoutSize LayoutObject::offsetFromContainer(const LayoutObject* o, const Layout
     return offset;
 }
 
-LayoutSize LayoutObject::offsetFromAncestorContainer(const LayoutObject* container) const
+LayoutSize LayoutObject::offsetFromAncestorContainer(const LayoutObject* ancestorContainer) const
 {
-    if (container == this)
+    if (ancestorContainer == this)
         return LayoutSize();
 
     LayoutSize offset;
@@ -2294,7 +2323,7 @@ LayoutSize LayoutObject::offsetFromAncestorContainer(const LayoutObject* contain
         offset += currentOffset;
         referencePoint.move(currentOffset);
         currContainer = nextContainer;
-    } while (currContainer != container);
+    } while (currContainer != ancestorContainer);
 
     return offset;
 }
@@ -2802,8 +2831,8 @@ static PassRefPtr<ComputedStyle> firstLineStyleForCachedUncachedType(StyleCacheS
     if (layoutObject->isBeforeOrAfterContent())
         layoutObjectForFirstLineStyle = layoutObject->parent();
 
-    if (layoutObjectForFirstLineStyle->isLayoutBlockFlow() || layoutObjectForFirstLineStyle->isLayoutButton()) {
-        if (LayoutBlock* firstLineBlock = layoutObjectForFirstLineStyle->firstLineBlock()) {
+    if (layoutObjectForFirstLineStyle->canHaveFirstLineOrFirstLetterStyle()) {
+        if (LayoutBlock* firstLineBlock = toLayoutBlock(layoutObjectForFirstLineStyle)->enclosingFirstLineStyleBlock()) {
             if (type == Cached)
                 return firstLineBlock->getCachedPseudoStyle(FIRST_LINE, style);
             return firstLineBlock->getUncachedPseudoStyle(PseudoStyleRequest(FIRST_LINE), style, firstLineBlock == layoutObject ? style : 0);
@@ -3006,7 +3035,7 @@ int LayoutObject::caretMinOffset() const
 
 int LayoutObject::caretMaxOffset() const
 {
-    if (isReplaced())
+    if (isAtomicInlineLevel())
         return node() ? std::max(1U, node()->countChildren()) : 1;
     if (isHR())
         return 1;
@@ -3224,13 +3253,6 @@ static PaintInvalidationReason documentLifecycleBasedPaintInvalidationReason(con
 
 inline void LayoutObject::markContainerChainForPaintInvalidation()
 {
-    // Setting layer-needs-repaint doesn't mean we'll fully repaint the layer, but
-    // means we won't skip painting of the whole layer with a CachedSubsequenceDisplayItem.
-    // This is to ensure we'll check paint offset changes of the objects on the layer.
-    // We'll still use cached display items for non-invalidated objects on the layer.
-    if (PaintLayer* enclosingLayer = this->enclosingLayer())
-        enclosingLayer->setNeedsRepaint();
-
     for (LayoutObject* container = this->containerCrossingFrameBoundaries(); container && !container->shouldCheckForPaintInvalidationRegardlessOfPaintInvalidationState(); container = container->containerCrossingFrameBoundaries())
         container->m_bitfields.setChildShouldCheckForPaintInvalidation(true);
 }
@@ -3255,13 +3277,11 @@ void LayoutObject::setShouldDoFullPaintInvalidation(PaintInvalidationReason reas
         if (reason == PaintInvalidationFull)
             reason = documentLifecycleBasedPaintInvalidationReason(document().lifecycle());
         m_bitfields.setFullPaintInvalidationReason(reason);
+        if (!isUpgradingDelayedFullToFull)
+            markContainerChainForPaintInvalidation();
     }
 
-    if (!isUpgradingDelayedFullToFull) {
-        ASSERT(document().lifecycle().state() != DocumentLifecycle::InPaintInvalidation);
-        frame()->scheduleVisualUpdateUnlessThrottled(); // In case that this is called outside of FrameView::updateLayoutAndStyleForPainting().
-        markContainerChainForPaintInvalidation();
-    }
+    frameView()->scheduleVisualUpdateForPaintInvalidationIfNeeded();
 }
 
 void LayoutObject::setMayNeedPaintInvalidation()
@@ -3270,7 +3290,7 @@ void LayoutObject::setMayNeedPaintInvalidation()
         return;
     m_bitfields.setMayNeedPaintInvalidation(true);
     markContainerChainForPaintInvalidation();
-    frame()->scheduleVisualUpdateUnlessThrottled(); // In case that this is called outside of FrameView::updateLayoutAndStyleForPainting().
+    frameView()->scheduleVisualUpdateForPaintInvalidationIfNeeded();
 }
 
 void LayoutObject::clearPaintInvalidationState(const PaintInvalidationState& paintInvalidationState)
@@ -3407,7 +3427,7 @@ void LayoutObject::invalidatePaintOfPreviousPaintInvalidationRect(const LayoutBo
     // Clear previous paint invalidation rect on the original paint invalidation container to avoid
     // under-invalidation if the new paint invalidation rect on the new paint invalidation container
     // happens to be the same as the old one.
-    setPreviousPaintInvalidationRect(LayoutRect());
+    clearPreviousPaintInvalidationRects();
 }
 
 void LayoutObject::invalidatePaintIncludingNonCompositingDescendants()

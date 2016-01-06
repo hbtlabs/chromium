@@ -5,6 +5,7 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_GPU_CONTROL_H_
 #define GPU_COMMAND_BUFFER_CLIENT_GPU_CONTROL_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
@@ -85,11 +86,22 @@ class GPU_EXPORT GpuControl {
   // should be considered as lost.
   virtual bool IsGpuChannelLost() = 0;
 
+  // When this function returns it ensures all previously flushed work is
+  // visible by the service. This command does this by sending a synchronous
+  // IPC. Note just because the work is visible to the server does not mean
+  // that it has been processed. This is only relevant for out of process
+  // services and will be treated as a NOP for in process command buffers.
+  virtual void EnsureWorkVisible() = 0;
+
   // The namespace and command buffer ID forms a unique pair for all existing
   // GpuControl (on client) and matches for the corresponding command buffer
-  // (on server) in a single server process.
+  // (on server) in a single server process. The extra command buffer data can
+  // be used for extra identification purposes. One usage is to store some
+  // extra field to identify unverified sync tokens for the implementation of
+  // the CanWaitUnverifiedSyncToken() function.
   virtual CommandBufferNamespace GetNamespaceID() const = 0;
   virtual uint64_t GetCommandBufferID() const = 0;
+  virtual int32_t GetExtraCommandBufferData() const = 0;
 
   // Fence Syncs use release counters at a context level, these fence syncs
   // need to be flushed before they can be shared with other contexts across

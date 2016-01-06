@@ -4,7 +4,13 @@
 
 #include "ui/views/controls/combobox/combobox.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/models/combobox_model.h"
@@ -95,7 +101,7 @@ class TransparentButton : public CustomButton {
   }
 
   double GetAnimationValue() const {
-    return hover_animation_->GetCurrentValue();
+    return hover_animation().GetCurrentValue();
   }
 
  private:
@@ -233,8 +239,7 @@ class Combobox::ComboboxMenuModelAdapter : public ui::MenuModel,
  private:
   bool UseCheckmarks() const {
     return owner_->style_ != STYLE_ACTION &&
-           MenuConfig::instance(owner_->GetNativeTheme())
-               .check_selected_combobox_item;
+           MenuConfig::instance().check_selected_combobox_item;
   }
 
   // Overridden from MenuModel:
@@ -688,7 +693,7 @@ void Combobox::UpdateBorder() {
     border->SetInsets(5, 10, 5, 10);
   if (invalid_)
     border->SetColor(gfx::kGoogleRed700);
-  SetBorder(border.Pass());
+  SetBorder(std::move(border));
 }
 
 void Combobox::AdjustBoundsForRTLUI(gfx::Rect* rect) const {

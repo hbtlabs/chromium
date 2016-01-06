@@ -725,6 +725,11 @@
       }
     ]
   },
+  "Win Builder": {
+    "additional_compile_targets": [
+      "battor_agent"
+    ]
+  },
   "Win x64 GN": {
     "additional_compile_targets": [
       "gn_all"
@@ -933,6 +938,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gin_unittests"
       },
       {
         "swarming": {

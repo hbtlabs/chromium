@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
@@ -498,9 +502,7 @@ class RenderWidgetHostTest : public testing::Test {
   virtual void ConfigureView(TestView* view) {
   }
 
-  int64 GetLatencyComponentId() {
-    return host_->GetLatencyComponentId();
-  }
+  int64_t GetLatencyComponentId() { return host_->GetLatencyComponentId(); }
 
   void SendInputEventACK(WebInputEvent::Type type,
                          InputEventAckState ack_result) {
@@ -588,8 +590,8 @@ class RenderWidgetHostTest : public testing::Test {
 
   // Sends a touch event (irrespective of whether the page has a touch-event
   // handler or not).
-  uint32 SendTouchEvent() {
-    uint32 touch_event_id = touch_event_.uniqueTouchEventId;
+  uint32_t SendTouchEvent() {
+    uint32_t touch_event_id = touch_event_.uniqueTouchEventId;
     host_->ForwardTouchEventWithLatencyInfo(touch_event_, ui::LatencyInfo());
 
     touch_event_.ResetPoints();
@@ -1528,7 +1530,7 @@ ui::LatencyInfo GetLatencyInfoFromInputEvent(RenderWidgetHostProcess* process) {
 }
 
 void CheckLatencyInfoComponentInMessage(RenderWidgetHostProcess* process,
-                                        int64 component_id,
+                                        int64_t component_id,
                                         WebInputEvent::Type input_type) {
   ui::LatencyInfo latency_info = GetLatencyInfoFromInputEvent(process);
   EXPECT_TRUE(latency_info.FindLatency(
@@ -1587,7 +1589,7 @@ TEST_F(RenderWidgetHostTest, InputEventRWHLatencyComponent) {
 
   // Tests RWHI::ForwardTouchEventWithLatencyInfo().
   PressTouchPoint(0, 1);
-  uint32 touch_event_id = SendTouchEvent();
+  uint32_t touch_event_id = SendTouchEvent();
   InputEventAck ack(WebInputEvent::TouchStart, INPUT_EVENT_ACK_STATE_CONSUMED,
                     touch_event_id);
   host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
@@ -1651,6 +1653,26 @@ TEST_F(RenderWidgetHostInitialSizeTest, InitialSize) {
   EXPECT_FALSE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
   EXPECT_EQ(initial_size_, host_->old_resize_params_->new_size);
   EXPECT_TRUE(host_->resize_ack_pending_);
+}
+
+// Tests that event dispatch after the delegate has been detached doesn't cause
+// a crash. See crbug.com/563237.
+TEST_F(RenderWidgetHostTest, EventDispatchPostDetach) {
+  host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  process_->sink().ClearMessages();
+
+  host_->DetachDelegate();
+
+  // Tests RWHI::ForwardGestureEventWithLatencyInfo().
+  SimulateGestureEventWithLatencyInfo(WebInputEvent::GestureScrollUpdate,
+                                      blink::WebGestureDeviceTouchscreen,
+                                      ui::LatencyInfo());
+
+
+  // Tests RWHI::ForwardWheelEventWithLatencyInfo().
+  SimulateWheelEventWithLatencyInfo(-5, 0, 0, true, ui::LatencyInfo());
+
+  ASSERT_FALSE(host_->input_router()->HasPendingEvents());
 }
 
 }  // namespace content

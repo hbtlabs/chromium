@@ -5,12 +5,14 @@
 #include "content/common/font_warmup_win.h"
 
 #include <dwrite.h>
+#include <stdint.h>
 #include <map>
 
 #include "base/debug/alias.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
@@ -94,56 +96,6 @@ NTSTATUS WINAPI NtALpcConnectPortPatch(HANDLE* port_handle,
                                        void* in_message_attributes,
                                        void* time_out) {
   return STATUS_ACCESS_DENIED;
-}
-
-// Directwrite connects to the font cache service to retrieve information about
-// fonts installed on the system etc. This works well outside the sandbox and
-// within the sandbox as long as the lpc connection maintained by the current
-// process with the font cache service remains valid. It appears that there
-// are cases when this connection is dropped after which directwrite is unable
-// to connect to the font cache service which causes problems with characters
-// disappearing.
-// Directwrite has fallback code to enumerate fonts if it is unable to connect
-// to the font cache service. We need to intercept the following APIs to
-// ensure that it does not connect to the font cache service.
-// NtALpcConnectPort
-// OpenSCManagerW
-// OpenServiceW
-// StartServiceW
-// CloseServiceHandle.
-// These are all IAT patched.
-void PatchServiceManagerCalls() {
-  static bool is_patched = false;
-  if (is_patched)
-    return;
-  const char* service_provider_dll =
-      (base::win::GetVersion() >= base::win::VERSION_WIN8
-           ? "api-ms-win-service-management-l1-1-0.dll"
-           : "advapi32.dll");
-
-  is_patched = true;
-
-  DWORD patched =
-      g_iat_patch_open_sc_manager.Patch(L"dwrite.dll", service_provider_dll,
-                                        "OpenSCManagerW", OpenSCManagerWPatch);
-  DCHECK(patched == 0);
-
-  patched = g_iat_patch_close_service_handle.Patch(
-      L"dwrite.dll", service_provider_dll, "CloseServiceHandle",
-      CloseServiceHandlePatch);
-  DCHECK(patched == 0);
-
-  patched = g_iat_patch_open_service.Patch(L"dwrite.dll", service_provider_dll,
-                                           "OpenServiceW", OpenServiceWPatch);
-  DCHECK(patched == 0);
-
-  patched = g_iat_patch_start_service.Patch(
-      L"dwrite.dll", service_provider_dll, "StartServiceW", StartServiceWPatch);
-  DCHECK(patched == 0);
-
-  patched = g_iat_patch_nt_connect_port.Patch(
-      L"dwrite.dll", "ntdll.dll", "NtAlpcConnectPort", NtALpcConnectPortPatch);
-  DCHECK(patched == 0);
 }
 
 // Windows-only DirectWrite support. These warm up the DirectWrite paths
@@ -460,6 +412,56 @@ GdiFontPatchDataImpl::GdiFontPatchDataImpl(const base::FilePath& path) {
 }
 
 }  // namespace
+
+// Directwrite connects to the font cache service to retrieve information about
+// fonts installed on the system etc. This works well outside the sandbox and
+// within the sandbox as long as the lpc connection maintained by the current
+// process with the font cache service remains valid. It appears that there
+// are cases when this connection is dropped after which directwrite is unable
+// to connect to the font cache service which causes problems with characters
+// disappearing.
+// Directwrite has fallback code to enumerate fonts if it is unable to connect
+// to the font cache service. We need to intercept the following APIs to
+// ensure that it does not connect to the font cache service.
+// NtALpcConnectPort
+// OpenSCManagerW
+// OpenServiceW
+// StartServiceW
+// CloseServiceHandle.
+// These are all IAT patched.
+void PatchServiceManagerCalls() {
+  static bool is_patched = false;
+  if (is_patched)
+    return;
+  const char* service_provider_dll =
+      (base::win::GetVersion() >= base::win::VERSION_WIN8
+           ? "api-ms-win-service-management-l1-1-0.dll"
+           : "advapi32.dll");
+
+  is_patched = true;
+
+  DWORD patched =
+      g_iat_patch_open_sc_manager.Patch(L"dwrite.dll", service_provider_dll,
+                                        "OpenSCManagerW", OpenSCManagerWPatch);
+  DCHECK(patched == 0);
+
+  patched = g_iat_patch_close_service_handle.Patch(
+      L"dwrite.dll", service_provider_dll, "CloseServiceHandle",
+      CloseServiceHandlePatch);
+  DCHECK(patched == 0);
+
+  patched = g_iat_patch_open_service.Patch(L"dwrite.dll", service_provider_dll,
+                                           "OpenServiceW", OpenServiceWPatch);
+  DCHECK(patched == 0);
+
+  patched = g_iat_patch_start_service.Patch(
+      L"dwrite.dll", service_provider_dll, "StartServiceW", StartServiceWPatch);
+  DCHECK(patched == 0);
+
+  patched = g_iat_patch_nt_connect_port.Patch(
+      L"dwrite.dll", "ntdll.dll", "NtAlpcConnectPort", NtALpcConnectPortPatch);
+  DCHECK(patched == 0);
+}
 
 void DoPreSandboxWarmupForTypeface(SkTypeface* typeface) {
   SkPaint paint_warmup;

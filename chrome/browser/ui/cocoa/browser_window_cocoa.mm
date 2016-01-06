@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/browser_commands_mac.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
+#import "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_bridge.h"
 #import "chrome/browser/ui/cocoa/browser/edit_search_engine_cocoa_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
@@ -433,6 +434,10 @@ void BrowserWindowCocoa::UpdateExclusiveAccessExitBubbleContent(
   [controller_ updateFullscreenExitBubbleURL:url bubbleType:bubble_type];
 }
 
+void BrowserWindowCocoa::OnExclusiveAccessUserInput() {
+  // TODO(mgiuca): Route this signal to the exclusive access bubble on Mac.
+}
+
 bool BrowserWindowCocoa::ShouldHideUIForFullscreen() const {
   // On Mac, fullscreen mode has most normal things (in a slide-down panel).
   return false;
@@ -658,8 +663,7 @@ autofill::SaveCardBubbleView* BrowserWindowCocoa::ShowSaveCreditCardBubble(
     content::WebContents* web_contents,
     autofill::SaveCardBubbleController* controller,
     bool user_gesture) {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return new autofill::SaveCardBubbleViewBridge(controller, controller_);
 }
 
 void BrowserWindowCocoa::ShowTranslateBubble(
@@ -840,17 +844,21 @@ NSWindow* BrowserWindowCocoa::window() const {
 
 void BrowserWindowCocoa::ShowAvatarBubbleFromAvatarButton(
     AvatarBubbleMode mode,
-    const signin::ManageAccountsParams& manage_accounts_params) {
+    const signin::ManageAccountsParams& manage_accounts_params,
+    signin_metrics::AccessPoint access_point) {
   AvatarBaseController* controller = [controller_ avatarButtonController];
   NSView* anchor = [controller buttonView];
   if ([anchor isHiddenOrHasHiddenAncestor])
-    anchor = [[controller_ toolbarController] wrenchButton];
+    anchor = [[controller_ toolbarController] appMenuButton];
   [controller showAvatarBubbleAnchoredAt:anchor
                                 withMode:mode
-                         withServiceType:manage_accounts_params.service_type];
+                         withServiceType:manage_accounts_params.service_type
+                         fromAccessPoint:access_point];
 }
 
-void BrowserWindowCocoa::ShowModalSigninWindow(AvatarBubbleMode mode) {
+void BrowserWindowCocoa::ShowModalSigninWindow(
+    AvatarBubbleMode mode,
+    signin_metrics::AccessPoint access_point) {
   NOTREACHED();
 }
 void BrowserWindowCocoa::CloseModalSigninWindow() {

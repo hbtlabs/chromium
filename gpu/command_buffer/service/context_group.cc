@@ -4,6 +4,9 @@
 
 #include "gpu/command_buffer/service/context_group.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
@@ -16,6 +19,7 @@
 #include "gpu/command_buffer/service/path_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
+#include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
@@ -83,7 +87,7 @@ ContextGroup::ContextGroup(
   }
 }
 
-static void GetIntegerv(GLenum pname, uint32* var) {
+static void GetIntegerv(GLenum pname, uint32_t* var) {
   GLint value = 0;
   glGetIntegerv(pname, &value);
   *var = value;
@@ -155,6 +159,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
       memory_tracker_.get(), max_renderbuffer_size, max_samples,
       feature_info_.get()));
   shader_manager_.reset(new ShaderManager());
+  sampler_manager_.reset(new SamplerManager(feature_info_.get()));
   valuebuffer_manager_.reset(
       new ValuebufferManager(subscription_ref_set_.get(),
                              pending_valuebuffer_state_.get()));
@@ -274,18 +279,19 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   if (feature_info_->workarounds().max_fragment_uniform_vectors) {
     max_fragment_uniform_vectors_ = std::min(
         max_fragment_uniform_vectors_,
-        static_cast<uint32>(
+        static_cast<uint32_t>(
             feature_info_->workarounds().max_fragment_uniform_vectors));
   }
   if (feature_info_->workarounds().max_varying_vectors) {
-    max_varying_vectors_ = std::min(
-        max_varying_vectors_,
-        static_cast<uint32>(feature_info_->workarounds().max_varying_vectors));
+    max_varying_vectors_ =
+        std::min(max_varying_vectors_,
+                 static_cast<uint32_t>(
+                     feature_info_->workarounds().max_varying_vectors));
   }
   if (feature_info_->workarounds().max_vertex_uniform_vectors) {
     max_vertex_uniform_vectors_ =
         std::min(max_vertex_uniform_vectors_,
-                 static_cast<uint32>(
+                 static_cast<uint32_t>(
                      feature_info_->workarounds().max_vertex_uniform_vectors));
   }
 
@@ -378,6 +384,11 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     shader_manager_.reset();
   }
 
+  if (sampler_manager_ != NULL) {
+    sampler_manager_->Destroy(have_context);
+    sampler_manager_.reset();
+  }
+
   if (valuebuffer_manager_ != NULL) {
     valuebuffer_manager_->Destroy();
     valuebuffer_manager_.reset();
@@ -386,8 +397,8 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
   memory_tracker_ = NULL;
 }
 
-uint32 ContextGroup::GetMemRepresented() const {
-  uint32 total = 0;
+uint32_t ContextGroup::GetMemRepresented() const {
+  uint32_t total = 0;
   if (buffer_manager_.get())
     total += buffer_manager_->mem_represented();
   if (renderbuffer_manager_.get())
@@ -418,7 +429,7 @@ bool ContextGroup::CheckGLFeature(GLint min_required, GLint* v) {
   return value >= min_required;
 }
 
-bool ContextGroup::CheckGLFeatureU(GLint min_required, uint32* v) {
+bool ContextGroup::CheckGLFeatureU(GLint min_required, uint32_t* v) {
   GLint value = *v;
   if (enforce_gl_minimums_) {
     value = std::min(min_required, value);
@@ -435,9 +446,10 @@ bool ContextGroup::QueryGLFeature(
   return CheckGLFeature(min_required, v);
 }
 
-bool ContextGroup::QueryGLFeatureU(
-    GLenum pname, GLint min_required, uint32* v) {
-  uint32 value = 0;
+bool ContextGroup::QueryGLFeatureU(GLenum pname,
+                                   GLint min_required,
+                                   uint32_t* v) {
+  uint32_t value = 0;
   GetIntegerv(pname, &value);
   bool result = CheckGLFeatureU(min_required, &value);
   *v = value;

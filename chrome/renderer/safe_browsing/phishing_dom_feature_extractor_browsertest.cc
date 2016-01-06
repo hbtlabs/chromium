@@ -10,6 +10,8 @@
 #include "chrome/renderer/safe_browsing/phishing_dom_feature_extractor.h"
 
 #include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -20,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -136,8 +139,7 @@ class PhishingDOMFeatureExtractorTest : public InProcessBrowserTest {
 
   scoped_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request) {
-    std::map<std::string, std::string>::const_iterator host_it =
-        request.headers.find("Host");
+    auto host_it = request.headers.find("Host");
     if (host_it == request.headers.end())
       return scoped_ptr<net::test_server::HttpResponse>();
 
@@ -153,7 +155,7 @@ class PhishingDOMFeatureExtractorTest : public InProcessBrowserTest {
     http_response->set_code(net::HTTP_OK);
     http_response->set_content_type("text/html");
     http_response->set_content(it->second);
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   GURL GetURL(const std::string& host, const std::string& path) {

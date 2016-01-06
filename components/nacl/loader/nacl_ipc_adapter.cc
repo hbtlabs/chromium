@@ -6,10 +6,11 @@
 
 #include <limits.h>
 #include <string.h>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/task_runner_util.h"
@@ -47,7 +48,7 @@ BufferSizeStatus GetBufferStatus(const char* data, size_t len) {
 
   const NaClIPCAdapter::NaClMessageHeader* header =
       reinterpret_cast<const NaClIPCAdapter::NaClMessageHeader*>(data);
-  uint32 message_size =
+  uint32_t message_size =
       sizeof(NaClIPCAdapter::NaClMessageHeader) + header->payload_size;
 
   if (len == message_size)
@@ -365,7 +366,7 @@ NaClIPCAdapter::NaClIPCAdapter(scoped_ptr<IPC::Channel> channel,
       cond_var_(&lock_),
       task_runner_(runner),
       locked_data_() {
-  io_thread_data_.channel_ = channel.Pass();
+  io_thread_data_.channel_ = std::move(channel);
 }
 
 void NaClIPCAdapter::ConnectChannel() {
@@ -636,7 +637,7 @@ scoped_ptr<IPC::Message> CreateOpenResourceReply(
   // Write empty file tokens.
   new_msg->WriteUInt64(0);  // token_lo
   new_msg->WriteUInt64(0);  // token_hi
-  return new_msg.Pass();
+  return new_msg;
 }
 
 void NaClIPCAdapter::SaveOpenResourceMessage(
@@ -696,8 +697,7 @@ void NaClIPCAdapter::SaveOpenResourceMessage(
   }
 }
 
-void NaClIPCAdapter::OnChannelConnected(int32 peer_pid) {
-}
+void NaClIPCAdapter::OnChannelConnected(int32_t peer_pid) {}
 
 void NaClIPCAdapter::OnChannelError() {
   CloseChannel();
@@ -834,11 +834,11 @@ void NaClIPCAdapter::SaveMessage(const IPC::Message& msg,
   NaClMessageHeader header;
   memset(&header, 0, sizeof(NaClMessageHeader));
 
-  header.payload_size = static_cast<uint32>(msg.payload_size());
+  header.payload_size = static_cast<uint32_t>(msg.payload_size());
   header.routing = msg.routing_id();
   header.type = msg.type();
   header.flags = msg.flags();
-  header.num_fds = static_cast<uint16>(rewritten_msg->desc_count());
+  header.num_fds = static_cast<uint16_t>(rewritten_msg->desc_count());
 
   rewritten_msg->SetData(header, msg.payload(), msg.payload_size());
   locked_data_.to_be_received_.push(rewritten_msg);

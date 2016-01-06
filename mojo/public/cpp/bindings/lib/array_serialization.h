@@ -5,6 +5,7 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_ARRAY_SERIALIZATION_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_ARRAY_SERIALIZATION_H_
 
+#include <stddef.h>
 #include <string.h>  // For |memcpy()|.
 
 #include <utility>
@@ -30,7 +31,7 @@ inline void SerializeArray_(
     const internal::ArrayValidateParams* validate_params);
 
 template <typename E, typename F>
-inline void Deserialize_(internal::Array_Data<F>* data,
+inline bool Deserialize_(internal::Array_Data<F>* data,
                          Array<E>* output,
                          internal::SerializationContext* context);
 
@@ -62,13 +63,14 @@ struct ArraySerializer<E, F, false> {
     if (input.size())
       memcpy(output->storage(), &input.storage()[0], input.size() * sizeof(E));
   }
-  static void DeserializeElements(Array_Data<F>* input,
+  static bool DeserializeElements(Array_Data<F>* input,
                                   Array<E>* output,
                                   SerializationContext* context) {
     std::vector<E> result(input->size());
     if (input->size())
       memcpy(&result[0], input->storage(), input->size() * sizeof(E));
     output->Swap(&result);
+    return true;
   }
 };
 
@@ -92,7 +94,7 @@ struct ArraySerializer<bool, bool, false> {
     for (size_t i = 0; i < input.size(); ++i)
       output->at(i) = input[i];
   }
-  static void DeserializeElements(Array_Data<bool>* input,
+  static bool DeserializeElements(Array_Data<bool>* input,
                                   Array<bool>* output,
                                   SerializationContext* context) {
     Array<bool> result(input->size());
@@ -100,6 +102,7 @@ struct ArraySerializer<bool, bool, false> {
     for (size_t i = 0; i < input->size(); ++i)
       result.at(i) = input->at(i);
     output->Swap(&result);
+    return true;
   }
 };
 
@@ -127,13 +130,14 @@ struct ArraySerializer<ScopedHandleBase<H>, H, false> {
               i));
     }
   }
-  static void DeserializeElements(Array_Data<H>* input,
+  static bool DeserializeElements(Array_Data<H>* input,
                                   Array<ScopedHandleBase<H>>* output,
                                   SerializationContext* context) {
     Array<ScopedHandleBase<H>> result(input->size());
     for (size_t i = 0; i < input->size(); ++i)
       result.at(i) = MakeScopedHandle(FetchAndReset(&input->at(i)));
     output->Swap(&result);
+    return true;
   }
 };
 
@@ -161,7 +165,7 @@ struct ArraySerializer<
                                 const ArrayValidateParams* validate_params) {
     for (size_t i = 0; i < input.size(); ++i) {
       S_Data* element;
-      SerializeCaller<S>::Run(input[i].Pass(), buf, &element,
+      SerializeCaller<S>::Run(std::move(input[i]), buf, &element,
                               validate_params->element_validate_params);
       output->at(i) = element;
       MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
@@ -171,14 +175,20 @@ struct ArraySerializer<
                                     input.size(), i));
     }
   }
-  static void DeserializeElements(Array_Data<S_Data*>* input,
+  static bool DeserializeElements(Array_Data<S_Data*>* input,
                                   Array<S>* output,
                                   SerializationContext* context) {
+    bool success = true;
     Array<S> result(input->size());
     for (size_t i = 0; i < input->size(); ++i) {
-      Deserialize_(input->at(i), &result[i], context);
+      // Note that we rely on complete deserialization taking place in order to
+      // transfer ownership of all encoded handles. Therefore we don't
+      // short-circuit on failure here.
+      if (!Deserialize_(input->at(i), &result[i], context))
+        success = false;
     }
     output->Swap(&result);
+    return success;
   }
 
  private:
@@ -201,7 +211,7 @@ struct ArraySerializer<
                     Buffer* buf,
                     typename Array<T>::Data_** output,
                     const ArrayValidateParams* validate_params) {
-      SerializeArray_(input.Pass(), buf, output, validate_params);
+      SerializeArray_(std::move(input), buf, output, validate_params);
     }
   };
 
@@ -211,7 +221,7 @@ struct ArraySerializer<
                     Buffer* buf,
                     typename Map<T, U>::Data_** output,
                     const ArrayValidateParams* validate_params) {
-      SerializeMap_(input.Pass(), buf, output, validate_params);
+      SerializeMap_(std::move(input), buf, output, validate_params);
     }
   };
 };
@@ -235,7 +245,7 @@ struct ArraySerializer<U, U_Data, true> {
                                 const ArrayValidateParams* validate_params) {
     for (size_t i = 0; i < input.size(); ++i) {
       U_Data* result = output->storage() + i;
-      SerializeUnion_(input[i].Pass(), buf, &result, true);
+      SerializeUnion_(std::move(input[i]), buf, &result, true);
       MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
           !validate_params->element_is_nullable && output->at(i).is_null(),
           VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
@@ -244,14 +254,20 @@ struct ArraySerializer<U, U_Data, true> {
     }
   }
 
-  static void DeserializeElements(Array_Data<U_Data>* input,
+  static bool DeserializeElements(Array_Data<U_Data>* input,
                                   Array<U>* output,
                                   SerializationContext* context) {
+    bool success = true;
     Array<U> result(input->size());
     for (size_t i = 0; i < input->size(); ++i) {
-      Deserialize_(&input->at(i), &result[i], context);
+      // Note that we rely on complete deserialization taking place in order to
+      // transfer ownership of all encoded handles. Therefore we don't
+      // short-circuit on failure here.
+      if (!Deserialize_(&input->at(i), &result[i], context))
+        success = false;
     }
     output->Swap(&result);
+    return success;
   }
 };
 
@@ -288,13 +304,17 @@ struct ArraySerializer<String, String_Data*> {
                                     input.size(), i));
     }
   }
-  static void DeserializeElements(Array_Data<String_Data*>* input,
+  static bool DeserializeElements(Array_Data<String_Data*>* input,
                                   Array<String>* output,
                                   SerializationContext* context) {
     Array<String> result(input->size());
-    for (size_t i = 0; i < input->size(); ++i)
-      Deserialize_(input->at(i), &result[i], context);
+    for (size_t i = 0; i < input->size(); ++i) {
+      // It's OK to short-circuit here since string data cannot contain handles.
+      if (!Deserialize_(input->at(i), &result[i], context))
+        return false;
+    }
     output->Swap(&result);
+    return true;
   }
 };
 
@@ -336,15 +356,18 @@ inline void SerializeArray_(
 }
 
 template <typename E, typename F>
-inline void Deserialize_(internal::Array_Data<F>* input,
+inline bool Deserialize_(internal::Array_Data<F>* input,
                          Array<E>* output,
                          internal::SerializationContext* context) {
   if (input) {
-    internal::ArraySerializer<E, F>::DeserializeElements(input, output,
-                                                         context);
+    if (!internal::ArraySerializer<E, F>::DeserializeElements(input, output,
+                                                              context)) {
+      return false;
+    }
   } else {
     output->reset();
   }
+  return true;
 }
 
 }  // namespace mojo

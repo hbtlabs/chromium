@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/inspector/v8/V8InjectedScriptHost.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -79,21 +78,6 @@ void V8InjectedScriptHost::internalConstructorNameCallback(const v8::FunctionCal
 
     v8::Local<v8::Object> object = info[0].As<v8::Object>();
     v8::Local<v8::String> result = object->GetConstructorName();
-
-    if (!result.IsEmpty() && toCoreStringWithUndefinedOrNullCheck(result) == "Object") {
-        v8::Local<v8::String> constructorSymbol = v8AtomicString(info.GetIsolate(), "constructor");
-        if (object->HasRealNamedProperty(constructorSymbol) && !object->HasRealNamedCallbackProperty(constructorSymbol)) {
-            v8::TryCatch tryCatch(info.GetIsolate());
-            v8::Local<v8::Value> constructor = object->GetRealNamedProperty(constructorSymbol);
-            if (!constructor.IsEmpty() && constructor->IsFunction()) {
-                v8::Local<v8::String> constructorName = functionDisplayName(v8::Local<v8::Function>::Cast(constructor));
-                if (!constructorName.IsEmpty() && !tryCatch.HasCaught())
-                    result = constructorName;
-            }
-        }
-        if (toCoreStringWithUndefinedOrNullCheck(result) == "Object" && object->IsFunction())
-            result = v8AtomicString(info.GetIsolate(), "Function");
-    }
 
     v8SetReturnValue(info, result);
 }
@@ -510,8 +494,7 @@ void V8InjectedScriptHost::setNonEnumPropertyCallback(const v8::FunctionCallback
         return;
 
     v8::Local<v8::Object> object = info[0].As<v8::Object>();
-    // TODO(bashi): Use DefineOwnProperty() if possible.
-    object->ForceSet(info.GetIsolate()->GetCurrentContext(), info[1], info[2], v8::DontEnum);
+    v8CallBoolean(object->DefineOwnProperty(info.GetIsolate()->GetCurrentContext(), info[1].As<v8::String>(), info[2], v8::DontEnum));
 }
 
 void V8InjectedScriptHost::bindCallback(const v8::FunctionCallbackInfo<v8::Value>& info)

@@ -6,11 +6,9 @@ import logging
 import os
 import re
 import shutil
-import stat
 import subprocess
 import tempfile
 
-from telemetry.internal.util import binary_manager
 from telemetry.core import android_platform
 from telemetry.core import exceptions
 from telemetry.core import platform
@@ -36,6 +34,7 @@ import adb_install_cert
 import certutils
 import platformsettings
 
+from devil.android import app_ui
 from devil.android import battery_utils
 from devil.android import device_errors
 from devil.android import device_utils
@@ -43,8 +42,7 @@ from devil.android.perf import cache_control
 from devil.android.perf import perf_control
 from devil.android.perf import thermal_throttle
 from devil.android.sdk import version_codes
-from pylib import constants
-from pylib import screenshot
+from devil.android.tools import video_recorder
 
 try:
   from devil.android.perf import surface_stats_collector
@@ -52,72 +50,29 @@ except Exception:
   surface_stats_collector = None
 
 
-_DEVICE_COPY_SCRIPT_FILE = os.path.join(
-    constants.DIR_SOURCE_ROOT, 'build', 'android', 'pylib',
-    'efficient_android_directory_copy.sh')
+_DEVICE_COPY_SCRIPT_FILE = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), 'efficient_android_directory_copy.sh'))
 _DEVICE_COPY_SCRIPT_LOCATION = (
     '/data/local/tmp/efficient_android_directory_copy.sh')
 
-
-def _SetupPrebuiltTools(device):
-  """Some of the android pylib scripts we depend on are lame and expect
-  binaries to be in the out/ directory. So we copy any prebuilt binaries there
-  as a prereq."""
-
-  # TODO(bulach): Build the targets for x86/mips.
-  device_tools = [
-    'file_poller',
-    'forwarder_dist/device_forwarder',
-    'memtrack_helper',
-    'md5sum_dist/md5sum_bin',
-    'purge_ashmem',
-  ]
-
-  host_tools = [
-    'bitmaptools',
-    'md5sum_bin_host',
-  ]
-
-  platform_name = platform.GetHostPlatform().GetOSName()
-  if platform_name == 'linux':
-    host_tools.append('host_forwarder')
-
-  arch_name = device.product_cpu_abi
-  has_device_prebuilt = (arch_name.startswith('armeabi')
-                         or arch_name.startswith('arm64'))
-  if not has_device_prebuilt:
-    logging.warning('Unknown architecture type: %s' % arch_name)
-    return all([binary_manager.LocalPath(t, platform_name, arch_name)
-        for t in device_tools])
-
-  build_type = None
-  for t in device_tools + host_tools:
-    executable = os.path.basename(t)
-    locally_built_path = binary_manager.LocalPath(
-        t, platform_name, arch_name)
-    if not build_type:
-      build_type = _GetBuildTypeOfPath(locally_built_path) or 'Release'
-      constants.SetBuildType(build_type)
-    dest = os.path.join(constants.GetOutDirectory(), t)
-    if not locally_built_path:
-      logging.info('Setting up prebuilt %s', dest)
-      if not os.path.exists(os.path.dirname(dest)):
-        os.makedirs(os.path.dirname(dest))
-      platform_name = ('android' if t in device_tools else
-                       platform.GetHostPlatform().GetOSName())
-      bin_arch_name = (arch_name if t in device_tools else
-                       platform.GetHostPlatform().GetArchName())
-      prebuilt_path = binary_manager.FetchPath(
-          executable, bin_arch_name, platform_name)
-      if not prebuilt_path or not os.path.exists(prebuilt_path):
-        raise NotImplementedError("""
-%s must be checked into cloud storage.
-Instructions:
-http://www.chromium.org/developers/telemetry/upload_to_cloud_storage
-""" % t)
-      shutil.copyfile(prebuilt_path, dest)
-      os.chmod(dest, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-  return True
+# TODO(nednguyen): Remove this method and update the client config to point to
+# the correct binary instead.
+def _FindLocallyBuiltPath(binary_name):
+  """Finds the most recently built |binary_name|."""
+  command = None
+  command_mtime = 0
+  chrome_root = util.GetChromiumSrcDir()
+  required_mode = os.X_OK
+  if binary_name.endswith('.apk'):
+    required_mode = os.R_OK
+  for build_dir, build_type in util.GetBuildDirectories():
+    candidate = os.path.join(chrome_root, build_dir, build_type, binary_name)
+    if os.path.isfile(candidate) and os.access(candidate, required_mode):
+      candidate_mtime = os.stat(candidate).st_mtime
+      if candidate_mtime > command_mtime:
+        command = candidate
+        command_mtime = candidate_mtime
+  return command
 
 
 def _GetBuildTypeOfPath(path):
@@ -136,13 +91,6 @@ class AndroidPlatformBackend(
         'AndroidPlatformBackend can only be initialized from remote device')
     super(AndroidPlatformBackend, self).__init__(device)
     self._device = device_utils.DeviceUtils(device.device_id)
-    installed_prebuilt_tools = _SetupPrebuiltTools(self._device)
-    if not installed_prebuilt_tools:
-      logging.error(
-          '%s detected, however prebuilt android tools could not '
-          'be used. To run on Android you must build them first:\n'
-          '  $ ninja -C out/Release android_tools' % device.name)
-      raise exceptions.PlatformError()
     # Trying to root the device, if possible.
     if not self._device.HasRoot():
       try:
@@ -170,7 +118,7 @@ class AndroidPlatformBackend(
           self._battery, self),
         sysfs_power_monitor.SysfsPowerMonitor(self, standalone=True),
         android_fuelgauge_power_monitor.FuelGaugePowerMonitor(
-            self._battery, self),
+            self._battery),
     ], self._battery))
     self._video_recorder = None
     self._installed_applications = None
@@ -178,6 +126,7 @@ class AndroidPlatformBackend(
     self._wpr_ca_cert_path = None
     self._device_cert_util = None
     self._is_test_ca_installed = False
+    self._system_ui = None
 
     self._use_rndis_forwarder = (
         finder_options.android_rndis or
@@ -215,6 +164,11 @@ class AndroidPlatformBackend(
   @property
   def device(self):
     return self._device
+
+  def GetSystemUi(self):
+    if self._system_ui is None:
+      self._system_ui = app_ui.AppUi(self.device, 'com.android.systemui')
+    return self._system_ui
 
   def IsSvelte(self):
     try:
@@ -451,10 +405,9 @@ class AndroidPlatformBackend(
                        'Max capture rate is 100mbps.' % min_bitrate_mbps)
     if self.is_video_capture_running:
       self._video_recorder.Stop()
-    self._video_recorder = screenshot.VideoRecorder(
+    self._video_recorder = video_recorder.VideoRecorder(
         self._device, megabits_per_second=min_bitrate_mbps)
-    self._video_recorder.Start()
-    util.WaitFor(self._video_recorder.IsStarted, 5)
+    self._video_recorder.Start(timeout=5)
 
   @property
   def is_video_capture_running(self):

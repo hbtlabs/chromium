@@ -23,7 +23,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/LayoutTableSection.h"
 
 #include "core/layout/HitTestResult.h"
@@ -35,6 +34,7 @@
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableSectionPainter.h"
 #include "wtf/HashSet.h"
+#include <algorithm>
 #include <limits>
 
 namespace blink {
@@ -80,8 +80,8 @@ row, const LayoutTableCell* cell)
 
 void CellSpan::ensureConsistency(const unsigned maximumSpanSize)
 {
-    static_assert(WTF::IsSameType<decltype(m_start), unsigned>::value, "Asserts below assume m_start is unsigned");
-    static_assert(WTF::IsSameType<decltype(m_end), unsigned>::value, "Asserts below assume m_end is unsigned");
+    static_assert(std::is_same<decltype(m_start), unsigned>::value, "Asserts below assume m_start is unsigned");
+    static_assert(std::is_same<decltype(m_end), unsigned>::value, "Asserts below assume m_end is unsigned");
     RELEASE_ASSERT(m_start <= maximumSpanSize);
     RELEASE_ASSERT(m_end <= maximumSpanSize);
     RELEASE_ASSERT(m_start <= m_end);
@@ -969,7 +969,7 @@ int LayoutTableSection::distributeExtraLogicalHeightToRows(int extraLogicalHeigh
 
 static bool shouldFlexCellChild(LayoutObject* cellDescendant)
 {
-    return cellDescendant->isReplaced() || (cellDescendant->isBox() && toLayoutBox(cellDescendant)->scrollsOverflow());
+    return cellDescendant->isAtomicInlineLevel() || (cellDescendant->isBox() && toLayoutBox(cellDescendant)->scrollsOverflow());
 }
 
 void LayoutTableSection::layoutRows()
@@ -1094,7 +1094,7 @@ void LayoutTableSection::layoutRows()
                 if (oldLogicalHeight > rHeight)
                     rowHeightIncreaseForPagination = std::max<int>(rowHeightIncreaseForPagination, oldLogicalHeight - rHeight);
                 cell->setLogicalHeight(rHeight);
-                cell->computeOverflow(oldLogicalHeight);
+                cell->computeOverflow(oldLogicalHeight, false);
             }
 
             if (rowLayoutObject)
@@ -1117,7 +1117,7 @@ void LayoutTableSection::layoutRows()
                 for (size_t i = 0; i < cells.size(); ++i) {
                     LayoutUnit oldLogicalHeight = cells[i]->logicalHeight();
                     cells[i]->setLogicalHeight(oldLogicalHeight + rowHeightIncreaseForPagination);
-                    cells[i]->computeOverflow(oldLogicalHeight);
+                    cells[i]->computeOverflow(oldLogicalHeight, false);
                 }
             }
         }

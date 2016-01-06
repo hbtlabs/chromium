@@ -5,8 +5,10 @@
 #include "content/public/test/test_download_request_handler.h"
 
 #include <inttypes.h>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -99,7 +101,7 @@ class TestDownloadRequestHandler::PartialResponseJob
   // URLRequestJob
   void Start() override;
   void GetResponseInfo(net::HttpResponseInfo* response_info) override;
-  int64 GetTotalReceivedBytes() const override;
+  int64_t GetTotalReceivedBytes() const override;
   bool GetMimeType(std::string* mime_type) const override;
   int GetResponseCode() const override;
   int ReadRawData(net::IOBuffer* buf, int buf_size) override;
@@ -212,7 +214,7 @@ TestDownloadRequestHandler::PartialResponseJob::PartialResponseJob(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate)
     : net::URLRequestJob(request, network_delegate),
-      parameters_(parameters.Pass()),
+      parameters_(std::move(parameters)),
       interceptor_(interceptor),
       weak_factory_(this) {
   DCHECK(parameters_.get());
@@ -246,7 +248,7 @@ void TestDownloadRequestHandler::PartialResponseJob::GetResponseInfo(
   *response_info = response_info_;
 }
 
-int64 TestDownloadRequestHandler::PartialResponseJob::GetTotalReceivedBytes()
+int64_t TestDownloadRequestHandler::PartialResponseJob::GetTotalReceivedBytes()
     const {
   return offset_of_next_read_ - requested_range_begin_;
 }
@@ -487,7 +489,7 @@ TestDownloadRequestHandler::Interceptor::Register(
   base::WeakPtr<Interceptor> weak_reference =
       interceptor->weak_ptr_factory_.GetWeakPtr();
   net::URLRequestFilter* filter = net::URLRequestFilter::GetInstance();
-  filter->AddUrlInterceptor(url, interceptor.Pass());
+  filter->AddUrlInterceptor(url, std::move(interceptor));
   return weak_reference;
 }
 

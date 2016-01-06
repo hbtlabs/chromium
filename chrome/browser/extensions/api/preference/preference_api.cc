@@ -4,15 +4,19 @@
 
 #include "chrome/browser/extensions/api/preference/preference_api.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_service.h"
 #include "chrome/browser/extensions/api/preference/preference_api_constants.h"
@@ -75,7 +79,7 @@ const char kConversionErrorMessage[] =
 
 PrefMappingEntry kPrefMapping[] = {
     {"spdy_proxy.enabled",
-     data_reduction_proxy::prefs::kDataReductionProxyEnabled,
+     prefs::kDataSaverEnabled,
      APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"data_reduction.daily_original_length",
      data_reduction_proxy::prefs::kDailyHttpOriginalContentLength,

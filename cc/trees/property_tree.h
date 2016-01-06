@@ -5,9 +5,10 @@
 #ifndef CC_TREES_PROPERTY_TREE_H_
 #define CC_TREES_PROPERTY_TREE_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "cc/base/cc_export.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
@@ -472,10 +473,13 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
  public:
   bool operator==(const EffectTree& other) const;
 
-  void UpdateOpacities(int id);
+  void UpdateEffects(int id);
 
   void ToProtobuf(proto::PropertyTree* proto) const;
   void FromProtobuf(const proto::PropertyTree& proto);
+
+ private:
+  void UpdateOpacities(EffectNode* node, EffectNode* parent_node);
 };
 
 class CC_EXPORT PropertyTrees final {

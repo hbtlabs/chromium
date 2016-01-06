@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/extensions/device_local_account_management_policy_provider.h"
 
+#include <stddef.h>
+
 #include <cstddef>
 #include <string>
 
@@ -142,8 +144,9 @@ const char* const kSafeManifestEntries[] = {
     // Just UX.
     emk::kIcons,
 
-    // No constant in manifest_constants.cc.
-    // "author",
+    // Documented in https://developer.chrome.com/extensions/manifest but not
+    // implemented anywhere.  Still, a lot of apps use it.
+    "author",
 
     // TBD
     // emk::kBluetooth,
@@ -206,8 +209,8 @@ const char* const kSafeManifestEntries[] = {
     // Descriptive statement about the app.
     emk::kRequirements,
 
-    // Execute some pages in a separate sandbox. (manifest_constants.cc only has
-    // constants for sub-keys.)
+    // Execute some pages in a separate sandbox.  (Note:
+    // extensions::manifest_keys only has constants for sub-keys.)
     "sandbox",
 
     // TBD, doc missing
@@ -216,8 +219,8 @@ const char* const kSafeManifestEntries[] = {
     // Network access.
     emk::kSockets,
 
-    // TBD
-    // emk::kIsolatedStorage,
+    // TBD.  (Note: extensions::manifest_keys only has constants for sub-keys.)
+    // "storage",
 
     // TBD, doc missing
     // emk::kSystemIndicator,
@@ -243,9 +246,15 @@ const char* const kSafeManifestEntries[] = {
     emk::kWebview,
 };
 
-// List of permissions based on
-// https://developer.chrome.com/apps/declare_permissions.
-// TODO(tnagel): Explain generic rationale for decisions.
+// List of permissions based on [1] and [2].  Since Public Session users may be
+// fully unaware of any apps being installed, their consent to access any kind
+// of sensitive information cannot be assumed.  Therefore only APIs are
+// whitelisted which should not leak sensitive data to the caller.  Since the
+// privacy boundary is drawn at the API level, no safeguards are required to
+// prevent exfiltration and thus apps may communicate freely over any kind of
+// network.
+// [1] https://developer.chrome.com/apps/declare_permissions
+// [2] https://developer.chrome.com/apps/api_other
 const char* const kSafePermissions[] = {
     // Risky: Reading accessibility settings could allow to infer health
     // information.
@@ -287,7 +296,16 @@ const char* const kSafePermissions[] = {
 
     // Possibly risky due to its experimental nature: not vetted for security,
     // potentially buggy, subject to change without notice.
-    // "experimental,"
+    // "experimental",
+
+    // Fullscreen is a no-op for Public Session.  Whitelisting nevertheless to
+    // broaden the range of supported apps.  (The recommended permission names
+    // are "app.window.*" but their unprefixed counterparts are still
+    // supported.)
+    "app.window.fullscreen",
+    "app.window.fullscreen.overrideEsc",
+    "fullscreen",
+    "overrideEscFullscreen",
 
     // TBD
     // "fileSystem",
@@ -426,12 +444,21 @@ bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
           LOG(ERROR) << it.key() << " contains a non-string.";
           return false;
         }
-        if (!ArrayContains(kSafePermissions, permission_string)) {
-          LOG(ERROR) << extension->id()
-                     << " requested non-whitelisted permission: "
-                     << permission_string;
-          return false;
+        // Accept whitelisted permissions.
+        if (ArrayContains(kSafePermissions, permission_string)) {
+          continue;
         }
+        // Allow arbitrary web requests.  Don't include <all_urls> because that
+        // also matches file:// schemes.
+        if (permission_string.find("https://") == 0 ||
+            permission_string.find("http://") == 0 ||
+            permission_string.find("ftp://") == 0) {
+          continue;
+        }
+        LOG(ERROR) << extension->id()
+                   << " requested non-whitelisted permission: "
+                   << permission_string;
+        return false;
       }
     // "app" may only contain "background".
     } else if (it.key() == emk::kApp) {
@@ -531,8 +558,8 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
       return true;
     }
   } else if (account_type_ == policy::DeviceLocalAccount::TYPE_KIOSK_APP) {
-    // For single-app kiosk sessions, allow platform apps, extesions and
-    // shared modules.
+    // For single-app kiosk sessions, allow platform apps, extesions and shared
+    // modules.
     if (extension->GetType() == extensions::Manifest::TYPE_PLATFORM_APP ||
         extension->GetType() == extensions::Manifest::TYPE_SHARED_MODULE ||
         extension->GetType() == extensions::Manifest::TYPE_EXTENSION) {

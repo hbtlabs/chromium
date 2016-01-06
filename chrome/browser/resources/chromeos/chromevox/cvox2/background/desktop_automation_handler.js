@@ -14,7 +14,7 @@ goog.require('ChromeVoxState');
 goog.scope(function() {
 var AutomationEvent = chrome.automation.AutomationEvent;
 var AutomationNode = chrome.automation.AutomationNode;
-var Dir = AutomationUtil.Dir;
+var Dir = constants.Dir;
 var RoleType = chrome.automation.RoleType;
 
 /**
@@ -53,7 +53,7 @@ DesktopAutomationHandler.prototype = {
 
   /**
    * Provides all feedback once ChromeVox's focus changes.
-   * @param {Object} evt
+   * @param {!AutomationEvent} evt
    */
   onEventDefault: function(evt) {
     var node = evt.target;
@@ -141,10 +141,18 @@ DesktopAutomationHandler.prototype = {
       node = node.find({state: {focused: true}}) || node;
     }
 
-    if (this.isEditable_(evt.target))
-      this.createEditableTextHandlerIfNeeded_(evt.target);
+    if (this.isEditable_(node))
+      this.createEditableTextHandlerIfNeeded_(node);
 
-    this.onEventDefault({target: node, type: 'focus'});
+    // Since we queue output mostly for live regions support and there isn't a
+    // reliable way to know if this focus event resulted from a user's explicit
+    // action, only flush when the focused node is not web content.
+    if (node.root.role == RoleType.desktop)
+      Output.flushNextSpeechUtterance();
+
+    this.onEventDefault(
+        /** @type {!AutomationEvent} */
+        ({target: node, type: chrome.automation.EventType.focus}));
   },
 
   /**
@@ -192,7 +200,7 @@ DesktopAutomationHandler.prototype = {
 
   /**
    * Provides all feedback once a text selection change event fires.
-   * @param {Object} evt
+   * @param {!AutomationEvent} evt
    */
   onTextOrTextSelectionChanged: function(evt) {
     if (!this.isEditable_(evt.target))
@@ -229,7 +237,7 @@ DesktopAutomationHandler.prototype = {
 
   /**
    * Provides all feedback once a value changed event fires.
-   * @param {Object} evt
+   * @param {!AutomationEvent} evt
    */
   onValueChanged: function(evt) {
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
@@ -237,15 +245,12 @@ DesktopAutomationHandler.prototype = {
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
       return;
 
-    if (!evt.target.state.focused)
-      return;
-
     // Value change events fire on web editables when typing. Suppress them.
     if (!ChromeVoxState.instance.currentRange ||
         !this.isEditable_(evt.target)) {
-      this.onEventDefault(evt);
-      ChromeVoxState.instance.setCurrentRange(
-          cursors.Range.fromNode(evt.target));
+      var range = cursors.Range.fromNode(evt.target);
+      new Output().withSpeechAndBraille(range, range, evt.type)
+          .go();
     }
   },
 

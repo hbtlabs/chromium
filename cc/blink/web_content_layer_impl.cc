@@ -4,6 +4,8 @@
 
 #include "cc/blink/web_content_layer_impl.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "cc/base/switches.h"
 #include "cc/blink/web_display_item_list_impl.h"
@@ -38,6 +40,8 @@ PaintingControlToWeb(
       return blink::WebContentLayerClient::DisplayListCachingDisabled;
     case cc::ContentLayerClient::DISPLAY_LIST_PAINTING_DISABLED:
       return blink::WebContentLayerClient::DisplayListPaintingDisabled;
+    case cc::ContentLayerClient::SUBSEQUENCE_CACHING_DISABLED:
+      return blink::WebContentLayerClient::SubsequenceCachingDisabled;
   }
   NOTREACHED();
   return blink::WebContentLayerClient::PaintDefaultBehavior;

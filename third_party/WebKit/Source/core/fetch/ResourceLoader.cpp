@@ -27,7 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/fetch/ResourceLoader.h"
 
 #include "core/fetch/CSSStyleSheetResource.h"
@@ -77,6 +76,8 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher, Resource* resource, con
     , m_state(Initialized)
     , m_connectionState(ConnectionStateNew)
 {
+    ASSERT(m_resource);
+    ASSERT(m_fetcher);
 }
 
 ResourceLoader::~ResourceLoader()

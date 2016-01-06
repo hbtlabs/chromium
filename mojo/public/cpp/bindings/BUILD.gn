@@ -53,6 +53,8 @@ source_set("bindings") {
     "lib/multiplex_router.cc",
     "lib/multiplex_router.h",
     "lib/no_interface.cc",
+    "lib/pickle_buffer.cc",
+    "lib/pickle_buffer.h",
     "lib/pipe_control_message_handler.cc",
     "lib/pipe_control_message_handler.h",
     "lib/pipe_control_message_handler_delegate.h",
@@ -78,11 +80,14 @@ source_set("bindings") {
     "string.h",
     "strong_binding.h",
     "struct_ptr.h",
+    "struct_traits.h",
     "type_converter.h",
   ]
 
   public_deps = [
     ":callback",
+    "//base",
+    "//ipc:param_traits",
     "//mojo/public/cpp/system",
   ]
 
@@ -100,12 +105,10 @@ source_set("callback") {
     "lib/shared_data.h",
     "lib/shared_ptr.h",
     "lib/template_util.h",
-    "lib/thread_checker.h",
-    "lib/thread_checker_posix.cc",
-    "lib/thread_checker_posix.h",
   ]
 
   deps = [
+    "//base",
     "//mojo/public/cpp/system",
   ]
 }

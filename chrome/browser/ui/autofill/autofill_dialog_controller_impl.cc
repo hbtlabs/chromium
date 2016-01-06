@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -14,6 +15,7 @@
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
@@ -1429,9 +1431,8 @@ bool AutofillDialogControllerImpl::HandleKeyPressEventInInput(
 void AutofillDialogControllerImpl::ShowNewCreditCardBubble(
     scoped_ptr<CreditCard> new_card,
     scoped_ptr<AutofillProfile> billing_profile) {
-  NewCreditCardBubbleController::Show(web_contents(),
-                                      new_card.Pass(),
-                                      billing_profile.Pass());
+  NewCreditCardBubbleController::Show(web_contents(), std::move(new_card),
+                                      std::move(billing_profile));
 }
 
 void AutofillDialogControllerImpl::SubmitButtonDelayBegin() {
@@ -2302,7 +2303,8 @@ void AutofillDialogControllerImpl::MaybeShowCreditCardBubble() {
     billing_profile.reset(new AutofillProfile(*profile));
   }
 
-  ShowNewCreditCardBubble(newly_saved_card_.Pass(), billing_profile.Pass());
+  ShowNewCreditCardBubble(std::move(newly_saved_card_),
+                          std::move(billing_profile));
 }
 
 void AutofillDialogControllerImpl::OnSubmitButtonDelayEnd() {

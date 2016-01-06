@@ -5,7 +5,9 @@
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider_impl.h"
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -49,7 +51,7 @@ scoped_ptr<KeyedService> BuildProfileInvalidationProvider(
   invalidation_service->SetInvalidatorState(
       syncer::TRANSIENT_INVALIDATION_ERROR);
   return make_scoped_ptr(new invalidation::ProfileInvalidationProvider(
-      invalidation_service.Pass()));
+      std::move(invalidation_service)));
 }
 
 }  // namespace

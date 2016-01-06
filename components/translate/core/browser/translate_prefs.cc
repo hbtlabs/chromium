@@ -10,6 +10,7 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/translate/core/browser/translate_accept_languages.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -358,7 +359,8 @@ void TranslatePrefs::ResetDenialState() {
   prefs_->ClearPref(kPrefTranslateTooOftenDeniedForLanguage);
 }
 
-void TranslatePrefs::GetLanguageList(std::vector<std::string>* languages) {
+void TranslatePrefs::GetLanguageList(
+    std::vector<std::string>* languages) const {
   DCHECK(languages);
   DCHECK(languages->empty());
 

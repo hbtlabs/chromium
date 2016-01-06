@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <set>
 #include <vector>
 
@@ -844,7 +846,8 @@ void TransformTree::UndoSnapping(TransformNode* node) {
 
 void TransformTree::UpdateSnapping(TransformNode* node) {
   if (!node->data.scrolls || node->data.to_screen_is_animated ||
-      !node->data.to_target.IsScaleOrTranslation()) {
+      !node->data.to_target.IsScaleOrTranslation() ||
+      !node->data.ancestors_are_invertible) {
     return;
   }
 
@@ -1019,13 +1022,18 @@ void TransformTree::FromProtobuf(const proto::PropertyTree& proto) {
   }
 }
 
-void EffectTree::UpdateOpacities(int id) {
-  EffectNode* node = Node(id);
+void EffectTree::UpdateOpacities(EffectNode* node, EffectNode* parent_node) {
   node->data.screen_space_opacity = node->data.opacity;
 
-  EffectNode* parent_node = parent(node);
   if (parent_node)
     node->data.screen_space_opacity *= parent_node->data.screen_space_opacity;
+}
+
+void EffectTree::UpdateEffects(int id) {
+  EffectNode* node = Node(id);
+  EffectNode* parent_node = parent(node);
+
+  UpdateOpacities(node, parent_node);
 }
 
 void TransformTree::UpdateNodeAndAncestorsHaveIntegerTranslations(

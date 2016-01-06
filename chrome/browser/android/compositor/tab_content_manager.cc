@@ -5,12 +5,15 @@
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 
 #include <android/bitmap.h>
+#include <stddef.h>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "cc/layers/layer.h"
 #include "chrome/browser/android/compositor/layer/thumbnail_layer.h"
 #include "chrome/browser/android/tab_android.h"
@@ -271,7 +274,7 @@ void TabContentManager::CacheTab(JNIEnv* env,
     scoped_ptr<TabReadbackRequest> readback_request =
         make_scoped_ptr(new TabReadbackRequest(
             content_view_core, thumbnail_scale, readback_done_callback));
-    pending_tab_readbacks_.set(tab_id, readback_request.Pass());
+    pending_tab_readbacks_.set(tab_id, std::move(readback_request));
     pending_tab_readbacks_.get(tab_id)->Run();
   }
 }

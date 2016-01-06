@@ -4,9 +4,12 @@
 
 #include "components/metrics/metrics_service.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/metrics_hashes.h"
@@ -108,8 +111,8 @@ class MetricsServiceTest : public testing::Test {
       const std::vector<variations::ActiveGroupId>& synthetic_trials,
       const std::string& trial_name,
       const std::string& trial_group) {
-    uint32 trial_name_hash = HashName(trial_name);
-    uint32 trial_group_hash = HashName(trial_group);
+    uint32_t trial_name_hash = HashName(trial_name);
+    uint32_t trial_group_hash = HashName(trial_group);
     for (const variations::ActiveGroupId& trial : synthetic_trials) {
       if (trial.name == trial_name_hash && trial.group == trial_group_hash)
         return true;
@@ -120,7 +123,7 @@ class MetricsServiceTest : public testing::Test {
   // Finds a histogram with the specified |name_hash| in |histograms|.
   const base::HistogramBase* FindHistogram(
       const base::StatisticsRecorder::Histograms& histograms,
-      uint64 name_hash) {
+      uint64_t name_hash) {
     for (const base::HistogramBase* histogram : histograms) {
       if (name_hash == base::HashMetricName(histogram->histogram_name()))
         return histogram;
@@ -137,7 +140,7 @@ class MetricsServiceTest : public testing::Test {
     base::StatisticsRecorder::Histograms histograms;
     base::StatisticsRecorder::GetHistograms(&histograms);
     for (int i = 0; i < uma_log.histogram_event_size(); ++i) {
-      const uint64 hash = uma_log.histogram_event(i).name_hash();
+      const uint64_t hash = uma_log.histogram_event(i).name_hash();
 
       const base::HistogramBase* histogram = FindHistogram(histograms, hash);
       EXPECT_TRUE(histogram) << hash;
@@ -315,10 +318,12 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   MetricsService service(GetMetricsStateManager(), &client, GetLocalState());
 
   // Add two synthetic trials and confirm that they show up in the list.
-  SyntheticTrialGroup trial1(HashName("TestTrial1"), HashName("Group1"));
+  variations::SyntheticTrialGroup trial1(HashName("TestTrial1"),
+                                         HashName("Group1"));
   service.RegisterSyntheticFieldTrial(trial1);
 
-  SyntheticTrialGroup trial2(HashName("TestTrial2"), HashName("Group2"));
+  variations::SyntheticTrialGroup trial2(HashName("TestTrial2"),
+                                         HashName("Group2"));
   service.RegisterSyntheticFieldTrial(trial2);
   // Ensure that time has advanced by at least a tick before proceeding.
   WaitUntilTimeChanges(base::TimeTicks::Now());
@@ -345,14 +350,16 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   WaitUntilTimeChanges(begin_log_time);
 
   // Change the group for the first trial after the log started.
-  SyntheticTrialGroup trial3(HashName("TestTrial1"), HashName("Group2"));
+  variations::SyntheticTrialGroup trial3(HashName("TestTrial1"),
+                                         HashName("Group2"));
   service.RegisterSyntheticFieldTrial(trial3);
   service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
 
   // Add a new trial after the log started and confirm that it doesn't show up.
-  SyntheticTrialGroup trial4(HashName("TestTrial3"), HashName("Group3"));
+  variations::SyntheticTrialGroup trial4(HashName("TestTrial3"),
+                                         HashName("Group3"));
   service.RegisterSyntheticFieldTrial(trial4);
   service.GetSyntheticFieldTrialsOlderThan(begin_log_time, &synthetic_trials);
   EXPECT_EQ(1U, synthetic_trials.size());

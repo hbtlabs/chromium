@@ -242,14 +242,12 @@ void ClearStencil(GLint s) {
 
 void ClientWaitSync(GLuint sync,
                     GLbitfield flags,
-                    GLuint timeout_0,
-                    GLuint timeout_1,
+                    GLuint64 timeout,
                     uint32_t result_shm_id,
                     uint32_t result_shm_offset) {
   gles2::cmds::ClientWaitSync* c = GetCmdSpace<gles2::cmds::ClientWaitSync>();
   if (c) {
-    c->Init(sync, flags, timeout_0, timeout_1, result_shm_id,
-            result_shm_offset);
+    c->Init(sync, flags, timeout, result_shm_id, result_shm_offset);
   }
 }
 
@@ -2146,13 +2144,10 @@ void Viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
   }
 }
 
-void WaitSync(GLuint sync,
-              GLbitfield flags,
-              GLuint timeout_0,
-              GLuint timeout_1) {
+void WaitSync(GLuint sync, GLbitfield flags, GLuint64 timeout) {
   gles2::cmds::WaitSync* c = GetCmdSpace<gles2::cmds::WaitSync>();
   if (c) {
-    c->Init(sync, flags, timeout_0, timeout_1);
+    c->Init(sync, flags, timeout);
   }
 }
 
@@ -2790,6 +2785,16 @@ void GenUnverifiedSyncTokenCHROMIUMImmediate(GLuint64 fence_sync) {
   }
 }
 
+void VerifySyncTokensCHROMIUMImmediate(GLsizei count) {
+  const uint32_t s = 0;
+  gles2::cmds::VerifySyncTokensCHROMIUMImmediate* c =
+      GetImmediateCmdSpaceTotalSize<
+          gles2::cmds::VerifySyncTokensCHROMIUMImmediate>(s);
+  if (c) {
+    c->Init(count);
+  }
+}
+
 void WaitSyncTokenCHROMIUM(GLint namespace_id,
                            GLuint64 command_buffer_id,
                            GLuint64 release_count) {
@@ -2841,12 +2846,16 @@ void ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
 void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLfloat opacity,
                              GLuint background_color,
+                             GLuint edge_aa_mask,
+                             GLboolean is_clipped,
+                             GLint sorting_context_id,
                              GLuint shm_id,
                              GLuint shm_offset) {
   gles2::cmds::ScheduleCALayerCHROMIUM* c =
       GetCmdSpace<gles2::cmds::ScheduleCALayerCHROMIUM>();
   if (c) {
-    c->Init(contents_texture_id, opacity, background_color, shm_id, shm_offset);
+    c->Init(contents_texture_id, opacity, background_color, edge_aa_mask,
+            is_clipped, sorting_context_id, shm_id, shm_offset);
   }
 }
 
@@ -3148,6 +3157,14 @@ void ProgramPathFragmentInputGenCHROMIUM(GLuint program,
   if (c) {
     c->Init(program, location, genMode, components, coeffs_shm_id,
             coeffs_shm_offset);
+  }
+}
+
+void CoverageModulationCHROMIUM(GLenum components) {
+  gles2::cmds::CoverageModulationCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::CoverageModulationCHROMIUM>();
+  if (c) {
+    c->Init(components);
   }
 }
 

@@ -108,6 +108,10 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
+    'base/third_party/libevent': [  # http://crbug.com/98309
+        'UNKNOWN',
+    ],
+
     # http://code.google.com/p/google-breakpad/issues/detail?id=450
     'breakpad/src': [
         'UNKNOWN',
@@ -117,6 +121,14 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         # http://llvm.org/bugs/show_bug.cgi?id=18291
         'UNKNOWN',
     ],
+    # http://llvm.org/bugs/show_bug.cgi?id=25976
+    'buildtools/third_party/libc++/trunk/src/include/atomic_support.h': [
+      'UNKNOWN'
+    ],
+    'buildtools/third_party/libc++/trunk/utils/gen_link_script': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++/trunk/utils/not': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++/trunk/utils/sym_check': [ 'UNKNOWN' ],
+    'buildtools/third_party/libc++abi/trunk/test': [ 'UNKNOWN' ],
 
     'chrome/common/extensions/docs/examples': [  # http://crbug.com/98092
         'UNKNOWN',
@@ -409,9 +421,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     'third_party/lcov/contrib/galaxy/genflat.pl': [
         'GPL (v2 or later)',
     ],
-    'third_party/libevent': [  # http://crbug.com/98309
-        'UNKNOWN',
-    ],
     'third_party/libjingle/source/talk': [  # http://crbug.com/98310
         'UNKNOWN',
     ],
@@ -607,10 +616,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     ],
     # Not shipped, MIT license but the header files contain no licensing info.
     'tools/telemetry/third_party/altgraph': [
-        'UNKNOWN',
-    ],
-    # Not shipped, downloaded on trybots sometimes.
-    'tools/telemetry/third_party/gsutil': [
         'UNKNOWN',
     ],
     # Not shipped, MIT license but the header files contain no licensing info.

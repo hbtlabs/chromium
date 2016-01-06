@@ -4,6 +4,8 @@
 
 #include "mojo/edk/embedder/simple_platform_shared_buffer.h"
 
+#include <stddef.h>
+
 #include <limits>
 
 #include "base/memory/ref_counted.h"
@@ -179,8 +181,8 @@ TEST(SimplePlatformSharedBufferTest, MappingsOutliveBuffer) {
   {
     scoped_refptr<SimplePlatformSharedBuffer> buffer(
         SimplePlatformSharedBuffer::Create(100));
-    mapping1 = buffer->Map(0, 100).Pass();
-    mapping2 = buffer->Map(50, 50).Pass();
+    mapping1 = buffer->Map(0, 100);
+    mapping2 = buffer->Map(50, 50);
     static_cast<char*>(mapping1->GetBase())[50] = 'x';
   }
 

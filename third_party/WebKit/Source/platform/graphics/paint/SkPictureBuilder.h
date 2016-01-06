@@ -20,7 +20,7 @@ class SkPictureBuilder final {
     WTF_MAKE_NONCOPYABLE(SkPictureBuilder);
     STACK_ALLOCATED();
 public:
-    SkPictureBuilder(const FloatRect& bounds, SkMetaData* metaData = 0, GraphicsContext* containingContext = 0)
+    SkPictureBuilder(const FloatRect& bounds, SkMetaData* metaData = nullptr, GraphicsContext* containingContext = nullptr)
         : m_bounds(bounds)
     {
         GraphicsContext::DisabledMode disabledMode = GraphicsContext::NothingDisabled;
@@ -28,6 +28,7 @@ public:
             disabledMode = GraphicsContext::FullyDisabled;
 
         m_paintController = PaintController::create();
+        m_paintController->beginSkippingCache();
         m_context = adoptPtr(new GraphicsContext(*m_paintController, disabledMode, metaData));
 
         if (containingContext) {
@@ -41,6 +42,7 @@ public:
     PassRefPtr<const SkPicture> endRecording()
     {
         m_context->beginRecording(m_bounds);
+        m_paintController->endSkippingCache();
         m_paintController->commitNewDisplayItems();
         m_paintController->paintArtifact().replay(*m_context);
         return m_context->endRecording();

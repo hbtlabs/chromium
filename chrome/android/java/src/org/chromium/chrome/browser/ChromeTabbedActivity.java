@@ -926,12 +926,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     @Override
                     public void run() {
                         StartupMetrics.getInstance().recordOpenedBookmarks();
-                        if (!EnhancedBookmarkUtils.showEnhancedBookmarkIfEnabled(
-                                ChromeTabbedActivity.this)) {
-                            currentTab.loadUrl(new LoadUrlParams(
-                                    UrlConstants.BOOKMARKS_URL,
-                                    PageTransition.AUTO_BOOKMARK));
-                        }
+                        EnhancedBookmarkUtils.showBookmarkManager(
+                                ChromeTabbedActivity.this);
                     }
                 });
                 RecordUserAction.record("MobileMenuAllBookmarks");
@@ -1216,11 +1212,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         return getCompositorViewHolder() != null && !getCompositorViewHolder().isTabInteractive();
     }
 
-    @Override
-    public boolean mayShowUpdateInfoBar() {
-        return !isOverlayVisible();
-    }
-
     // App Menu related code -----------------------------------------------------------------------
 
     @Override
@@ -1268,6 +1259,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     public void onOverviewModeStartedShowing(boolean showToolbar) {
         if (mFindToolbarManager != null) mFindToolbarManager.hideToolbar();
         if (getAssistStatusHandler() != null) getAssistStatusHandler().updateAssistState();
+        if (getAppMenuHandler() != null) getAppMenuHandler().hideAppMenu();
         ApiCompatibilityUtils.setStatusBarColor(getWindow(), Color.BLACK);
         StartupMetrics.getInstance().recordOpenedTabSwitcher();
     }
@@ -1277,6 +1269,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
     @Override
     public void onOverviewModeStartedHiding(boolean showToolbar, boolean delayAnimation) {
+        if (getAppMenuHandler() != null) getAppMenuHandler().hideAppMenu();
     }
 
     @Override

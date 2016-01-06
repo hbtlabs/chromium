@@ -9,7 +9,7 @@
         [83, 268, 26, 76],
         [79, 268, 30, 76],
         [23, 297, 77, 18],
-        [23, 211, 35, 17],
+        [23, 211, 34, 17],
         [23, 125, 77, 18],
         [22, 316, 87, 28],
         [22, 316, 61, 28],
@@ -66,7 +66,9 @@
         "LayoutTableCell TD",
         "LayoutTableSection TBODY",
         "LayoutTableCell TD",
+        "RootInlineBox",
         "LayoutTableCell TD",
+        "RootInlineBox",
         "LayoutTableCell TD",
         "LayoutTable TABLE",
         "LayoutTableCell TD",
@@ -77,10 +79,13 @@
         "LayoutTableSection TBODY",
         "LayoutTable TABLE",
         "LayoutTableCell TD",
+        "RootInlineBox",
         "LayoutTableCell TD id='d3'",
+        "RootInlineBox",
         "LayoutText #text",
         "InlineTextBox 'ipsum dolor'",
-        "LayoutTableCell TD"
+        "LayoutTableCell TD",
+        "RootInlineBox"
       ]
     }
   ]

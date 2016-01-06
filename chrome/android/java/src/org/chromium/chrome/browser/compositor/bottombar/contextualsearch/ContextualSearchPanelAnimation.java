@@ -36,7 +36,7 @@ public abstract class ContextualSearchPanelAnimation extends ContextualSearchPan
      * The base duration of animations in milliseconds. This value is based on
      * the Kennedy specification for slow animations.
      */
-    static final long BASE_ANIMATION_DURATION_MS = 218;
+    protected static final long BASE_ANIMATION_DURATION_MS = 218;
 
     /**
      * The maximum animation duration in milliseconds.
@@ -146,13 +146,21 @@ public abstract class ContextualSearchPanelAnimation extends ContextualSearchPan
 
     @Override
     protected void closePanel(StateChangeReason reason, boolean animate) {
-        if (!mIsAnimatingPanelClosing) {
-            if (animate) {
-                mIsAnimatingPanelClosing = true;
-                animatePanelToState(PanelState.CLOSED, reason);
+        // If close without animation is called while the panel is already animating closed, cancel
+        // the animation and finish closing immediately.
+        if (mIsAnimatingPanelClosing) {
+            if (!animate) {
+                cancelAnimation(this, Property.PANEL_HEIGHT);
             } else {
-                resizePanelToState(PanelState.CLOSED, reason);
+                return;
             }
+        }
+
+        if (animate) {
+            mIsAnimatingPanelClosing = true;
+            animatePanelToState(PanelState.CLOSED, reason);
+        } else {
+            resizePanelToState(PanelState.CLOSED, reason);
         }
     }
 
@@ -187,7 +195,7 @@ public abstract class ContextualSearchPanelAnimation extends ContextualSearchPan
      * @param state The state to resize to.
      * @param reason The reason for the change of panel state.
      */
-    private void resizePanelToState(PanelState state, StateChangeReason reason) {
+    protected void resizePanelToState(PanelState state, StateChangeReason reason) {
         cancelHeightAnimation();
 
         final float height = getPanelHeightFromState(state);

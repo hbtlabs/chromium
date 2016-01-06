@@ -51,8 +51,6 @@
         'base/media_codec_support.h',
         'base/media_message_loop.cc',
         'base/media_message_loop.h',
-        'base/switching_media_renderer.cc',
-        'base/switching_media_renderer.h',
         'base/video_plane_controller.cc',
         'base/video_plane_controller.h',
       ],
@@ -203,6 +201,7 @@
       'type': '<(component)',
       'dependencies': [
         'cma_base',
+        'cma_decoder',
         'media_base',
         'media_cdm',
         '../../base/base.gyp:base',
@@ -211,6 +210,8 @@
         '../../third_party/boringssl/boringssl.gyp:boringssl',
       ],
       'sources': [
+        'cma/pipeline/audio_decoder_software_wrapper.cc',
+        'cma/pipeline/audio_decoder_software_wrapper.h',
         'cma/pipeline/audio_pipeline_impl.cc',
         'cma/pipeline/audio_pipeline_impl.h',
         'cma/pipeline/av_pipeline_client.cc',

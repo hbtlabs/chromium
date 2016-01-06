@@ -1017,6 +1017,8 @@ void GLES2InterfaceStub::GenSyncTokenCHROMIUM(GLuint64 /* fence_sync */,
 void GLES2InterfaceStub::GenUnverifiedSyncTokenCHROMIUM(
     GLuint64 /* fence_sync */,
     GLbyte* /* sync_token */) {}
+void GLES2InterfaceStub::VerifySyncTokensCHROMIUM(GLbyte** /* sync_tokens */,
+                                                  GLsizei /* count */) {}
 void GLES2InterfaceStub::WaitSyncTokenCHROMIUM(const GLbyte* /* sync_token */) {
 }
 void GLES2InterfaceStub::DrawBuffersEXT(GLsizei /* count */,
@@ -1038,8 +1040,12 @@ void GLES2InterfaceStub::ScheduleCALayerCHROMIUM(
     GLuint /* contents_texture_id */,
     const GLfloat* /* contents_rect */,
     GLfloat /* opacity */,
-    const GLuint /* background_color */,
-    const GLfloat* /* bounds_size */,
+    GLuint /* background_color */,
+    GLuint /* edge_aa_mask */,
+    const GLfloat* /* bounds_rect */,
+    GLboolean /* is_clipped */,
+    const GLfloat* /* clip_rect */,
+    GLint /* sorting_context_id */,
     const GLfloat* /* transform */) {}
 void GLES2InterfaceStub::CommitOverlayPlanesCHROMIUM() {}
 void GLES2InterfaceStub::SwapInterval(GLint /* interval */) {}
@@ -1154,6 +1160,7 @@ void GLES2InterfaceStub::ProgramPathFragmentInputGenCHROMIUM(
     GLenum /* genMode */,
     GLint /* components */,
     const GLfloat* /* coeffs */) {}
+void GLES2InterfaceStub::CoverageModulationCHROMIUM(GLenum /* components */) {}
 GLenum GLES2InterfaceStub::GetGraphicsResetStatusKHR() {
   return 0;
 }

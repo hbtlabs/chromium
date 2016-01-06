@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -65,7 +67,7 @@ AudioVideoPipelineImplTest::AudioVideoPipelineImplTest()
   scoped_ptr<MediaPipelineBackend> backend =
       make_scoped_ptr(new MediaPipelineBackendDefault());
 
-  media_pipeline_->Initialize(kLoadTypeURL, backend.Pass());
+  media_pipeline_->Initialize(kLoadTypeURL, std::move(backend));
   media_pipeline_->SetPlaybackRate(1.0);
 }
 
@@ -108,7 +110,7 @@ void AudioVideoPipelineImplTest::Initialize(
       std::vector<bool>(
           provider_delayed_pattern,
           provider_delayed_pattern + arraysize(provider_delayed_pattern)),
-      frame_generator_provider.Pass());
+      std::move(frame_generator_provider));
 
   ::media::PipelineStatusCB next_task =
       base::Bind(&AudioVideoPipelineImplTest::StartPlaying,

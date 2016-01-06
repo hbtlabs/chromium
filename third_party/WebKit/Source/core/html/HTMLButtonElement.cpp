@@ -23,7 +23,6 @@
  *
  */
 
-#include "config.h"
 #include "core/html/HTMLButtonElement.h"
 
 #include "core/HTMLNames.h"
@@ -104,7 +103,7 @@ void HTMLButtonElement::parseAttribute(const QualifiedName& name, const AtomicSt
         setNeedsWillValidateCheck();
     } else {
         if (name == formactionAttr)
-            logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "button", formactionAttr.toString(), oldValue, value);
+            logUpdateAttributeIfIsolatedWorldAndInDocument("button", formactionAttr, oldValue, value);
         HTMLFormControlElement::parseAttribute(name, oldValue, value);
     }
 }
@@ -216,7 +215,7 @@ bool HTMLButtonElement::supportsAutofocus() const
 Node::InsertionNotificationRequest HTMLButtonElement::insertedInto(ContainerNode* insertionPoint)
 {
     InsertionNotificationRequest request = HTMLFormControlElement::insertedInto(insertionPoint);
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "button", fastGetAttribute(typeAttr), fastGetAttribute(formmethodAttr), fastGetAttribute(formactionAttr));
+    logAddElementIfIsolatedWorldAndInDocument("button", typeAttr, formmethodAttr, formactionAttr);
     return request;
 }
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/screens/chrome_user_selection_screen.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -22,6 +24,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -78,8 +81,7 @@ void ChromeUserSelectionScreen::OnDeviceLocalAccountsChanged() {
 void ChromeUserSelectionScreen::CheckForPublicSessionDisplayNameChange(
     policy::DeviceLocalAccountPolicyBroker* broker) {
   const AccountId& account_id =
-      user_manager::UserManager::GetKnownUserAccountId(broker->user_id(),
-                                                       std::string());
+      user_manager::known_user::GetAccountId(broker->user_id(), std::string());
   DCHECK(account_id.is_valid());
   const std::string& display_name = broker->GetDisplayName();
   if (display_name == public_session_display_names_[account_id])
@@ -110,8 +112,7 @@ void ChromeUserSelectionScreen::CheckForPublicSessionDisplayNameChange(
 void ChromeUserSelectionScreen::CheckForPublicSessionLocalePolicyChange(
     policy::DeviceLocalAccountPolicyBroker* broker) {
   const AccountId& account_id =
-      user_manager::UserManager::GetKnownUserAccountId(broker->user_id(),
-                                                       std::string());
+      user_manager::known_user::GetAccountId(broker->user_id(), std::string());
   DCHECK(account_id.is_valid());
   const policy::PolicyMap::Entry* entry =
       broker->core()->store()->policy_map().Get(policy::key::kSessionLocales);
@@ -183,7 +184,7 @@ void ChromeUserSelectionScreen::SetPublicSessionLocales(
   const bool two_or_more_recommended_locales = recommended_locales.size() >= 2;
 
   // Notify the UI.
-  view_->SetPublicSessionLocales(account_id, available_locales.Pass(),
+  view_->SetPublicSessionLocales(account_id, std::move(available_locales),
                                  default_locale,
                                  two_or_more_recommended_locales);
 }

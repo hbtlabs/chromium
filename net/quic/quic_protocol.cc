@@ -16,6 +16,8 @@ using std::string;
 
 namespace net {
 
+const char* const kFinalOffsetHeaderKey = ":final-offset";
+
 size_t GetPacketHeaderSize(const QuicPacketHeader& header) {
   return GetPacketHeaderSize(
       header.public_header.connection_id_length,
@@ -74,7 +76,7 @@ QuicPacketPublicHeader::QuicPacketPublicHeader(
 QuicPacketPublicHeader::~QuicPacketPublicHeader() {}
 
 QuicPacketHeader::QuicPacketHeader()
-    : path_id(0),
+    : path_id(kDefaultPathId),
       packet_number(0),
       fec_flag(false),
       entropy_flag(false),
@@ -84,7 +86,7 @@ QuicPacketHeader::QuicPacketHeader()
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketPublicHeader& header)
     : public_header(header),
-      path_id(0),
+      path_id(kDefaultPathId),
       packet_number(0),
       fec_flag(false),
       entropy_flag(false),
@@ -99,43 +101,77 @@ QuicPublicResetPacket::QuicPublicResetPacket(
     const QuicPacketPublicHeader& header)
     : public_header(header), nonce_proof(0), rejected_packet_number(0) {}
 
-UniqueStreamBuffer NewStreamBuffer(size_t size) {
-  return UniqueStreamBuffer(new char[size]);
+QuicBufferAllocator::~QuicBufferAllocator() = default;
+
+void StreamBufferDeleter::operator()(char* buffer) const {
+  if (allocator_ != nullptr && buffer != nullptr) {
+    allocator_->Delete(buffer);
+  }
 }
 
-QuicStreamFrame::QuicStreamFrame() : stream_id(0), fin(false), offset(0) {
+UniqueStreamBuffer NewStreamBuffer(QuicBufferAllocator* allocator,
+                                   size_t size) {
+  return UniqueStreamBuffer(allocator->New(size),
+                            StreamBufferDeleter(allocator));
 }
+
+QuicStreamFrame::QuicStreamFrame()
+    : QuicStreamFrame(0, false, 0, nullptr, 0, nullptr) {}
 
 QuicStreamFrame::QuicStreamFrame(QuicStreamId stream_id,
                                  bool fin,
                                  QuicStreamOffset offset,
                                  StringPiece data)
-    : stream_id(stream_id), fin(fin), offset(offset), data(data) {
+    : QuicStreamFrame(stream_id,
+                      fin,
+                      offset,
+                      data.data(),
+                      data.length(),
+                      nullptr) {}
+
+QuicStreamFrame::QuicStreamFrame(QuicStreamId stream_id,
+                                 bool fin,
+                                 QuicStreamOffset offset,
+                                 QuicPacketLength frame_length,
+                                 UniqueStreamBuffer buffer)
+    : QuicStreamFrame(stream_id,
+                      fin,
+                      offset,
+                      nullptr,
+                      frame_length,
+                      std::move(buffer)) {
+  DCHECK(this->buffer != nullptr);
+  DCHECK_EQ(frame_buffer, this->buffer.get());
 }
 
 QuicStreamFrame::QuicStreamFrame(QuicStreamId stream_id,
                                  bool fin,
                                  QuicStreamOffset offset,
-                                 StringPiece data,
+                                 const char* frame_buffer,
+                                 QuicPacketLength frame_length,
                                  UniqueStreamBuffer buffer)
     : stream_id(stream_id),
       fin(fin),
+      frame_length(frame_length),
+      frame_buffer(frame_buffer),
       offset(offset),
-      data(data),
-      buffer(buffer.release()) {}
+      buffer(std::move(buffer)) {
+  if (this->buffer != nullptr) {
+    DCHECK(frame_buffer == nullptr);
+    this->frame_buffer = this->buffer.get();
+  }
+}
 
 QuicStreamFrame::~QuicStreamFrame() {}
 
-uint32 MakeQuicTag(char a, char b, char c, char d) {
-  return static_cast<uint32>(a) |
-         static_cast<uint32>(b) << 8 |
-         static_cast<uint32>(c) << 16 |
-         static_cast<uint32>(d) << 24;
+uint32_t MakeQuicTag(char a, char b, char c, char d) {
+  return static_cast<uint32_t>(a) | static_cast<uint32_t>(b) << 8 |
+         static_cast<uint32_t>(c) << 16 | static_cast<uint32_t>(d) << 24;
 }
 
 bool ContainsQuicTag(const QuicTagVector& tag_vector, QuicTag tag) {
-  return std::find(tag_vector.begin(), tag_vector.end(),  tag)
-      != tag_vector.end();
+  return std::find(tag_vector.begin(), tag_vector.end(), tag) !=
+         tag_vector.end();
 }
 
 QuicVersionVector QuicSupportedVersions() {
@@ -181,8 +217,8 @@ QuicVersion QuicTagToQuicVersion(const QuicTag version_tag) {
 }
 
 #define RETURN_STRING_LITERAL(x) \
-case x: \
-return #x
+  case x:                        \
+    return #x
 
 string QuicVersionToString(const QuicVersion version) {
   switch (version) {
@@ -247,14 +283,13 @@ bool IsAwaitingPacket(const QuicAckFrame& ack_frame,
 }
 
 QuicStopWaitingFrame::QuicStopWaitingFrame()
-    : entropy_hash(0),
-      least_unacked(0) {
-}
+    : path_id(kDefaultPathId), entropy_hash(0), least_unacked(0) {}
 
 QuicStopWaitingFrame::~QuicStopWaitingFrame() {}
 
 QuicAckFrame::QuicAckFrame()
-    : entropy_hash(0),
+    : path_id(kDefaultPathId),
+      entropy_hash(0),
       is_truncated(false),
       largest_observed(0),
       delta_time_largest_observed(QuicTime::Delta::Infinite()),
@@ -273,15 +308,12 @@ QuicRstStreamFrame::QuicRstStreamFrame()
 QuicRstStreamFrame::QuicRstStreamFrame(QuicStreamId stream_id,
                                        QuicRstStreamErrorCode error_code,
                                        QuicStreamOffset bytes_written)
-    : stream_id(stream_id),
-      error_code(error_code),
-      byte_offset(bytes_written) {
-  DCHECK_LE(error_code, numeric_limits<uint8>::max());
+    : stream_id(stream_id), error_code(error_code), byte_offset(bytes_written) {
+  DCHECK_LE(error_code, numeric_limits<uint8_t>::max());
 }
 
 QuicConnectionCloseFrame::QuicConnectionCloseFrame()
-    : error_code(QUIC_NO_ERROR) {
-}
+    : error_code(QUIC_NO_ERROR) {}
 
 QuicFrame::QuicFrame() {}
 
@@ -504,7 +536,7 @@ ostream& operator<<(ostream& os, const QuicAckFrame& ack_frame) {
 
 ostream& operator<<(ostream& os, const QuicFrame& frame) {
   switch (frame.type) {
-  case PADDING_FRAME: {
+    case PADDING_FRAME: {
       os << "type { PADDING_FRAME } ";
       break;
     }
@@ -593,15 +625,12 @@ ostream& operator<<(ostream& os, const QuicStreamFrame& stream_frame) {
   os << "stream_id { " << stream_frame.stream_id << " } "
      << "fin { " << stream_frame.fin << " } "
      << "offset { " << stream_frame.offset << " } "
-     << "data { " << QuicUtils::StringToHexASCIIDump(stream_frame.data)
-     << " }\n";
+     << "length { " << stream_frame.frame_length << " }\n";
   return os;
 }
 
 QuicGoAwayFrame::QuicGoAwayFrame()
-    : error_code(QUIC_NO_ERROR),
-      last_good_stream_id(0) {
-}
+    : error_code(QUIC_NO_ERROR), last_good_stream_id(0) {}
 
 QuicGoAwayFrame::QuicGoAwayFrame(QuicErrorCode error_code,
                                  QuicStreamId last_good_stream_id,
@@ -609,34 +638,24 @@ QuicGoAwayFrame::QuicGoAwayFrame(QuicErrorCode error_code,
     : error_code(error_code),
       last_good_stream_id(last_good_stream_id),
       reason_phrase(reason) {
-  DCHECK_LE(error_code, numeric_limits<uint8>::max());
+  DCHECK_LE(error_code, numeric_limits<uint8_t>::max());
 }
 
-QuicData::QuicData(const char* buffer,
-                   size_t length)
-    : buffer_(buffer),
-      length_(length),
-      owns_buffer_(false) {
-}
+QuicData::QuicData(const char* buffer, size_t length)
+    : buffer_(buffer), length_(length), owns_buffer_(false) {}
 
-QuicData::QuicData(char* buffer,
-                   size_t length,
-                   bool owns_buffer)
-    : buffer_(buffer),
-      length_(length),
-      owns_buffer_(owns_buffer) {
-}
+QuicData::QuicData(char* buffer, size_t length, bool owns_buffer)
+    : buffer_(buffer), length_(length), owns_buffer_(owns_buffer) {}
 
 QuicData::~QuicData() {
   if (owns_buffer_) {
-    delete [] const_cast<char*>(buffer_);
+    delete[] const_cast<char*>(buffer_);
   }
 }
 
 QuicWindowUpdateFrame::QuicWindowUpdateFrame(QuicStreamId stream_id,
                                              QuicStreamOffset byte_offset)
-    : stream_id(stream_id),
-      byte_offset(byte_offset) {}
+    : stream_id(stream_id), byte_offset(byte_offset) {}
 
 QuicBlockedFrame::QuicBlockedFrame(QuicStreamId stream_id)
     : stream_id(stream_id) {}
@@ -653,16 +672,13 @@ QuicPacket::QuicPacket(char* buffer,
       includes_version_(includes_version),
       packet_number_length_(packet_number_length) {}
 
-QuicEncryptedPacket::QuicEncryptedPacket(const char* buffer,
-                                         size_t length)
-    : QuicData(buffer, length) {
-}
+QuicEncryptedPacket::QuicEncryptedPacket(const char* buffer, size_t length)
+    : QuicData(buffer, length) {}
 
 QuicEncryptedPacket::QuicEncryptedPacket(char* buffer,
                                          size_t length,
                                          bool owns_buffer)
-      : QuicData(buffer, length, owns_buffer) {
-}
+    : QuicData(buffer, length, owns_buffer) {}
 
 StringPiece QuicPacket::FecProtectedData() const {
   const size_t start_of_fec = GetStartOfFecProtectedData(
@@ -671,14 +687,6 @@ StringPiece QuicPacket::FecProtectedData() const {
 }
 
 StringPiece QuicPacket::AssociatedData() const {
-  return StringPiece(
-      data() + kStartOfHashData,
-      GetStartOfEncryptedData(connection_id_length_, includes_version_,
-                              packet_number_length_) -
-          kStartOfHashData);
-}
-
-StringPiece QuicPacket::BeforePlaintext() const {
   return StringPiece(
       data(), GetStartOfEncryptedData(connection_id_length_, includes_version_,
                                       packet_number_length_));
@@ -691,10 +699,8 @@ StringPiece QuicPacket::Plaintext() const {
                      length() - start_of_encrypted_data);
 }
 
-RetransmittableFrames::RetransmittableFrames(EncryptionLevel level)
-    : encryption_level_(level),
-      has_crypto_handshake_(NOT_HANDSHAKE),
-      needs_padding_(false) {
+RetransmittableFrames::RetransmittableFrames()
+    : has_crypto_handshake_(NOT_HANDSHAKE), needs_padding_(false) {
   // TODO(ianswett): Consider using an inlined vector instead, since this
   // is very frequently a single frame.
   frames_.reserve(2);
@@ -768,6 +774,7 @@ AckListenerWrapper::AckListenerWrapper(QuicAckListenerInterface* listener,
 AckListenerWrapper::~AckListenerWrapper() {}
 
 SerializedPacket::SerializedPacket(
+    QuicPathId path_id,
     QuicPacketNumber packet_number,
     QuicPacketNumberLength packet_number_length,
     QuicEncryptedPacket* packet,
@@ -777,14 +784,17 @@ SerializedPacket::SerializedPacket(
     bool has_stop_waiting)
     : packet(packet),
       retransmittable_frames(retransmittable_frames),
+      path_id(path_id),
       packet_number(packet_number),
       packet_number_length(packet_number_length),
+      encryption_level(ENCRYPTION_NONE),
       entropy_hash(entropy_hash),
       is_fec_packet(false),
       has_ack(has_ack),
       has_stop_waiting(has_stop_waiting) {}
 
 SerializedPacket::SerializedPacket(
+    QuicPathId path_id,
     QuicPacketNumber packet_number,
     QuicPacketNumberLength packet_number_length,
     char* encrypted_buffer,
@@ -793,8 +803,10 @@ SerializedPacket::SerializedPacket(
     QuicPacketEntropyHash entropy_hash,
     RetransmittableFrames* retransmittable_frames,
     bool has_ack,
-    bool has_stop_waiting)
-    : SerializedPacket(packet_number,
+    bool has_stop_waiting,
+    EncryptionLevel level)
+    : SerializedPacket(path_id,
+                       packet_number,
                        packet_number_length,
                        new QuicEncryptedPacket(encrypted_buffer,
                                                encrypted_length,
@@ -802,7 +814,11 @@ SerializedPacket::SerializedPacket(
                        entropy_hash,
                        retransmittable_frames,
                        has_ack,
-                       has_stop_waiting) {}
+                       has_stop_waiting) {
+  // TODO(ianswett): Move into the initializer list once SerializedPacket
+  // no longer contains an encrypted packet.
+  encryption_level = level;
+}
 
 SerializedPacket::~SerializedPacket() {}
 
@@ -819,6 +835,7 @@ ostream& operator<<(ostream& os, const QuicEncryptedPacket& s) {
 
 TransmissionInfo::TransmissionInfo()
     : retransmittable_frames(nullptr),
+      encryption_level(ENCRYPTION_NONE),
       packet_number_length(PACKET_1BYTE_PACKET_NUMBER),
       bytes_sent(0),
       nack_count(0),
@@ -832,12 +849,14 @@ TransmissionInfo::TransmissionInfo()
 
 TransmissionInfo::TransmissionInfo(
     RetransmittableFrames* retransmittable_frames,
+    EncryptionLevel level,
     QuicPacketNumberLength packet_number_length,
     TransmissionType transmission_type,
     QuicTime sent_time,
     QuicPacketLength bytes_sent,
     bool is_fec_packet)
     : retransmittable_frames(retransmittable_frames),
+      encryption_level(level),
       packet_number_length(packet_number_length),
       bytes_sent(bytes_sent),
       nack_count(0),

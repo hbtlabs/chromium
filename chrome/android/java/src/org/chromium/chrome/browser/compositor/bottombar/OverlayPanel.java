@@ -4,8 +4,13 @@
 
 package org.chromium.chrome.browser.compositor.bottombar;
 
+import android.app.Activity;
 import android.content.Context;
+import android.view.View.MeasureSpec;
 
+import org.chromium.base.ActivityState;
+import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
@@ -13,6 +18,7 @@ import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.Context
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.common.TopControlsState;
 import org.chromium.ui.base.LocalizationUtils;
@@ -22,7 +28,7 @@ import org.chromium.ui.resources.ResourceManager;
  * Controls the Overlay Panel.
  */
 public class OverlayPanel extends ContextualSearchPanelAnimation
-        implements OverlayPanelContentFactory {
+        implements ActivityStateListener, OverlayPanelContentFactory {
 
     /**
      * The extra dp added around the close button touch target.
@@ -129,13 +135,22 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      * Destroy the native components associated with this panel's content.
      */
     public void destroy() {
+        closePanel(StateChangeReason.UNKNOWN, false);
+        ApplicationStatus.unregisterActivityStateListener(this);
+    }
+
+    /**
+     * Destroy the components associated with this panel. This should be overridden by panel
+     * implementations to destroy text views and other elements.
+     */
+    protected void destroyComponents() {
         destroyOverlayPanelContent();
     }
 
     @Override
     protected void onClosed(StateChangeReason reason) {
+        destroyComponents();
         mPanelManager.notifyPanelClosed(this, reason);
-        destroy();
     }
 
     // ============================================================================================
@@ -217,6 +232,9 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      */
     public void setChromeActivity(ChromeActivity activity) {
         mActivity = activity;
+        if (mActivity != null) {
+            ApplicationStatus.registerStateListenerForActivity(this, mActivity);
+        }
     }
 
     /**
@@ -251,6 +269,18 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     }
 
     // ============================================================================================
+    // ActivityStateListener
+    // ============================================================================================
+
+    @Override
+    public void onActivityStateChange(Activity activity, int newState) {
+        if (newState == ActivityState.RESUMED || newState == ActivityState.STOPPED
+                || newState == ActivityState.DESTROYED) {
+            closePanel(StateChangeReason.UNKNOWN, false);
+        }
+    }
+
+    // ============================================================================================
     // Content
     // ============================================================================================
 
@@ -280,12 +310,45 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
     }
 
     /**
+     * Add any other objects that depend on the OverlayPanelContent having already been created.
+     */
+    private OverlayPanelContent createNewOverlayPanelContentInternal() {
+        OverlayPanelContent content = mContentFactory.createNewOverlayPanelContent();
+
+        content.setContentViewClient(new ContentViewClient() {
+            @Override
+            public int getDesiredWidthMeasureSpec() {
+                if (isFullscreenSizePanel()) {
+                    return super.getDesiredWidthMeasureSpec();
+                } else {
+                    return MeasureSpec.makeMeasureSpec(
+                            getSearchContentViewWidthPx(),
+                            MeasureSpec.EXACTLY);
+                }
+            }
+
+            @Override
+            public int getDesiredHeightMeasureSpec() {
+                if (isFullscreenSizePanel()) {
+                    return super.getDesiredHeightMeasureSpec();
+                } else {
+                    return MeasureSpec.makeMeasureSpec(
+                            getSearchContentViewHeightPx(),
+                            MeasureSpec.EXACTLY);
+                }
+            }
+        });
+
+        return content;
+    }
+
+    /**
      * @return A new OverlayPanelContent if the instance was null or the existing one.
      */
     protected OverlayPanelContent getOverlayPanelContent() {
         // Only create the content when necessary
         if (mContent == null) {
-            mContent = mContentFactory.createNewOverlayPanelContent();
+            mContent = createNewOverlayPanelContentInternal();
         }
         return mContent;
     }
@@ -352,7 +415,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      * @return The vertical scroll position of the content.
      */
     public float getContentVerticalScroll() {
-        return mContent.getContentVerticalScroll();
+        return mContent != null ? mContent.getContentVerticalScroll() : 0.0f;
     }
 
     // ============================================================================================
@@ -428,6 +491,32 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
         return true;
     }
 
+    /**
+     * Handles the device orientation change.
+     */
+    public void onOrientationChanged() {
+        if (isNarrowSizePanelSupported()) {
+            // TODO(pedrosimonetti): We cannot preserve the panel when rotating from/to a
+            // narrow version of the Panel because the Content is resized before the Panel
+            // gets a notification of the resize.
+            closePanel(StateChangeReason.UNKNOWN, false);
+        } else {
+            updatePanelForOrientationChange();
+        }
+    }
+
+    /**
+     * Updates the Panel so it preserves its state when the orientation changes.
+     */
+    protected void updatePanelForOrientationChange() {
+        // NOTE(pedrosimonetti): We cannot tell where the selection will be after the
+        // orientation change, so we are setting the selection position to zero, which
+        // means the base page will be positioned in its original state and we won't
+        // try to keep the selection in view.
+        updateBasePageSelectionYPx(0.f);
+        resizePanelToState(getPanelState(), StateChangeReason.UNKNOWN);
+    }
+
     // ============================================================================================
     // Generic Event Handling
     // ============================================================================================
@@ -450,7 +539,7 @@ public class OverlayPanel extends ContextualSearchPanelAnimation
      * @param ty The movement's total displacement in dps.
      */
     public void handleSwipeMove(float ty) {
-        if (ty > 0 && getPanelState() == PanelState.MAXIMIZED) {
+        if (mContent != null && ty > 0 && getPanelState() == PanelState.MAXIMIZED) {
             // Resets the Content View scroll position when swiping the Panel down
             // after being maximized.
             mContent.resetContentViewScroll();

@@ -1,4 +1,7 @@
-#include "config.h"
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 #include "core/css/cssom/KeywordValue.h"
 
 #include "wtf/HashMap.h"
@@ -54,7 +57,7 @@ String KeywordValue::cssString() const
     return keywordValue();
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> KeywordValue::toCSSValue()
+PassRefPtrWillBeRawPtr<CSSValue> KeywordValue::toCSSValue() const
 {
     switch (m_keywordValue) {
     case Initial:

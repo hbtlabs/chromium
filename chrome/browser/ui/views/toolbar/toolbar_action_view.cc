@@ -10,8 +10,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -67,10 +65,10 @@ ToolbarActionView::ToolbarActionView(
       called_register_command_(false),
       wants_to_run_(false),
       menu_(nullptr),
+      ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       weak_factory_(this) {
-  scoped_ptr<views::InkDropDelegate> new_ink_drop_delegate(
-      new views::ButtonInkDropDelegate(this, this));
-  SetInkDropDelegate(new_ink_drop_delegate.Pass());
+  set_ink_drop_delegate(ink_drop_delegate_.get());
+  set_has_ink_drop_action_on_click(true);
   set_id(VIEW_ID_BROWSER_ACTION);
   view_controller_->SetDelegate(this);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
@@ -85,14 +83,6 @@ ToolbarActionView::ToolbarActionView(
   ink_drop_delegate()->SetInkDropSize(
       kInkDropLargeSize, kInkDropLargeCornerRadius, kInkDropSmallSize,
       kInkDropSmallCornerRadius);
-
-  // We also listen for browser theme changes on linux because a switch from or
-  // to GTK requires that we regrab our browser action images.
-  registrar_.Add(
-      this,
-      chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
-      content::Source<ThemeService>(
-          ThemeServiceFactory::GetForProfile(profile_)));
 
   // If the button is within a menu, we need to make it focusable in order to
   // have it accessible via keyboard navigation, but it shouldn't request focus
@@ -120,7 +110,7 @@ scoped_ptr<LabelButtonBorder> ToolbarActionView::CreateDefaultBorder() const {
   scoped_ptr<LabelButtonBorder> border = LabelButton::CreateDefaultBorder();
   border->set_insets(gfx::Insets(kBorderInset, kBorderInset,
                                  kBorderInset, kBorderInset));
-  return border.Pass();
+  return border;
 }
 
 void ToolbarActionView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -157,9 +147,8 @@ void ToolbarActionView::UpdateState() {
                                 GetPreferredSize()).AsImageSkia());
 
   if (!icon.isNull()) {
-    ThemeService* theme = ThemeServiceFactory::GetForProfile(profile_);
-
-    gfx::ImageSkia bg = *theme->GetImageSkiaNamed(IDR_BROWSER_ACTION);
+    gfx::ImageSkia bg = *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+        IDR_BROWSER_ACTION);
     SetImage(views::Button::STATE_NORMAL,
              gfx::ImageSkiaOperations::CreateSuperimposedImage(bg, icon));
   }
@@ -182,13 +171,6 @@ void ToolbarActionView::OnMenuButtonClicked(views::View* sender,
   } else {
     view_controller_->ExecuteAction(true);
   }
-}
-
-void ToolbarActionView::Observe(int type,
-                                const content::NotificationSource& source,
-                                const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_BROWSER_THEME_CHANGED, type);
-  UpdateState();
 }
 
 void ToolbarActionView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
@@ -225,8 +207,12 @@ gfx::Size ToolbarActionView::GetPreferredSize() const {
 
 bool ToolbarActionView::OnMousePressed(const ui::MouseEvent& event) {
   // views::MenuButton actions are only triggered by left mouse clicks.
-  if (event.IsOnlyLeftMouseButton())
+  if (event.IsOnlyLeftMouseButton()) {
+    // TODO(bruthig): The ACTION_PENDING triggering logic should be in
+    // MenuButton::OnPressed() however there is a bug with the pressed state
+    // logic in MenuButton. See http://crbug.com/567252.
     ink_drop_delegate()->OnAction(views::InkDropState::ACTION_PENDING);
+  }
   return MenuButton::OnMousePressed(event);
 }
 

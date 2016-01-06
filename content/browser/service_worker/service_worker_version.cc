@@ -4,13 +4,15 @@
 
 #include "content/browser/service_worker/service_worker_version.h"
 
-#include <algorithm>
+#include <stddef.h>
+
 #include <map>
 #include <string>
 
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -21,28 +23,22 @@
 #include "base/time/time.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/message_port_service.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_registration.h"
-#include "content/browser/storage_partition_impl.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_type_converters.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/background_sync.mojom.h"
-#include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
@@ -55,9 +51,6 @@
 namespace content {
 
 using StatusCallback = ServiceWorkerVersion::StatusCallback;
-using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
-using GetClientsCallback =
-    base::Callback<void(scoped_ptr<ServiceWorkerClients>)>;
 
 namespace {
 
@@ -172,145 +165,6 @@ void RunErrorServicePortConnectCallback(
                base::string16());
 }
 
-using OpenURLCallback = base::Callback<void(int, int)>;
-
-// The OpenURLObserver class is a WebContentsObserver that will wait for a
-// WebContents to be initialized, run the |callback| passed to its constructor
-// then self destroy.
-// The callback will receive the process and frame ids. If something went wrong
-// those will be (kInvalidUniqueID, MSG_ROUTING_NONE).
-// The callback will be called in the IO thread.
-class OpenURLObserver : public WebContentsObserver {
- public:
-  OpenURLObserver(WebContents* web_contents,
-                  int frame_tree_node_id,
-                  const OpenURLCallback& callback)
-      : WebContentsObserver(web_contents),
-        frame_tree_node_id_(frame_tree_node_id),
-        callback_(callback) {}
-
-  void DidCommitProvisionalLoadForFrame(
-      RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      ui::PageTransition transition_type) override {
-    DCHECK(web_contents());
-
-    RenderFrameHostImpl* rfhi =
-        static_cast<RenderFrameHostImpl*>(render_frame_host);
-    if (rfhi->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
-      return;
-
-    RunCallback(render_frame_host->GetProcess()->GetID(),
-                render_frame_host->GetRoutingID());
-  }
-
-  void RenderProcessGone(base::TerminationStatus status) override {
-    RunCallback(ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
-  }
-
-  void WebContentsDestroyed() override {
-    RunCallback(ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
-  }
-
- private:
-  void RunCallback(int render_process_id, int render_frame_id) {
-    // After running the callback, |this| will stop observing, thus
-    // web_contents() should return nullptr and |RunCallback| should no longer
-    // be called. Then, |this| will self destroy.
-    DCHECK(web_contents());
-
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback_,
-                                       render_process_id,
-                                       render_frame_id));
-    Observe(nullptr);
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
-  }
-
-  int frame_tree_node_id_;
-  const OpenURLCallback callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(OpenURLObserver);
-};
-
-// This is only called for main frame navigations in OpenWindowOnUI().
-void DidOpenURL(const OpenURLCallback& callback, WebContents* web_contents) {
-  DCHECK(web_contents);
-
-  RenderFrameHostImpl* rfhi =
-      static_cast<RenderFrameHostImpl*>(web_contents->GetMainFrame());
-  new OpenURLObserver(web_contents,
-                      rfhi->frame_tree_node()->frame_tree_node_id(), callback);
-}
-
-void NavigateClientOnUI(const GURL& url,
-                        const GURL& script_url,
-                        int process_id,
-                        int frame_id,
-                        const OpenURLCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  RenderFrameHostImpl* rfhi = RenderFrameHostImpl::FromID(process_id, frame_id);
-  WebContents* web_contents = WebContents::FromRenderFrameHost(rfhi);
-
-  if (!rfhi || !web_contents) {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(callback, ChildProcessHost::kInvalidUniqueID,
-                   MSG_ROUTING_NONE));
-    return;
-  }
-
-  ui::PageTransition transition = rfhi->GetParent()
-                                      ? ui::PAGE_TRANSITION_AUTO_SUBFRAME
-                                      : ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
-  int frame_tree_node_id = rfhi->frame_tree_node()->frame_tree_node_id();
-
-  OpenURLParams params(
-      url, Referrer::SanitizeForRequest(
-               url, Referrer(script_url, blink::WebReferrerPolicyDefault)),
-      frame_tree_node_id, CURRENT_TAB, transition,
-      true /* is_renderer_initiated */);
-  web_contents->OpenURL(params);
-  new OpenURLObserver(web_contents, frame_tree_node_id, callback);
-}
-
-void OpenWindowOnUI(
-    const GURL& url,
-    const GURL& script_url,
-    int process_id,
-    const scoped_refptr<ServiceWorkerContextWrapper>& context_wrapper,
-    const OpenURLCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  BrowserContext* browser_context = context_wrapper->storage_partition()
-      ? context_wrapper->storage_partition()->browser_context()
-      : nullptr;
-  // We are shutting down.
-  if (!browser_context)
-    return;
-
-  RenderProcessHost* render_process_host =
-      RenderProcessHost::FromID(process_id);
-  if (render_process_host->IsForGuestsOnly()) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback,
-                                       ChildProcessHost::kInvalidUniqueID,
-                                       MSG_ROUTING_NONE));
-    return;
-  }
-
-  OpenURLParams params(
-      url, Referrer::SanitizeForRequest(
-               url, Referrer(script_url, blink::WebReferrerPolicyDefault)),
-      NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      true /* is_renderer_initiated */);
-
-  GetContentClient()->browser()->OpenURL(
-      browser_context, params,
-      base::Bind(&DidOpenURL, callback));
-}
-
 void KillEmbeddedWorkerProcess(int process_id, ResultCode code) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RenderProcessHost* render_process_host =
@@ -329,71 +183,16 @@ void RestartTick(base::TimeTicks* time) {
   *time = base::TimeTicks().Now();
 }
 
+bool RequestExpired(const base::TimeTicks& expiration) {
+  if (expiration.is_null())
+    return false;
+  return base::TimeTicks().Now() >= expiration;
+}
+
 base::TimeDelta GetTickDuration(const base::TimeTicks& time) {
   if (time.is_null())
     return base::TimeDelta();
   return base::TimeTicks().Now() - time;
-}
-
-void OnGetWindowClientsFromUI(
-    // The tuple contains process_id, frame_id, client_uuid.
-    const std::vector<base::Tuple<int, int, std::string>>& clients_info,
-    const GURL& script_url,
-    const GetClientsCallback& callback) {
-  scoped_ptr<ServiceWorkerClients> clients(new ServiceWorkerClients);
-
-  for (const auto& it : clients_info) {
-    ServiceWorkerClientInfo info =
-        ServiceWorkerProviderHost::GetWindowClientInfoOnUI(base::get<0>(it),
-                                                           base::get<1>(it));
-
-    // If the request to the provider_host returned an empty
-    // ServiceWorkerClientInfo, that means that it wasn't possible to associate
-    // it with a valid RenderFrameHost. It might be because the frame was killed
-    // or navigated in between.
-    if (info.IsEmpty())
-      continue;
-
-    // We can get info for a frame that was navigating end ended up with a
-    // different URL than expected. In such case, we should make sure to not
-    // expose cross-origin WindowClient.
-    if (info.url.GetOrigin() != script_url.GetOrigin())
-      continue;
-
-    info.client_uuid = base::get<2>(it);
-    clients->push_back(info);
-  }
-
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(callback, base::Passed(&clients)));
-}
-
-void AddWindowClient(
-    ServiceWorkerProviderHost* host,
-    std::vector<base::Tuple<int, int, std::string>>* client_info) {
-  if (host->client_type() != blink::WebServiceWorkerClientTypeWindow)
-    return;
-  client_info->push_back(base::MakeTuple(host->process_id(), host->frame_id(),
-                                         host->client_uuid()));
-}
-
-void AddNonWindowClient(ServiceWorkerProviderHost* host,
-                        const ServiceWorkerClientQueryOptions& options,
-                        ServiceWorkerClients* clients) {
-  blink::WebServiceWorkerClientType host_client_type = host->client_type();
-  if (host_client_type == blink::WebServiceWorkerClientTypeWindow)
-    return;
-  if (options.client_type != blink::WebServiceWorkerClientTypeAll &&
-      options.client_type != host_client_type)
-    return;
-
-  ServiceWorkerClientInfo client_info(blink::WebPageVisibilityStateHidden,
-                                      false,  // is_focused
-                                      host->document_url(),
-                                      REQUEST_CONTEXT_FRAME_TYPE_NONE,
-                                      base::TimeTicks(), host_client_type);
-  client_info.client_uuid = host->client_uuid();
-  clients->push_back(client_info);
 }
 
 bool IsInstalled(ServiceWorkerVersion::Status status) {
@@ -410,13 +209,6 @@ bool IsInstalled(ServiceWorkerVersion::Status status) {
   NOTREACHED() << "Unexpected status: " << status;
   return false;
 }
-
-struct ServiceWorkerClientInfoSortMRU {
-  bool operator()(const ServiceWorkerClientInfo& a,
-                  const ServiceWorkerClientInfo& b) const {
-    return a.last_focus_time > b.last_focus_time;
-  }
-};
 
 }  // namespace
 
@@ -517,7 +309,7 @@ class ServiceWorkerVersion::PingController {
 ServiceWorkerVersion::ServiceWorkerVersion(
     ServiceWorkerRegistration* registration,
     const GURL& script_url,
-    int64 version_id,
+    int64_t version_id,
     base::WeakPtr<ServiceWorkerContextCore> context)
     : version_id_(version_id),
       registration_id_(registration->id()),
@@ -803,6 +595,7 @@ void ServiceWorkerVersion::DispatchFetchEvent(
 void ServiceWorkerVersion::DispatchSyncEvent(
     BackgroundSyncRegistrationHandle::HandleId handle_id,
     BackgroundSyncEventLastChance last_chance,
+    base::TimeDelta max_duration,
     const StatusCallback& callback) {
   OnBeginEvent();
   DCHECK_EQ(ACTIVATED, status()) << status();
@@ -811,11 +604,13 @@ void ServiceWorkerVersion::DispatchSyncEvent(
     StartWorker(base::Bind(
         &RunTaskAfterStartWorker, weak_factory_.GetWeakPtr(), callback,
         base::Bind(&self::DispatchSyncEvent, weak_factory_.GetWeakPtr(),
-                   handle_id, last_chance, callback)));
+                   handle_id, last_chance, max_duration, callback)));
     return;
   }
 
-  int request_id = AddRequest(callback, &sync_requests_, REQUEST_SYNC);
+  int request_id =
+      AddRequestWithExpiration(callback, &sync_requests_, REQUEST_SYNC,
+                               base::TimeTicks::Now() + max_duration);
   if (!background_sync_dispatcher_) {
     embedded_worker_->GetServiceRegistry()->ConnectToRemoteService(
         mojo::GetProxy(&background_sync_dispatcher_));
@@ -1079,7 +874,7 @@ void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
     skip_recording_startup_time_ = true;
 
     // Cancel request timeouts.
-    SetAllRequestTimes(base::TimeTicks());
+    SetAllRequestExpirations(base::TimeTicks());
     return;
   }
   if (!start_callbacks_.empty()) {
@@ -1090,8 +885,10 @@ void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
     RestartTick(&start_time_);
   }
 
-  // Reactivate request timeouts.
-  SetAllRequestTimes(base::TimeTicks::Now());
+  // Reactivate request timeouts, setting them all to the same expiration time.
+  SetAllRequestExpirations(
+      base::TimeTicks::Now() +
+      base::TimeDelta::FromMinutes(kRequestTimeoutMinutes));
 }
 
 void ServiceWorkerVersion::SetMainScriptHttpResponseInfo(
@@ -1110,13 +907,18 @@ ServiceWorkerVersion::GetMainScriptHttpResponseInfo() {
   return main_script_http_info_.get();
 }
 
-ServiceWorkerVersion::RequestInfo::RequestInfo(int id,
-                                               RequestType type,
-                                               const base::TimeTicks& now)
-    : id(id), type(type), time(now) {
-}
+ServiceWorkerVersion::RequestInfo::RequestInfo(
+    int id,
+    RequestType type,
+    const base::TimeTicks& expiration)
+    : id(id), type(type), expiration(expiration) {}
 
 ServiceWorkerVersion::RequestInfo::~RequestInfo() {
+}
+
+bool ServiceWorkerVersion::RequestInfo::operator>(
+    const RequestInfo& other) const {
+  return expiration > other.expiration;
 }
 
 template <typename CallbackType>
@@ -1311,22 +1113,10 @@ void ServiceWorkerVersion::OnGetClients(
       "ServiceWorker", "ServiceWorkerVersion::OnGetClients", request_id,
       "client_type", options.client_type, "include_uncontrolled",
       options.include_uncontrolled);
-
-  ServiceWorkerClients clients;
-  if (controllee_map_.empty() && !options.include_uncontrolled) {
-    OnGetClientsFinished(request_id, &clients);
-    return;
-  }
-
-  // For Window clients we want to query the info on the UI thread first.
-  if (options.client_type == blink::WebServiceWorkerClientTypeWindow ||
-      options.client_type == blink::WebServiceWorkerClientTypeAll) {
-    GetWindowClients(request_id, options);
-    return;
-  }
-
-  GetNonWindowClients(request_id, options, &clients);
-  OnGetClientsFinished(request_id, &clients);
+  service_worker_client_utils::GetClients(
+      weak_factory_.GetWeakPtr(), options,
+      base::Bind(&ServiceWorkerVersion::OnGetClientsFinished,
+                 weak_factory_.GetWeakPtr(), request_id));
 }
 
 void ServiceWorkerVersion::OnGetClientsFinished(int request_id,
@@ -1340,8 +1130,6 @@ void ServiceWorkerVersion::OnGetClientsFinished(int request_id,
   if (running_status() != STARTING && running_status() != RUNNING)
     return;
 
-  // Sort clients so that the most recently active tab is in the front.
-  std::sort(clients->begin(), clients->end(), ServiceWorkerClientInfoSortMRU());
   embedded_worker_->SendMessage(
       ServiceWorkerMsg_DidGetClients(request_id, *clients));
 }
@@ -1433,9 +1221,12 @@ void ServiceWorkerVersion::OnSyncEventFinished(
                "Request id", request_id);
   PendingRequest<StatusCallback>* request = sync_requests_.Lookup(request_id);
   if (!request) {
-    NOTREACHED() << "Got unexpected message: " << request_id;
+    // Assume the request timed out.
     return;
   }
+
+  UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundSyncEvent.Time",
+                             base::TimeTicks::Now() - request->start_time);
 
   scoped_refptr<ServiceWorkerVersion> protect(this);
   request->callback.Run(mojo::ConvertTo<ServiceWorkerStatusCode>(status));
@@ -1554,60 +1345,27 @@ void ServiceWorkerVersion::OnOpenWindow(int request_id, GURL url) {
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&OpenWindowOnUI,
-                 url,
-                 script_url_,
-                 embedded_worker_->process_id(),
-                 make_scoped_refptr(context_->wrapper()),
-                 base::Bind(&ServiceWorkerVersion::DidOpenWindow,
-                            weak_factory_.GetWeakPtr(),
-                            request_id)));
-}
-
-void ServiceWorkerVersion::DidOpenWindow(int request_id,
-                                         int render_process_id,
-                                         int render_frame_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (running_status() != RUNNING)
-    return;
-
-  if (render_process_id == ChildProcessHost::kInvalidUniqueID &&
-      render_frame_id == MSG_ROUTING_NONE) {
-    embedded_worker_->SendMessage(ServiceWorkerMsg_OpenWindowError(
-        request_id, "Something went wrong while trying to open the window."));
-    return;
-  }
-
-  for (auto it =
-           context_->GetClientProviderHostIterator(script_url_.GetOrigin());
-       !it->IsAtEnd(); it->Advance()) {
-    ServiceWorkerProviderHost* provider_host = it->GetProviderHost();
-    if (provider_host->process_id() != render_process_id ||
-        provider_host->frame_id() != render_frame_id) {
-      continue;
-    }
-    provider_host->GetWindowClientInfo(base::Bind(
-        &ServiceWorkerVersion::OnOpenWindowFinished, weak_factory_.GetWeakPtr(),
-        request_id, provider_host->client_uuid()));
-    return;
-  }
-
-  // If here, it means that no provider_host was found, in which case, the
-  // renderer should still be informed that the window was opened.
-  OnOpenWindowFinished(request_id, std::string(), ServiceWorkerClientInfo());
+  service_worker_client_utils::OpenWindow(
+      url, script_url_, embedded_worker_->process_id(), context_,
+      base::Bind(&ServiceWorkerVersion::OnOpenWindowFinished,
+                 weak_factory_.GetWeakPtr(), request_id));
 }
 
 void ServiceWorkerVersion::OnOpenWindowFinished(
     int request_id,
+    ServiceWorkerStatusCode status,
     const std::string& client_uuid,
     const ServiceWorkerClientInfo& client_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (running_status() != RUNNING)
     return;
+
+  if (status != SERVICE_WORKER_OK) {
+    embedded_worker_->SendMessage(ServiceWorkerMsg_OpenWindowError(
+        request_id, "Something went wrong while trying to open the window."));
+    return;
+  }
 
   ServiceWorkerClientInfo client(client_info);
 
@@ -1623,7 +1381,7 @@ void ServiceWorkerVersion::OnOpenWindowFinished(
 
 void ServiceWorkerVersion::OnSetCachedMetadata(const GURL& url,
                                                const std::vector<char>& data) {
-  int64 callback_id = base::TimeTicks::Now().ToInternalValue();
+  int64_t callback_id = base::TimeTicks::Now().ToInternalValue();
   TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
                            "ServiceWorkerVersion::OnSetCachedMetadata",
                            callback_id, "URL", url.spec());
@@ -1632,7 +1390,7 @@ void ServiceWorkerVersion::OnSetCachedMetadata(const GURL& url,
                             weak_factory_.GetWeakPtr(), callback_id));
 }
 
-void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64 callback_id,
+void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64_t callback_id,
                                                        int result) {
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerVersion::OnSetCachedMetadata",
@@ -1641,7 +1399,7 @@ void ServiceWorkerVersion::OnSetCachedMetadataFinished(int64 callback_id,
 }
 
 void ServiceWorkerVersion::OnClearCachedMetadata(const GURL& url) {
-  int64 callback_id = base::TimeTicks::Now().ToInternalValue();
+  int64_t callback_id = base::TimeTicks::Now().ToInternalValue();
   TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
                            "ServiceWorkerVersion::OnClearCachedMetadata",
                            callback_id, "URL", url.spec());
@@ -1650,7 +1408,7 @@ void ServiceWorkerVersion::OnClearCachedMetadata(const GURL& url) {
                       weak_factory_.GetWeakPtr(), callback_id));
 }
 
-void ServiceWorkerVersion::OnClearCachedMetadataFinished(int64 callback_id,
+void ServiceWorkerVersion::OnClearCachedMetadataFinished(int64_t callback_id,
                                                          int result) {
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "ServiceWorkerVersion::OnClearCachedMetadata",
@@ -1758,55 +1516,27 @@ void ServiceWorkerVersion::OnNavigateClient(int request_id,
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&NavigateClientOnUI, url, script_url_,
-                 provider_host->process_id(), provider_host->frame_id(),
-                 base::Bind(&ServiceWorkerVersion::DidNavigateClient,
-                            weak_factory_.GetWeakPtr(), request_id)));
-}
-
-void ServiceWorkerVersion::DidNavigateClient(int request_id,
-                                             int render_process_id,
-                                             int render_frame_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (running_status() != RUNNING)
-    return;
-
-  if (render_process_id == ChildProcessHost::kInvalidUniqueID &&
-      render_frame_id == MSG_ROUTING_NONE) {
-    embedded_worker_->SendMessage(
-        ServiceWorkerMsg_NavigateClientError(request_id, GURL()));
-    return;
-  }
-
-  for (auto it =
-           context_->GetClientProviderHostIterator(script_url_.GetOrigin());
-       !it->IsAtEnd(); it->Advance()) {
-    ServiceWorkerProviderHost* provider_host = it->GetProviderHost();
-    if (provider_host->process_id() != render_process_id ||
-        provider_host->frame_id() != render_frame_id) {
-      continue;
-    }
-    provider_host->GetWindowClientInfo(base::Bind(
-        &ServiceWorkerVersion::OnNavigateClientFinished,
-        weak_factory_.GetWeakPtr(), request_id, provider_host->client_uuid()));
-    return;
-  }
-
-  OnNavigateClientFinished(request_id, std::string(),
-                           ServiceWorkerClientInfo());
+  service_worker_client_utils::NavigateClient(
+      url, script_url_, provider_host->process_id(), provider_host->frame_id(),
+      context_, base::Bind(&ServiceWorkerVersion::OnNavigateClientFinished,
+                           weak_factory_.GetWeakPtr(), request_id));
 }
 
 void ServiceWorkerVersion::OnNavigateClientFinished(
     int request_id,
+    ServiceWorkerStatusCode status,
     const std::string& client_uuid,
     const ServiceWorkerClientInfo& client_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (running_status() != RUNNING)
     return;
+
+  if (status != SERVICE_WORKER_OK) {
+    embedded_worker_->SendMessage(
+        ServiceWorkerMsg_NavigateClientError(request_id, GURL()));
+    return;
+  }
 
   ServiceWorkerClientInfo client(client_info);
 
@@ -1953,64 +1683,6 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   }
 }
 
-void ServiceWorkerVersion::GetWindowClients(
-    int request_id,
-    const ServiceWorkerClientQueryOptions& options) {
-  DCHECK(options.client_type == blink::WebServiceWorkerClientTypeWindow ||
-         options.client_type == blink::WebServiceWorkerClientTypeAll);
-
-  std::vector<base::Tuple<int, int, std::string>> clients_info;
-  if (!options.include_uncontrolled) {
-    for (auto& controllee : controllee_map_)
-      AddWindowClient(controllee.second, &clients_info);
-  } else {
-    for (auto it =
-             context_->GetClientProviderHostIterator(script_url_.GetOrigin());
-         !it->IsAtEnd(); it->Advance()) {
-      AddWindowClient(it->GetProviderHost(), &clients_info);
-    }
-  }
-
-  if (clients_info.empty()) {
-    DidGetWindowClients(request_id, options,
-                        make_scoped_ptr(new ServiceWorkerClients));
-    return;
-  }
-
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&OnGetWindowClientsFromUI, clients_info, script_url_,
-                 base::Bind(&ServiceWorkerVersion::DidGetWindowClients,
-                            weak_factory_.GetWeakPtr(), request_id, options)));
-}
-
-void ServiceWorkerVersion::DidGetWindowClients(
-    int request_id,
-    const ServiceWorkerClientQueryOptions& options,
-    scoped_ptr<ServiceWorkerClients> clients) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (options.client_type == blink::WebServiceWorkerClientTypeAll)
-    GetNonWindowClients(request_id, options, clients.get());
-  OnGetClientsFinished(request_id, clients.get());
-}
-
-void ServiceWorkerVersion::GetNonWindowClients(
-    int request_id,
-    const ServiceWorkerClientQueryOptions& options,
-    ServiceWorkerClients* clients) {
-  if (!options.include_uncontrolled) {
-    for (auto& controllee : controllee_map_) {
-      AddNonWindowClient(controllee.second, options, clients);
-    }
-  } else {
-    for (auto it =
-             context_->GetClientProviderHostIterator(script_url_.GetOrigin());
-         !it->IsAtEnd(); it->Advance()) {
-      AddNonWindowClient(it->GetProviderHost(), options, clients);
-    }
-  }
-}
-
 void ServiceWorkerVersion::StartTimeoutTimer() {
   DCHECK(!timeout_timer_.IsRunning());
 
@@ -2067,6 +1739,9 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
          running_status() == STOPPING)
       << running_status();
 
+  if (!context_)
+    return;
+
   MarkIfStale();
 
   // Stopping the worker hasn't finished within a certain period.
@@ -2116,21 +1791,20 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
     return;
   }
 
-  // Requests have not finished within a certain period.
-  bool request_timed_out = false;
+  // Requests have not finished before their expiration.
+  bool stop_for_timeout = false;
   while (!requests_.empty()) {
-    RequestInfo info = requests_.front();
-    if (GetTickDuration(info.time) <
-        base::TimeDelta::FromMinutes(kRequestTimeoutMinutes))
+    RequestInfo info = requests_.top();
+    if (!RequestExpired(info.expiration))
       break;
     if (MaybeTimeOutRequest(info)) {
-      request_timed_out = true;
+      stop_for_timeout = stop_for_timeout || ShouldStopIfRequestTimesOut(info);
       UMA_HISTOGRAM_ENUMERATION("ServiceWorker.RequestTimeouts.Count",
                                 info.type, NUM_REQUEST_TYPES);
     }
     requests_.pop();
   }
-  if (request_timed_out && running_status() != STOPPING)
+  if (stop_for_timeout && running_status() != STOPPING)
     embedded_worker_->Stop();
 
   // For the timeouts below, there are no callbacks to timeout so there is
@@ -2237,10 +1911,22 @@ int ServiceWorkerVersion::AddRequest(
     const CallbackType& callback,
     IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
     RequestType request_type) {
-  base::TimeTicks now = base::TimeTicks::Now();
-  int request_id =
-      callback_map->Add(new PendingRequest<CallbackType>(callback, now));
-  requests_.push(RequestInfo(request_id, request_type, now));
+  base::TimeTicks expiration_time =
+      base::TimeTicks::Now() +
+      base::TimeDelta::FromMinutes(kRequestTimeoutMinutes);
+  return AddRequestWithExpiration(callback, callback_map, request_type,
+                                  expiration_time);
+}
+
+template <typename CallbackType>
+int ServiceWorkerVersion::AddRequestWithExpiration(
+    const CallbackType& callback,
+    IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
+    RequestType request_type,
+    base::TimeTicks expiration) {
+  int request_id = callback_map->Add(
+      new PendingRequest<CallbackType>(callback, base::TimeTicks::Now()));
+  requests_.push(RequestInfo(request_id, request_type, expiration));
   return request_id;
 }
 
@@ -2281,11 +1967,35 @@ bool ServiceWorkerVersion::MaybeTimeOutRequest(const RequestInfo& info) {
   return false;
 }
 
-void ServiceWorkerVersion::SetAllRequestTimes(const base::TimeTicks& ticks) {
-  std::queue<RequestInfo> new_requests;
+bool ServiceWorkerVersion::ShouldStopIfRequestTimesOut(
+    const RequestInfo& info) {
+  // Note, returning false for a type means that the On*EventFinished should not
+  // call NOTREACHED if it can't find the matching request, it may have simply
+  // timed out.
+  switch (info.type) {
+    case REQUEST_SYNC:
+      return false;
+    case REQUEST_ACTIVATE:
+    case REQUEST_INSTALL:
+    case REQUEST_FETCH:
+    case REQUEST_NOTIFICATION_CLICK:
+    case REQUEST_PUSH:
+    case REQUEST_GEOFENCING:
+    case REQUEST_SERVICE_PORT_CONNECT:
+      return true;
+    case NUM_REQUEST_TYPES:
+      NOTREACHED() << "Got unexpected request type: " << info.type;
+  }
+  NOTREACHED() << "Got unexpected request type: " << info.type;
+  return false;
+}
+
+void ServiceWorkerVersion::SetAllRequestExpirations(
+    const base::TimeTicks& expiration) {
+  RequestInfoPriorityQueue new_requests;
   while (!requests_.empty()) {
-    RequestInfo info = requests_.front();
-    info.time = ticks;
+    RequestInfo info = requests_.top();
+    info.expiration = expiration;
     new_requests.push(info);
     requests_.pop();
   }

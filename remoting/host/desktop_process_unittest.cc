@@ -4,13 +4,19 @@
 
 #include "remoting/host/desktop_process.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
@@ -46,7 +52,7 @@ class MockDaemonListener : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override;
 
   MOCK_METHOD1(OnDesktopAttached, void(IPC::PlatformFileForTransit));
-  MOCK_METHOD1(OnChannelConnected, void(int32));
+  MOCK_METHOD1(OnChannelConnected, void(int32_t));
   MOCK_METHOD0(OnChannelError, void());
 
  private:
@@ -60,7 +66,7 @@ class MockNetworkListener : public IPC::Listener {
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  MOCK_METHOD1(OnChannelConnected, void(int32));
+  MOCK_METHOD1(OnChannelConnected, void(int32_t));
   MOCK_METHOD0(OnChannelError, void());
 
   MOCK_METHOD0(OnDesktopEnvironmentCreated, void());
@@ -260,7 +266,7 @@ void DesktopProcessTest::RunDesktopProcess() {
       .WillRepeatedly(Return(false));
 
   DesktopProcess desktop_process(ui_task_runner, io_task_runner_, channel_name);
-  EXPECT_TRUE(desktop_process.Start(desktop_environment_factory.Pass()));
+  EXPECT_TRUE(desktop_process.Start(std::move(desktop_environment_factory)));
 
   ui_task_runner = nullptr;
   run_loop.Run();

@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -151,11 +152,8 @@ void ChromeTranslateClient::GetTranslateLanguages(
     }
   }
 
-  std::string accept_languages_str = prefs->GetString(prefs::kAcceptLanguages);
-  std::vector<std::string> accept_languages_list = base::SplitString(
-      accept_languages_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   *target =
-      translate::TranslateManager::GetTargetLanguage(accept_languages_list);
+      translate::TranslateManager::GetTargetLanguage(translate_prefs.get());
 }
 
 translate::TranslateManager* ChromeTranslateClient::GetTranslateManager() {

@@ -4,6 +4,8 @@
 
 #include "extensions/browser/value_store/testing_value_store.h"
 
+#include <utility>
+
 #include "base/logging.h"
 
 namespace {
@@ -57,14 +59,14 @@ ValueStore::ReadResult TestingValueStore::Get(
       settings->SetWithoutPathExpansion(*it, value->DeepCopy());
     }
   }
-  return MakeReadResult(make_scoped_ptr(settings));
+  return MakeReadResult(make_scoped_ptr(settings), status_);
 }
 
 ValueStore::ReadResult TestingValueStore::Get() {
   read_count_++;
   if (!status_.ok())
     return MakeReadResult(status_);
-  return MakeReadResult(make_scoped_ptr(storage_.DeepCopy()));
+  return MakeReadResult(make_scoped_ptr(storage_.DeepCopy()), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Set(
@@ -94,7 +96,7 @@ ValueStore::WriteResult TestingValueStore::Set(
       storage_.SetWithoutPathExpansion(it.key(), it.value().DeepCopy());
     }
   }
-  return MakeWriteResult(changes.Pass());
+  return MakeWriteResult(std::move(changes), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Remove(const std::string& key) {
@@ -115,7 +117,7 @@ ValueStore::WriteResult TestingValueStore::Remove(
       changes->push_back(ValueStoreChange(*it, old_value.release(), NULL));
     }
   }
-  return MakeWriteResult(changes.Pass());
+  return MakeWriteResult(std::move(changes), status_);
 }
 
 ValueStore::WriteResult TestingValueStore::Clear() {
@@ -125,12 +127,4 @@ ValueStore::WriteResult TestingValueStore::Clear() {
     keys.push_back(it.key());
   }
   return Remove(keys);
-}
-
-bool TestingValueStore::Restore() {
-  return true;
-}
-
-bool TestingValueStore::RestoreKey(const std::string& key) {
-  return true;
 }

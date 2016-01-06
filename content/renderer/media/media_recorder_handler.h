@@ -6,6 +6,7 @@
 #define CONTENT_RENDERER_MEDIA_MEDIA_RECORDER_HANDLER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
@@ -47,10 +48,12 @@ class CONTENT_EXPORT MediaRecorderHandler final
   ~MediaRecorderHandler() override;
 
   // blink::WebMediaRecorderHandler.
-  bool canSupportMimeType(const blink::WebString& mimeType) override;
+  bool canSupportMimeType(const blink::WebString& web_type,
+                          const blink::WebString& web_codecs) override;
   bool initialize(blink::WebMediaRecorderHandlerClient* client,
                   const blink::WebMediaStream& media_stream,
-                  const blink::WebString& mimeType) override;
+                  const blink::WebString& type,
+                  const blink::WebString& codecs) override;
   bool start() override;
   bool start(int timeslice) override;
   void stop() override;

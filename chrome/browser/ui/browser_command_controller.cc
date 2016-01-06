@@ -4,11 +4,15 @@
 
 #include "chrome/browser/ui/browser_command_controller.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
 #include "base/debug/debugging_flags.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -563,13 +567,9 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #endif  // ENABLE_BASIC_PRINTING
 
-// TODO(bondd): Implement save credit card bubble and icon on Mac.
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
     case IDC_SAVE_CREDIT_CARD_FOR_PAGE:
       SaveCreditCard(browser_);
       break;
-#endif
-
     case IDC_TRANSLATE_PAGE:
       Translate(browser_);
       break;
@@ -781,7 +781,8 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ShowHelp(browser_, HELP_SOURCE_MENU);
       break;
     case IDC_SHOW_SIGNIN:
-      ShowBrowserSigninOrSettings(browser_, signin_metrics::SOURCE_MENU);
+      ShowBrowserSigninOrSettings(
+          browser_, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       break;
     case IDC_DISTILL_PAGE:
       DistillCurrentPage(browser_);

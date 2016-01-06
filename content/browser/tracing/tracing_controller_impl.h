@@ -5,12 +5,18 @@
 #ifndef CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_IMPL_H_
 #define CONTENT_BROWSER_TRACING_TRACING_CONTROLLER_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
+#include "base/time/time.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/tracing_agent.h"
 #include "content/public/browser/tracing_controller.h"
 
 namespace base {
@@ -25,7 +31,8 @@ class TracingUI;
 
 class TracingControllerImpl
     : public TracingController,
-      public base::trace_event::MemoryDumpManagerDelegate {
+      public base::trace_event::MemoryDumpManagerDelegate,
+      public base::trace_event::TracingAgent {
  public:
   static TracingControllerImpl* GetInstance();
 
@@ -55,11 +62,22 @@ class TracingControllerImpl
   void RegisterTracingUI(TracingUI* tracing_ui);
   void UnregisterTracingUI(TracingUI* tracing_ui);
 
+  // base::trace_event::TracingAgent implementation.
+  std::string GetTracingAgentName() override;
+  std::string GetTraceEventLabel() override;
+  bool StartAgentTracing(
+      const base::trace_event::TraceConfig& trace_config) override;
+  void StopAgentTracing(const StopAgentTracingCallback& callback) override;
+  bool SupportsExplicitClockSync() override;
+  void RecordClockSyncMarker(
+      int sync_id,
+      const RecordClockSyncMarkerCallback& callback) override;
+
   // base::trace_event::MemoryDumpManagerDelegate implementation.
   void RequestGlobalMemoryDump(
       const base::trace_event::MemoryDumpRequestArgs& args,
       const base::trace_event::MemoryDumpCallback& callback) override;
-  uint64 GetTracingProcessId() const override;
+  uint64_t GetTracingProcessId() const override;
 
   class TraceMessageFilterObserver {
    public:
@@ -122,12 +140,9 @@ class TracingControllerImpl
       TraceMessageFilter* trace_message_filter,
       const std::vector<std::string>& known_category_groups);
 
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-  void OnEndSystemTracingAcked(
-      const scoped_refptr<base::RefCountedString>& events_str_ptr);
-#endif
-
-  void OnEndPowerTracingAcked(
+  void OnEndAgentTracingAcked(
+      const std::string& agent_name,
+      const std::string& events_label,
       const scoped_refptr<base::RefCountedString>& events_str_ptr);
 
   void OnCaptureMonitoringSnapshotAcked(
@@ -136,11 +151,11 @@ class TracingControllerImpl
   void OnTraceLogStatusReply(TraceMessageFilter* trace_message_filter,
                              const base::trace_event::TraceLogStatus& status);
   void OnProcessMemoryDumpResponse(TraceMessageFilter* trace_message_filter,
-                                   uint64 dump_guid,
+                                   uint64_t dump_guid,
                                    bool success);
 
   // Callback of MemoryDumpManager::CreateProcessDump().
-  void OnBrowserProcessMemoryDumpDone(uint64 dump_guid, bool success);
+  void OnBrowserProcessMemoryDumpDone(uint64_t dump_guid, bool success);
 
   void FinalizeGlobalMemoryDumpIfAllProcessesReplied();
 
@@ -151,9 +166,10 @@ class TracingControllerImpl
       int mode,
       const base::Closure& callback);
   void SetDisabledOnFileThread(const base::Closure& callback);
-  void OnStartTracingDone(
+  void OnStartAgentTracingDone(
       const base::trace_event::TraceConfig& trace_config,
       const StartTracingDoneCallback& callback);
+  void StopTracingAfterClockSync();
   void OnStopTracingDone();
   void OnStartMonitoringDone(
       const base::trace_event::TraceConfig& trace_config,
@@ -161,6 +177,14 @@ class TracingControllerImpl
   void OnStopMonitoringDone(const StopMonitoringDoneCallback& callback);
 
   void OnMonitoringStateChanged(bool is_monitoring);
+
+  int GetUniqueClockSyncID();
+  // Issue clock sync markers to the tracing agents.
+  void IssueClockSyncMarker();
+  void OnClockSyncMarkerRecordedByAgent(
+      int sync_id,
+      const base::TimeTicks& issue_ts,
+      const base::TimeTicks& issue_end_ts);
 
   typedef std::set<scoped_refptr<TraceMessageFilter>> TraceMessageFilterSet;
   TraceMessageFilterSet trace_message_filters_;
@@ -183,15 +207,17 @@ class TracingControllerImpl
   int pending_memory_dump_ack_count_;
   int failed_memory_dump_count_;
   TraceMessageFilterSet pending_memory_dump_filters_;
-  uint64 pending_memory_dump_guid_;
+  uint64_t pending_memory_dump_guid_;
   base::trace_event::MemoryDumpCallback pending_memory_dump_callback_;
 
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-  bool is_system_tracing_;
-#endif
+  StartTracingDoneCallback start_tracing_done_callback_;
+  std::vector<base::trace_event::TracingAgent*> additional_tracing_agents_;
+  int clock_sync_id_;
+  int pending_clock_sync_ack_count_;
+  base::OneShotTimer clock_sync_timer_;
+
   bool is_tracing_;
   bool is_monitoring_;
-  bool is_power_tracing_;
 
   GetCategoriesDoneCallback pending_get_categories_done_callback_;
   GetTraceBufferUsageCallback pending_trace_buffer_usage_callback_;

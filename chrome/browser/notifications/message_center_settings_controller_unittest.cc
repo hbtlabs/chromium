@@ -3,9 +3,12 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -200,67 +203,71 @@ TEST_F(MessageCenterSettingsControllerTest, NotifierSortOrder) {
   // Baf is a hosted app which should not appear in the notifier list.
   const std::string kBafId = "dddddddddddddddddddddddddddddddd";
 
-  foo_app.SetManifest(
+  foo_app.SetManifest(std::move(
       extensions::DictionaryBuilder()
           .Set("name", "Foo")
           .Set("version", "1.0.0")
           .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder().Set(
-                          "background",
-                          extensions::DictionaryBuilder().Set(
-                              "scripts", extensions::ListBuilder().Append(
-                                             "background.js"))))
+          .Set("app",
+               std::move(extensions::DictionaryBuilder().Set(
+                   "background",
+                   std::move(extensions::DictionaryBuilder().Set(
+                       "scripts", std::move(extensions::ListBuilder().Append(
+                                      "background.js")))))))
           .Set("permissions",
-               extensions::ListBuilder().Append("notifications")));
+               std::move(extensions::ListBuilder().Append("notifications")))));
   foo_app.SetID(kFooId);
   extension_service->AddExtension(foo_app.Build().get());
 
   extensions::ExtensionBuilder bar_app;
-  bar_app.SetManifest(
+  bar_app.SetManifest(std::move(
       extensions::DictionaryBuilder()
           .Set("name", "Bar")
           .Set("version", "1.0.0")
           .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder().Set(
-                          "background",
-                          extensions::DictionaryBuilder().Set(
-                              "scripts", extensions::ListBuilder().Append(
-                                             "background.js"))))
+          .Set("app",
+               std::move(extensions::DictionaryBuilder().Set(
+                   "background",
+                   std::move(extensions::DictionaryBuilder().Set(
+                       "scripts", std::move(extensions::ListBuilder().Append(
+                                      "background.js")))))))
           .Set("permissions",
-               extensions::ListBuilder().Append("notifications")));
+               std::move(extensions::ListBuilder().Append("notifications")))));
   bar_app.SetID(kBarId);
   extension_service->AddExtension(bar_app.Build().get());
 
   extensions::ExtensionBuilder baz_app;
-  baz_app.SetManifest(
+  baz_app.SetManifest(std::move(
       extensions::DictionaryBuilder()
           .Set("name", "baz")
           .Set("version", "1.0.0")
           .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder().Set(
-                          "background",
-                          extensions::DictionaryBuilder().Set(
-                              "scripts", extensions::ListBuilder().Append(
-                                             "background.js")))));
+          .Set("app",
+               std::move(extensions::DictionaryBuilder().Set(
+                   "background",
+                   std::move(extensions::DictionaryBuilder().Set(
+                       "scripts", std::move(extensions::ListBuilder().Append(
+                                      "background.js")))))))));
   baz_app.SetID(kBazId);
   extension_service->AddExtension(baz_app.Build().get());
 
   extensions::ExtensionBuilder baf_app;
-  baf_app.SetManifest(
+  baf_app.SetManifest(std::move(
       extensions::DictionaryBuilder()
           .Set("name", "baf")
           .Set("version", "1.0.0")
           .Set("manifest_version", 2)
           .Set("app",
-               extensions::DictionaryBuilder().Set(
+               std::move(extensions::DictionaryBuilder().Set(
                    "urls",
-                   extensions::ListBuilder().Append(
-                       "http://localhost/extensions/hosted_app/main.html")))
-          .Set("launch",
-               extensions::DictionaryBuilder().Set(
-                   "urls",
-                   extensions::ListBuilder().Append(
-                       "http://localhost/extensions/hosted_app/main.html"))));
+                   std::move(extensions::ListBuilder().Append(
+                       "http://localhost/extensions/hosted_app/main.html")))))
+          .Set(
+              "launch",
+              std::move(extensions::DictionaryBuilder().Set(
+                  "urls",
+                  std::move(extensions::ListBuilder().Append(
+                      "http://localhost/extensions/hosted_app/main.html")))))));
 
   baf_app.SetID(kBafId);
   extension_service->AddExtension(baf_app.Build().get());

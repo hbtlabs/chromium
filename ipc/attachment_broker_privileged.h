@@ -7,7 +7,9 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/ipc_export.h"
 
@@ -39,6 +41,11 @@ class IPC_EXPORT AttachmentBrokerPrivileged : public IPC::AttachmentBroker {
 #else
   static void CreateBrokerIfNeeded();
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+
+  // Similar to CreateBrokerIfNeeded(), but useful for single process unit tests
+  // that don't need real attachment brokering, and don't want to deal with
+  // setting up a fake PortProvider.
+  static void CreateBrokerForSingleProcessTests();
 
   // AttachmentBroker overrides.
   void RegisterCommunicationChannel(Endpoint* endpoint) override;

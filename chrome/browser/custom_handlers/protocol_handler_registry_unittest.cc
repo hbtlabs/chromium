@@ -4,12 +4,15 @@
 
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "chrome/common/pref_names.h"
@@ -36,12 +39,12 @@ void AssertInterceptedIO(
     net::URLRequestJobFactory* interceptor) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext context;
-  scoped_ptr<net::URLRequest> request(context.CreateRequest(
-      url, net::DEFAULT_PRIORITY, NULL));
-  scoped_refptr<net::URLRequestJob> job =
+  scoped_ptr<net::URLRequest> request(
+      context.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr));
+  scoped_ptr<net::URLRequestJob> job(
       interceptor->MaybeCreateJobWithProtocolHandler(
-          url.scheme(), request.get(), context.network_delegate());
-  ASSERT_TRUE(job.get() != NULL);
+          url.scheme(), request.get(), context.network_delegate()));
+  ASSERT_TRUE(job.get());
 }
 
 void AssertIntercepted(

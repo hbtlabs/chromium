@@ -4,6 +4,8 @@
 
 #include "ash/display/mirror_window_controller.h"
 
+#include <utility>
+
 #if defined(USE_X11)
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
@@ -226,7 +228,7 @@ void MirrorWindowController::UpdateWindow(
           new aura::Window(nullptr);
       mirror_window->Init(ui::LAYER_SOLID_COLOR);
       host->window()->AddChild(mirror_window);
-      host_info->ash_host->SetRootWindowTransformer(transformer.Pass());
+      host_info->ash_host->SetRootWindowTransformer(std::move(transformer));
       mirror_window->SetBounds(host->window()->bounds());
       mirror_window->Show();
       if (reflector_) {
@@ -242,7 +244,7 @@ void MirrorWindowController::UpdateWindow(
           mirroring_host_info_map_[display_info.id()]->ash_host.get();
       aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
       GetRootWindowSettings(host->window())->display_id = display_info.id();
-      ash_host->SetRootWindowTransformer(transformer.Pass());
+      ash_host->SetRootWindowTransformer(std::move(transformer));
       host->SetBounds(display_info.bounds_in_native());
     }
   }
@@ -327,7 +329,7 @@ gfx::Display MirrorWindowController::GetDisplayForRootWindow(
   for (const auto& pair : mirroring_host_info_map_) {
     if (pair.second->ash_host->AsWindowTreeHost()->window() == root) {
       // Sanity check to catch an error early.
-      int64 id = pair.first;
+      int64_t id = pair.first;
       const DisplayManager::DisplayList& list =
           Shell::GetInstance()
               ->display_manager()
@@ -344,7 +346,7 @@ gfx::Display MirrorWindowController::GetDisplayForRootWindow(
 }
 
 AshWindowTreeHost* MirrorWindowController::GetAshWindowTreeHostForDisplayId(
-    int64 id) {
+    int64_t id) {
   CHECK_EQ(1u, mirroring_host_info_map_.count(id));
   return mirroring_host_info_map_[id]->ash_host.get();
 }

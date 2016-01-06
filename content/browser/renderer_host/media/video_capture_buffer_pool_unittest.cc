@@ -6,10 +6,17 @@
 
 #include "content/browser/renderer_host/media/video_capture_buffer_pool.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "content/browser/compositor/buffer_queue.h"
@@ -46,7 +53,9 @@ class VideoCaptureBufferPoolTest
   class MockGpuMemoryBuffer : public gfx::GpuMemoryBuffer {
    public:
     explicit MockGpuMemoryBuffer(const gfx::Size& size)
-        : size_(size), data_(new uint8[size_.GetArea() * 4]), mapped_(false) {}
+        : size_(size),
+          data_(new uint8_t[size_.GetArea() * 4]),
+          mapped_(false) {}
     ~MockGpuMemoryBuffer() override { delete[] data_; }
 
     bool Map() override {
@@ -81,7 +90,7 @@ class VideoCaptureBufferPoolTest
 
    private:
     const gfx::Size size_;
-    uint8* const data_;
+    uint8_t* const data_;
     bool mapped_;
   };
 
@@ -123,7 +132,7 @@ class VideoCaptureBufferPoolTest
     Buffer(const scoped_refptr<VideoCaptureBufferPool> pool,
            scoped_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle,
            int id)
-        : id_(id), pool_(pool), buffer_handle_(buffer_handle.Pass()) {}
+        : id_(id), pool_(pool), buffer_handle_(std::move(buffer_handle)) {}
     ~Buffer() { pool_->RelinquishProducerReservation(id()); }
     int id() const { return id_; }
     size_t mapped_size() { return buffer_handle_->mapped_size(); }
@@ -175,7 +184,7 @@ class VideoCaptureBufferPoolTest
     scoped_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle =
         pool_->GetBufferHandle(buffer_id);
     return scoped_ptr<Buffer>(
-        new Buffer(pool_, buffer_handle.Pass(), buffer_id));
+        new Buffer(pool_, std::move(buffer_handle), buffer_id));
   }
 
   base::MessageLoop loop_;

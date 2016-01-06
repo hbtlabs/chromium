@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdint.h>
 
+#include <list>
+
 #include "base/big_endian.h"
+#include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/net/pacing/paced_sender.h"
 #include "media/cast/test/fake_single_thread_task_runner.h"
@@ -16,16 +20,17 @@ namespace media {
 namespace cast {
 namespace {
 
-static const uint8 kValue = 123;
+static const uint8_t kValue = 123;
 static const size_t kSize1 = 101;
 static const size_t kSize2 = 102;
 static const size_t kSize3 = 103;
 static const size_t kSize4 = 104;
 static const size_t kNackSize = 105;
-static const int64 kStartMillisecond = INT64_C(12345678900000);
-static const uint32 kVideoSsrc = 0x1234;
-static const uint32 kAudioSsrc = 0x5678;
-static const uint32 kFrameRtpTimestamp = 12345;
+static const int64_t kStartMillisecond = INT64_C(12345678900000);
+static const uint32_t kVideoSsrc = 0x1234;
+static const uint32_t kAudioSsrc = 0x5678;
+static const uint32_t kVideoFrameRtpTimestamp = 12345;
+static const uint32_t kAudioFrameRtpTimestamp = 23456;
 
 class TestPacketSender : public PacketSender {
  public:
@@ -40,7 +45,7 @@ class TestPacketSender : public PacketSender {
     return true;
   }
 
-  int64 GetBytesSent() final { return bytes_sent_; }
+  int64_t GetBytesSent() final { return bytes_sent_; }
 
   void AddExpectedSize(int expected_packet_size, int repeat_count) {
     for (int i = 0; i < repeat_count; ++i) {
@@ -50,7 +55,7 @@ class TestPacketSender : public PacketSender {
 
  public:
   std::list<int> expected_packet_size_;
-  int64 bytes_sent_;
+  int64_t bytes_sent_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPacketSender);
 };
@@ -90,7 +95,8 @@ class PacedSenderTest : public ::testing::Test {
       base::BigEndianWriter writer(reinterpret_cast<char*>(&packet->data[0]),
                                    packet_size);
       bool success = writer.Skip(4);
-      success &= writer.WriteU32(kFrameRtpTimestamp);
+      success &= writer.WriteU32(audio ? kAudioFrameRtpTimestamp
+                                       : kVideoFrameRtpTimestamp);
       success &= writer.WriteU32(audio ? kAudioSsrc : kVideoSsrc);
       success &= writer.Skip(2);
       success &= writer.WriteU16(i);
@@ -123,7 +129,7 @@ class PacedSenderTest : public ::testing::Test {
   TestPacketSender mock_transport_;
   scoped_refptr<test::FakeSingleThreadTaskRunner> task_runner_;
   scoped_ptr<PacedSender> paced_sender_;
-  uint32 frame_id_;
+  uint32_t frame_id_;
 
   DISALLOW_COPY_AND_ASSIGN(PacedSenderTest);
 };
@@ -177,13 +183,13 @@ TEST_F(PacedSenderTest, BasicPace) {
 
   // Check that packet logging events match expected values.
   EXPECT_EQ(num_of_packets, static_cast<int>(packet_events_.size()));
-  uint16 expected_packet_id = 0;
+  uint16_t expected_packet_id = 0;
   for (const PacketEvent& e : packet_events_) {
     ASSERT_LE(earliest_event_timestamp, e.timestamp);
     ASSERT_GE(latest_event_timestamp, e.timestamp);
     ASSERT_EQ(PACKET_SENT_TO_NETWORK, e.type);
     ASSERT_EQ(VIDEO_EVENT, e.media_type);
-    ASSERT_EQ(kFrameRtpTimestamp, e.rtp_timestamp);
+    ASSERT_EQ(kVideoFrameRtpTimestamp, e.rtp_timestamp.lower_32_bits());
     ASSERT_EQ(num_of_packets - 1, e.max_packet_id);
     ASSERT_EQ(expected_packet_id++, e.packet_id);
     ASSERT_EQ(kSize1, e.size);
@@ -407,34 +413,34 @@ TEST_F(PacedSenderTest, GetLastByteSent) {
   SendPacketVector packets2 = CreateSendPacketVector(kSize1, 1, false);
 
   EXPECT_TRUE(paced_sender_->SendPackets(packets1));
-  EXPECT_EQ(static_cast<int64>(kSize1),
+  EXPECT_EQ(static_cast<int64_t>(kSize1),
             paced_sender_->GetLastByteSentForPacket(packets1[0].first));
-  EXPECT_EQ(static_cast<int64>(kSize1),
+  EXPECT_EQ(static_cast<int64_t>(kSize1),
             paced_sender_->GetLastByteSentForSsrc(kAudioSsrc));
   EXPECT_EQ(0, paced_sender_->GetLastByteSentForSsrc(kVideoSsrc));
 
   EXPECT_TRUE(paced_sender_->SendPackets(packets2));
-  EXPECT_EQ(static_cast<int64>(2 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(2 * kSize1),
             paced_sender_->GetLastByteSentForPacket(packets2[0].first));
-  EXPECT_EQ(static_cast<int64>(kSize1),
+  EXPECT_EQ(static_cast<int64_t>(kSize1),
             paced_sender_->GetLastByteSentForSsrc(kAudioSsrc));
-  EXPECT_EQ(static_cast<int64>(2 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(2 * kSize1),
             paced_sender_->GetLastByteSentForSsrc(kVideoSsrc));
 
   EXPECT_TRUE(paced_sender_->ResendPackets(packets1, DedupInfo()));
-  EXPECT_EQ(static_cast<int64>(3 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(3 * kSize1),
             paced_sender_->GetLastByteSentForPacket(packets1[0].first));
-  EXPECT_EQ(static_cast<int64>(3 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(3 * kSize1),
             paced_sender_->GetLastByteSentForSsrc(kAudioSsrc));
-  EXPECT_EQ(static_cast<int64>(2 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(2 * kSize1),
             paced_sender_->GetLastByteSentForSsrc(kVideoSsrc));
 
   EXPECT_TRUE(paced_sender_->ResendPackets(packets2, DedupInfo()));
-  EXPECT_EQ(static_cast<int64>(4 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(4 * kSize1),
             paced_sender_->GetLastByteSentForPacket(packets2[0].first));
-  EXPECT_EQ(static_cast<int64>(3 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(3 * kSize1),
             paced_sender_->GetLastByteSentForSsrc(kAudioSsrc));
-  EXPECT_EQ(static_cast<int64>(4 * kSize1),
+  EXPECT_EQ(static_cast<int64_t>(4 * kSize1),
             paced_sender_->GetLastByteSentForSsrc(kVideoSsrc));
 }
 
@@ -450,11 +456,11 @@ TEST_F(PacedSenderTest, DedupWithResendInterval) {
 
   // This packet will not be sent.
   EXPECT_TRUE(paced_sender_->ResendPackets(packets, dedup_info));
-  EXPECT_EQ(static_cast<int64>(kSize1), mock_transport_.GetBytesSent());
+  EXPECT_EQ(static_cast<int64_t>(kSize1), mock_transport_.GetBytesSent());
 
   dedup_info.resend_interval = base::TimeDelta::FromMilliseconds(5);
   EXPECT_TRUE(paced_sender_->ResendPackets(packets, dedup_info));
-  EXPECT_EQ(static_cast<int64>(2 * kSize1), mock_transport_.GetBytesSent());
+  EXPECT_EQ(static_cast<int64_t>(2 * kSize1), mock_transport_.GetBytesSent());
 }
 
 }  // namespace cast

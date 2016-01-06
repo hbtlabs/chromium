@@ -5,10 +5,13 @@
 #ifndef REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 #define REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
 #include "net/base/ip_endpoint.h"
@@ -165,17 +168,9 @@ class MockSession : public Session {
 
   MOCK_METHOD1(SetEventHandler, void(Session::EventHandler* event_handler));
   MOCK_METHOD0(error, ErrorCode());
-  MOCK_METHOD0(GetTransport, Transport*());
-  MOCK_METHOD0(GetQuicChannelFactory, StreamChannelFactory*());
+  MOCK_METHOD1(SetTransport, void(Transport*));
   MOCK_METHOD0(jid, const std::string&());
-  MOCK_METHOD0(candidate_config, const CandidateSessionConfig*());
   MOCK_METHOD0(config, const SessionConfig&());
-  MOCK_METHOD0(initiator_token, const std::string&());
-  MOCK_METHOD1(set_initiator_token, void(const std::string& initiator_token));
-  MOCK_METHOD0(receiver_token, const std::string&());
-  MOCK_METHOD1(set_receiver_token, void(const std::string& receiver_token));
-  MOCK_METHOD1(set_shared_secret, void(const std::string& secret));
-  MOCK_METHOD0(shared_secret, const std::string&());
   MOCK_METHOD1(Close, void(ErrorCode error));
 
  private:
@@ -187,7 +182,7 @@ class MockSessionManager : public SessionManager {
   MockSessionManager();
   ~MockSessionManager() override;
 
-  MOCK_METHOD2(Init, void(SignalStrategy*, Listener*));
+  MOCK_METHOD1(AcceptIncoming, void(const IncomingSessionCallback&));
   void set_protocol_config(scoped_ptr<CandidateSessionConfig> config) override {
   }
   MOCK_METHOD2(ConnectPtr,

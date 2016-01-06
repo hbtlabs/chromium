@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
 #include "platform/RuntimeEnabledFeatures.h"
@@ -120,7 +119,7 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::create(PassOwnPtr<WebGraphicsContext3D>
     if (discardFramebufferSupported)
         extensionsUtil->ensureExtensionEnabled("GL_EXT_discard_framebuffer");
 
-    RefPtr<DrawingBuffer> drawingBuffer = adoptRef(new DrawingBuffer(context, extensionsUtil.release(), multisampleSupported, packedDepthStencilSupported, discardFramebufferSupported, preserve, requestedAttributes));
+    RefPtr<DrawingBuffer> drawingBuffer = adoptRef(new DrawingBuffer(std::move(context), extensionsUtil.release(), multisampleSupported, packedDepthStencilSupported, discardFramebufferSupported, preserve, requestedAttributes));
     if (!drawingBuffer->initialize(size)) {
         drawingBuffer->beginDestruction();
         return PassRefPtr<DrawingBuffer>();
@@ -146,8 +145,8 @@ DrawingBuffer::DrawingBuffer(PassOwnPtr<WebGraphicsContext3D> context,
     , m_drawFramebufferBinding(0)
     , m_readFramebufferBinding(0)
     , m_activeTextureUnit(GL_TEXTURE0)
-    , m_context(context)
-    , m_extensionsUtil(extensionsUtil)
+    , m_context(std::move(context))
+    , m_extensionsUtil(std::move(extensionsUtil))
     , m_size(-1, -1)
     , m_requestedAttributes(requestedAttributes)
     , m_multisampleExtensionSupported(multisampleExtensionSupported)
@@ -380,7 +379,7 @@ PassRefPtr<DrawingBuffer::MailboxInfo> DrawingBuffer::recycledMailbox()
     ASSERT(mailboxInfo);
 
     if (mailboxInfo->mailbox.validSyncToken) {
-        m_context->waitSyncToken(mailboxInfo->mailbox.syncToken);
+        m_context->waitSyncTokenCHROMIUM(mailboxInfo->mailbox.syncToken);
         mailboxInfo->mailbox.validSyncToken = false;
     }
 
@@ -408,7 +407,7 @@ void DrawingBuffer::deleteMailbox(const WebExternalTextureMailbox& mailbox)
     for (size_t i = 0; i < m_textureMailboxes.size(); i++) {
         if (nameEquals(m_textureMailboxes[i]->mailbox, mailbox)) {
             if (mailbox.validSyncToken)
-                m_context->waitSyncToken(mailbox.syncToken);
+                m_context->waitSyncTokenCHROMIUM(mailbox.syncToken);
 
             deleteChromiumImageForTexture(&m_textureMailboxes[i]->textureInfo);
 
@@ -519,7 +518,7 @@ bool DrawingBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platfor
         mailbox.validSyncToken = m_context->insertSyncPoint(mailbox.syncToken);
     }
 
-    context->waitSyncToken(mailbox.syncToken);
+    context->waitSyncTokenCHROMIUM(mailbox.syncToken);
     Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
 
     GLboolean unpackPremultiplyAlphaNeeded = GL_FALSE;
@@ -536,7 +535,7 @@ bool DrawingBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platfor
     context->flush();
     GLbyte syncToken[24];
     if (context->insertSyncPoint(syncToken))
-        m_context->waitSyncToken(syncToken);
+        m_context->waitSyncTokenCHROMIUM(syncToken);
 
     return true;
 }
@@ -949,12 +948,12 @@ void DrawingBuffer::readBackFramebuffer(unsigned char* pixels, int width, int he
 void DrawingBuffer::flipVertically(uint8_t* framebuffer, int width, int height)
 {
     m_scanline.resize(width * 4);
-    uint8* scanline = &m_scanline[0];
+    uint8_t* scanline = &m_scanline[0];
     unsigned rowBytes = width * 4;
     unsigned count = height / 2;
     for (unsigned i = 0; i < count; i++) {
-        uint8* rowA = framebuffer + i * rowBytes;
-        uint8* rowB = framebuffer + (height - i - 1) * rowBytes;
+        uint8_t* rowA = framebuffer + i * rowBytes;
+        uint8_t* rowB = framebuffer + (height - i - 1) * rowBytes;
         memcpy(scanline, rowB, rowBytes);
         memcpy(rowB, rowA, rowBytes);
         memcpy(rowA, scanline, rowBytes);

@@ -5,6 +5,7 @@
 #include "chrome/browser/android/preferences/pref_service_bridge.h"
 
 #include <jni.h>
+#include <stddef.h>
 
 #include "base/android/build_info.h"
 #include "base/android/jni_android.h"
@@ -391,9 +392,9 @@ static jboolean GetCrashReportManaged(JNIEnv* env,
       prefs::kCrashReportingEnabled);
 }
 
-static jboolean GetForceGoogleSafeSearch(JNIEnv* env,
+static jboolean GetSupervisedUserSafeSitesEnabled(JNIEnv* env,
                                          const JavaParamRef<jobject>& obj) {
-  return GetPrefService()->GetBoolean(prefs::kForceGoogleSafeSearch);
+  return GetPrefService()->GetBoolean(prefs::kSupervisedUserSafeSites);
 }
 
 static jint GetDefaultSupervisedUserFilteringBehavior(
@@ -450,6 +451,17 @@ static jboolean HasSetMetricsReporting(JNIEnv* env,
                                        const JavaParamRef<jobject>& obj) {
   PrefService* local_state = g_browser_process->local_state();
   return local_state->HasPrefPath(metrics::prefs::kMetricsReportingEnabled);
+}
+
+static void SetClickedUpdateMenuItem(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj,
+                                       jboolean clicked) {
+  GetPrefService()->SetBoolean(prefs::kClickedUpdateMenuItem, clicked);
+}
+
+static jboolean GetClickedUpdateMenuItem(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->GetBoolean(prefs::kClickedUpdateMenuItem);
 }
 
 namespace {
@@ -672,37 +684,6 @@ static void MigrateJavascriptPreference(JNIEnv* env,
   GetPrefService()->ClearPref(prefs::kWebKitJavascriptEnabled);
 }
 
-static void MigrateLocationPreference(JNIEnv* env,
-                                      const JavaParamRef<jobject>& obj) {
-  const PrefService::Preference* pref =
-      GetPrefService()->FindPreference(prefs::kGeolocationEnabled);
-  if (!pref || !pref->HasUserSetting())
-    return;
-  bool location_enabled = false;
-  bool retval = pref->GetValue()->GetAsBoolean(&location_enabled);
-  DCHECK(retval);
-  // Do a restrictive migration. GetAllowLocationEnabled could be
-  // non-usermodifiable and we don't want to migrate that.
-  if (!location_enabled)
-    SetAllowLocationEnabled(env, obj, false);
-  GetPrefService()->ClearPref(prefs::kGeolocationEnabled);
-}
-
-static void MigrateProtectedMediaPreference(JNIEnv* env,
-                                            const JavaParamRef<jobject>& obj) {
-  const PrefService::Preference* pref =
-      GetPrefService()->FindPreference(prefs::kProtectedMediaIdentifierEnabled);
-  if (!pref || !pref->HasUserSetting())
-    return;
-  bool pmi_enabled = false;
-  bool retval = pref->GetValue()->GetAsBoolean(&pmi_enabled);
-  DCHECK(retval);
-  // Do a restrictive migration if values disagree.
-  if (!pmi_enabled)
-    SetProtectedMediaIdentifierEnabled(env, obj, false);
-  GetPrefService()->ClearPref(prefs::kProtectedMediaIdentifierEnabled);
-}
-
 static void SetPasswordEchoEnabled(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    jboolean passwordEchoEnabled) {
@@ -801,6 +782,31 @@ static void SetNetworkPredictionOptions(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj,
                                         int option) {
   GetPrefService()->SetInteger(prefs::kNetworkPredictionOptions, option);
+}
+
+static jboolean NetworkPredictionEnabledHasUserSetting(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->GetUserPrefValue(
+      prefs::kNetworkPredictionEnabled) != NULL;
+}
+
+static jboolean NetworkPredictionOptionsHasUserSetting(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->GetUserPrefValue(
+      prefs::kNetworkPredictionOptions) != NULL;
+}
+
+static jboolean GetNetworkPredictionEnabledUserPrefValue(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  const base::Value* network_prediction_enabled =
+      GetPrefService()->GetUserPrefValue(prefs::kNetworkPredictionEnabled);
+  DCHECK(network_prediction_enabled);
+  bool value = false;
+  DCHECK(network_prediction_enabled->GetAsBoolean(&value));
+  return value;
 }
 
 static void SetResolveNavigationErrorEnabled(JNIEnv* env,
@@ -947,4 +953,11 @@ std::string PrefServiceBridge::GetAndroidPermissionForContentSetting(
     return std::string();
 
   return ConvertJavaStringToUTF8(android_permission);
+}
+
+static void SetSupervisedUserId(JNIEnv* env,
+                                const JavaParamRef<jobject>& obj,
+                                const JavaParamRef<jstring>& pref) {
+  GetPrefService()->SetString(prefs::kSupervisedUserId,
+                              ConvertJavaStringToUTF8(env, pref));
 }

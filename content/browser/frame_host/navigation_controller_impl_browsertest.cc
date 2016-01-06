@@ -2,12 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/frame_host/navigation_controller_impl.h"
+
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/frame_host/frame_navigation_entry.h"
 #include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/site_isolation_policy.h"
@@ -26,6 +32,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "content/shell/common/shell_switches.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -2476,7 +2483,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // 5. Restore the new entry in a new tab and verify the correct URLs load.
   std::vector<scoped_ptr<NavigationEntry>> entries;
-  entries.push_back(restored_entry.Pass());
+  entries.push_back(std::move(restored_entry));
   Shell* new_shell = Shell::CreateNewWindow(
       controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
   FrameTreeNode* new_root =
@@ -2622,8 +2629,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   FrameNavigationEntry* frame_entry =
       controller.GetLastCommittedEntry()->GetFrameEntry(root);
-  int64 isn_1 = frame_entry->item_sequence_number();
-  int64 dsn_1 = frame_entry->document_sequence_number();
+  int64_t isn_1 = frame_entry->item_sequence_number();
+  int64_t dsn_1 = frame_entry->document_sequence_number();
   EXPECT_NE(-1, isn_1);
   EXPECT_NE(-1, dsn_1);
 
@@ -2633,8 +2640,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   frame_entry = controller.GetLastCommittedEntry()->GetFrameEntry(root);
-  int64 isn_2 = frame_entry->item_sequence_number();
-  int64 dsn_2 = frame_entry->document_sequence_number();
+  int64_t isn_2 = frame_entry->item_sequence_number();
+  int64_t dsn_2 = frame_entry->document_sequence_number();
   EXPECT_NE(-1, isn_2);
   EXPECT_NE(isn_1, isn_2);
   EXPECT_EQ(dsn_1, dsn_2);
@@ -2662,8 +2669,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameTreeNode* subframe = root->child_at(0);
   FrameNavigationEntry* subframe_entry =
       controller.GetLastCommittedEntry()->GetFrameEntry(subframe);
-  int64 isn_3 = subframe_entry->item_sequence_number();
-  int64 dsn_3 = subframe_entry->document_sequence_number();
+  int64_t isn_3 = subframe_entry->item_sequence_number();
+  int64_t dsn_3 = subframe_entry->document_sequence_number();
   EXPECT_NE(-1, isn_2);
   EXPECT_NE(isn_2, isn_3);
   EXPECT_NE(dsn_2, dsn_3);
@@ -2673,11 +2680,110 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   subframe_entry = controller.GetLastCommittedEntry()->GetFrameEntry(subframe);
-  int64 isn_4 = subframe_entry->item_sequence_number();
-  int64 dsn_4 = subframe_entry->document_sequence_number();
+  int64_t isn_4 = subframe_entry->item_sequence_number();
+  int64_t dsn_4 = subframe_entry->document_sequence_number();
   EXPECT_NE(-1, isn_4);
   EXPECT_NE(isn_3, isn_4);
   EXPECT_EQ(dsn_3, dsn_4);
+}
+
+// Support a set of tests that isolate only a subset of sites with
+// out-of-process iframes (OOPIFs).
+class NavigationControllerOopifBrowserTest
+    : public NavigationControllerBrowserTest {
+ public:
+  NavigationControllerOopifBrowserTest() {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Enable the OOPIF framework but only isolate sites from a single TLD.
+    command_line->AppendSwitchASCII(switches::kIsolateSitesForTesting, "*.is");
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NavigationControllerOopifBrowserTest);
+};
+
+// Verify that restoring a NavigationEntry with cross-site subframes does not
+// create out-of-process iframes unless the current SiteIsolationPolicy says to.
+IN_PROC_BROWSER_TEST_F(NavigationControllerOopifBrowserTest,
+                       RestoreWithoutExtraOopifs) {
+  // This test requires OOPIFs to be possible.
+  EXPECT_TRUE(SiteIsolationPolicy::AreCrossProcessFramesPossible());
+
+  // 1. Start on a page with a data URL iframe.
+  GURL main_url_a(embedded_test_server()->GetURL(
+      "a.com", "/navigation_controller/page_with_data_iframe.html"));
+  GURL data_url("data:text/html,Subframe");
+  EXPECT_TRUE(NavigateToURL(shell(), main_url_a));
+  const NavigationControllerImpl& controller =
+      static_cast<const NavigationControllerImpl&>(
+          shell()->web_contents()->GetController());
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  EXPECT_EQ(main_url_a, root->current_url());
+  EXPECT_EQ(data_url, root->child_at(0)->current_url());
+
+  // 2. Navigate the iframe cross-site.
+  GURL frame_url_b(embedded_test_server()->GetURL(
+      "b.com", "/navigation_controller/simple_page_1.html"));
+  NavigateFrameToURL(root->child_at(0), frame_url_b);
+  EXPECT_EQ(main_url_a, root->current_url());
+  EXPECT_EQ(frame_url_b, root->child_at(0)->current_url());
+
+  EXPECT_EQ(2, controller.GetEntryCount());
+  EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
+  NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
+
+  // 3. Create a NavigationEntry with the same PageState as |entry2|.
+  scoped_ptr<NavigationEntryImpl> restored_entry =
+      NavigationEntryImpl::FromNavigationEntry(
+          NavigationControllerImpl::CreateNavigationEntry(
+              main_url_a, Referrer(), ui::PAGE_TRANSITION_RELOAD, false,
+              std::string(), controller.GetBrowserContext()));
+  restored_entry->SetPageID(0);
+  EXPECT_EQ(0U, restored_entry->root_node()->children.size());
+  restored_entry->SetPageState(entry2->GetPageState());
+
+  // The entry should have no SiteInstance in the FrameNavigationEntry for the
+  // b.com subframe.
+  EXPECT_FALSE(
+      restored_entry->root_node()->children[0]->frame_entry->site_instance());
+
+  // 4. Restore the new entry in a new tab and verify the correct URLs load.
+  std::vector<scoped_ptr<NavigationEntry>> entries;
+  entries.push_back(std::move(restored_entry));
+  Shell* new_shell = Shell::CreateNewWindow(
+      controller.GetBrowserContext(), GURL::EmptyGURL(), nullptr, gfx::Size());
+  FrameTreeNode* new_root =
+      static_cast<WebContentsImpl*>(new_shell->web_contents())
+          ->GetFrameTree()
+          ->root();
+  NavigationControllerImpl& new_controller =
+      static_cast<NavigationControllerImpl&>(
+          new_shell->web_contents()->GetController());
+  new_controller.Restore(
+      entries.size() - 1,
+      NavigationController::RESTORE_LAST_SESSION_EXITED_CLEANLY, &entries);
+  ASSERT_EQ(0u, entries.size());
+  {
+    TestNavigationObserver restore_observer(new_shell->web_contents());
+    new_controller.LoadIfNecessary();
+    restore_observer.Wait();
+  }
+  ASSERT_EQ(1U, new_root->child_count());
+  EXPECT_EQ(main_url_a, new_root->current_url());
+  EXPECT_EQ(frame_url_b, new_root->child_at(0)->current_url());
+
+  // The subframe should only be in a different SiteInstance if OOPIFs are
+  // required for all sites.
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(new_root->current_frame_host()->GetSiteInstance(),
+              new_root->child_at(0)->current_frame_host()->GetSiteInstance());
+  } else {
+    EXPECT_EQ(new_root->current_frame_host()->GetSiteInstance(),
+              new_root->child_at(0)->current_frame_host()->GetSiteInstance());
+  }
 }
 
 namespace {

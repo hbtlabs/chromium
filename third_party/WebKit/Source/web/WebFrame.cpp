@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "public/web/WebFrame.h"
 
 #include "bindings/core/v8/WindowProxyManager.h"
@@ -130,6 +129,11 @@ void WebFrame::setFrameOwnerSandboxFlags(WebSandboxFlags flags)
     FrameOwner* owner = toImplBase()->frame()->owner();
     ASSERT(owner);
     toRemoteBridgeFrameOwner(owner)->setSandboxFlags(static_cast<SandboxFlags>(flags));
+}
+
+bool WebFrame::shouldEnforceStrictMixedContentChecking() const
+{
+    return toImplBase()->frame()->securityContext()->shouldEnforceStrictMixedContentChecking();
 }
 
 WebFrame* WebFrame::opener() const

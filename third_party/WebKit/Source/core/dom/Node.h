@@ -60,6 +60,7 @@ class FloatPoint;
 class LocalFrame;
 class HTMLInputElement;
 class HTMLQualifiedName;
+class HTMLSlotElement;
 class IntRect;
 class KeyboardEvent;
 class NSResolver;
@@ -220,7 +221,7 @@ public:
     Node* pseudoAwareFirstChild() const;
     Node* pseudoAwareLastChild() const;
 
-    virtual KURL baseURI() const;
+    const KURL& baseURI() const;
 
     PassRefPtrWillBeRawPtr<Node> insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
     PassRefPtrWillBeRawPtr<Node> replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -295,6 +296,7 @@ public:
     bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
 
     bool canParticipateInComposedTree() const;
+    bool isSlotOrActiveInsertionPoint() const;
 
     bool hasCustomStyleCallbacks() const { return getFlag(HasCustomStyleCallbacksFlag); }
 
@@ -303,6 +305,8 @@ public:
     // shadow tree but its root is detached from its host. This can happen when handling
     // queued events (e.g. during execCommand()).
     Element* shadowHost() const;
+    // crbug.com/569532: containingShadowRoot() can return nullptr even if isInShadowTree() returns true.
+    // This can happen when handling queued events (e.g. during execCommand())
     ShadowRoot* containingShadowRoot() const;
     ShadowRoot* youngestShadowRoot() const;
 
@@ -655,6 +659,8 @@ public:
     void updateAncestorConnectedSubframeCountForInsertion() const;
 
     PassRefPtrWillBeRawPtr<StaticNodeList> getDestinationInsertionPoints();
+    HTMLSlotElement* assignedSlot() const;
+    HTMLSlotElement* assignedSlotForBinding() { updateDistribution(); return assignedSlot(); }
 
     void setAlreadySpellChecked(bool flag) { setFlag(flag, AlreadySpellCheckedFlag); }
     bool isAlreadySpellChecked() { return getFlag(AlreadySpellCheckedFlag); }

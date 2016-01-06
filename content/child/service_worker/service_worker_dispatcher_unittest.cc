@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_provider_context.h"
@@ -16,6 +17,8 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
 
 namespace content {
+
+namespace {
 
 class ServiceWorkerTestSender : public ThreadSafeSender {
  public:
@@ -34,6 +37,8 @@ class ServiceWorkerTestSender : public ThreadSafeSender {
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerTestSender);
 };
+
+}  // namespace
 
 class ServiceWorkerDispatcherTest : public testing::Test {
  public:
@@ -116,13 +121,13 @@ class MockWebServiceWorkerProviderClientImpl
     dispatcher_->AddProviderClient(provider_id, this);
   }
 
-  ~MockWebServiceWorkerProviderClientImpl() {
+  ~MockWebServiceWorkerProviderClientImpl() override {
     dispatcher_->RemoveProviderClient(provider_id_);
   }
 
   void setController(
       blink::WebPassOwnPtr<blink::WebServiceWorker::Handle> handle,
-      bool shouldNotifyControllerChange) {
+      bool shouldNotifyControllerChange) override {
     // WebPassOwnPtr cannot be owned in Chromium, so drop the handle here.
     // The destruction releases ServiceWorkerHandleReference.
     is_set_controlled_called_ = true;
@@ -149,9 +154,6 @@ class MockWebServiceWorkerProviderClientImpl
   bool is_dispatch_message_event_called_ = false;
   ServiceWorkerDispatcher* dispatcher_;
 };
-
-// TODO(nhiroki): Add tests for message handlers especially to receive reference
-// counts.
 
 TEST_F(ServiceWorkerDispatcherTest, OnAssociateRegistration_NoProviderContext) {
   // Assume that these objects are passed from the browser process and own

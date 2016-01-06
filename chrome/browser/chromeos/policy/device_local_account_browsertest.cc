@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/policy/device_local_account.h"
+
+#include <stddef.h>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/shell.h"
 #include "ash/system/chromeos/session/logout_confirmation_controller.h"
 #include "ash/system/chromeos/session/logout_confirmation_dialog.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -57,7 +60,6 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/cloud_external_data_manager_base_test_util.h"
-#include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
@@ -336,7 +338,7 @@ TestingUpdateManifestProvider::HandleRequest(
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(content);
   http_response->set_content_type("text/xml");
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 TestingUpdateManifestProvider::~TestingUpdateManifestProvider() {
@@ -834,7 +836,6 @@ class ExtensionInstallObserver : public content::NotificationObserver,
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const extensions::Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override {
     if (waiting_extension_id_ == extension->id()) {
       observed_ = true;

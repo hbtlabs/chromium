@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "base/bind.h"
@@ -32,7 +33,7 @@ const uint32_t kSizeOfOptions =
 // TODO(vtl): Get rid of this.
 const size_t kMaxPoll = 100;
 
-class DataPipeTest : public test::MojoSystemTest {
+class DataPipeTest : public testing::Test {
  public:
   DataPipeTest() : producer_(MOJO_HANDLE_INVALID),
                    consumer_(MOJO_HANDLE_INVALID) {}

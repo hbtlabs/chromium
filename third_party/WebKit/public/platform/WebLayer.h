@@ -160,6 +160,11 @@ public:
     // Pauses all animations with the given id.
     virtual void pauseAnimation(int animationId, double timeOffset) = 0;
 
+    // Aborts all animations with the given id. Different from removeAnimation
+    // in that aborting an animation stops it from affecting both the pending
+    // and active tree.
+    virtual void abortAnimation(int animationId) = 0;
+
     // Returns true if this layer has any active animations - useful for tests.
     virtual bool hasActiveAnimation() = 0;
 
@@ -247,6 +252,12 @@ public:
 
     // Gets the underlying cc layer.
     virtual const cc::Layer* ccLayer() const = 0;
+
+    virtual void setElementId(uint64_t) = 0;
+    virtual uint64_t elementId() const = 0;
+
+    virtual void setCompositorMutableProperties(uint32_t) = 0;
+    virtual uint32_t compositorMutableProperties() const = 0;
 };
 
 } // namespace blink

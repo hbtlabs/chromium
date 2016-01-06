@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -189,6 +190,9 @@ class OAuth2LoginManager : public KeyedService,
 
   // Update the token service and inform listeners of a new refresh token.
   void UpdateCredentials(const std::string& account_id);
+
+  // Notify that the refresh tokens are loaded and ready to use.
+  void FireRefreshTokensLoaded();
 
   // Attempts to fetch OAuth2 tokens by using pre-authenticated cookie jar from
   // provided |auth_profile|.

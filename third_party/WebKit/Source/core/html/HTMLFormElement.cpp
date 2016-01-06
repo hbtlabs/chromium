@@ -22,7 +22,6 @@
  *
  */
 
-#include "config.h"
 #include "core/html/HTMLFormElement.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -152,7 +151,7 @@ bool HTMLFormElement::layoutObjectIsNeeded(const ComputedStyle& style)
 Node::InsertionNotificationRequest HTMLFormElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "form", fastGetAttribute(methodAttr), fastGetAttribute(actionAttr));
+    logAddElementIfIsolatedWorldAndInDocument("form", methodAttr, actionAttr);
     if (insertionPoint->inDocument())
         this->document().didAssociateFormControl(this);
     return InsertionDone;
@@ -508,7 +507,7 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicStri
         KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().string() : m_attributes.action());
         if (MixedContentChecker::isMixedFormAction(document().frame(), actionURL))
             UseCounter::count(document().frame(), UseCounter::MixedContentFormPresent);
-        logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "form", actionAttr.toString(), oldValue, value);
+        logUpdateAttributeIfIsolatedWorldAndInDocument("form", actionAttr, oldValue, value);
     } else if (name == targetAttr) {
         m_attributes.setTarget(value);
     } else if (name == methodAttr) {
@@ -812,8 +811,17 @@ void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RadioNodeLi
     ASSERT(!elements.isEmpty());
 
     bool onlyMatchImg = !elements.isEmpty() && isHTMLImageElement(*elements.first());
-    if (onlyMatchImg)
+    if (onlyMatchImg) {
         UseCounter::count(document(), UseCounter::FormNameAccessForImageElement);
+        // The following code has performance impact, but it should be small
+        // because <img> access via <form> name getter is rarely used.
+        for (auto& element : elements) {
+            if (isHTMLImageElement(*element) && !element->isDescendantOf(this)) {
+                UseCounter::count(document(), UseCounter::FormNameAccessForNonDescendantImageElement);
+                break;
+            }
+        }
+    }
     if (elements.size() == 1) {
         returnValue.setElement(elements.at(0));
         return;

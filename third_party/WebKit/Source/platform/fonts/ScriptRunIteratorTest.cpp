@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/fonts/ScriptRunIterator.h"
 
 #include "platform/Logging.h"
@@ -36,7 +35,7 @@ public:
 
     static const MockScriptData* instance()
     {
-        AtomicallyInitializedStaticReference(const MockScriptData, mockScriptData, (new MockScriptData()));
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(const MockScriptData, mockScriptData, (new MockScriptData()));
 
         return &mockScriptData;
     }

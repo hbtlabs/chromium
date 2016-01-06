@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/heap/ThreadState.h"
 
 #include "platform/ScriptForbiddenScope.h"
@@ -75,7 +74,7 @@ SafePointBarrier* ThreadState::s_safePointBarrier = nullptr;
 
 RecursiveMutex& ThreadState::threadAttachMutex()
 {
-    AtomicallyInitializedStaticReference(RecursiveMutex, mutex, (new RecursiveMutex));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(RecursiveMutex, mutex, (new RecursiveMutex));
     return mutex;
 }
 
@@ -103,6 +102,9 @@ ThreadState::ThreadState()
     , m_traceDOMWrappers(nullptr)
 #if defined(ADDRESS_SANITIZER)
     , m_asanFakeStack(__asan_get_current_fake_stack())
+#endif
+#if defined(LEAK_SANITIZER)
+    , m_disabledStaticPersistentsRegistration(0)
 #endif
 {
     ASSERT(checkThread());
@@ -467,9 +469,8 @@ void ThreadState::threadLocalWeakProcessing()
     TRACE_EVENT0("blink_gc", "ThreadState::threadLocalWeakProcessing");
     double startTime = WTF::currentTimeMS();
 
-    SweepForbiddenScope forbiddenScope(this);
-    if (isMainThread())
-        ScriptForbiddenScope::enter();
+    SweepForbiddenScope sweepForbiddenScope(this);
+    ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
     // Disallow allocation during weak processing.
     // It would be technically safe to allow allocations, but it is unsafe
@@ -485,7 +486,6 @@ void ThreadState::threadLocalWeakProcessing()
     while (popAndInvokeThreadLocalWeakCallback(&weakProcessingVisitor)) { }
 
     if (isMainThread()) {
-        ScriptForbiddenScope::exit();
         double timeForThreadLocalWeakProcessing = WTF::currentTimeMS() - startTime;
         Platform::current()->histogramCustomCounts("BlinkGC.timeForThreadLocalWeakProcessing", timeForThreadLocalWeakProcessing, 1, 10 * 1000, 50);
     }
@@ -493,7 +493,7 @@ void ThreadState::threadLocalWeakProcessing()
 
 CrossThreadPersistentRegion& ThreadState::crossThreadPersistentRegion()
 {
-    AtomicallyInitializedStaticReference(CrossThreadPersistentRegion, persistentRegion, new CrossThreadPersistentRegion());
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(CrossThreadPersistentRegion, persistentRegion, new CrossThreadPersistentRegion());
     return persistentRegion;
 }
 
@@ -747,6 +747,7 @@ void ThreadState::performIdleGC(double deadlineSeconds)
 {
     ASSERT(checkThread());
     ASSERT(isMainThread());
+    ASSERT(Platform::current()->currentThread()->scheduler());
 
     if (gcState() != IdleGCScheduled)
         return;
@@ -784,8 +785,7 @@ void ThreadState::performIdleLazySweep(double deadlineSeconds)
     SweepForbiddenScope scope(this);
     {
         double startTime = WTF::currentTimeMS();
-        if (isMainThread())
-            ScriptForbiddenScope::enter();
+        ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
         for (int i = 0; i < BlinkGC::NumberOfHeaps; i++) {
             // lazySweepWithDeadline() won't check the deadline until it sweeps
@@ -801,8 +801,6 @@ void ThreadState::performIdleLazySweep(double deadlineSeconds)
             }
         }
 
-        if (isMainThread())
-            ScriptForbiddenScope::exit();
         accumulateSweepingTime(WTF::currentTimeMS() - startTime);
     }
 
@@ -821,6 +819,10 @@ void ThreadState::scheduleIdleGC()
         return;
     }
 
+    // Some threads (e.g. PPAPI thread) don't have a scheduler.
+    if (!Platform::current()->currentThread()->scheduler())
+        return;
+
     Platform::current()->currentThread()->scheduler()->postNonNestableIdleTask(BLINK_FROM_HERE, WTF::bind<double>(&ThreadState::performIdleGC, this));
     setGCState(IdleGCScheduled);
 }
@@ -829,6 +831,10 @@ void ThreadState::scheduleIdleLazySweep()
 {
     // TODO(haraken): Idle complete sweep should be supported in worker threads.
     if (!isMainThread())
+        return;
+
+    // Some threads (e.g. PPAPI thread) don't have a scheduler.
+    if (!Platform::current()->currentThread()->scheduler())
         return;
 
     Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind<double>(&ThreadState::performIdleLazySweep, this));
@@ -1075,17 +1081,11 @@ void ThreadState::eagerSweep()
         return;
 
     SweepForbiddenScope scope(this);
-    {
-        double startTime = WTF::currentTimeMS();
-        if (isMainThread())
-            ScriptForbiddenScope::enter();
+    ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
-        m_heaps[BlinkGC::EagerSweepHeapIndex]->completeSweep();
-
-        if (isMainThread())
-            ScriptForbiddenScope::exit();
-        accumulateSweepingTime(WTF::currentTimeMS() - startTime);
-    }
+    double startTime = WTF::currentTimeMS();
+    m_heaps[BlinkGC::EagerSweepHeapIndex]->completeSweep();
+    accumulateSweepingTime(WTF::currentTimeMS() - startTime);
 }
 
 void ThreadState::completeSweep()
@@ -1103,8 +1103,7 @@ void ThreadState::completeSweep()
 
     SweepForbiddenScope scope(this);
     {
-        if (isMainThread())
-            ScriptForbiddenScope::enter();
+        ScriptForbiddenIfMainThreadScope scriptForbiddenScope;
 
         TRACE_EVENT0("blink_gc", "ThreadState::completeSweep");
         double startTime = WTF::currentTimeMS();
@@ -1116,10 +1115,8 @@ void ThreadState::completeSweep()
         double timeForCompleteSweep = WTF::currentTimeMS() - startTime;
         accumulateSweepingTime(timeForCompleteSweep);
 
-        if (isMainThread()) {
-            ScriptForbiddenScope::exit();
+        if (isMainThread())
             Platform::current()->histogramCustomCounts("BlinkGC.CompleteSweep", timeForCompleteSweep, 1, 10 * 1000, 50);
-        }
     }
 
     postSweep();
@@ -1317,6 +1314,36 @@ void ThreadState::removeInterruptor(BlinkGCInterruptor* interruptor)
     }
 }
 
+#if defined(LEAK_SANITIZER)
+void ThreadState::registerStaticPersistentNode(PersistentNode* node)
+{
+    if (m_disabledStaticPersistentsRegistration)
+        return;
+
+    ASSERT(!m_staticPersistents.contains(node));
+    m_staticPersistents.add(node);
+}
+
+void ThreadState::releaseStaticPersistentNodes()
+{
+    for (PersistentNode* node : m_staticPersistents)
+        persistentRegion()->freePersistentNode(node);
+
+    m_staticPersistents.clear();
+}
+
+void ThreadState::enterStaticReferenceRegistrationDisabledScope()
+{
+    m_disabledStaticPersistentsRegistration++;
+}
+
+void ThreadState::leaveStaticReferenceRegistrationDisabledScope()
+{
+    ASSERT(m_disabledStaticPersistentsRegistration);
+    m_disabledStaticPersistentsRegistration--;
+}
+#endif
+
 ThreadState::AttachedThreadStateSet& ThreadState::attachedThreads()
 {
     DEFINE_STATIC_LOCAL(AttachedThreadStateSet, threads, ());
@@ -1338,25 +1365,30 @@ void ThreadState::invokePreFinalizers()
     ASSERT(checkThread());
     ASSERT(!sweepForbidden());
     TRACE_EVENT0("blink_gc", "ThreadState::invokePreFinalizers");
+
     double startTime = WTF::currentTimeMS();
+    if (!m_orderedPreFinalizers.isEmpty()) {
+        SweepForbiddenScope sweepForbidden(this);
+        ScriptForbiddenIfMainThreadScope scriptForbidden;
 
-    if (isMainThread())
-        ScriptForbiddenScope::enter();
-
-    SweepForbiddenScope forbiddenScope(this);
-    Vector<PreFinalizer> deadPreFinalizers;
-    // Call the pre-finalizers in the reverse order in which they
-    // are registered.
-    for (auto it = m_orderedPreFinalizers.rbegin(); it != m_orderedPreFinalizers.rend(); ++it) {
-        if (!(it->second)(it->first))
-            continue;
-        deadPreFinalizers.append(*it);
+        // Call the prefinalizers in the opposite order to their registration.
+        //
+        // The prefinalizer callback wrapper returns |true| when its associated
+        // object is unreachable garbage and the prefinalizer callback has run.
+        // The registered prefinalizer entry must then be removed and deleted.
+        //
+        auto it = --m_orderedPreFinalizers.end();
+        bool done;
+        do {
+            auto entry = it;
+            done = it == m_orderedPreFinalizers.begin();
+            if (!done)
+                --it;
+            if ((entry->second)(entry->first))
+                m_orderedPreFinalizers.remove(entry);
+        } while (!done);
     }
-    // FIXME: removeAll is inefficient.  It can shrink repeatedly.
-    m_orderedPreFinalizers.removeAll(deadPreFinalizers);
-
     if (isMainThread()) {
-        ScriptForbiddenScope::exit();
         double timeForInvokingPreFinalizers = WTF::currentTimeMS() - startTime;
         Platform::current()->histogramCustomCounts("BlinkGC.TimeForInvokingPreFinalizers", timeForInvokingPreFinalizers, 1, 10 * 1000, 50);
     }

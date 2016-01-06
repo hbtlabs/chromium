@@ -42,7 +42,7 @@
       '../../testing/gtest/include',
       '../../third_party',
       '../../third_party/libyuv/include',
-      '../../third_party/usrsctp',
+      '../../third_party/usrsctp/usrsctplib',
     ],
     # These dependencies have been translated into :jingle_deps in the GN build.
     'dependencies': [
@@ -280,6 +280,8 @@
             '<(libjingle_source)/talk/app/webrtc/mediastreamhandler.cc',
             '<(libjingle_source)/talk/app/webrtc/mediastreamhandler.h',
             '<(libjingle_source)/talk/app/webrtc/mediastreaminterface.h',
+            '<(libjingle_source)/talk/app/webrtc/mediastreamobserver.cc',
+            '<(libjingle_source)/talk/app/webrtc/mediastreamobserver.h',
             '<(libjingle_source)/talk/app/webrtc/mediastreamprovider.h',
             '<(libjingle_source)/talk/app/webrtc/mediastreamproxy.h',
             '<(libjingle_source)/talk/app/webrtc/mediastreamtrack.h',
@@ -294,6 +296,8 @@
             '<(libjingle_source)/talk/app/webrtc/portallocatorfactory.h',
             '<(libjingle_source)/talk/app/webrtc/remoteaudiosource.cc',
             '<(libjingle_source)/talk/app/webrtc/remoteaudiosource.h',
+            '<(libjingle_source)/talk/app/webrtc/remoteaudiotrack.cc',
+            '<(libjingle_source)/talk/app/webrtc/remoteaudiotrack.h',
             '<(libjingle_source)/talk/app/webrtc/remotevideocapturer.cc',
             '<(libjingle_source)/talk/app/webrtc/remotevideocapturer.h',
             '<(libjingle_source)/talk/app/webrtc/rtpreceiver.cc',

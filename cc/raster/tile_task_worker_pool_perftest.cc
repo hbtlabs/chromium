@@ -4,6 +4,10 @@
 
 #include "cc/raster/tile_task_worker_pool.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "cc/debug/lap_timer.h"
@@ -216,20 +220,21 @@ class TileTaskWorkerPoolPerfTestBase {
 
   void BuildTileTaskGraph(TaskGraph* graph,
                           const RasterTaskVector& raster_tasks) {
-    size_t priority = 0;
+    uint16_t priority = 0;
 
     for (auto& raster_task : raster_tasks) {
       priority++;
 
       for (auto& decode_task : raster_task->dependencies()) {
         graph->nodes.push_back(
-            TaskGraph::Node(decode_task.get(), priority, 0u));
+            TaskGraph::Node(decode_task.get(), 0u /* group */, priority, 0u));
         graph->edges.push_back(
             TaskGraph::Edge(raster_task.get(), decode_task.get()));
       }
 
       graph->nodes.push_back(TaskGraph::Node(
-          raster_task.get(), priority, raster_task->dependencies().size()));
+          raster_task.get(), 0u /* group */, priority,
+          static_cast<uint32_t>(raster_task->dependencies().size())));
     }
   }
 

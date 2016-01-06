@@ -18,11 +18,6 @@
 
 namespace content {
 
-// TODO(liberato): This is an entirely made-up number.  It depends on how
-// many decoded buffers that the MediaCodec is willing to have outstanding
-// at any one time.  Only one is guaranteed.  crbug.com/531606.
-enum { kNumPictureBuffers = 3 };
-
 AndroidDeferredRenderingBackingStrategy::
     AndroidDeferredRenderingBackingStrategy()
     : state_provider_(nullptr), media_codec_(nullptr) {}
@@ -47,11 +42,7 @@ void AndroidDeferredRenderingBackingStrategy::Cleanup(
   }
 }
 
-uint32 AndroidDeferredRenderingBackingStrategy::GetNumPictureBuffers() const {
-  return kNumPictureBuffers;
-}
-
-uint32 AndroidDeferredRenderingBackingStrategy::GetTextureTarget() const {
+uint32_t AndroidDeferredRenderingBackingStrategy::GetTextureTarget() const {
   return GL_TEXTURE_EXTERNAL_OES;
 }
 
@@ -116,7 +107,7 @@ void AndroidDeferredRenderingBackingStrategy::SetImageForPicture(
 }
 
 void AndroidDeferredRenderingBackingStrategy::UseCodecBufferForPictureBuffer(
-    int32 codec_buf_index,
+    int32_t codec_buf_index,
     const media::PictureBuffer& picture_buffer) {
   // Make sure that the decoder is available.
   RETURN_IF_NULL(state_provider_->GetGlDecoder());
@@ -147,7 +138,7 @@ void AndroidDeferredRenderingBackingStrategy::ReleaseCodecBufferForPicture(
   AVDACodecImage* avImage = GetImageForPicture(picture_buffer);
 
   // See if there is a media codec buffer still attached to this image.
-  const int32 codec_buffer = avImage->GetMediaCodecBufferIndex();
+  const int32_t codec_buffer = avImage->GetMediaCodecBufferIndex();
 
   if (codec_buffer >= 0) {
     // PictureBuffer wasn't displayed, so release the buffer.

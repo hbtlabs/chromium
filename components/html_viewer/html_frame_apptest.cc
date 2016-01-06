@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/html_viewer/public/interfaces/test_html_viewer.mojom.h"
 #include "components/mus/public/cpp/tests/window_server_test_base.h"
 #include "components/mus/public/cpp/window.h"
@@ -22,8 +28,8 @@
 #include "components/web_view/public/interfaces/frame.mojom.h"
 #include "components/web_view/test_frame_tree_delegate.h"
 #include "mojo/application/public/cpp/application_impl.h"
+#include "mojo/services/accessibility/public/interfaces/accessibility.mojom.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/mojo_services/src/accessibility/public/interfaces/accessibility.mojom.h"
 
 using mus::mojom::WindowTreeClientPtr;
 using mus::WindowServerTestBase;
@@ -77,7 +83,7 @@ scoped_ptr<base::Value> ExecuteScript(ApplicationConnection* connection,
   });
   if (!WindowServerTestBase::DoRunLoopWithTimeout())
     ADD_FAILURE() << "Timed out waiting for execute to complete";
-  return result.Pass();
+  return result;
 }
 
 // FrameTreeDelegate that can block waiting for navigation to start.
@@ -210,7 +216,7 @@ class HTMLFrameTest : public WindowServerTestBase {
   mojo::URLRequestPtr BuildRequestForURL(const std::string& url_string) {
     mojo::URLRequestPtr request(mojo::URLRequest::New());
     request->url = mojo::String::From(AddPortToString(url_string));
-    return request.Pass();
+    return request;
   }
 
   FrameConnection* InitFrameTree(mus::Window* view,
@@ -229,8 +235,8 @@ class HTMLFrameTest : public WindowServerTestBase {
     FrameClient* frame_client = frame_connection->frame_client();
     WindowTreeClientPtr tree_client = frame_connection->GetWindowTreeClient();
     frame_tree_.reset(new FrameTree(
-        result->GetContentHandlerID(), view, tree_client.Pass(),
-        frame_tree_delegate_.get(), frame_client, frame_connection.Pass(),
+        result->GetContentHandlerID(), view, std::move(tree_client),
+        frame_tree_delegate_.get(), frame_client, std::move(frame_connection),
         Frame::ClientPropertyMap(), base::TimeTicks::Now()));
     frame_tree_delegate_->set_frame_tree(frame_tree_.get());
     return result;
@@ -261,7 +267,13 @@ class HTMLFrameTest : public WindowServerTestBase {
   DISALLOW_COPY_AND_ASSIGN(HTMLFrameTest);
 };
 
-TEST_F(HTMLFrameTest, PageWithSingleFrame) {
+// Crashes on linux_chromium_rel_ng only. http://crbug.com/567337
+#if defined(OS_LINUX)
+#define MAYBE_PageWithSingleFrame DISABLED_PageWithSingleFrame
+#else
+#define MAYBE_PageWithSingleFrame PageWithSingleFrame
+#endif
+TEST_F(HTMLFrameTest, MAYBE_PageWithSingleFrame) {
   mus::Window* embed_window = window_manager()->NewWindow();
 
   FrameConnection* root_connection = InitFrameTree(
@@ -286,7 +298,13 @@ TEST_F(HTMLFrameTest, PageWithSingleFrame) {
 
 // Creates two frames. The parent navigates the child frame by way of changing
 // the location of the child frame.
-TEST_F(HTMLFrameTest, ChangeLocationOfChildFrame) {
+// Crashes on linux_chromium_rel_ng only. http://crbug.com/567337
+#if defined(OS_LINUX)
+#define MAYBE_ChangeLocationOfChildFrame DISABLED_ChangeLocationOfChildFrame
+#else
+#define MAYBE_ChangeLocationOfChildFrame ChangeLocationOfChildFrame
+#endif
+TEST_F(HTMLFrameTest, MAYBE_ChangeLocationOfChildFrame) {
   mus::Window* embed_window = window_manager()->NewWindow();
 
   ASSERT_TRUE(InitFrameTree(

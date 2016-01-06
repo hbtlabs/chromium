@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "crypto/sha2.h"
@@ -576,6 +577,11 @@ TEST_F(CertVerifyProcTest, NameConstraintsOk) {
                      NULL,
                      empty_cert_list_,
                      &verify_result);
+  EXPECT_EQ(OK, error);
+  EXPECT_EQ(0U, verify_result.cert_status);
+
+  error = Verify(leaf.get(), "foo.test2.example.com", flags, NULL,
+                 empty_cert_list_, &verify_result);
   EXPECT_EQ(OK, error);
   EXPECT_EQ(0U, verify_result.cert_status);
 }

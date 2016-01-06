@@ -42,7 +42,7 @@ WebInspector.FilterBar = function(name, visibleByDefault)
     this._enabled = true;
     this.element.classList.add("filter-bar");
 
-    this._filterButton = new WebInspector.ToolbarButton(WebInspector.UIString("Filter"), "filter-toolbar-item", 3);
+    this._filterButton = new WebInspector.ToolbarButton(WebInspector.UIString("Filter"), "filter-toolbar-item");
     this._filterButton.addEventListener("click", this._handleFilterButtonClick, this);
 
     this._filters = [];
@@ -90,7 +90,8 @@ WebInspector.FilterBar.prototype = {
 
     forceShowFilterBar: function()
     {
-        this._updateFilterBar(true);
+        this._alwaysShowFilters = true;
+        this._updateFilterBar();
     },
 
     /**
@@ -124,12 +125,9 @@ WebInspector.FilterBar.prototype = {
         return WebInspector.FilterBar.FilterBarState.Inactive;
     },
 
-    /**
-     * @param {boolean=} forceShow
-     */
-    _updateFilterBar: function(forceShow)
+    _updateFilterBar: function()
     {
-        var visible = forceShow || (this._filtersShown && this._enabled);
+        var visible = this._alwaysShowFilters || (this._filtersShown && this._enabled);
         this.element.classList.toggle("hidden", !visible);
         if (visible) {
             for (var i = 0; i < this._filters.length; ++i) {

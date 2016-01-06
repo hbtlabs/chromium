@@ -4,6 +4,7 @@
 
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 
+#include <utility>
 #include <vector>
 
 #include "android_webview/browser/aw_browser_context.h"
@@ -143,17 +144,17 @@ scoped_ptr<net::URLRequestJobFactory> CreateJobFactory(
 
   // The chain of responsibility will execute the handlers in reverse to the
   // order in which the elements of the chain are created.
-  scoped_ptr<net::URLRequestJobFactory> job_factory(aw_job_factory.Pass());
+  scoped_ptr<net::URLRequestJobFactory> job_factory(std::move(aw_job_factory));
   for (content::URLRequestInterceptorScopedVector::reverse_iterator i =
            request_interceptors.rbegin();
        i != request_interceptors.rend();
        ++i) {
     job_factory.reset(new net::URLRequestInterceptingJobFactory(
-        job_factory.Pass(), make_scoped_ptr(*i)));
+        std::move(job_factory), make_scoped_ptr(*i)));
   }
   request_interceptors.weak_clear();
 
-  return job_factory.Pass();
+  return job_factory;
 }
 
 }  // namespace
@@ -165,15 +166,27 @@ AwURLRequestContextGetter::AwURLRequestContextGetter(
     PrefService* user_pref_service)
     : cache_path_(cache_path),
       net_log_(new net::NetLog()),
-      proxy_config_service_(config_service.Pass()),
+      proxy_config_service_(std::move(config_service)),
       cookie_store_(cookie_store),
-      http_user_agent_settings_(new AwHttpUserAgentSettings()),
-      auth_android_negotiate_account_type_(user_pref_service->GetString(
-          prefs::kAuthAndroidNegotiateAccountType)),
-      auth_server_whitelist_(
-          user_pref_service->GetString(prefs::kAuthServerWhitelist)) {
+      http_user_agent_settings_(new AwHttpUserAgentSettings()) {
   // CreateSystemProxyConfigService for Android must be called on main thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+
+  auth_server_whitelist_.Init(
+      prefs::kAuthServerWhitelist, user_pref_service,
+      base::Bind(&AwURLRequestContextGetter::UpdateServerWhitelist,
+                 base::Unretained(this)));
+  auth_server_whitelist_.MoveToThread(io_thread_proxy);
+
+  auth_android_negotiate_account_type_.Init(
+      prefs::kAuthAndroidNegotiateAccountType, user_pref_service,
+      base::Bind(
+          &AwURLRequestContextGetter::UpdateAndroidAuthNegotiateAccountType,
+          base::Unretained(this)));
+  auth_android_negotiate_account_type_.MoveToThread(io_thread_proxy);
 }
 
 AwURLRequestContextGetter::~AwURLRequestContextGetter() {
@@ -190,11 +203,9 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   DCHECK(browser_context);
 
   builder.set_network_delegate(
-      browser_context->GetDataReductionProxyIOData()
-          ->CreateNetworkDelegate(
-              aw_network_delegate.Pass(),
-              false /* No UMA is produced to track bypasses. */)
-          .Pass());
+      browser_context->GetDataReductionProxyIOData()->CreateNetworkDelegate(
+          std::move(aw_network_delegate),
+          false /* No UMA is produced to track bypasses. */));
 #if !defined(DISABLE_FTP_SUPPORT)
   builder.set_ftp_enabled(false);  // Android WebView does not support ftp yet.
 #endif
@@ -203,7 +214,7 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   // Create the proxy without a resolver since we rely on this local HTTP proxy.
   // TODO(sgurun) is this behavior guaranteed through SDK?
   builder.set_proxy_service(net::ProxyService::CreateWithoutProxyResolver(
-      proxy_config_service_.Pass(), net_log_.get()));
+      std::move(proxy_config_service_), net_log_.get()));
   builder.set_net_log(net_log_.get());
   builder.SetCookieAndChannelIdStores(cookie_store_, NULL);
 
@@ -220,22 +231,21 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
       network_session_params;
   ApplyCmdlineOverridesToNetworkSessionParams(&network_session_params);
   builder.set_http_network_session_params(network_session_params);
-  builder.SetSpdyAndQuicEnabled(true, true);
+  builder.SetSpdyAndQuicEnabled(true, false);
 
   scoped_ptr<net::MappedHostResolver> host_resolver(new net::MappedHostResolver(
       net::HostResolver::CreateDefaultResolver(nullptr)));
   ApplyCmdlineOverridesToHostResolver(host_resolver.get());
-  builder.add_http_auth_handler_factory(
-      "negotiate",
-      CreateNegotiateAuthHandlerFactory(host_resolver.get()).release());
-  builder.set_host_resolver(host_resolver.Pass());
+  builder.SetHttpAuthHandlerFactory(
+      CreateAuthHandlerFactory(host_resolver.get()));
+  builder.set_host_resolver(std::move(host_resolver));
 
-  url_request_context_ = builder.Build().Pass();
+  url_request_context_ = builder.Build();
 
-  job_factory_ = CreateJobFactory(&protocol_handlers_,
-                                  request_interceptors_.Pass());
+  job_factory_ =
+      CreateJobFactory(&protocol_handlers_, std::move(request_interceptors_));
   job_factory_.reset(new net::URLRequestInterceptingJobFactory(
-      job_factory_.Pass(),
+      std::move(job_factory_),
       browser_context->GetDataReductionProxyIOData()->CreateInterceptor()));
   url_request_context_->set_job_factory(job_factory_.get());
   url_request_context_->set_http_user_agent_settings(
@@ -273,18 +283,30 @@ void AwURLRequestContextGetter::SetKeyOnIO(const std::string& key) {
 }
 
 scoped_ptr<net::HttpAuthHandlerFactory>
-AwURLRequestContextGetter::CreateNegotiateAuthHandlerFactory(
+AwURLRequestContextGetter::CreateAuthHandlerFactory(
     net::HostResolver* resolver) {
   DCHECK(resolver);
-  std::vector<std::string> supported_schemes = {"negotiate"};
+
+  // In Chrome this is configurable via the AuthSchemes policy. For WebView
+  // there is no interest to have it available so far.
+  std::vector<std::string> supported_schemes = {"basic", "digest", "negotiate"};
   http_auth_preferences_.reset(new net::HttpAuthPreferences(supported_schemes));
-  http_auth_preferences_->set_server_whitelist(auth_server_whitelist_);
+
+  UpdateServerWhitelist();
+  UpdateAndroidAuthNegotiateAccountType();
+
+  return net::HttpAuthHandlerRegistryFactory::Create(
+      http_auth_preferences_.get(), resolver);
+}
+
+void AwURLRequestContextGetter::UpdateServerWhitelist() {
+  http_auth_preferences_->set_server_whitelist(
+      auth_server_whitelist_.GetValue());
+}
+
+void AwURLRequestContextGetter::UpdateAndroidAuthNegotiateAccountType() {
   http_auth_preferences_->set_auth_android_negotiate_account_type(
-      auth_android_negotiate_account_type_);
-  scoped_ptr<net::HttpAuthHandlerFactory> negotiate_factory(
-      net::HttpAuthHandlerRegistryFactory::Create(http_auth_preferences_.get(),
-                                                  resolver));
-  return negotiate_factory;
+      auth_android_negotiate_account_type_.GetValue());
 }
 
 }  // namespace android_webview

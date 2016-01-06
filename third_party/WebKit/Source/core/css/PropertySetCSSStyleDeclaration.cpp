@@ -19,7 +19,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -292,7 +291,7 @@ void AbstractPropertySetCSSStyleDeclaration::setPropertyInternal(CSSPropertyID u
         return;
 
     Element* parent = parentElement();
-    if (parent && parent->inActiveDocument() && parent->document().styleResolver())
+    if (parent)
         parent->document().styleEngine().attributeChangedForElement(HTMLNames::styleAttr, *parent);
     mutationScope.enqueueMutationRecord();
 }

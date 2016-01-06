@@ -21,7 +21,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/html/HTMLAnchorElement.h"
 
 #include "core/events/KeyboardEvent.h"
@@ -199,7 +198,7 @@ void HTMLAnchorElement::parseAttribute(const QualifiedName& name, const AtomicSt
             }
         }
         invalidateCachedVisitedLinkHash();
-        logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "a", hrefAttr.toString(), oldValue, value);
+        logUpdateAttributeIfIsolatedWorldAndInDocument("a", hrefAttr, oldValue, value);
     } else if (name == nameAttr || name == titleAttr) {
         // Do nothing.
     } else if (name == relAttr) {
@@ -386,7 +385,7 @@ bool HTMLAnchorElement::isInteractiveContent() const
 Node::InsertionNotificationRequest HTMLAnchorElement::insertedInto(ContainerNode* insertionPoint)
 {
     InsertionNotificationRequest request = HTMLElement::insertedInto(insertionPoint);
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "a", fastGetAttribute(hrefAttr));
+    logAddElementIfIsolatedWorldAndInDocument("a", hrefAttr);
     return request;
 }
 

@@ -11,8 +11,6 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
-        '../ui/base/ui_base.gyp:ui_base',
-        '../ui/gfx/gfx.gyp:gfx',
         '../url/url.gyp:url_lib',
       ],
       'include_dirs': [
@@ -46,6 +44,7 @@
         'autofill/core/common/password_form_field_prediction_map.h',
         'autofill/core/common/password_form_fill_data.cc',
         'autofill/core/common/password_form_fill_data.h',
+        'autofill/core/common/password_form_generation_data.h',
         'autofill/core/common/password_generation_util.cc',
         'autofill/core/common/password_generation_util.h',
         'autofill/core/common/save_password_progress_logger.cc',
@@ -97,7 +96,7 @@
         'signin_core_browser',
         'signin_core_common',
         'sync_driver',
-        'variations_http_provider',
+        'variations_net',
         'webdata_common',
       ],
       'sources': [
@@ -412,8 +411,7 @@
             '../ipc/ipc.gyp:ipc',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia',
-            '../third_party/icu/icu.gyp:icui18n',
-            '../third_party/icu/icu.gyp:icuuc',
+            '../third_party/re2/re2.gyp:re2',
             '../third_party/WebKit/public/blink.gyp:blink',
             '../ui/base/ui_base.gyp:ui_base',
             'autofill_content_common',

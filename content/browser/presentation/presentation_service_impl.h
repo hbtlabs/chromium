@@ -9,7 +9,6 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
@@ -163,12 +162,10 @@ class CONTENT_EXPORT PresentationServiceImpl
   void SendSessionMessage(presentation::PresentationSessionInfoPtr session_info,
                           presentation::SessionMessagePtr session_message,
                           const SendMessageMojoCallback& callback) override;
-  void CloseSession(
-      const mojo::String& presentation_url,
-      const mojo::String& presentation_id) override;
-  void TerminateSession(
-      const mojo::String& presentation_url,
-      const mojo::String& presentation_id) override;
+  void CloseConnection(const mojo::String& presentation_url,
+                       const mojo::String& presentation_id) override;
+  void Terminate(const mojo::String& presentation_url,
+                 const mojo::String& presentation_id) override;
   void ListenForSessionMessages(
       presentation::PresentationSessionInfoPtr session) override;
 

@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "ui/views/context_menu_controller.h"
@@ -148,7 +149,7 @@ class BrowserFrame
   // and |owned_theme_provider_| is null (as ThemeServices lifetime is managed
   // externally).
   scoped_ptr<ui::ThemeProvider> owned_theme_provider_;
-  ui::ThemeProvider* theme_provider_;
+  const ui::ThemeProvider* theme_provider_;
 
   scoped_ptr<ui::EventHandler> browser_command_handler_;
 

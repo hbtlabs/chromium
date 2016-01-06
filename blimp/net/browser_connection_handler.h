@@ -15,6 +15,7 @@
 namespace blimp {
 
 class BlimpConnection;
+class BlimpMessageCheckpointer;
 class BlimpMessageDemultiplexer;
 class BlimpMessageMultiplexer;
 class BlimpMessageOutputBuffer;
@@ -27,6 +28,7 @@ class BlimpMessageProcessor;
 class BLIMP_NET_EXPORT BrowserConnectionHandler
     : public ConnectionHandler,
       public ConnectionErrorObserver {
+ public:
   BrowserConnectionHandler();
   ~BrowserConnectionHandler() override;
 
@@ -58,6 +60,10 @@ class BLIMP_NET_EXPORT BrowserConnectionHandler
   // Routes outgoing messages from feature-specific handlers to a single
   // message stream.
   scoped_ptr<BlimpMessageMultiplexer> multiplexer_;
+
+  // Dispatches checkpoint/ACK messages to the outgoing processor, as the
+  // incoming processor completes processing them.
+  scoped_ptr<BlimpMessageCheckpointer> checkpointer_;
 
   // Holds network resources while there is a Client connected.
   scoped_ptr<BlimpConnection> connection_;

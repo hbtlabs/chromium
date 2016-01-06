@@ -105,7 +105,6 @@
 <translation id="1426410128494586442">Taip</translation>
 <translation id="1427655258943162134">Tarpinio serverio adresas arba URL</translation>
 <translation id="1435659902881071157">Įrenginio lygio tinklo konfigūracija</translation>
-<translation id="1445397020763995734">HTTP suderinimo autentifikavimo paskyros tipas</translation>
 <translation id="1454846751303307294">Leidžiama nustatyti URL šablonų, nurodančių svetaines, kuriose neleidžiama paleisti „JavaScript“, sąrašą.
 
           Nenustačius šios politikos visose svetainėse bus naudojama visuotinė numatytoji vertė iš politikos „Numatytasis „JavaScript“ nustatymas“ (jei nustatyta) arba naudotojo asmeninės konfigūracijos.</translation>
@@ -287,18 +286,6 @@
       Jei nustatymas „HardwareAccelerationModeEnabled“ nustatytas į „false“, nustatymo „Disable3DAPIs“ nepaisoma ir jis atitinka nustatymą „Disable3DAPIs“, nustatytą į „true“.</translation>
 <translation id="2168397434410358693">Neveikos delsa, kai naudojama kintamosios srovės energija</translation>
 <translation id="2170233653554726857">Įgalinti WPAD optimizavimą</translation>
-<translation id="2175836933294053665">Konfigūruojamas tvarkomų žymių sąrašas.
-
-      Politiką sudaro žymių sąrašas. Kiekviena žymė yra
-      žodynas, kuriame yra raktai „pavadinimas“ ir „url“, nurodantys žymės
-      pavadinimą ir taikymą. Poaplankį galima konfigūruoti apibrėžiant žymę
-      be „url“ rakto, bet naudojant papildomą „priklausomųjų elementų“ raktą, kuriame
-      yra žymių sąrašas, kaip nurodyta anksčiau (kai kurie jų gali būti
-      aplankai). „<ph name="PRODUCT_NAME" />“
-      pataiso neužbaigtus URL, lyg jie būtų pateikti per „Omnibox“, pvz.,
-      „google.com“ bus „https://google.com/“.
-
-      Šios žymės bus „Tvarkomų žymių“ aplanke, kurio naudotojas negali keisti, bet gali paslėpti jį žymių juostoje. Tvarkomos žymės nesinchronizuojamos su naudotojo paskyra ir plėtiniai negali jų keisti.</translation>
 <translation id="2188979373208322108">Įgalinama žymių juosta „<ph name="PRODUCT_NAME" />“.
 
       Jei įgalinsite šį nustatymą, „<ph name="PRODUCT_NAME" />“ bus rodoma žymių juosta.
@@ -374,21 +361,6 @@
 
           Jei šis nustatymas nenustatytas, „<ph name="PRODUCT_NAME" />“ leis naudoti
           savosios susirašinėjimo pranešimais programos prieglobą naudotojo lygiu.</translation>
-<translation id="2393996789386329927">Užblokuojama galimybė pasiekti sąraše pateiktus URL.
-
-      Naudojant šią politiką naudotojams neleidžiama įkelti tinklalapių iš juodojo URL sąrašo. Juodajame sąraše pateikiami URL šablonai, nurodantys, kurie URL bus įtraukti į juodąjį sąrašą.
-
-      Kiekvienas URL šablonas gali būti vietinių failų arba bendrojo URL šablonas. Vietinių failų šablonų formatas yra „file://path“, kur kelias („path“) turi būti absoliutus blokavimo kelias. Visos failų sistemos vietos, kurių priešdėlis yra kelias, bus užblokuotos.
-
-      Bendrojo URL šablono formatas yra „scheme://host:port/path“.
-      Jei nustatyta schema („scheme“), bus užblokuota tik nurodyta schema. Jei priešdėlis „scheme://“ nenurodytas, bus užblokuotos visos schemos.
-      Būtina nurodyti prieglobos serverį („host“). Tai gali būti prieglobos serverio pavadinimas arba IP adresas. Prieglobos serverio pavadinimo padomeniai taip pat bus blokuojami. Kad padomeniai nebūtų blokuojami, prieš prieglobos serverio pavadinimą nurodykite „.“. Naudojant specialųjį prieglobos serverio pavadinimą „*“ bus užblokuoti visi domenai.
-      Prievadas (nurodyti nebūtina) yra galiojantis prievado skaičius nuo 1 iki 65535. Jei jis nenurodytas, blokuojami visi prievadai.
-      Jei nurodytas kelias („path“) (nėra būtinas), bus blokuojami tik keliai su tuo priešdėliu.
-
-      URL baltojo sąrašo politikoje galima pateikti išimčių. Šiose politikose galima pateikti iki 1 000 įrašų; kitų įrašų bus nepaisoma.
-
-      Jei ši politika nenustatyta, į naršyklės juodąjį sąrašą nebus įtrauktas nė vienas URL.</translation>
 <translation id="240213793013362302">Konfigūruojamas ekrano fono vaizdas.
 
       Pagal šią politiką leidžiama konfigūruoti ekrano fono vaizdą, kuris rodomas naudotojo darbalaukyje ir prisijungimo ekrano fone. Politika nustatoma nurodant URL, iš kurio „<ph name="PRODUCT_OS_NAME" />“ gali atsisiųsti ekrano fono vaizdą ir kriptografinę maišą, naudojamą atsisiuntimo vientisumui patikrinti. Vaizdas turi būti JPEG formato, ne didesnis nei 16 MB. URL turi būti galima pasiekti nenustačius tapatybės.
@@ -421,6 +393,38 @@
       Jei įgalinsite šį nustatymą, naršymo istorija nebus išsaugoma. Be to, nustačius šį nustatymą išjungiamas skirtukų sinchronizavimas.
 
      Jei šį nustatymą išjungsite arba jo nenustatysite, naršymo istorija bus išsaugoma.</translation>
+<translation id="2424023834246613232">Nepaisoma „<ph name="PRODUCT_NAME" />“ numatytojo spausdintuvo pasirinkimo taisyklių.
+
+      Pagal šią politiką nustatomos numatytojo spausdintuvo pasirinkimo „<ph name="PRODUCT_NAME" />“ taisyklės. Spausdintuvas pasirenkamas pirmą kartą profilyje naudojant spausdinimo funkciją.
+
+      Kai ši politika nustatyta, „<ph name="PRODUCT_NAME" />“ bandys rasti visus nurodytus atributus atitinkantį spausdintuvą ir pasirinks jį kaip numatytąjį spausdintuvą. Pasirenkamas pirmas politiką atitikęs spausdintuvas. Jei atitiktis nėra unikali, gali būti pasirinktas bet koks spausdintuvas, atsižvelgiant į spausdintuvų aptikimo eilės tvarką.
+
+      Jei ši politika nenustatyta arba per skirtąjį laiką nerandamas atitinkantis spausdintuvas, kaip numatytasis spausdintuvas pasirenkamas įtaisytasis PDF spausdintuvas arba nepasirenkamas joks spausdintuvas, jei PDF spausdintuvas nepasiekiamas.
+
+      Vertė analizuojama kaip JSON objektas, atitinkantis toliau nurodytą schemą:
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Whether to limit the search of the matching printer to a specific set of printers.",
+            "type": {
+              "enum": [ "local", "cloud" ]
+            }
+          },
+          "idPattern": {
+            "description": "Regular expression to match printer id.",
+            "type": "string"
+          },
+          "namePattern": {
+            "description": "Regular expression to match printer display name.",
+            "type": "string"
+          }
+        }
+      }
+
+      Prie „<ph name="CLOUD_PRINT_NAME" />“ prijungti spausdintuvai laikomi „<ph name="PRINTER_TYPE_CLOUD" />“, o kiti spausdintuvai priskiriami kategorijai „<ph name="PRINTER_TYPE_LOCAL" />“.
+      Jei laukas praleidžiamas, tai reiškia, kad atitiko visos vertės. Pvz., nenurodžius ryšio spausdinimo peržiūra inicijuos visų tipų spausdintuvų (vietinių ir iš debesies) aptikimą.
+      Reguliariųjų reiškinių šablonai turi atitikti „JavaScript“ reguliariųjų reiškinių sintaksę. Atitiktyse skiriamos didžiosios ir mažosios raidės.</translation>
 <translation id="2426782419955104525">Įgalinama „<ph name="PRODUCT_NAME" />“ Intuityviosios paieškos funkcija ir naudotojams neleidžiama keisti šio nustatymo.
 
       Jei įgalinsite šį nustatymą, bus įgalinta „<ph name="PRODUCT_NAME" />“ Intuityvioji paieška.
@@ -596,6 +600,7 @@
       Nurodoma, ar TLS domeno sertifikatų plėtinys turėtų būti įgalintas.
 
       Šis nustatymas naudojamas TLS domeno sertifikatų plėtiniui įgalinti bandymo tikslais. Ateityje šis eksperimentinis nustatymas bus pašalintas.</translation>
+<translation id="2957513448235202597"><ph name="HTTP_NEGOTIATE" /> autentifikavimo paskyros tipas</translation>
 <translation id="2959898425599642200">Tarpinio serverio apėjimo taisyklės</translation>
 <translation id="2960691910306063964">Nuotolinės prieigos prieglobų autentifikavimo be PIN kodo įjungimas arba išjungimas</translation>
 <translation id="2976002782221275500">Nurodoma laiko trukmė be naudotojo įvesties, po kurios ekranas pritemdomas, kai naudojama akumuliatoriaus energija.
@@ -614,38 +619,6 @@
       Jei įgalinsite šį nustatymą, visi fiksuotojo portalo autentifikavimo puslapiai (pvz., visi tinklalapiai nuo fiksuotojo portalo prisijungimo puslapio iki tada, kai „<ph name="PRODUCT_NAME" />“ aptinka, kad sėkmingai prisijungta prie interneto), bus rodomi atskirame lange ir bus nepaisoma visų dabartinio naudotojo politikos nustatymų bei apribojimų.
 
       Jei išjungsite šį nustatymą arba paliksite jį nenustatytą, fiksuotojo portalo autentifikavimo puslapiai bus rodomi (įprastame) naujame naršyklės skirtuke naudojant dabartinio naudotojo tarpinio serverio nustatymus.</translation>
-<translation id="3001569025430882724">Pakeičiamos „<ph name="PRODUCT_NAME" />“ numatytojo spausdintuvo pasirinkimo taisyklės.
-
-      Pagal šią politiką nustatomos numatytojo spausdintuvo pasirinkimo sistemoje „<ph name="PRODUCT_NAME" />“ taisyklės, kurios taikomos pirmą kartą profilyje naudojant spausdinimo funkciją.
-
-      Nustačius šią politiką, „<ph name="PRODUCT_NAME" />“ bando surasti spausdintuvą, atitinkantį visus nurodytus atributus, ir pasirinkti jį kaip numatytąjį spausdintuvą. Pasirenkamas pirmas rastas politiką atitinkantis spausdintuvas, o jei nėra unikalios atitikties, gali būti pasirinktas bet kuris atitinkantis spausdintuvas, atsižvelgiant į spausdintuvų aptikimo tvarką.
-
-      Jei ši politika nenustatyta arba nepavyksta rasti atitinkamo spausdintuvo, kol baigiasi skirtasis laikas, pagal numatytuosius spausdintuvo nustatymus naudojamas integruotas PDF spausdintuvas arba, jei PDF spausdintuvas nepasiekiamas, nepasirenkamas joks spausdintuvas.
-
-      Vertė analizuojama kaip JSON objektas pagal nurodytą schemą:
-      {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "description": "Ar apriboti atitinkamo spausdintuvo paiešką naudojant konkretų spausdintuvų rinkinį.",
-            "type": {
-              "enum": [ "local", "cloud" ]
-            }
-          },
-          "idPattern": {
-            "description": "Spausdintuvo ID atitinkantis reguliarusis reiškinys.",
-            "type": "string"
-          },
-          "namePattern": {
-            "description": "Spausdintuvo rodomą pavadinimą atitinkantis reguliarusis reiškinys.",
-            "type": "string"
-          }
-        }
-      }
-
-      Prie „Google“ spausdinimo iš debesies prijungti spausdintuvai laikomi „debesies“ spausdintuvais, o kiti priskiriami „vietinių“ spausdintuvų kategorijai.
-      Praleidus lauką nurodoma, kad atitinka visos vertės, pvz., nenurodžius ryšio funkcija „Spaudinio peržiūra“ inicijuos visų tipų spausdintuvų (vietinių ir debesies) aptikimą.
-      Reguliariojo reiškinio šablonai turi atitikti „JavaScript“ sintaksę „RegExp“. Be to, skiriamos atitikčių didžiosios ir mažosios raidės.</translation>
 <translation id="3021409116652377124">Neleisti papildinių ieškiklio</translation>
 <translation id="3030000825273123558">Įgalinti metrikos ataskaitų teikimą</translation>
 <translation id="3034580675120919256">Leidžiama nustatyti, ar svetainėse leidžiama paleisti „JavaScript“. Gali būti leidžiama arba draudžiama paleisti „JavaScript“ visose svetainėse.
@@ -741,24 +714,6 @@ Jei nustatyta kaip „Netiesa“ arba nenustatyta, kreipiantis į API įvyks kla
       Jei įgalinsite šį nustatymą arba jo nekonfigūruosite, naudotojai galės įgalinti spausdinimo iš debesies įgaliotąjį serverį, tapatumą nustatydami pagal savo „Google“ paskyrą.
 
       Jei šio nustatymo neleisite, naudotojai negalės įgalinti tarpinio serverio, o kompiuteriui bus neleidžiama bendrinti prijungtų spausdintuvų su „<ph name="CLOUD_PRINT_NAME" />“.</translation>
-<translation id="3357181471604560535">Tiek „Chromium“, tiek „Google Chrome“ palaiko tuos pačius politikos
-      nustatymus. Atminkite, kad šiame dokumente gali būti politikos nustatymų, kurie
-      taikomi neišleistos versijos programinei įrangai (pvz., įrašas „palaikoma naudojant“
-      nurodo neišleistos versijos programą), ir tokia politika gali
-      būti pakeista arba pašalinta be išankstinio įspėjimo.
-
-      Šie politikos nustatymai griežtai skirti konfigūruoti tik
-      vidiniams organizacijos „<ph name="PRODUCT_NAME" />“
-      objektams. Šių politikos nustatymų naudojimas už organizacijos ribų (pvz.,
-      viešai platinamoje programoje) laikomas kenkėjišku ir
-      „Google“ bei antivirusinės programinės įrangos teikėjai tai tikriausiai laikys kenkėjiška programa.
-
-      Šių nustatymų nereikia sukonfigūruoti neautomatiškai! Lengvai naudojamų
-      šablonų, skirtų „Windows“, „Mac“ ir „Linux“, galite atsisiųsti adresu <ph name="POLICY_TEMPLATE_DOWNLOAD_URL" />.
-
-      Rekomenduojame politiką sistemoje „Windows“ nustatyti naudojant GPO, tačiau
-      aprūpinimo politika naudojant registrą vis tiek palaikoma „Windows“ objektuose,
-      kurie susieti su aktyvaus katalogo domenu.</translation>
 <translation id="3381968327636295719">Pagal numatytuosius nustatymus naudoti prieglobos naršyklę</translation>
 <translation id="3417418267404583991">Jei ši politika nustatyta į „true“ (tiesa) arba nesukonfigūruota, „<ph name="PRODUCT_OS_NAME" />“ įgalinami svečių prisijungimai. Svečių prisijungimai – tai anoniminės naudotojų sesijos ir nereikalaujama slaptažodžio.
 
@@ -1350,9 +1305,6 @@ Jei nustatyta kaip „Netiesa“ arba nenustatyta, kreipiantis į API įvyks kla
 
       Jei ši politika nenustatyta arba nustatyta kaip „false“, „<ph name="PRODUCT_NAME" />“ naudoja esamus panaikinimo tikrinimo prisijungus nustatymus.</translation>
 <translation id="5732972008943405952">Automatinio pildymo formų duomenų importavimas iš numatytosios naršyklės paleidus pirmą kartą</translation>
-<translation id="5751004203256768694">Nurodo paskyrų, pateiktų „Android“ autentifikavimo programos, palaikančios HTTP suderinimo autentifikavimą (t. y. „Kerberos“ autentifikavimą), paskyros tipą. Šią informaciją turėtų pateikti autentifikavimo programos teikėjas. Daugiau išsamios informacijos žr. https://goo.gl/hajyfN.
-
-          Jei nepateikiamas joks nustatymas, HTTP suderinimo autentifikavimas išjungiamas sistemoje „Android“.</translation>
 <translation id="5761030451068906335">Bus sukonfigūruoti įgaliotojo serverio nustatymai, skirti „<ph name="PRODUCT_NAME" />“.
 
       Ši politika dar neparuošta naudoti; nenaudokite jos.</translation>
@@ -1894,6 +1846,9 @@ Jei nustatyta kaip „Netiesa“ arba nenustatyta, kreipiantis į API įvyks kla
           Kai ši politika nenustatyta, naudojama numatytoji laiko trukmė.
 
           Politikos vertė turėtų būti nurodoma milisekundėmis. Vertės sumažinamos, kad neviršytų neveikos delsos laiko.</translation>
+<translation id="7329968046053403405">Nurodo paskyrų, pateiktų „Android“ autentifikavimo programos, palaikančios <ph name="HTTP_NEGOTIATE" /> autentifikavimą (t. y. „Kerberos“ autentifikavimą), paskyros tipą. Šią informaciją turėtų pateikti autentifikavimo programos teikėjas. Daugiau išsamios informacijos žr. adresu https://goo.gl/hajyfN.
+
+          Jei nepateikiamas joks nustatymas, <ph name="HTTP_NEGOTIATE" /> autentifikavimas išjungiamas sistemoje „Android“.</translation>
 <translation id="7331962793961469250">Kai bus nustatyta į „Tiesa“, „Chrome“ internetinės parduotuvės programų reklamos nebus rodomos naujo skirtuko puslapyje.
 
       Nustačius šią parinktį į „Netiesa“ arba jos nenustačius „Chrome“ internetinės parduotuvės programų reklamos bus rodomos naujo skirtuko puslapyje</translation>
@@ -1919,6 +1874,9 @@ Jei nustatyta kaip „Netiesa“ arba nenustatyta, kreipiantis į API įvyks kla
 <translation id="7417972229667085380">Procentas, pagal kurį bus keičiamas neveikos delsos mastelis dirbant pristatymo režimu (nebenaudojama)</translation>
 <translation id="7421483919690710988">Nustatyti medijos disko talpyklos dydį baitais</translation>
 <translation id="7424751532654212117">Neleidžiamų papildinių sąrašo išimčių sąrašas</translation>
+<translation id="7426112309807051726">Nurodo, ar reikia išjungti <ph name="TLS_FALSE_START" /> optimizavimą. Atsižvelgiant į istoriją, ši politika pavadinta „DisableSSLRecordSplitting“.
+
+      Jei politika nenustatyta arba nustatyta į „false“, <ph name="TLS_FALSE_START" /> įgalinamas. Jei ji nustatyta į „true“, <ph name="TLS_FALSE_START" /> išjungiamas.</translation>
 <translation id="7433714841194914373">Įgalinti intuityviąją paiešką</translation>
 <translation id="7443616896860707393">Mišrios kilmės HTTP pagrindinio autentifikavimo raginimai</translation>
 <translation id="7468416082528382842">„Windows“ registro vieta:</translation>
@@ -2171,7 +2129,7 @@ Jei plėtinio nėra sąraše arba sąrašas nenustatytas, kreipiantis į API įv
 <translation id="8382184662529825177">Įgalinti nuotolinio patvirtinimo naudojimą siekiant apsaugoti įrenginio turinį</translation>
 <translation id="838870586332499308">Įgalinti duomenų tarptinklinį ryšį</translation>
 <translation id="8412312801707973447">Ar atliekami OCSP / CRL patikrinimai prisijungus</translation>
-<translation id="8424255554404582727">Nustatyti numatytąjį ekrano sukimo nustatymą, kuris bus iš naujo pritaikymas kiekvieną kartą paleidus iš naujo</translation>
+<translation id="8424255554404582727">Nustatyti numatytąjį ekrano sukimo nustatymą, kuris bus iš naujo pritaikomas kiekvieną kartą paleidus iš naujo</translation>
 <translation id="8426231401662877819">Sukti ekraną pagal laikrodžio rodyklę 90 laipsnių kampu</translation>
 <translation id="8451988835943702790">Naudoti naujo skirtuko puslapį kaip pagrindinį puslapį</translation>
 <translation id="8465065632133292531">Intuityviosios paieškos URL parametrai, kuriuose naudojama POST</translation>
@@ -2198,13 +2156,45 @@ Jei plėtinio nėra sąraše arba sąrašas nenustatytas, kreipiantis į API įv
 <translation id="8519264904050090490">Tvarkomi naudotojo neautomatinių išimčių URL</translation>
 <translation id="8544375438507658205">Numatytasis „<ph name="PRODUCT_FRAME_NAME" />“ HTML teikėjas</translation>
 <translation id="8549772397068118889">Įspėti, kai apsilankoma svetainėse, nesančiose turinio paketuose</translation>
-<translation id="8566842294717252664">Internetinės parduotuvės slėpimas Naujo skirtuko puslapyje ir programų paleidimo priemonėje</translation>
-<translation id="857925079934558818">Nurodo, ar reikia išjungti TLS klaidingo paleidimo optimizavimą. Atsižvelgiant į istoriją, ši politika pavadinta „DisableSSLRecordSplitting“.
+<translation id="855339549837475534">Tiek „Chromium“, tiek „Google Chrome“ palaiko tas pačias politikos
+      nuostatas. Atminkite, kad šiame dokumente gali būti politikos nuostatų, kurios
+      taikomos neišleistos versijos programinei įrangai (pvz., įrašas „palaikoma naudojant“
+      nurodo neišleistos versijos programą), ir tokios politikos nuostatos gali
+      būti pakeistos arba pašalintos be išankstinio įspėjimo.
 
-      Jei politika nenustatyta arba nustatyta į „false“, TLS klaidingas paleidimas įgalinamas. Jei ji nustatyta į „true“, TLS klaidingas paleidimas išjungiamas.</translation>
+      Šie politikos nuostatos griežtai skirtos konfigūruoti tik
+      vidiniams sistemos „<ph name="PRODUCT_NAME" />“
+      objektams. Šių politikos nuostatų naudojimas už organizacijos ribų (pvz.,
+      viešai platinamoje programoje) laikomas kenkėjišku ir
+      „Google“ bei antivirusinės programinės įrangos teikėjai tai tikriausiai laikys kenkėjiška programa.
+
+      Šių nustatymų nereikia sukonfigūruoti neautomatiškai! Lengvai naudojamų
+      šablonų, skirtų „Windows“, „Mac“ ir „Linux“, galite atsisiųsti adresu <ph name="POLICY_TEMPLATE_DOWNLOAD_URL" />.
+
+      Rekomenduojame politiką sistemoje „Windows“ nustatyti naudojant GPO, tačiau
+      aprūpinimo politika naudojant registrą vis tiek palaikoma „Windows“ objektuose,
+      kurie susieti su aktyvaus katalogo domenu.</translation>
+<translation id="8566842294717252664">Internetinės parduotuvės slėpimas Naujo skirtuko puslapyje ir programų paleidimo priemonėje</translation>
 <translation id="8587229956764455752">Leisti kurti naujų naudotojų paskyras</translation>
 <translation id="8614804915612153606">Neleidžiamas automatinis naujinys</translation>
 <translation id="8631434304112909927">iki <ph name="UNTIL_VERSION" /> versijos</translation>
+<translation id="863712305404093038">Blokuojama galimybė pasiekti sąraše pateiktus URL.
+
+      Naudojant šią politiką naudotojams neleidžiama įkelti tinklalapių iš juodojo URL sąrašo. Juodajame sąraše pateikiami URL šablonai, nurodantys, kurie URL bus įtraukti į juodąjį sąrašą.
+
+      Kiekvienas URL šablonas gali būti vietinių failų arba bendrojo URL šablonas. Vietinių failų šablonų formatas yra „file://path“, kur kelias („path“) turi būti absoliutus blokavimo kelias. Visos failų sistemos vietos, kurių priešdėlis yra kelias, bus užblokuotos.
+
+      Bendrojo URL šablono formatas yra „scheme://host:port/path“.
+      Jei nustatyta schema („scheme“), bus užblokuota tik nurodyta schema. Jei priešdėlis „scheme://“ nenurodytas, bus užblokuotos visos schemos.
+      Būtina nurodyti prieglobos serverį („host“). Tai gali būti prieglobos serverio pavadinimas arba IP adresas. Prieglobos serverio pavadinimo padomeniai taip pat bus blokuojami. Kad padomeniai nebūtų blokuojami, prieš prieglobos serverio pavadinimą nurodykite „.“. Naudojant specialųjį prieglobos serverio pavadinimą „*“ bus užblokuoti visi domenai.
+      Prievadas (nurodyti nebūtina) yra galiojantis prievado skaičius nuo 1 iki 65 535. Jei jis nenurodytas, blokuojami visi prievadai.
+      Jei nurodytas kelias („path“) (nėra būtinas), bus blokuojami tik keliai su tuo priešdėliu.
+
+      URL baltojo sąrašo politikoje galima pateikti išimčių. Šiose politikose galima pateikti iki 1 000 įrašų; kitų įrašų bus nepaisoma.
+
+      Atminkite, kad nerekomenduojama blokuoti vidinių „chrome://*“ URL, nes gali kilti netikėtų klaidų.
+
+      Jei ši politika nenustatyta, į naršyklės juodąjį sąrašą nebus įtrauktas nė vienas URL.</translation>
 <translation id="8649763579836720255">„Chrome“ OS įrenginiai gali naudoti nuotolinį patvirtinimą (patvirtinta prieiga), kad gautų „Chrome“ OS CA išduotą sertifikatą, pagal kurį nurodoma, kad įrenginys yra tinkamas paleisti apsaugotą turinį. Šis procesas apima aparatinės įrangos patvirtinimo informacijos siuntimą „Chrome“ OS CA, kuri unikaliai identifikuoja įrenginį.
 
           Jei šis nustatymas negalioja, įrenginys nenaudos nuotolinio turinio apsaugos patvirtinimo ir galbūt įrenginys negalės paleisti apsaugoto turinio.

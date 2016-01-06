@@ -4,6 +4,8 @@
 
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
+#include <utility>
+
 #include "components/guest_view/browser/guest_view_event.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -80,6 +82,7 @@ void RecordUserInitiatedUMA(
       case WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN:
         content::RecordAction(
             UserMetricsAction("WebView.Guest.PermissionAllow.PluginLoad"));
+        break;
       case WEB_VIEW_PERMISSION_TYPE_MEDIA:
         content::RecordAction(
             UserMetricsAction("WebView.PermissionAllow.Media"));
@@ -332,19 +335,19 @@ int WebViewPermissionHelper::RequestPermission(
   switch (permission_type) {
     case WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW: {
       web_view_guest_->DispatchEventToView(
-          new GuestViewEvent(webview::kEventNewWindow, args.Pass()));
+          new GuestViewEvent(webview::kEventNewWindow, std::move(args)));
       break;
     }
     case WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG: {
       web_view_guest_->DispatchEventToView(
-          new GuestViewEvent(webview::kEventDialog, args.Pass()));
+          new GuestViewEvent(webview::kEventDialog, std::move(args)));
       break;
     }
     default: {
       args->SetString(webview::kPermission,
                       PermissionTypeToString(permission_type));
       web_view_guest_->DispatchEventToView(new GuestViewEvent(
-          webview::kEventPermissionRequest, args.Pass()));
+          webview::kEventPermissionRequest, std::move(args)));
       break;
     }
   }

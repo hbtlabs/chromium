@@ -2,12 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
@@ -16,7 +23,6 @@
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service.h"
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service_factory.h"
 #include "chrome/browser/supervised_user/permission_request_creator.h"
-#include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_whitelist_service.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -389,7 +395,7 @@ class SupervisedUserServiceExtensionTestBase
     source->SetString(extensions::manifest_keys::kVersion, "1.0");
     extensions::ExtensionBuilder builder;
     scoped_refptr<extensions::Extension> extension =
-        builder.SetManifest(source.Pass()).Build();
+        builder.SetManifest(std::move(source)).Build();
     return extension;
   }
 
@@ -403,7 +409,9 @@ class SupervisedUserServiceExtensionTestBase
       creation_flags |= extensions::Extension::WAS_INSTALLED_BY_CUSTODIAN;
     extensions::ExtensionBuilder builder;
     scoped_refptr<extensions::Extension> extension =
-        builder.SetManifest(manifest.Pass()).AddFlags(creation_flags).Build();
+        builder.SetManifest(std::move(manifest))
+            .AddFlags(creation_flags)
+            .Build();
     return extension;
   }
 

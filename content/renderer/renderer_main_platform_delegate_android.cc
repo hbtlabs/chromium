@@ -7,6 +7,7 @@
 #include "base/android/build_info.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 
 #ifdef USE_SECCOMP_BPF
@@ -108,7 +109,7 @@ bool RendererMainPlatformDelegate::EnableSandbox() {
   }
 
   // Seccomp has been detected, check if the field trial experiment should run.
-  if (base::FeatureList::IsEnabled(kSeccompSandboxAndroidFeature)) {
+  if (base::FeatureList::IsEnabled(features::kSeccompSandboxAndroid)) {
     status_uma.set_status(RecordSeccompStatus::FEATURE_ENABLED);
 
     sandbox::SandboxBPF sandbox(new SandboxBPFBasePolicyAndroid());

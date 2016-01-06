@@ -4,6 +4,8 @@
 
 #include "chromecast/renderer/media/cma_renderer.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
@@ -46,7 +48,7 @@ CmaRenderer::CmaRenderer(scoped_ptr<MediaPipelineProxy> media_pipeline,
                          ::media::GpuVideoAcceleratorFactories* gpu_factories)
     : media_task_runner_factory_(
           new BalancedMediaTaskRunnerFactory(kMaxDeltaFetcher)),
-      media_pipeline_(media_pipeline.Pass()),
+      media_pipeline_(std::move(media_pipeline)),
       audio_pipeline_(media_pipeline_->GetAudioPipeline()),
       video_pipeline_(media_pipeline_->GetVideoPipeline()),
       video_renderer_sink_(video_renderer_sink),
@@ -110,7 +112,6 @@ void CmaRenderer::Initialize(
   buffering_state_cb_ = buffering_state_cb;
   ended_cb_ = ended_cb;
   error_cb_ = error_cb;
-  // TODO(erickung): wire up waiting_for_decryption_key_cb.
   waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
 
   MediaPipelineClient media_pipeline_client;
@@ -257,6 +258,8 @@ void CmaRenderer::InitializeAudioPipeline() {
 
   // Receive events from the audio pipeline.
   AvPipelineClient av_pipeline_client;
+  av_pipeline_client.wait_for_key_cb = ::media::BindToCurrentLoop(
+      base::Bind(&CmaRenderer::OnWaitForKey, weak_this_, true));
   av_pipeline_client.eos_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaRenderer::OnEosReached, weak_this_, true));
   av_pipeline_client.playback_error_cb =
@@ -272,8 +275,8 @@ void CmaRenderer::InitializeAudioPipeline() {
   if (config.codec() == ::media::kCodecAAC)
     stream->EnableBitstreamConverter();
 
-  media_pipeline_->InitializeAudio(
-      config, frame_provider.Pass(), audio_initialization_done_cb);
+  media_pipeline_->InitializeAudio(config, std::move(frame_provider),
+                                   audio_initialization_done_cb);
 }
 
 void CmaRenderer::OnAudioPipelineInitializeDone(
@@ -317,6 +320,8 @@ void CmaRenderer::InitializeVideoPipeline() {
 
   // Receive events from the video pipeline.
   VideoPipelineClient client;
+  client.av_pipeline_client.wait_for_key_cb = ::media::BindToCurrentLoop(
+      base::Bind(&CmaRenderer::OnWaitForKey, weak_this_, false));
   client.av_pipeline_client.eos_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaRenderer::OnEosReached, weak_this_, false));
   client.av_pipeline_client.playback_error_cb =
@@ -338,8 +343,8 @@ void CmaRenderer::InitializeVideoPipeline() {
 
   std::vector<::media::VideoDecoderConfig> configs;
   configs.push_back(config);
-  media_pipeline_->InitializeVideo(
-      configs, frame_provider.Pass(), video_initialization_done_cb);
+  media_pipeline_->InitializeVideo(configs, std::move(frame_provider),
+                                   video_initialization_done_cb);
 }
 
 void CmaRenderer::OnVideoPipelineInitializeDone(
@@ -362,6 +367,10 @@ void CmaRenderer::OnVideoPipelineInitializeDone(
   has_video_ = video_stream_present;
   CompleteStateTransition(kFlushed);
   base::ResetAndReturn(&init_cb_).Run(::media::PIPELINE_OK);
+}
+
+void CmaRenderer::OnWaitForKey(bool is_audio) {
+  waiting_for_decryption_key_cb_.Run();
 }
 
 void CmaRenderer::OnEosReached(bool is_audio) {
@@ -444,7 +453,10 @@ void CmaRenderer::OnFlushDone(::media::PipelineStatus status) {
   }
 
   CompleteStateTransition(kFlushed);
-  base::ResetAndReturn(&flush_cb_).Run();
+  // If OnError was called while the flush was in progress, |flush_cb_| might
+  // be null.
+  if (!flush_cb_.is_null())
+    base::ResetAndReturn(&flush_cb_).Run();
 }
 
 void CmaRenderer::OnError(::media::PipelineStatus error) {

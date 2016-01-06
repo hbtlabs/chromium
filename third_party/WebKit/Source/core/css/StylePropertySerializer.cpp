@@ -20,7 +20,6 @@
  * Boston, MA 02110-1301, USA.
 */
 
-#include "config.h"
 #include "core/css/StylePropertySerializer.h"
 
 #include "core/CSSValueKeywords.h"
@@ -509,8 +508,7 @@ String StylePropertySerializer::borderSpacingValue(const StylePropertyShorthand&
 void StylePropertySerializer::appendFontLonghandValueIfNotNormal(CSSPropertyID propertyID, StringBuilder& result, String& commonValue) const
 {
     int foundPropertyIndex = m_propertySet.findPropertyIndex(propertyID);
-    if (foundPropertyIndex == -1)
-        return;
+    ASSERT(foundPropertyIndex != -1);
 
     const CSSValue* val = m_propertySet.propertyAt(foundPropertyIndex).value();
     if (val->isPrimitiveValue() && toCSSPrimitiveValue(val)->getValueID() == CSSValueNormal) {
@@ -545,10 +543,12 @@ void StylePropertySerializer::appendFontLonghandValueIfNotNormal(CSSPropertyID p
 
 String StylePropertySerializer::fontValue() const
 {
+    if (!isPropertyShorthandAvailable(fontShorthand()) && !shorthandHasOnlyInitialOrInheritedValue(fontShorthand()))
+        return emptyString();
+
     int fontSizePropertyIndex = m_propertySet.findPropertyIndex(CSSPropertyFontSize);
     int fontFamilyPropertyIndex = m_propertySet.findPropertyIndex(CSSPropertyFontFamily);
-    if (fontSizePropertyIndex == -1 || fontFamilyPropertyIndex == -1)
-        return emptyString();
+    ASSERT(fontSizePropertyIndex != -1 && fontFamilyPropertyIndex != -1);
 
     PropertyValueForSerializer fontSizeProperty = m_propertySet.propertyAt(fontSizePropertyIndex);
     PropertyValueForSerializer fontFamilyProperty = m_propertySet.propertyAt(fontFamilyPropertyIndex);

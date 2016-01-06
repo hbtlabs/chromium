@@ -34,8 +34,8 @@
 #include "platform/geometry/FloatRoundedRect.h"
 #include "platform/graphics/DashArray.h"
 #include "platform/graphics/DrawLooperBuilder.h"
-#include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/GraphicsContextState.h"
+#include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkMetaData.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -60,6 +60,7 @@ namespace blink {
 class ImageBuffer;
 class KURL;
 class PaintController;
+class Path;
 
 class PLATFORM_EXPORT GraphicsContext {
     WTF_MAKE_NONCOPYABLE(GraphicsContext); USING_FAST_MALLOC(GraphicsContext);
@@ -249,9 +250,16 @@ public:
 
     SkFilterQuality computeFilterQuality(Image*, const FloatRect& dest, const FloatRect& src) const;
 
-    // URL drawing
+    // Sets target URL of a clickable area.
     void setURLForRect(const KURL&, const IntRect&);
+
+    // Sets destination of a URL fragment (in a URL pointing to the same web page) of a clickable area.
+    // When the area is clicked, the page should be scrolled to the location set by setURLDestinationLocation()
+    // for the destination whose name equals the fragment.
     void setURLFragmentForRect(const String& name, const IntRect&);
+
+    // Sets location of a URL destination (a.k.a. anchor) in the page.
+    void setURLDestinationLocation(const String& name, const IntPoint&);
 
     static void adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2, float strokeWidth, StrokeStyle);
 

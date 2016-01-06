@@ -22,7 +22,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutText.h"
 
 #include "core/dom/AXObjectCache.h"
@@ -728,7 +727,6 @@ ALWAYS_INLINE float LayoutText::widthFromFont(const Font& f, int start, int len,
     TextRun run = constructTextRun(f, this, start, len, styleRef(), textDirection);
     run.setCharactersLength(textLength() - start);
     ASSERT(run.charactersLength() >= run.length());
-    run.setCodePath(canUseSimpleFontCodePath() ? TextRun::ForceSimple : TextRun::ForceComplex);
     run.setTabSize(!style()->collapseWhiteSpace(), style()->tabSize());
     run.setXPos(leadWidth + textWidthSoFar);
 
@@ -793,7 +791,6 @@ void LayoutText::trimmedPrefWidths(LayoutUnit leadWidthLayoutUnit,
         if (stripFrontSpaces) {
             const UChar spaceChar = spaceCharacter;
             TextRun run = constructTextRun(font, &spaceChar, 1, styleRef(), direction);
-            run.setCodePath(canUseSimpleFontCodePath() ? TextRun::ForceSimple : TextRun::ForceComplex);
             float spaceWidth = font.width(run);
             floatMaxWidth -= spaceWidth;
         } else {
@@ -1083,7 +1080,6 @@ void LayoutText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
             } else {
                 TextRun run = constructTextRun(f, this, i, 1, styleToUse, textDirection);
                 run.setCharactersLength(len - i);
-                run.setCodePath(canUseSimpleFontCodePath() ? TextRun::ForceSimple : TextRun::ForceComplex);
                 ASSERT(run.charactersLength() >= run.length());
                 run.setTabSize(!style()->collapseWhiteSpace(), style()->tabSize());
                 run.setXPos(leadWidth + currMaxWidth);
@@ -1116,8 +1112,8 @@ void LayoutText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
     GlyphOverflow glyphOverflow;
     glyphOverflow.setFromBounds(glyphBounds, f.fontMetrics().floatAscent(), f.fontMetrics().floatDescent(), m_maxWidth);
     // We shouldn't change our mind once we "know".
-    ASSERT(!m_knownToHaveNoOverflowAndNoFallbackFonts || (fallbackFonts.isEmpty() && glyphOverflow.isZero()));
-    m_knownToHaveNoOverflowAndNoFallbackFonts = fallbackFonts.isEmpty() && glyphOverflow.isZero();
+    ASSERT(!m_knownToHaveNoOverflowAndNoFallbackFonts || (fallbackFonts.isEmpty() && glyphOverflow.isApproximatelyZero()));
+    m_knownToHaveNoOverflowAndNoFallbackFonts = fallbackFonts.isEmpty() && glyphOverflow.isApproximatelyZero();
 
     clearPreferredLogicalWidthsDirty();
 }
@@ -1517,7 +1513,6 @@ float LayoutText::width(unsigned from, unsigned len, const Font& f, LayoutUnit x
         run.setCharactersLength(textLength() - from);
         ASSERT(run.charactersLength() >= run.length());
 
-        run.setCodePath(canUseSimpleFontCodePath() ? TextRun::ForceSimple : TextRun::ForceComplex);
         run.setTabSize(!style()->collapseWhiteSpace(), style()->tabSize());
         run.setXPos(xPos.toFloat());
         w = f.width(run, fallbackFonts, glyphBounds);
@@ -1584,7 +1579,7 @@ LayoutRect LayoutText::clippedOverflowRectForPaintInvalidation(const LayoutBoxMo
         return LayoutRect();
 
     LayoutRect paintInvalidationRect(visualOverflowRect());
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
+    mapToVisibleRectInAncestorSpace(paintInvalidationContainer, paintInvalidationRect, paintInvalidationState);
     return paintInvalidationRect;
 }
 
@@ -1623,7 +1618,7 @@ LayoutRect LayoutText::selectionRectForPaintInvalidation(const LayoutBoxModelObj
         rect.unite(LayoutRect(ellipsisRectForBox(box, startPos, endPos)));
     }
 
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
+    mapToVisibleRectInAncestorSpace(paintInvalidationContainer, rect, 0);
     // FIXME: groupedMapping() leaks the squashing abstraction.
     if (paintInvalidationContainer->layer()->groupedMapping())
         PaintLayer::mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);
@@ -1870,7 +1865,7 @@ void LayoutText::momentarilyRevealLastTypedCharacter(unsigned lastTypedCharacter
 
 PassRefPtr<AbstractInlineTextBox> LayoutText::firstAbstractInlineTextBox()
 {
-    return AbstractInlineTextBox::getOrCreate(this, m_firstTextBox);
+    return AbstractInlineTextBox::getOrCreate(LineLayoutText(this), m_firstTextBox);
 }
 
 void LayoutText::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason, const LayoutRect* paintInvalidationRect) const

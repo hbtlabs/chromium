@@ -4,12 +4,16 @@
 
 #include "components/data_reduction_proxy/content/browser/content_lofi_decider.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
@@ -87,7 +91,7 @@ class ContentLoFiDeciderTest : public testing::Test {
         data_reduction_proxy_lofi_decider(
             new data_reduction_proxy::ContentLoFiDecider());
     test_context_->io_data()->set_lofi_decider(
-        data_reduction_proxy_lofi_decider.Pass());
+        std::move(data_reduction_proxy_lofi_decider));
   }
 
   scoped_ptr<net::URLRequest> CreateRequest(bool is_using_lofi) {
@@ -102,7 +106,7 @@ class ContentLoFiDeciderTest : public testing::Test {
         false,  // is_async
         is_using_lofi);
 
-    return request.Pass();
+    return request;
   }
 
   void NotifyBeforeSendProxyHeaders(net::HttpRequestHeaders* headers,

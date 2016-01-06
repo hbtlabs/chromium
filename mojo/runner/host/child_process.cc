@@ -4,6 +4,10 @@
 
 #include "mojo/runner/host/child_process.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -124,7 +128,9 @@ class AppContext : public embedder::ProcessDelegate {
     // create a message pipe which requires this code to be run first.
     embedder::InitIPCSupport(embedder::ProcessType::NONE, this, io_runner_,
                              embedder::ScopedPlatformHandle());
+  }
 
+  void StartControllerThread() {
     // Create and start our controller thread.
     base::Thread::Options controller_thread_options;
     controller_thread_options.message_loop_type =
@@ -154,7 +160,7 @@ class AppContext : public embedder::ProcessDelegate {
   ChildControllerImpl* controller() const { return controller_.get(); }
 
   void set_controller(scoped_ptr<ChildControllerImpl> controller) {
-    controller_ = controller.Pass();
+    controller_ = std::move(controller);
   }
 
  private:
@@ -211,12 +217,15 @@ class ChildControllerImpl : public ChildController {
     scoped_ptr<ChildControllerImpl> impl(
         new ChildControllerImpl(app_context, app_library, unblocker));
 
-    impl->Bind(host_message_pipe.Pass());
+    impl->Bind(std::move(host_message_pipe));
 
-    app_context->set_controller(impl.Pass());
+    app_context->set_controller(std::move(impl));
   }
 
-  void Bind(ScopedMessagePipeHandle handle) { binding_.Bind(handle.Pass()); }
+  void Bind(ScopedMessagePipeHandle handle) {
+    binding_.Bind(std::move(handle));
+    binding_.set_connection_error_handler([this]() { OnConnectionError(); });
+  }
 
   void OnConnectionError() {
     // A connection error means the connection to the shell is lost. This is not
@@ -249,14 +258,12 @@ class ChildControllerImpl : public ChildController {
         app_library_(app_library),
         unblocker_(unblocker),
         channel_info_(nullptr),
-        binding_(this) {
-    binding_.set_connection_error_handler([this]() { OnConnectionError(); });
-  }
+        binding_(this) {}
 
   static void StartAppOnMainThread(
       base::NativeLibrary app_library,
       InterfaceRequest<Application> application_request) {
-    if (!RunNativeApplication(app_library, application_request.Pass())) {
+    if (!RunNativeApplication(app_library, std::move(application_request))) {
       LOG(ERROR) << "Failure to RunNativeApplication()";
     }
   }
@@ -295,17 +302,17 @@ scoped_ptr<mojo::runner::LinuxSandbox> InitializeSandbox() {
   sandbox->EngageNamespaceSandbox();
   sandbox->EngageSeccompSandbox();
   sandbox->Seal();
-  return sandbox.Pass();
+  return sandbox;
 }
 #endif
 
 ScopedMessagePipeHandle InitializeHostMessagePipe(
     embedder::ScopedPlatformHandle platform_channel,
     scoped_refptr<base::TaskRunner> io_task_runner) {
-  ScopedMessagePipeHandle host_message_pipe(embedder::CreateChannel(
-      platform_channel.Pass(), base::Bind(&DidCreateChannel), io_task_runner));
+  ScopedMessagePipeHandle host_message_pipe(
+      embedder::CreateChannel(std::move(platform_channel),
+                              base::Bind(&DidCreateChannel), io_task_runner));
 
-#if defined(OS_WIN)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
     // When using the new Mojo EDK, each message pipe is backed by a platform
     // handle. The one platform handle that comes on the command line is used
@@ -331,19 +338,10 @@ ScopedMessagePipeHandle InitializeHostMessagePipe(
     CHECK(broker_channel.is_valid());
     embedder::SetParentPipeHandle(
         mojo::embedder::ScopedPlatformHandle(mojo::embedder::PlatformHandle(
-            broker_channel.release().
-#if defined(OS_WIN)
-                                    handle
-#else
-                                    fd
-#endif
-            )));
+            broker_channel.release().handle)));
   }
-#else
-  // TODO(jam): hook up on POSIX
-#endif
 
-  return host_message_pipe.Pass();
+  return host_message_pipe;
 }
 
 }  // namespace
@@ -363,15 +361,14 @@ int ChildProcessMain() {
   base::i18n::InitializeICU();
   if (app_library)
     CallLibraryEarlyInitialization(app_library);
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
-  if (command_line.HasSwitch(switches::kEnableSandbox)) {
 #if !defined(OFFICIAL_BUILD)
-    // Initialize stack dumping just before initializing sandbox to make
-    // sure symbol names in all loaded libraries will be cached.
-    base::debug::EnableInProcessStackDumping();
+  // Initialize stack dumping just before initializing sandbox to make
+  // sure symbol names in all loaded libraries will be cached.
+  base::debug::EnableInProcessStackDumping();
 #endif
+#if defined(OS_LINUX) && !defined(OS_ANDROID)
+  if (command_line.HasSwitch(switches::kEnableSandbox))
     sandbox = InitializeSandbox();
-  }
 #endif
 
   embedder::ScopedPlatformHandle platform_channel =
@@ -384,7 +381,8 @@ int ChildProcessMain() {
   AppContext app_context;
   app_context.Init();
   ScopedMessagePipeHandle host_message_pipe = InitializeHostMessagePipe(
-      platform_channel.Pass(), app_context.io_runner());
+      std::move(platform_channel), app_context.io_runner());
+  app_context.StartControllerThread();
   Blocker blocker;
   app_context.controller_runner()->PostTask(
       FROM_HERE,

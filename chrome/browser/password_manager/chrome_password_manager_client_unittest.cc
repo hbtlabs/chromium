@@ -4,9 +4,12 @@
 
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -14,7 +17,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -27,6 +30,7 @@
 #include "components/password_manager/core/browser/log_router.h"
 #include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
@@ -121,7 +125,7 @@ ChromePasswordManagerClient* ChromePasswordManagerClientTest::GetClient() {
 
 bool ChromePasswordManagerClientTest::WasLoggingActivationMessageSent(
     bool* activation_flag) {
-  const uint32 kMsgID = AutofillMsg_SetLoggingState::ID;
+  const uint32_t kMsgID = AutofillMsg_SetLoggingState::ID;
   const IPC::Message* message =
       process()->sink().GetFirstMessageMatching(kMsgID);
   if (!message)
@@ -163,8 +167,13 @@ TEST_F(ChromePasswordManagerClientTest,
 
 TEST_F(ChromePasswordManagerClientTest,
        IsAutomaticPasswordSavingEnabledWhenFlagIsSetTest) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      password_manager::switches::kEnableAutomaticPasswordSaving);
+  // Add the enable-automatic-password-saving feature.
+  base::FeatureList::ClearInstanceForTesting();
+  scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->InitializeFromCommandLine(
+      password_manager::features::kEnableAutomaticPasswordSaving.name, "");
+  base::FeatureList::SetInstance(std::move(feature_list));
+
   if (chrome::GetChannel() == version_info::Channel::UNKNOWN)
     EXPECT_TRUE(GetClient()->IsAutomaticPasswordSavingEnabled());
   else
@@ -177,7 +186,7 @@ TEST_F(ChromePasswordManagerClientTest, GetPasswordSyncState) {
   ProfileSyncServiceMock* mock_sync_service =
       static_cast<ProfileSyncServiceMock*>(
           ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-              profile(), ProfileSyncServiceMock::BuildMockProfileSyncService));
+              profile(), BuildMockProfileSyncService));
 
   syncer::ModelTypeSet active_types;
   active_types.Put(syncer::PASSWORDS);

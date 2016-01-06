@@ -25,6 +25,7 @@ source_set("browser") {
     "//components/invalidation/impl",
     "//components/invalidation/public",
     "//components/keyed_service/core",
+    "//components/password_manager/core/browser",
     "//components/password_manager/sync/browser",
     "//components/pref_registry",
     "//components/signin/core/browser",
@@ -40,5 +41,55 @@ source_set("browser") {
     "//net",
     "//sync",
     "//ui/base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "profile_sync_service_unittest.cc",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//base/test:test_support",
+    "//components/browser_sync/common",
+    "//components/dom_distiller/core",
+    "//components/invalidation/impl",
+    "//components/invalidation/public",
+    "//components/signin/core/browser",
+    "//components/signin/core/browser:test_support",
+    "//components/strings",
+    "//components/sync_driver",
+    "//components/sync_driver:test_support",
+    "//components/sync_sessions",
+    "//components/sync_sessions:test_support",
+    "//components/syncable_prefs",
+    "//components/syncable_prefs:test_support",
+    "//components/version_info",
+    "//components/version_info:generate_version_info",
+    "//google_apis",
+    "//net",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/base",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "profile_sync_service_mock.cc",
+    "profile_sync_service_mock.h",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//components/sync_driver:test_support",
+    "//google_apis",
+    "//testing/gmock",
   ]
 }

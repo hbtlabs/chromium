@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/bind.h"
@@ -11,6 +13,7 @@
 #include "base/location.h"
 #include "base/prefs/pref_service.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
@@ -112,7 +115,6 @@
 #if defined(OS_ANDROID) || defined(OS_IOS)
 #include "chrome/browser/ui/webui/net_export_ui.h"
 #else
-#include "chrome/browser/devtools/device/webrtc/webrtc_device_provider.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/easy_unlock_service_factory.h"
 #include "chrome/browser/ui/webui/copresence_ui.h"
@@ -337,6 +339,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<DomainReliabilityInternalsUI>;
   if (url.host() == chrome::kChromeUIFlagsHost)
     return &NewWebUI<FlagsUI>;
+  if (url.host() == chrome::kChromeUIGCMInternalsHost)
+    return &NewWebUI<GCMInternalsUI>;
   if (url.host() == chrome::kChromeUIHistoryFrameHost)
     return &NewWebUI<HistoryUI>;
   if (url.host() == chrome::kChromeUIInstantHost)
@@ -398,8 +402,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       return &NewWebUI<MdDownloadsUI>;
     return &NewWebUI<DownloadsUI>;
   }
-  if (url.host() == chrome::kChromeUIGCMInternalsHost)
-    return &NewWebUI<GCMInternalsUI>;
   // Help is implemented with native UI elements on Android.
   if (url.host() == chrome::kChromeUIHelpFrameHost)
     return &NewWebUI<HelpUI>;
@@ -484,13 +486,13 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::SlowTraceController>;
   if (url.host() == chrome::kChromeUIVoiceSearchHost)
     return &NewWebUI<VoiceSearchUI>;
-#endif  // defined(OS_CHROMEOS)
-#if !defined(OFFICIAL_BUILD) && defined(OS_CHROMEOS) && !defined(NDEBUG)
+#if !defined(GOOGLE_CHROME_BUILD) && !defined(NDEBUG)
   if (!base::SysInfo::IsRunningOnChromeOS()) {
     if (url.host() == chrome::kChromeUIDeviceEmulatorHost)
       return &NewWebUI<DeviceEmulatorUI>;
   }
-#endif // !defined(OFFICIAL_BUILD) && defined(OS_CHROMEOS) && !defined(NDEBUG)
+#endif  // !defined(GOOGLE_CHROME_BUILD) && !defined(NDEBUG)
+#endif  // defined(OS_CHROMEOS)
 #if defined(OS_ANDROID) || defined(OS_IOS)
   if (url.host() == chrome::kChromeUINetExportHost)
     return &NewWebUI<NetExportUI>;
@@ -501,8 +503,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<InlineLoginUI>;
   if (url.SchemeIs(content::kChromeDevToolsScheme))
     return &NewWebUI<DevToolsUI>;
-  if (url.host() == chrome::kChromeUIWebRTCDeviceProviderHost)
-    return &NewWebUI<WebRTCDeviceProvider::WebUI>;
 
   // chrome://inspect isn't supported on Android nor iOS. Page debugging is
   // handled by a remote devtools on the host machine, and other elements, i.e.

@@ -5,7 +5,9 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_ASSOCIATED_INTERFACE_PTR_STATE_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_ASSOCIATED_INTERFACE_PTR_STATE_H_
 
+#include <stdint.h>
 #include <algorithm>  // For |std::swap()|.
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -24,6 +26,8 @@ namespace internal {
 template <typename Interface>
 class AssociatedInterfacePtrState {
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   AssociatedInterfacePtrState() : version_(0u) {}
 
   ~AssociatedInterfacePtrState() {
@@ -69,7 +73,7 @@ class AssociatedInterfacePtrState {
     swap(other->version_, version_);
   }
 
-  void Bind(AssociatedInterfacePtrInfo<Interface> info) {
+  void Bind(AssociatedInterfacePtrInfo<GenericInterface> info) {
     DCHECK(!endpoint_client_);
     DCHECK(!proxy_);
     DCHECK_EQ(0u, version_);
@@ -85,14 +89,14 @@ class AssociatedInterfacePtrState {
 
   // After this method is called, the object is in an invalid state and
   // shouldn't be reused.
-  AssociatedInterfacePtrInfo<Interface> PassInterface() {
+  AssociatedInterfacePtrInfo<GenericInterface> PassInterface() {
     ScopedInterfaceEndpointHandle handle = endpoint_client_->PassHandle();
     endpoint_client_.reset();
     proxy_.reset();
 
-    AssociatedInterfacePtrInfo<Interface> result;
+    AssociatedInterfacePtrInfo<GenericInterface> result;
     result.set_version(version_);
-    AssociatedInterfacePtrInfoHelper::SetHandle(&result, handle.Pass());
+    AssociatedInterfacePtrInfoHelper::SetHandle(&result, std::move(handle));
     return result.Pass();
   }
 

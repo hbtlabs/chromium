@@ -42,7 +42,7 @@ source_set("extensions") {
     "//chrome/common",
     "//chrome/common/extensions/api:api_registration",
     "//chrome/common/safe_browsing:proto",
-    "//chrome/installer/util",
+    "//chrome/installer/util:with_no_strings",
     "//components/copresence",
     "//components/data_reduction_proxy/proto:data_reduction_proxy_proto",
     "//components/dom_distiller/core",
@@ -109,13 +109,6 @@ source_set("extensions") {
     if (is_android) {
       sources -= [ "api/messaging/native_process_launcher_posix.cc" ]
     }
-  }
-
-  if (!is_android) {
-    sources +=
-        rebase_path(gypi_values.chrome_browser_extensions_non_android_sources,
-                    ".",
-                    "//chrome")
   }
 
   if (use_ash) {

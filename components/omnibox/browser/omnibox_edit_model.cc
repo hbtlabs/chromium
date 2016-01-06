@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
@@ -171,7 +173,7 @@ OmniboxEditModel::State::~State() {
 OmniboxEditModel::OmniboxEditModel(OmniboxView* view,
                                    OmniboxEditController* controller,
                                    scoped_ptr<OmniboxClient> client)
-    : client_(client.Pass()),
+    : client_(std::move(client)),
       view_(view),
       controller_(controller),
       focus_state_(OMNIBOX_FOCUS_NONE),
@@ -451,8 +453,7 @@ void OmniboxEditModel::SetInputInProgress(bool in_progress) {
     autocomplete_controller()->ResetSession();
   }
 
-  controller_->GetToolbarModel()->set_input_in_progress(in_progress);
-  controller_->UpdateWithoutTabRestore();
+  controller_->OnInputInProgress(in_progress);
 
   if (user_input_in_progress_ || !in_revert_)
     client_->OnInputStateChanged();

@@ -10,7 +10,7 @@
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_spdy_session.h"
 #include "net/quic/reliable_quic_stream.h"
-#include "net/tools/quic/quic_spdy_server_stream.h"
+#include "net/tools/quic/quic_simple_server_stream.h"
 
 namespace net {
 namespace tools {
@@ -60,7 +60,7 @@ void QuicServerSession::OnConfigNegotiated() {
       last_bandwidth_resumption || max_bandwidth_resumption;
   if (cached_network_params != nullptr && bandwidth_resumption_enabled_ &&
       cached_network_params->serving_region() == serving_region_) {
-    int64 seconds_since_estimate =
+    int64_t seconds_since_estimate =
         connection()->clock()->WallNow().ToUNIXSeconds() -
         cached_network_params->timestamp();
     bool estimate_within_last_hour =
@@ -108,10 +108,10 @@ void QuicServerSession::OnCongestionWindowChange(QuicTime now) {
   // client, or not enough packets have been sent, then return early.
   const QuicSentPacketManager& sent_packet_manager =
       connection()->sent_packet_manager();
-  int64 srtt_ms =
+  int64_t srtt_ms =
       sent_packet_manager.GetRttStats()->smoothed_rtt().ToMilliseconds();
-  int64 now_ms = now.Subtract(last_scup_time_).ToMilliseconds();
-  int64 packets_since_last_scup =
+  int64_t now_ms = now.Subtract(last_scup_time_).ToMilliseconds();
+  int64_t packets_since_last_scup =
       connection()->packet_number_of_last_sent_packet() -
       last_scup_packet_number_;
   if (now_ms < (kMinIntervalBetweenServerConfigUpdatesRTTs * srtt_ms) ||
@@ -132,7 +132,7 @@ void QuicServerSession::OnCongestionWindowChange(QuicTime now) {
   // we sent to the client, and if so, send the new one.
   QuicBandwidth new_bandwidth_estimate = bandwidth_recorder.BandwidthEstimate();
 
-  int64 bandwidth_delta =
+  int64_t bandwidth_delta =
       std::abs(new_bandwidth_estimate.ToBitsPerSecond() -
                bandwidth_estimate_sent_to_client_.ToBitsPerSecond());
 
@@ -152,7 +152,7 @@ void QuicServerSession::OnCongestionWindowChange(QuicTime now) {
   // Include max bandwidth in the update.
   QuicBandwidth max_bandwidth_estimate =
       bandwidth_recorder.MaxBandwidthEstimate();
-  int32 max_bandwidth_timestamp = bandwidth_recorder.MaxBandwidthTimestamp();
+  int32_t max_bandwidth_timestamp = bandwidth_recorder.MaxBandwidthTimestamp();
 
   // Fill the proto before passing it to the crypto stream to send.
   CachedNetworkParameters cached_network_params;
@@ -190,7 +190,8 @@ bool QuicServerSession::ShouldCreateIncomingDynamicStream(QuicStreamId id) {
 
   if (id % 2 == 0) {
     DVLOG(1) << "Invalid incoming even stream_id:" << id;
-    connection()->SendConnectionClose(QUIC_INVALID_STREAM_ID);
+    connection()->SendConnectionCloseWithDetails(
+        QUIC_INVALID_STREAM_ID, "Client created even numbered stream");
     return false;
   }
   return true;
@@ -202,12 +203,37 @@ QuicSpdyStream* QuicServerSession::CreateIncomingDynamicStream(
     return nullptr;
   }
 
-  return new QuicSpdyServerStream(id, this);
+  return new QuicSimpleServerStream(id, this);
 }
 
-QuicSpdyStream* QuicServerSession::CreateOutgoingDynamicStream() {
-  DLOG(ERROR) << "Server push not yet supported";
-  return nullptr;
+bool QuicServerSession::ShouldCreateOutgoingDynamicStream() {
+  if (!connection()->connected()) {
+    LOG(DFATAL) << "ShouldCreateOutgoingDynamicStream called when disconnected";
+    return false;
+  }
+  if (!crypto_stream_->encryption_established()) {
+    LOG(DFATAL) << "Encryption not established so no outgoing stream created.";
+    return false;
+  }
+  if (GetNumOpenOutgoingStreams() >= get_max_open_streams()) {
+    VLOG(1) << "No more streams should be created. "
+            << "Already " << GetNumOpenOutgoingStreams() << " open.";
+    return false;
+  }
+  return true;
+}
+
+QuicSpdyStream* QuicServerSession::CreateOutgoingDynamicStream(
+    SpdyPriority priority) {
+  if (!ShouldCreateOutgoingDynamicStream()) {
+    return nullptr;
+  }
+
+  QuicSpdyStream* stream =
+      new QuicSimpleServerStream(GetNextOutgoingStreamId(), this);
+  stream->SetPriority(priority);
+  ActivateStream(stream);
+  return stream;
 }
 
 QuicCryptoServerStreamBase* QuicServerSession::GetCryptoStream() {

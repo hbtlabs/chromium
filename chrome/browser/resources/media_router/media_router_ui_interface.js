@@ -53,22 +53,20 @@ cr.define('media_router.ui', function() {
    * @param {deviceMissingUrl: string,
    *         sinks: !Array<!media_router.Sink>,
    *         routes: !Array<!media_router.Route>,
-   *         castModes: !Array<!media_router.CastMode>,
-   *         initialCastModeType: number} data
+   *         castModes: !Array<!media_router.CastMode>} data
    * Parameters in data:
    *   deviceMissingUrl - url to be opened on "Device missing?" clicked.
    *   sinks - list of sinks to be displayed.
    *   routes - list of routes that are associated with the sinks.
    *   castModes - list of available cast modes.
-   *   initialCastModeType - cast mode to show initially. Expected to be
-   *       included in |castModes|.
    */
   function setInitialData(data) {
     container.deviceMissingUrl = data['deviceMissingUrl'];
+    container.castModeList = data['castModes'];
     container.allSinks = data['sinks'];
     container.routeList = data['routes'];
-    container.initializeCastModes(data['castModes'],
-        data['initialCastModeType']);
+    container.maybeShowRouteDetailsOnOpen();
+    media_router.browserApi.onInitialDataReceived();
   }
 
   /**
@@ -140,7 +138,41 @@ cr.define('media_router.browserApi', function() {
    * @param {!media_router.Route} route
    */
   function closeRoute(route) {
-    chrome.send('closeRoute', [{routeId: route.id}]);
+    chrome.send('closeRoute', [{routeId: route.id, isLocal: route.isLocal}]);
+  }
+
+  /**
+   * Indicates that the initial data has been received.
+   */
+  function onInitialDataReceived() {
+    chrome.send('onInitialDataReceived');
+  }
+
+  /**
+   * Reports the index of the selected sink.
+   *
+   * @param {number} sinkIndex
+   */
+  function reportClickedSinkIndex(sinkIndex) {
+    chrome.send('reportClickedSinkIndex', [sinkIndex]);
+  }
+
+  /**
+   * Reports the navigation to the specified view.
+   *
+   * @param {string} view
+   */
+  function reportNavigateToView(view) {
+    chrome.send('reportNavigateToView', [view]);
+  }
+
+  /**
+   * Reports the cast mode that the user selected.
+   *
+   * @param {number} castModeType
+   */
+  function reportSelectedCastMode(castModeType) {
+    chrome.send('reportSelectedCastMode', [castModeType]);
   }
 
   /**
@@ -176,6 +208,10 @@ cr.define('media_router.browserApi', function() {
     actOnIssue: actOnIssue,
     closeDialog: closeDialog,
     closeRoute: closeRoute,
+    onInitialDataReceived: onInitialDataReceived,
+    reportClickedSinkIndex: reportClickedSinkIndex,
+    reportNavigateToView: reportNavigateToView,
+    reportSelectedCastMode: reportSelectedCastMode,
     reportSinkCount: reportSinkCount,
     requestInitialData: requestInitialData,
     requestRoute: requestRoute,

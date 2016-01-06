@@ -5,21 +5,18 @@
 #ifndef TOOLS_BATTOR_AGENT_BATTOR_AGENT_H_
 #define TOOLS_BATTOR_AGENT_BATTOR_AGENT_H_
 
-#include <string>
-
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "tools/battor_agent/battor_connection.h"
 #include "tools/battor_agent/battor_error.h"
 
 namespace battor {
 
-// A BattOrAgent is a class used to synchronously communicate with a BattOr for
+// A BattOrAgent is a class used to asynchronously communicate with a BattOr for
 // the purpose of collecting power samples. A BattOr is an external USB device
 // that's capable of recording accurate, high-frequency (2000Hz) power samples.
-//
-// Because the communication is synchronous and passes over a serial connection,
-// callers wishing to avoid blocking the thread (like the Chromium tracing
-// controller) should issue these commands in a separate thread.
 //
 // The serial connection is automatically opened when the first command
 // (e.g. StartTracing(), StopTracing(), etc.) is issued, and automatically
@@ -29,43 +26,95 @@ namespace battor {
 // same BattOrAgent for multiple commands and thus avoid having to reinitialize
 // the serial connection.
 //
-// This class is NOT thread safe.
-class BattOrAgent {
+// This class is NOT thread safe, and must be interacted with only from the IO
+// thread. The IO thread must also have a running MessageLoop.
+class BattOrAgent : public BattOrConnection::Listener,
+                    public base::SupportsWeakPtr<BattOrAgent> {
  public:
-  explicit BattOrAgent(const std::string& path);
+  // The listener interface that must be implemented in order to interact with
+  // the BattOrAgent.
+  class Listener {
+   public:
+    virtual void OnStartTracingComplete(BattOrError error) = 0;
+  };
+
+  BattOrAgent(
+      const std::string& path,
+      Listener* listener,
+      scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner);
   virtual ~BattOrAgent();
 
   // Tells the BattOr to start tracing.
-  BattOrError StartTracing();
-
-  // Tells the BattOr to stop tracing and write the trace output to the
-  // specified string.
-  BattOrError StopTracing(std::string* trace_output);
-
-  // Tells the BattOr to record a clock sync marker in its own trace log.
-  BattOrError RecordClockSyncMarker(const std::string& marker);
-
-  // Tells the BattOr to issue clock sync markers to all other tracing agents
-  // to which it's connected.
-  BattOrError IssueClockSyncMarker();
+  void StartTracing();
 
   // Returns whether the BattOr is able to record clock sync markers in its own
   // trace log.
   static bool SupportsExplicitClockSync() { return true; }
 
- private:
-  // Initializes the serial connection with the BattOr. If the connection
-  // already exists, BATTOR_ERROR_NONE is immediately returned.
-  BattOrError ConnectIfNeeded();
+  // BattOrConnection::Listener implementations.
+  void OnConnectionOpened(bool success) override;
+  void OnBytesSent(bool success) override;
+  void OnBytesRead(bool success,
+                   BattOrMessageType type,
+                   scoped_ptr<std::vector<char>> bytes) override;
 
-  // Resets the connection to its unopened state.
-  void ResetConnection();
-
-  // The path of the BattOr (e.g. "/dev/tty.battor_serial").
-  std::string path_;
-
-  // Serial connection the BattOr.
+ protected:
+  // The connection that knows how to communicate with the BattOr in terms of
+  // protocol primitives. This is protected so that it can be replaced with a
+  // fake in testing.
   scoped_ptr<BattOrConnection> connection_;
+
+ private:
+  enum class Command {
+    INVALID,
+    START_TRACING,
+  };
+
+  enum class Action {
+    INVALID,
+
+    // Actions required to connect to a BattOr.
+    REQUEST_CONNECTION,
+
+    // Actions required for starting tracing.
+    SEND_RESET,
+    SEND_INIT,
+    READ_INIT_ACK,
+    SEND_SET_GAIN,
+    READ_SET_GAIN_ACK,
+    SEND_START_TRACING,
+    READ_START_TRACING_ACK,
+  };
+
+  // Performs an action.
+  void PerformAction(Action action);
+  // Performs an action after a delay.
+  void PerformDelayedAction(Action action, base::TimeDelta delay);
+
+  // Requests a connection to the BattOr.
+  void BeginConnect();
+
+  // Sends a control message over the connection.
+  void SendControlMessage(BattOrControlMessageType type,
+                          uint16_t param1,
+                          uint16_t param2);
+
+  // Completes the command with the specified error.
+  void CompleteCommand(BattOrError error);
+
+  // The listener that handles the commands' results. It must outlive the agent.
+  Listener* listener_;
+
+  // The last action executed by the agent. This should only be updated in
+  // PerformAction().
+  Action last_action_;
+
+  // The tracing command currently being executed by the agent.
+  Command command_;
+
+  // Checker to make sure that this is only ever called on the IO thread.
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(BattOrAgent);
 };

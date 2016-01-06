@@ -4,8 +4,10 @@
 
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -64,6 +66,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -605,9 +608,12 @@ bool WindowsCreateFunction::RunSync() {
 #endif
     std::string title =
         web_app::GenerateApplicationNameFromExtensionId(extension_id);
+    content::SiteInstance* source_site_instance =
+        render_frame_host()->GetSiteInstance();
     // Note: Panels ignore all but the first url provided.
     Panel* panel = PanelManager::GetInstance()->CreatePanel(
-        title, window_profile, urls[0], window_bounds, panel_create_mode);
+        title, window_profile, urls[0], source_site_instance, window_bounds,
+        panel_create_mode);
 
     // Unlike other window types, Panels do not take focus by default.
     if (!saw_focus_key || !focused)
@@ -1817,7 +1823,7 @@ bool ExecuteCodeInTabFunction::Init() {
   }
 
   execute_tab_id_ = tab_id;
-  details_ = details.Pass();
+  details_ = std::move(details);
   set_host_id(HostID(HostID::EXTENSIONS, extension()->id()));
   return true;
 }

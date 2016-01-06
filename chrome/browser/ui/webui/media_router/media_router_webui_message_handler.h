@@ -58,7 +58,11 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   void OnActOnIssue(const base::ListValue* args);
   void OnCloseRoute(const base::ListValue* args);
   void OnCloseDialog(const base::ListValue* args);
+  void OnReportClickedSinkIndex(const base::ListValue* args);
+  void OnReportNavigateToView(const base::ListValue* args);
+  void OnReportSelectedCastMode(const base::ListValue* args);
   void OnReportSinkCount(const base::ListValue* args);
+  void OnInitialDataReceived(const base::ListValue* args);
 
   // Performs an action for an Issue of |type|.
   // |args| contains additional parameter that varies based on |type|.

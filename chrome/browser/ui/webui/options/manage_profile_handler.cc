@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/options/manage_profile_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
@@ -13,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/gaia_info_update_service.h"
@@ -91,7 +95,9 @@ void ManageProfileHandler::GetLocalizedValues(
     { "manageProfilesNameLabel", IDS_PROFILES_MANAGE_NAME_LABEL },
     { "manageProfilesIconLabel", IDS_PROFILES_MANAGE_ICON_LABEL },
     { "manageProfilesExistingSupervisedUser",
-        IDS_PROFILES_CREATE_EXISTING_LEGACY_SUPERVISED_USER_ERROR },
+        IDS_PROFILES_CREATE_LEGACY_SUPERVISED_USER_ERROR_EXISTS_REMOTELY },
+    { "managedProfilesExistingLocalSupervisedUser",
+        IDS_PROFILES_CREATE_LEGACY_SUPERVISED_USER_ERROR_EXISTS_LOCALLY },
     { "manageProfilesSupervisedSignedInLabel",
         IDS_PROFILES_CREATE_SUPERVISED_SIGNED_IN_LABEL },
     { "manageProfilesSupervisedNotSignedIn",

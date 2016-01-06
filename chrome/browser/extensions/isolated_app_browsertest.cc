@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -52,8 +56,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleExpectAndSetCookieRequest(
   http_response->set_code(net::HTTP_OK);
 
   std::string request_cookies;
-  std::map<std::string, std::string>::const_iterator it =
-      request.headers.find("Cookie");
+  auto it = request.headers.find("Cookie");
   if (it != request.headers.end())
     request_cookies = it->second;
 
@@ -96,7 +99,7 @@ scoped_ptr<net::test_server::HttpResponse> HandleExpectAndSetCookieRequest(
       http_response->AddCustomHeader("Set-Cookie", cookies_to_set[i]);
   }
 
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 class IsolatedAppTest : public ExtensionBrowserTest {

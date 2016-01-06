@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_controllee_request_handler.h"
 
+#include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
@@ -97,14 +98,10 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
   }
 
   // It's for original request (A) or redirect case (B-a or B-b).
-  ServiceWorkerURLRequestJob* job = new ServiceWorkerURLRequestJob(
-      request, network_delegate, provider_host_, blob_storage_context_,
-      resource_context, request_mode_, credentials_mode_, redirect_mode_,
-      is_main_resource_load_, request_context_type_, frame_type_, body_,
-      base::Bind(&ServiceWorkerControlleeRequestHandler::OnPrepareToRestart,
-                 base::Unretained(this)),
-      base::Bind(&ServiceWorkerControlleeRequestHandler::OnStartCompleted,
-                 base::Unretained(this)));
+  scoped_ptr<ServiceWorkerURLRequestJob> job(new ServiceWorkerURLRequestJob(
+      request, network_delegate, blob_storage_context_, resource_context,
+      request_mode_, credentials_mode_, redirect_mode_, is_main_resource_load_,
+      request_context_type_, frame_type_, body_, this));
   job_ = job->GetWeakPtr();
 
   resource_context_ = resource_context;
@@ -124,15 +121,11 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
     if (!is_main_resource_load_)
       use_network_ = true;
 
-    // TODO(mmenke): Make job a scoped_ptr once URLRequestJobs are no longer
-    // reference counted.
-    scoped_refptr<ServiceWorkerURLRequestJob> owned_job(job);
+    job.reset();
     ClearJob();
-
-    return NULL;
   }
 
-  return job;
+  return job.release();
 }
 
 void ServiceWorkerControlleeRequestHandler::GetExtraResponseInfo(
@@ -305,7 +298,7 @@ void ServiceWorkerControlleeRequestHandler::DidUpdateRegistration(
     const scoped_refptr<ServiceWorkerRegistration>& original_registration,
     ServiceWorkerStatusCode status,
     const std::string& status_message,
-    int64 registration_id) {
+    int64_t registration_id) {
   DCHECK(force_update_started_);
 
   // The job may have been canceled and then destroyed before this was invoked.
@@ -400,6 +393,42 @@ void ServiceWorkerControlleeRequestHandler::OnStartCompleted(
     service_worker_start_time_ = service_worker_start_time;
     service_worker_ready_time_ = service_worker_ready_time;
   }
+}
+
+ServiceWorkerVersion*
+ServiceWorkerControlleeRequestHandler::GetServiceWorkerVersion(
+    ServiceWorkerMetrics::URLRequestJobResult* result) {
+  if (!provider_host_) {
+    *result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_PROVIDER_HOST;
+    return nullptr;
+  }
+  if (!provider_host_->active_version()) {
+    *result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_ACTIVE_VERSION;
+    return nullptr;
+  }
+  return provider_host_->active_version();
+}
+
+bool ServiceWorkerControlleeRequestHandler::RequestStillValid(
+    ServiceWorkerMetrics::URLRequestJobResult* result) {
+  // A null |provider_host_| probably means the tab was closed. The null value
+  // would cause problems down the line, so bail out.
+  if (!provider_host_) {
+    *result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_PROVIDER_HOST;
+    return false;
+  }
+  return true;
+}
+
+void ServiceWorkerControlleeRequestHandler::MainResourceLoadFailed() {
+  DCHECK(provider_host_);
+  // Detach the controller so subresource requests also skip the worker.
+  provider_host_->NotifyControllerLost();
+}
+
+GURL ServiceWorkerControlleeRequestHandler::GetRequestingOrigin() {
+  DCHECK(provider_host_);
+  return provider_host_->document_url().GetOrigin();
 }
 
 void ServiceWorkerControlleeRequestHandler::ClearJob() {

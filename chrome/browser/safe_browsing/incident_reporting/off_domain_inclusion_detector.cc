@@ -5,9 +5,11 @@
 #include "chrome/browser/safe_browsing/incident_reporting/off_domain_inclusion_detector.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -145,6 +147,7 @@ bool OffDomainInclusionDetector::ShouldAnalyzeRequest(
     case content::RESOURCE_TYPE_OBJECT:
     case content::RESOURCE_TYPE_MEDIA:
     case content::RESOURCE_TYPE_XHR:
+    case content::RESOURCE_TYPE_PLUGIN_RESOURCE:
       // Types above are to be analyzed for off-domain inclusion if they are
       // loaded as part of the main frame.
       return request_info->IsMainFrame();
@@ -154,6 +157,7 @@ bool OffDomainInclusionDetector::ShouldAnalyzeRequest(
     case content::RESOURCE_TYPE_FAVICON:
     case content::RESOURCE_TYPE_PING:
     case content::RESOURCE_TYPE_SERVICE_WORKER:
+    case content::RESOURCE_TYPE_CSP_REPORT:
       // Types above are not to be analyzed for off-domain inclusion.
       return false;
     case content::RESOURCE_TYPE_LAST_TYPE:
@@ -175,7 +179,7 @@ void OffDomainInclusionDetector::BeginAnalysis(
     // requests). Consider adding the original referrer to ResourceRequestInfo
     // if that's an issue.
     DCHECK(off_domain_inclusion_info->main_frame_url.is_empty());
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::ABORT_EMPTY_MAIN_FRAME_URL);
     return;
   }
@@ -234,10 +238,10 @@ void OffDomainInclusionDetector::ContinueAnalysisOnWhitelistResult(
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
   if (request_url_is_on_inclusion_whitelist) {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::OFF_DOMAIN_INCLUSION_WHITELISTED);
   } else {
-    ContinueAnalysisWithHistoryCheck(off_domain_inclusion_info.Pass());
+    ContinueAnalysisWithHistoryCheck(std::move(off_domain_inclusion_info));
   }
 }
 
@@ -252,11 +256,11 @@ void OffDomainInclusionDetector::ContinueAnalysisWithHistoryCheck(
   Profile* profile =
       ProfileFromRenderProcessId(off_domain_inclusion_info->render_process_id);
   if (!profile) {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::ABORT_NO_PROFILE);
     return;
   } else if (profile->IsOffTheRecord()) {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::ABORT_INCOGNITO);
     return;
   }
@@ -267,7 +271,7 @@ void OffDomainInclusionDetector::ContinueAnalysisWithHistoryCheck(
   if (!history_service) {
     // Should only happen very early during startup, receiving many such reports
     // relative to other report types would indicate that something is wrong.
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::ABORT_NO_HISTORY_SERVICE);
     return;
   }
@@ -290,16 +294,16 @@ void OffDomainInclusionDetector::ContinueAnalysisOnHistoryResult(
     int num_visits,
     base::Time /* first_visit_time */) {
   if (!success) {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::ABORT_HISTORY_LOOKUP_FAILED);
     return;
   }
 
   if (num_visits > 0) {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::OFF_DOMAIN_INCLUSION_IN_HISTORY);
   } else {
-    ReportAnalysisResult(off_domain_inclusion_info.Pass(),
+    ReportAnalysisResult(std::move(off_domain_inclusion_info),
                          AnalysisEvent::OFF_DOMAIN_INCLUSION_SUSPICIOUS);
   }
 }
@@ -311,7 +315,7 @@ void OffDomainInclusionDetector::ReportAnalysisResult(
 
   // Always record this histogram for the resource type analyzed to be able to
   // do ratio analysis w.r.t. other histograms below.
-  UMA_HISTOGRAM_ENUMERATION("SBOffDomainInclusion.RequestAnalyzed",
+  UMA_HISTOGRAM_ENUMERATION("SBOffDomainInclusion2.RequestAnalyzed",
                             off_domain_inclusion_info->resource_type,
                             content::RESOURCE_TYPE_LAST_TYPE);
 
@@ -322,28 +326,28 @@ void OffDomainInclusionDetector::ReportAnalysisResult(
     case AnalysisEvent::NO_EVENT:
       break;
     case AnalysisEvent::ABORT_EMPTY_MAIN_FRAME_URL:
-      histogram_name = "SBOffDomainInclusion.Abort.EmptyMainFrameURL";
+      histogram_name = "SBOffDomainInclusion2.Abort.EmptyMainFrameURL";
       break;
     case AnalysisEvent::ABORT_NO_PROFILE:
-      histogram_name = "SBOffDomainInclusion.Abort.NoProfile";
+      histogram_name = "SBOffDomainInclusion2.Abort.NoProfile";
       break;
     case AnalysisEvent::ABORT_INCOGNITO:
-      histogram_name = "SBOffDomainInclusion.Abort.Incognito";
+      histogram_name = "SBOffDomainInclusion2.Abort.Incognito";
       break;
     case AnalysisEvent::ABORT_NO_HISTORY_SERVICE:
-      histogram_name = "SBOffDomainInclusion.Abort.NoHistoryService";
+      histogram_name = "SBOffDomainInclusion2.Abort.NoHistoryService";
       break;
     case AnalysisEvent::ABORT_HISTORY_LOOKUP_FAILED:
-      histogram_name = "SBOffDomainInclusion.Abort.HistoryLookupFailed";
+      histogram_name = "SBOffDomainInclusion2.Abort.HistoryLookupFailed";
       break;
     case AnalysisEvent::OFF_DOMAIN_INCLUSION_WHITELISTED:
-      histogram_name = "SBOffDomainInclusion.Whitelisted";
+      histogram_name = "SBOffDomainInclusion2.Whitelisted";
       break;
     case AnalysisEvent::OFF_DOMAIN_INCLUSION_IN_HISTORY:
-      histogram_name = "SBOffDomainInclusion.InHistory";
+      histogram_name = "SBOffDomainInclusion2.InHistory";
       break;
     case AnalysisEvent::OFF_DOMAIN_INCLUSION_SUSPICIOUS:
-      histogram_name = "SBOffDomainInclusion.Suspicious";
+      histogram_name = "SBOffDomainInclusion2.Suspicious";
       break;
   }
   if (!histogram_name.empty()) {

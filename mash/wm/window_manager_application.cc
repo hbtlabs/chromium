@@ -4,6 +4,9 @@
 
 #include "mash/wm/window_manager_application.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "components/mus/common/util.h"
 #include "components/mus/public/cpp/event_matcher.h"
@@ -80,8 +83,8 @@ void WindowManagerApplication::Initialize(mojo::ApplicationImpl* app) {
       mojo::GetProxy(&window_manager)));
   mus::mojom::WindowTreeHostClientPtr host_client;
   host_client_binding_.Bind(GetProxy(&host_client));
-  mus::CreateSingleWindowTreeHost(app, host_client.Pass(), this,
-                                  &window_tree_host_, window_manager.Pass(),
+  mus::CreateSingleWindowTreeHost(app, std::move(host_client), this,
+                                  &window_tree_host_, std::move(window_manager),
                                   window_manager_.get());
 }
 
@@ -101,7 +104,7 @@ void WindowManagerApplication::OnAccelerator(uint32_t id,
     default:
       for (auto* registrar : accelerator_registrars_) {
         if (registrar->OwnsAccelerator(id)) {
-          registrar->ProcessAccelerator(id, event.Pass());
+          registrar->ProcessAccelerator(id, std::move(event));
           break;
         }
       }
@@ -121,6 +124,7 @@ void WindowManagerApplication::OnEmbed(mus::Window* root) {
   window_layout_.reset(
       new WindowLayout(GetWindowForContainer(mojom::CONTAINER_USER_WINDOWS)));
   window_tree_host_->AddActivationParent(window->id());
+  window_tree_host_->SetTitle("Mash");
 
   AddAccelerators();
 
@@ -129,7 +133,8 @@ void WindowManagerApplication::OnEmbed(mus::Window* root) {
   window_manager_->Initialize(this);
 
   for (auto request : requests_)
-    window_manager_binding_.AddBinding(window_manager_.get(), request->Pass());
+    window_manager_binding_.AddBinding(window_manager_.get(),
+                                       std::move(*request));
   requests_.clear();
 
   shadow_controller_.reset(new ShadowController(root->connection()));
@@ -155,7 +160,8 @@ void WindowManagerApplication::Create(
     accelerator_registrar_count = 0;
   }
   accelerator_registrars_.insert(new AcceleratorRegistrarImpl(
-      window_tree_host_.get(), ++accelerator_registrar_count, request.Pass(),
+      window_tree_host_.get(), ++accelerator_registrar_count,
+      std::move(request),
       base::Bind(&WindowManagerApplication::OnAcceleratorRegistrarDestroyed,
                  base::Unretained(this))));
 }
@@ -164,10 +170,11 @@ void WindowManagerApplication::Create(
     mojo::ApplicationConnection* connection,
     mojo::InterfaceRequest<mus::mojom::WindowManager> request) {
   if (root_) {
-    window_manager_binding_.AddBinding(window_manager_.get(), request.Pass());
+    window_manager_binding_.AddBinding(window_manager_.get(),
+                                       std::move(request));
   } else {
-    requests_.push_back(
-        new mojo::InterfaceRequest<mus::mojom::WindowManager>(request.Pass()));
+    requests_.push_back(new mojo::InterfaceRequest<mus::mojom::WindowManager>(
+        std::move(request)));
   }
 }
 

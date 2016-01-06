@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
 #import "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #import "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -222,7 +224,9 @@ TEST_F(TranslationInfoBarTest, Bug36666) {
     .Times(0);
 
   int arbitrary_index = 2;
-  [infobar_controller_ sourceLanguageModified:arbitrary_index];
+  NSString* arbitrary_language = @"es";
+  [infobar_controller_ sourceLanguageModified:arbitrary_language
+                            withLanguageIndex:arbitrary_index];
   EXPECT_CALL(*infobar_delegate(), Translate())
     .Times(0);
 }

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "sync/internal_api/sync_context_proxy_impl.h"
+
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -12,7 +17,6 @@
 #include "sync/internal_api/public/shared_model_type_processor.h"
 #include "sync/internal_api/public/sync_context.h"
 #include "sync/internal_api/public/test/fake_model_type_service.h"
-#include "sync/internal_api/sync_context_proxy_impl.h"
 #include "sync/sessions/model_type_registry.h"
 #include "sync/test/engine/mock_nudge_handler.h"
 #include "sync/test/engine/test_directory_setter_upper.h"
@@ -51,7 +55,7 @@ class SyncContextProxyImplTest : public ::testing::Test, FakeModelTypeService {
 
   void StartDone(syncer::SyncError error,
                  scoped_ptr<ActivationContext> context) {
-    context_proxy_->ConnectTypeToSync(syncer::THEMES, context.Pass());
+    context_proxy_->ConnectTypeToSync(syncer::THEMES, std::move(context));
   }
 
   scoped_ptr<SharedModelTypeProcessor> CreateModelTypeProcessor() {
@@ -117,4 +121,4 @@ TEST_F(SyncContextProxyImplTest, SyncDisconnectsFirst) {
   DisableSync();
 }
 
-}  // namespace syncer
+}  // namespace syncer_v2

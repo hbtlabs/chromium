@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/autofill_profile.h"
@@ -37,6 +37,23 @@ class AutofillMetrics {
     FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS,
     FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS,
     AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE,
+  };
+
+  enum CardUploadDecisionMetric {
+    // All the required conditions were satisfied and the card upload prompt was
+    // triggered.
+    UPLOAD_OFFERED,
+    // No CVC was detected. We don't know whether a valid address was available
+    // nor whether we would have been able to get upload details.
+    UPLOAD_NOT_OFFERED_NO_CVC,
+    // A CVC was detected but no valid address was available (recently created
+    // or used, with a name matching the card, and with a non-empty zip code).
+    // We don't know whether we would have been able to get upload details.
+    UPLOAD_NOT_OFFERED_NO_ADDRESS,
+    // A CVC was detected and a valid address was available but the request to
+    // Payments for upload details failed.
+    UPLOAD_NOT_OFFERED_GET_UPLOAD_DETAILS_FAILED,
+    NUM_CARD_UPLOAD_DECISION_METRICS,
   };
 
   enum DeveloperEngagementMetric {
@@ -180,6 +197,39 @@ class AutofillMetrics {
     INFOBAR_IGNORED,    // The user completely ignored the infobar (logged on
                         // tab close).
     NUM_INFO_BAR_METRICS,
+  };
+
+  // Metrics to measure user interaction with the save credit card prompt.
+  //
+  // SAVE_CARD_PROMPT_DISMISS_FOCUS is not stored explicitly, but can be
+  // inferred from the other metrics:
+  // SAVE_CARD_PROMPT_DISMISS_FOCUS = SHOW_REQUESTED - END_* - DISMISS_*
+  enum SaveCardPromptMetric {
+    // Prompt was requested to be shown due to:
+    // CC info being submitted (first show), or
+    // location bar icon being clicked while bubble is hidden (reshows).
+    SAVE_CARD_PROMPT_SHOW_REQUESTED,
+    // The prompt was shown successfully.
+    SAVE_CARD_PROMPT_SHOWN,
+    // The prompt was not shown because the legal message was invalid.
+    SAVE_CARD_PROMPT_END_INVALID_LEGAL_MESSAGE,
+    // The user explicitly accepted the prompt.
+    SAVE_CARD_PROMPT_END_ACCEPTED,
+    // The user explicitly denied the prompt.
+    SAVE_CARD_PROMPT_END_DENIED,
+    // The prompt and icon were removed because of navigation away from the
+    // page that caused the prompt to be shown. The navigation occurred while
+    // the prompt was showing.
+    SAVE_CARD_PROMPT_END_NAVIGATION_SHOWING,
+    // The prompt and icon were removed  because of navigation away from the
+    // page that caused the prompt to be shown. The navigation occurred while
+    // the prompt was hidden.
+    SAVE_CARD_PROMPT_END_NAVIGATION_HIDDEN,
+    // The prompt was dismissed because the user clicked the "Learn more" link.
+    SAVE_CARD_PROMPT_DISMISS_CLICK_LEARN_MORE,
+    // The prompt was dismissed because the user clicked a legal message link.
+    SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
+    NUM_SAVE_CARD_PROMPT_METRICS,
   };
 
   // Metrics measuring how well we predict field types.  Exactly three such
@@ -437,7 +487,11 @@ class AutofillMetrics {
     NUM_WALLET_REQUIRED_ACTIONS
   };
 
+  static void LogCardUploadDecisionMetric(CardUploadDecisionMetric metric);
   static void LogCreditCardInfoBarMetric(InfoBarMetric metric);
+  static void LogSaveCardPromptMetric(SaveCardPromptMetric metric,
+                                      bool is_uploading,
+                                      bool is_reshow);
   static void LogScanCreditCardPromptMetric(ScanCreditCardPromptMetric metric);
 
   // Should be called when credit card scan is finished. |duration| should be
@@ -450,11 +504,14 @@ class AutofillMetrics {
   static void LogDeveloperEngagementMetric(DeveloperEngagementMetric metric);
 
   static void LogHeuristicTypePrediction(FieldTypeQualityMetric metric,
-                                         ServerFieldType field_type);
+                                         ServerFieldType field_type,
+                                         bool observed_submission);
   static void LogOverallTypePrediction(FieldTypeQualityMetric metric,
-                                       ServerFieldType field_type);
+                                       ServerFieldType field_type,
+                                       bool observed_submission);
   static void LogServerTypePrediction(FieldTypeQualityMetric metric,
-                                      ServerFieldType field_type);
+                                      ServerFieldType field_type,
+                                      bool observed_submission);
 
   static void LogServerQueryMetric(ServerQueryMetric metric);
 
@@ -576,10 +633,12 @@ class AutofillMetrics {
   // Log the index of the selected Autocomplete suggestion in the popup.
   static void LogAutocompleteSuggestionAcceptedIndex(int index);
 
-  // Log how many autofilled fields in a given form were edited before
-  // submission.
-  static void LogNumberOfEditedAutofilledFieldsAtSubmission(
-      size_t num_edited_autofilled_fields);
+  // Log how many autofilled fields in a given form were edited before the
+  // submission or when the user unfocused the form (depending on
+  // |observed_submission|).
+  static void LogNumberOfEditedAutofilledFields(
+      size_t num_edited_autofilled_fields,
+      bool observed_submission);
 
   // This should be called each time a server response is parsed for a form.
   static void LogServerResponseHasDataForForm(bool has_data);

@@ -4,6 +4,9 @@
 
 #include "cc/trees/layer_tree_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -49,10 +52,12 @@ LayerTreeImpl::LayerTreeImpl(
     scoped_refptr<SyncedElasticOverscroll> elastic_overscroll)
     : layer_tree_host_impl_(layer_tree_host_impl),
       source_frame_number_(-1),
+      is_first_frame_after_commit_tracker_(-1),
       hud_layer_(0),
       background_color_(0),
       has_transparent_background_(false),
       currently_scrolling_layer_id_(Layer::INVALID_ID),
+      last_scrolled_layer_id_(Layer::INVALID_ID),
       overscroll_elasticity_layer_id_(Layer::INVALID_ID),
       page_scale_layer_id_(Layer::INVALID_ID),
       inner_viewport_scroll_layer_id_(Layer::INVALID_ID),
@@ -371,8 +376,15 @@ LayerImpl* LayerTreeImpl::CurrentlyScrollingLayer() const {
   return LayerById(currently_scrolling_layer_id_);
 }
 
+int LayerTreeImpl::LastScrolledLayerId() const {
+  return last_scrolled_layer_id_;
+}
+
 void LayerTreeImpl::SetCurrentlyScrollingLayer(LayerImpl* layer) {
   int new_id = layer ? layer->id() : Layer::INVALID_ID;
+  if (layer)
+    last_scrolled_layer_id_ = new_id;
+
   if (currently_scrolling_layer_id_ == new_id)
     return;
 
@@ -1307,6 +1319,19 @@ void LayerTreeImpl::RemoveLayerWithCopyOutputRequest(LayerImpl* layer) {
   }
 }
 
+void LayerTreeImpl::AddSurfaceLayer(LayerImpl* layer) {
+  DCHECK(std::find(surface_layers_.begin(), surface_layers_.end(), layer) ==
+         surface_layers_.end());
+  surface_layers_.push_back(layer);
+}
+
+void LayerTreeImpl::RemoveSurfaceLayer(LayerImpl* layer) {
+  std::vector<LayerImpl*>::iterator it =
+      std::find(surface_layers_.begin(), surface_layers_.end(), layer);
+  DCHECK(it != surface_layers_.end());
+  surface_layers_.erase(it);
+}
+
 const std::vector<LayerImpl*>& LayerTreeImpl::LayersWithCopyOutputRequest()
     const {
   // Only the active tree needs to know about layers with copy requests, as
@@ -1842,6 +1867,14 @@ bool LayerTreeImpl::TransformIsAnimatingOnImplOnly(
              ? layer_tree_host_impl_->animation_host()
                    ->TransformIsAnimatingOnImplOnly(layer->id())
              : false;
+}
+
+bool LayerTreeImpl::AnimationsPreserveAxisAlignment(
+    const LayerImpl* layer) const {
+  return layer_tree_host_impl_->animation_host()
+             ? layer_tree_host_impl_->animation_host()
+                   ->AnimationsPreserveAxisAlignment(layer->id())
+             : true;
 }
 
 bool LayerTreeImpl::HasOnlyTranslationTransforms(const LayerImpl* layer) const {

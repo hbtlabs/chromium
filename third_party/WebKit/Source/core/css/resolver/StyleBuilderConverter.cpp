@@ -24,7 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/css/resolver/StyleBuilderConverter.h"
 
 #include "core/css/BasicShapeFunctions.h"
@@ -45,6 +44,7 @@
 #include "platform/transforms/RotateTransformOperation.h"
 #include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
+#include <algorithm>
 
 namespace blink {
 
@@ -521,12 +521,12 @@ void StyleBuilderConverter::createImplicitNamedGridLinesFromGridArea(const Named
         GridSpan areaSpan = direction == ForRows ? namedGridAreaEntry.value.rows : namedGridAreaEntry.value.columns;
         {
             NamedGridLinesMap::AddResult startResult = namedGridLines.add(namedGridAreaEntry.key + "-start", Vector<size_t>());
-            startResult.storedValue->value.append(areaSpan.resolvedInitialPosition().toInt());
+            startResult.storedValue->value.append(areaSpan.resolvedInitialPosition());
             std::sort(startResult.storedValue->value.begin(), startResult.storedValue->value.end());
         }
         {
             NamedGridLinesMap::AddResult endResult = namedGridLines.add(namedGridAreaEntry.key + "-end", Vector<size_t>());
-            endResult.storedValue->value.append(areaSpan.resolvedFinalPosition().toInt());
+            endResult.storedValue->value.append(areaSpan.resolvedFinalPosition());
             std::sort(endResult.storedValue->value.begin(), endResult.storedValue->value.end());
         }
     }
@@ -951,6 +951,11 @@ RespectImageOrientationEnum StyleBuilderConverter::convertImageOrientation(Style
 {
     const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(value);
     return primitiveValue.getValueID() == CSSValueFromImage ? RespectImageOrientation : DoNotRespectImageOrientation;
+}
+
+CSSPathValue* StyleBuilderConverter::convertPath(StyleResolverState&, CSSValue& value)
+{
+    return toCSSPathValue(&value);
 }
 
 } // namespace blink

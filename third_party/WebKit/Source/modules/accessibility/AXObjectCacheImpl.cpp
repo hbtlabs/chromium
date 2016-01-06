@@ -26,8 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "modules/accessibility/AXObjectCacheImpl.h"
 
 #include "core/HTMLNames.h"
@@ -1072,12 +1070,6 @@ void AXObjectCacheImpl::handleAttributeChanged(const QualifiedName& attrName, El
 void AXObjectCacheImpl::labelChanged(Element* element)
 {
     textChanged(toHTMLLabelElement(element)->control());
-}
-
-void AXObjectCacheImpl::recomputeIsIgnored(LayoutObject* layoutObject)
-{
-    if (AXObject* obj = get(layoutObject))
-        obj->notifyIfIgnoredValueChanged();
 }
 
 void AXObjectCacheImpl::inlineTextBoxesUpdated(LayoutObject* layoutObject)

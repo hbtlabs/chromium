@@ -4,8 +4,12 @@
 
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_number_conversions.h"
@@ -13,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_protocol.h"
@@ -76,6 +81,7 @@ static const char kTitleFormat[] = "Developer Tools - %s";
 
 static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
 static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
+static const char kDevtoolsDrawerShownHistogram[] = "DevTools.DrawerShown";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -121,6 +127,7 @@ class DevToolsConfirmInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~DevToolsConfirmInfoBarDelegate() override;
 
  private:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   base::string16 GetMessageText() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
   bool Accept() override;
@@ -143,6 +150,11 @@ DevToolsConfirmInfoBarDelegate::DevToolsConfirmInfoBarDelegate(
 DevToolsConfirmInfoBarDelegate::~DevToolsConfirmInfoBarDelegate() {
   if (!callback_.is_null())
     callback_.Run(false);
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+DevToolsConfirmInfoBarDelegate::GetIdentifier() const {
+  return DEV_TOOLS_CONFIRM_INFOBAR_DELEGATE;
 }
 
 base::string16 DevToolsConfirmInfoBarDelegate::GetMessageText() const {
@@ -286,6 +298,7 @@ class DevToolsUIBindings::FrontendWebContentsObserver
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::NavigationController::ReloadType reload_type) override;
+  void DocumentAvailableInMainFrame() override;
   void DocumentOnLoadCompletedInMainFrame() override;
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
@@ -335,6 +348,11 @@ void DevToolsUIBindings::FrontendWebContentsObserver::
           web_contents()->GetMainFrame(),
           base::Bind(&DevToolsUIBindings::HandleMessageFromDevToolsFrontend,
                      base::Unretained(devtools_bindings_))));
+}
+
+void DevToolsUIBindings::FrontendWebContentsObserver::
+    DocumentAvailableInMainFrame() {
+  devtools_bindings_->DocumentAvailableInMainFrame();
 }
 
 void DevToolsUIBindings::FrontendWebContentsObserver::
@@ -484,6 +502,7 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
       delegate_(new DefaultBindingsDelegate(web_contents_)),
       devices_updates_enabled_(false),
       frontend_loaded_(false),
+      reattaching_(false),
       weak_factory_(this) {
   g_instances.Get().push_back(this);
   frontend_contents_observer_.reset(new FrontendWebContentsObserver(this));
@@ -912,6 +931,8 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
     UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
   else if (name == kDevToolsPanelShownHistogram)
     UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
+  else if (name == kDevtoolsDrawerShownHistogram)
+    UMA_HISTOGRAM_ENUMERATION(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();
 }
@@ -1082,7 +1103,7 @@ void DevToolsUIBindings::ShowDevToolsConfirmInfoBar(
   }
   scoped_ptr<DevToolsConfirmInfoBarDelegate> delegate(
       new DevToolsConfirmInfoBarDelegate(callback, message));
-  GlobalConfirmInfoBar::Show(delegate.Pass());
+  GlobalConfirmInfoBar::Show(std::move(delegate));
 }
 
 void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
@@ -1127,8 +1148,7 @@ void DevToolsUIBindings::AttachTo(
 
 void DevToolsUIBindings::Reattach() {
   DCHECK(agent_host_.get());
-  agent_host_->DetachClient();
-  agent_host_->AttachClient(this);
+  reattaching_ = true;
 }
 
 void DevToolsUIBindings::Detach() {
@@ -1172,6 +1192,14 @@ void DevToolsUIBindings::CallClientFunction(const std::string& function_name,
   javascript.append(");");
   web_contents_->GetMainFrame()->ExecuteJavaScript(
       base::UTF8ToUTF16(javascript));
+}
+
+void DevToolsUIBindings::DocumentAvailableInMainFrame() {
+  if (!reattaching_)
+    return;
+  reattaching_ = false;
+  agent_host_->DetachClient();
+  agent_host_->AttachClient(this);
 }
 
 void DevToolsUIBindings::DocumentOnLoadCompletedInMainFrame() {

@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/webui/settings/md_settings_ui.h"
 
 namespace base {
@@ -57,11 +58,14 @@ class ResetSettingsHandler
   // Closes the dialog once all requested settings has been reset.
   void OnResetProfileSettingsDone(bool send_feedback);
 
-  // Called when the confirmation box appears.
+  // Called when the reset profile dialog is shown.
   void OnShowResetProfileDialog(const base::ListValue* value);
 
-  // Called when the confirmation box disappears.
+  // Called when the reset profile dialog is hidden.
   void OnHideResetProfileDialog(const base::ListValue* value);
+
+  // Called when the reset profile banner is shown.
+  void OnHideResetProfileBanner(const base::ListValue* value);
 
   // Called when BrandcodeConfigFetcher completed fetching settings.
   void OnSettingsFetched();

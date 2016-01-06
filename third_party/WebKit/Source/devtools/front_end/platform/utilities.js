@@ -1085,12 +1085,12 @@ String.vsprintf = function(format, substitutions)
 /**
  * @param {string} format
  * @param {?ArrayLike} substitutions
- * @param {!Object.<string, function(string, ...):string>} formatters
+ * @param {!Object.<string, function(string, ...):Q>} formatters
  * @param {!T} initialValue
- * @param {function(T, string): T|undefined} append
+ * @param {function(T, Q): T|undefined} append
  * @param {!Array.<!Object>=} tokenizedFormat
  * @return {!{formattedResult: T, unusedSubstitutions: ?ArrayLike}};
- * @template T
+ * @template T, Q
  */
 String.format = function(format, substitutions, formatters, initialValue, append, tokenizedFormat)
 {
@@ -1330,6 +1330,23 @@ Multimap.prototype = {
         if (!result)
             result = new Set();
         return result;
+    },
+
+    /**
+     * @param {K} key
+     * @return {boolean}
+     */
+    has: function(key)
+    {
+        return this._map.has(key);
+    },
+
+    /**
+     * @return {number}
+     */
+    get size()
+    {
+        return this._map.size;
     },
 
     /**

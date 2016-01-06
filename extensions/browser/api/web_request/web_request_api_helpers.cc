@@ -4,8 +4,12 @@
 
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/macros.h"
@@ -51,9 +55,15 @@ static const char* kResourceTypeStrings[] = {
   "stylesheet",
   "script",
   "image",
+  "font",
   "object",
+  "script",
+  "script",
+  "image",
   "xmlhttprequest",
-  "other",
+  "ping",
+  "script",
+  "object",
   "other",
 };
 
@@ -65,15 +75,16 @@ static ResourceType kResourceTypeValues[] = {
   content::RESOURCE_TYPE_STYLESHEET,
   content::RESOURCE_TYPE_SCRIPT,
   content::RESOURCE_TYPE_IMAGE,
+  content::RESOURCE_TYPE_FONT_RESOURCE,
   content::RESOURCE_TYPE_OBJECT,
+  content::RESOURCE_TYPE_WORKER,
+  content::RESOURCE_TYPE_SHARED_WORKER,
+  content::RESOURCE_TYPE_FAVICON,
   content::RESOURCE_TYPE_XHR,
+  content::RESOURCE_TYPE_PING,
+  content::RESOURCE_TYPE_SERVICE_WORKER,
+  content::RESOURCE_TYPE_PLUGIN_RESOURCE,
   content::RESOURCE_TYPE_LAST_TYPE,  // represents "other"
-  // TODO(jochen): We duplicate the last entry, so the array's size is not a
-  // power of two. If it is, this triggers a bug in gcc 4.4 in Release builds
-  // (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43949). Once we use a version
-  // of gcc with this bug fixed, or the array is changed so this duplicate
-  // entry is no longer required, this should be removed.
-  content::RESOURCE_TYPE_LAST_TYPE,
 };
 
 const size_t kResourceTypeValuesLength = arraysize(kResourceTypeValues);
@@ -85,7 +96,7 @@ void ClearCacheOnNavigationOnUI() {
 }
 
 bool ParseCookieLifetime(net::ParsedCookie* cookie,
-                         int64* seconds_till_expiry) {
+                         int64_t* seconds_till_expiry) {
   // 'Max-Age' is processed first because according to:
   // http://tools.ietf.org/html/rfc6265#section-5.3 'Max-Age' attribute
   // overrides 'Expires' attribute.
@@ -240,7 +251,7 @@ scoped_ptr<base::Value> NetLogModificationCallback(
     deleted_headers->Append(new base::StringValue(*key));
   }
   dict->Set("deleted_headers", deleted_headers);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 bool InDecreasingExtensionInstallationTimeOrder(
@@ -652,7 +663,8 @@ static std::string FindSetRequestHeader(
     net::HttpRequestHeaders::Iterator modification(
         (*delta)->modified_request_headers);
     while (modification.GetNext()) {
-      if (key == modification.name() && value == modification.value())
+      if (base::EqualsCaseInsensitiveASCII(key, modification.name()) &&
+          value == modification.value())
         return (*delta)->extension_id;
     }
   }
@@ -670,7 +682,7 @@ static std::string FindRemoveRequestHeader(
     for (i = (*delta)->deleted_request_headers.begin();
          i != (*delta)->deleted_request_headers.end();
          ++i) {
-      if (*i == key)
+      if (base::EqualsCaseInsensitiveASCII(*i, key))
         return (*delta)->extension_id;
     }
   }
@@ -882,7 +894,7 @@ static bool DoesResponseCookieMatchFilter(net::ParsedCookie* cookie,
     return false;
   if (filter->age_upper_bound || filter->age_lower_bound ||
       (filter->session_cookie && *filter->session_cookie)) {
-    int64 seconds_to_expiry;
+    int64_t seconds_to_expiry;
     bool lifetime_parsed = ParseCookieLifetime(cookie, &seconds_to_expiry);
     if (filter->age_upper_bound && seconds_to_expiry > *filter->age_upper_bound)
       return false;
@@ -1248,8 +1260,6 @@ base::DictionaryValue* CreateHeaderDictionary(
   }
   return header;
 }
-
-#define ARRAYEND(array) (array + arraysize(array))
 
 bool IsRelevantResourceType(ResourceType type) {
   ResourceType* iter =

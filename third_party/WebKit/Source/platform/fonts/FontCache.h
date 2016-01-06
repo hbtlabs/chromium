@@ -60,6 +60,7 @@ class FontDescription;
 class OpenTypeVerticalData;
 class ShapeCache;
 class SimpleFontData;
+class WebProcessMemoryDump;
 
 enum ShouldRetain { Retain, DoNotRetain };
 enum PurgeSeverity { PurgeIfNeeded, ForcePurge };
@@ -142,6 +143,10 @@ public:
 
     void invalidateShapeCache();
 
+    // Memory reporting
+    void dumpFontPlatformDataCache(WebProcessMemoryDump*);
+    void dumpShapeResultCache(WebProcessMemoryDump*);
+
 private:
     FontCache();
     ~FontCache();
@@ -160,7 +165,7 @@ private:
     FontPlatformData* getFontPlatformData(const FontDescription&, const FontFaceCreationParams&, bool checkingAlternateName = false);
 
     // These methods are implemented by each platform.
-    FontPlatformData* createFontPlatformData(const FontDescription&, const FontFaceCreationParams&, float fontSize);
+    PassOwnPtr<FontPlatformData> createFontPlatformData(const FontDescription&, const FontFaceCreationParams&, float fontSize);
 
     // Implemented on skia platforms.
     PassRefPtr<SkTypeface> createTypeface(const FontDescription&, const FontFaceCreationParams&, CString& name);

@@ -5,31 +5,74 @@
 #ifndef TOOLS_BATTOR_AGENT_BATTOR_CONNECTION_H_
 #define TOOLS_BATTOR_AGENT_BATTOR_CONNECTION_H_
 
+#include <vector>
+
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "device/serial/serial_io_handler.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/single_thread_task_runner.h"
+#include "tools/battor_agent/battor_protocol_types.h"
 
 namespace battor {
 
-// A BattOrConnection is a serial connection to the BattOr. It's essentially
-// just a thin wrapper around device::serial::SerialIoHandler that provides
-// reasonable defaults for the serial connection for the BattOr and provides a
-// synchronous interface.
+// A BattOrConnection is a wrapper around the serial connection to the BattOr
+// that handles conversion of a message to and from the byte-level BattOr
+// protocol.
 //
-// The serial connection remains open for the lifetime of the object.
+// At a high-level, all BattOr messages consist of:
+//
+//   0x00               (1 byte start marker)
+//   uint8_t            (1 byte header indicating the message type)
+//   data               (message data, with 0x00s and 0x01s escaped with 0x02)
+//   0x01               (1 byte end marker)
+//
+// For a more in-depth description of the protocol, see http://bit.ly/1NvNVc3.
 class BattOrConnection {
  public:
-  // Creates a BattOrConnection to the BattOr at the given path.
-  // If creation is unsuccessful, a null pointer is returned.
-  static scoped_ptr<BattOrConnection> Create(const std::string& path);
-  virtual ~BattOrConnection();
+  // The listener interface that must be implemented in order to interact with
+  // the BattOrConnection.
+  class Listener {
+   public:
+    virtual void OnConnectionOpened(bool success) = 0;
+    virtual void OnBytesSent(bool success) = 0;
+    virtual void OnBytesRead(bool success,
+                             BattOrMessageType type,
+                             scoped_ptr<std::vector<char>> bytes) = 0;
+  };
+
+  BattOrConnection(Listener* listener);
+  virtual ~BattOrConnection() = 0;
+
+  // Initializes the serial connection and calls the listener's
+  // OnConnectionOpened() when complete. This function must be called before
+  // using the BattOrConnection. If the connection is already open, calling this
+  // method immediately calls the listener's OnConnectionOpened method.
+  virtual void Open() = 0;
+  // Closes the serial connection and releases any handles being held.
+  virtual void Close() = 0;
+
+  // Sends the specified buffer over the serial connection and calls the
+  // listener's OnBytesSent() when complete. Note that bytes_to_send should not
+  // include the start, end, type, or escape bytes required by the BattOr
+  // protocol.
+  virtual void SendBytes(BattOrMessageType type,
+                         const void* buffer,
+                         size_t bytes_to_send) = 0;
+
+  // Reads the specified number of bytes from the serial connection and calls
+  // the listener's OnBytesRead() when complete. Note that the number of bytes
+  // requested should not include the start, end, or type bytes required by the
+  // BattOr protocol, and that this method may issue multiple read read requests
+  // if the message contains escape characters.
+  virtual void ReadBytes(size_t bytes_to_read) = 0;
+
+  // Flushes the serial connection to the BattOr.
+  virtual void Flush() = 0;
+
+ protected:
+  // The listener receiving the results of the commands being executed.
+  Listener* listener_;
 
  private:
-  BattOrConnection();
-
-  // IO handler capable of reading from and writing to the serial connection.
-  scoped_refptr<device::SerialIoHandler> io_handler_;
-
   DISALLOW_COPY_AND_ASSIGN(BattOrConnection);
 };
 

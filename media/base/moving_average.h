@@ -5,8 +5,12 @@
 #ifndef MEDIA_BASE_MOVING_AVERAGE_H_
 #define MEDIA_BASE_MOVING_AVERAGE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
 

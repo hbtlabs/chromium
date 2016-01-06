@@ -4,6 +4,11 @@
 
 #include "mojo/edk/embedder/embedder.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/atomicops.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -27,14 +32,6 @@
 
 namespace mojo {
 namespace edk {
-
-namespace {
-
-// Note: Called on the I/O thread.
-void ShutdownIPCSupportHelper() {
-}
-
-}  // namespace
 
 namespace internal {
 
@@ -65,24 +62,18 @@ void PreInitializeChildProcess() {
 }
 
 ScopedPlatformHandle ChildProcessLaunched(base::ProcessHandle child_process) {
-#if defined(OS_WIN)
   PlatformChannelPair token_channel;
   new ChildBrokerHost(child_process, token_channel.PassServerHandle());
   return token_channel.PassClientHandle();
-#else
-  // TODO(jam): create this for POSIX. Need to implement channel reading first
-  // so we don't leak handles.
-  return ScopedPlatformHandle();
-#endif
 }
 
 void ChildProcessLaunched(base::ProcessHandle child_process,
                           ScopedPlatformHandle server_pipe) {
-  new ChildBrokerHost(child_process, server_pipe.Pass());
+  new ChildBrokerHost(child_process, std::move(server_pipe));
 }
 
 void SetParentPipeHandle(ScopedPlatformHandle pipe) {
-  ChildBroker::GetInstance()->SetChildBrokerHostHandle(pipe.Pass());
+  ChildBroker::GetInstance()->SetChildBrokerHostHandle(std::move(pipe));
 }
 
 void Init() {
@@ -110,7 +101,7 @@ MojoResult CreatePlatformHandleWrapper(
   DCHECK(platform_handle_wrapper_handle);
 
   scoped_refptr<Dispatcher> dispatcher =
-      PlatformHandleDispatcher::Create(platform_handle.Pass());
+      PlatformHandleDispatcher::Create(std::move(platform_handle));
 
   DCHECK(internal::g_core);
   MojoHandle h = internal::g_core->AddDispatcher(dispatcher);
@@ -137,10 +128,8 @@ MojoResult PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
   if (dispatcher->GetType() != Dispatcher::Type::PLATFORM_HANDLE)
     return MOJO_RESULT_INVALID_ARGUMENT;
 
-  *platform_handle =
-      static_cast<PlatformHandleDispatcher*>(dispatcher.get())
-          ->PassPlatformHandle()
-          .Pass();
+  *platform_handle = static_cast<PlatformHandleDispatcher*>(dispatcher.get())
+                         ->PassPlatformHandle();
   return MOJO_RESULT_OK;
 }
 
@@ -156,27 +145,26 @@ void ShutdownIPCSupportOnIOThread() {
 }
 
 void ShutdownIPCSupport() {
-  internal::g_io_thread_task_runner->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&ShutdownIPCSupportHelper),
-      base::Bind(&ProcessDelegate::OnShutdownComplete,
-                 base::Unretained(internal::g_process_delegate)));
+  // TODO(jam): remove ProcessDelegate from new EDK once the old EDK is gone.
+  internal::g_process_delegate->OnShutdownComplete();
 }
 
 ScopedMessagePipeHandle CreateMessagePipe(
     ScopedPlatformHandle platform_handle) {
+  MojoCreateMessagePipeOptions options = {
+      static_cast<uint32_t>(sizeof(MojoCreateMessagePipeOptions)),
+      MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_TRANSFERABLE};
   scoped_refptr<MessagePipeDispatcher> dispatcher =
-      MessagePipeDispatcher::Create(
-          MessagePipeDispatcher::kDefaultCreateOptions);
+      MessagePipeDispatcher::Create(options);
 
   ScopedMessagePipeHandle rv(
       MessagePipeHandle(internal::g_core->AddDispatcher(dispatcher)));
   CHECK(rv.is_valid());
-  dispatcher->Init(platform_handle.Pass(), nullptr, 0, nullptr, 0, nullptr,
+  dispatcher->Init(std::move(platform_handle), nullptr, 0, nullptr, 0, nullptr,
                    nullptr);
   // TODO(vtl): The |.Pass()| below is only needed due to an MSVS bug; remove it
   // once that's fixed.
-  return rv.Pass();
+  return rv;
 }
 
 }  // namespace edk

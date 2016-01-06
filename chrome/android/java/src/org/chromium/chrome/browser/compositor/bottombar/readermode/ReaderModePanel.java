@@ -31,25 +31,23 @@ import org.chromium.ui.resources.ResourceManager;
  */
 public class ReaderModePanel extends OverlayPanel {
 
-    /**
-     * The compositor layer used for drawing the panel.
-     */
+    /** The compositor layer used for drawing the panel. */
     private ContextualSearchSceneLayer mSceneLayer;
 
-    /**
-     * Delegate for calling functions on the ReaderModeManager.
-     */
+    /** Delegate for calling functions on the ReaderModeManager. */
     private ReaderModeManagerDelegate mManagerDelegate;
 
-    /**
-     * Delegate for passing the current ContentViewCore to the layout manager.
-     */
+    /** Delegate for passing the current ContentViewCore to the layout manager. */
     private OverlayPanelContentViewDelegate mContentViewDelegate;
 
-    /**
-     * The opacity of the panel bar text.
-     */
+    /** The opacity of the panel bar text. */
     private float mReaderBarTextOpacity;
+
+    /** If the timer for counting how long a user has been reading is running. */
+    private boolean mTimerRunning;
+
+    /** The start time in ms of the current timer. */
+    private long mStartTime;
 
     // ============================================================================================
     // Constructor
@@ -65,14 +63,6 @@ public class ReaderModePanel extends OverlayPanel {
         super(context, updateHost, panelManager);
         mSceneLayer = createNewReaderModeSceneLayer();
         mContentViewDelegate = contentViewDelegate;
-    }
-
-    /**
-     * Destroy the panel's components.
-     */
-    public void destroy() {
-        super.destroy();
-        destroyReaderModeBarControl();
     }
 
     @Override
@@ -200,6 +190,12 @@ public class ReaderModePanel extends OverlayPanel {
     // ============================================================================================
 
     @Override
+    public void destroyComponents() {
+        super.destroyComponents();
+        destroyReaderModeBarControl();
+    }
+
+    @Override
     public PanelPriority getPriority() {
         return PanelPriority.MEDIUM;
     }
@@ -212,6 +208,10 @@ public class ReaderModePanel extends OverlayPanel {
     @Override
     protected void updatePanelForCloseOrPeek(float percent) {
         super.updatePanelForCloseOrPeek(percent);
+
+        // Do not update the panel text if the panel was closed immediately.
+        if (percent < 0.01f) return;
+
         getReaderModeBarControl().setBarText(R.string.reader_view_text);
         mReaderBarTextOpacity = 1.0f;
     }
@@ -233,6 +233,50 @@ public class ReaderModePanel extends OverlayPanel {
         super.updatePanelForMaximization(percent);
         getReaderModeBarControl().setBarText(R.string.reader_mode_expanded_title);
         mReaderBarTextOpacity = 1.0f;
+    }
+
+    @Override
+    protected void maximizePanel(StateChangeReason reason) {
+        long duration = BASE_ANIMATION_DURATION_MS;
+        // Extend animation time when animating from PEEKED state to MAXIMIZED.
+        // TODO(mdjones): This check will be unnecessary after the expanded state is removed.
+        if (getPanelState() == PanelState.PEEKED) {
+            duration += 150;
+        }
+
+        super.animatePanelToState(PanelState.MAXIMIZED, reason, duration);
+    }
+
+    @Override
+    protected void onAnimationFinished() {
+        super.onAnimationFinished();
+        boolean animatingToOpenState = getPanelState() == PanelState.EXPANDED
+                || getPanelState() == PanelState.MAXIMIZED;
+        // Start or stop the timer for how long the user has been reading.
+        if (!mTimerRunning && animatingToOpenState) {
+            mStartTime = System.currentTimeMillis();
+            mTimerRunning = true;
+        } else if (mTimerRunning && !animatingToOpenState) {
+            onTimerEnded();
+        }
+    }
+
+    @Override
+    public void closePanel(StateChangeReason reason, boolean animate) {
+        super.closePanel(reason, animate);
+        if (mTimerRunning) {
+            onTimerEnded();
+        }
+    }
+
+    /**
+     * Record the time spent in Reader Mode.
+     */
+    private void onTimerEnded() {
+        mTimerRunning = false;
+        long totalTime = System.currentTimeMillis() - mStartTime;
+        if (mStartTime <= 0 || totalTime < 0) return;
+        mManagerDelegate.recordTimeSpentInReader(totalTime);
     }
 
     @Override

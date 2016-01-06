@@ -30,7 +30,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/ImageBuffer.h"
 
 #include "GrContext.h"
@@ -64,7 +63,7 @@ PassOwnPtr<ImageBuffer> ImageBuffer::create(PassOwnPtr<ImageBufferSurface> surfa
 {
     if (!surface->isValid())
         return nullptr;
-    return adoptPtr(new ImageBuffer(surface));
+    return adoptPtr(new ImageBuffer(std::move(surface)));
 }
 
 PassOwnPtr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opacityMode, ImageInitializationMode initializationMode)
@@ -77,20 +76,23 @@ PassOwnPtr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opa
 
 ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
     : m_snapshotState(InitialSnapshotState)
-    , m_surface(surface)
+    , m_surface(std::move(surface))
     , m_client(0)
+    , m_gpuMemoryUsage(0)
 {
     m_surface->setImageBuffer(this);
+    updateGPUMemoryUsage();
 }
+
+intptr_t ImageBuffer::s_globalGPUMemoryUsage = 0;
 
 ImageBuffer::~ImageBuffer()
 {
+    ImageBuffer::s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
 }
 
 SkCanvas* ImageBuffer::canvas() const
 {
-    if (!isSurfaceValid())
-        return nullptr;
     return m_surface->canvas();
 }
 
@@ -211,7 +213,7 @@ bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3
 
     mailbox->validSyncToken = sharedContext->insertSyncPoint(mailbox->syncToken);
     if (mailbox->validSyncToken)
-        context->waitSyncToken(mailbox->syncToken);
+        context->waitSyncTokenCHROMIUM(mailbox->syncToken);
 
     Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
 
@@ -225,7 +227,7 @@ bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3
 
     WGC3Dbyte syncToken[24];
     if (context->insertSyncPoint(syncToken))
-        sharedContext->waitSyncToken(syncToken);
+        sharedContext->waitSyncTokenCHROMIUM(syncToken);
 
     // Undo grContext texture binding changes introduced in this function
     provider->grContext()->resetContext(kTextureBinding_GrGLBackendState);
@@ -253,7 +255,7 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
         GL_UNSIGNED_BYTE, 0, true, false, sourceBuffer);
 }
 
-void ImageBuffer::draw(GraphicsContext* context, const FloatRect& destRect, const FloatRect* srcPtr, SkXfermode::Mode op)
+void ImageBuffer::draw(GraphicsContext& context, const FloatRect& destRect, const FloatRect* srcPtr, SkXfermode::Mode op)
 {
     if (!isSurfaceValid())
         return;
@@ -343,6 +345,28 @@ void ImageBuffer::putByteArray(Multiply multiplied, const unsigned char* source,
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(sourceRect.width(), sourceRect.height(), kRGBA_8888_SkColorType, alphaType);
     m_surface->writePixels(info, srcAddr, srcBytesPerRow, destX, destY);
+}
+
+void ImageBuffer::updateGPUMemoryUsage() const
+{
+    if (this->isAccelerated()) {
+        // If image buffer is accelerated, we should keep track of GPU memory usage.
+        int gpuBufferCount = 2;
+        Checked<intptr_t, RecordOverflow> checkedGPUUsage = 4 * gpuBufferCount;
+        checkedGPUUsage *= this->size().width();
+        checkedGPUUsage *= this->size().height();
+        intptr_t gpuMemoryUsage;
+        if (checkedGPUUsage.safeGet(gpuMemoryUsage) == CheckedState::DidOverflow)
+            gpuMemoryUsage = std::numeric_limits<intptr_t>::max();
+
+        s_globalGPUMemoryUsage += (gpuMemoryUsage - m_gpuMemoryUsage);
+        m_gpuMemoryUsage = gpuMemoryUsage;
+    } else if (m_gpuMemoryUsage > 0) {
+        // In case of switching from accelerated to non-accelerated mode,
+        // the GPU memory usage needs to be updated too.
+        s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
+        m_gpuMemoryUsage = 0;
+    }
 }
 
 bool ImageDataBuffer::encodeImage(const String& mimeType, const double& quality, Vector<unsigned char>* encodedImage) const

@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_MUS_WS_WINDOW_TREE_HOST_IMPL_H_
 #define COMPONENTS_MUS_WS_WINDOW_TREE_HOST_IMPL_H_
 
+#include <stdint.h>
+
 #include <queue>
 
 #include "base/macros.h"
@@ -54,6 +56,7 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
   // Initializes state that depends on the existence of a WindowTreeHostImpl.
   void Init(WindowTreeHostDelegate* delegate);
 
+  const WindowTreeImpl* GetWindowTree() const;
   WindowTreeImpl* GetWindowTree();
 
   mojom::WindowTreeHostClient* client() const { return client_.get(); }
@@ -93,9 +96,18 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
                             const ui::TextInputState& state);
   void SetImeVisibility(ServerWindow* window, bool visible);
 
+  // Called just before |tree| is destroyed after its connection encounters an
+  // error.
+  void OnWindowTreeConnectionError(WindowTreeImpl* tree);
+
   // Called when a client updates a cursor. This will update the cursor on the
   // native display if the cursor is currently under |window|.
   void OnCursorUpdated(ServerWindow* window);
+
+  // Called when the window tree when stacking and bounds of a window
+  // change. This may update the cursor if the ServerWindow under the last
+  // known pointer location changed.
+  void MaybeChangeCursorOnWindowTreeChange();
 
   // WindowTreeHost:
   void SetSize(mojo::SizePtr size) override;
@@ -104,8 +116,8 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
                       mojom::EventMatcherPtr event_matcher,
                       const AddAcceleratorCallback& callback) override;
   void RemoveAccelerator(uint32_t id) override;
-  void AddActivationParent(uint32_t window_id) override;
-  void RemoveActivationParent(uint32_t window_id) override;
+  void AddActivationParent(Id transport_window_id) override;
+  void RemoveActivationParent(Id transport_window_id) override;
   void ActivateNextWindow() override;
   void SetUnderlaySurfaceOffsetAndExtendedHitArea(
       Id window_id,
@@ -118,6 +130,8 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
  private:
   friend class WindowTreeTest;
 
+  WindowId MapWindowIdFromClient(Id transport_window_id) const;
+
   void OnClientClosed();
   void OnEventAckTimeout();
   void DispatchNextEventFromQueue();
@@ -126,7 +140,7 @@ class WindowTreeHostImpl : public DisplayManagerDelegate,
 
   // DisplayManagerDelegate:
   ServerWindow* GetRootWindow() override;
-  void OnEvent(mojom::EventPtr event) override;
+  void OnEvent(const ui::Event& event) override;
   void OnDisplayClosed() override;
   void OnViewportMetricsChanged(
       const mojom::ViewportMetrics& old_metrics,

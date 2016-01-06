@@ -23,7 +23,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/encryptedmedia/MediaKeys.h"
 
 #include "bindings/core/v8/ScriptState.h"
@@ -107,7 +106,7 @@ MediaKeys::~MediaKeys()
 
 MediaKeySession* MediaKeys::createSession(ScriptState* scriptState, const String& sessionTypeString, ExceptionState& exceptionState)
 {
-    WTF_LOG(Media, "MediaKeys(%p)::createSession", this);
+    WTF_LOG(Media, "MediaKeys(%p)::createSession %s", this, sessionTypeString.utf8().data());
 
     // From http://w3c.github.io/encrypted-media/#createSession
 
@@ -121,8 +120,10 @@ MediaKeySession* MediaKeys::createSession(ScriptState* scriptState, const String
     //    implementation value does not support sessionType, throw a new
     //    DOMException whose name is NotSupportedError.
     WebEncryptedMediaSessionType sessionType = EncryptedMediaUtils::convertToSessionType(sessionTypeString);
-    if (!sessionTypeSupported(sessionType))
+    if (!sessionTypeSupported(sessionType)) {
         exceptionState.throwDOMException(NotSupportedError, "Unsupported session type.");
+        return nullptr;
+    }
 
     // 3. Let session be a new MediaKeySession object, and initialize it as
     //    follows:

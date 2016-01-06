@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/accessibility/AXInlineTextBox.h"
 
 #include "core/dom/Range.h"
@@ -128,8 +127,8 @@ AXObject* AXInlineTextBox::computeParent() const
     if (!m_inlineTextBox || !m_axObjectCache)
         return 0;
 
-    LayoutText* layoutText = m_inlineTextBox->layoutText();
-    return m_axObjectCache->getOrCreate(layoutText);
+    LineLayoutText lineLayoutText = m_inlineTextBox->lineLayoutItem();
+    return m_axObjectCache->getOrCreate(lineLayoutText);
 }
 
 // In addition to LTR and RTL direction, edit fields also support

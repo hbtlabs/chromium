@@ -4,10 +4,12 @@
 
 #include "components/dom_distiller/core/page_features.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/json/json_reader.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
 namespace dom_distiller {

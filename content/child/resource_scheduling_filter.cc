@@ -4,9 +4,12 @@
 
 #include "content/child/resource_scheduling_filter.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "content/child/resource_dispatcher.h"
+#include "content/common/resource_messages.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_start.h"
 #include "third_party/WebKit/public/platform/WebTaskRunner.h"
@@ -49,6 +52,9 @@ ResourceSchedulingFilter::~ResourceSchedulingFilter() {
 }
 
 bool ResourceSchedulingFilter::OnMessageReceived(const IPC::Message& message) {
+  // TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+  content::CheckContentsOfResourceMessage(&message);
+
   base::AutoLock lock(request_id_to_task_runner_map_lock_);
   int request_id;
 
@@ -78,7 +84,7 @@ void ResourceSchedulingFilter::SetRequestIdTaskRunner(
     int id, scoped_ptr<blink::WebTaskRunner> web_task_runner) {
   base::AutoLock lock(request_id_to_task_runner_map_lock_);
   request_id_to_task_runner_map_.insert(
-      std::make_pair(id, web_task_runner.Pass()));
+      std::make_pair(id, std::move(web_task_runner)));
 }
 
 void ResourceSchedulingFilter::ClearRequestIdTaskRunner(int id) {
@@ -87,7 +93,7 @@ void ResourceSchedulingFilter::ClearRequestIdTaskRunner(int id) {
 }
 
 bool ResourceSchedulingFilter::GetSupportedMessageClasses(
-    std::vector<uint32>* supported_message_classes) const {
+    std::vector<uint32_t>* supported_message_classes) const {
   supported_message_classes->push_back(ResourceMsgStart);
   return true;
 }

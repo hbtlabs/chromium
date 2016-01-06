@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/history/core/browser/history_types.h"
@@ -107,6 +108,8 @@ class InstantService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, ProcessIsolation);
   FRIEND_TEST_ALL_PREFIXES(InstantServiceEnabledTest,
                            SendsSearchURLsToRenderer);
+  FRIEND_TEST_ALL_PREFIXES(InstantServiceTest, GetSuggestionFromServiceSide);
+  FRIEND_TEST_ALL_PREFIXES(InstantServiceTest, GetSuggestionFromClientSide);
 
   // KeyedService:
   void Shutdown() override;
@@ -143,7 +146,7 @@ class InstantService : public KeyedService,
 
 #if defined(ENABLE_THEMES)
   // Theme changed notification handler.
-  void OnThemeChanged(ThemeService* theme_service);
+  void OnThemeChanged();
 #endif
 
   void ResetInstantSearchPrerenderer();

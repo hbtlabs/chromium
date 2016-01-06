@@ -8,10 +8,12 @@
 #ifndef NET_TOOLS_QUIC_QUIC_SIMPLE_CLIENT_H_
 #define NET_TOOLS_QUIC_QUIC_SIMPLE_CLIENT_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_endpoint.h"
@@ -127,7 +129,7 @@ class QuicSimpleClient : public QuicClientBase,
   bool MigrateSocket(const IPAddressNumber& new_host);
 
   // QuicPacketReader::Visitor
-  void OnReadError(int result) override;
+  void OnReadError(int result, const DatagramClientSocket* socket) override;
   bool OnPacket(const QuicEncryptedPacket& packet,
                 IPEndPoint local_address,
                 IPEndPoint peer_address) override;
@@ -218,9 +220,6 @@ class QuicSimpleClient : public QuicClientBase,
 
   // UDP socket connected to the server.
   scoped_ptr<UDPClientSocket> socket_;
-
-  // Helper to be used by created connections.
-  scoped_ptr<QuicConnectionHelper> helper_;
 
   // Listens for full responses.
   scoped_ptr<ResponseListener> response_listener_;

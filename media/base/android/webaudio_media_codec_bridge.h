@@ -6,10 +6,12 @@
 #define MEDIA_BASE_ANDROID_WEBAUDIO_MEDIA_CODEC_BRIDGE_H_
 
 #include <jni.h>
+#include <stdint.h>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
 #include "base/file_descriptor_posix.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "media/base/media_export.h"
 

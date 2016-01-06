@@ -8,8 +8,8 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -54,6 +54,9 @@ class CONTENT_EXPORT NavigationControllerAndroid {
   void Reload(JNIEnv* env,
               const base::android::JavaParamRef<jobject>& obj,
               jboolean check_for_repost);
+  void ReloadToRefreshContent(JNIEnv* env,
+                              jobject obj,
+                              jboolean check_for_repost);
   void ReloadIgnoringCache(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            jboolean check_for_repost);
@@ -80,6 +83,7 @@ class CONTENT_EXPORT NavigationControllerAndroid {
       const base::android::JavaParamRef<jbyteArray>& post_data,
       const base::android::JavaParamRef<jstring>& base_url_for_data_url,
       const base::android::JavaParamRef<jstring>& virtual_url_for_data_url,
+      const base::android::JavaParamRef<jstring>& data_url_as_string,
       jboolean can_load_local_resources,
       jboolean is_renderer_initiated,
       jboolean should_replace_current_entry);

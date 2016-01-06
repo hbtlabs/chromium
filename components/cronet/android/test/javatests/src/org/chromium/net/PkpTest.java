@@ -66,7 +66,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mServerHost, nonMatchingHash, EXCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertErrorResponse();
@@ -87,7 +87,7 @@ public class PkpTest extends CronetTestBase {
 
         addPkpSha256(mServerHost, matchingHash, EXCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertSuccessfulResponse();
@@ -106,7 +106,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mDomain, nonMatchingHash, INCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertErrorResponse();
@@ -125,7 +125,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mDomain, nonMatchingHash, EXCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertSuccessfulResponse();
@@ -144,7 +144,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256("otherhost.com", nonMatchingHash, INCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertSuccessfulResponse();
@@ -163,7 +163,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mServerHost, nonMatchingHash, EXCLUDE_SUBDOMAINS, tenSecondsAhead);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertErrorResponse();
@@ -182,7 +182,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mServerHost, nonMatchingHash, EXCLUDE_SUBDOMAINS, oneSecondAgo);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
 
         assertSuccessfulResponse();
@@ -199,7 +199,7 @@ public class PkpTest extends CronetTestBase {
         byte[] nonMatchingHash = generateSomeSha256();
         addPkpSha256(mServerHost, nonMatchingHash, EXCLUDE_SUBDOMAINS, DISTANT_FUTURE);
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
         assertErrorResponse();
         shutdownCronetEngine();
@@ -208,7 +208,7 @@ public class PkpTest extends CronetTestBase {
         // a successful response is expected.
         createCronetEngineBuilder();
         startCronetFramework();
-        registerHostResolver();
+        registerHostResolver(mTestFramework);
         sendRequestAndWaitForResult();
         assertSuccessfulResponse();
     }
@@ -302,17 +302,20 @@ public class PkpTest extends CronetTestBase {
      * Asserts that the response from the server contains an PKP error.
      * TODO(kapishnikov): currently QUIC returns ERR_QUIC_PROTOCOL_ERROR instead of expected
      * ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN error code when the pin doesn't match.
-     * This method should be changed when the bug is resolved. See http://crbug.com/548378
+     * This method should be changed when the bug is resolved.
+     * See http://crbug.com/548378
+     * See http://crbug.com/568669
      */
     private void assertErrorResponse() {
         assertNotNull("Expected an error", mListener.mError);
         int errorCode = mListener.mError.netError();
-        boolean correctErrorCode = errorCode == NetError.ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN
-                || errorCode == NetError.ERR_QUIC_PROTOCOL_ERROR;
-        assertTrue(String.format("Incorrect error code. Expected %s or %s but received %s",
-                           NetError.ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN,
-                           NetError.ERR_QUIC_PROTOCOL_ERROR, errorCode),
-                correctErrorCode);
+        Set<Integer> expectedErrors = new HashSet<>();
+        expectedErrors.add(NetError.ERR_QUIC_PROTOCOL_ERROR);
+        expectedErrors.add(NetError.ERR_CONNECTION_REFUSED);
+        expectedErrors.add(NetError.ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN);
+        assertTrue(String.format("Incorrect error code. Expected one of %s but received %s",
+                           expectedErrors, errorCode),
+                expectedErrors.contains(errorCode));
     }
 
     /**
@@ -345,12 +348,6 @@ public class PkpTest extends CronetTestBase {
         if (mTestFramework != null && mTestFramework.mCronetEngine != null) {
             mTestFramework.mCronetEngine.shutdown();
         }
-    }
-
-    private void registerHostResolver() {
-        long urlRequestContextAdapter = ((CronetUrlRequestContext) mTestFramework.mCronetEngine)
-                                                .getUrlRequestContextAdapter();
-        NativeTestServer.registerHostResolverProc(urlRequestContextAdapter, false);
     }
 
     private byte[] generateSomeSha256() {

@@ -4,11 +4,14 @@
 
 #include "content/browser/service_worker/service_worker_context_core.h"
 
+#include <utility>
+
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -104,7 +107,7 @@ class ClearAllServiceWorkersHelper
       return;
     // Make a copy of live versions map because StopWorker() removes the version
     // from it when we were starting up and don't have a process yet.
-    const std::map<int64, ServiceWorkerVersion*> live_versions_copy =
+    const std::map<int64_t, ServiceWorkerVersion*> live_versions_copy =
         context->GetLiveVersions();
     for (const auto& version_itr : live_versions_copy) {
       ServiceWorkerVersion* version(version_itr.second);
@@ -221,12 +224,9 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
       weak_factory_(this) {
   // These get a WeakPtr from weak_factory_, so must be set after weak_factory_
   // is initialized.
-  storage_ = ServiceWorkerStorage::Create(path,
-                                          AsWeakPtr(),
-                                          database_task_manager.Pass(),
-                                          disk_cache_thread,
-                                          quota_manager_proxy,
-                                          special_storage_policy);
+  storage_ = ServiceWorkerStorage::Create(
+      path, AsWeakPtr(), std::move(database_task_manager), disk_cache_thread,
+      quota_manager_proxy, special_storage_policy);
   embedded_worker_registry_ = EmbeddedWorkerRegistry::Create(AsWeakPtr());
   job_coordinator_.reset(new ServiceWorkerJobCoordinator(AsWeakPtr()));
 }
@@ -333,7 +333,7 @@ void ServiceWorkerContextCore::HasMainFrameProviderHost(
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&FrameListContainsMainFrameOnUI,
-                 base::Passed(render_frames.Pass())),
+                 base::Passed(std::move(render_frames))),
       callback);
 }
 
@@ -523,7 +523,7 @@ void ServiceWorkerContextCore::UpdateComplete(
 void ServiceWorkerContextCore::UnregistrationComplete(
     const GURL& pattern,
     const ServiceWorkerContextCore::UnregistrationCallback& callback,
-    int64 registration_id,
+    int64_t registration_id,
     ServiceWorkerStatusCode status) {
   callback.Run(status);
   if (status == SERVICE_WORKER_OK && observer_list_.get()) {
@@ -534,7 +534,7 @@ void ServiceWorkerContextCore::UnregistrationComplete(
 }
 
 ServiceWorkerRegistration* ServiceWorkerContextCore::GetLiveRegistration(
-    int64 id) {
+    int64_t id) {
   RegistrationsMap::iterator it = live_registrations_.find(id);
   return (it != live_registrations_.end()) ? it->second : NULL;
 }
@@ -550,12 +550,11 @@ void ServiceWorkerContextCore::AddLiveRegistration(
   }
 }
 
-void ServiceWorkerContextCore::RemoveLiveRegistration(int64 id) {
+void ServiceWorkerContextCore::RemoveLiveRegistration(int64_t id) {
   live_registrations_.erase(id);
 }
 
-ServiceWorkerVersion* ServiceWorkerContextCore::GetLiveVersion(
-    int64 id) {
+ServiceWorkerVersion* ServiceWorkerContextCore::GetLiveVersion(int64_t id) {
   VersionMap::iterator it = live_versions_.find(id);
   return (it != live_versions_.end()) ? it->second : NULL;
 }
@@ -601,17 +600,16 @@ void ServiceWorkerContextCore::AddLiveVersion(ServiceWorkerVersion* version) {
   }
 }
 
-void ServiceWorkerContextCore::RemoveLiveVersion(int64 id) {
+void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {
   live_versions_.erase(id);
 }
 
 std::vector<ServiceWorkerRegistrationInfo>
 ServiceWorkerContextCore::GetAllLiveRegistrationInfo() {
   std::vector<ServiceWorkerRegistrationInfo> infos;
-  for (std::map<int64, ServiceWorkerRegistration*>::const_iterator iter =
+  for (std::map<int64_t, ServiceWorkerRegistration*>::const_iterator iter =
            live_registrations_.begin();
-       iter != live_registrations_.end();
-       ++iter) {
+       iter != live_registrations_.end(); ++iter) {
     infos.push_back(iter->second->GetInfo());
   }
   return infos;
@@ -620,10 +618,9 @@ ServiceWorkerContextCore::GetAllLiveRegistrationInfo() {
 std::vector<ServiceWorkerVersionInfo>
 ServiceWorkerContextCore::GetAllLiveVersionInfo() {
   std::vector<ServiceWorkerVersionInfo> infos;
-  for (std::map<int64, ServiceWorkerVersion*>::const_iterator iter =
+  for (std::map<int64_t, ServiceWorkerVersion*>::const_iterator iter =
            live_versions_.begin();
-       iter != live_versions_.end();
-       ++iter) {
+       iter != live_versions_.end(); ++iter) {
     infos.push_back(iter->second->GetInfo());
   }
   return infos;
@@ -636,7 +633,7 @@ void ServiceWorkerContextCore::ProtectVersion(
   protected_versions_[version->version_id()] = version;
 }
 
-void ServiceWorkerContextCore::UnprotectVersion(int64 version_id) {
+void ServiceWorkerContextCore::UnprotectVersion(int64_t version_id) {
   DCHECK(protected_versions_.find(version_id) != protected_versions_.end());
   protected_versions_.erase(version_id);
 }

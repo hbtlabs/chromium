@@ -5,6 +5,7 @@
 #include "remoting/protocol/capture_scheduler.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/sys_info.h"
@@ -19,7 +20,7 @@ namespace {
 const int kStatisticsWindow = 3;
 
 // The hard limit is 30fps or 33ms per recording cycle.
-const int64 kDefaultMinimumIntervalMs = 33;
+const int64_t kDefaultMinimumIntervalMs = 33;
 
 // Controls how much CPU time we can use for encode and capture.
 // Range of this value is between 0 to 1. 0 means using 0% of of all CPUs
@@ -127,11 +128,11 @@ void CaptureScheduler::ProcessVideoAck(scoped_ptr<VideoAck> video_ack) {
 
 void CaptureScheduler::SetTickClockForTest(
     scoped_ptr<base::TickClock> tick_clock) {
-  tick_clock_ = tick_clock.Pass();
+  tick_clock_ = std::move(tick_clock);
 }
 
 void CaptureScheduler::SetTimerForTest(scoped_ptr<base::Timer> timer) {
-  capture_timer_ = timer.Pass();
+  capture_timer_ = std::move(timer);
 }
 
 void CaptureScheduler::SetNumOfProcessorsForTest(int num_of_processors) {

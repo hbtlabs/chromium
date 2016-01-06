@@ -24,7 +24,6 @@
     pages from the web. It has a memory cache for these objects.
 */
 
-#include "config.h"
 #include "core/fetch/CSSStyleSheetResource.h"
 
 #include "core/css/StyleSheetContents.h"
@@ -102,7 +101,7 @@ const String CSSStyleSheetResource::sheetText(MIMETypeCheck mimeTypeCheck) const
 
 const AtomicString CSSStyleSheetResource::mimeType() const
 {
-    return extractMIMETypeFromMediaType(response().httpHeaderField("Content-Type")).lower();
+    return extractMIMETypeFromMediaType(response().httpHeaderField(HTTPNames::Content_Type)).lower();
 }
 
 void CSSStyleSheetResource::checkNotify()

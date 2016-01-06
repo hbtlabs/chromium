@@ -5,8 +5,10 @@
 #include "ui/views/controls/textfield/textfield.h"
 
 #include <string>
+#include <utility>
 
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
@@ -563,7 +565,7 @@ void Textfield::ExecuteCommand(int command_id) {
 }
 
 void Textfield::SetFocusPainter(scoped_ptr<Painter> focus_painter) {
-  focus_painter_ = focus_painter.Pass();
+  focus_painter_ = std::move(focus_painter);
 }
 
 bool Textfield::HasTextBeingDragged() {
@@ -1496,7 +1498,7 @@ gfx::Rect Textfield::GetCaretBounds() const {
   return rect;
 }
 
-bool Textfield::GetCompositionCharacterBounds(uint32 index,
+bool Textfield::GetCompositionCharacterBounds(uint32_t index,
                                               gfx::Rect* rect) const {
   DCHECK(rect);
   if (!HasCompositionText())

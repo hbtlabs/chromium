@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/app_mode/kiosk_diagnosis_runner.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -107,7 +110,7 @@ void KioskDiagnosisRunner::SendSysLogFeedback(
        it != sys_info.end(); ++it) {
     (*sys_logs.get())[it->get()->key] = it->get()->value;
   }
-  feedback_data->SetAndCompressSystemInfo(sys_logs.Pass());
+  feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
   extensions::FeedbackService* service =
       extensions::FeedbackPrivateAPI::GetFactoryInstance()

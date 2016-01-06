@@ -34,13 +34,13 @@ const char kPrecacheFieldTrialEnabledGroup[] = "Enabled";
 const char kPrecacheFieldTrialControlGroup[] = "Control";
 const char kConfigURLParam[] = "config_url";
 const char kManifestURLPrefixParam[] = "manifest_url_prefix";
-const int kNumTopHosts = 100;
+const size_t kNumTopHosts = 100;
 
 }  // namespace
 
 namespace precache {
 
-int NumTopHosts() {
+size_t NumTopHosts() {
   return kNumTopHosts;
 }
 
@@ -176,7 +176,7 @@ void PrecacheManager::RecordStatsForFetch(const GURL& url,
                                           const GURL& referrer,
                                           const base::TimeDelta& latency,
                                           const base::Time& fetch_time,
-                                          int64 size,
+                                          int64_t size,
                                           bool was_cached) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -198,7 +198,7 @@ void PrecacheManager::RecordStatsForFetchInternal(
     const GURL& url,
     const base::TimeDelta& latency,
     const base::Time& fetch_time,
-    int64 size,
+    int64_t size,
     bool was_cached,
     int host_rank) {
   if (is_precaching_) {

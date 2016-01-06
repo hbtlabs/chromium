@@ -55,7 +55,7 @@ WebInspector.Spectrum = function()
     this._contrastRatioLine = contrastRatioSVG.createSVGChild("path", "spectrum-contrast-line");
 
     var toolbar = new WebInspector.Toolbar("spectrum-eye-dropper", this.contentElement);
-    this._colorPickerButton = new WebInspector.ToolbarButton(WebInspector.UIString("Toggle color picker"), "eyedropper-toolbar-item");
+    this._colorPickerButton = new WebInspector.ToolbarToggle(WebInspector.UIString("Toggle color picker"), "eyedropper-toolbar-item");
     this._colorPickerButton.setToggled(true);
     this._colorPickerButton.addEventListener("click", this._toggleColorPicker.bind(this, undefined));
     toolbar.appendToolbarItem(this._colorPickerButton);
@@ -227,7 +227,7 @@ WebInspector.Spectrum.prototype = {
 
     _focus: function()
     {
-        if (WebInspector.currentFocusElement() !== this.contentElement)
+        if (this.isShowing() && WebInspector.currentFocusElement() !== this.contentElement)
             WebInspector.setCurrentFocusElement(this.contentElement);
     },
 
@@ -270,9 +270,7 @@ WebInspector.Spectrum.prototype = {
                 shadow = colorElement.createChild("div", "spectrum-palette-color spectrum-palette-color-shadow");
                 shadow.style.background = palette.colors[i];
                 colorElement.title = WebInspector.UIString(palette.colors[i] + ". Long-click to show alternate shades.");
-                var controller = new WebInspector.LongClickController(colorElement);
-                controller.enable();
-                controller.addEventListener(WebInspector.LongClickController.Events.LongClick, this._showLightnessShades.bind(this, colorElement, palette.colors[i]));
+                new WebInspector.LongClickController(colorElement, this._showLightnessShades.bind(this, colorElement, palette.colors[i]));
             }
             this._paletteContainer.appendChild(colorElement);
         }
@@ -296,7 +294,7 @@ WebInspector.Spectrum.prototype = {
     /**
      * @param {!Element} colorElement
      * @param {string} colorText
-     * @param {!WebInspector.Event} event
+     * @param {!Event} event
      */
     _showLightnessShades: function(colorElement, colorText, event)
     {
@@ -370,8 +368,6 @@ WebInspector.Spectrum.prototype = {
         this._dragElement = element;
         this._dragHotSpotX = e.pageX - (index % WebInspector.Spectrum._itemsPerPaletteRow) * WebInspector.Spectrum._colorChipSize;
         this._dragHotSpotY = e.pageY - (index / WebInspector.Spectrum._itemsPerPaletteRow | 0) * WebInspector.Spectrum._colorChipSize;
-
-        this._deleteIconToolbar.element.classList.add("dragging");
         return true;
     },
 
@@ -387,6 +383,7 @@ WebInspector.Spectrum.prototype = {
         var offsetY = e.pageY - (newIndex / WebInspector.Spectrum._itemsPerPaletteRow | 0) * WebInspector.Spectrum._colorChipSize;
 
         var isDeleting = this._isDraggingToBin(e);
+        this._deleteIconToolbar.element.classList.add("dragging");
         this._deleteIconToolbar.element.classList.toggle("delete-color-toolbar-active", isDeleting);
         var dragElementTransform = "translateX(" + (offsetX - this._dragHotSpotX) + "px) translateY(" + (offsetY - this._dragHotSpotY) + "px)";
         this._dragElement.style.transform = isDeleting ? dragElementTransform + " scale(0.8)" : dragElementTransform;
@@ -434,7 +431,6 @@ WebInspector.Spectrum.prototype = {
 
         this._deleteIconToolbar.element.classList.remove("dragging");
         this._deleteIconToolbar.element.classList.remove("delete-color-toolbar-active");
-        this._deleteButton.setToggled(false);
     },
 
     _loadPalettes: function()

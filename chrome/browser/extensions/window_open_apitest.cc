@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/memory/scoped_vector.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -259,6 +262,32 @@ class WindowOpenPanelTest : public ExtensionApiTest {
 #endif
 IN_PROC_BROWSER_TEST_F(WindowOpenPanelTest, MAYBE_WindowOpenPanel) {
   ASSERT_TRUE(RunExtensionTest("window_open/panel")) << message_;
+}
+
+// Test verifying that panel-subframe can use window.open to find
+// background-subframe (see the picture below).  In other words, the test
+// verifies that the everything on the picture below stays in the same
+// BrowsingInstance.
+//
+// +-extension background page---+    +-panel-----------------------------+
+// |                             |    |                                   |
+// | chrome.windows.create(      |    | +-panel-subframe----------------+ |
+// |   'type':'panel') -------------> | | (foo.com)                     | |
+// |                             |    | |                               | |
+// |   +-background-subframe-+   |    | | w = window.open(...,          | |
+// |   | (foo.com)           |   |    | |   "background-subframe-name") | |
+// |   |                     | <--------------/                         | |
+// |   +---------------------+   |    | +-------------------------------+ |
+// |                             |    |                                   |
+// +-----------------------------+    +-----------------------------------+
+//
+// See also crbug.com/568357 for more info / context.
+IN_PROC_BROWSER_TEST_F(WindowOpenPanelTest, BrowsingInstanceTest) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  ASSERT_TRUE(RunExtensionTest("window_open/panel_browsing_instance"))
+      << message_;
 }
 
 #if defined(USE_ASH_PANELS) || defined(OS_LINUX)

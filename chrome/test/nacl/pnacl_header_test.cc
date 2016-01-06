@@ -4,6 +4,8 @@
 
 #include "chrome/test/nacl/pnacl_header_test.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/test/scoped_path_override.h"
@@ -98,7 +100,7 @@ scoped_ptr<HttpResponse> PnaclHeaderTest::WatchForPexeFetch(
     http_response->set_code(net::HTTP_OK);
     http_response->set_content("");
     http_response->set_content_type("application/octet-stream");
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // Skip other non-pexe files and let ServeFilesFromDirectory handle it.
@@ -109,8 +111,7 @@ scoped_ptr<HttpResponse> PnaclHeaderTest::WatchForPexeFetch(
   // For pexe files, check for the special Accept header,
   // along with the expected ResourceType of the URL request.
   EXPECT_NE(0U, request.headers.count("Accept"));
-  std::map<std::string, std::string>::const_iterator it =
-      request.headers.find("Accept");
+  auto it = request.headers.find("Accept");
   EXPECT_NE(std::string::npos, it->second.find("application/x-pnacl"));
   EXPECT_NE(std::string::npos, it->second.find("*/*"));
   EXPECT_TRUE(test_delegate_.found_pnacl_header());
@@ -131,7 +132,7 @@ scoped_ptr<HttpResponse> PnaclHeaderTest::WatchForPexeFetch(
   http_response->set_code(net::HTTP_NOT_FOUND);
   http_response->set_content("PEXE ... not found");
   http_response->set_content_type("application/octet-stream");
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 IN_PROC_BROWSER_TEST_F(PnaclHeaderTest, TestHasPnaclHeader) {

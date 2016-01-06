@@ -44,6 +44,13 @@ typedef void(GL_BINDING_CALL* glBindFragDataLocationIndexedProc)(
     const char* name);
 typedef void(GL_BINDING_CALL* glBindFramebufferEXTProc)(GLenum target,
                                                         GLuint framebuffer);
+typedef void(GL_BINDING_CALL* glBindImageTextureEXTProc)(GLuint index,
+                                                         GLuint texture,
+                                                         GLint level,
+                                                         GLboolean layered,
+                                                         GLint layer,
+                                                         GLenum access,
+                                                         GLint format);
 typedef void(GL_BINDING_CALL* glBindRenderbufferEXTProc)(GLenum target,
                                                          GLuint renderbuffer);
 typedef void(GL_BINDING_CALL* glBindSamplerProc)(GLuint unit, GLuint sampler);
@@ -199,6 +206,7 @@ typedef void(GL_BINDING_CALL* glCopyTexSubImage3DProc)(GLenum target,
                                                        GLint y,
                                                        GLsizei width,
                                                        GLsizei height);
+typedef void(GL_BINDING_CALL* glCoverageModulationNVProc)(GLenum components);
 typedef void(GL_BINDING_CALL* glCoverFillPathInstancedNVProc)(
     GLsizei numPaths,
     GLenum pathNameType,
@@ -607,6 +615,7 @@ typedef void*(GL_BINDING_CALL* glMapBufferRangeProc)(GLenum target,
 typedef void(GL_BINDING_CALL* glMatrixLoadfEXTProc)(GLenum matrixMode,
                                                     const GLfloat* m);
 typedef void(GL_BINDING_CALL* glMatrixLoadIdentityEXTProc)(GLenum matrixMode);
+typedef void(GL_BINDING_CALL* glMemoryBarrierEXTProc)(GLbitfield barriers);
 typedef void(GL_BINDING_CALL* glPathCommandsNVProc)(GLuint path,
                                                     GLsizei numCommands,
                                                     const GLubyte* commands,
@@ -1042,6 +1051,7 @@ struct ExtensionsGL {
   bool b_GL_ARB_occlusion_query;
   bool b_GL_ARB_program_interface_query;
   bool b_GL_ARB_robustness;
+  bool b_GL_ARB_shader_image_load_store;
   bool b_GL_ARB_sync;
   bool b_GL_ARB_texture_storage;
   bool b_GL_ARB_timer_query;
@@ -1062,6 +1072,7 @@ struct ExtensionsGL {
   bool b_GL_EXT_multisampled_render_to_texture;
   bool b_GL_EXT_occlusion_query_boolean;
   bool b_GL_EXT_robustness;
+  bool b_GL_EXT_shader_image_load_store;
   bool b_GL_EXT_texture_storage;
   bool b_GL_EXT_timer_query;
   bool b_GL_IMG_multisampled_render_to_texture;
@@ -1070,6 +1081,7 @@ struct ExtensionsGL {
   bool b_GL_KHR_robustness;
   bool b_GL_NV_blend_equation_advanced;
   bool b_GL_NV_fence;
+  bool b_GL_NV_framebuffer_mixed_samples;
   bool b_GL_NV_path_rendering;
   bool b_GL_OES_EGL_image;
   bool b_GL_OES_get_program_binary;
@@ -1091,6 +1103,7 @@ struct ProcsGL {
   glBindFragDataLocationProc glBindFragDataLocationFn;
   glBindFragDataLocationIndexedProc glBindFragDataLocationIndexedFn;
   glBindFramebufferEXTProc glBindFramebufferEXTFn;
+  glBindImageTextureEXTProc glBindImageTextureEXTFn;
   glBindRenderbufferEXTProc glBindRenderbufferEXTFn;
   glBindSamplerProc glBindSamplerFn;
   glBindTextureProc glBindTextureFn;
@@ -1128,6 +1141,7 @@ struct ProcsGL {
   glCopyTexImage2DProc glCopyTexImage2DFn;
   glCopyTexSubImage2DProc glCopyTexSubImage2DFn;
   glCopyTexSubImage3DProc glCopyTexSubImage3DFn;
+  glCoverageModulationNVProc glCoverageModulationNVFn;
   glCoverFillPathInstancedNVProc glCoverFillPathInstancedNVFn;
   glCoverFillPathNVProc glCoverFillPathNVFn;
   glCoverStrokePathInstancedNVProc glCoverStrokePathInstancedNVFn;
@@ -1281,6 +1295,7 @@ struct ProcsGL {
   glMapBufferRangeProc glMapBufferRangeFn;
   glMatrixLoadfEXTProc glMatrixLoadfEXTFn;
   glMatrixLoadIdentityEXTProc glMatrixLoadIdentityEXTFn;
+  glMemoryBarrierEXTProc glMemoryBarrierEXTFn;
   glPathCommandsNVProc glPathCommandsNVFn;
   glPathParameterfNVProc glPathParameterfNVFn;
   glPathParameteriNVProc glPathParameteriNVFn;
@@ -1430,6 +1445,13 @@ class GL_EXPORT GLApi {
                                                GLuint index,
                                                const char* name) = 0;
   virtual void glBindFramebufferEXTFn(GLenum target, GLuint framebuffer) = 0;
+  virtual void glBindImageTextureEXTFn(GLuint index,
+                                       GLuint texture,
+                                       GLint level,
+                                       GLboolean layered,
+                                       GLint layer,
+                                       GLenum access,
+                                       GLint format) = 0;
   virtual void glBindRenderbufferEXTFn(GLenum target, GLuint renderbuffer) = 0;
   virtual void glBindSamplerFn(GLuint unit, GLuint sampler) = 0;
   virtual void glBindTextureFn(GLenum target, GLuint texture) = 0;
@@ -1582,6 +1604,7 @@ class GL_EXPORT GLApi {
                                      GLint y,
                                      GLsizei width,
                                      GLsizei height) = 0;
+  virtual void glCoverageModulationNVFn(GLenum components) = 0;
   virtual void glCoverFillPathInstancedNVFn(GLsizei numPaths,
                                             GLenum pathNameType,
                                             const void* paths,
@@ -1923,6 +1946,7 @@ class GL_EXPORT GLApi {
                                    GLbitfield access) = 0;
   virtual void glMatrixLoadfEXTFn(GLenum matrixMode, const GLfloat* m) = 0;
   virtual void glMatrixLoadIdentityEXTFn(GLenum matrixMode) = 0;
+  virtual void glMemoryBarrierEXTFn(GLbitfield barriers) = 0;
   virtual void glPathCommandsNVFn(GLuint path,
                                   GLsizei numCommands,
                                   const GLubyte* commands,
@@ -2316,6 +2340,8 @@ class GL_EXPORT GLApi {
 #define glBindFragDataLocationIndexed \
   ::gfx::g_current_gl_context->glBindFragDataLocationIndexedFn
 #define glBindFramebufferEXT ::gfx::g_current_gl_context->glBindFramebufferEXTFn
+#define glBindImageTextureEXT \
+  ::gfx::g_current_gl_context->glBindImageTextureEXTFn
 #define glBindRenderbufferEXT \
   ::gfx::g_current_gl_context->glBindRenderbufferEXTFn
 #define glBindSampler ::gfx::g_current_gl_context->glBindSamplerFn
@@ -2362,6 +2388,8 @@ class GL_EXPORT GLApi {
 #define glCopyTexImage2D ::gfx::g_current_gl_context->glCopyTexImage2DFn
 #define glCopyTexSubImage2D ::gfx::g_current_gl_context->glCopyTexSubImage2DFn
 #define glCopyTexSubImage3D ::gfx::g_current_gl_context->glCopyTexSubImage3DFn
+#define glCoverageModulationNV \
+  ::gfx::g_current_gl_context->glCoverageModulationNVFn
 #define glCoverFillPathInstancedNV \
   ::gfx::g_current_gl_context->glCoverFillPathInstancedNVFn
 #define glCoverFillPathNV ::gfx::g_current_gl_context->glCoverFillPathNVFn
@@ -2561,6 +2589,7 @@ class GL_EXPORT GLApi {
 #define glMatrixLoadfEXT ::gfx::g_current_gl_context->glMatrixLoadfEXTFn
 #define glMatrixLoadIdentityEXT \
   ::gfx::g_current_gl_context->glMatrixLoadIdentityEXTFn
+#define glMemoryBarrierEXT ::gfx::g_current_gl_context->glMemoryBarrierEXTFn
 #define glPathCommandsNV ::gfx::g_current_gl_context->glPathCommandsNVFn
 #define glPathParameterfNV ::gfx::g_current_gl_context->glPathParameterfNVFn
 #define glPathParameteriNV ::gfx::g_current_gl_context->glPathParameteriNVFn

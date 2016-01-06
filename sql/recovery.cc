@@ -4,6 +4,8 @@
 
 #include "sql/recovery.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -113,7 +115,7 @@ scoped_ptr<Recovery> Recovery::Begin(
     return scoped_ptr<Recovery>();
   }
 
-  return r.Pass();
+  return r;
 }
 
 // static

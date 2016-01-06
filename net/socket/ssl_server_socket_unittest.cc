@@ -17,14 +17,15 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-
 #include <queue>
+#include <utility>
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -191,9 +192,9 @@ class FakeSocket : public StreamSocket {
     return outgoing_->Write(buf, buf_len, callback);
   }
 
-  int SetReceiveBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
 
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
   int Connect(const CompletionCallback& callback) override { return OK; }
 
@@ -325,10 +326,10 @@ class SSLServerSocketTest : public PlatformTest {
     base::FilePath key_path = certs_dir.AppendASCII("unittest.key.bin");
     std::string key_string;
     ASSERT_TRUE(base::ReadFileToString(key_path, &key_string));
-    std::vector<uint8> key_vector(
-        reinterpret_cast<const uint8*>(key_string.data()),
-        reinterpret_cast<const uint8*>(key_string.data() +
-                                       key_string.length()));
+    std::vector<uint8_t> key_vector(
+        reinterpret_cast<const uint8_t*>(key_string.data()),
+        reinterpret_cast<const uint8_t*>(key_string.data() +
+                                         key_string.length()));
 
     scoped_ptr<crypto::RSAPrivateKey> private_key(
         crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(key_vector));
@@ -347,10 +348,10 @@ class SSLServerSocketTest : public PlatformTest {
     context.cert_verifier = cert_verifier_.get();
     context.transport_security_state = transport_security_state_.get();
     client_socket_ = socket_factory_->CreateSSLClientSocket(
-        client_connection.Pass(), host_and_pair, client_ssl_config_, context);
-    server_socket_ =
-        CreateSSLServerSocket(server_socket.Pass(), cert.get(),
-                              private_key.get(), server_ssl_config_);
+        std::move(client_connection), host_and_pair, client_ssl_config_,
+        context);
+    server_socket_ = CreateSSLServerSocket(std::move(server_socket), cert.get(),
+                                           *private_key, server_ssl_config_);
   }
 
   FakeDataChannel channel_1_;

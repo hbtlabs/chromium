@@ -4,6 +4,10 @@
 
 #include "mojo/runner/host/child_process_host.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -39,11 +43,8 @@ ChildProcessHost::ChildProcessHost(base::TaskRunner* launch_process_runner,
       channel_info_(nullptr),
       start_child_process_event_(false, false),
       weak_factory_(this) {
-#if defined(OS_WIN)
-  // TODO(jam): enable on POSIX
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk"))
     serializer_platform_channel_pair_.reset(new edk::PlatformChannelPair(true));
-#endif
 
   child_message_pipe_ = embedder::CreateChannel(
       platform_channel_pair_.PassServerHandle(),
@@ -59,7 +60,7 @@ ChildProcessHost::ChildProcessHost(ScopedHandle channel)
       weak_factory_(this) {
   CHECK(channel.is_valid());
   ScopedMessagePipeHandle handle(MessagePipeHandle(channel.release().value()));
-  controller_.Bind(InterfacePtrInfo<ChildController>(handle.Pass(), 0u));
+  controller_.Bind(InterfacePtrInfo<ChildController>(std::move(handle), 0u));
 }
 
 ChildProcessHost::~ChildProcessHost() {
@@ -67,11 +68,11 @@ ChildProcessHost::~ChildProcessHost() {
     CHECK(!controller_) << "Destroying ChildProcessHost before calling Join";
 }
 
-void ChildProcessHost::Start() {
+void ChildProcessHost::Start(
+    const base::Callback<void(base::ProcessId)>& pid_available_callback) {
   DCHECK(!child_process_.IsValid());
   DCHECK(child_message_pipe_.is_valid());
 
-#if defined(OS_WIN)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
     std::string client_handle_as_string =
         serializer_platform_channel_pair_
@@ -86,15 +87,15 @@ void ChildProcessHost::Start() {
         MOJO_WRITE_MESSAGE_FLAG_NONE);
     DCHECK_EQ(rv, MOJO_RESULT_OK);
   }
-#endif
 
   controller_.Bind(
-      InterfacePtrInfo<ChildController>(child_message_pipe_.Pass(), 0u));
+      InterfacePtrInfo<ChildController>(std::move(child_message_pipe_), 0u));
 
   launch_process_runner_->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&ChildProcessHost::DoLaunch, base::Unretained(this)),
-      base::Bind(&ChildProcessHost::DidStart, weak_factory_.GetWeakPtr()));
+      base::Bind(&ChildProcessHost::DidStart, weak_factory_.GetWeakPtr(),
+                 pid_available_callback));
 }
 
 int ChildProcessHost::Join() {
@@ -116,7 +117,7 @@ void ChildProcessHost::StartApp(
 
   on_app_complete_ = on_app_complete;
   controller_->StartApp(
-      application_request.Pass(),
+      std::move(application_request),
       base::Bind(&ChildProcessHost::AppCompleted, weak_factory_.GetWeakPtr()));
 }
 
@@ -126,10 +127,13 @@ void ChildProcessHost::ExitNow(int32_t exit_code) {
   controller_->ExitNow(exit_code);
 }
 
-void ChildProcessHost::DidStart() {
+void ChildProcessHost::DidStart(
+    const base::Callback<void(base::ProcessId)>& pid_available_callback) {
   DVLOG(2) << "ChildProcessHost::DidStart()";
 
-  if (!child_process_.IsValid()) {
+  if (child_process_.IsValid()) {
+    pid_available_callback.Run(child_process_.Pid());
+  } else {
     LOG(ERROR) << "Failed to start child process";
     AppCompleted(MOJO_RESULT_UNKNOWN);
   }
@@ -206,21 +210,14 @@ void ChildProcessHost::DoLaunch() {
 
   if (child_process_.IsValid()) {
     platform_channel_pair_.ChildProcessLaunched();
-#if defined(OS_WIN)
     if (serializer_platform_channel_pair_.get()) {
       serializer_platform_channel_pair_->ChildProcessLaunched();
       mojo::embedder::ChildProcessLaunched(
           child_process_.Handle(),
           mojo::embedder::ScopedPlatformHandle(mojo::embedder::PlatformHandle(
               serializer_platform_channel_pair_->PassServerHandle().release().
-#if defined(OS_WIN)
-                  handle
-#else
-                  fd
-#endif
-            )));
+                  handle)));
     }
-#endif
   }
   start_child_process_event_.Signal();
 }

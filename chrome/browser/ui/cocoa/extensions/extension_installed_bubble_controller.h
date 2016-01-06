@@ -14,6 +14,7 @@ class Browser;
 class ExtensionInstalledBubble;
 @class HyperlinkTextView;
 @class HoverCloseButton;
+@class BubbleSyncPromoController;
 
 namespace extensions {
 class BundleInstaller;
@@ -36,14 +37,11 @@ const int kInnerVerticalMargin = 10;
 const int kAppsBubbleArrowOffset = 4;
 
 // We use a different kind of notification for each of these extension types.
-typedef enum {
+enum ExtensionType {
   kApp,
-  kBrowserAction,
-  kGeneric,
-  kOmniboxKeyword,
-  kPageAction,
+  kExtension,
   kBundle,
-} ExtensionType;
+};
 
 }  // namespace extension_installed_bubble
 
@@ -51,8 +49,7 @@ typedef enum {
 // an extension has been installed to inform the user that the install happened
 // properly, and to let the user know how to manage this extension in the
 // future.
-@interface ExtensionInstalledBubbleController :
-    BaseBubbleController<NSTextViewDelegate> {
+@interface ExtensionInstalledBubbleController : BaseBubbleController {
  @private
   const extensions::Extension* extension_;  // weak
   const extensions::BundleInstaller* bundle_;  // weak
@@ -69,6 +66,9 @@ typedef enum {
   // A weak reference to the bubble. It's owned by the BubbleManager.
   ExtensionInstalledBubble* installedBubble_;
 
+  // The controller for the sync promo.
+  base::scoped_nsobject<BubbleSyncPromoController> syncPromoController_;
+
   // References below are weak, being obtained from the nib.
   IBOutlet HoverCloseButton* closeButton_;
   IBOutlet NSImageView* iconImage_;
@@ -81,12 +81,7 @@ typedef enum {
   // Only shown for extensions with commands.
   IBOutlet NSButton* manageShortcutLink_;
   // Only shown if the sign-in promo is active.
-  IBOutlet NSTextField* promoPlaceholder_;
-  // Text fields don't work as well with embedded links as text views, but
-  // text views cannot conveniently be created in IB. The xib file contains
-  // a text field |promoPlaceholder_| that's replaced by this text view |promo_|
-  // in -awakeFromNib.
-  base::scoped_nsobject<HyperlinkTextView> promo_;
+  IBOutlet NSView* promoContainer_;
   // Only shown for bundle installs.
   IBOutlet NSTextField* installedHeadingMsg_;
   IBOutlet NSView* installedItemsView_;
@@ -95,6 +90,15 @@ typedef enum {
 }
 
 @property(nonatomic, readonly) const extensions::BundleInstaller* bundle;
+@property(nonatomic, readonly) ExtensionInstalledBubble* installedBubble;
+@property(nonatomic, readonly) NSView* heading;
+@property(nonatomic, readonly) NSView* closeButton;
+@property(nonatomic, readonly) NSView* howToUse;
+@property(nonatomic, readonly) NSView* howToManage;
+@property(nonatomic, readonly) NSView* appInstalledShortcutLink;
+@property(nonatomic, readonly) NSView* manageShortcutLink;
+@property(nonatomic, readonly) NSView* promoContainer;
+@property(nonatomic, readonly) NSView* iconImage;
 @property(nonatomic) BOOL pageActionPreviewShowing;
 
 // Initialize the window. It will be shown by the BubbleManager.
@@ -110,11 +114,6 @@ typedef enum {
 // Action for close button.
 - (IBAction)closeWindow:(id)sender;
 
-// From NSTextViewDelegate:
-- (BOOL)textView:(NSTextView*)aTextView
-   clickedOnLink:(id)link
-         atIndex:(NSUInteger)charIndex;
-
 // Displays the extension installed bubble. This callback is triggered by
 // the extensionObserver when the extension has completed loading.
 - (void)showWindow:(id)sender;
@@ -129,21 +128,5 @@ typedef enum {
 - (void)doClose;
 
 @end
-
-@interface ExtensionInstalledBubbleController (ExposedForTesting)
-
-- (void)removePageActionPreviewIfNecessary;
-- (NSWindow*)initializeWindow;
-- (int)calculateWindowHeight;
-- (void)setMessageFrames:(int)newWindowHeight;
-- (NSRect)headingFrame;
-- (NSRect)frameOfHowToUse;
-- (NSRect)frameOfHowToManage;
-- (NSRect)frameOfSigninPromo;
-- (BOOL)showSyncPromo;
-- (NSButton*)appInstalledShortcutLink;
-- (void)updateAnchorPosition;
-
-@end  // ExtensionInstalledBubbleController(ExposedForTesting)
 
 #endif  // CHROME_BROWSER_UI_COCOA_EXTENSIONS_EXTENSION_INSTALLED_BUBBLE_CONTROLLER_H_

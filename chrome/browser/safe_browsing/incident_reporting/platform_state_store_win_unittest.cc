@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/incident_reporting/platform_state_store.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_notifier_impl.h"
 #include "base/prefs/testing_pref_store.h"
 #include "base/strings/utf_string_conversions.h"
@@ -99,7 +100,7 @@ class PlatformStateStoreWinTest : public ::testing::Test {
     ASSERT_EQ(ERROR_SUCCESS,
               key.ReadValue(base::UTF8ToUTF16(kProfileName_).c_str(),
                             &buffer[0], &data_size, &data_type));
-    EXPECT_EQ(REG_BINARY, data_type);
+    EXPECT_EQ(static_cast<DWORD>(REG_BINARY), data_type);
     ASSERT_EQ(kTestDataSize_, data_size);
     EXPECT_EQ(std::string(&buffer[0], data_size),
               std::string(&kTestData_[0], kTestDataSize_));

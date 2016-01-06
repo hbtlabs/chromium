@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "net/dns/mock_mdns_socket_factory.h"
+
 #include <algorithm>
+#include <utility>
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
-#include "net/dns/mock_mdns_socket_factory.h"
 
 using testing::_;
 using testing::Invoke;
@@ -86,10 +88,10 @@ void MockMDnsSocketFactory::CreateSocket(
           this,
           &MockMDnsSocketFactory::RecvFromInternal));
 
-  sockets->push_back(new_socket.Pass());
+  sockets->push_back(std::move(new_socket));
 }
 
-void MockMDnsSocketFactory::SimulateReceive(const uint8* packet, int size) {
+void MockMDnsSocketFactory::SimulateReceive(const uint8_t* packet, int size) {
   DCHECK(recv_buffer_size_ >= size);
   DCHECK(recv_buffer_.get());
   DCHECK(!recv_callback_.is_null());

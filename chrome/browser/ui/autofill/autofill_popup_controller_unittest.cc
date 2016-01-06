@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
@@ -91,7 +95,6 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
   }
 
   // Making protected functions public for testing
-  using AutofillPopupControllerImpl::SetPopupBounds;
   using AutofillPopupControllerImpl::GetLineCount;
   using AutofillPopupControllerImpl::GetSuggestionAt;
   using AutofillPopupControllerImpl::GetElidedValueAt;
@@ -180,18 +183,6 @@ class AutofillPopupControllerUnitTest : public ChromeRenderViewHostTestHarness {
   scoped_ptr<NiceMock<MockAutofillExternalDelegate> > external_delegate_;
   testing::NiceMock<TestAutofillPopupController>* autofill_popup_controller_;
 };
-
-TEST_F(AutofillPopupControllerUnitTest, SetBounds) {
-  // Ensure the popup size can be set and causes a redraw.
-  gfx::Rect popup_bounds(10, 10, 100, 100);
-
-  EXPECT_CALL(*autofill_popup_controller_,
-              UpdateBoundsAndRedrawPopup());
-
-  popup_controller()->SetPopupBounds(popup_bounds);
-
-  EXPECT_EQ(popup_bounds, popup_controller()->popup_bounds());
-}
 
 TEST_F(AutofillPopupControllerUnitTest, ChangeSelectedLine) {
   // Set up the popup.

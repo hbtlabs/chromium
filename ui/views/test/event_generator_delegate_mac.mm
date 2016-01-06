@@ -3,9 +3,11 @@
 // found in the LICENSE file.
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_target.h"
@@ -284,6 +286,12 @@ class EventGeneratorDelegateMac : public ui::EventTarget,
                             gfx::Point* point) const override {}
   void ConvertPointFromHost(const ui::EventTarget* hosted_target,
                             gfx::Point* point) const override {}
+  void DispatchKeyEventToIME(EventTarget* target,
+                             ui::KeyEvent* event) override {
+    // InputMethodMac does not send native events nor do the necessary
+    // translation. Key events must be handled natively by an NSResponder which
+    // translates keyboard events into editing commands.
+  }
 
  private:
   friend struct base::DefaultSingletonTraits<EventGeneratorDelegateMac>;

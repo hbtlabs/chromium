@@ -5,11 +5,13 @@
 #ifndef MEDIA_BASE_MEDIA_KEYS_H_
 #define MEDIA_BASE_MEDIA_KEYS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"

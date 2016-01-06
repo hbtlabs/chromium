@@ -602,26 +602,24 @@ Number.withThousandsSeparator = function(num)
 /**
  * @param {string} format
  * @param {?ArrayLike} substitutions
- * @param {?string} initialValue
  * @return {!Element}
  */
-WebInspector.formatLocalized = function(format, substitutions, initialValue)
+WebInspector.formatLocalized = function(format, substitutions)
 {
-    var element = createElement("span");
     var formatters = {
-        s: function(substitution)
-        {
-            return substitution;
-        }
+        s: substitution => substitution
     };
+    /**
+     * @param {!Element} a
+     * @param {string|!Element} b
+     * @return {!Element}
+     */
     function append(a, b)
     {
-        if (typeof b === "string")
-            b = createTextNode(b);
-        element.appendChild(b);
+        a.appendChild(typeof b === "string" ? createTextNode(b) : b);
+        return a;
     }
-    String.format(WebInspector.UIString(format), substitutions, formatters, initialValue, append);
-    return element;
+    return String.format(WebInspector.UIString(format), substitutions, formatters, createElement("span"), append).formattedResult;
 }
 
 /**
@@ -1106,18 +1104,14 @@ WebInspector.animateFunction = function(window, func, params, frames, animationC
  * @constructor
  * @extends {WebInspector.Object}
  * @param {!Element} element
+ * @param {function(!Event)} callback
  */
-WebInspector.LongClickController = function(element)
+WebInspector.LongClickController = function(element, callback)
 {
     this._element = element;
+    this._callback = callback;
+    this._enable();
 }
-
-/**
- * @enum {string}
- */
-WebInspector.LongClickController.Events = {
-    LongClick: "LongClick"
-};
 
 WebInspector.LongClickController.prototype = {
     reset: function()
@@ -1128,7 +1122,7 @@ WebInspector.LongClickController.prototype = {
         }
     },
 
-    enable: function()
+    _enable: function()
     {
         if (this._longClickData)
             return;
@@ -1151,7 +1145,8 @@ WebInspector.LongClickController.prototype = {
         {
             if (e.which !== 1)
                 return;
-            this._longClickInterval = setTimeout(longClicked.bind(this, e), 200);
+            var callback = this._callback;
+            this._longClickInterval = setTimeout(callback.bind(null, e), 200);
         }
 
         /**
@@ -1164,18 +1159,9 @@ WebInspector.LongClickController.prototype = {
                 return;
             this.reset();
         }
-
-        /**
-         * @param {!Event} e
-         * @this {WebInspector.LongClickController}
-         */
-        function longClicked(e)
-        {
-            this.dispatchEventToListeners(WebInspector.LongClickController.Events.LongClick, e);
-        }
     },
 
-    disable: function()
+    dispose: function()
     {
         if (!this._longClickData)
             return;
@@ -1368,8 +1354,10 @@ WebInspector.appendStyle = function(node, cssFile)
              */
             function toggleCheckbox(event)
             {
-                if (event.target !== checkboxElement && event.target !== this)
+                if (event.target !== checkboxElement && event.target !== this) {
+                    event.consume();
                     checkboxElement.click();
+                }
             }
 
             this._root.createChild("content");

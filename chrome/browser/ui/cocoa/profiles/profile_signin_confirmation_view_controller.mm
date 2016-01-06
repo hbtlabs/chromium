@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/profiles/profile_signin_confirmation_view_controller.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -92,7 +94,7 @@ NSTextView* AddTextView(
       [[HyperlinkTextView alloc] initWithFrame:NSZeroRect]);
   NSFont* font = ui::ResourceBundle::GetSharedInstance().GetFont(
       font_style).GetNativeFont();
-  NSColor* linkColor = gfx::SkColorToCalibratedNSColor(
+  NSColor* linkColor = skia::SkColorToCalibratedNSColor(
       chrome_style::GetLinkColor());
   NSMutableString* finalMessage = [NSMutableString stringWithString:
                                              base::SysUTF16ToNSString(message)];
@@ -246,13 +248,13 @@ NSTextField* AddTextField(
 
   // Prompt box.
   [promptBox_
-      setBorderColor:gfx::SkColorToCalibratedNSColor(
+      setBorderColor:skia::SkColorToCalibratedNSColor(
                          ui::GetSigninConfirmationPromptBarColor(
                              ui::NativeThemeMac::instance(),
                              ui::kSigninConfirmationPromptBarBorderAlpha))];
   [promptBox_ setBorderWidth:kDialogAlertBarBorderWidth];
   [promptBox_
-      setFillColor:gfx::SkColorToCalibratedNSColor(
+      setFillColor:skia::SkColorToCalibratedNSColor(
                        ui::GetSigninConfirmationPromptBarColor(
                            ui::NativeThemeMac::instance(),
                            ui::kSigninConfirmationPromptBarBackgroundAlpha))];

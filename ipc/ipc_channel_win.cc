@@ -4,8 +4,9 @@
 
 #include "ipc/ipc_channel_win.h"
 
-#include <stdint.h>
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
@@ -489,6 +490,17 @@ bool ChannelWin::ProcessOutgoingMessages(
 
   // Write to pipe...
   OutputElement* element = output_queue_.front();
+
+  // TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+  {
+    const Message* m = element->get_message();
+    if (m) {
+      Channel::MessageVerifier verifier = Channel::GetMessageVerifier();
+      if (verifier)
+        verifier(m);
+    }
+  }
+
   DCHECK(element->size() <= INT_MAX);
   BOOL ok = WriteFile(pipe_.Get(),
                       element->data(),

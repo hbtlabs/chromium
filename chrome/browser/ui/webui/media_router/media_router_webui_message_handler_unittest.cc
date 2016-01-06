@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -97,9 +98,9 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinks) {
   EXPECT_EQ("media_router.ui.setSinkList", call_data.function_name());
   const base::Value* arg1 = call_data.arg1();
   const base::ListValue* sinks_list_value = nullptr;
-  EXPECT_TRUE(arg1->GetAsList(&sinks_list_value));
+  ASSERT_TRUE(arg1->GetAsList(&sinks_list_value));
   const base::DictionaryValue* sink_value = nullptr;
-  EXPECT_TRUE(sinks_list_value->GetDictionary(0, &sink_value));
+  ASSERT_TRUE(sinks_list_value->GetDictionary(0, &sink_value));
 
   std::string value;
   EXPECT_TRUE(sink_value->GetString("id", &value));
@@ -108,11 +109,9 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateSinks) {
   EXPECT_TRUE(sink_value->GetString("name", &value));
   EXPECT_EQ(sink_name, value);
 
-  const base::ListValue* cast_modes_value = nullptr;
-  EXPECT_TRUE(sink_value->GetList("castModes", &cast_modes_value));
-  int cast_mode = -1;
-  EXPECT_TRUE(cast_modes_value->GetInteger(0, &cast_mode));
-  EXPECT_EQ(static_cast<int>(MediaCastMode::TAB_MIRROR), cast_mode);
+  int cast_mode_bits = -1;
+  ASSERT_TRUE(sink_value->GetInteger("castModes", &cast_mode_bits));
+  EXPECT_EQ(static_cast<int>(MediaCastMode::TAB_MIRROR), cast_mode_bits);
 }
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
@@ -134,9 +133,9 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   EXPECT_EQ("media_router.ui.setRouteList", call_data.function_name());
   const base::Value* arg1 = call_data.arg1();
   const base::ListValue* routes_list_value = nullptr;
-  EXPECT_TRUE(arg1->GetAsList(&routes_list_value));
+  ASSERT_TRUE(arg1->GetAsList(&routes_list_value));
   const base::DictionaryValue* route_value = nullptr;
-  EXPECT_TRUE(routes_list_value->GetDictionary(0, &route_value));
+  ASSERT_TRUE(routes_list_value->GetDictionary(0, &route_value));
 
   std::string value;
   EXPECT_TRUE(route_value->GetString("id", &value));
@@ -178,12 +177,12 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, OnCreateRouteResponseReceived) {
             call_data.function_name());
   const base::Value* arg1 = call_data.arg1();
   const base::StringValue* sink_id_value = nullptr;
-  EXPECT_TRUE(arg1->GetAsString(&sink_id_value));
+  ASSERT_TRUE(arg1->GetAsString(&sink_id_value));
   EXPECT_EQ(sink_id, sink_id_value->GetString());
 
   const base::Value* arg2 = call_data.arg2();
   const base::DictionaryValue* route_value = nullptr;
-  EXPECT_TRUE(arg2->GetAsDictionary(&route_value));
+  ASSERT_TRUE(arg2->GetAsDictionary(&route_value));
 
   std::string value;
   EXPECT_TRUE(route_value->GetString("id", &value));
@@ -216,7 +215,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateIssue) {
   EXPECT_EQ("media_router.ui.setIssue", call_data.function_name());
   const base::Value* arg1 = call_data.arg1();
   const base::DictionaryValue* issue_value = nullptr;
-  EXPECT_TRUE(arg1->GetAsDictionary(&issue_value));
+  ASSERT_TRUE(arg1->GetAsDictionary(&issue_value));
 
   std::string value;
   EXPECT_TRUE(issue_value->GetString("id", &value));

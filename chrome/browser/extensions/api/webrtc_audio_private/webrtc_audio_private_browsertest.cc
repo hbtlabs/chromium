@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -10,6 +12,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/webrtc_audio_private/webrtc_audio_private_api.h"
 #include "chrome/browser/extensions/component_loader.h"
@@ -117,7 +120,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
     scoped_ptr<base::Value> result(
         RunFunctionAndReturnSingleResult(function.get(), "[]", browser()));
     result->GetAsList(sink_list);
-    return result.Pass();
+    return result;
   }
 
   // Synchronously (from the calling thread's point of view) runs the

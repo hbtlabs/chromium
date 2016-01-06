@@ -5,6 +5,7 @@
 #ifndef CC_LAYERS_PICTURE_LAYER_H_
 #define CC_LAYERS_PICTURE_LAYER_H_
 
+#include "base/macros.h"
 #include "cc/base/invalidation_region.h"
 #include "cc/debug/devtools_instrumentation.h"
 #include "cc/debug/micro_benchmark_controller.h"
@@ -52,18 +53,26 @@ class CC_EXPORT PictureLayer : public Layer {
   ~PictureLayer() override;
 
   bool HasDrawableContent() const override;
+  void SetTypeForProtoSerialization(proto::LayerNode* proto) const override;
+  void LayerSpecificPropertiesToProto(proto::LayerProperties* proto) override;
+  void FromLayerSpecificPropertiesProto(
+      const proto::LayerProperties& proto) override;
 
   bool is_mask() const { return is_mask_; }
 
  private:
+  friend class TestSerializationPictureLayer;
+
+  void DropRecordingSourceContentIfInvalid();
+
   ContentLayerClient* client_;
   scoped_ptr<DisplayListRecordingSource> recording_source_;
   devtools_instrumentation::
       ScopedLayerObjectTracker instrumentation_object_tracker_;
+
   // Invalidation to use the next time update is called.
-  InvalidationRegion pending_invalidation_;
-  // Invalidation from the last time update was called.
-  Region recording_invalidation_;
+  InvalidationRegion invalidation_;
+
   gfx::Rect last_updated_visible_layer_rect_;
 
   int update_source_frame_number_;

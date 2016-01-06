@@ -5,8 +5,10 @@
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
+#include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_manager.h"
@@ -241,7 +243,7 @@ void RenderWidgetHostViewChildFrame::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
-void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32 output_surface_id,
+void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
                                                   cc::SurfaceDrawStatus drawn) {
   cc::CompositorFrameAck ack;
   DCHECK_GT(ack_pending_count_, 0U);
@@ -255,8 +257,8 @@ void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32 output_surface_id,
 }
 
 void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
-      uint32 output_surface_id,
-      scoped_ptr<cc::CompositorFrame> frame) {
+    uint32_t output_surface_id,
+    scoped_ptr<cc::CompositorFrame> frame) {
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
 
   if (!frame_connector_)
@@ -266,10 +268,8 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
   // the embedder's renderer to be composited.
   if (!frame->delegated_frame_data || !use_surfaces_) {
     frame_connector_->ChildFrameCompositorFrameSwapped(
-        output_surface_id,
-        host_->GetProcess()->GetID(),
-        host_->GetRoutingID(),
-        frame.Pass());
+        output_surface_id, host_->GetProcess()->GetID(), host_->GetRoutingID(),
+        std::move(frame));
     return;
   }
 
@@ -319,7 +319,7 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
   ack_pending_count_++;
   // If this value grows very large, something is going wrong.
   DCHECK_LT(ack_pending_count_, 1000U);
-  surface_factory_->SubmitCompositorFrame(surface_id_, frame.Pass(),
+  surface_factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                           ack_callback);
 }
 

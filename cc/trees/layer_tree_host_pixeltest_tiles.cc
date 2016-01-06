@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/output/copy_output_request.h"
@@ -130,13 +132,8 @@ class BlueYellowClient : public ContentLayerClient {
     paint.setColor(SK_ColorYELLOW);
     canvas->drawRect(gfx::RectToSkRect(yellow_rect), paint);
 
-    skia::RefPtr<SkPicture> picture =
-        skia::AdoptRef(recorder.endRecordingAsPicture());
-
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion());
-    item->SetNew(std::move(picture));
-
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
     display_list->Finalize();
     return display_list;
   }

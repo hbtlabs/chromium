@@ -12,13 +12,14 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_checker.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -37,6 +38,7 @@ namespace content_settings {
 class ObservableProvider;
 class ProviderInterface;
 class PrefProvider;
+class TestUtils;
 }
 
 namespace user_prefs {
@@ -157,6 +159,17 @@ class HostContentSettingsMap : public content_settings::Observer,
                                      const std::string& resource_identifier,
                                      base::Value* value);
 
+  // Sets a rule to apply the |value| for all sites matching |pattern|,
+  // |content_type| and |resource_identifier|. Setting the value to null removes
+  // the given pattern pair. Unless adding a custom-scoped setting, most
+  // developers will want to use SetWebsiteSettingDefaultScope() instead.
+  void SetWebsiteSettingCustomScope(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier,
+      scoped_ptr<base::Value> value);
+
   // Sets the most specific rule that currently defines the setting for the
   // given content type. TODO(raymes): Remove this once all content settings
   // are scoped to origin scope. There is no scope more narrow than origin
@@ -243,6 +256,7 @@ class HostContentSettingsMap : public content_settings::Observer,
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
   friend class HostContentSettingsMapTest_NonDefaultSettings_Test;
+  friend class content_settings::TestUtils;
 
   typedef std::map<ProviderType, content_settings::ProviderInterface*>
       ProviderMap;
@@ -250,17 +264,6 @@ class HostContentSettingsMap : public content_settings::Observer,
   typedef ProviderMap::const_iterator ConstProviderIterator;
 
   ~HostContentSettingsMap() override;
-
-  // Sets a rule to apply the |value| for all sites matching |pattern|,
-  // |content_type| and |resource_identifier|. Setting the value to null removes
-  // the given pattern pair. Unless adding a custom-scoped setting, most
-  // developers will want to use SetWebsiteSettingDefaultScope() instead.
-  void SetWebsiteSettingCustomScope(
-      const ContentSettingsPattern& primary_pattern,
-      const ContentSettingsPattern& secondary_pattern,
-      ContentSettingsType content_type,
-      const std::string& resource_identifier,
-      scoped_ptr<base::Value> value);
 
   ContentSetting GetDefaultContentSettingFromProvider(
       ContentSettingsType content_type,
@@ -293,6 +296,23 @@ class HostContentSettingsMap : public content_settings::Observer,
       ContentSettingsType content_type,
       const std::string& resource_identifier,
       content_settings::SettingInfo* info) const;
+
+  static scoped_ptr<base::Value> GetContentSettingValueAndPatterns(
+      const content_settings::ProviderInterface* provider,
+      const GURL& primary_url,
+      const GURL& secondary_url,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier,
+      bool include_incognito,
+      ContentSettingsPattern* primary_pattern,
+      ContentSettingsPattern* secondary_pattern);
+
+  static scoped_ptr<base::Value> GetContentSettingValueAndPatterns(
+      content_settings::RuleIterator* rule_iterator,
+      const GURL& primary_url,
+      const GURL& secondary_url,
+      ContentSettingsPattern* primary_pattern,
+      ContentSettingsPattern* secondary_pattern);
 
   content_settings::PrefProvider* GetPrefProvider();
 

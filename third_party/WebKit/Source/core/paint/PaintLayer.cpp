@@ -41,7 +41,6 @@
  * version of this file under any of the LGPL, the MPL or the GPL.
  */
 
-#include "config.h"
 #include "core/paint/PaintLayer.h"
 
 #include "core/CSSPropertyNames.h"
@@ -52,6 +51,7 @@
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
@@ -67,6 +67,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
+#include "core/layout/svg/LayoutSVGResourceClipper.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/ReferenceFilterBuilder.h"
 #include "core/page/Page.h"
@@ -125,6 +126,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject, PaintLayerType type)
     , m_shouldIsolateCompositedDescendants(false)
     , m_lostGroupedMapping(false)
     , m_needsRepaint(false)
+    , m_previousPaintResult(PaintLayerPainter::FullyPainted)
     , m_layoutObject(layoutObject)
     , m_parent(0)
     , m_previous(0)
@@ -182,6 +184,11 @@ String PaintLayer::debugName() const
     if (isReflection())
         return layoutObject()->parent()->debugName() + " (reflection)";
     return layoutObject()->debugName();
+}
+
+IntRect PaintLayer::visualRect() const
+{
+    return m_layoutObject->visualRect();
 }
 
 PaintLayerCompositor* PaintLayer::compositor() const
@@ -486,7 +493,7 @@ void PaintLayer::clearPaginationRecursive()
 
 LayoutPoint PaintLayer::positionFromPaintInvalidationBacking(const LayoutObject* layoutObject, const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState)
 {
-    FloatPoint point = layoutObject->localToContainerPoint(FloatPoint(), paintInvalidationContainer, 0, 0, paintInvalidationState);
+    FloatPoint point = layoutObject->localToAncestorPoint(FloatPoint(), paintInvalidationContainer, 0, 0, paintInvalidationState);
 
     // FIXME: Eventually we are going to unify coordinates in GraphicsLayer space.
     if (paintInvalidationContainer && paintInvalidationContainer->layer()->groupedMapping())
@@ -509,7 +516,7 @@ void PaintLayer::mapPointToPaintBackingCoordinates(const LayoutBoxModelObject* p
 
     // |paintInvalidationContainer| may have a local 2D transform on it, so take that into account when mapping into the space of the
     // transformed ancestor.
-    point = paintInvalidationContainer->localToContainerPoint(point, transformedAncestor);
+    point = paintInvalidationContainer->localToAncestorPoint(point, transformedAncestor);
 
     point.moveBy(-paintInvalidationLayer->groupedMapping()->squashingOffsetFromTransformedAncestor());
 }
@@ -528,7 +535,7 @@ void PaintLayer::mapRectToPaintBackingCoordinates(const LayoutBoxModelObject* pa
 
     // |paintInvalidationContainer| may have a local 2D transform on it, so take that into account when mapping into the space of the
     // transformed ancestor.
-    rect = LayoutRect(paintInvalidationContainer->localToContainerQuad(FloatRect(rect), transformedAncestor).boundingBox());
+    rect = LayoutRect(paintInvalidationContainer->localToAncestorQuad(FloatRect(rect), transformedAncestor).boundingBox());
 
     rect.moveBy(-paintInvalidationLayer->groupedMapping()->squashingOffsetFromTransformedAncestor());
 }
@@ -536,7 +543,7 @@ void PaintLayer::mapRectToPaintBackingCoordinates(const LayoutBoxModelObject* pa
 void PaintLayer::mapRectToPaintInvalidationBacking(const LayoutObject* layoutObject, const LayoutBoxModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState)
 {
     if (!paintInvalidationContainer->layer()->groupedMapping()) {
-        layoutObject->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, paintInvalidationState);
+        layoutObject->mapToVisibleRectInAncestorSpace(paintInvalidationContainer, rect, paintInvalidationState);
         return;
     }
 
@@ -544,7 +551,7 @@ void PaintLayer::mapRectToPaintInvalidationBacking(const LayoutObject* layoutObj
     // layer. This is because all layers that squash together need to issue paint invalidations w.r.t. a single container that is
     // an ancestor of all of them, in order to properly take into account any local transforms etc.
     // FIXME: remove this special-case code that works around the paint invalidation code structure.
-    layoutObject->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, paintInvalidationState);
+    layoutObject->mapToVisibleRectInAncestorSpace(paintInvalidationContainer, rect, paintInvalidationState);
 
     mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);
 }
@@ -747,15 +754,15 @@ bool PaintLayer::updateLayerPosition()
     }
 
     // Subtract our parent's scroll offset.
-    if (PaintLayer* positionedParent = layoutObject()->isOutOfFlowPositioned() ? enclosingPositionedAncestor() : nullptr) {
+    if (PaintLayer* containingLayer = layoutObject()->isOutOfFlowPositioned() ? containingLayerForOutOfFlowPositioned() : nullptr) {
         // For positioned layers, we subtract out the enclosing positioned layer's scroll offset.
-        if (positionedParent->layoutObject()->hasOverflowClip()) {
-            IntSize offset = positionedParent->layoutBox()->scrolledContentOffset();
+        if (containingLayer->layoutObject()->hasOverflowClip()) {
+            IntSize offset = containingLayer->layoutBox()->scrolledContentOffset();
             localPoint -= offset;
         }
 
-        if (positionedParent->layoutObject()->isInFlowPositioned() && positionedParent->layoutObject()->isLayoutInline()) {
-            LayoutSize offset = toLayoutInline(positionedParent->layoutObject())->offsetForInFlowPositionedInline(*toLayoutBox(layoutObject()));
+        if (containingLayer->layoutObject()->isInFlowPositioned() && containingLayer->layoutObject()->isLayoutInline()) {
+            LayoutSize offset = toLayoutInline(containingLayer->layoutObject())->offsetForInFlowPositionedInline(*toLayoutBox(layoutObject()));
             localPoint += offset;
         }
     } else if (parent() && parent()->layoutObject()->hasOverflowClip()) {
@@ -813,19 +820,28 @@ FloatPoint PaintLayer::perspectiveOrigin() const
     return FloatPoint(floatValueForLength(style.perspectiveOriginX(), borderBox.width().toFloat()), floatValueForLength(style.perspectiveOriginY(), borderBox.height().toFloat()));
 }
 
-static inline bool isFixedPositionedContainer(PaintLayer* layer)
+static inline bool isContainerForFixedPositioned(PaintLayer* layer)
 {
     return layer->isRootLayer() || layer->hasTransformRelatedProperty();
 }
 
-PaintLayer* PaintLayer::enclosingPositionedAncestor(const PaintLayer* ancestor, bool* skippedAncestor) const
+static inline bool isContainerForPositioned(PaintLayer* layer)
+{
+    // FIXME: This is not in sync with containingBlock.
+    // LayoutObject::canContainFixedPositionObjects() should probably be used
+    // instead.
+    LayoutBoxModelObject* layerlayoutObject = layer->layoutObject();
+    return layer->isRootLayer() || layerlayoutObject->isPositioned() || layer->hasTransformRelatedProperty() || layerlayoutObject->style()->containsPaint();
+}
+
+PaintLayer* PaintLayer::containingLayerForOutOfFlowPositioned(const PaintLayer* ancestor, bool* skippedAncestor) const
 {
     ASSERT(!ancestor || skippedAncestor); // If we have specified an ancestor, surely the caller needs to know whether we skipped it.
     if (skippedAncestor)
         *skippedAncestor = false;
     if (layoutObject()->style()->position() == FixedPosition) {
         PaintLayer* curr = parent();
-        while (curr && !isFixedPositionedContainer(curr)) {
+        while (curr && !isContainerForFixedPositioned(curr)) {
             if (skippedAncestor && curr == ancestor)
                 *skippedAncestor = true;
             curr = curr->parent();
@@ -835,7 +851,7 @@ PaintLayer* PaintLayer::enclosingPositionedAncestor(const PaintLayer* ancestor, 
     }
 
     PaintLayer* curr = parent();
-    while (curr && !curr->isPositionedContainer()) {
+    while (curr && !isContainerForPositioned(curr)) {
         if (skippedAncestor && curr == ancestor)
             *skippedAncestor = true;
         curr = curr->parent();
@@ -859,7 +875,7 @@ LayoutPoint PaintLayer::computeOffsetFromTransformedAncestor() const
 
     TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
     // FIXME: add a test that checks flipped writing mode and ApplyContainerFlip are correct.
-    layoutObject()->mapLocalToContainer(properties.transformAncestor ? properties.transformAncestor->layoutObject() : 0, transformState, ApplyContainerFlip);
+    layoutObject()->mapLocalToAncestor(properties.transformAncestor ? properties.transformAncestor->layoutObject() : 0, transformState, ApplyContainerFlip);
     transformState.flatten();
     return LayoutPoint(transformState.lastPlanarPoint());
 }
@@ -1272,7 +1288,7 @@ static inline const PaintLayer* accumulateOffsetTowardsAncestor(const PaintLayer
     PaintLayer* parentLayer;
     if (position == AbsolutePosition || position == FixedPosition) {
         bool foundAncestorFirst;
-        parentLayer = layer->enclosingPositionedAncestor(ancestorLayer, &foundAncestorFirst);
+        parentLayer = layer->containingLayerForOutOfFlowPositioned(ancestorLayer, &foundAncestorFirst);
 
         if (foundAncestorFirst) {
             // Found ancestorLayer before the container of the out-of-flow object, so compute offset
@@ -1650,7 +1666,7 @@ PaintLayer* PaintLayer::hitTestLayer(PaintLayer* rootLayer, PaintLayer* containe
     ASSERT(layoutObject()->document().lifecycle().state() >= DocumentLifecycle::CompositingClean);
 
     if (!isSelfPaintingLayer() && !hasSelfPaintingLayerDescendant())
-        return 0;
+        return nullptr;
 
     ClipRectsCacheSlot clipRectsCacheSlot = result.hitTestRequest().ignoreClipping() ? RootRelativeClipRectsIgnoringViewportClip : RootRelativeClipRects;
 
@@ -1664,11 +1680,14 @@ PaintLayer* PaintLayer::hitTestLayer(PaintLayer* rootLayer, PaintLayer* containe
             ClipRect clipRect = clipper().backgroundClipRect(ClipRectsContext(rootLayer, clipRectsCacheSlot, IncludeOverlayScrollbarSize));
             // Go ahead and test the enclosing clip now.
             if (!clipRect.intersects(hitTestLocation))
-                return 0;
+                return nullptr;
         }
 
         return hitTestLayerByApplyingTransform(rootLayer, containerLayer, result, hitTestRect, hitTestLocation, transformState, zOffset);
     }
+
+    if (hitTestClippedOutByClipPath(rootLayer, hitTestLocation))
+        return nullptr;
 
     // Ensure our lists and 3d status are up-to-date.
     m_stackingNode->updateLayerListsIfNeeded();
@@ -1690,7 +1709,7 @@ PaintLayer* PaintLayer::hitTestLayer(PaintLayer* rootLayer, PaintLayer* containe
         TransformationMatrix invertedMatrix = localTransformState->m_accumulatedTransform.inverse();
         // If the z-vector of the matrix is negative, the back is facing towards the viewer.
         if (invertedMatrix.m33() < 0)
-            return 0;
+            return nullptr;
     }
 
     RefPtr<HitTestingTransformState> unflattenedTransformState = localTransformState;
@@ -1801,7 +1820,7 @@ PaintLayer* PaintLayer::hitTestLayer(PaintLayer* rootLayer, PaintLayer* containe
             result.append(tempResult);
     }
 
-    return 0;
+    return nullptr;
 }
 
 bool PaintLayer::hitTestContentsForFragments(const PaintLayerFragments& layerFragments, HitTestResult& result,
@@ -1960,6 +1979,37 @@ PaintLayer* PaintLayer::hitTestChildren(ChildrenIteration childrentoVisit, Paint
     }
 
     return resultLayer;
+}
+
+bool PaintLayer::hitTestClippedOutByClipPath(PaintLayer* rootLayer, const HitTestLocation& hitTestLocation) const
+{
+    if (!layoutObject()->hasClipPath())
+        return false;
+    ASSERT(isSelfPaintingLayer());
+
+    LayoutPoint offsetToRootLayer;
+    if (rootLayer)
+        convertToLayerCoords(rootLayer, offsetToRootLayer);
+    LayoutRect rootRelativeBounds = physicalBoundingBoxIncludingReflectionAndStackingChildren(offsetToRootLayer);
+
+    ClipPathOperation* clipPathOperation = layoutObject()->style()->clipPath();
+    ASSERT(clipPathOperation);
+    if (clipPathOperation->type() == ClipPathOperation::SHAPE) {
+        ShapeClipPathOperation* clipPath = toShapeClipPathOperation(clipPathOperation);
+        if (!clipPath->path(FloatRect(rootRelativeBounds)).contains(FloatPoint(hitTestLocation.point())))
+            return true;
+    } else {
+        ASSERT(clipPathOperation->type() == ClipPathOperation::REFERENCE);
+        ReferenceClipPathOperation* referenceClipPathOperation = toReferenceClipPathOperation(clipPathOperation);
+        Element* element = layoutObject()->document().getElementById(referenceClipPathOperation->fragment());
+        if (isSVGClipPathElement(element) && element->layoutObject()) {
+            LayoutSVGResourceClipper* clipper = toLayoutSVGResourceClipper(toLayoutSVGResourceContainer(element->layoutObject()));
+            if (!clipper->hitTestClipContent(FloatRect(rootRelativeBounds), FloatPoint(hitTestLocation.point())))
+                return true;
+        }
+    }
+
+    return false;
 }
 
 void PaintLayer::blockSelectionGapsBoundsChanged()
@@ -2163,9 +2213,9 @@ LayoutRect PaintLayer::boundingBoxForCompositing(const PaintLayer* ancestorLayer
     if (this != ancestorLayer && !hasVisibleContent() && !hasVisibleDescendant())
         return LayoutRect();
 
-    // The root layer is always just the size of the document.
-    if (isRootLayer())
-        return LayoutRect(m_layoutObject->view()->unscaledDocumentRect());
+    // Without composited scrolling, the root layer is the size of the document.
+    if (isRootLayer() && !needsCompositedScrolling())
+        return LayoutRect(m_layoutObject->view()->documentRect());
 
     // The layer created for the LayoutFlowThread is just a helper for painting and hit-testing,
     // and should not contribute to the bounding box. The LayoutMultiColumnSets will contribute
@@ -2358,7 +2408,7 @@ bool PaintLayer::backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) 
 
     // We can't consult child layers if we clip, since they might cover
     // parts of the rect that are clipped out.
-    if (layoutObject()->hasOverflowClip())
+    if (layoutObject()->hasOverflowClip() || layoutObject()->style()->containsPaint())
         return false;
 
     return childBackgroundIsKnownToBeOpaqueInRect(localRect);

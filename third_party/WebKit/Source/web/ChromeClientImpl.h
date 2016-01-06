@@ -61,7 +61,6 @@ public:
     bool canTakeFocus(WebFocusType) override;
     void takeFocus(WebFocusType) override;
     void focusedNodeChanged(Node* fromNode, Node* toNode) override;
-    void focusedFrameChanged(LocalFrame*) override;
     bool hadFormInteraction() const override;
     Page* createWindow(
         LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSetOpener) override;
@@ -93,8 +92,7 @@ public:
     bool tabsToLinks() override;
     IntRect windowResizerRect() const override;
     void invalidateRect(const IntRect&) override;
-    void scheduleAnimation() override;
-    void scheduleAnimationForFrame(LocalFrame* localRoot) override;
+    void scheduleAnimation(Widget*) override;
     IntRect viewportToScreen(const IntRect&) const override;
     WebScreenInfo screenInfo() const override;
     void contentsSizeChanged(LocalFrame*, const IntSize&) const override;
@@ -119,6 +117,8 @@ public:
 
     // Pass 0 as the GraphicsLayer to detatch the root layer.
     void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
+
+    void didPaint(const PaintArtifact&) override;
 
     void attachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) override;
     void detachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) override;

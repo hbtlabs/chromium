@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright (c) 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@ TEST(CryptoHandshakeMessageTest, DebugString) {
 TEST(CryptoHandshakeMessageTest, DebugStringWithUintVector) {
   CryptoHandshakeMessage message;
   message.set_tag(kREJ);
-  std::vector<uint32> reasons = {
+  std::vector<uint32_t> reasons = {
       SOURCE_ADDRESS_TOKEN_DIFFERENT_IP_ADDRESS_FAILURE,
       CLIENT_NONCE_NOT_UNIQUE_FAILURE};
   message.SetVector(kRREJ, reasons);

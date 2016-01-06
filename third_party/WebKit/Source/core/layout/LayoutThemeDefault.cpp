@@ -22,7 +22,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutThemeDefault.h"
 
 #include "core/CSSValueKeywords.h"
@@ -390,7 +389,7 @@ void LayoutThemeDefault::setDefaultFontSize(int fontSize)
 
 int LayoutThemeDefault::menuListArrowPadding() const
 {
-    return ScrollbarTheme::theme()->scrollbarThickness();
+    return ScrollbarTheme::theme().scrollbarThickness();
 }
 
 int LayoutThemeDefault::menuListInternalPadding(const ComputedStyle& style, int paddingType) const

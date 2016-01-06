@@ -4,12 +4,16 @@
 
 #include "media/filters/stream_parser_factory.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "media/base/media_switches.h"
 #include "media/formats/mpeg/adts_stream_parser.h"
 #include "media/formats/mpeg/mpeg1_audio_stream_parser.h"
@@ -431,7 +435,7 @@ scoped_ptr<StreamParser> StreamParserFactory::Create(
     stream_parser.reset(factory_function(codecs, media_log));
   }
 
-  return stream_parser.Pass();
+  return stream_parser;
 }
 
 }  // namespace media

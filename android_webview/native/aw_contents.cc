@@ -5,6 +5,7 @@
 #include "android_webview/native/aw_contents.h"
 
 #include <limits>
+#include <utility>
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
@@ -190,7 +191,7 @@ AwContents::AwContents(scoped_ptr<WebContents> web_contents)
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kDisablePageVisibility)),
-      web_contents_(web_contents.Pass()),
+      web_contents_(std::move(web_contents)),
       renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
   icon_helper_.reset(new IconHelper(web_contents_.get()));
@@ -329,7 +330,7 @@ static jlong Init(JNIEnv* env,
       content::WebContents::CreateParams(AwBrowserContext::GetDefault())));
   // Return an 'uninitialized' instance; most work is deferred until the
   // subsequent SetJavaPeers() call.
-  return reinterpret_cast<intptr_t>(new AwContents(web_contents.Pass()));
+  return reinterpret_cast<intptr_t>(new AwContents(std::move(web_contents)));
 }
 
 static void SetForceAuxiliaryBitmapRendering(
@@ -387,7 +388,8 @@ void AwContents::DocumentHasImages(JNIEnv* env,
 
 namespace {
 void GenerateMHTMLCallback(ScopedJavaGlobalRef<jobject>* callback,
-                           const base::FilePath& path, int64 size) {
+                           const base::FilePath& path,
+                           int64_t size) {
   JNIEnv* env = AttachCurrentThread();
   // Android files are UTF8, so the path conversion below is safe.
   Java_AwContents_generateMHTMLCallback(
@@ -791,8 +793,9 @@ base::android::ScopedJavaLocalRef<jbyteArray> AwContents::GetCertificate(
   // Convert the certificate and return it
   std::string der_string;
   net::X509Certificate::GetDEREncoded(cert->os_cert_handle(), &der_string);
-  return base::android::ToJavaByteArray(env,
-      reinterpret_cast<const uint8*>(der_string.data()), der_string.length());
+  return base::android::ToJavaByteArray(
+      env, reinterpret_cast<const uint8_t*>(der_string.data()),
+      der_string.length());
 }
 
 void AwContents::RequestNewHitTestDataAt(JNIEnv* env,
@@ -915,8 +918,8 @@ base::android::ScopedJavaLocalRef<jbyteArray> AwContents::GetOpaqueState(
   if (!WriteToPickle(*web_contents_, &pickle)) {
     return ScopedJavaLocalRef<jbyteArray>();
   } else {
-    return base::android::ToJavaByteArray(env,
-       reinterpret_cast<const uint8*>(pickle.data()), pickle.size());
+    return base::android::ToJavaByteArray(
+        env, reinterpret_cast<const uint8_t*>(pickle.data()), pickle.size());
   }
 }
 
@@ -927,7 +930,7 @@ jboolean AwContents::RestoreFromOpaqueState(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // TODO(boliu): This copy can be optimized out if this is a performance
   // problem.
-  std::vector<uint8> state_vector;
+  std::vector<uint8_t> state_vector;
   base::android::JavaByteArrayToByteVector(env, state, &state_vector);
 
   base::Pickle pickle(reinterpret_cast<const char*>(state_vector.data()),
@@ -989,7 +992,7 @@ void AwContents::SetPendingWebContentsForPopup(
     base::MessageLoop::current()->DeleteSoon(FROM_HERE, pending.release());
     return;
   }
-  pending_contents_.reset(new AwContents(pending.Pass()));
+  pending_contents_.reset(new AwContents(std::move(pending)));
   // Set dip_scale for pending contents, which is necessary for the later
   // SynchronousCompositor and InputHandler setup.
   pending_contents_->SetDipScaleInternal(browser_view_renderer_.dip_scale());

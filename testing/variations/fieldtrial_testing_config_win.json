@@ -24,7 +24,7 @@
     ],
     "AutomaticTabDiscarding": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled_Once"
         }
     ],
     "BrowserBlacklist": [
@@ -43,6 +43,9 @@
         }
     ],
     "ChromeDashboard": [
+        {
+            "group_name": "Enabled"
+        },
         {
             "group_name": "Default"
         }
@@ -139,6 +142,11 @@
             "group_name": "Enabled"
         }
     ],
+    "PasswordBranding": [
+        {
+            "group_name": "SmartLockBrandingSavePromptOnly"
+        }
+    ],
     "PasswordGeneration": [
         {
             "group_name": "Disabled"
@@ -188,7 +196,7 @@
     ],
     "SRTPromptFieldTrial": [
         {
-            "group_name": "Default"
+            "group_name": "On"
         }
     ],
     "SafeBrowsingReportPhishingErrorLink": [
@@ -202,6 +210,22 @@
             "group_name": "Disabled"
         }
     ],
+    "SafeBrowsingUnverifiedDownloads": [
+        {
+            "group_name": "DisableByParameterExe",
+            "params": {
+                "blacklist": ".exe"
+            }
+        }
+    ],
+    "SafeBrowsingUpdateFrequency": [
+        {
+            "group_name": "UpdateTime15m",
+            "params": {
+                "NextUpdateIntervalInMinutes": "15"
+            }
+        }
+    ],
     "SdchPersistence": [
         {
             "group_name": "Enabled"
@@ -210,6 +234,11 @@
     "SettingsEnforcement": [
         {
             "group_name": "enforce_always_with_extensions_and_dse"
+        }
+    ],
+    "StrictSecureCookies": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "SyncHttpContentCompression": [

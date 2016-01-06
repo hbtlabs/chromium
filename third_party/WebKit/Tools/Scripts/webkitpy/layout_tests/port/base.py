@@ -1038,7 +1038,7 @@ class Port(object):
     def default_results_directory(self):
         """Absolute path to the default place to store the test results."""
         try:
-            return self.path_from_chromium_base('webkit', self.get_option('configuration'), 'layout-test-results')
+            return self.path_from_chromium_base('out', self.get_option('configuration'), 'layout-test-results')
         except AssertionError:
             return self._build_path('layout-test-results')
 
@@ -1294,6 +1294,8 @@ class Port(object):
         paths.append(self._filesystem.join(self.layout_tests_dir(), 'NeverFixTests'))
         paths.append(self._filesystem.join(self.layout_tests_dir(), 'StaleTestExpectations'))
         paths.append(self._filesystem.join(self.layout_tests_dir(), 'SlowTests'))
+        if self._is_wpt_enabled:
+            paths.append(self._filesystem.join(self.layout_tests_dir(), 'WPTServeExpectations'))
         return paths
 
     def _flag_specific_expectations_files(self):

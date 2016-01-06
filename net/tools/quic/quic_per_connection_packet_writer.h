@@ -5,6 +5,9 @@
 #ifndef NET_TOOLS_QUIC_QUIC_PER_CONNECTION_PACKET_WRITER_H_
 #define NET_TOOLS_QUIC_QUIC_PER_CONNECTION_PACKET_WRITER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_packet_writer.h"
 
@@ -37,7 +40,7 @@ class QuicPerConnectionPacketWriter : public QuicPacketWriter {
 
  private:
   QuicPacketWriter* shared_writer_;  // Not owned.
-  QuicConnection* connection_;  // Not owned.
+  QuicConnection* connection_;       // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(QuicPerConnectionPacketWriter);
 };

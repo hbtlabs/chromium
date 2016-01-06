@@ -5,7 +5,9 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_INTERFACE_PTR_STATE_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_INTERFACE_PTR_STATE_H_
 
+#include <stdint.h>
 #include <algorithm>  // For |std::swap()|.
+#include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
@@ -38,6 +40,8 @@ class InterfacePtrState;
 template <typename Interface>
 class InterfacePtrState<Interface, false> {
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   InterfacePtrState()
       : proxy_(nullptr), router_(nullptr), waiter_(nullptr), version_(0u) {}
 
@@ -94,7 +98,8 @@ class InterfacePtrState<Interface, false> {
     swap(other->version_, version_);
   }
 
-  void Bind(InterfacePtrInfo<Interface> info, const MojoAsyncWaiter* waiter) {
+  void Bind(InterfacePtrInfo<GenericInterface> info,
+            const MojoAsyncWaiter* waiter) {
     DCHECK(!proxy_);
     DCHECK(!router_);
     DCHECK(!handle_.is_valid());
@@ -107,6 +112,8 @@ class InterfacePtrState<Interface, false> {
     version_ = info.version();
   }
 
+  bool HasAssociatedInterfaces() const { return false; }
+
   bool WaitForIncomingResponse() {
     ConfigureProxyIfNecessary();
 
@@ -116,9 +123,9 @@ class InterfacePtrState<Interface, false> {
 
   // After this method is called, the object is in an invalid state and
   // shouldn't be reused.
-  InterfacePtrInfo<Interface> PassInterface() {
-    return InterfacePtrInfo<Interface>(
-        router_ ? router_->PassMessagePipe() : handle_.Pass(), version_);
+  InterfacePtrInfo<GenericInterface> PassInterface() {
+    return InterfacePtrInfo<GenericInterface>(
+        router_ ? router_->PassMessagePipe() : std::move(handle_), version_);
   }
 
   bool is_bound() const { return handle_.is_valid() || router_; }
@@ -165,7 +172,7 @@ class InterfacePtrState<Interface, false> {
     filters.Append<MessageHeaderValidator>();
     filters.Append<typename Interface::ResponseValidator_>();
 
-    router_ = new Router(handle_.Pass(), filters.Pass(), waiter_);
+    router_ = new Router(std::move(handle_), std::move(filters), waiter_);
     waiter_ = nullptr;
 
     proxy_ = new Proxy(router_);
@@ -190,6 +197,8 @@ class InterfacePtrState<Interface, false> {
 template <typename Interface>
 class InterfacePtrState<Interface, true> {
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   InterfacePtrState() : waiter_(nullptr), version_(0u) {}
 
   ~InterfacePtrState() {
@@ -246,7 +255,8 @@ class InterfacePtrState<Interface, true> {
     swap(other->version_, version_);
   }
 
-  void Bind(InterfacePtrInfo<Interface> info, const MojoAsyncWaiter* waiter) {
+  void Bind(InterfacePtrInfo<GenericInterface> info,
+            const MojoAsyncWaiter* waiter) {
     DCHECK(!router_);
     DCHECK(!endpoint_client_);
     DCHECK(!proxy_);
@@ -260,12 +270,23 @@ class InterfacePtrState<Interface, true> {
     version_ = info.version();
   }
 
+  bool HasAssociatedInterfaces() const {
+    return router_ ? router_->HasAssociatedEndpoints() : false;
+  }
+
+  bool WaitForIncomingResponse() {
+    ConfigureProxyIfNecessary();
+
+    DCHECK(router_);
+    return router_->WaitForIncomingMessage(MOJO_DEADLINE_INDEFINITE);
+  }
+
   // After this method is called, the object is in an invalid state and
   // shouldn't be reused.
-  InterfacePtrInfo<Interface> PassInterface() {
+  InterfacePtrInfo<GenericInterface> PassInterface() {
     endpoint_client_.reset();
     proxy_.reset();
-    return InterfacePtrInfo<Interface>(
+    return InterfacePtrInfo<GenericInterface>(
         router_ ? router_->PassMessagePipe() : handle_.Pass(), version_);
   }
 
@@ -297,9 +318,6 @@ class InterfacePtrState<Interface, true> {
     router_->EnableTestingMode();
   }
 
-  // Intentionally not defined:
-  // bool WaitForIncomingResponse();
-
  private:
   using Proxy = typename Interface::Proxy_;
 
@@ -316,7 +334,7 @@ class InterfacePtrState<Interface, true> {
       return;
     }
 
-    router_ = new MultiplexRouter(true, handle_.Pass(), waiter_);
+    router_ = new MultiplexRouter(true, std::move(handle_), waiter_);
     endpoint_client_.reset(new InterfaceEndpointClient(
         router_->CreateLocalEndpointHandle(kMasterInterfaceId), nullptr,
         make_scoped_ptr(new typename Interface::ResponseValidator_())));

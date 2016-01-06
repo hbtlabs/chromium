@@ -8,6 +8,7 @@
 #include <queue>
 #include <string>
 
+#include "base/macros.h"
 #include "net/quic/quic_crypto_client_stream.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
 #include "net/quic/test_tools/mock_crypto_client_stream.h"
@@ -16,7 +17,7 @@ namespace net {
 
 class QuicServerId;
 
-class MockCryptoClientStreamFactory : public QuicCryptoClientStreamFactory  {
+class MockCryptoClientStreamFactory : public QuicCryptoClientStreamFactory {
  public:
   MockCryptoClientStreamFactory();
   ~MockCryptoClientStreamFactory() override;
@@ -36,9 +37,7 @@ class MockCryptoClientStreamFactory : public QuicCryptoClientStreamFactory  {
     proof_verify_details_queue_.push(proof_verify_details);
   }
 
-  MockCryptoClientStream* last_stream() const {
-    return last_stream_;
-  }
+  MockCryptoClientStream* last_stream() const { return last_stream_; }
 
  private:
   MockCryptoClientStream::HandshakeMode handshake_mode_;

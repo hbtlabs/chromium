@@ -5,19 +5,30 @@
 #ifndef IOS_PUBLIC_PROVIDER_CHROME_BROWSER_BROWSER_STATE_CHROME_BROWSER_STATE_H_
 #define IOS_PUBLIC_PROVIDER_CHROME_BROWSER_BROWSER_STATE_CHROME_BROWSER_STATE_H_
 
+#include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_vector.h"
 #include "ios/web/public/browser_state.h"
+#include "net/url_request/url_request_job_factory.h"
 
+class ChromeBrowserStateIOData;
+class PrefProxyConfigTracker;
 class PrefService;
 
 namespace base {
 class SequencedTaskRunner;
 class Time;
+}
+
+namespace net {
+class SSLConfigService;
+class URLRequestInterceptor;
 }
 
 namespace syncable_prefs {
@@ -29,6 +40,11 @@ class WebUIIOS;
 }
 
 namespace ios {
+
+enum class ChromeBrowserStateType {
+  REGULAR_BROWSER_STATE,
+  INCOGNITO_BROWSER_STATE,
+};
 
 // This class is a Chrome-specific extension of the BrowserState interface.
 class ChromeBrowserState : public web::BrowserState {
@@ -68,6 +84,15 @@ class ChromeBrowserState : public web::BrowserState {
   // Retrieves a pointer to the PrefService that manages the preferences.
   virtual PrefService* GetPrefs() = 0;
 
+  // Retrieves a pointer to the PrefService that manages the preferences
+  // for OffTheRecord browser states.
+  virtual PrefService* GetOffTheRecordPrefs() = 0;
+
+  // Allows access to ChromeBrowserStateIOData without going through
+  // ResourceContext that is not compiled on iOS. This method must be called on
+  // UI thread, but the returned object must only be accessed on the IO thread.
+  virtual ChromeBrowserStateIOData* GetIOData() = 0;
+
   // Retrieves a pointer to the PrefService that manages the preferences as
   // a syncable_prefs::PrefServiceSyncable.
   virtual syncable_prefs::PrefServiceSyncable* GetSyncablePrefs() = 0;
@@ -83,6 +108,26 @@ class ChromeBrowserState : public web::BrowserState {
 
   // Returns an identifier of the browser state for debugging.
   std::string GetDebugName();
+
+  // Returns the helper object that provides the proxy configuration service
+  // access to the the proxy configuration possibly defined by preferences.
+  virtual PrefProxyConfigTracker* GetProxyConfigTracker() = 0;
+
+  // Returns the SSLConfigService for this browser state.
+  virtual net::SSLConfigService* GetSSLConfigService() = 0;
+
+  // Creates the main net::URLRequestContextGetter that will be returned by
+  // GetRequestContext(). Should only be called once.
+  virtual net::URLRequestContextGetter* CreateRequestContext(
+      std::map<std::string,
+               linked_ptr<net::URLRequestJobFactory::ProtocolHandler>>*
+          protocol_handlers,
+      ScopedVector<net::URLRequestInterceptor> request_interceptors) = 0;
+
+  // Creates a isolated net::URLRequestContextGetter. Should only be called once
+  // per partition_path per browser state object.
+  virtual net::URLRequestContextGetter* CreateIsolatedRequestContext(
+      const base::FilePath& partition_path) = 0;
 
  protected:
   ChromeBrowserState() {}

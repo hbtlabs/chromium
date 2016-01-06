@@ -20,8 +20,6 @@ config("ui_warnings") {
 }
 
 source_set("ui") {
-  output_name = "browser_ui"
-
   sources = []
   defines = []
   libs = []
@@ -46,7 +44,7 @@ source_set("ui") {
   deps = [
     # NOTE: New dependencies should generally be added in the OS!="ios"
     # dependencies block below, rather than here.
-    "//base/debug:debugging_flags",
+    "//base",
     "//chrome:extra_resources",
     "//chrome:resources",
     "//chrome:strings",
@@ -101,7 +99,7 @@ source_set("ui") {
       "//chrome/browser/ui/webui/engagement:mojo_bindings",
       "//chrome/browser/ui/webui/omnibox:mojo_bindings",
       "//chrome/common/net",
-      "//chrome/installer/util",
+      "//chrome/installer/util:with_no_strings",
       "//components/autofill/content/browser:risk_proto",
       "//components/bubble:bubble",
       "//components/crash/core/browser",
@@ -135,7 +133,7 @@ source_set("ui") {
     deps += [ "//net" ]
   }
 
-  if ((!is_android || use_aura) && !is_ios) {
+  if (!android_java_ui && !is_ios) {
     sources += rebase_path(gypi_values.chrome_browser_ui_non_mobile_sources,
                            ".",
                            "//chrome")
@@ -144,6 +142,7 @@ source_set("ui") {
                     ".",
                     "//chrome")
     deps += [
+      "//chrome/common:features",
       "//components/copresence",
       "//components/feedback/proto",
       "//components/proximity_auth/webui",
@@ -473,7 +472,7 @@ source_set("ui") {
         rebase_path(gypi_values.chrome_browser_ui_autofill_dialog_sources,
                     ".",
                     "//chrome")
-    if ((!is_android || use_aura) && !is_ios) {
+    if (!android_java_ui && !is_ios) {
       sources += rebase_path(
               gypi_values.chrome_browser_ui_autofill_dialog_non_mobile_sources,
               ".",
@@ -555,8 +554,8 @@ source_set("test_support") {
 
   sources = [
     "browser.h",
-    "cocoa/extensions/browser_action_test_util_mac.mm",
-    "cocoa/find_bar/find_bar_host_unittest_util_cocoa.mm",
+    "cocoa/cocoa_test_helper.h",
+    "cocoa/cocoa_test_helper.mm",
     "cocoa/run_loop_testing.h",
     "cocoa/run_loop_testing.mm",
     "exclusive_access/fullscreen_controller_state_test.cc",
@@ -586,6 +585,11 @@ source_set("test_support") {
     sources += [
       "views/find_bar_host_unittest_util_views.cc",
       "views/toolbar/browser_action_test_util_views.cc",
+    ]
+  } else {
+    sources += [
+      "cocoa/extensions/browser_action_test_util_mac.mm",
+      "cocoa/find_bar/find_bar_host_unittest_util_cocoa.mm",
     ]
   }
 

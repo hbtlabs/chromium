@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.contextualsearch;
 
-import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
 import android.view.View;
@@ -12,9 +11,6 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.ViewTreeObserver.OnGlobalFocusChangeListener;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -72,7 +68,7 @@ import javax.annotation.Nullable;
 public class ContextualSearchManager extends ContextualSearchObservable
         implements ContextualSearchManagementDelegate,
                 ContextualSearchNetworkCommunicator, ContextualSearchSelectionHandler,
-                ContextualSearchClient, ActivityStateListener {
+                ContextualSearchClient {
 
     private static final String TAG = "ContextualSearch";
 
@@ -190,7 +186,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
         mTabModelObserver = new EmptyTabModelObserver() {
             @Override
             public void didSelectTab(Tab tab, TabSelectionType type, int lastId) {
-                if (!mIsPromotingToTab && tab.getId() != lastId) {
+                if (!mIsPromotingToTab && tab.getId() != lastId
+                        || mActivity.getTabModelSelector().isIncognitoSelected()) {
                     hideContextualSearch(StateChangeReason.UNKNOWN);
                 }
             }
@@ -221,7 +218,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
         mDidStartLoadingResolvedSearchRequest = false;
         mWereSearchResultsSeen = false;
         mNetworkCommunicator = this;
-        ApplicationStatus.registerStateListenerForActivity(this, mActivity);
         mIsInitialized = true;
     }
 
@@ -261,7 +257,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
         nativeDestroy(mNativeContextualSearchManagerPtr);
         stopListeningForHideNotifications();
         mTabRedirectHandler.clear();
-        ApplicationStatus.unregisterActivityStateListener(this);
         if (mFindToolbarManager != null) {
             mFindToolbarManager.removeObserver(mFindToolbarObserver);
             mFindToolbarManager = null;
@@ -333,6 +328,13 @@ public class ContextualSearchManager extends ContextualSearchObservable
     }
 
     /**
+     * Notifies that the base page has started loading a page.
+     */
+    public void onBasePageLoadStarted() {
+        mSelectionController.onBasePageLoadStarted();
+    }
+
+    /**
      * Hides the Contextual Search UX.
      * @param reason The {@link StateChangeReason} for hiding Contextual Search.
      */
@@ -341,29 +343,18 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
         if (mSearchPanel.isShowing()) {
             mSearchPanel.closePanel(reason, false);
+        } else {
+            if (mSelectionController.getSelectionType() == SelectionType.TAP) {
+                mSelectionController.clearSelection();
+            }
         }
     }
 
     @Override
     public void onCloseContextualSearch(StateChangeReason reason) {
-        // If the user explicitly closes the panel after establishing a selection with long press,
-        // it should not reappear until a new selection is made. This prevents the panel from
-        // reappearing when a long press selection is modified after the user has taken action to
-        // get rid of the panel. See crbug.com/489461.
-        if (shouldPreventHandlingCurrentSelectionModification(reason)) {
-            mSelectionController.preventHandlingCurrentSelectionModification();
-        }
-
         if (mSearchPanel == null) return;
 
-        // NOTE(pedrosimonetti): hideContextualSearch() will also be called after swiping the
-        // Panel down in order to dismiss it. In this case, hideContextualSearch() will be called
-        // after completing the hide animation, and at that moment the Panel will not be showing
-        // anymore. Therefore, we need to always clear selection, regardless of when the Panel
-        // was still visible, in order to make sure the selection will be cleared appropriately.
-        if (mSelectionController.getSelectionType() == SelectionType.TAP) {
-            mSelectionController.clearSelection();
-        }
+        mSelectionController.onSearchEnded(reason);
 
         // Show the infobar container if it was visible before Contextual Search was shown.
         if (mWereInfoBarsHidden) {
@@ -400,20 +391,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
     }
 
     /**
-     * Returns true if the StateChangeReason corresponds to an explicit action used to close
-     * the Contextual Search panel.
-     * @param reason The reason the panel is closing.
-     */
-    private boolean shouldPreventHandlingCurrentSelectionModification(StateChangeReason reason) {
-        return mSelectionController.getSelectionType() == SelectionType.LONG_PRESS
-                && (reason == StateChangeReason.BACK_PRESS
-                || reason == StateChangeReason.BASE_PAGE_SCROLL
-                || reason == StateChangeReason.SWIPE
-                || reason == StateChangeReason.FLING
-                || reason == StateChangeReason.CLOSE_BUTTON);
-    }
-
-    /**
      * Called when the system back button is pressed. Will hide the layout.
      */
     public boolean onBackPressed() {
@@ -427,7 +404,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
      */
     public void onOrientationChange() {
         if (!mIsInitialized) return;
-        hideContextualSearch(StateChangeReason.UNKNOWN);
+        mSearchPanel.onOrientationChanged();
     }
 
     /**
@@ -619,16 +596,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
             for (TabModel tabModel : selector.getModels()) {
                 tabModel.removeObserver(mTabModelObserver);
             }
-        }
-    }
-
-    @Override
-    public void onActivityStateChange(Activity activity, int newState) {
-        if (newState == ActivityState.RESUMED || newState == ActivityState.STOPPED
-                || newState == ActivityState.DESTROYED) {
-            hideContextualSearch(StateChangeReason.UNKNOWN);
-        } else if (newState == ActivityState.PAUSED) {
-            mPolicy.logCurrentState(getBaseContentView());
         }
     }
 
@@ -829,10 +796,12 @@ public class ContextualSearchManager extends ContextualSearchObservable
         // The primary language, according to the translation-service, always comes first.
         uniqueLanguages.add(trimLocaleToLanguage(getNativeTranslateServiceTargetLanguage()));
         // Merge in the IME locales, if possible.
-        Context context = mActivity.getApplicationContext();
-        if (context != null) {
-            for (String locale : UiUtils.getIMELocales(context)) {
-                uniqueLanguages.add(trimLocaleToLanguage(locale));
+        if (!ContextualSearchFieldTrial.isKeyboardLanguagesForTranslationDisabled()) {
+            Context context = mActivity.getApplicationContext();
+            if (context != null) {
+                for (String locale : UiUtils.getIMELocales(context)) {
+                    uniqueLanguages.add(trimLocaleToLanguage(locale));
+                }
             }
         }
         return uniqueLanguages;
@@ -843,10 +812,12 @@ public class ContextualSearchManager extends ContextualSearchObservable
      * @return The {@link List} of languages the user understands or does not want translated.
      */
     private List<String> getAcceptLanguages() {
-        String acceptLanguages = getNativeAcceptLanguages();
         List<String> result = new ArrayList<String>();
-        for (String language : acceptLanguages.split(",")) {
-            result.add(language);
+        if (!ContextualSearchFieldTrial.isAcceptLanguagesForTranslationDisabled()) {
+            String acceptLanguages = getNativeAcceptLanguages();
+            for (String language : acceptLanguages.split(",")) {
+                result.add(language);
+            }
         }
         return result;
     }
@@ -870,9 +841,11 @@ public class ContextualSearchManager extends ContextualSearchObservable
      */
     private void forceTranslateIfNeeded(ContextualSearchRequest searchRequest,
             String sourceLanguage) {
+        if (!mPolicy.isTranslationEnabled()) return;
+
         if (!TextUtils.isEmpty(sourceLanguage)) {
             if (mPolicy.needsTranslation(sourceLanguage, getReadableLanguages())) {
-                boolean doForceTranslate = !mPolicy.disableForceTranslationOnebox();
+                boolean doForceTranslate = !mPolicy.isForceTranslationOneboxDisabled();
                 if (doForceTranslate && searchRequest != null) {
                     searchRequest.forceTranslation(sourceLanguage,
                             mPolicy.bestTargetLanguage(getProficientLanguageList()));
@@ -892,7 +865,9 @@ public class ContextualSearchManager extends ContextualSearchObservable
     private void forceAutoDetectTranslateUnlessDisabled(ContextualSearchRequest searchRequest) {
         // Always trigger translation using auto-detect when we're not resolving,
         // unless disabled by policy.
-        boolean shouldAutoDetectTranslate = !mPolicy.disableAutoDetectTranslationOnebox();
+        if (!mPolicy.isTranslationEnabled()) return;
+
+        boolean shouldAutoDetectTranslate = !mPolicy.isAutoDetectTranslationOneboxDisabled();
         if (shouldAutoDetectTranslate && searchRequest != null) {
             // The translation one-box won't actually show when the source text ends up being
             // the same as the target text, so we err on over-triggering.
@@ -908,7 +883,9 @@ public class ContextualSearchManager extends ContextualSearchObservable
      * Caches all the native translate language info, so we can avoid repeated JNI calls.
      */
     private void cacheNativeTranslateData() {
-        if (!mPolicy.disableForceTranslationOnebox()) {
+        if (!mPolicy.isTranslationEnabled()) return;
+
+        if (!mPolicy.isForceTranslationOneboxDisabled()) {
             getNativeTranslateServiceTargetLanguage();
             getNativeAcceptLanguages();
         }
@@ -1127,6 +1104,13 @@ public class ContextualSearchManager extends ContextualSearchObservable
     }
 
     @Override
+    public void logCurrentState() {
+        if (mPolicy != null) {
+            mPolicy.logCurrentState(getBaseContentView());
+        }
+    }
+
+    @Override
     public void logPromoOutcome() {
         ContextualSearchUma.logPromoOutcome(mWasActivatedByTap);
         mDidLogPromoOutcome = true;
@@ -1251,19 +1235,26 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
     @Override
     public void onSelectionChanged(String selection) {
-        mSelectionController.handleSelectionChanged(selection);
-        mSearchPanel.updateTopControlsState(TopControlsState.BOTH, true);
+        // Workaround to disable Contextual Search in HTML fullscreen mode. crbug.com/511977
+        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+            mSelectionController.handleSelectionChanged(selection);
+            mSearchPanel.updateTopControlsState(TopControlsState.BOTH, true);
+        }
     }
 
     @Override
     public void onSelectionEvent(int eventType, float posXPix, float posYPix) {
-        mSelectionController.handleSelectionEvent(eventType, posXPix, posYPix);
+        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+            mSelectionController.handleSelectionEvent(eventType, posXPix, posYPix);
+        }
     }
 
     @Override
     public void showUnhandledTapUIIfNeeded(final int x, final int y) {
         mDidBasePageLoadJustStart = false;
-        mSelectionController.handleShowUnhandledTapUIIfNeeded(x, y);
+        if (!mActivity.getFullscreenManager().getPersistentFullscreenMode()) {
+            mSelectionController.handleShowUnhandledTapUIIfNeeded(x, y);
+        }
     }
 
     // --------------------------------------------------------------------------------------------
@@ -1312,10 +1303,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
             StateChangeReason stateChangeReason = type == SelectionType.TAP
                     ? StateChangeReason.TEXT_SELECT_TAP : StateChangeReason.TEXT_SELECT_LONG_PRESS;
             ContextualSearchUma.logSelectionIsValid(selectionValid);
-            // Workaround to disable Contextual Search in HTML fullscreen mode. crbug.com/511977
-            boolean isInFullscreenMode =
-                    mActivity.getFullscreenManager().getPersistentFullscreenMode();
-            if (selectionValid && !isInFullscreenMode) {
+            if (selectionValid) {
                 mSearchPanel.updateBasePageSelectionYPx(y);
                 showContextualSearch(stateChangeReason);
             } else {

@@ -7,6 +7,7 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -233,8 +234,14 @@ class ExtensionManagementApiEscalationTest :
 const char ExtensionManagementApiEscalationTest::kId[] =
     "pgdpcfcocojkjfbgpiianjngphoopgmo";
 
+// Temporarily disabled in official builds. See crbug.com/567497 for details.
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
+#define MAYBE_DisabledReason DISABLED_DisabledReason
+#else
+#define MAYBE_DisabledReason DisabledReason
+#endif  // defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
 IN_PROC_BROWSER_TEST_F(ExtensionManagementApiEscalationTest,
-                       DisabledReason) {
+                       MAYBE_DisabledReason) {
   scoped_refptr<ManagementGetFunction> function =
       new ManagementGetFunction();
   scoped_ptr<base::Value> result(util::RunFunctionAndReturnSingleResult(
@@ -250,8 +257,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiEscalationTest,
   EXPECT_EQ(reason, std::string(keys::kDisabledReasonPermissionsIncrease));
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionManagementApiEscalationTest,
-                       SetEnabled) {
+// Temporarily disabled in official builds. See crbug.com/567497 for details.
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
+#define MAYBE_SetEnabled DISABLED_SetEnabled
+#else
+#define MAYBE_SetEnabled SetEnabled
+#endif  // defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(ExtensionManagementApiEscalationTest, MAYBE_SetEnabled) {
   // Expect an error about no gesture.
   SetEnabled(true, false, keys::kGestureNeededForEscalationError);
 

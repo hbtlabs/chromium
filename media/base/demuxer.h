@@ -5,8 +5,11 @@
 #ifndef MEDIA_BASE_DEMUXER_H_
 #define MEDIA_BASE_DEMUXER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer_stream.h"
@@ -50,7 +53,7 @@ class MEDIA_EXPORT Demuxer : public DemuxerStreamProvider {
   // First parameter - The type of initialization data.
   // Second parameter - The initialization data associated with the stream.
   typedef base::Callback<void(EmeInitDataType type,
-                              const std::vector<uint8>& init_data)>
+                              const std::vector<uint8_t>& init_data)>
       EncryptedMediaInitDataCB;
 
   Demuxer();

@@ -24,7 +24,6 @@ source_set("gbm") {
     "common/scoped_drm_types.h",
     "gpu/crtc_controller.cc",
     "gpu/crtc_controller.h",
-    "gpu/display_change_observer.h",
     "gpu/drm_buffer.cc",
     "gpu/drm_buffer.h",
     "gpu/drm_console_buffer.cc",
@@ -115,11 +114,13 @@ source_set("gbm") {
     "//ui/display/util",
     "//ui/events",
     "//ui/events/devices",
+    "//ui/events/ozone:events_ozone",
     "//ui/events/ozone:events_ozone_evdev",
     "//ui/events/ozone:events_ozone_layout",
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/ozone:ozone_base",
   ]
 
   configs += [ ":libdrm" ]
@@ -152,16 +153,23 @@ source_set("gbm_unittests") {
   testonly = true
   sources = [
     "gpu/drm_window_unittest.cc",
+    "gpu/fake_plane_info.cc",
+    "gpu/fake_plane_info.h",
     "gpu/hardware_display_controller_unittest.cc",
     "gpu/hardware_display_plane_manager_unittest.cc",
-    "gpu/mock_buffer_generator.cc",
-    "gpu/mock_buffer_generator.h",
     "gpu/mock_drm_device.cc",
     "gpu/mock_drm_device.h",
+    "gpu/mock_dumb_buffer_generator.cc",
+    "gpu/mock_dumb_buffer_generator.h",
+    "gpu/mock_hardware_display_plane_manager.cc",
+    "gpu/mock_hardware_display_plane_manager.h",
+    "gpu/mock_scanout_buffer.cc",
+    "gpu/mock_scanout_buffer.h",
     "gpu/screen_manager_unittest.cc",
   ]
 
   deps = [
+    ":gbm",
     "//skia",
     "//testing/gtest",
     "//ui/gfx",

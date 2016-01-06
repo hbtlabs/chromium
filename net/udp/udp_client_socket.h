@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "base/macros.h"
 #include "net/base/rand_callback.h"
 #include "net/log/net_log.h"
 #include "net/udp/datagram_client_socket.h"
@@ -27,6 +28,8 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
 
   // DatagramClientSocket implementation.
   int BindToNetwork(NetworkChangeNotifier::NetworkHandle network) override;
+  int BindToDefaultNetwork() override;
+  NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override;
   int Connect(const IPEndPoint& address) override;
   int Read(IOBuffer* buf,
            int buf_len,
@@ -49,6 +52,7 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
 
  private:
   UDPSocket socket_;
+  NetworkChangeNotifier::NetworkHandle network_;
   DISALLOW_COPY_AND_ASSIGN(UDPClientSocket);
 };
 

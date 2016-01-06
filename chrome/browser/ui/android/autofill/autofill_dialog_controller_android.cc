@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/android/autofill/autofill_dialog_controller_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,7 +21,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/android/autofill/autofill_dialog_result.h"
-#include "chrome/browser/ui/android/window_android_helper.h"
+#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_common.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -39,6 +42,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/AutofillDialogControllerAndroid_jni.h"
+#include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/menu_model.h"
@@ -404,8 +408,8 @@ void AutofillDialogControllerAndroid::Show() {
   java_object_.Reset(Java_AutofillDialogControllerAndroid_create(
       env,
       reinterpret_cast<intptr_t>(this),
-      WindowAndroidHelper::FromWebContents(contents_)->
-          GetWindowAndroid()->GetJavaObject().obj(),
+      ViewAndroidHelper::FromWebContents(contents_)->
+          GetViewAndroid()->GetWindowAndroid()->GetJavaObject().obj(),
       request_full_billing_address, request_shipping_address,
       request_phone_numbers, incognito_mode,
       last_used_choice_is_autofill, jlast_used_account_name.obj(),

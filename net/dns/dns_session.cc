@@ -5,11 +5,12 @@
 #include "net/dns/dns_session.h"
 
 #include <stdint.h>
-
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sample_vector.h"
 #include "base/rand_util.h"
@@ -77,10 +78,12 @@ DnsSession::RttBuckets::RttBuckets() : base::BucketRanges(kRTTBucketCount + 1) {
 DnsSession::SocketLease::SocketLease(scoped_refptr<DnsSession> session,
                                      unsigned server_index,
                                      scoped_ptr<DatagramClientSocket> socket)
-    : session_(session), server_index_(server_index), socket_(socket.Pass()) {}
+    : session_(session),
+      server_index_(server_index),
+      socket_(std::move(socket)) {}
 
 DnsSession::SocketLease::~SocketLease() {
-  session_->FreeSocket(server_index_, socket_.Pass());
+  session_->FreeSocket(server_index_, std::move(socket_));
 }
 
 DnsSession::DnsSession(const DnsConfig& config,
@@ -88,7 +91,7 @@ DnsSession::DnsSession(const DnsConfig& config,
                        const RandIntCallback& rand_int_callback,
                        NetLog* net_log)
     : config_(config),
-      socket_pool_(socket_pool.Pass()),
+      socket_pool_(std::move(socket_pool)),
       rand_callback_(base::Bind(rand_int_callback,
                                 0,
                                 std::numeric_limits<uint16_t>::max())),
@@ -238,7 +241,7 @@ scoped_ptr<DnsSession::SocketLease> DnsSession::AllocateSocket(
   socket->NetLog().BeginEvent(NetLog::TYPE_SOCKET_IN_USE,
                               source.ToEventParametersCallback());
 
-  SocketLease* lease = new SocketLease(this, server_index, socket.Pass());
+  SocketLease* lease = new SocketLease(this, server_index, std::move(socket));
   return scoped_ptr<SocketLease>(lease);
 }
 
@@ -254,7 +257,7 @@ void DnsSession::FreeSocket(unsigned server_index,
 
   socket->NetLog().EndEvent(NetLog::TYPE_SOCKET_IN_USE);
 
-  socket_pool_->FreeSocket(server_index, socket.Pass());
+  socket_pool_->FreeSocket(server_index, std::move(socket));
 }
 
 base::TimeDelta DnsSession::NextTimeoutFromJacobson(unsigned server_index,

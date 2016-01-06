@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/webui/web_ui_data_source_impl.h"
@@ -143,6 +144,16 @@ TEST_F(WebUIDataSourceTest, MimeType) {
   EXPECT_EQ(GetMimeType("foocss"), html);
   EXPECT_EQ(GetMimeType("foo.css"), css);
   EXPECT_EQ(GetMimeType(".css.foo"), html);
+}
+
+TEST_F(WebUIDataSourceTest, QueryStringRemoval) {
+  std::string path = "path.js?query_string";
+  source()->source()->WillServiceRequest(nullptr, &path);
+  EXPECT_EQ("path.js", path);
+
+  path = "path.js?query_string?query_string2";
+  source()->source()->WillServiceRequest(nullptr, &path);
+  EXPECT_EQ("path.js", path);
 }
 
 }  // namespace content

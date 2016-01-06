@@ -4,7 +4,9 @@
 
 #include "gin/v8_initializer.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/debug/alias.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -286,8 +288,8 @@ void V8Initializer::LoadV8Natives() {
 
 // static
 void V8Initializer::LoadV8SnapshotFromFD(base::PlatformFile snapshot_pf,
-                                         int64 snapshot_offset,
-                                         int64 snapshot_size) {
+                                         int64_t snapshot_offset,
+                                         int64_t snapshot_size) {
   if (g_mapped_snapshot)
     return;
 
@@ -318,8 +320,8 @@ void V8Initializer::LoadV8SnapshotFromFD(base::PlatformFile snapshot_pf,
 
 // static
 void V8Initializer::LoadV8NativesFromFD(base::PlatformFile natives_pf,
-                                        int64 natives_offset,
-                                        int64 natives_size) {
+                                        int64_t natives_offset,
+                                        int64_t natives_size) {
   if (g_mapped_natives)
     return;
 
@@ -362,16 +364,21 @@ base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
 #endif  // defined(V8_USE_EXTERNAL_STARTUP_DATA)
 
 // static
-void V8Initializer::Initialize(gin::IsolateHolder::ScriptMode mode) {
+void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
+                               IsolateHolder::V8ExtrasMode v8_extras_mode) {
   static bool v8_is_initialized = false;
   if (v8_is_initialized)
     return;
 
   v8::V8::InitializePlatform(V8Platform::Get());
 
-  if (gin::IsolateHolder::kStrictMode == mode) {
+  if (IsolateHolder::kStrictMode == mode) {
     static const char use_strict[] = "--use_strict";
     v8::V8::SetFlagsFromString(use_strict, sizeof(use_strict) - 1);
+  }
+  if (IsolateHolder::kStableAndExperimentalV8Extras == v8_extras_mode) {
+    static const char flag[] = "--experimental_extras";
+    v8::V8::SetFlagsFromString(flag, sizeof(flag) - 1);
   }
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)

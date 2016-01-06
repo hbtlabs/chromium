@@ -4,9 +4,11 @@
 
 #include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/ash_switches.h"
@@ -19,6 +21,7 @@
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
 #include "ash/system/bluetooth/bluetooth_observer.h"
+#include "ash/system/chromeos/power/power_status.h"
 #include "ash/system/chromeos/session/logout_button_observer.h"
 #include "ash/system/chromeos/shutdown_policy_observer.h"
 #include "ash/system/date/clock_observer.h"
@@ -469,6 +472,16 @@ void SystemTrayDelegateChromeOS::ShowDisplaySettings() {
   }
   content::RecordAction(base::UserMetricsAction("ShowDisplayOptions"));
   ShowSettingsSubPageForActiveUser(kDisplaySettingsSubPageName);
+}
+
+void SystemTrayDelegateChromeOS::ShowPowerSettings() {
+  if (!(switches::PowerOverlayEnabled() ||
+        (ash::PowerStatus::Get()->IsBatteryPresent() &&
+         ash::PowerStatus::Get()->SupportsDualRoleDevices()))) {
+    return;
+  }
+  content::RecordAction(base::UserMetricsAction("Tray_ShowPowerOptions"));
+  ShowSettingsSubPageForActiveUser(chrome::kPowerOptionsSubPage);
 }
 
 void SystemTrayDelegateChromeOS::ShowChromeSlow() {
@@ -1217,7 +1230,7 @@ void SystemTrayDelegateChromeOS::OnStartBluetoothDiscoverySession(
   if (!should_run_bluetooth_discovery_)
     return;
   VLOG(1) << "Claiming new Bluetooth device discovery session.";
-  bluetooth_discovery_session_ = discovery_session.Pass();
+  bluetooth_discovery_session_ = std::move(discovery_session);
   GetSystemTrayNotifier()->NotifyBluetoothDiscoveringChanged();
 }
 

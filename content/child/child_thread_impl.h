@@ -5,15 +5,19 @@
 #ifndef CONTENT_CHILD_CHILD_THREAD_IMPL_H_
 #define CONTENT_CHILD_CHILD_THREAD_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/sequenced_task_runner.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 #include "content/child/mojo/mojo_application.h"
 #include "content/common/content_export.h"
 #include "content/common/message_router.h"
@@ -177,7 +181,7 @@ class CONTENT_EXPORT ChildThreadImpl
   static void ShutdownThread();
 #endif
 
-  ServiceRegistryImpl* service_registry() const {
+  ServiceRegistry* service_registry() const {
     return mojo_application_->service_registry();
   }
 
@@ -190,13 +194,9 @@ class CONTENT_EXPORT ChildThreadImpl
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
   virtual void OnProcessBackgrounded(bool backgrounded);
 
-  void set_on_channel_error_called(bool on_channel_error_called) {
-    on_channel_error_called_ = on_channel_error_called;
-  }
-
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
 
   bool IsInBrowserProcess() const;
@@ -235,6 +235,7 @@ class CONTENT_EXPORT ChildThreadImpl
 
   void EnsureConnected();
 
+  scoped_ptr<IPC::ScopedIPCSupport> mojo_ipc_support_;
   scoped_ptr<MojoApplication> mojo_application_;
 
   std::string channel_name_;

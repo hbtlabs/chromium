@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/animation/css/CSSAnimations.h"
 
 #include "core/StylePropertyShorthand.h"
@@ -58,6 +57,7 @@
 #include "public/platform/Platform.h"
 #include "wtf/BitArray.h"
 #include "wtf/HashSet.h"
+#include <algorithm>
 
 namespace blink {
 

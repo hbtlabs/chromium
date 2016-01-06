@@ -28,8 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "public/web/WebLeakDetector.h"
 
 #include "bindings/core/v8/ScriptPromise.h"
@@ -38,7 +36,6 @@
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/Document.h"
 #include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/inspector/InstanceCounters.h"
 #include "core/layout/LayoutObject.h"
 #include "core/workers/WorkerThread.h"
@@ -65,7 +62,7 @@ public:
 
     ~WebLeakDetectorImpl() override {}
 
-    void prepareForLeakDetection(WebLocalFrame*) override;
+    void prepareForLeakDetection() override;
     void collectGarbageAndReport() override;
 
 private:
@@ -78,7 +75,7 @@ private:
     int m_numberOfGCNeeded;
 };
 
-void WebLeakDetectorImpl::prepareForLeakDetection(WebLocalFrame* frame)
+void WebLeakDetectorImpl::prepareForLeakDetection()
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::HandleScope handleScope(isolate);
@@ -92,12 +89,6 @@ void WebLeakDetectorImpl::prepareForLeakDetection(WebLocalFrame* frame)
 
     WorkerThread::terminateAndWaitForAllWorkers();
     memoryCache()->evictResources();
-
-    {
-        RefPtrWillBeRawPtr<Document> document = PassRefPtrWillBeRawPtr<Document>(frame->document());
-        if (ResourceFetcher* fetcher = document->fetcher())
-            fetcher->garbageCollectDocumentResources();
-    }
 
     // FIXME: HTML5 Notification should be closed because notification affects the result of number of DOM objects.
 

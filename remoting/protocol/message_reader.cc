@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/message_reader.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -126,7 +128,7 @@ void MessageReader::OnDataReceived(net::IOBuffer* data, int data_size) {
 void MessageReader::RunCallback(scoped_ptr<CompoundBuffer> message) {
   if (!message_received_callback_.is_null()){
     message_received_callback_.Run(
-        message.Pass(),
+        std::move(message),
         base::Bind(&MessageReader::OnMessageDone, weak_factory_.GetWeakPtr()));
   }
 }

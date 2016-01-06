@@ -2882,6 +2882,13 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="DownloadNotification.Button_CopyToClipboard">
+  <owner>yoshiki@chromium.org</owner>
+  <description>
+    User pushes &quot;Copy to clipboard&quot; button on download notification.
+  </description>
+</action>
+
 <action name="DownloadNotification.Button_Discard">
   <owner>yoshiki@chromium.org</owner>
   <description>
@@ -7763,6 +7770,38 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MediaRouter_Ui_Navigate_Help">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User clicked the Media Router help menu item, located on the Media Router
+    contextual menu, to open the Cast help page.
+  </description>
+</action>
+
+<action name="MediaRouter_Ui_Navigate_RouteDetailsToSinkList">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User explicitly clicked the back button from the route details view to
+    navigate to the sink list view.
+  </description>
+</action>
+
+<action name="MediaRouter_Ui_Navigate_SinkListToRouteDetails">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User explicitly clicked a sink to navigate to the route details view from
+    the sink list view.
+  </description>
+</action>
+
+<action name="MediaRouter_Ui_Navigate_SinkListToSource">
+  <owner>apacible@chromium.org</owner>
+  <description>
+    User explicitly clicked to navigate from the sink view to the cast mode
+    view.
+  </description>
+</action>
+
 <action name="Menu_Take_Screenshot">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8109,6 +8148,26 @@ should be able to be added at any place in this file.
 <action name="MobileMenuShow">
   <owner>aurimas@chromium.org</owner>
   <description>User opened the app menu.</description>
+</action>
+
+<action name="MobileNTP.Interests.Click">
+  <owner>knn@chromium.org</owner>
+  <description>
+    Android: The user clicked on an Interest item shown on the NTP.
+  </description>
+</action>
+
+<action name="MobileNTP.Interests.Dismissed">
+  <owner>knn@chromium.org</owner>
+  <description>
+    Android: The user dismissed the page showing the Interests without clicking
+    on any of them.
+  </description>
+</action>
+
+<action name="MobileNTP.Interests.OpenDialog">
+  <owner>peconn@chromium.org</owner>
+  <description>User opened the interests dialog.</description>
 </action>
 
 <action name="MobileNTP.Snippets.Click">
@@ -11138,13 +11197,102 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="PhysicalWeb.NotificationPressed">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of the metric.</description>
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    A notification advertising nearby Physical Web URLs was pressed.
+  </description>
+</action>
+
+<action name="PhysicalWeb.OptIn.DeclineButtonPressed">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user has disabled the Physical Web feature via the settings.
+  </description>
+</action>
+
+<action name="PhysicalWeb.OptIn.EnableButtonPressed">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The enable button was pressed in the Physical Web opt-in activity.
+  </description>
+</action>
+
+<action name="PhysicalWeb.OptIn.HighPriorityNotificationShown">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    A high priority Physical Web opt-in notification was displayed.
+  </description>
+</action>
+
+<action name="PhysicalWeb.OptIn.MinPriorityNotificationShown">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    A min priority Physical Web opt-in notification was displayed.
+  </description>
+</action>
+
+<action name="PhysicalWeb.OptIn.NotificationPressed">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user pressed the Physical Web opt-in notification.
+  </description>
+</action>
+
+<action name="PhysicalWeb.Prefs.FeatureDisabled">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user has disabled the Physical Web feature via the settings.
+  </description>
+</action>
+
+<action name="PhysicalWeb.Prefs.FeatureEnabled">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user has enabled the Physical Web feature via the settings.
+  </description>
+</action>
+
+<action name="PhysicalWeb.Prefs.LocationDenied">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user denied location permission when enabling the Physical Web feature
+    via the settings.
+  </description>
+</action>
+
+<action name="PhysicalWeb.Prefs.LocationGranted">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user granted location permission when enabling the Physical Web feature
+    via the settings.
+  </description>
 </action>
 
 <action name="PhysicalWeb.UrlSelected">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of the metric.</description>
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>A Physical Web URL was selected.</description>
 </action>
 
 <action name="PlatformVerificationAccepted">
@@ -11940,6 +12088,305 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Signin_EnterpriseAccountPrompt_Cancel">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user clicks 'cancel' in the sign in enterprise account
+    confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_EnterpriseAccountPrompt_DontImportData">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to not import data in the sign in enterprise
+    account confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_EnterpriseAccountPrompt_ImportData">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to import data in the sign in enterprise
+    account confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_ImportDataPrompt_Cancel">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to cancel (abort) sign in in the import data
+    confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_ImportDataPrompt_DontImport">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to not import data (create new profile) in
+    the import data confirmation dialog of sign in.
+  </description>
+</action>
+
+<action name="Signin_ImportDataPrompt_ImportData">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to import data in the import data
+    confirmation dialog of sign in.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromAppsPageLink">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the chrome://apps page.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromBookmarkBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the bookmark bubble.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromCloudPrint">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the cloud print preview page.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromDevicesPage">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the chrome://devices page.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromExtensionInstallBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the extension installed bubble.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromMenu">
+  <owner>gogerald@chromium.org</owner>
+  <description>Recorded when showing sign in entry in the menu.</description>
+</action>
+
+<action name="Signin_Impression_FromNTP">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the new tab page.
+  </description>
+</action>
+
+<action name="Signin_Show_EnterpriseAccountPrompt">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in enterprise account confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_Show_ImportDataPrompt">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in import data confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_Show_UntrustedSigninPrompt">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing untrusted sign in confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_SigninPage_Loading">
+  <owner>gogerald@chromium.org</owner>
+  <description>Recorded when sign in page is loading.</description>
+</action>
+
+<action name="Signin_SigninPage_Shown">
+  <owner>gogerald@chromium.org</owner>
+  <description>Recorded when sign in page is shown.</description>
+</action>
+
+<action name="Signin_Signin_FromAppsPageLink">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromAvatarBubbleSignin">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromBookmarkBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromBookmarkManager">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromCloudPrint">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromContentArea">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromDevicesPage">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromExtensionInstallBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromExtensions">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromMenu">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_MENU.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromNTP">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromRecentTabs">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromSettings">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromSigninPromo">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromStartPage">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromSupervisedUser">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromUnspecifiedAccessPoint">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_UNSPECIFIED.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromUserManager">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER.
+  </description>
+</action>
+
+<action name="Signin_Signin_Succeed">
+  <owner>gogerald@chromium.org</owner>
+  <description>Recorded when user sign in was successful.</description>
+</action>
+
+<action name="Signin_Signin_WithAdvancedSyncSettings">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses advanced sync settings in the sign in succeed
+    confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_Signin_WithDefaultSyncSettings">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses default sync settings in the sign in succeed
+    confirmation dialog.
+  </description>
+</action>
+
+<action name="Signin_Undo_Signin">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when the user chooses to undo (abort) the sign in process. It
+    closes sign in page without signing user in.
+  </description>
+</action>
+
 <action name="SiteChipPress">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -12682,6 +13129,13 @@ should be able to be added at any place in this file.
     Records when the user presses the overview mode button in the Ash system
     tray. Overview mode is a feature of Ash that shows thumbnails of all
     currently-open windows.
+  </description>
+</action>
+
+<action name="Tray_ShowPowerOptions">
+  <owner>michaelpg@chromium.org</owner>
+  <description>
+    Settings opened to the Power overlay from the system tray.
   </description>
 </action>
 

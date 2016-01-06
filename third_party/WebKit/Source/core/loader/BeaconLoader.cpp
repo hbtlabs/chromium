@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/loader/BeaconLoader.h"
 
 #include "core/dom/DOMArrayBufferView.h"
@@ -82,8 +81,8 @@ public:
 
         ResourceRequest request(beaconURL);
         request.setRequestContext(WebURLRequest::RequestContextBeacon);
-        request.setHTTPMethod("POST");
-        request.setHTTPHeaderField("Cache-Control", "max-age=0");
+        request.setHTTPMethod(HTTPNames::POST);
+        request.setHTTPHeaderField(HTTPNames::Cache_Control, "max-age=0");
         request.setAllowStoredCredentials(true);
         frame->document()->fetcher()->context().addAdditionalRequestHeaders(request, FetchSubresource);
         frame->document()->fetcher()->context().setFirstPartyForCookies(request);

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/graphics/paint/PaintArtifact.h"
 
 #include "platform/TraceEvent.h"
@@ -41,6 +40,9 @@ void PaintArtifact::replay(GraphicsContext& graphicsContext) const
 void PaintArtifact::appendToWebDisplayItemList(WebDisplayItemList* list) const
 {
     TRACE_EVENT0("blink,benchmark", "PaintArtifact::appendToWebDisplayItemList");
+#if ENABLE(ASSERT)
+    m_displayItemList.assertDisplayItemClientsAreAlive();
+#endif
     for (const DisplayItem& displayItem : m_displayItemList) {
         // TODO(wkorman): Pass the actual visual rect for the display item.
         displayItem.appendToWebDisplayItemList(IntRect(), list);

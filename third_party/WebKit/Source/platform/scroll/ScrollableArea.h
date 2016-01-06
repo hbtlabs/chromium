@@ -33,6 +33,7 @@
 #include "platform/scroll/ScrollAnimatorBase.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/Scrollbar.h"
+#include "wtf/MathExtras.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 
@@ -47,6 +48,7 @@ class ProgrammaticScrollAnimator;
 struct ScrollAlignment;
 class ScrollAnimatorBase;
 class WebCompositorAnimationTimeline;
+class Widget;
 
 enum ScrollBehavior {
     ScrollBehaviorAuto,
@@ -106,15 +108,15 @@ public:
     void mouseEnteredContentArea() const;
     void mouseExitedContentArea() const;
     void mouseMovedInContentArea() const;
-    void mouseEnteredScrollbar(Scrollbar*) const;
-    void mouseExitedScrollbar(Scrollbar*) const;
+    void mouseEnteredScrollbar(Scrollbar&) const;
+    void mouseExitedScrollbar(Scrollbar&) const;
     void contentAreaDidShow() const;
     void contentAreaDidHide() const;
 
     void finishCurrentScrollAnimations() const;
 
-    virtual void didAddScrollbar(Scrollbar*, ScrollbarOrientation);
-    virtual void willRemoveScrollbar(Scrollbar*, ScrollbarOrientation);
+    virtual void didAddScrollbar(Scrollbar&, ScrollbarOrientation);
+    virtual void willRemoveScrollbar(Scrollbar&, ScrollbarOrientation);
 
     virtual void contentsResized();
 
@@ -123,12 +125,12 @@ public:
     ScrollbarOverlayStyle scrollbarOverlayStyle() const { return static_cast<ScrollbarOverlayStyle>(m_scrollbarOverlayStyle); }
 
     // This getter will create a ScrollAnimatorBase if it doesn't already exist.
-    ScrollAnimatorBase* scrollAnimator() const;
+    ScrollAnimatorBase& scrollAnimator() const;
 
     // This getter will return null if the ScrollAnimatorBase hasn't been created yet.
     ScrollAnimatorBase* existingScrollAnimator() const { return m_scrollAnimator.get(); }
 
-    ProgrammaticScrollAnimator* programmaticScrollAnimator() const;
+    ProgrammaticScrollAnimator& programmaticScrollAnimator() const;
     ProgrammaticScrollAnimator* existingProgrammaticScrollAnimator() const { return m_programmaticScrollAnimator.get(); }
 
     const IntPoint& scrollOrigin() const { return m_scrollOrigin; }
@@ -144,7 +146,7 @@ public:
 
     virtual bool isActive() const = 0;
     virtual int scrollSize(ScrollbarOrientation) const = 0;
-    void setScrollbarNeedsPaintInvalidation(Scrollbar*);
+    void setScrollbarNeedsPaintInvalidation(ScrollbarOrientation);
     virtual bool isScrollCornerVisible() const = 0;
     virtual IntRect scrollCornerRect() const = 0;
     void setScrollCornerNeedsPaintInvalidation();
@@ -153,25 +155,25 @@ public:
     // Convert points and rects between the scrollbar and its containing Widget.
     // The client needs to implement these in order to be aware of layout effects
     // like CSS transforms.
-    virtual IntRect convertFromScrollbarToContainingWidget(const Scrollbar* scrollbar, const IntRect& scrollbarRect) const
+    virtual IntRect convertFromScrollbarToContainingWidget(const Scrollbar& scrollbar, const IntRect& scrollbarRect) const
     {
-        return scrollbar->Widget::convertToContainingWidget(scrollbarRect);
+        return scrollbar.Widget::convertToContainingWidget(scrollbarRect);
     }
-    virtual IntRect convertFromContainingWidgetToScrollbar(const Scrollbar* scrollbar, const IntRect& parentRect) const
+    virtual IntRect convertFromContainingWidgetToScrollbar(const Scrollbar& scrollbar, const IntRect& parentRect) const
     {
-        return scrollbar->Widget::convertFromContainingWidget(parentRect);
+        return scrollbar.Widget::convertFromContainingWidget(parentRect);
     }
-    virtual IntPoint convertFromScrollbarToContainingWidget(const Scrollbar* scrollbar, const IntPoint& scrollbarPoint) const
+    virtual IntPoint convertFromScrollbarToContainingWidget(const Scrollbar& scrollbar, const IntPoint& scrollbarPoint) const
     {
-        return scrollbar->Widget::convertToContainingWidget(scrollbarPoint);
+        return scrollbar.Widget::convertToContainingWidget(scrollbarPoint);
     }
-    virtual IntPoint convertFromContainingWidgetToScrollbar(const Scrollbar* scrollbar, const IntPoint& parentPoint) const
+    virtual IntPoint convertFromContainingWidgetToScrollbar(const Scrollbar& scrollbar, const IntPoint& parentPoint) const
     {
-        return scrollbar->Widget::convertFromContainingWidget(parentPoint);
+        return scrollbar.Widget::convertFromContainingWidget(parentPoint);
     }
 
-    virtual Scrollbar* horizontalScrollbar() const { return 0; }
-    virtual Scrollbar* verticalScrollbar() const { return 0; }
+    virtual Scrollbar* horizontalScrollbar() const { return nullptr; }
+    virtual Scrollbar* verticalScrollbar() const { return nullptr; }
 
     // scrollPosition is relative to the scrollOrigin. i.e. If the page is RTL
     // then scrollPosition will be negative. By default, scrollPositionDouble()
@@ -210,7 +212,7 @@ public:
 
     // Let subclasses provide a way of asking for and servicing scroll
     // animations.
-    bool scheduleAnimation();
+    virtual bool scheduleAnimation();
     virtual void serviceScrollAnimations(double monotonicTime);
     virtual void updateCompositorScrollAnimations();
     virtual void registerForAnimation() { }
@@ -230,7 +232,7 @@ public:
     int scrollPosition(ScrollbarOrientation orientation) { return orientation == HorizontalScrollbar ? scrollPosition().x() : scrollPosition().y(); }
     int minimumScrollPosition(ScrollbarOrientation orientation) { return orientation == HorizontalScrollbar ? minimumScrollPosition().x() : minimumScrollPosition().y(); }
     int maximumScrollPosition(ScrollbarOrientation orientation) { return orientation == HorizontalScrollbar ? maximumScrollPosition().x() : maximumScrollPosition().y(); }
-    int clampScrollPosition(ScrollbarOrientation orientation, int pos)  { return std::max(std::min(pos, maximumScrollPosition(orientation)), minimumScrollPosition(orientation)); }
+    int clampScrollPosition(ScrollbarOrientation orientation, int pos)  { return clampTo(pos, minimumScrollPosition(orientation), maximumScrollPosition(orientation)); }
 
     virtual GraphicsLayer* layerForContainer() const;
     virtual GraphicsLayer* layerForScrolling() const { return 0; }
@@ -244,7 +246,7 @@ public:
     void layerForScrollingDidChange(WebCompositorAnimationTimeline*);
 
     void cancelScrollAnimation();
-    void cancelProgrammaticScrollAnimation();
+    virtual void cancelProgrammaticScrollAnimation();
 
     virtual ~ScrollableArea();
 
@@ -273,12 +275,18 @@ public:
     // Does nothing if overlay scrollbars are enabled.
     IntSize excludeScrollbars(const IntSize&) const;
 
+    // Returns the widget associated with this ScrollableArea.
+    virtual Widget* widget() { return nullptr; }
+
     // Need to promptly let go of owned animator objects.
     EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
 
 protected:
     ScrollableArea();
+
+    ScrollbarOrientation scrollbarOrientationFromDirection(ScrollDirectionPhysical) const;
+    float scrollStep(ScrollGranularity, ScrollbarOrientation) const;
 
     void setScrollOrigin(const IntPoint&);
     void resetScrollOriginChanged() { m_scrollOriginChanged = false; }

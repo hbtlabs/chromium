@@ -7,6 +7,7 @@
 #include <cryptohi.h>
 #include <keyhi.h>
 #include <pk11pub.h>
+#include <stdint.h>
 
 #include "base/logging.h"
 #include "crypto/nss_util.h"
@@ -136,7 +137,7 @@ ScopedSECKEYPrivateKey FindNSSKeyFromPublicKeyInfo(
       ScopedSECKEYPrivateKey key(
           PK11_FindKeyByKeyID(item->module->slots[i], cka_id.get(), nullptr));
       if (key)
-        return key.Pass();
+        return key;
     }
   }
 

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/PageWidgetDelegate.h"
 
 #include "core/frame/FrameView.h"
@@ -56,11 +55,6 @@ void PageWidgetDelegate::animate(Page& page, double monotonicFrameBeginTime)
 {
     page.autoscrollController().animate(monotonicFrameBeginTime);
     page.animator().serviceScriptedAnimations(monotonicFrameBeginTime);
-}
-
-void PageWidgetDelegate::updateLifecycleToCompositingCleanPlusScrolling(Page& page, LocalFrame& root)
-{
-    page.animator().updateLifecycleToCompositingCleanPlusScrolling(root);
 }
 
 void PageWidgetDelegate::updateAllLifecyclePhases(Page& page, LocalFrame& root)
@@ -93,7 +87,7 @@ static void paintInternal(Page& page, WebCanvas* canvas,
         if (view) {
             ClipRecorder clipRecorder(paintContext, root, DisplayItem::PageWidgetDelegateClip, LayoutRect(dirtyRect));
 
-            view->paint(&paintContext, globalPaintFlags, CullRect(dirtyRect));
+            view->paint(paintContext, globalPaintFlags, CullRect(dirtyRect));
         } else if (!DrawingRecorder::useCachedDrawingIfPossible(paintContext, root, DisplayItem::PageWidgetDelegateBackgroundFallback)) {
             DrawingRecorder drawingRecorder(paintContext, root, DisplayItem::PageWidgetDelegateBackgroundFallback, dirtyRect);
             paintContext.fillRect(dirtyRect, Color::white);

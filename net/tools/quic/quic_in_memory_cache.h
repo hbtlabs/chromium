@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_piece.h"
 #include "net/quic/spdy_utils.h"
@@ -21,7 +22,8 @@ using std::list;
 
 namespace base {
 
-template <typename Type> struct DefaultSingletonTraits;
+template <typename Type>
+struct DefaultSingletonTraits;
 
 }  // namespace base
 
@@ -55,7 +57,7 @@ class QuicInMemoryCache {
   enum SpecialResponseType {
     REGULAR_RESPONSE,  // Send the headers and body like a server should.
     CLOSE_CONNECTION,  // Close the connection (sending the close packet).
-    IGNORE_REQUEST,  // Do nothing, expect the client to time out.
+    IGNORE_REQUEST,    // Do nothing, expect the client to time out.
   };
 
   // Container for response header/body pairs.
@@ -66,22 +68,21 @@ class QuicInMemoryCache {
 
     SpecialResponseType response_type() const { return response_type_; }
     const SpdyHeaderBlock& headers() const { return headers_; }
+    const SpdyHeaderBlock& trailers() const { return trailers_; }
     const base::StringPiece body() const { return base::StringPiece(body_); }
 
     void set_response_type(SpecialResponseType response_type) {
       response_type_ = response_type;
     }
-    void set_headers(const SpdyHeaderBlock& headers) {
-      headers_ = headers;
-    }
-    void set_body(base::StringPiece body) {
-      body.CopyToString(&body_);
-    }
+    void set_headers(const SpdyHeaderBlock& headers) { headers_ = headers; }
+    void set_trailers(const SpdyHeaderBlock& trailers) { trailers_ = trailers; }
+    void set_body(base::StringPiece body) { body.CopyToString(&body_); }
 
    private:
     SpecialResponseType response_type_;
     SpdyHeaderBlock headers_;
-    string body_;
+    SpdyHeaderBlock trailers_;
+    std::string body_;
 
     DISALLOW_COPY_AND_ASSIGN(Response);
   };
@@ -118,6 +119,13 @@ class QuicInMemoryCache {
                    const SpdyHeaderBlock& response_headers,
                    base::StringPiece response_body);
 
+  // Add a response, with trailers, to the cache.
+  void AddResponse(base::StringPiece host,
+                   base::StringPiece path,
+                   const SpdyHeaderBlock& response_headers,
+                   base::StringPiece response_body,
+                   const SpdyHeaderBlock& response_trailers);
+
   // Simulate a special behavior at a particular path.
   void AddSpecialResponse(base::StringPiece host,
                           base::StringPiece path,
@@ -148,7 +156,8 @@ class QuicInMemoryCache {
                        base::StringPiece path,
                        SpecialResponseType response_type,
                        const SpdyHeaderBlock& response_headers,
-                       base::StringPiece response_body);
+                       base::StringPiece response_body,
+                       const SpdyHeaderBlock& response_trailers);
 
   string GetKey(base::StringPiece host, base::StringPiece path) const;
 

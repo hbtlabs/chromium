@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gfx/mac/io_surface_manager.h"
+#include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/gl_image_io_surface.h"
 #include "ui/gl/test/gl_image_test_template.h"
 
@@ -18,8 +21,7 @@ class GLImageIOSurfaceTestDelegate {
                                                const uint8_t color[4]) const {
     scoped_refptr<GLImageIOSurface> image(new GLImageIOSurface(
         size, GLImageIOSurface::GetInternalFormatForTesting(format)));
-    IOSurfaceRef surface_ref =
-        gfx::IOSurfaceManager::CreateIOSurface(size, format);
+    IOSurfaceRef surface_ref = gfx::CreateIOSurface(size, format);
     IOReturn status = IOSurfaceLock(surface_ref, 0, nullptr);
     EXPECT_NE(status, kIOReturnCannotLock);
     for (size_t plane = 0; plane < NumberOfPlanesForBufferFormat(format);

@@ -5,6 +5,7 @@
 #include "chrome/renderer/net/net_error_helper.h"
 
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
@@ -12,6 +13,7 @@
 #include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/localized_error.h"
 #include "chrome/common/render_messages.h"
@@ -112,6 +114,11 @@ void NetErrorHelper::DidStartProvisionalLoad() {
 
 void NetErrorHelper::DidCommitProvisionalLoad(bool is_new_navigation,
                                               bool is_same_page_navigation) {
+  // If this is a "same page" navigation, it's not a real navigation.  There
+  // wasn't a start event for it, either, so just ignore it.
+  if (is_same_page_navigation)
+    return;
+
   // Invalidate weak pointers from old error page controllers. If loading a new
   // error page, the controller has not yet been attached, so this won't affect
   // it.
@@ -193,17 +200,11 @@ void NetErrorHelper::GenerateLocalizedErrorPage(
   } else {
     base::DictionaryValue error_strings;
     LocalizedError::GetStrings(
-        error.reason,
-        error.domain.utf8(),
-        error.unreachableURL,
-        is_failed_post,
-        error.staleCopyInCache,
-        can_show_network_diagnostics_dialog,
-        offline_page_status,
-        RenderThread::Get()->GetLocale(),
+        error.reason, error.domain.utf8(), error.unreachableURL, is_failed_post,
+        error.staleCopyInCache, can_show_network_diagnostics_dialog,
+        offline_page_status, RenderThread::Get()->GetLocale(),
         render_frame()->GetRenderView()->GetAcceptLanguages(),
-        params.Pass(),
-        &error_strings);
+        std::move(params), &error_strings);
     *reload_button_shown = error_strings.Get("reloadButton", nullptr);
     *show_saved_copy_button_shown =
         error_strings.Get("showSavedCopyButton", nullptr);

@@ -15,8 +15,7 @@ from telemetry.web_perf.metrics import smoothness
 from telemetry.web_perf.metrics import memory_timeline
 
 
-@benchmark.Disabled('win',        # crbug.com/416502
-                    'reference')  # crbug.com/547833
+@benchmark.Disabled('win')        # crbug.com/416502
 class V8Top25(perf_benchmark.PerfBenchmark):
   """Measures V8 GC metrics on the while scrolling down the top 25 web pages.
 
@@ -65,7 +64,8 @@ class V8InfiniteScroll(perf_benchmark.PerfBenchmark):
         # See: http://crbug.com/513692
         '--enable-memory-benchmarking',
         # TODO(ssid): Remove this flag after fixing http://crbug.com/461788.
-        '--no-sandbox'
+        '--no-sandbox',
+        '--js-flags=--heap-growing-percent=10'
     ])
 
   def CreateStorySet(self, options):

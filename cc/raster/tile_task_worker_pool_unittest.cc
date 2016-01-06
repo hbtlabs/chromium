@@ -4,12 +4,16 @@
 
 #include "cc/raster/tile_task_worker_pool.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/base/unique_notifier.h"
@@ -194,7 +198,8 @@ class TileTaskWorkerPoolTest
 
     for (RasterTaskVector::const_iterator it = tasks_.begin();
          it != tasks_.end(); ++it) {
-      graph_.nodes.emplace_back(it->get(), priority++, 0 /* dependencies */);
+      graph_.nodes.emplace_back(it->get(), 0 /* group */, priority++,
+                                0 /* dependencies */);
     }
 
     tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&graph_);

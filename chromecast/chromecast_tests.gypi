@@ -18,6 +18,7 @@
         '../testing/gtest.gyp:gtest',
       ],
       'sources': [
+        'base/bind_to_task_runner_unittest.cc',
         'base/device_capabilities_impl_unittest.cc',
         'base/error_codes_unittest.cc',
         'base/path_utils_unittest.cc',
@@ -111,7 +112,7 @@
         '../url/url.gyp:url_unittests',
       ],
       'conditions': [
-        ['target_arch=="arm" and OS!="android"', {
+        ['OS=="linux" and is_cast_desktop_build==0', {
           'variables': {
             'filters': [
               # Run net_unittests first to avoid random failures due to slow python startup
@@ -153,7 +154,7 @@
               'url_unittests --gtest_filter=-URLCanonTest.DoAppendUTF8Invalid',
             ],
           },
-        }, { # else "x86" or "android"
+        }, { # else desktop or android
           'variables': {
             'filters': [
               # Disable PipelineIntegrationTest.BasicPlayback_MediaSource_VP9_WebM (not supported)
@@ -180,7 +181,9 @@
           ],
           'variables': {
             'filters': [
-              'cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast',
+              # --enable-local-file-accesses => to load sample media files
+              # --test-launcher-jobs=1 => so internal code can bind to port
+              'cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1',
             ],
           },
         }],

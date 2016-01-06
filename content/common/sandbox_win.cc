@@ -4,6 +4,8 @@
 
 #include "content/common/sandbox_win.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/base_switches.h"
@@ -12,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/hash.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/sparse_histogram.h"
@@ -24,6 +27,7 @@
 #include "base/win/iat_patch_function.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_process_information.h"
+#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_client.h"
@@ -36,7 +40,10 @@
 #include "sandbox/win/src/sandbox_nt_util.h"
 #include "sandbox/win/src/sandbox_policy_base.h"
 #include "sandbox/win/src/win_utils.h"
-#include "ui/gfx/win/direct_write.h"
+
+#if !defined(NACL_WIN64)
+#include "ui/gfx/win/direct_write.h" // nogncheck: unused #ifdef NACL_WIN64
+#endif  // !defined(NACL_WIN64)
 
 static sandbox::BrokerServices* g_broker_services = NULL;
 static sandbox::TargetServices* g_target_services = NULL;
@@ -558,7 +565,7 @@ bool IsAppContainerEnabled() {
 
 void SetJobLevel(const base::CommandLine& cmd_line,
                  sandbox::JobLevel job_level,
-                 uint32 ui_exceptions,
+                 uint32_t ui_exceptions,
                  sandbox::TargetPolicy* policy) {
   if (ShouldSetJobLevel(cmd_line)) {
 #ifdef _WIN64
@@ -743,8 +750,9 @@ base::Process StartSandboxedProcess(
       if (direct_write_font_cache_section.Open(name, true)) {
         void* shared_handle = policy->AddHandleToShare(
             direct_write_font_cache_section.handle().GetHandle());
-        cmd_line->AppendSwitchASCII(switches::kFontCacheSharedHandle,
-            base::UintToString(reinterpret_cast<unsigned int>(shared_handle)));
+        cmd_line->AppendSwitchASCII(
+            switches::kFontCacheSharedHandle,
+            base::UintToString(base::win::HandleToUint32(shared_handle)));
       }
     }
   }
@@ -814,7 +822,7 @@ base::Process StartSandboxedProcess(
 
   delegate->PostSpawnTarget(target.process_handle());
 
-  CHECK(ResumeThread(target.thread_handle()) != -1);
+  CHECK(ResumeThread(target.thread_handle()) != static_cast<DWORD>(-1));
   return base::Process(target.TakeProcessHandle());
 }
 

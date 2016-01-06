@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/animation/CompositorAnimations.h"
 
 #include "core/animation/AnimationEffect.h"
@@ -384,8 +383,8 @@ void CompositorAnimations::cancelAnimationOnCompositor(const Element& element, c
     }
     if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled()) {
         WebCompositorAnimationPlayer* compositorPlayer = animation.compositorPlayer();
-        ASSERT(compositorPlayer);
-        compositorPlayer->removeAnimation(id);
+        if (compositorPlayer)
+            compositorPlayer->removeAnimation(id);
     } else {
         toLayoutBoxModelObject(element.layoutObject())->layer()->compositedLayerMapping()->mainGraphicsLayer()->removeAnimation(id);
     }

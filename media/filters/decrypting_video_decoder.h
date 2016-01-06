@@ -5,7 +5,10 @@
 #ifndef MEDIA_FILTERS_DECRYPTING_VIDEO_DECODER_H_
 #define MEDIA_FILTERS_DECRYPTING_VIDEO_DECODER_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
@@ -114,7 +117,7 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
 
   // A unique ID to trace Decryptor::DecryptAndDecodeVideo() call and the
   // matching DecryptCB call (in DoDeliverFrame()).
-  uint32 trace_id_;
+  uint32_t trace_id_;
 
   base::WeakPtr<DecryptingVideoDecoder> weak_this_;
   base::WeakPtrFactory<DecryptingVideoDecoder> weak_factory_;

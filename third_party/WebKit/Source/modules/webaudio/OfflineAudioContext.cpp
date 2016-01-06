@@ -22,10 +22,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-#if ENABLE(WEB_AUDIO)
 #include "modules/webaudio/OfflineAudioContext.h"
 
+#if ENABLE(WEB_AUDIO)
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
@@ -375,7 +374,9 @@ void OfflineAudioContext::resolveSuspendOnMainThread(size_t frame)
     // Wait until the suspend map is available for the removal.
     AutoLocker locker(this);
 
-    ASSERT(m_scheduledSuspends.contains(frame));
+    // |frame| must exist in the map. However, it can be removed already in a
+    // very rare case. See: crbug.com/568796
+    RELEASE_ASSERT(m_scheduledSuspends.contains(frame));
 
     SuspendMap::iterator it = m_scheduledSuspends.find(frame);
     it->value->resolve();

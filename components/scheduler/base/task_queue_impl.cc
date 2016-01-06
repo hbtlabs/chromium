@@ -54,7 +54,7 @@ TaskQueueImpl::Task::Task()
 TaskQueueImpl::Task::Task(const tracked_objects::Location& posted_from,
                           const base::Closure& task,
                           base::TimeTicks desired_run_time,
-                          int sequence_number,
+                          EnqueueOrder sequence_number,
                           bool nestable)
     : PendingTask(posted_from, task, base::TimeTicks(), nestable),
 #ifndef NDEBUG
@@ -68,9 +68,9 @@ TaskQueueImpl::Task::Task(const tracked_objects::Location& posted_from,
 TaskQueueImpl::Task::Task(const tracked_objects::Location& posted_from,
                           const base::Closure& task,
                           base::TimeTicks desired_run_time,
-                          int sequence_number,
+                          EnqueueOrder sequence_number,
                           bool nestable,
-                          int enqueue_order)
+                          EnqueueOrder enqueue_order)
     : PendingTask(posted_from, task, base::TimeTicks(), nestable),
 #ifndef NDEBUG
       enqueue_order_set_(true),
@@ -162,7 +162,7 @@ bool TaskQueueImpl::PostDelayedTaskLocked(
     base::TimeTicks desired_run_time,
     TaskType task_type) {
   DCHECK(any_thread().task_queue_manager);
-  int sequence_number =
+  EnqueueOrder sequence_number =
       any_thread().task_queue_manager->GetNextSequenceNumber();
   if (!desired_run_time.is_null()) {
     PushOntoDelayedIncomingQueueLocked(
@@ -193,7 +193,7 @@ void TaskQueueImpl::PushOntoDelayedIncomingQueueLocked(
     // be common. This pathway is less optimal than perhaps it could be
     // because it causes two main thread tasks to be run.  Should this
     // assumption prove to be false in future, we may need to revisit this.
-    int thread_hop_task_sequence_number =
+    EnqueueOrder thread_hop_task_sequence_number =
         any_thread().task_queue_manager->GetNextSequenceNumber();
     PushOntoImmediateIncomingQueueLocked(Task(
         FROM_HERE,
@@ -282,7 +282,7 @@ bool TaskQueueImpl::TaskIsOlderThanQueuedTasks(const Task* task) {
     return false;
   }
 
-  int enqueue_order;
+  EnqueueOrder enqueue_order;
   if (!main_thread_only().delayed_work_queue->GetFrontTaskEnqueueOrder(
           &enqueue_order)) {
     return true;
@@ -335,7 +335,7 @@ void TaskQueueImpl::UpdateImmediateWorkQueue(bool should_trigger_wakeup,
   if (!ShouldAutoPumpQueueLocked(should_trigger_wakeup, previous_task))
     return;
 
-  main_thread_only().immediate_work_queue->Swap(
+  main_thread_only().immediate_work_queue->SwapLocked(
       any_thread().immediate_incoming_queue);
 
   // |any_thread().immediate_incoming_queue| is now empty so
@@ -350,6 +350,12 @@ void TaskQueueImpl::TraceQueueSize(bool is_locked) const {
                                      &is_tracing);
   if (!is_tracing)
     return;
+
+  // It's only safe to access the work queues from the main thread.
+  // TODO(alexclarke): We should find another way of tracing this
+  if (base::PlatformThread::CurrentId() != thread_id_)
+    return;
+
   if (!is_locked)
     any_thread_lock_.Acquire();
   else
@@ -373,6 +379,8 @@ void TaskQueueImpl::SetPumpPolicy(PumpPolicy pump_policy) {
 }
 
 void TaskQueueImpl::PumpQueueLocked(bool may_post_dowork) {
+  TRACE_EVENT1(disabled_by_default_tracing_category_,
+               "TaskQueueImpl::PumpQueueLocked", "queue", name_);
   TaskQueueManager* task_queue_manager = any_thread().task_queue_manager;
   if (!task_queue_manager)
     return;

@@ -5,11 +5,14 @@
 #ifndef CC_BASE_RTREE_H_
 #define CC_BASE_RTREE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <vector>
 
 #include "cc/base/cc_export.h"
-#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace cc {
 
@@ -74,6 +77,8 @@ class CC_EXPORT RTree {
   }
 
   void Search(const gfx::Rect& query, std::vector<size_t>* results) const;
+
+  gfx::Rect GetBounds() const;
 
  private:
   // These values were empirically determined to produce reasonable performance

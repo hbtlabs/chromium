@@ -127,8 +127,7 @@ public:
     // If |visualRect| is not nullptr, it contains all pixels that might be painted by the display item client,
     // in coordinate space of the layer's layout object.
     // |visualRect| can be nullptr if we know it's unchanged and PaintController has cached the previous value.
-    void invalidateDisplayItemClient(const DisplayItemClientWrapper&, PaintInvalidationReason, const LayoutRect* visualRect);
-    void invalidateDisplayItemClientOnScrollingContentsLayer(const DisplayItemClientWrapper&, PaintInvalidationReason, const LayoutRect* visualRect);
+    void invalidateDisplayItemClient(const DisplayItemClient&, PaintInvalidationReason, const LayoutRect* visualRect);
 
     // Notification from the layoutObject that its content changed.
     void contentChanged(ContentChangeType);
@@ -148,6 +147,7 @@ public:
     void finishAccumulatingSquashingLayers(size_t nextSquashedLayerIndex);
     void updateRenderingContext();
     void updateShouldFlattenTransform();
+    void updateElementIdAndCompositorMutableProperties();
 
     // GraphicsLayerClient interface
     void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime, int group) override;
@@ -211,9 +211,6 @@ public:
     const GraphicsLayerPaintInfo* containingSquashedLayer(const LayoutObject*, unsigned maxSquashedLayerIndex);
 
     void updateScrollingBlockSelection();
-
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
-    String debugName() const { return "CompositedLayerMapping for " + owningLayer().debugName(); }
 
 private:
     IntRect recomputeInterestRect(const GraphicsLayer*) const;
@@ -301,7 +298,7 @@ private:
 
     static bool hasVisibleNonCompositingDescendant(PaintLayer* parent);
 
-    void doPaintTask(const GraphicsLayerPaintInfo&, const PaintLayerFlags&, GraphicsContext*, const IntRect& clip) const;
+    void doPaintTask(const GraphicsLayerPaintInfo&, const GraphicsLayer&, const PaintLayerFlags&, GraphicsContext&, const IntRect& clip) const;
 
     // Computes the background clip rect for the given squashed layer, up to any containing layer that is squashed into the
     // same squashing layer and contains this squashed layer's clipping ancestor.

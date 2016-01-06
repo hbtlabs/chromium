@@ -4,7 +4,10 @@
 
 #include "chrome/browser/chromeos/preferences.h"
 
+#include <utility>
+
 #include "base/json/json_string_value_serializer.h"
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -125,7 +128,7 @@ class MyMockInputMethodManager : public MockInputMethodManager {
   ~MyMockInputMethodManager() override {}
 
   scoped_ptr<InputMethodDescriptors> GetSupportedInputMethods() const override {
-    return whitelist_.GetSupportedInputMethods().Pass();
+    return whitelist_.GetSupportedInputMethods();
   }
 
   std::string last_input_method_id_;
@@ -269,11 +272,11 @@ class InputMethodPreferencesTest : public PreferencesTest {
     scoped_ptr<ComponentExtensionIMEManagerDelegate> delegate(mock_delegate);
     scoped_ptr<ComponentExtensionIMEManager> component_extension_ime_manager(
         new ComponentExtensionIMEManager);
-    component_extension_ime_manager->Initialize(delegate.Pass());
+    component_extension_ime_manager->Initialize(std::move(delegate));
 
     // Add the ComponentExtensionIMEManager to the mock InputMethodManager.
     mock_manager_->SetComponentExtensionIMEManager(
-        component_extension_ime_manager.Pass());
+        std::move(component_extension_ime_manager));
   }
 
   std::vector<ComponentExtensionIME> CreateImeList() {

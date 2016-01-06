@@ -5,7 +5,9 @@
 #ifndef UI_NATIVE_THEME_NATIVE_THEME_H_
 #define UI_NATIVE_THEME_NATIVE_THEME_H_
 
+#include "base/macros.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_export.h"
@@ -46,12 +48,14 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kCheckbox,
     kInnerSpinButton,
     kMenuList,
+    kMenuPopupBackground,
+#if defined(OS_WIN)
     kMenuCheck,
     kMenuCheckBackground,
     kMenuPopupArrow,
-    kMenuPopupBackground,
     kMenuPopupGutter,
     kMenuPopupSeparator,
+#endif
     kMenuItemBackground,
     kProgressBar,
     kPushButton,
@@ -258,6 +262,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_BlueButtonHoverColor,
     kColorId_BlueButtonShadowColor,
     kColorId_CallToActionColor,
+    kColorId_MdTextButtonEnabledColor,
+    kColorId_MdTextButtonDisabledColor,
     // MenuItem
     kColorId_EnabledMenuItemForegroundColor,
     kColorId_DisabledMenuItemForegroundColor,

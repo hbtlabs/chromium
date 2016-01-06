@@ -4,8 +4,11 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -19,6 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/safe_browsing/safe_browsing_store_file.h"
 #include "components/safe_browsing_db/prefix_set.h"
 #include "content/public/browser/browser_thread.h"
@@ -109,47 +113,6 @@ int DecodeChunkId(int encoded_chunk_id) {
 int EncodeChunkId(const int chunk, const int list_id) {
   DCHECK_NE(list_id, INVALID);
   return chunk << 1 | list_id % 2;
-}
-
-// Generate the set of full hashes to check for |url|.  If
-// |include_whitelist_hashes| is true we will generate additional path-prefixes
-// to match against the csd whitelist.  E.g., if the path-prefix /foo is on the
-// whitelist it should also match /foo/bar which is not the case for all the
-// other lists.  We'll also always add a pattern for the empty path.
-// TODO(shess): This function is almost the same as
-// |CompareFullHashes()| in safe_browsing_util.cc, except that code
-// does an early exit on match.  Since match should be the infrequent
-// case (phishing or malware found), consider combining this function
-// with that one.
-void UrlToFullHashes(const GURL& url,
-                     bool include_whitelist_hashes,
-                     std::vector<SBFullHash>* full_hashes) {
-  std::vector<std::string> hosts;
-  if (url.HostIsIPAddress()) {
-    hosts.push_back(url.host());
-  } else {
-    GenerateHostsToCheck(url, &hosts);
-  }
-
-  std::vector<std::string> paths;
-  GeneratePathsToCheck(url, &paths);
-
-  for (size_t i = 0; i < hosts.size(); ++i) {
-    for (size_t j = 0; j < paths.size(); ++j) {
-      const std::string& path = paths[j];
-      full_hashes->push_back(
-          SBFullHashForString(hosts[i] + path));
-
-      // We may have /foo as path-prefix in the whitelist which should
-      // also match with /foo/bar and /foo?bar.  Hence, for every path
-      // that ends in '/' we also add the path without the slash.
-      if (include_whitelist_hashes && path.size() > 1 &&
-          path[path.size() - 1] == '/') {
-        full_hashes->push_back(SBFullHashForString(
-            hosts[i] + path.substr(0, path.size() - 1)));
-      }
-    }
-  }
 }
 
 // Helper function to compare addprefixes in |store| with |prefixes|.
@@ -257,8 +220,8 @@ void UpdateChunkRangesForList(
 
 // This code always checks for non-zero file size.  This helper makes
 // that less verbose.
-int64 GetFileSizeOrZero(const base::FilePath& file_path) {
-  int64 size_64;
+int64_t GetFileSizeOrZero(const base::FilePath& file_path) {
+  int64_t size_64;
   if (!base::GetFileSize(file_path, &size_64))
     return 0;
   return size_64;
@@ -1448,8 +1411,8 @@ void SafeBrowsingDatabaseNew::UpdatePrefixSetUrlStore(
   }
 
   // Swap in the newly built filter.
-  state_manager_.BeginWriteTransaction()->SwapPrefixSet(prefix_set_id,
-                                                        new_prefix_set.Pass());
+  state_manager_.BeginWriteTransaction()->SwapPrefixSet(
+      prefix_set_id, std::move(new_prefix_set));
 
   UMA_HISTOGRAM_LONG_TIMES("SB2.BuildFilter", base::TimeTicks::Now() - before);
 
@@ -1557,7 +1520,7 @@ void SafeBrowsingDatabaseNew::LoadPrefixSet(const base::FilePath& db_filename,
       PrefixSet::LoadFile(PrefixSetForFilename(db_filename));
   if (!new_prefix_set.get())
     RecordFailure(read_failure_type);
-  txn->SwapPrefixSet(prefix_set_id, new_prefix_set.Pass());
+  txn->SwapPrefixSet(prefix_set_id, std::move(new_prefix_set));
   UMA_HISTOGRAM_TIMES("SB2.PrefixSetLoad", base::TimeTicks::Now() - before);
 }
 
@@ -1704,9 +1667,9 @@ void SafeBrowsingDatabaseNew::LoadIpBlacklist(
     const char* full_hash = it->full_hash.full_hash;
     DCHECK_EQ(crypto::kSHA256Length, arraysize(it->full_hash.full_hash));
     // The format of the IP blacklist is:
-    // SHA-1(IPv6 prefix) + uint8(prefix size) + 11 unused bytes.
+    // SHA-1(IPv6 prefix) + uint8_t(prefix size) + 11 unused bytes.
     std::string hashed_ip_prefix(full_hash, base::kSHA1Length);
-    size_t prefix_size = static_cast<uint8>(full_hash[base::kSHA1Length]);
+    size_t prefix_size = static_cast<uint8_t>(full_hash[base::kSHA1Length]);
     if (prefix_size > kMaxIpPrefixSize || prefix_size < kMinIpPrefixSize) {
       RecordFailure(FAILURE_IP_BLACKLIST_UPDATE_INVALID);
       new_blacklist.clear();  // Load empty blacklist.
@@ -1753,7 +1716,7 @@ SafeBrowsingDatabaseNew::GetUnsynchronizedPrefixGetHashCacheForTesting() {
 
 void SafeBrowsingDatabaseNew::RecordFileSizeHistogram(
     const base::FilePath& file_path) {
-  const int64 file_size = GetFileSizeOrZero(file_path);
+  const int64_t file_size = GetFileSizeOrZero(file_path);
   const int file_size_kilobytes = static_cast<int>(file_size / 1024);
 
   base::FilePath::StringType filename = file_path.BaseName().value();

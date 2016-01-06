@@ -12,9 +12,11 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -129,8 +131,10 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
 // Taps the screen at |point|.
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
 
+#if defined(USE_AURA)
 // Generates a TouchStart at |point|.
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point);
+#endif
 
 // Taps the screen with modifires at |point|.
 void SimulateTapWithModifiersAt(WebContents* web_contents,

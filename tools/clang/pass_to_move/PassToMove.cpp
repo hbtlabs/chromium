@@ -39,22 +39,32 @@ class RewriterCallback : public MatchFinder::MatchCallback {
 };
 
 void RewriterCallback::run(const MatchFinder::MatchResult& result) {
+  const clang::CXXMemberCallExpr* call_expr =
+      result.Nodes.getNodeAs<clang::CXXMemberCallExpr>("expr");
+  const clang::MemberExpr* callee =
+      clang::dyn_cast<clang::MemberExpr>(call_expr->getCallee());
+  const bool is_arrow = callee->isArrow();
   const clang::Expr* arg = result.Nodes.getNodeAs<clang::Expr>("arg");
-  clang::CharSourceRange arg_range = clang::CharSourceRange::getTokenRange(
-      result.SourceManager->getSpellingLoc(arg->getLocStart()),
-      result.SourceManager->getSpellingLoc(arg->getLocEnd()));
-  llvm::Twine new_source_text =
-      llvm::Twine("std::move(")
-          .concat(clang::Lexer::getSourceText(arg_range, *result.SourceManager,
-                                              result.Context->getLangOpts()))
-          .concat(")");
-  // Replace the entire original expression with std::move(arg).
-  const clang::Expr* expr = result.Nodes.getNodeAs<clang::Expr>("expr");
-  clang::CharSourceRange expr_range = clang::CharSourceRange::getTokenRange(
-      result.SourceManager->getSpellingLoc(expr->getLocStart()),
-      result.SourceManager->getSpellingLoc(expr->getLocEnd()));
-  replacements_->emplace(*result.SourceManager, expr_range,
-                         new_source_text.str());
+
+  const char kMoveRefText[] = "std::move(";
+  const char kMovePtrText[] = "std::move(*";
+
+  replacements_->emplace(*result.SourceManager,
+                         result.SourceManager->getSpellingLoc(
+                             arg->getLocStart()),
+                         0,
+                         is_arrow ? kMovePtrText : kMoveRefText);
+
+  // Delete everything but the closing parentheses from the original call to
+  // Pass(): the closing parantheses is left to match up with the parantheses
+  // just inserted with std::move.
+  replacements_->emplace(*result.SourceManager,
+                         clang::CharSourceRange::getCharRange(
+                             result.SourceManager->getSpellingLoc(
+                                 callee->getOperatorLoc()),
+                             result.SourceManager->getSpellingLoc(
+                                 call_expr->getRParenLoc())),
+                         "");
 }
 
 }  // namespace
@@ -77,10 +87,10 @@ int main(int argc, const char* argv[]) {
 
   auto pass_matcher = id(
       "expr",
-      cxxMemberCallExpr(argumentCountIs(0),
-                        hasDeclaration(functionDecl(
-                            hasName("Pass"), returns(rValueReferenceType()))),
-                        on(id("arg", expr()))));
+      cxxMemberCallExpr(
+          argumentCountIs(0),
+          callee(functionDecl(hasName("Pass"), returns(rValueReferenceType()))),
+          on(id("arg", expr()))));
   RewriterCallback callback(&replacements);
   match_finder.addMatcher(pass_matcher, &callback);
 

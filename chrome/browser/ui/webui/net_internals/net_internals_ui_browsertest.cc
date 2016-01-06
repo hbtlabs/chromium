@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui_browsertest.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -25,8 +28,8 @@
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -290,9 +293,9 @@ void NetInternalsTest::MessageHandler::GetNetLogFileContents(
       chrome::GetChannelString()));
   scoped_ptr<net::WriteToFileNetLogObserver> net_log_logger(
       new net::WriteToFileNetLogObserver());
-  net_log_logger->StartObserving(
-      g_browser_process->net_log(), temp_file_handle.Pass(), constants.get(),
-      nullptr);
+  net_log_logger->StartObserving(g_browser_process->net_log(),
+                                 std::move(temp_file_handle), constants.get(),
+                                 nullptr);
   g_browser_process->net_log()->AddGlobalEntry(
       net::NetLog::TYPE_NETWORK_IP_ADDRESSES_CHANGED);
   net::BoundNetLog bound_net_log = net::BoundNetLog::Make(
@@ -316,7 +319,7 @@ void NetInternalsTest::MessageHandler::EnableDataReductionProxy(
   bool enable;
   ASSERT_TRUE(list_value->GetBoolean(0, &enable));
   browser()->profile()->GetPrefs()->SetBoolean(
-      data_reduction_proxy::prefs::kDataReductionProxyEnabled, enable);
+      prefs::kDataSaverEnabled, enable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

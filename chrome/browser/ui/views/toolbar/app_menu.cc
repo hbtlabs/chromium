@@ -4,13 +4,17 @@
 
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <cmath>
 #include <set>
 
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/bookmark_stats.h"
@@ -272,6 +276,7 @@ class InMenuButton : public LabelButton {
     set_background(in_menu_background_);
     SetBorder(views::Border::CreateEmptyBorder(0, kHorizontalPadding, 0,
                                                kHorizontalPadding));
+    SetFontList(MenuConfig::instance().font_list);
   }
 
   void SetOtherButtons(const InMenuButton* left, const InMenuButton* right) {
@@ -280,9 +285,6 @@ class InMenuButton : public LabelButton {
 
   // views::LabelButton
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
-    const MenuConfig& menu_config = MenuConfig::instance(theme);
-    SetFontList(menu_config.font_list);
-
     if (theme) {
       SetTextColor(
           views::Button::STATE_DISABLED,
@@ -405,10 +407,10 @@ class HoveredImageSource : public gfx::ImageSkiaSource {
     white.eraseARGB(0, 0, 0, 0);
     bitmap.lockPixels();
     for (int y = 0; y < bitmap.height(); ++y) {
-      uint32* image_row = bitmap.getAddr32(0, y);
-      uint32* dst_row = white.getAddr32(0, y);
+      uint32_t* image_row = bitmap.getAddr32(0, y);
+      uint32_t* dst_row = white.getAddr32(0, y);
       for (int x = 0; x < bitmap.width(); ++x) {
-        uint32 image_pixel = image_row[x];
+        uint32_t image_pixel = image_row[x];
         // Fill the non transparent pixels with |color_|.
         dst_row[x] = (image_pixel & 0xFF000000) == 0x0 ? 0x0 : color_;
       }
@@ -596,10 +598,9 @@ class AppMenu::ZoomView : public AppMenuView {
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
     AppMenuView::OnNativeThemeChanged(theme);
 
-    const MenuConfig& menu_config = MenuConfig::instance(theme);
     zoom_label_->SetBorder(views::Border::CreateEmptyBorder(
         0, kZoomLabelHorizontalPadding, 0, kZoomLabelHorizontalPadding));
-    zoom_label_->SetFontList(menu_config.font_list);
+    zoom_label_->SetFontList(MenuConfig::instance().font_list);
     zoom_label_max_width_valid_ = false;
 
     if (theme) {
@@ -833,7 +834,7 @@ void AppMenu::Init(ui::MenuModel* model) {
                                // so we get the taller menu style.
   PopulateMenu(root_, model);
 
-  int32 types = views::MenuRunner::HAS_MNEMONICS;
+  int32_t types = views::MenuRunner::HAS_MNEMONICS;
   if (for_drop()) {
     // We add NESTED_DRAG since currently the only operation to open the app
     // menu for is an extension action drag, which is controlled by the child
@@ -1115,7 +1116,7 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
 
     if (model->GetCommandIdAt(i) == IDC_EDIT_MENU ||
         model->GetCommandIdAt(i) == IDC_ZOOM_MENU) {
-      const MenuConfig& config = item->GetMenuConfig();
+      const MenuConfig& config = views::MenuConfig::instance();
       int top_margin = config.item_top_margin + config.separator_height / 2;
       int bottom_margin =
           config.item_bottom_margin + config.separator_height / 2;

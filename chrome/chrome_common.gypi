@@ -110,6 +110,8 @@
       'common/worker_thread_ticker.h',
     ],
     'chrome_common_extensions_sources': [
+      'common/cast_messages.cc',
+      'common/cast_messages.h',
       'common/extensions/api/commands/commands_handler.cc',
       'common/extensions/api/commands/commands_handler.h',
       'common/extensions/api/extension_action/action_info.cc',
@@ -377,6 +379,12 @@
             ['chromeos==1', {
               'sources': [ '<@(chrome_common_extensions_chromeos_sources)' ],
             }],
+            ['OS=="win" or OS=="linux"', {
+              'sources': [
+                'common/extensions/api/input_ime/input_components_handler.cc',
+                'common/extensions/api/input_ime/input_components_handler.h',
+              ]
+            }]
           ],
         }],
         ['enable_extensions==1 and chromeos==1', {

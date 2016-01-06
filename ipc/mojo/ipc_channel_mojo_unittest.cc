@@ -4,7 +4,9 @@
 
 #include "ipc/mojo/ipc_channel_mojo.h"
 
+#include <stddef.h>
 #include <stdint.h>
+#include <utility>
 
 #include "base/base_paths.h"
 #include "base/files/file.h"
@@ -16,6 +18,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_test_base.h"
 #include "ipc/ipc_test_channel_listener.h"
@@ -314,8 +317,8 @@ class HandleSendingHelper {
               mojo::WriteMessageRaw(pipe->self.get(), &content[0],
                                     static_cast<uint32_t>(content.size()),
                                     nullptr, 0, 0));
-    EXPECT_TRUE(
-        IPC::MojoMessageHelper::WriteMessagePipeTo(message, pipe->peer.Pass()));
+    EXPECT_TRUE(IPC::MojoMessageHelper::WriteMessagePipeTo(
+        message, std::move(pipe->peer)));
   }
 
   static void WritePipeThenSend(IPC::Sender* sender, TestingMessagePipe* pipe) {

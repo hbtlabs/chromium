@@ -19,8 +19,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGImageElement.h"
 
 #include "core/CSSPropertyNames.h"
@@ -92,7 +90,7 @@ bool SVGImageElement::isPresentationAttributeWithSVGDOM(const QualifiedName& att
 
 void SVGImageElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_width)
         addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, m_width->currentValue()->asCSSPrimitiveValue());
     else if (property == m_height)

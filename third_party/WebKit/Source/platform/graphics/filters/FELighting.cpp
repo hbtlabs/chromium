@@ -25,7 +25,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/filters/FELighting.h"
 
 #include "SkLightingImageFilter.h"
@@ -47,7 +46,7 @@ FELighting::FELighting(Filter* filter, LightingType lightingType, const Color& l
     , m_surfaceScale(surfaceScale)
     , m_diffuseConstant(std::max(diffuseConstant, 0.0f))
     , m_specularConstant(std::max(specularConstant, 0.0f))
-    , m_specularExponent(std::min(std::max(specularExponent, 1.0f), 128.0f))
+    , m_specularExponent(clampTo(specularExponent, 1.0f, 128.0f))
 {
 }
 

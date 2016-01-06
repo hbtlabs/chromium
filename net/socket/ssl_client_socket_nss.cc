@@ -70,6 +70,7 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -2066,7 +2067,7 @@ void SSLClientSocketNSS::Core::UpdateConnectionStatus() {
 }
 
 void SSLClientSocketNSS::Core::UpdateNextProto() {
-  uint8 buf[256];
+  uint8_t buf[256];
   SSLNextProtoState state;
   unsigned buf_len;
 
@@ -2661,11 +2662,11 @@ int SSLClientSocketNSS::Write(IOBuffer* buf, int buf_len,
   return rv;
 }
 
-int SSLClientSocketNSS::SetReceiveBufferSize(int32 size) {
+int SSLClientSocketNSS::SetReceiveBufferSize(int32_t size) {
   return transport_->socket()->SetReceiveBufferSize(size);
 }
 
-int SSLClientSocketNSS::SetSendBufferSize(int32 size) {
+int SSLClientSocketNSS::SetSendBufferSize(int32_t size) {
   return transport_->socket()->SetSendBufferSize(size);
 }
 
@@ -2772,7 +2773,7 @@ int SSLClientSocketNSS::InitializeSSLOptions() {
     }
   }
 
-  for (std::vector<uint16>::const_iterator it =
+  for (std::vector<uint16_t>::const_iterator it =
            ssl_config_.disabled_cipher_suites.begin();
        it != ssl_config_.disabled_cipher_suites.end(); ++it) {
     // This will fail if the specified cipher is not implemented by NSS, but
@@ -2788,8 +2789,11 @@ int SSLClientSocketNSS::InitializeSSLOptions() {
         SECSuccess) {
       continue;
     }
-    if (info.symCipher == ssl_calg_rc4 && !ssl_config_.rc4_enabled)
+    if (info.symCipher == ssl_calg_rc4 &&
+        !(ssl_config_.rc4_enabled &&
+          ssl_config_.deprecated_cipher_suites_enabled)) {
       SSL_CipherPrefSet(nss_fd_, ssl_ciphers[i], PR_FALSE);
+    }
     if (info.keaType == ssl_kea_dh &&
         !ssl_config_.deprecated_cipher_suites_enabled) {
       // Only offer DHE on the second handshake. https://crbug.com/538690

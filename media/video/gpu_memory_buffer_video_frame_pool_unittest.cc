@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/test/test_simple_task_runner.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
@@ -63,9 +65,9 @@ class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
   static scoped_refptr<media::VideoFrame> CreateTestYUVVideoFrame(
       int dimension) {
     const int kDimension = 10;
-    static uint8 y_data[kDimension * kDimension] = {0};
-    static uint8 u_data[kDimension * kDimension / 2] = {0};
-    static uint8 v_data[kDimension * kDimension / 2] = {0};
+    static uint8_t y_data[kDimension * kDimension] = {0};
+    static uint8_t u_data[kDimension * kDimension / 2] = {0};
+    static uint8_t v_data[kDimension * kDimension / 2] = {0};
 
     DCHECK_LE(dimension, kDimension);
     gfx::Size size(dimension, dimension);

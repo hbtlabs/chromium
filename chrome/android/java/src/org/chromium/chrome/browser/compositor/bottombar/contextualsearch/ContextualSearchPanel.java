@@ -4,10 +4,11 @@
 
 package org.chromium.chrome.browser.compositor.bottombar.contextualsearch;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
-import android.view.View.MeasureSpec;
 
+import org.chromium.base.ActivityState;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
@@ -19,7 +20,6 @@ import org.chromium.chrome.browser.compositor.scene_layer.ContextualSearchSceneL
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.content.browser.ContentViewClient;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -73,44 +73,10 @@ public class ContextualSearchPanel extends OverlayPanel {
         mPanelMetrics = new ContextualSearchPanelMetrics();
     }
 
-    /**
-     * Destroy the panel's components.
-     */
-    @Override
-    public void destroy() {
-        super.destroy();
-        destroyPromoView();
-        destroyPeekPromoControl();
-        destroySearchBarControl();
-    }
-
     @Override
     public OverlayPanelContent createNewOverlayPanelContent() {
-        OverlayPanelContent overlayPanelContent = new OverlayPanelContent(
-                mManagementDelegate.getOverlayContentDelegate(),
-                new PanelProgressObserver(),
-                mActivity);
-
-        // Adds a ContentViewClient to override the default fullscreen size.
-        if (!isFullscreenSizePanel()) {
-            overlayPanelContent.setContentViewClient(new ContentViewClient() {
-                @Override
-                public int getDesiredWidthMeasureSpec() {
-                    return MeasureSpec.makeMeasureSpec(
-                            getSearchContentViewWidthPx(),
-                            MeasureSpec.EXACTLY);
-                }
-
-                @Override
-                public int getDesiredHeightMeasureSpec() {
-                    return MeasureSpec.makeMeasureSpec(
-                            getSearchContentViewHeightPx(),
-                            MeasureSpec.EXACTLY);
-                }
-            });
-        }
-
-        return overlayPanelContent;
+        return new OverlayPanelContent(mManagementDelegate.getOverlayContentDelegate(),
+                new PanelProgressObserver(), mActivity);
     }
 
     /**
@@ -311,6 +277,22 @@ public class ContextualSearchPanel extends OverlayPanel {
     // ============================================================================================
     // Panel base methods
     // ============================================================================================
+
+    @Override
+    protected void destroyComponents() {
+        super.destroyComponents();
+        destroyPromoView();
+        destroyPeekPromoControl();
+        destroySearchBarControl();
+    }
+
+    @Override
+    public void onActivityStateChange(Activity activity, int newState) {
+        super.onActivityStateChange(activity, newState);
+        if (newState == ActivityState.PAUSED) {
+            mManagementDelegate.logCurrentState();
+        }
+    }
 
     @Override
     public PanelPriority getPriority() {
@@ -519,6 +501,16 @@ public class ContextualSearchPanel extends OverlayPanel {
         super.updatePanelForMaximization(percentage);
 
         getPeekPromoControl().onUpdateFromExpandToMaximize(percentage);
+    }
+
+    @Override
+    protected void updatePanelForOrientationChange() {
+        // TODO(pedrosimonetti): find a better way of resizing the promo upon rotation.
+        // Destroys the Promo view so it can be properly resized. Once the Promo starts
+        // using the ViewResourceInflater, we could probably just call invalidate.
+        destroyPromoView();
+
+        super.updatePanelForOrientationChange();
     }
 
     // ============================================================================================

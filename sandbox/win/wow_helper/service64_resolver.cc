@@ -4,6 +4,9 @@
 
 #include "sandbox/win/wow_helper/service64_resolver.h"
 
+#include <limits.h>
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "sandbox/win/wow_helper/target_code.h"
 

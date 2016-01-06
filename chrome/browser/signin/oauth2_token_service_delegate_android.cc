@@ -10,6 +10,7 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_android.h"
@@ -286,8 +287,8 @@ void OAuth2TokenServiceDelegateAndroid::InvalidateAccessToken(
 
 void OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
     JNIEnv* env,
-    jobject obj,
-    jstring j_current_acc,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& j_current_acc,
     jboolean j_force_notifications) {
   std::string signed_in_account_name;
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::ValidateAccounts from java";
@@ -309,9 +310,8 @@ void OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
   std::vector<std::string> curr_ids;
   for (const std::string& curr_name : GetSystemAccountNames()) {
     std::string curr_id(MapAccountNameToAccountId(curr_name));
-    // TODO(knn): Convert to DCHECK after https://crbug.com/535211
-    CHECK(!curr_id.empty());
-    curr_ids.push_back(curr_id);
+    if (!curr_id.empty())
+      curr_ids.push_back(curr_id);
   }
 
   std::vector<std::string> prev_ids;
@@ -436,8 +436,8 @@ bool OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
 
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenAvailableFromJava(
     JNIEnv* env,
-    jobject obj,
-    const jstring account_name) {
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& account_name) {
   std::string account_id =
       MapAccountNameToAccountId(ConvertJavaStringToUTF8(env, account_name));
   // Notify native observers.
@@ -463,8 +463,8 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenAvailable(
 
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevokedFromJava(
     JNIEnv* env,
-    jobject obj,
-    const jstring account_name) {
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& account_name) {
   std::string account_id =
       MapAccountNameToAccountId(ConvertJavaStringToUTF8(env, account_name));
   // Notify native observers.
@@ -490,7 +490,7 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevoked(
 
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokensLoadedFromJava(
     JNIEnv* env,
-    jobject obj) {
+    const JavaParamRef<jobject>& obj) {
   // Notify native observers.
   FireRefreshTokensLoaded();
 }

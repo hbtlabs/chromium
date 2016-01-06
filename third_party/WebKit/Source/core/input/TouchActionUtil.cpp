@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/input/TouchActionUtil.h"
 
 #include "core/dom/Node.h"
@@ -21,7 +20,7 @@ namespace {
 // height applies to all elements but non-replaced inline elements, table columns, and column groups.
 bool supportsTouchAction(const LayoutObject& object)
 {
-    if (object.isInline() && !object.isReplaced())
+    if (object.isInline() && !object.isAtomicInlineLevel())
         return false;
     if (object.isTableRow() || object.isLayoutTableCol())
         return false;

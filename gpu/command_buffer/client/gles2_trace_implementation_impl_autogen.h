@@ -2174,6 +2174,12 @@ void GLES2TraceImplementation::GenUnverifiedSyncTokenCHROMIUM(
   gl_->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token);
 }
 
+void GLES2TraceImplementation::VerifySyncTokensCHROMIUM(GLbyte** sync_tokens,
+                                                        GLsizei count) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::VerifySyncTokensCHROMIUM");
+  gl_->VerifySyncTokensCHROMIUM(sync_tokens, count);
+}
+
 void GLES2TraceImplementation::WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::WaitSyncTokenCHROMIUM");
   gl_->WaitSyncTokenCHROMIUM(sync_token);
@@ -2213,12 +2219,18 @@ void GLES2TraceImplementation::ScheduleCALayerCHROMIUM(
     GLuint contents_texture_id,
     const GLfloat* contents_rect,
     GLfloat opacity,
-    const GLuint background_color,
-    const GLfloat* bounds_size,
+    GLuint background_color,
+    GLuint edge_aa_mask,
+    const GLfloat* bounds_rect,
+    GLboolean is_clipped,
+    const GLfloat* clip_rect,
+    GLint sorting_context_id,
     const GLfloat* transform) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::ScheduleCALayerCHROMIUM");
   gl_->ScheduleCALayerCHROMIUM(contents_texture_id, contents_rect, opacity,
-                               background_color, bounds_size, transform);
+                               background_color, edge_aa_mask, bounds_rect,
+                               is_clipped, clip_rect, sorting_context_id,
+                               transform);
 }
 
 void GLES2TraceImplementation::CommitOverlayPlanesCHROMIUM() {
@@ -2457,6 +2469,12 @@ void GLES2TraceImplementation::ProgramPathFragmentInputGenCHROMIUM(
       "gpu", "GLES2Trace::ProgramPathFragmentInputGenCHROMIUM");
   gl_->ProgramPathFragmentInputGenCHROMIUM(program, location, genMode,
                                            components, coeffs);
+}
+
+void GLES2TraceImplementation::CoverageModulationCHROMIUM(GLenum components) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "GLES2Trace::CoverageModulationCHROMIUM");
+  gl_->CoverageModulationCHROMIUM(components);
 }
 
 GLenum GLES2TraceImplementation::GetGraphicsResetStatusKHR() {

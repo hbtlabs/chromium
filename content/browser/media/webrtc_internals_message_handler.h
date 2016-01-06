@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_MEDIA_WEBRTC_INTERNALS_MESSAGE_HANDLER_H_
 #define CONTENT_BROWSER_MEDIA_WEBRTC_INTERNALS_MESSAGE_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/media/webrtc_internals_ui_observer.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -40,6 +41,7 @@ class WebRTCInternalsMessageHandler : public WebUIMessageHandler,
   void OnGetAllStats(const base::ListValue* list);
   void OnSetAudioDebugRecordingsEnabled(bool enable,
                                         const base::ListValue* list);
+  void OnSetEventLogRecordingsEnabled(bool enable, const base::ListValue* list);
   void OnDOMLoadDone(const base::ListValue* list);
 
   DISALLOW_COPY_AND_ASSIGN(WebRTCInternalsMessageHandler);

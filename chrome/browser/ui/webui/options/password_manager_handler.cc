@@ -6,11 +6,13 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -45,13 +47,14 @@ namespace {
 // chrome/browser/resources/options/password_manager_list.js.
 const char kOriginField[] = "origin";
 const char kShownUrlField[] = "shownUrl";
+const char kIsAndroidUriField[] = "isAndroidUri";
 const char kIsSecureField[] = "isSecure";
 const char kUsernameField[] = "username";
 const char kPasswordField[] = "password";
 const char kFederationField[] = "federation";
 
-// Copies from |form| to |entry| the origin, shown origin and whether the
-// origin is secure or not.
+// Copies from |form| to |entry| the origin, shown origin, whether the origin is
+// Android URI, and whether the origin is secure.
 void CopyOriginInfoOfPasswordForm(const autofill::PasswordForm& form,
                                   const std::string& languages,
                                   base::DictionaryValue* entry) {
@@ -60,8 +63,10 @@ void CopyOriginInfoOfPasswordForm(const autofill::PasswordForm& form,
       url_formatter::FormatUrl(
           form.origin, languages, url_formatter::kFormatUrlOmitNothing,
           net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
-  entry->SetString(kShownUrlField,
-                   password_manager::GetShownOrigin(form, languages));
+  bool is_android_uri = false;
+  entry->SetString(kShownUrlField, password_manager::GetShownOrigin(
+                                       form, languages, &is_android_uri));
+  entry->SetBoolean(kIsAndroidUriField, is_android_uri);
   entry->SetBoolean(kIsSecureField, content::IsOriginSecure(form.origin));
 }
 
@@ -126,8 +131,7 @@ void PasswordManagerHandler::GetLocalizedValues(
   localized_strings->SetString("passwordsManagePasswordsBeforeLinkText",
                                full_text.substr(0, offset));
   localized_strings->SetString("passwordsManagePasswordsLinkText",
-                               full_text.substr(offset,
-                                                link_text.size()));
+                               full_text.substr(offset, link_text.size()));
   localized_strings->SetString("passwordsManagePasswordsAfterLinkText",
                                full_text.substr(offset + link_text.size()));
 

@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/base/completion_event.h"
@@ -230,13 +234,13 @@ class TaskGraphRunnerPerfTest : public testing::Test {
     for (PerfTaskImpl::Vector::const_iterator it = leaf_tasks.begin();
          it != leaf_tasks.end();
          ++it) {
-      graph->nodes.push_back(TaskGraph::Node(it->get(), 0u, 0u));
+      graph->nodes.push_back(TaskGraph::Node(it->get(), 0u, 0u, 0u));
     }
 
     for (PerfTaskImpl::Vector::const_iterator it = tasks.begin();
-         it != tasks.end();
-         ++it) {
-      graph->nodes.push_back(TaskGraph::Node(it->get(), 0u, leaf_tasks.size()));
+         it != tasks.end(); ++it) {
+      graph->nodes.push_back(TaskGraph::Node(
+          it->get(), 0u, 0u, static_cast<uint32_t>(leaf_tasks.size())));
 
       for (PerfTaskImpl::Vector::const_iterator leaf_it = leaf_tasks.begin();
            leaf_it != leaf_tasks.end();
@@ -253,9 +257,9 @@ class TaskGraphRunnerPerfTest : public testing::Test {
     }
 
     for (PerfTaskImpl::Vector::const_iterator it = top_level_tasks.begin();
-         it != top_level_tasks.end();
-         ++it) {
-      graph->nodes.push_back(TaskGraph::Node(it->get(), 0u, tasks.size()));
+         it != top_level_tasks.end(); ++it) {
+      graph->nodes.push_back(TaskGraph::Node(
+          it->get(), 0u, 0u, static_cast<uint32_t>(tasks.size())));
     }
   }
 

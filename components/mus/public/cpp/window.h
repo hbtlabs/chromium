@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/mus_constants.mojom.h"
@@ -26,6 +27,7 @@ class Size;
 
 namespace mus {
 
+class InputEventHandler;
 class ServiceProviderImpl;
 class WindowObserver;
 class WindowSurface;
@@ -143,6 +145,10 @@ class Window {
   template <typename T>
   void ClearLocalProperty(const WindowProperty<T>* property);
 
+  void set_input_event_handler(InputEventHandler* input_event_handler) {
+    input_event_handler_ = input_event_handler;
+  }
+
   // Observation.
   void AddObserver(WindowObserver* observer);
   void RemoveObserver(WindowObserver* observer);
@@ -195,6 +201,10 @@ class Window {
   void Embed(mus::mojom::WindowTreeClientPtr client,
              uint32_t policy_bitmask,
              const EmbedCallback& callback);
+
+  // TODO(sky): this API is only applicable to the WindowManager. Move it
+  // to a better place.
+  void RequestClose();
 
  protected:
   // This class is subclassed only by test classes that provide a public ctor.
@@ -282,6 +292,7 @@ class Window {
   Children transient_children_;
 
   base::ObserverList<WindowObserver> observers_;
+  InputEventHandler* input_event_handler_;
 
   gfx::Rect bounds_;
   gfx::Insets client_area_;

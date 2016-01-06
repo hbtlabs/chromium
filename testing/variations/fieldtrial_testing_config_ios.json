@@ -33,6 +33,11 @@
             }
         }
     ],
+    "PasswordBranding": [
+        {
+            "group_name": "SmartLockBrandingSavePromptOnly"
+        }
+    ],
     "QUIC": [
         {
             "group_name": "Enabled",

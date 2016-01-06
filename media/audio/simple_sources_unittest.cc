@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <limits>
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/audio/audio_parameters.h"
 #include "media/audio/simple_sources.h"
@@ -18,8 +20,8 @@ namespace media {
 
 // Validate that the SineWaveAudioSource writes the expected values.
 TEST(SimpleSources, SineWaveAudioSource) {
-  static const uint32 samples = 1024;
-  static const uint32 bytes_per_sample = 2;
+  static const uint32_t samples = 1024;
+  static const uint32_t bytes_per_sample = 2;
   static const int freq = 200;
 
   AudioParameters params(
@@ -28,11 +30,11 @@ TEST(SimpleSources, SineWaveAudioSource) {
 
   SineWaveAudioSource source(1, freq, params.sample_rate());
   scoped_ptr<AudioBus> audio_bus = AudioBus::Create(params);
-  source.OnMoreData(audio_bus.get(), 0);
+  source.OnMoreData(audio_bus.get(), 0, 0);
   EXPECT_EQ(1, source.callbacks());
   EXPECT_EQ(0, source.errors());
 
-  uint32 half_period = AudioParameters::kTelephoneSampleRate / (freq * 2);
+  uint32_t half_period = AudioParameters::kTelephoneSampleRate / (freq * 2);
 
   // Spot test positive incursion of sine wave.
   EXPECT_NEAR(0, audio_bus->channel(0)[0],
@@ -57,14 +59,12 @@ TEST(SimpleSources, SineWaveAudioCapped) {
   source.CapSamples(kSampleCap);
 
   scoped_ptr<AudioBus> audio_bus = AudioBus::Create(1, 2 * kSampleCap);
-  EXPECT_EQ(source.OnMoreData(
-      audio_bus.get(), 0), kSampleCap);
+  EXPECT_EQ(source.OnMoreData(audio_bus.get(), 0, 0), kSampleCap);
   EXPECT_EQ(1, source.callbacks());
-  EXPECT_EQ(source.OnMoreData(audio_bus.get(), 0), 0);
+  EXPECT_EQ(source.OnMoreData(audio_bus.get(), 0, 0), 0);
   EXPECT_EQ(2, source.callbacks());
   source.Reset();
-  EXPECT_EQ(source.OnMoreData(
-      audio_bus.get(), 0), kSampleCap);
+  EXPECT_EQ(source.OnMoreData(audio_bus.get(), 0, 0), kSampleCap);
   EXPECT_EQ(3, source.callbacks());
   EXPECT_EQ(0, source.errors());
 }
@@ -97,7 +97,7 @@ TEST(SimpleSources, FileSourceTestData) {
 
   // Create a FileSource that reads this file.
   FileSource source(params, temp_path);
-  EXPECT_EQ(kNumFrames, source.OnMoreData(audio_bus.get(), 0));
+  EXPECT_EQ(kNumFrames, source.OnMoreData(audio_bus.get(), 0, 0));
 
   // Convert the test data (little-endian) into floats and compare.
   const int kFirstSampleIndex = 12 + 8 + 16 + 8;
@@ -133,7 +133,7 @@ TEST(SimpleSources, BadFilePathFails) {
              .Append(FILE_PATH_LITERAL("not"))
              .Append(FILE_PATH_LITERAL("exist"));
   FileSource source(params, path);
-  EXPECT_EQ(0, source.OnMoreData(audio_bus.get(), 0));
+  EXPECT_EQ(0, source.OnMoreData(audio_bus.get(), 0, 0));
 
   // Confirm all frames are zero-padded.
   for (int channel = 0; channel < audio_bus->channels(); ++channel) {
@@ -167,7 +167,7 @@ TEST(SimpleSources, FileSourceCorruptTestDataFails) {
 
   // Create a FileSource that reads this file.
   FileSource source(params, temp_path);
-  EXPECT_EQ(0, source.OnMoreData(audio_bus.get(), 0));
+  EXPECT_EQ(0, source.OnMoreData(audio_bus.get(), 0, 0));
 
   // Confirm all frames are zero-padded.
   for (int channel = 0; channel < audio_bus->channels(); ++channel) {

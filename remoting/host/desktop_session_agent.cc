@@ -4,9 +4,13 @@
 
 #include "remoting/host/desktop_session_agent.h"
 
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
@@ -74,38 +78,24 @@ class DesktopSessionAgent::SharedBuffer : public webrtc::SharedMemory {
                                          size_t size,
                                          int id) {
     scoped_ptr<base::SharedMemory> memory(new base::SharedMemory());
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-    // Remoting does not yet support Mach primitive backed SharedMemory, so
-    // force the underlying primitive to be a POSIX fd.
-    // https://crbug.com/547247.
-    if (!memory->CreateAndMapAnonymousPosix(size))
-      return nullptr;
-#else
     if (!memory->CreateAndMapAnonymous(size))
       return nullptr;
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
-    return make_scoped_ptr(new SharedBuffer(agent, memory.Pass(), size, id));
+    return make_scoped_ptr(
+        new SharedBuffer(agent, std::move(memory), size, id));
   }
 
   ~SharedBuffer() override { agent_->OnSharedBufferDeleted(id()); }
+
+  base::SharedMemory* shared_memory() { return shared_memory_.get(); }
 
  private:
   SharedBuffer(DesktopSessionAgent* agent,
                scoped_ptr<base::SharedMemory> memory,
                size_t size,
                int id)
-      : SharedMemory(memory->memory(),
-                     size,
-#if defined(OS_WIN)
-                     memory->handle().GetHandle(),
-#else
-                     base::SharedMemory::GetFdFromSharedMemoryHandle(
-                         memory->handle()),
-#endif
-                     id),
+      : SharedMemory(memory->memory(), size, 0, id),
         agent_(agent),
-        shared_memory_(memory.Pass()) {
-  }
+        shared_memory_(std::move(memory)) {}
 
   DesktopSessionAgent* agent_;
   scoped_ptr<base::SharedMemory> shared_memory_;
@@ -168,7 +158,7 @@ bool DesktopSessionAgent::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void DesktopSessionAgent::OnChannelConnected(int32 peer_pid) {
+void DesktopSessionAgent::OnChannelConnected(int32_t peer_pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   VLOG(1) << "IPC: desktop <- network (" << peer_pid << ")";
@@ -206,14 +196,8 @@ webrtc::SharedMemory* DesktopSessionAgent::CreateSharedMemory(size_t size) {
     // speaking it never happens.
     next_shared_buffer_id_ += 2;
 
-    IPC::PlatformFileForTransit handle;
-#if defined(OS_WIN)
-    handle = buffer->handle();
-#else
-    handle = base::FileDescriptor(buffer->handle(), false);
-#endif
     SendToNetwork(new ChromotingDesktopNetworkMsg_CreateSharedBuffer(
-        buffer->id(), handle, buffer->size()));
+        buffer->id(), buffer->shared_memory()->handle(), buffer->size()));
   }
 
   return buffer.release();
@@ -299,7 +283,7 @@ void DesktopSessionAgent::OnStartSessionAgent(
   // Start the input injector.
   scoped_ptr<protocol::ClipboardStub> clipboard_stub(
       new DesktopSesssionClipboardStub(this));
-  input_injector_->Start(clipboard_stub.Pass());
+  input_injector_->Start(std::move(clipboard_stub));
 
   // Start the audio capturer.
   if (delegate_->desktop_environment_factory().SupportsAudioCapture()) {

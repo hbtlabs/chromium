@@ -45,12 +45,14 @@
         "LayoutView #document",
         "LayoutBlockFlow HTML",
         "LayoutBlockFlow BODY",
+        "RootInlineBox",
         "LayoutEmbeddedObject OBJECT",
         "LayoutView #document",
         "LayoutSVGRoot svg",
         "LayoutSVGRect rect",
         "LayoutSVGRect rect",
         "LayoutText #text",
+        "LayoutView #document",
         "LayoutView #document"
       ]
     }

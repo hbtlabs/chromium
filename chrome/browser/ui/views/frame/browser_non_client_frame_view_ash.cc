@@ -12,18 +12,19 @@
 #include "ash/frame/header_painter_util.h"
 #include "ash/shell.h"
 #include "base/profiler/scoped_tracker.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_header_painter_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/web_app_left_header_view_ash.h"
-#include "chrome/browser/ui/views/layout_constants.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
@@ -176,6 +177,14 @@ int BrowserNonClientFrameViewAsh::GetTopInset(bool restored) const {
     return 0;
 
   if (browser_view()->IsTabStripVisible()) {
+    // TODO(tdanderson): Remove this temporary hack to prevent the buttons in
+    //                   the header from overlapping the tabstrip/toolbar
+    //                   separator in material design.
+    if (ui::MaterialDesignController::IsModeMaterial()) {
+      return header_painter_->GetHeaderHeight() -
+          browser_view()->GetTabStripHeight();
+    }
+
     return ((frame()->IsMaximized() || frame()->IsFullscreen()) && !restored) ?
         kTabstripTopSpacingShort : kTabstripTopSpacingTall;
   }
@@ -637,8 +646,7 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
     toolbar_bounds.Inset(kClientEdgeThickness, 0);
     BrowserView::Paint1pxHorizontalLine(
         canvas,
-        ThemeProperties::GetDefaultColor(
-            ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
+        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
         toolbar_bounds, true);
   } else {
     // Gross hack: We split the toolbar images into two pieces, since sometimes
@@ -696,17 +704,15 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
     canvas->FillRect(
         gfx::Rect(x + kClientEdgeThickness,
                   toolbar_bounds.bottom() - kClientEdgeThickness,
-                  w - (2 * kClientEdgeThickness),
-                  kClientEdgeThickness),
-        ThemeProperties::GetDefaultColor(
-            ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+                  w - (2 * kClientEdgeThickness), kClientEdgeThickness),
+        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
   }
 }
 
 void BrowserNonClientFrameViewAsh::PaintContentEdge(gfx::Canvas* canvas) {
   DCHECK(!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle());
-  canvas->FillRect(gfx::Rect(0, caption_button_container_->bounds().bottom(),
-                             width(), kClientEdgeThickness),
-                   ThemeProperties::GetDefaultColor(
-                       ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+  canvas->FillRect(
+      gfx::Rect(0, caption_button_container_->bounds().bottom(), width(),
+                kClientEdgeThickness),
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
 }

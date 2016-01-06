@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/bluetooth_low_energy/bluetooth_low_energy_event_router.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/values.h"
@@ -101,7 +103,7 @@ void PopulateCharacteristic(const BluetoothGattCharacteristic* characteristic,
   PopulateCharacteristicProperties(characteristic->GetProperties(),
                                    &out->properties);
 
-  const std::vector<uint8>& value = characteristic->GetValue();
+  const std::vector<uint8_t>& value = characteristic->GetValue();
   if (value.empty())
     return;
 
@@ -118,7 +120,7 @@ void PopulateDescriptor(const BluetoothGattDescriptor* descriptor,
 
   PopulateCharacteristic(descriptor->GetCharacteristic(), &out->characteristic);
 
-  const std::vector<uint8>& value = descriptor->GetValue();
+  const std::vector<uint8_t>& value = descriptor->GetValue();
   if (value.empty())
     return;
 
@@ -611,7 +613,7 @@ void BluetoothLowEnergyEventRouter::ReadCharacteristicValue(
 void BluetoothLowEnergyEventRouter::WriteCharacteristicValue(
     const Extension* extension,
     const std::string& instance_id,
-    const std::vector<uint8>& value,
+    const std::vector<uint8_t>& value,
     const base::Closure& callback,
     const ErrorCallback& error_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -785,7 +787,7 @@ void BluetoothLowEnergyEventRouter::ReadDescriptorValue(
 void BluetoothLowEnergyEventRouter::WriteDescriptorValue(
     const Extension* extension,
     const std::string& instance_id,
-    const std::vector<uint8>& value,
+    const std::vector<uint8_t>& value,
     const base::Closure& callback,
     const ErrorCallback& error_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -864,8 +866,8 @@ void BluetoothLowEnergyEventRouter::GattServiceRemoved(
       apibtle::OnServiceRemoved::Create(api_service);
   scoped_ptr<Event> event(
       new Event(events::BLUETOOTH_LOW_ENERGY_ON_SERVICE_REMOVED,
-                apibtle::OnServiceRemoved::kEventName, args.Pass()));
-  EventRouter::Get(browser_context_)->BroadcastEvent(event.Pass());
+                apibtle::OnServiceRemoved::kEventName, std::move(args)));
+  EventRouter::Get(browser_context_)->BroadcastEvent(std::move(event));
 }
 
 void BluetoothLowEnergyEventRouter::GattDiscoveryCompleteForService(
@@ -886,8 +888,8 @@ void BluetoothLowEnergyEventRouter::GattDiscoveryCompleteForService(
       apibtle::OnServiceAdded::Create(api_service);
   scoped_ptr<Event> event(
       new Event(events::BLUETOOTH_LOW_ENERGY_ON_SERVICE_ADDED,
-                apibtle::OnServiceAdded::kEventName, args.Pass()));
-  EventRouter::Get(browser_context_)->BroadcastEvent(event.Pass());
+                apibtle::OnServiceAdded::kEventName, std::move(args)));
+  EventRouter::Get(browser_context_)->BroadcastEvent(std::move(event));
 }
 
 void BluetoothLowEnergyEventRouter::DeviceAddressChanged(
@@ -997,7 +999,7 @@ void BluetoothLowEnergyEventRouter::GattDescriptorRemoved(
 void BluetoothLowEnergyEventRouter::GattCharacteristicValueChanged(
     BluetoothAdapter* adapter,
     BluetoothGattCharacteristic* characteristic,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_EQ(adapter, adapter_.get());
   VLOG(2) << "GATT characteristic value changed: "
@@ -1024,13 +1026,13 @@ void BluetoothLowEnergyEventRouter::GattCharacteristicValueChanged(
   DispatchEventToExtensionsWithPermission(
       events::BLUETOOTH_LOW_ENERGY_ON_CHARACTERISTIC_VALUE_CHANGED,
       apibtle::OnCharacteristicValueChanged::kEventName, service->GetUUID(),
-      characteristic->GetIdentifier(), args.Pass());
+      characteristic->GetIdentifier(), std::move(args));
 }
 
 void BluetoothLowEnergyEventRouter::GattDescriptorValueChanged(
     BluetoothAdapter* adapter,
     BluetoothGattDescriptor* descriptor,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_EQ(adapter, adapter_.get());
   VLOG(2) << "GATT descriptor value changed: " << descriptor->GetIdentifier();
@@ -1055,7 +1057,7 @@ void BluetoothLowEnergyEventRouter::GattDescriptorValueChanged(
       events::BLUETOOTH_LOW_ENERGY_ON_DESCRIPTOR_VALUE_CHANGED,
       apibtle::OnDescriptorValueChanged::kEventName,
       characteristic->GetService()->GetUUID(), "" /* characteristic_id */,
-      args.Pass());
+      std::move(args));
 }
 
 void BluetoothLowEnergyEventRouter::OnGetAdapter(
@@ -1169,9 +1171,9 @@ void BluetoothLowEnergyEventRouter::DispatchEventToExtensionsWithPermission(
     // Send the event.
     scoped_ptr<base::ListValue> args_copy(args->DeepCopy());
     scoped_ptr<Event> event(
-        new Event(histogram_value, event_name, args_copy.Pass()));
-    EventRouter::Get(browser_context_)->DispatchEventToExtension(
-        extension_id, event.Pass());
+        new Event(histogram_value, event_name, std::move(args_copy)));
+    EventRouter::Get(browser_context_)
+        ->DispatchEventToExtension(extension_id, std::move(event));
   }
 }
 
@@ -1258,7 +1260,7 @@ BluetoothGattDescriptor* BluetoothLowEnergyEventRouter::FindDescriptorById(
 
 void BluetoothLowEnergyEventRouter::OnValueSuccess(
     const base::Closure& callback,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   VLOG(2) << "Remote characteristic/descriptor value read successful.";
   callback.Run();
 }
@@ -1278,7 +1280,7 @@ void BluetoothLowEnergyEventRouter::OnCreateGattConnection(
   DCHECK_NE(0U, connecting_devices_.count(connect_id));
 
   BluetoothLowEnergyConnection* conn = new BluetoothLowEnergyConnection(
-      persistent, extension_id, connection.Pass());
+      persistent, extension_id, std::move(connection));
   ConnectionResourceManager* manager =
       GetConnectionResourceManager(browser_context_);
   manager->Add(conn);
@@ -1340,8 +1342,8 @@ void BluetoothLowEnergyEventRouter::OnStartNotifySession(
   DCHECK_NE(0U, pending_session_calls_.count(session_id));
 
   BluetoothLowEnergyNotifySession* resource =
-      new BluetoothLowEnergyNotifySession(
-          persistent, extension_id, session.Pass());
+      new BluetoothLowEnergyNotifySession(persistent, extension_id,
+                                          std::move(session));
 
   NotifySessionResourceManager* manager =
       GetNotifySessionResourceManager(browser_context_);

@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
@@ -17,6 +18,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -188,30 +190,59 @@ class PersonalDataManagerTest : public testing::Test {
     ASSERT_EQ(1U, personal_data_->GetProfiles().size());
   }
 
-  // Sets up the frecency field trial group and parameter. Enables the frecency
-  // suggestions ordering if |frecency_enabled| and sets up the suggestions
-  // limit parameter to |limit_param| if it's not empty.
-  void EnableAutofillProfileOrderByFrecencyFieldTrial(
-      const bool frecency_enabled,
-      const std::string& limit_param) {
+  // Adds three local cards to the |personal_data_|. The three cards are
+  // different: two are from different companies and the third doesn't have a
+  // number. All three have different owners and credit card number. This allows
+  // to test the suggestions based on name as well as on credit card number.
+  void SetupReferenceLocalCreditCards() {
+    ASSERT_EQ(0U, personal_data_->GetCreditCards().size());
+
+    CreditCard credit_card0("287151C8-6AB1-487C-9095-28E80BE5DA15",
+                            "https://www.example.com");
+    test::SetCreditCardInfo(&credit_card0, "Clyde Barrow",
+                            "347666888555" /* American Express */, "04",
+                            "2015");
+    credit_card0.set_use_count(2);
+    personal_data_->AddCreditCard(credit_card0);
+
+    CreditCard credit_card1("1141084B-72D7-4B73-90CF-3D6AC154673B",
+                            "https://www.example.com");
+    credit_card1.set_use_count(3);
+    test::SetCreditCardInfo(&credit_card1, "John Dillinger", "", "01", "2010");
+    personal_data_->AddCreditCard(credit_card1);
+
+    CreditCard credit_card2("002149C1-EE28-4213-A3B9-DA243FFF021B",
+                            "https://www.example.com");
+    credit_card2.set_use_count(1);
+    test::SetCreditCardInfo(&credit_card2, "Bonnie Parker",
+                            "518765432109" /* Mastercard */, "", "");
+    personal_data_->AddCreditCard(credit_card2);
+
+    EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
+        .WillOnce(QuitMainMessageLoop());
+    base::MessageLoop::current()->Run();
+
+    ASSERT_EQ(3U, personal_data_->GetCreditCards().size());
+  }
+
+  // Sets up the profile order field trial group and parameter. Sets up the
+  // suggestions limit parameter to |limit_param|.
+  void EnableAutofillProfileLimitFieldTrial(const std::string& limit_param) {
+    DCHECK(!limit_param.empty());
+
     // Clear the existing |field_trial_list_| and variation parameters.
     field_trial_list_.reset(NULL);
     field_trial_list_.reset(
         new base::FieldTrialList(new metrics::SHA1EntropyProvider("foo")));
     variations::testing::ClearAllVariationParams();
 
-    std::string group_name(frecency_enabled ? kFrecencyFieldTrialStateEnabled
-                                            : "Generic");
-
-    if (!limit_param.empty()) {
-      std::map<std::string, std::string> params;
-      params[kFrecencyFieldTrialLimitParam] = limit_param;
-      variations::AssociateVariationParams(kFrecencyFieldTrialName, group_name,
-                                           params);
-    }
+    std::map<std::string, std::string> params;
+    params[kFrecencyFieldTrialLimitParam] = limit_param;
+    variations::AssociateVariationParams(kFrecencyFieldTrialName, "LimitToN",
+                                         params);
 
     field_trial_ = base::FieldTrialList::CreateFieldTrial(
-        kFrecencyFieldTrialName, group_name);
+        kFrecencyFieldTrialName, "LimitToN");
     field_trial_->group();
   }
 
@@ -315,8 +346,25 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerProfile) {
   base::MessageLoop::current()->Run();
 
   // Verify the non-addition.
-  EXPECT_EQ(1U, personal_data_->GetProfiles().size());
   EXPECT_EQ(0U, personal_data_->web_profiles().size());
+  ASSERT_EQ(1U, personal_data_->GetProfiles().size());
+
+  // Verify that the server profile's use date was updated.
+  const AutofillProfile* server_profile = personal_data_->GetProfiles()[0];
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+            base::Time::Now() - server_profile->use_date());
+}
+
+// Tests that SaveImportedProfile sets the modification date on new profiles.
+TEST_F(PersonalDataManagerTest, SaveImportedProfileSetModificationDate) {
+  AutofillProfile profile(test::GetFullProfile());
+  EXPECT_EQ(base::Time(), profile.modification_date());
+
+  personal_data_->SaveImportedProfile(profile);
+  const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
+  ASSERT_EQ(1U, profiles.size());
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+            base::Time::Now() - profiles[0]->modification_date());
 }
 
 TEST_F(PersonalDataManagerTest, AddUpdateRemoveProfiles) {
@@ -876,7 +924,7 @@ TEST_F(PersonalDataManagerTest, ImportFormData) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -917,7 +965,7 @@ TEST_F(PersonalDataManagerTest, ImportFormDataBadEmail) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure, false,
                                               &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -950,7 +998,7 @@ TEST_F(PersonalDataManagerTest, ImportFormDataTwoEmails) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
   ASSERT_EQ(1U, results.size());
@@ -981,7 +1029,7 @@ TEST_F(PersonalDataManagerTest, ImportFormDataTwoDifferentEmails) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure, false,
                                               &imported_credit_card));
   const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
   ASSERT_EQ(0U, results.size());
@@ -1002,7 +1050,7 @@ TEST_F(PersonalDataManagerTest, ImportFormDataNotEnoughFilledFields) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure, false,
                                               &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1033,8 +1081,8 @@ TEST_F(PersonalDataManagerTest, ImportFormMinimumAddressUSA) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(
-      personal_data_->ImportFormData(form_structure, &imported_credit_card));
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
+                                             &imported_credit_card));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
 }
@@ -1060,7 +1108,7 @@ TEST_F(PersonalDataManagerTest, ImportFormMinimumAddressGB) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
@@ -1082,7 +1130,7 @@ TEST_F(PersonalDataManagerTest, ImportFormMinimumAddressGI) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
   ASSERT_EQ(1U, profiles.size());
@@ -1121,7 +1169,7 @@ TEST_F(PersonalDataManagerTest, ImportPhoneNumberSplitAcrossMultipleFields) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1168,7 +1216,7 @@ TEST_F(PersonalDataManagerTest, ImportFormDataMultilineAddress) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1248,7 +1296,7 @@ TEST_F(PersonalDataManagerTest, AggregateTwoDifferentProfiles) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1288,7 +1336,7 @@ TEST_F(PersonalDataManagerTest, AggregateTwoDifferentProfiles) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1337,7 +1385,7 @@ TEST_F(PersonalDataManagerTest, AggregateSameProfileWithConflict) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1387,7 +1435,7 @@ TEST_F(PersonalDataManagerTest, AggregateSameProfileWithConflict) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1427,7 +1475,7 @@ TEST_F(PersonalDataManagerTest, AggregateProfileWithMissingInfoInOld) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -1467,7 +1515,7 @@ TEST_F(PersonalDataManagerTest, AggregateProfileWithMissingInfoInOld) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1514,7 +1562,7 @@ TEST_F(PersonalDataManagerTest, AggregateProfileWithMissingInfoInNew) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1555,7 +1603,7 @@ TEST_F(PersonalDataManagerTest, AggregateProfileWithMissingInfoInNew) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1595,7 +1643,7 @@ TEST_F(PersonalDataManagerTest, AggregateProfileWithInsufficientAddress) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure1, false,
                                               &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1628,7 +1676,7 @@ TEST_F(PersonalDataManagerTest, AggregateTwoDifferentCreditCards) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1660,7 +1708,7 @@ TEST_F(PersonalDataManagerTest, AggregateTwoDifferentCreditCards) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1710,7 +1758,7 @@ TEST_F(PersonalDataManagerTest, AggregateCardsThatDuplicateServerCards) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1737,8 +1785,8 @@ TEST_F(PersonalDataManagerTest, AggregateCardsThatDuplicateServerCards) {
   // the masked card.
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2,
-                                             &imported_credit_card));
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2, false,
+                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 }
 
@@ -1761,7 +1809,7 @@ TEST_F(PersonalDataManagerTest, AggregateInvalidCreditCard) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1793,7 +1841,7 @@ TEST_F(PersonalDataManagerTest, AggregateInvalidCreditCard) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2, false,
                                               &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -1825,7 +1873,7 @@ TEST_F(PersonalDataManagerTest, AggregateSameCreditCardWithConflict) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1858,7 +1906,7 @@ TEST_F(PersonalDataManagerTest, AggregateSameCreditCardWithConflict) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -1896,7 +1944,7 @@ TEST_F(PersonalDataManagerTest, AggregateEmptyCreditCardWithConflict) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1925,7 +1973,7 @@ TEST_F(PersonalDataManagerTest, AggregateEmptyCreditCardWithConflict) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2, false,
                                               &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -1961,7 +2009,7 @@ TEST_F(PersonalDataManagerTest, AggregateCreditCardWithMissingInfoInNew) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
                                              &imported_credit_card));
   ASSERT_TRUE(imported_credit_card);
   personal_data_->SaveImportedCreditCard(*imported_credit_card);
@@ -1992,7 +2040,7 @@ TEST_F(PersonalDataManagerTest, AggregateCreditCardWithMissingInfoInNew) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -2020,7 +2068,7 @@ TEST_F(PersonalDataManagerTest, AggregateCreditCardWithMissingInfoInNew) {
 
   FormStructure form_structure3(form3);
   form_structure3.DetermineHeuristicTypes();
-  EXPECT_FALSE(personal_data_->ImportFormData(form_structure3,
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure3, false,
                                               &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -2073,7 +2121,7 @@ TEST_F(PersonalDataManagerTest, AggregateCreditCardWithMissingInfoInOld) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -2128,7 +2176,7 @@ TEST_F(PersonalDataManagerTest, AggregateSameCreditCardWithSeparators) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -2188,7 +2236,7 @@ TEST_F(PersonalDataManagerTest, AggregateExistingVerifiedProfileWithConflict) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
@@ -2211,8 +2259,8 @@ TEST_F(PersonalDataManagerTest, AggregateExistingVerifiedProfileWithConflict) {
 
   FormStructure form_structure2(form);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_TRUE(
-      personal_data_->ImportFormData(form_structure2, &imported_credit_card));
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure2, false,
+                                             &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 
   // Wait for the refresh, which in this case is a no-op.
@@ -2261,7 +2309,7 @@ TEST_F(PersonalDataManagerTest,
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(personal_data_->ImportFormData(form_structure,
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure, false,
                                              &imported_credit_card));
   ASSERT_FALSE(imported_credit_card);
 
@@ -2753,83 +2801,117 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestionsHideSubsets) {
   EXPECT_EQ(base::ASCIIToUTF16("Hollywood, TX"), suggestions[1].label);
 }
 
-TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions) {
-  EnableWalletCardImport();
-
-  CreditCard credit_card0("287151C8-6AB1-487C-9095-28E80BE5DA15",
-                          "https://www.example.com");
-  test::SetCreditCardInfo(&credit_card0,
-      "Clyde Barrow", "347666888555" /* American Express */, "04", "2015");
-  credit_card0.set_use_count(2);
-  personal_data_->AddCreditCard(credit_card0);
-
-  CreditCard credit_card1("1141084B-72D7-4B73-90CF-3D6AC154673B",
-                          "https://www.example.com");
-  credit_card1.set_use_count(3);
-  test::SetCreditCardInfo(&credit_card1, "John Dillinger", "", "01", "2010");
-  personal_data_->AddCreditCard(credit_card1);
-
-  CreditCard credit_card2("002149C1-EE28-4213-A3B9-DA243FFF021B",
-                          "https://www.example.com");
-  credit_card2.set_use_count(1);
-  test::SetCreditCardInfo(&credit_card2,
-      "Bonnie Parker", "518765432109" /* Mastercard */, "", "");
-  personal_data_->AddCreditCard(credit_card2);
-
-  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
-      .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+// Test that local credit cards are ordered by MFU.
+TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_LocalCardsRanking) {
+  SetupReferenceLocalCreditCards();
 
   // Sublabel is card number when filling name (exact format depends on
   // the platform, but the last 4 digits should appear).
   std::vector<Suggestion> suggestions =
       personal_data_->GetCreditCardSuggestions(
-          AutofillType(CREDIT_CARD_NAME), base::string16());
+          AutofillType(CREDIT_CARD_NAME),
+          /* field_contents= */ base::string16());
   ASSERT_EQ(3U, suggestions.size());
+
   // Ordered by MFU.
-  EXPECT_EQ(ASCIIToUTF16("Clyde Barrow"), suggestions[1].value);
-  EXPECT_TRUE(suggestions[1].label.find(ASCIIToUTF16("8555")) !=
-      base::string16::npos);
   EXPECT_EQ(ASCIIToUTF16("John Dillinger"), suggestions[0].value);
   EXPECT_EQ(base::string16(), suggestions[0].label);
+  EXPECT_EQ(ASCIIToUTF16("Clyde Barrow"), suggestions[1].value);
+  EXPECT_TRUE(suggestions[1].label.find(ASCIIToUTF16("8555")) !=
+              base::string16::npos);
   EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[2].value);
   EXPECT_TRUE(suggestions[2].label.find(ASCIIToUTF16("2109")) !=
-      base::string16::npos);
+              base::string16::npos);
+}
 
-  // Sublabel is expiration date when filling card number.
-  suggestions = personal_data_->GetCreditCardSuggestions(
-      AutofillType(CREDIT_CARD_NUMBER), base::string16());
+// Test that server cards are suggested after local credit cards even if they
+// have a higher use count.
+TEST_F(PersonalDataManagerTest,
+       GetCreditCardSuggestions_LocalAndServerCardsRanking) {
+  EnableWalletCardImport();
+  SetupReferenceLocalCreditCards();
+
+  // Add some server cards.
+  std::vector<CreditCard> server_cards;
+  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b459"));
+  test::SetCreditCardInfo(&server_cards.back(), "Emmet Dalton", "2110", "12",
+                          "2012");
+  server_cards.back().set_use_count(0);
+  server_cards.back().SetTypeForMaskedCard(kVisaCard);
+
+  server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b460"));
+  test::SetCreditCardInfo(&server_cards.back(), "Jesse James", "2109", "12",
+                          "2012");
+  server_cards.back().set_use_count(4);
+  server_cards.back().SetTypeForMaskedCard(kVisaCard);
+
+  test::SetServerCreditCards(autofill_table_, server_cards);
+  personal_data_->Refresh();
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
+      .WillOnce(QuitMainMessageLoop());
+  base::MessageLoop::current()->Run();
+
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NAME),
+          /* field_contents= */ base::string16());
+  ASSERT_EQ(5U, suggestions.size());
+
+  // First local cards ordered by MFU, then server cards (not sorted).
+  EXPECT_EQ(ASCIIToUTF16("John Dillinger"), suggestions[0].value);
+  EXPECT_EQ(ASCIIToUTF16("Clyde Barrow"), suggestions[1].value);
+  EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[2].value);
+  EXPECT_EQ(ASCIIToUTF16("Emmet Dalton"), suggestions[3].value);
+  EXPECT_EQ(ASCIIToUTF16("Jesse James"), suggestions[4].value);
+}
+
+// Test that a card that doesn't have a number is not shown in the suggestions
+// when querying credit cards by their number.
+TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_NumberMissing) {
+  SetupReferenceLocalCreditCards();
+
+  // Sublabel is expiration date when filling card number. The second card
+  // doesn't have a number so it should not be included in the suggestions.
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NUMBER),
+          /* field_contents= */ base::string16());
   ASSERT_EQ(2U, suggestions.size());
-  EXPECT_EQ(UTF8ToUTF16(
-                "Amex\xC2\xA0\xE2\x8B\xAF"
-                "8555"),
+  EXPECT_EQ(UTF8ToUTF16("Amex\xC2\xA0\xE2\x8B\xAF"
+                        "8555"),
             suggestions[0].value);
   EXPECT_EQ(ASCIIToUTF16("04/15"), suggestions[0].label);
-  EXPECT_EQ(UTF8ToUTF16(
-                "MasterCard\xC2\xA0\xE2\x8B\xAF"
-                "2109"),
+  EXPECT_EQ(UTF8ToUTF16("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                        "2109"),
             suggestions[1].value);
   EXPECT_EQ(base::string16(), suggestions[1].label);
+}
+
+// Tests the suggestions of duplicate local and server credit cards.
+TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions_ServerDuplicates) {
+  EnableWalletCardImport();
+  SetupReferenceLocalCreditCards();
 
   // Add some server cards. If there are local dupes, the locals should be
   // hidden.
   std::vector<CreditCard> server_cards;
   // This server card matches a local card, except the local card is missing the
-  // number. This should count as a dupe. The locally saved card takes
-  // precedence.
+  // number. This should count as a dupe and thus not be shown in the
+  // suggestions since the locally saved card takes precedence.
   server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "a123"));
   test::SetCreditCardInfo(&server_cards.back(), "John Dillinger",
                           "9012" /* Visa */, "01", "2010");
   server_cards.back().SetTypeForMaskedCard(kVisaCard);
 
   // This server card is identical to a local card, but has a different
-  // card type. Not a dupe.
+  // card type. Not a dupe and therefore both should appear in the suggestions.
   server_cards.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b456"));
-  test::SetCreditCardInfo(&server_cards.back(), "Bonnie Parker",
-                          "2109", "12", "2012");
+  test::SetCreditCardInfo(&server_cards.back(), "Bonnie Parker", "2109", "12",
+                          "2012");
   server_cards.back().SetTypeForMaskedCard(kVisaCard);
 
-  // This unmasked server card is a dupe.
+  // This unmasked server card is an exact dupe of a local card. Therefore only
+  // the local card should appear in the suggestions.
   server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "c789"));
   test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
                           "347666888555" /* American Express */, "04", "2015");
@@ -2840,39 +2922,61 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions) {
       .WillOnce(QuitMainMessageLoop());
   base::MessageLoop::current()->Run();
 
-  suggestions = personal_data_->GetCreditCardSuggestions(
-      AutofillType(CREDIT_CARD_NAME), base::string16());
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NAME),
+          /* field_contents= */ base::string16());
   ASSERT_EQ(4U, suggestions.size());
   EXPECT_EQ(ASCIIToUTF16("John Dillinger"), suggestions[0].value);
-  EXPECT_EQ(suggestions[0].backend_id, credit_card1.guid());
   EXPECT_EQ(ASCIIToUTF16("Clyde Barrow"), suggestions[1].value);
-  EXPECT_NE(suggestions[1].backend_id, credit_card0.guid());
   EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[2].value);
-  EXPECT_EQ(suggestions[2].backend_id, credit_card2.guid());
   EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[3].value);
-  EXPECT_NE(suggestions[3].backend_id, credit_card2.guid());
 
   suggestions = personal_data_->GetCreditCardSuggestions(
-      AutofillType(CREDIT_CARD_NUMBER), base::string16());
+      AutofillType(CREDIT_CARD_NUMBER), /* field_contents= */ base::string16());
   ASSERT_EQ(4U, suggestions.size());
-  EXPECT_EQ(UTF8ToUTF16(
-                "Amex\xC2\xA0\xE2\x8B\xAF"
-                "8555"),
+  EXPECT_EQ(UTF8ToUTF16("Amex\xC2\xA0\xE2\x8B\xAF"
+                        "8555"),
             suggestions[0].value);
-  EXPECT_EQ(UTF8ToUTF16(
-                "MasterCard\xC2\xA0\xE2\x8B\xAF"
-                "2109"),
+  EXPECT_EQ(UTF8ToUTF16("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                        "2109"),
             suggestions[1].value);
-  EXPECT_EQ(UTF8ToUTF16(
-                "Visa\xC2\xA0\xE2\x8B\xAF"
-                "9012"),
+  EXPECT_EQ(UTF8ToUTF16("Visa\xC2\xA0\xE2\x8B\xAF"
+                        "9012"),
             suggestions[2].value);
-  EXPECT_EQ(UTF8ToUTF16(
-                "Visa\xC2\xA0\xE2\x8B\xAF"
-                "2109"),
+  EXPECT_EQ(UTF8ToUTF16("Visa\xC2\xA0\xE2\x8B\xAF"
+                        "2109"),
             suggestions[3].value);
+}
 
-  // Make sure a full server card can be a dupe of more than one local card.
+// Tests that a full server card can be a dupe of more than one local card.
+TEST_F(PersonalDataManagerTest,
+       GetCreditCardSuggestions_ServerCardDuplicateOfMultipleLocalCards) {
+  EnableWalletCardImport();
+  SetupReferenceLocalCreditCards();
+
+  // Add a duplicate server card.
+  std::vector<CreditCard> server_cards;
+  // This unmasked server card is an exact dupe of a local card. Therefore only
+  // the local card should appear in the suggestions.
+  server_cards.push_back(CreditCard(CreditCard::FULL_SERVER_CARD, "c789"));
+  test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
+                          "347666888555" /* American Express */, "04", "2015");
+
+  test::SetServerCreditCards(autofill_table_, server_cards);
+  personal_data_->Refresh();
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
+      .WillOnce(QuitMainMessageLoop());
+  base::MessageLoop::current()->Run();
+
+  std::vector<Suggestion> suggestions =
+      personal_data_->GetCreditCardSuggestions(
+          AutofillType(CREDIT_CARD_NAME),
+          /* field_contents= */ base::string16());
+  ASSERT_EQ(3U, suggestions.size());
+
+  // Add a second dupe local card to make sure a full server card can be a dupe
+  // of more than one local card.
   CreditCard credit_card3("4141084B-72D7-4B73-90CF-3D6AC154673B",
                           "https://www.example.com");
   test::SetCreditCardInfo(&credit_card3, "Clyde Barrow", "", "04", "");
@@ -2883,12 +2987,8 @@ TEST_F(PersonalDataManagerTest, GetCreditCardSuggestions) {
   base::MessageLoop::current()->Run();
 
   suggestions = personal_data_->GetCreditCardSuggestions(
-          AutofillType(CREDIT_CARD_NAME), base::string16());
-  ASSERT_EQ(4U, suggestions.size());
-  EXPECT_EQ(ASCIIToUTF16("John Dillinger"), suggestions[0].value);
-  EXPECT_EQ(ASCIIToUTF16("Clyde Barrow"), suggestions[1].value);
-  EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[2].value);
-  EXPECT_EQ(ASCIIToUTF16("Bonnie Parker"), suggestions[3].value);
+      AutofillType(CREDIT_CARD_NAME), /* field_contents= */ base::string16());
+  ASSERT_EQ(3U, suggestions.size());
 }
 
 TEST_F(PersonalDataManagerTest, RecordUseOf) {
@@ -3130,8 +3230,8 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerCard) {
   FormStructure form_structure1(form1);
   form_structure1.DetermineHeuristicTypes();
   scoped_ptr<CreditCard> imported_credit_card;
-  EXPECT_TRUE(
-      personal_data_->ImportFormData(form_structure1, &imported_credit_card));
+  EXPECT_TRUE(personal_data_->ImportFormData(form_structure1, false,
+                                             &imported_credit_card));
   EXPECT_TRUE(imported_credit_card);
   imported_credit_card.reset();
 
@@ -3151,8 +3251,8 @@ TEST_F(PersonalDataManagerTest, DontDuplicateServerCard) {
 
   FormStructure form_structure2(form2);
   form_structure2.DetermineHeuristicTypes();
-  EXPECT_FALSE(
-      personal_data_->ImportFormData(form_structure2, &imported_credit_card));
+  EXPECT_FALSE(personal_data_->ImportFormData(form_structure2, false,
+                                              &imported_credit_card));
   EXPECT_FALSE(imported_credit_card);
 }
 
@@ -3200,6 +3300,15 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
       // results in a merge but the original value is not overwritten (no
       // information loss).
       {ProfileFields(), {{COMPANY_NAME, ""}}, {{COMPANY_NAME, "Fox"}}},
+
+      // Tests that saving an identical profile except a slightly different
+      // postal code results in a merge with the new value kept.
+      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "R2C0A1"}}, {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+        {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
 
       // Tests that saving an identical profile plus a new piece of information
       // on the address line 2 results in a merge and that the original empty
@@ -3310,6 +3419,13 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
         EXPECT_EQ(base::UTF8ToUTF16(changed_field.field_value),
                   saved_profiles.front()->GetRawInfo(changed_field.field_type));
       }
+      // Verify that the merged profile's modification and use dates were
+      // updated.
+      EXPECT_GT(
+          base::TimeDelta::FromMilliseconds(500),
+          base::Time::Now() - saved_profiles.front()->modification_date());
+      EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
+                base::Time::Now() - saved_profiles.front()->use_date());
     }
 
     // Erase the profiles for the next test.
@@ -3317,15 +3433,13 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
   }
 }
 
-// Tests that GetProfileSuggestions orders its suggestions based on MRU by
-// default and based on the the frecency formula if the appropriate field trial
-// is set.
-TEST_F(PersonalDataManagerTest, GetProfileSuggestions_RankByMru) {
-  // Set up the profiles. They are named with number suffixes X_Y so the X is
-  // the order in which they should be ordered by MRU and Y is the order in
-  // which they should be ranked by frecency.
+// Tests that GetProfileSuggestions orders its suggestions based on the frecency
+// formula.
+TEST_F(PersonalDataManagerTest, GetProfileSuggestions_Ranking) {
+  // Set up the profiles. They are named with number suffixes X so the X is the
+  // order in which they should be ordered by frecency.
   AutofillProfile profile3(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile3, "Marion3_3", "Mitchell", "Morrison",
+  test::SetProfileInfo(&profile3, "Marion3", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox",
                        "123 Zoo St.\nSecond Line\nThird line", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
@@ -3334,7 +3448,7 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_RankByMru) {
   personal_data_->AddProfile(profile3);
 
   AutofillProfile profile1(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile1, "Marion2_1", "Mitchell", "Morrison",
+  test::SetProfileInfo(&profile1, "Marion1", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox",
                        "123 Zoo St.\nSecond Line\nThird line", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
@@ -3343,7 +3457,7 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_RankByMru) {
   personal_data_->AddProfile(profile1);
 
   AutofillProfile profile2(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile2, "Marion1_2", "Mitchell", "Morrison",
+  test::SetProfileInfo(&profile2, "Marion2", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox",
                        "123 Zoo St.\nSecond Line\nThird line", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
@@ -3352,26 +3466,13 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_RankByMru) {
   personal_data_->AddProfile(profile2);
 
   ResetPersonalDataManager(USER_MODE_NORMAL);
-
-  // Verify that the profiles are sorted by MRU by default.
   std::vector<Suggestion> suggestions = personal_data_->GetProfileSuggestions(
       AutofillType(NAME_FIRST), base::ASCIIToUTF16("Ma"), false,
       std::vector<ServerFieldType>());
   ASSERT_EQ(3U, suggestions.size());
-  EXPECT_EQ(suggestions[0].value, base::ASCIIToUTF16("Marion1_2"));
-  EXPECT_EQ(suggestions[1].value, base::ASCIIToUTF16("Marion2_1"));
-  EXPECT_EQ(suggestions[2].value, base::ASCIIToUTF16("Marion3_3"));
-
-  // Verify the profiles are sorted by frecency when the flag is set.
-  EnableAutofillProfileOrderByFrecencyFieldTrial(true, "");
-
-  suggestions = personal_data_->GetProfileSuggestions(
-      AutofillType(NAME_FIRST), base::ASCIIToUTF16("Ma"), false,
-      std::vector<ServerFieldType>());
-  ASSERT_EQ(3U, suggestions.size());
-  EXPECT_EQ(suggestions[0].value, base::ASCIIToUTF16("Marion2_1"));
-  EXPECT_EQ(suggestions[1].value, base::ASCIIToUTF16("Marion1_2"));
-  EXPECT_EQ(suggestions[2].value, base::ASCIIToUTF16("Marion3_3"));
+  EXPECT_EQ(suggestions[0].value, base::ASCIIToUTF16("Marion1"));
+  EXPECT_EQ(suggestions[1].value, base::ASCIIToUTF16("Marion2"));
+  EXPECT_EQ(suggestions[2].value, base::ASCIIToUTF16("Marion3"));
 }
 
 // Tests that GetProfileSuggestions returns all profiles suggestions by default
@@ -3408,7 +3509,7 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_NumberOfSuggestions) {
   EXPECT_EQ(3U, suggestions.size());
 
   // Verify that only two profiles are suggested.
-  EnableAutofillProfileOrderByFrecencyFieldTrial(false, "2");
+  EnableAutofillProfileLimitFieldTrial("2");
 
   suggestions = personal_data_->GetProfileSuggestions(
       AutofillType(NAME_FIRST), base::string16(), false,
@@ -3416,59 +3517,12 @@ TEST_F(PersonalDataManagerTest, GetProfileSuggestions_NumberOfSuggestions) {
   EXPECT_EQ(2U, suggestions.size());
 }
 
-// Tests that GetProfileSuggestions returns two profiles suggestions ordered by
-// frecency if the appropriate field trial group and parameter are set.
-TEST_F(PersonalDataManagerTest,
-       GetProfileSuggestions_FrecencyAndSuggestionsLimit) {
-  // Set up the profiles. They are named with number suffixes X_Y so the X is
-  // the order in which they should be ordered by MRU and Y is the order in
-  // which they should be ranked by frecency.
-  AutofillProfile profile3(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile3, "Marion3_3", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox",
-                       "123 Zoo St.\nSecond Line\nThird line", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-  profile3.set_use_date(base::Time::Now() - base::TimeDelta::FromDays(1));
-  profile3.set_use_count(5);
-  personal_data_->AddProfile(profile3);
-
-  AutofillProfile profile1(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile1, "Marion2_1", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox",
-                       "123 Zoo St.\nSecond Line\nThird line", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-  profile1.set_use_date(base::Time::Now() - base::TimeDelta::FromDays(1));
-  profile1.set_use_count(10);
-  personal_data_->AddProfile(profile1);
-
-  AutofillProfile profile2(base::GenerateGUID(), "https://www.example.com");
-  test::SetProfileInfo(&profile2, "Marion1_2", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox",
-                       "123 Zoo St.\nSecond Line\nThird line", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-  profile2.set_use_date(base::Time::Now() - base::TimeDelta::FromDays(15));
-  profile2.set_use_count(300);
-  personal_data_->AddProfile(profile2);
-
-  ResetPersonalDataManager(USER_MODE_NORMAL);
-
-  // Verify that only two profiles are suggested and ordered by frecency.
-  EnableAutofillProfileOrderByFrecencyFieldTrial(true, "2");
-
-  std::vector<Suggestion> suggestions = personal_data_->GetProfileSuggestions(
-      AutofillType(NAME_FIRST), base::ASCIIToUTF16("Ma"), false,
-      std::vector<ServerFieldType>());
-  ASSERT_EQ(2U, suggestions.size());
-  EXPECT_EQ(suggestions[0].value, base::ASCIIToUTF16("Marion2_1"));
-  EXPECT_EQ(suggestions[1].value, base::ASCIIToUTF16("Marion1_2"));
-}
-
 // Tests that GetProfileSuggestions returns the right number of profile
 // suggestions when the limit to three field trial is set and there are less
 // than three profiles.
 TEST_F(PersonalDataManagerTest,
-       GetProfileSuggestions_LimitIsLessThanProfileSuggestions) {
-  EnableAutofillProfileOrderByFrecencyFieldTrial(false, "3");
+       GetProfileSuggestions_LimitIsMoreThanProfileSuggestions) {
+  EnableAutofillProfileLimitFieldTrial("3");
 
   // Set up 2 different profiles.
   AutofillProfile profile1(base::GenerateGUID(), "https://www.example.com");

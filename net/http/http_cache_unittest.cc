@@ -5,12 +5,13 @@
 #include "net/http/http_cache.h"
 
 #include <stdint.h>
-
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -491,10 +492,10 @@ void Verify206Response(const std::string& response, int start, int end) {
 
   ASSERT_EQ(206, headers->response_code());
 
-  int64 range_start, range_end, object_size;
+  int64_t range_start, range_end, object_size;
   ASSERT_TRUE(
       headers->GetContentRange(&range_start, &range_end, &object_size));
-  int64 content_length = headers->GetContentLength();
+  int64_t content_length = headers->GetContentLength();
 
   int length = end - start + 1;
   ASSERT_EQ(length, content_length);
@@ -707,7 +708,7 @@ TEST(HttpCache, SimpleGETNoDiskCache2) {
       new MockBlockingBackendFactory());
   factory->set_fail(true);
   factory->FinishCreation();  // We'll complete synchronously.
-  MockHttpCache cache(factory.Pass());
+  MockHttpCache cache(std::move(factory));
 
   // Read from the network, and don't use the cache.
   RunTransactionTest(cache.http_cache(), kSimpleGET_Transaction);
@@ -2924,7 +2925,7 @@ TEST(HttpCache, SimplePOST_LoadOnlyFromCache_Hit) {
 
   MockTransaction transaction(kSimplePOST_Transaction);
 
-  const int64 kUploadId = 1;  // Just a dummy value.
+  const int64_t kUploadId = 1;  // Just a dummy value.
 
   std::vector<scoped_ptr<UploadElementReader>> element_readers;
   element_readers.push_back(
@@ -2957,7 +2958,7 @@ TEST(HttpCache, SimplePOST_WithRanges) {
   MockTransaction transaction(kSimplePOST_Transaction);
   transaction.request_headers = "Range: bytes = 0-4\r\n";
 
-  const int64 kUploadId = 1;  // Just a dummy value.
+  const int64_t kUploadId = 1;  // Just a dummy value.
 
   std::vector<scoped_ptr<UploadElementReader>> element_readers;
   element_readers.push_back(
@@ -3091,7 +3092,7 @@ TEST(HttpCache, SimplePOST_NoUploadId_NoBackend) {
       new MockBlockingBackendFactory());
   factory->set_fail(true);
   factory->FinishCreation();
-  MockHttpCache cache(factory.Pass());
+  MockHttpCache cache(std::move(factory));
 
   std::vector<scoped_ptr<UploadElementReader>> element_readers;
   element_readers.push_back(
@@ -5436,7 +5437,7 @@ TEST(HttpCache, RangeGET_NoDiskCache) {
       new MockBlockingBackendFactory());
   factory->set_fail(true);
   factory->FinishCreation();  // We'll complete synchronously.
-  MockHttpCache cache(factory.Pass());
+  MockHttpCache cache(std::move(factory));
 
   AddMockTransaction(&kRangeGET_TransactionOK);
 

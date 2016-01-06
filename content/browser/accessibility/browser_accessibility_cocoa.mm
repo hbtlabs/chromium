@@ -3,12 +3,13 @@
 // found in the LICENSE file.
 
 #include <execinfo.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
 
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -465,9 +466,9 @@ bool InitializeAccessibilityTreeSearch(
 // accessibility children of this object.
 - (NSArray*)children {
   if (!children_) {
-    uint32 childCount = browserAccessibility_->PlatformChildCount();
+    uint32_t childCount = browserAccessibility_->PlatformChildCount();
     children_.reset([[NSMutableArray alloc] initWithCapacity:childCount]);
-    for (uint32 index = 0; index < childCount; ++index) {
+    for (uint32_t index = 0; index < childCount; ++index) {
       BrowserAccessibilityCocoa* child =
           browserAccessibility_->PlatformGetChild(index)->
               ToBrowserAccessibilityCocoa();
@@ -478,11 +479,11 @@ bool InitializeAccessibilityTreeSearch(
     }
 
     // Also, add indirect children (if any).
-    const std::vector<int32>& indirectChildIds =
+    const std::vector<int32_t>& indirectChildIds =
         browserAccessibility_->GetIntListAttribute(
             ui::AX_ATTR_INDIRECT_CHILD_IDS);
-    for (uint32 i = 0; i < indirectChildIds.size(); ++i) {
-      int32 child_id = indirectChildIds[i];
+    for (uint32_t i = 0; i < indirectChildIds.size(); ++i) {
+      int32_t child_id = indirectChildIds[i];
       BrowserAccessibility* child =
           browserAccessibility_->manager()->GetFromID(child_id);
 
@@ -514,9 +515,8 @@ bool InitializeAccessibilityTreeSearch(
   }
 
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32>& uniqueCellIds =
-      browserAccessibility_->GetIntListAttribute(
-          ui::AX_ATTR_UNIQUE_CELL_IDS);
+  const std::vector<int32_t>& uniqueCellIds =
+      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_UNIQUE_CELL_IDS);
   for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
     int id = uniqueCellIds[i];
     BrowserAccessibility* cell =
@@ -558,7 +558,7 @@ bool InitializeAccessibilityTreeSearch(
 
   // If the name came from a single related element and it's present in the
   // tree, it will be exposed in AXTitleUIElement.
-  std::vector<int32> labelledby_ids =
+  std::vector<int32_t> labelledby_ids =
       browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
       browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
@@ -605,8 +605,7 @@ bool InitializeAccessibilityTreeSearch(
 
   // If it's focusable but didn't have any other name or value, compute a name
   // from its descendants.
-  std::string value = browserAccessibility_->GetStringAttribute(
-      ui::AX_ATTR_VALUE);
+  base::string16 value = browserAccessibility_->GetValue();
   if (browserAccessibility_->HasState(ui::AX_STATE_FOCUSABLE) &&
       !browserAccessibility_->IsControl() &&
       value.empty() &&
@@ -790,7 +789,7 @@ bool InitializeAccessibilityTreeSearch(
 
 - (void)addLinkedUIElementsFromAttribute:(ui::AXIntListAttribute)attribute
                                    addTo:(NSMutableArray*)outArray {
-  const std::vector<int32>& attributeValues =
+  const std::vector<int32_t>& attributeValues =
       browserAccessibility_->GetIntListAttribute(attribute);
   for (size_t i = 0; i < attributeValues.size(); ++i) {
     BrowserAccessibility* element =
@@ -841,8 +840,7 @@ bool InitializeAccessibilityTreeSearch(
 }
 
 - (NSNumber*)numberOfCharacters {
-  std::string value = browserAccessibility_->GetStringAttribute(
-      ui::AX_ATTR_VALUE);
+  base::string16 value = browserAccessibility_->GetValue();
   return [NSNumber numberWithInt:value.size()];
 }
 
@@ -1079,9 +1077,8 @@ bool InitializeAccessibilityTreeSearch(
   }
 
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32>& uniqueCellIds =
-      browserAccessibility_->GetIntListAttribute(
-          ui::AX_ATTR_UNIQUE_CELL_IDS);
+  const std::vector<int32_t>& uniqueCellIds =
+      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_UNIQUE_CELL_IDS);
   for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
     int id = uniqueCellIds[i];
     BrowserAccessibility* cell =
@@ -1117,10 +1114,10 @@ bool InitializeAccessibilityTreeSearch(
         [ret addObject:child];
     }
   } else if ([self internalRole] == ui::AX_ROLE_COLUMN) {
-    const std::vector<int32>& indirectChildIds =
+    const std::vector<int32_t>& indirectChildIds =
         browserAccessibility_->GetIntListAttribute(
             ui::AX_ATTR_INDIRECT_CHILD_IDS);
-    for (uint32 i = 0; i < indirectChildIds.size(); ++i) {
+    for (uint32_t i = 0; i < indirectChildIds.size(); ++i) {
       int id = indirectChildIds[i];
       BrowserAccessibility* rowElement =
           browserAccessibility_->manager()->GetFromID(id);
@@ -1162,8 +1159,8 @@ bool InitializeAccessibilityTreeSearch(
   // If it's multiselectable or if the previous attempts failed,
   // return any children with the "selected" state, which may
   // come from aria-selected.
-  uint32 childCount = browserAccessibility_->PlatformChildCount();
-  for (uint32 index = 0; index < childCount; ++index) {
+  uint32_t childCount = browserAccessibility_->PlatformChildCount();
+  for (uint32_t index = 0; index < childCount; ++index) {
     BrowserAccessibility* child =
       browserAccessibility_->PlatformGetChild(index);
     if (child->HasState(ui::AX_STATE_SELECTED))
@@ -1248,7 +1245,7 @@ bool InitializeAccessibilityTreeSearch(
 
   // If the name came from a single related element and it's present in the
   // tree, it will be exposed in AXTitleUIElement.
-  std::vector<int32> labelledby_ids =
+  std::vector<int32_t> labelledby_ids =
       browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
       browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
@@ -1272,7 +1269,7 @@ bool InitializeAccessibilityTreeSearch(
 }
 
 - (id)titleUIElement {
-  std::vector<int32> labelledby_ids =
+  std::vector<int32_t> labelledby_ids =
       browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
       browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
@@ -1360,26 +1357,24 @@ bool InitializeAccessibilityTreeSearch(
                 red / 255., green / 255., blue / 255.];
   }
 
-  return NSStringForStringAttribute(
-      browserAccessibility_, ui::AX_ATTR_VALUE);
+  return base::SysUTF16ToNSString(browserAccessibility_->GetValue());
 }
 
 - (NSString*)valueDescription {
-  return NSStringForStringAttribute(
-      browserAccessibility_, ui::AX_ATTR_VALUE);
+  if (browserAccessibility_)
+    return base::SysUTF16ToNSString(browserAccessibility_->GetValue());
+  return nil;
 }
 
 - (NSValue*)visibleCharacterRange {
-  std::string value = browserAccessibility_->GetStringAttribute(
-      ui::AX_ATTR_VALUE);
+  base::string16 value = browserAccessibility_->GetValue();
   return [NSValue valueWithRange:NSMakeRange(0, value.size())];
 }
 
 - (NSArray*)visibleCells {
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  const std::vector<int32>& uniqueCellIds =
-      browserAccessibility_->GetIntListAttribute(
-          ui::AX_ATTR_UNIQUE_CELL_IDS);
+  const std::vector<int32_t>& uniqueCellIds =
+      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_UNIQUE_CELL_IDS);
   for (size_t i = 0; i < uniqueCellIds.size(); ++i) {
     int id = uniqueCellIds[i];
     BrowserAccessibility* cell =
@@ -1392,8 +1387,8 @@ bool InitializeAccessibilityTreeSearch(
 
 - (NSArray*)visibleChildren {
   NSMutableArray* ret = [[[NSMutableArray alloc] init] autorelease];
-  uint32 childCount = browserAccessibility_->PlatformChildCount();
-  for (uint32 index = 0; index < childCount; ++index) {
+  uint32_t childCount = browserAccessibility_->PlatformChildCount();
+  for (uint32_t index = 0; index < childCount; ++index) {
     BrowserAccessibilityCocoa* child =
         browserAccessibility_->PlatformGetChild(index)->
             ToBrowserAccessibilityCocoa();
@@ -1441,8 +1436,7 @@ bool InitializeAccessibilityTreeSearch(
   if (!browserAccessibility_)
     return nil;
 
-  base::string16 value =
-      browserAccessibility_->GetString16Attribute(ui::AX_ATTR_VALUE);
+  base::string16 value = browserAccessibility_->GetValue();
   if (NSMaxRange(range) > value.size())
     return nil;
 
@@ -1471,9 +1465,8 @@ bool InitializeAccessibilityTreeSearch(
     int selLength = selEnd - selStart;
     if ([attribute isEqualToString:
         NSAccessibilityInsertionPointLineNumberAttribute]) {
-      const std::vector<int32>& line_breaks =
-          browserAccessibility_->GetIntListAttribute(
-              ui::AX_ATTR_LINE_BREAKS);
+      const std::vector<int32_t>& line_breaks =
+          browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
       for (int i = 0; i < static_cast<int>(line_breaks.size()); ++i) {
         if (line_breaks[i] > selStart)
           return [NSNumber numberWithInt:i];
@@ -1481,8 +1474,7 @@ bool InitializeAccessibilityTreeSearch(
       return [NSNumber numberWithInt:static_cast<int>(line_breaks.size())];
     }
     if ([attribute isEqualToString:NSAccessibilitySelectedTextAttribute]) {
-      base::string16 value = browserAccessibility_->GetString16Attribute(
-          ui::AX_ATTR_VALUE);
+      base::string16 value = browserAccessibility_->GetValue();
       return base::SysUTF16ToNSString(value.substr(selStart, selLength));
     }
     if ([attribute isEqualToString:NSAccessibilitySelectedTextRangeAttribute]) {
@@ -1499,11 +1491,9 @@ bool InitializeAccessibilityTreeSearch(
   if (!browserAccessibility_)
     return nil;
 
-  const std::vector<int32>& line_breaks =
-      browserAccessibility_->GetIntListAttribute(
-          ui::AX_ATTR_LINE_BREAKS);
-  std::string value = browserAccessibility_->GetStringAttribute(
-      ui::AX_ATTR_VALUE);
+  const std::vector<int32_t>& line_breaks =
+      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
+  base::string16 value = browserAccessibility_->GetValue();
   int len = static_cast<int>(value.size());
 
   if ([attribute isEqualToString:

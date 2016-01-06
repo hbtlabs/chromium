@@ -5,19 +5,20 @@
 #include "content/browser/power_save_blocker_impl.h"
 
 #include <X11/Xlib.h>
+#include <stdint.h>
 #include <X11/extensions/dpms.h>
 // Xlib #defines Status, but we can't have that for some of our headers.
 #ifdef Status
 #undef Status
 #endif
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
@@ -92,6 +93,9 @@ class PowerSaveBlockerImpl::Delegate
   // enqueues a call back to ApplyBlock() if it is true. See the comments for
   // enqueue_apply_ below.
   void InitOnUIThread();
+
+  // Returns true if ApplyBlock() / RemoveBlock() should be called.
+  bool ShouldBlock() const;
 
   // Apply or remove the power save block, respectively. These methods should be
   // called once each, on the same thread, per instance. They block waiting for
@@ -176,7 +180,7 @@ void PowerSaveBlockerImpl::Delegate::CleanUp() {
     // initializing on the UI thread, then just cancel it. We don't need to
     // remove the block because we haven't even applied it yet.
     enqueue_apply_ = false;
-  } else if (api_ != NO_API) {
+  } else if (ShouldBlock()) {
     BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
                             base::Bind(&Delegate::RemoveBlock, this));
   }
@@ -186,9 +190,7 @@ void PowerSaveBlockerImpl::Delegate::InitOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::AutoLock lock(lock_);
   api_ = SelectAPI();
-  bool api_matches =
-      freedesktop_only_ ? api_ == FREEDESKTOP_API : api_ != NO_API;
-  if (enqueue_apply_ && api_matches) {
+  if (enqueue_apply_ && ShouldBlock()) {
     // The thread we use here becomes the origin and D-Bus thread for the D-Bus
     // library, so we need to use the same thread above for RemoveBlock(). It
     // must be a thread that allows I/O operations, so we use the FILE thread.
@@ -196,6 +198,10 @@ void PowerSaveBlockerImpl::Delegate::InitOnUIThread() {
                             base::Bind(&Delegate::ApplyBlock, this));
   }
   enqueue_apply_ = false;
+}
+
+bool PowerSaveBlockerImpl::Delegate::ShouldBlock() const {
+  return freedesktop_only_ ? api_ == FREEDESKTOP_API : api_ != NO_API;
 }
 
 void PowerSaveBlockerImpl::Delegate::ApplyBlock() {

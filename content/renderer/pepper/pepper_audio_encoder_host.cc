@@ -2,11 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/renderer/pepper/pepper_audio_encoder_host.h"
+
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/host_globals.h"
-#include "content/renderer/pepper/pepper_audio_encoder_host.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/bind_to_current_loop.h"
 #include "ppapi/c/pp_codecs.h"
@@ -67,7 +72,7 @@ class PepperAudioEncoderHost::AudioEncoderImpl {
   void RequestBitrateChange(uint32_t bitrate);
 
  private:
-  scoped_ptr<uint8[]> encoder_memory_;
+  scoped_ptr<uint8_t[]> encoder_memory_;
   OpusEncoder* opus_encoder_;
 
   // Initialization parameters, only valid if |encoder_memory_| is not
@@ -111,7 +116,7 @@ bool PepperAudioEncoderHost::AudioEncoderImpl::Initialize(
   if (encoder_size < 1)
     return false;
 
-  scoped_ptr<uint8[]> encoder_memory(new uint8[encoder_size]);
+  scoped_ptr<uint8_t[]> encoder_memory(new uint8_t[encoder_size]);
   opus_encoder_ = reinterpret_cast<OpusEncoder*>(encoder_memory.get());
 
   if (opus_encoder_init(opus_encoder_, parameters.input_sample_rate,
@@ -368,7 +373,7 @@ bool PepperAudioEncoderHost::AllocateBuffers(
       new ppapi::MediaStreamBufferManager(this));
   if (!audio_buffer_manager->SetBuffers(kDefaultNumberOfAudioBuffers,
                                         total_audio_buffer_size.ValueOrDie(),
-                                        audio_memory.Pass(), false))
+                                        std::move(audio_memory), false))
     return false;
 
   for (int32_t i = 0; i < audio_buffer_manager->number_of_buffers(); ++i) {
@@ -392,7 +397,7 @@ bool PepperAudioEncoderHost::AllocateBuffers(
       new ppapi::MediaStreamBufferManager(this));
   if (!bitstream_buffer_manager->SetBuffers(kDefaultNumberOfAudioBuffers,
                                             bitstream_buffer_size.ValueOrDie(),
-                                            bitstream_memory.Pass(), true))
+                                            std::move(bitstream_memory), true))
     return false;
 
   for (int32_t i = 0; i < bitstream_buffer_manager->number_of_buffers(); ++i) {
@@ -481,9 +486,10 @@ void PepperAudioEncoderHost::Close() {
   // Destroy the encoder and the audio/bitstream buffers on the media thread
   // to avoid freeing memory the encoder might still be working on.
   media_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&StopAudioEncoder, base::Passed(encoder_.Pass()),
-                            base::Passed(audio_buffer_manager_.Pass()),
-                            base::Passed(bitstream_buffer_manager_.Pass())));
+      FROM_HERE,
+      base::Bind(&StopAudioEncoder, base::Passed(std::move(encoder_)),
+                 base::Passed(std::move(audio_buffer_manager_)),
+                 base::Passed(std::move(bitstream_buffer_manager_))));
 }
 
 // static

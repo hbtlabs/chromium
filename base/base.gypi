@@ -91,7 +91,6 @@
           'atomic_ref_count.h',
           'atomic_sequence_num.h',
           'atomicops.h',
-          'atomicops_internals_mac.h',
           'atomicops_internals_portable.h',
           'atomicops_internals_x86_msvc.h',
           'barrier_closure.cc',
@@ -112,7 +111,6 @@
           'base_paths_win.cc',
           'base_paths_win.h',
           'base_switches.h',
-          'basictypes.h',
           'big_endian.cc',
           'big_endian.h',
           'bind.h',
@@ -351,6 +349,7 @@
           'memory/memory_pressure_monitor_mac.h',
           'memory/memory_pressure_monitor_win.cc',
           'memory/memory_pressure_monitor_win.h',
+          'memory/ptr_util.h',
           'memory/raw_scoped_refptr_mismatch_checker.h',
           'memory/ref_counted.cc',
           'memory/ref_counted.h',
@@ -882,7 +881,6 @@
             'sources/': [
               # Pull in specific Mac files for iOS (which have been filtered out
               # by file name rules).
-              ['include', '^atomicops_internals_mac\\.'],
               ['include', '^base_paths_mac\\.'],
               ['include', '^files/file_util_mac\\.'],
               ['include', '^file_version_info_mac\\.'],

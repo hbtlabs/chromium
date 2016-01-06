@@ -18,7 +18,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/svg/SVGForeignObjectElement.h"
 
 #include "core/XLinkNames.h"
@@ -73,7 +72,7 @@ bool SVGForeignObjectElement::isPresentationAttributeWithSVGDOM(const QualifiedN
 
 void SVGForeignObjectElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_width)
         addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth, m_width->currentValue()->asCSSPrimitiveValue());
     else if (property == m_height)

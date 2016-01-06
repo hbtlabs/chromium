@@ -5,13 +5,18 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_VIEW_BASE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_VIEW_BASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/kill.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
@@ -44,6 +49,10 @@ namespace blink {
 struct WebScreenInfo;
 class WebMouseEvent;
 class WebMouseWheelEvent;
+}
+
+namespace ui {
+class LatencyInfo;
 }
 
 namespace content {
@@ -88,7 +97,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Return a value that is incremented each time the renderer swaps a new frame
   // to the view.
-  uint32 RendererFrameNumber();
+  uint32_t RendererFrameNumber();
 
   // Called each time the RenderWidgetHost receives a new frame for display from
   // the renderer.
@@ -158,7 +167,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Informs that the focused DOM node has changed.
   virtual void FocusedNodeChanged(bool is_editable_node) {}
 
-  virtual void OnSwapCompositorFrame(uint32 output_surface_id,
+  virtual void OnSwapCompositorFrame(uint32_t output_surface_id,
                                      scoped_ptr<cc::CompositorFrame> frame) {}
 
   // This method exists to allow removing of displayed graphics, after a new
@@ -192,6 +201,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event) {}
   virtual void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) {}
+  virtual void ProcessTouchEvent(const blink::WebTouchEvent& event,
+                         const ui::LatencyInfo& latency) {}
 
   // If a RenderWidgetHost is dealing with points that are transformed from the
   // root frame for a page (i.e. because its content is contained within
@@ -253,13 +264,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Notifies the View that the renderer has ceased to exist.
   virtual void RenderProcessGone(base::TerminationStatus status,
                                  int error_code) = 0;
-
-  // Notifies the View that the renderer's host has ceased to exist.
-  // The default implementation of this is a no-op. This hack exists to fix
-  // a crash on the branch.
-  // TODO(ccameron): Clean this up.
-  // http://crbug.com/404828
-  virtual void RenderWidgetHostGone() {}
 
   // Tells the View to destroy itself.
   virtual void Destroy() = 0;
@@ -439,7 +443,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   gfx::Rect current_display_area_;
 
-  uint32 renderer_frame_number_;
+  uint32_t renderer_frame_number_;
 
   base::OneShotTimer flush_input_timer_;
 

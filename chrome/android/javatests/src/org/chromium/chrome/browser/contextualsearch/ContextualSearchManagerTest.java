@@ -1029,36 +1029,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     }
 
     /**
-     * Tests tap to expand, after an initial tap to activate the peeking card.
-     *
-     * @SmallTest
-     * @Feature({"ContextualSearch"})
-     */
-    @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @FlakyTest
-    public void testTapExpand() throws InterruptedException, TimeoutException {
-        assertNoSearchesLoaded();
-        clickWordNode("states");
-        assertNoContentViewCore();
-        assertNoSearchesLoaded();
-
-        // Fake a search term resolution response.
-        fakeResponse(false, 200, "states", "United States Intelligence", "alternate-term", false);
-        assertContainsParameters("states", "alternate-term");
-        assertEquals(1, mFakeServer.getLoadedUrlCount());
-        assertLoadedLowPriorityUrl();
-        assertContentViewCoreCreated();
-        tapPeekingBarToExpandAndAssert();
-        assertLoadedLowPriorityUrl();
-        assertEquals(1, mFakeServer.getLoadedUrlCount());
-
-        // tap the base page to close.
-        tapBasePageToClosePanel();
-        assertEquals(1, mFakeServer.getLoadedUrlCount());
-        assertNoContentViewCore();
-    }
-
-    /**
      * Tests that only a single low-priority request is issued for a Tap/Open sequence.
      */
     @SmallTest
@@ -2058,6 +2028,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * We've had reliability problems with a sequence of simple taps, due to async dissolving
      * of selection bounds, so this helps prevent a regression with that.
      */
+    @SmallTest
+    @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
     public void testTapALot() throws InterruptedException, TimeoutException {
         mPolicy.setTapPrefetchLimitForDecidedForTesting(200);
@@ -2533,6 +2505,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @CommandLineFlags.Add(ContextualSearchFieldTrial.ENABLE_TRANSLATION_FOR_TESTING + "=true")
     public void testTapWithLanguage() throws InterruptedException, TimeoutException {
         // Tapping a German word should trigger translation.
         simulateTapSearch("german");
@@ -2549,6 +2522,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @CommandLineFlags.Add(ContextualSearchFieldTrial.ENABLE_TRANSLATION_FOR_TESTING + "=true")
     public void testTapWithoutLanguage() throws InterruptedException, TimeoutException {
         // Tapping an English word should NOT trigger translation.
         simulateTapSearch("search");
@@ -2563,6 +2537,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @CommandLineFlags.Add(ContextualSearchFieldTrial.ENABLE_TRANSLATION_FOR_TESTING + "=true")
     public void testLongpressTranslates() throws InterruptedException, TimeoutException {
         // LongPress on any word should trigger translation.
         simulateLongPressSearch("search");
@@ -2572,13 +2547,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     }
 
     /**
-     * Tests that a long-press does trigger translation.
+     * Tests that a long-press does NOT trigger translation when auto-detect is disabled.
      */
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX
-            + "=true")
+    @CommandLineFlags.Add({ContextualSearchFieldTrial.ENABLE_TRANSLATION_FOR_TESTING + "=true",
+            ContextualSearchFieldTrial.DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX + "=true"})
     public void testLongpressAutoDetectDisabledDoesNotTranslate()
             throws InterruptedException, TimeoutException {
         // Unless disabled, LongPress on any word should trigger translation.
@@ -2589,12 +2564,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     }
 
     /**
-     * Tests that a long-press does trigger translation.
+     * Tests that a long-press does NOT trigger translation when general one-box is disabled.
      */
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @CommandLineFlags.Add(ContextualSearchFieldTrial.DISABLE_FORCE_TRANSLATION_ONEBOX + "=true")
+    @CommandLineFlags.Add({ContextualSearchFieldTrial.ENABLE_TRANSLATION_FOR_TESTING + "=true",
+            ContextualSearchFieldTrial.DISABLE_FORCE_TRANSLATION_ONEBOX + "=true"})
     public void testLongpressTranslateDisabledDoesNotTranslate()
             throws InterruptedException, TimeoutException {
         // Unless disabled, LongPress on any word should trigger translation.

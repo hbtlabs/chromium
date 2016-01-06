@@ -30,7 +30,7 @@ enum BadMessageReason {
   RVH_CAN_ACCESS_FILES_OF_PAGE_STATE = 6,
   RVH_FILE_CHOOSER_PATH = 7,
   RWH_SYNTHETIC_GESTURE = 8,
-  RWH_FOCUS = 9,
+  RWH_FOCUS = 9,  // obsolete; no longer used
   RWH_BLUR = 10,
   RWH_SHARED_BITMAP = 11,
   RWH_BAD_ACK_MESSAGE = 12,
@@ -124,6 +124,8 @@ enum BadMessageReason {
   BDH_EMPTY_OR_INVALID_FILTERS = 100,
   WC_CONTENT_WITH_CERT_ERRORS_BAD_SECURITY_INFO = 101,
   RFMF_RENDERER_FAKED_ITS_OWN_DEATH = 102,
+  DWNLD_INVALID_SAVABLE_RESOURCE_LINKS_RESPONSE = 103,
+  DWNLD_INVALID_SERIALIZE_AS_MHTML_RESPONSE = 104,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the

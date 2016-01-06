@@ -4,7 +4,10 @@
 
 #include "remoting/protocol/video_frame_pump.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -175,8 +178,8 @@ TEST_F(VideoFramePumpTest, StartAndStop) {
       .RetiresOnSaturation();
 
   // Start video frame capture.
-  pump_.reset(new VideoFramePump(encode_task_runner_, capturer.Pass(),
-                                 encoder.Pass(), &video_stub_));
+  pump_.reset(new VideoFramePump(encode_task_runner_, std::move(capturer),
+                                 std::move(encoder), &video_stub_));
 
   // Run MessageLoop until the first frame is received.
   run_loop.Run();
@@ -202,8 +205,8 @@ TEST_F(VideoFramePumpTest, NullFrame) {
       .RetiresOnSaturation();
 
   // Start video frame capture.
-  pump_.reset(new VideoFramePump(encode_task_runner_, capturer.Pass(),
-                                 encoder.Pass(), &video_stub_));
+  pump_.reset(new VideoFramePump(encode_task_runner_, std::move(capturer),
+                                 std::move(encoder), &video_stub_));
 
   // Run MessageLoop until the first frame is received..
   run_loop.Run();
@@ -230,8 +233,8 @@ TEST_F(VideoFramePumpTest, UnchangedFrame) {
       .RetiresOnSaturation();
 
   // Start video frame capture.
-  pump_.reset(new VideoFramePump(encode_task_runner_, capturer.Pass(),
-                                 encoder.Pass(), &video_stub_));
+  pump_.reset(new VideoFramePump(encode_task_runner_, std::move(capturer),
+                                 std::move(encoder), &video_stub_));
 
   // Run MessageLoop until the first frame is received.
   run_loop.Run();

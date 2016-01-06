@@ -112,28 +112,6 @@ class _BlinkPerfMeasurement(page_test.PageTest):
     print log
 
 
-class _BlinkPerfFullFrameMeasurement(_BlinkPerfMeasurement):
-  def __init__(self):
-    super(_BlinkPerfFullFrameMeasurement, self).__init__()
-    self._blink_perf_js += '\nwindow.fullFrameMeasurement = true;'
-
-  def CustomizeBrowserOptions(self, options):
-    super(_BlinkPerfFullFrameMeasurement, self).CustomizeBrowserOptions(
-        options)
-    # Full layout measurement needs content_shell with internals testing API.
-    assert 'content-shell' in options.browser_type
-    options.AppendExtraBrowserArgs(['--expose-internals-for-testing'])
-
-
-class _BlinkPerfPywebsocketMeasurement(_BlinkPerfMeasurement):
-  def CustomizeBrowserOptions(self, options):
-    super(_BlinkPerfPywebsocketMeasurement, self).CustomizeBrowserOptions(
-        options)
-    # Cross-origin accesses are needed to run benchmarks spanning two servers,
-    # the Telemetry's HTTP server and the pywebsocket server.
-    options.AppendExtraBrowserArgs(['--disable-web-security'])
-
-
 class _SharedPywebsocketPageState(shared_page_state.SharedPageState):
   """Runs a pywebsocket server."""
   def __init__(self, test, finder_options, user_story_set):
@@ -254,14 +232,21 @@ class BlinkPerfLayout(perf_benchmark.PerfBenchmark):
     return cls.IsSvelte(possible_browser)  # http://crbug.com/551950
 
 
-@benchmark.Enabled('content-shell')
-class BlinkPerfLayoutFullLayout(BlinkPerfLayout):
-  tag = 'layout_full_frame'
-  test = _BlinkPerfFullFrameMeasurement
+class BlinkPerfPaint(perf_benchmark.PerfBenchmark):
+  tag = 'paint'
+  test = _BlinkPerfMeasurement
 
   @classmethod
   def Name(cls):
-    return 'blink_perf.layout_full_frame'
+    return 'blink_perf.paint'
+
+  def CreateStorySet(self, options):
+    path = os.path.join(BLINK_PERF_BASE_DIR, 'Paint')
+    return CreateStorySetFromPath(path, SKIPPED_FILE)
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return cls.IsSvelte(possible_browser)  # http://crbug.com/574483
 
 
 @benchmark.Disabled('win',     # crbug.com/488493
@@ -290,16 +275,6 @@ class BlinkPerfSVG(perf_benchmark.PerfBenchmark):
   def CreateStorySet(self, options):
     path = os.path.join(BLINK_PERF_BASE_DIR, 'SVG')
     return CreateStorySetFromPath(path, SKIPPED_FILE)
-
-
-@benchmark.Enabled('content-shell')
-class BlinkPerfSVGFullLayout(BlinkPerfSVG):
-  tag = 'svg_full_frame'
-  test = _BlinkPerfFullFrameMeasurement
-
-  @classmethod
-  def Name(cls):
-    return 'blink_perf.svg_full_frame'
 
 
 class BlinkPerfShadowDOM(perf_benchmark.PerfBenchmark):
@@ -334,8 +309,14 @@ class BlinkPerfXMLHttpRequest(perf_benchmark.PerfBenchmark):
 # Disabled on reference builds due to https://crbug.com/530374
 @benchmark.Disabled('win', 'chromeos', 'reference')
 class BlinkPerfPywebsocket(perf_benchmark.PerfBenchmark):
+  '''
+  The blink_perf.pywebsocket tests measure turn-around-time of 10MB
+  send/receive for XHR, Fetch API and WebSocket.
+  We might ignore <10% regressions, because the tests are noisy and such
+  regressions are often unreproducible (https://crbug.com/549017).
+  '''
   tag = 'pywebsocket'
-  test = _BlinkPerfPywebsocketMeasurement
+  test = _BlinkPerfMeasurement
 
   @classmethod
   def Name(cls):

@@ -151,7 +151,7 @@ InspectorTest.waitUntilResumed = function(callback)
 InspectorTest.resumeExecution = function(callback)
 {
     if (WebInspector.panels.sources.paused())
-        WebInspector.panels.sources.togglePause();
+        WebInspector.panels.sources._togglePause();
     InspectorTest.waitUntilResumed(callback);
 };
 
@@ -195,6 +195,26 @@ InspectorTest.waitUntilPausedAndDumpStackAndResume = function(callback, options)
     }
 };
 
+InspectorTest.stepOver = function()
+{
+    Promise.resolve().then(function(){WebInspector.panels.sources._stepOver()});
+};
+
+InspectorTest.stepInto = function()
+{
+    Promise.resolve().then(function(){WebInspector.panels.sources._stepInto()});
+};
+
+InspectorTest.stepOut = function()
+{
+    Promise.resolve().then(function(){WebInspector.panels.sources._stepOut()});
+};
+
+InspectorTest.togglePause = function()
+{
+    Promise.resolve().then(function(){WebInspector.panels.sources._togglePause()});
+};
+
 InspectorTest.waitUntilPausedAndPerformSteppingActions = function(actions, callback)
 {
     callback = InspectorTest.safeWrap(callback);
@@ -211,7 +231,7 @@ InspectorTest.waitUntilPausedAndPerformSteppingActions = function(actions, callb
         }
 
         if (!action) {
-            callback()
+            callback();
             return;
         }
 
@@ -219,23 +239,23 @@ InspectorTest.waitUntilPausedAndPerformSteppingActions = function(actions, callb
 
         switch (action) {
         case "StepInto":
-            WebInspector.panels.sources._stepIntoButton.element.click();
+            InspectorTest.stepInto();
             break;
         case "StepOver":
-            WebInspector.panels.sources._stepOverButton.element.click();
+            InspectorTest.stepOver();
             break;
         case "StepOut":
-            WebInspector.panels.sources._stepOutButton.element.click();
+            InspectorTest.stepOut();
             break;
         case "Resume":
-            WebInspector.panels.sources.togglePause();
+            InspectorTest.togglePause();
             break;
         case "StepIntoAsync":
             InspectorTest.DebuggerAgent.stepIntoAsync();
             break;
         default:
             InspectorTest.addResult("FAIL: Unknown action: " + action);
-            callback()
+            callback();
             return;
         }
 
@@ -366,24 +386,24 @@ InspectorTest.waitForScriptSource = function(scriptName, callback)
     InspectorTest.addSniffer(WebInspector.SourcesView.prototype, "_addUISourceCode", InspectorTest.waitForScriptSource.bind(InspectorTest, scriptName, callback));
 };
 
-InspectorTest.dumpNavigatorView = function(navigatorView, id, prefix)
+InspectorTest.dumpNavigatorView = function(navigatorView)
 {
-    InspectorTest.addResult(prefix + "Dumping ScriptsNavigator " + id + " tab:");
-    dumpNavigatorTreeOutline(prefix, navigatorView._scriptsTree);
+    dumpNavigatorTreeOutline(navigatorView._scriptsTree);
 
     function dumpNavigatorTreeElement(prefix, treeElement)
     {
-        InspectorTest.addResult(prefix + treeElement.nodeTitle());
+        InspectorTest.addResult(prefix + treeElement.title);
+        treeElement.expand();
         var children = treeElement.children();
         for (var i = 0; i < children.length; ++i)
             dumpNavigatorTreeElement(prefix + "  ", children[i]);
     }
 
-    function dumpNavigatorTreeOutline(prefix, treeOutline)
+    function dumpNavigatorTreeOutline(treeOutline)
     {
         var children = treeOutline.rootElement().children();
         for (var i = 0; i < children.length; ++i)
-            dumpNavigatorTreeElement(prefix + "  ", children[i]);
+            dumpNavigatorTreeElement("", children[i]);
     }
 };
 
@@ -508,7 +528,7 @@ InspectorTest.createScriptMock = function(url, startLine, startColumn, isContent
     var endLine = startLine + lineCount - 1;
     var endColumn = lineCount === 1 ? startColumn + source.length : source.length - source.lineEndings()[lineCount - 2];
     var hasSourceURL = !!source.match(/\/\/#\ssourceURL=\s*(\S*?)\s*$/m);
-    var script = new WebInspector.Script(debuggerModel, scriptId, url, startLine, startColumn, endLine, endColumn, isContentScript, null, hasSourceURL);
+    var script = new WebInspector.Script(debuggerModel, scriptId, url, startLine, startColumn, endLine, endColumn, 0, isContentScript, false, false, undefined, hasSourceURL);
     script.requestContent = function(callback)
     {
         var trimmedSource = WebInspector.Script._trimSourceURLComment(source);

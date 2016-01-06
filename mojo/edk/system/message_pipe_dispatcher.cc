@@ -4,7 +4,13 @@
 
 #include "mojo/edk/system/message_pipe_dispatcher.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "mojo/edk/embedder/embedder_internal.h"
@@ -25,10 +31,13 @@ namespace {
 const size_t kInvalidMessagePipeHandleIndex = static_cast<size_t>(-1);
 
 struct MOJO_ALIGNAS(8) SerializedMessagePipeHandleDispatcher {
+  bool transferable;
+  bool write_error;
+  uint64_t pipe_id;  // If transferable is false.
+  // The following members are only set if transferable is true.
   // Could be |kInvalidMessagePipeHandleIndex| if the other endpoint of the MP
   // was closed.
   size_t platform_handle_index;
-  bool write_error;
 
   size_t shared_memory_handle_index;  // (Or |kInvalidMessagePipeHandleIndex|.)
   uint32_t shared_memory_size;
@@ -90,7 +99,8 @@ MojoResult MessagePipeDispatcher::ValidateCreateOptions(
     const MojoCreateMessagePipeOptions* in_options,
     MojoCreateMessagePipeOptions* out_options) {
   const MojoCreateMessagePipeOptionsFlags kKnownFlags =
-      MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_NONE;
+      MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_NONE |
+      MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_TRANSFERABLE;
 
   *out_options = kDefaultCreateOptions;
   if (!in_options)
@@ -119,8 +129,9 @@ void MessagePipeDispatcher::Init(
     char* serialized_write_buffer, size_t serialized_write_buffer_size,
     std::vector<int>* serialized_read_fds,
     std::vector<int>* serialized_write_fds) {
+  CHECK(transferable_);
   if (message_pipe.get().is_valid()) {
-    channel_ = RawChannel::Create(message_pipe.Pass());
+    channel_ = RawChannel::Create(std::move(message_pipe));
 
     // TODO(jam): It's probably cleaner to pass this in Init call.
     channel_->SetSerializedData(
@@ -132,25 +143,86 @@ void MessagePipeDispatcher::Init(
   }
 }
 
+void MessagePipeDispatcher::InitNonTransferable(uint64_t pipe_id) {
+  CHECK(!transferable_);
+  pipe_id_ = pipe_id;
+}
+
 void MessagePipeDispatcher::InitOnIO() {
   base::AutoLock locker(lock());
+  CHECK(transferable_);
   calling_init_ = true;
   if (channel_)
     channel_->Init(this);
   calling_init_ = false;
 }
 
+void MessagePipeDispatcher::CloseOnIOAndRelease() {
+  {
+    base::AutoLock locker(lock());
+    CloseOnIO();
+  }
+  Release();  // To match CloseImplNoLock.
+}
+
 void MessagePipeDispatcher::CloseOnIO() {
-  base::AutoLock locker(lock());
+  lock().AssertAcquired();
 
   if (channel_) {
-    channel_->Shutdown();
-    channel_ = nullptr;
+    // If we closed the channel now then in-flight message pipes wouldn't get
+    // closed, and their other side wouldn't get a connection error notification
+    // which could lead to hangs or leaks. So we ask the other side of this
+    // message pipe to close, which ensures that we have dispatched all
+    // in-flight message pipes.
+    DCHECK(!close_requested_);
+    close_requested_ = true;
+    AddRef();
+    scoped_ptr<MessageInTransit> message(new MessageInTransit(
+        MessageInTransit::Type::QUIT_MESSAGE, 0, nullptr));
+    if (!transferable_)
+      message->set_route_id(pipe_id_);
+    channel_->WriteMessage(std::move(message));
+    return;
+  }
+
+  if (!transferable_ &&
+      (non_transferable_state_ == CONNECT_CALLED ||
+       non_transferable_state_ == WAITING_FOR_READ_OR_WRITE)) {
+    if (non_transferable_state_ == WAITING_FOR_READ_OR_WRITE)
+      RequestNontransferableChannel();
+
+    // We can't cancel the pending request yet, since the other side of the
+    // message pipe would want to get pending outgoing messages (if any) or at
+    // least know that this end was closed. So keep this object alive until
+    // then.
+    non_transferable_state_ = WAITING_FOR_CONNECT_TO_CLOSE;
+    AddRef();
   }
 }
 
 Dispatcher::Type MessagePipeDispatcher::GetType() const {
   return Type::MESSAGE_PIPE;
+}
+
+void MessagePipeDispatcher::GotNonTransferableChannel(RawChannel* channel) {
+  DCHECK(internal::g_io_thread_task_runner->RunsTasksOnCurrentThread());
+  base::AutoLock locker(lock());
+  channel_ = channel;
+  while (!non_transferable_outgoing_message_queue_.IsEmpty()) {
+    channel_->WriteMessage(
+        non_transferable_outgoing_message_queue_.GetMessage());
+  }
+
+  if (non_transferable_state_ == WAITING_FOR_CONNECT_TO_CLOSE) {
+    non_transferable_state_ = CONNECTED;
+    // We kept this object alive until it's connected, we can close it now.
+    CloseOnIO();
+    // Balance the AddRef in CloseOnIO.
+    Release();
+    return;
+  }
+
+  non_transferable_state_ = CONNECTED;
 }
 
 #if defined(OS_WIN)
@@ -186,6 +258,14 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
 
   const SerializedMessagePipeHandleDispatcher* serialization =
       static_cast<const SerializedMessagePipeHandleDispatcher*>(source);
+
+  scoped_refptr<MessagePipeDispatcher> rv(
+      new MessagePipeDispatcher(serialization->transferable));
+  if (!rv->transferable_) {
+    rv->InitNonTransferable(serialization->pipe_id);
+    return rv;
+  }
+
   if (serialization->shared_memory_size !=
       (serialization->serialized_read_buffer_size +
        serialization->serialized_write_buffer_size +
@@ -212,7 +292,7 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
   scoped_ptr<PlatformSharedBufferMapping> mapping;
   if (shared_memory_handle.is_valid()) {
     shared_buffer = internal::g_platform_support->CreateSharedBufferFromHandle(
-            serialization->shared_memory_size, shared_memory_handle.Pass());
+        serialization->shared_memory_size, std::move(shared_memory_handle));
     mapping = shared_buffer->Map(0, serialization->shared_memory_size);
     char* buffer = static_cast<char*>(mapping->GetBase());
     if (serialization->serialized_read_buffer_size) {
@@ -233,8 +313,6 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
     }
   }
 
-  scoped_refptr<MessagePipeDispatcher> rv(
-      Create(MessagePipeDispatcher::kDefaultCreateOptions));
   rv->write_error_ = serialization->write_error;
 
   std::vector<int> serialized_read_fds;
@@ -253,7 +331,7 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
       ClosePlatformHandles(&serialized_fds);
       return nullptr;
     }
-    serialized_fds.push_back(handle.release().fd);
+    serialized_fds.push_back(handle.release().handle);
   }
 
   serialized_read_fds.assign(
@@ -269,8 +347,15 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
 
   while (message_queue_size) {
     size_t message_size;
-    CHECK(MessageInTransit::GetNextMessageSize(
-              message_queue_data, message_queue_size, &message_size));
+    if (!MessageInTransit::GetNextMessageSize(
+            message_queue_data, message_queue_size, &message_size)) {
+      NOTREACHED() << "Couldn't read message size from serialized data.";
+      return nullptr;
+    }
+    if (message_size > message_queue_size) {
+      NOTREACHED() << "Invalid serialized message size.";
+      return nullptr;
+    }
     MessageInTransit::View message_view(message_size, message_queue_data);
     message_queue_size -= message_size;
     message_queue_data += message_size;
@@ -311,18 +396,15 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
       message->SetDispatchers(TransportData::DeserializeDispatchers(
           message_view.transport_data_buffer(),
           message_view.transport_data_buffer_size(),
-          temp_platform_handles.Pass()));
+          std::move(temp_platform_handles)));
     }
 
-    rv->message_queue_.AddMessage(message.Pass());
+    rv->message_queue_.AddMessage(std::move(message));
   }
 
-  rv->Init(platform_handle.Pass(),
-           serialized_read_buffer,
-           serialized_read_buffer_size,
-           serialized_write_buffer,
-           serialized_write_buffer_size,
-           &serialized_read_fds,
+  rv->Init(std::move(platform_handle), serialized_read_buffer,
+           serialized_read_buffer_size, serialized_write_buffer,
+           serialized_write_buffer_size, &serialized_read_fds,
            &serialized_write_fds);
 
   if (message_queue_size) {  // Should be empty by now.
@@ -333,14 +415,18 @@ scoped_refptr<MessagePipeDispatcher> MessagePipeDispatcher::Deserialize(
   return rv;
 }
 
-MessagePipeDispatcher::MessagePipeDispatcher()
+MessagePipeDispatcher::MessagePipeDispatcher(bool transferable)
     : channel_(nullptr),
-      serialized_(false),
       serialized_read_fds_length_(0u),
       serialized_write_fds_length_(0u),
       serialized_message_fds_length_(0u),
+      pipe_id_(0),
+      non_transferable_state_(WAITING_FOR_READ_OR_WRITE),
+      serialized_(false),
       calling_init_(false),
-      write_error_(false) {
+      write_error_(false),
+      transferable_(transferable),
+      close_requested_(false) {
 }
 
 MessagePipeDispatcher::~MessagePipeDispatcher() {
@@ -348,10 +434,16 @@ MessagePipeDispatcher::~MessagePipeDispatcher() {
   // exception is if they posted a task to run CloseOnIO but the IO thread shut
   // down and so when it was deleting pending tasks it caused the last reference
   // to destruct this object. In that case, safe to destroy the channel.
-  if (channel_ && internal::g_io_thread_task_runner->RunsTasksOnCurrentThread())
-    channel_->Shutdown();
-  else
+  if (channel_ &&
+      internal::g_io_thread_task_runner->RunsTasksOnCurrentThread()) {
+    if (transferable_) {
+      channel_->Shutdown();
+    } else {
+      internal::g_broker->CloseMessagePipe(pipe_id_, this);
+    }
+  } else {
     DCHECK(!channel_);
+  }
 #if defined(OS_POSIX)
   ClosePlatformHandles(&serialized_fds_);
 #endif
@@ -364,11 +456,35 @@ void MessagePipeDispatcher::CancelAllAwakablesNoLock() {
 
 void MessagePipeDispatcher::CloseImplNoLock() {
   lock().AssertAcquired();
+  // This early circuit fixes leak in unit tests. There's nothing to do in the
+  // posted task.
+  if (!transferable_ && non_transferable_state_ == CLOSED)
+    return;
+
+  // We take a manual refcount because at shutdown, the task below might not get
+  // a chance to execute. If that happens, the RawChannel will still call our
+  // OnError method because it always runs (since it watches thread
+  // destruction). So to avoid UAF, manually add a reference and only release it
+  // if the task runs.
+  AddRef();
   internal::g_io_thread_task_runner->PostTask(
-      FROM_HERE, base::Bind(&MessagePipeDispatcher::CloseOnIO, this));
+      FROM_HERE, base::Bind(&MessagePipeDispatcher::CloseOnIOAndRelease, this));
 }
 
 void MessagePipeDispatcher::SerializeInternal() {
+  serialized_ = true;
+  if (!transferable_) {
+    CHECK(non_transferable_state_ == WAITING_FOR_READ_OR_WRITE)
+        << "Non transferable message pipe being sent after read/write/waited. "
+        << "MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_TRANSFERABLE must be used if "
+        << "the pipe can be sent after it's read or written. This message pipe "
+        << "was previously bound at:\n"
+        << non_transferable_bound_stack_->ToString();
+
+    non_transferable_state_ = SERIALISED;
+    return;
+  }
+
   // We need to stop watching handle immediately, even though not on IO thread,
   // so that other messages aren't read after this.
   std::vector<int> serialized_read_fds, serialized_write_fds;
@@ -385,8 +501,6 @@ void MessagePipeDispatcher::SerializeInternal() {
                           serialized_write_fds.end());
     serialized_write_fds_length_ = serialized_write_fds.size();
     channel_ = nullptr;
-    if (write_error)
-      write_error = true;
   } else {
     // It's valid that the other side wrote some data and closed its end.
   }
@@ -436,25 +550,23 @@ void MessagePipeDispatcher::SerializeInternal() {
           all_platform_handles->at(i) = PlatformHandle();
 #else
         for (size_t i = 0; i < all_platform_handles->size(); i++) {
-          serialized_fds_.push_back(all_platform_handles->at(i).fd);
+          serialized_fds_.push_back(all_platform_handles->at(i).handle);
           serialized_message_fds_length_++;
           all_platform_handles->at(i) = PlatformHandle();
         }
 #endif
+      }
 
       serialized_message_queue_.insert(
           serialized_message_queue_.end(),
           static_cast<const char*>(message->transport_data()->buffer()),
           static_cast<const char*>(message->transport_data()->buffer()) +
               transport_data_buffer_size);
-      }
     }
 
     for (size_t i = 0; i < dispatchers.size(); ++i)
       dispatchers[i]->TransportEnded();
   }
-
-  serialized_ = true;
 }
 
 scoped_refptr<Dispatcher>
@@ -463,21 +575,24 @@ MessagePipeDispatcher::CreateEquivalentDispatcherAndCloseImplNoLock() {
 
   SerializeInternal();
 
-  // TODO(vtl): Currently, there are no options, so we just use
-  // |kDefaultCreateOptions|. Eventually, we'll have to duplicate the options
-  // too.
-  scoped_refptr<MessagePipeDispatcher> rv = Create(kDefaultCreateOptions);
-  rv->serialized_platform_handle_ = serialized_platform_handle_.Pass();
-  serialized_message_queue_.swap(rv->serialized_message_queue_);
-  serialized_read_buffer_.swap(rv->serialized_read_buffer_);
-  serialized_write_buffer_.swap(rv->serialized_write_buffer_);
-  serialized_fds_.swap(rv->serialized_fds_);
-  rv->serialized_read_fds_length_ = serialized_read_fds_length_;
-  rv->serialized_write_fds_length_ = serialized_write_fds_length_;
-  rv->serialized_message_fds_length_ = serialized_message_fds_length_;
+  scoped_refptr<MessagePipeDispatcher> rv(
+      new MessagePipeDispatcher(transferable_));
   rv->serialized_ = true;
-  rv->write_error_ = write_error_;
-  return scoped_refptr<Dispatcher>(rv.get());
+  if (transferable_) {
+    rv->serialized_platform_handle_ = std::move(serialized_platform_handle_);
+    serialized_message_queue_.swap(rv->serialized_message_queue_);
+    serialized_read_buffer_.swap(rv->serialized_read_buffer_);
+    serialized_write_buffer_.swap(rv->serialized_write_buffer_);
+    serialized_fds_.swap(rv->serialized_fds_);
+    rv->serialized_read_fds_length_ = serialized_read_fds_length_;
+    rv->serialized_write_fds_length_ = serialized_write_fds_length_;
+    rv->serialized_message_fds_length_ = serialized_message_fds_length_;
+    rv->write_error_ = write_error_;
+  } else {
+    rv->pipe_id_ = pipe_id_;
+    rv->non_transferable_state_ = non_transferable_state_;
+  }
+  return rv;
 }
 
 MojoResult MessagePipeDispatcher::WriteMessageImplNoLock(
@@ -485,15 +600,17 @@ MojoResult MessagePipeDispatcher::WriteMessageImplNoLock(
     uint32_t num_bytes,
     std::vector<DispatcherTransport>* transports,
     MojoWriteMessageFlags flags) {
+  lock().AssertAcquired();
 
   DCHECK(!transports ||
          (transports->size() > 0 &&
           transports->size() <= GetConfiguration().max_message_num_handles));
 
-  lock().AssertAcquired();
-
-  if (!channel_ || write_error_)
+  if (write_error_ ||
+      (transferable_ && !channel_) ||
+      (!transferable_ && non_transferable_state_ == CLOSED)) {
     return MOJO_RESULT_FAILED_PRECONDITION;
+  }
 
   if (num_bytes > GetConfiguration().max_message_num_bytes)
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
@@ -506,7 +623,17 @@ MojoResult MessagePipeDispatcher::WriteMessageImplNoLock(
   }
 
   message->SerializeAndCloseDispatchers();
-  channel_->WriteMessage(message.Pass());
+  if (!transferable_)
+    message->set_route_id(pipe_id_);
+  if (!transferable_ &&
+      (non_transferable_state_ == WAITING_FOR_READ_OR_WRITE ||
+       non_transferable_state_ == CONNECT_CALLED)) {
+    if (non_transferable_state_ == WAITING_FOR_READ_OR_WRITE)
+      RequestNontransferableChannel();
+    non_transferable_outgoing_message_queue_.AddMessage(std::move(message));
+  } else {
+    channel_->WriteMessage(std::move(message));
+  }
 
   return MOJO_RESULT_OK;
 }
@@ -518,8 +645,17 @@ MojoResult MessagePipeDispatcher::ReadMessageImplNoLock(
     uint32_t* num_dispatchers,
     MojoReadMessageFlags flags) {
   lock().AssertAcquired();
-  if (channel_)
+  if (transferable_ && channel_) {
     channel_->EnsureLazyInitialized();
+  } else if (!transferable_) {
+    if (non_transferable_state_ == WAITING_FOR_READ_OR_WRITE) {
+      RequestNontransferableChannel();
+      return MOJO_RESULT_SHOULD_WAIT;
+    } else if (non_transferable_state_ == CONNECT_CALLED) {
+      return MOJO_RESULT_SHOULD_WAIT;
+    }
+  }
+
   DCHECK(!dispatchers || dispatchers->empty());
 
   const uint32_t max_bytes = !num_bytes ? 0 : *num_bytes;
@@ -583,14 +719,22 @@ HandleSignalsState MessagePipeDispatcher::GetHandleSignalsStateImplNoLock()
   HandleSignalsState rv;
   if (!message_queue_.IsEmpty())
     rv.satisfied_signals |= MOJO_HANDLE_SIGNAL_READABLE;
-  if (channel_ || !message_queue_.IsEmpty())
+  if (!message_queue_.IsEmpty() ||
+      (transferable_ && channel_) ||
+      (!transferable_ && non_transferable_state_ != CLOSED))
     rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_READABLE;
-  if (channel_ && !write_error_) {
+  if (!write_error_ &&
+      ((transferable_ && channel_) ||
+       (!transferable_ && non_transferable_state_ != CLOSED))) {
     rv.satisfied_signals |= MOJO_HANDLE_SIGNAL_WRITABLE;
     rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_WRITABLE;
   }
-  if (!channel_ || write_error_)
+  if (write_error_ ||
+      (transferable_ && !channel_) ||
+       (!transferable_ &&
+        ((non_transferable_state_ == CLOSED) || is_closed()))) {
     rv.satisfied_signals |= MOJO_HANDLE_SIGNAL_PEER_CLOSED;
+  }
   rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_PEER_CLOSED;
   return rv;
 }
@@ -601,8 +745,13 @@ MojoResult MessagePipeDispatcher::AddAwakableImplNoLock(
     uintptr_t context,
     HandleSignalsState* signals_state) {
   lock().AssertAcquired();
-  if (channel_)
+  if (transferable_ && channel_) {
     channel_->EnsureLazyInitialized();
+  } else if (!transferable_ &&
+             non_transferable_state_ == WAITING_FOR_READ_OR_WRITE) {
+    RequestNontransferableChannel();
+  }
+
   HandleSignalsState state = GetHandleSignalsStateImplNoLock();
   if (state.satisfies(signals)) {
     if (signals_state)
@@ -653,6 +802,8 @@ bool MessagePipeDispatcher::EndSerializeAndCloseImplNoLock(
   CloseImplNoLock();
   SerializedMessagePipeHandleDispatcher* serialization =
       static_cast<SerializedMessagePipeHandleDispatcher*>(destination);
+  serialization->transferable = transferable_;
+  serialization->pipe_id = pipe_id_;
   if (serialized_platform_handle_.is_valid()) {
     serialization->platform_handle_index = platform_handles->size();
     platform_handles->push_back(serialized_platform_handle_.release());
@@ -730,30 +881,60 @@ void MessagePipeDispatcher::OnReadMessage(
     DCHECK(message_view.transport_data_buffer());
     message->SetDispatchers(TransportData::DeserializeDispatchers(
         message_view.transport_data_buffer(),
-        message_view.transport_data_buffer_size(), platform_handles.Pass()));
+        message_view.transport_data_buffer_size(),
+        std::move(platform_handles)));
   }
 
+  bool call_release = false;
   if (started_transport_.Try()) {
-    // we're not in the middle of being sent
+    // We're not in the middle of being sent.
 
     // Can get synchronously called back in Init if there was initial data.
     scoped_ptr<base::AutoLock> locker;
-    if (!calling_init_) {
+    if (!calling_init_)
       locker.reset(new base::AutoLock(lock()));
-    }
 
-    bool was_empty = message_queue_.IsEmpty();
-    message_queue_.AddMessage(message.Pass());
-    if (was_empty)
+    if (message_view.type() == MessageInTransit::Type::QUIT_MESSAGE) {
+      if (transferable_) {
+        channel_->Shutdown();
+      } else {
+        internal::g_broker->CloseMessagePipe(pipe_id_, this);
+        non_transferable_state_ = CLOSED;
+      }
+      channel_ = nullptr;
       awakable_list_.AwakeForStateChange(GetHandleSignalsStateImplNoLock());
+      if (close_requested_) {
+        // We requested the other side to close the connection while they also
+        // did the same. We must balance out the AddRef in CloseOnIO to ensure
+        // this object isn't leaked.
+        call_release = true;
+      }
+    } else {
+      bool was_empty = message_queue_.IsEmpty();
+      message_queue_.AddMessage(std::move(message));
+      if (was_empty)
+        awakable_list_.AwakeForStateChange(GetHandleSignalsStateImplNoLock());
+    }
 
     started_transport_.Release();
   } else {
-    // If RawChannel is calling OnRead, that means it has its read_lock_
-    // acquired. That means StartSerialize can't be accessing message queue as
-    // it waits on ReleaseHandle first which acquires readlock_.
-    message_queue_.AddMessage(message.Pass());
+    if (message_view.type() == MessageInTransit::Type::QUIT_MESSAGE) {
+      // We got a request to shutdown the channel but this object is already
+      // calling into channel to serialize it. Since all the other side cares
+      // about is flushing pending messages, we bounce the quit back to it.
+      scoped_ptr<MessageInTransit> message(new MessageInTransit(
+          MessageInTransit::Type::QUIT_MESSAGE, 0, nullptr));
+      channel_->WriteMessage(std::move(message));
+    } else {
+      // If RawChannel is calling OnRead, that means it has its read_lock_
+      // acquired. That means StartSerialize can't be accessing message queue as
+      // it waits on ReleaseHandle first which acquires read_lock_.
+      message_queue_.AddMessage(std::move(message));
+    }
   }
+
+  if (call_release)
+    Release();
 }
 
 void MessagePipeDispatcher::OnError(Error error) {
@@ -789,21 +970,35 @@ void MessagePipeDispatcher::OnError(Error error) {
       break;
   }
 
+  bool call_release = false;
   if (started_transport_.Try()) {
     base::AutoLock locker(lock());
-    // We can get two OnError callbacks before the post task below completes.
-    // Although RawChannel still has a pointer to this object until Shutdown is
-    // called, that is safe since this class always does a PostTask to the IO
-    // thread to self destruct.
     if (channel_ && error != ERROR_WRITE) {
-      channel_->Shutdown();
+      if (transferable_) {
+        channel_->Shutdown();
+      } else {
+        CHECK_NE(non_transferable_state_, CLOSED);
+        internal::g_broker->CloseMessagePipe(pipe_id_, this);
+        non_transferable_state_ = CLOSED;
+      }
       channel_ = nullptr;
+      if (close_requested_) {
+        // Balance AddRef in CloseOnIO.
+        call_release = true;
+      }
+    } else if (!channel_ && !transferable_ &&
+               non_transferable_state_ == WAITING_FOR_CONNECT_TO_CLOSE) {
+      // Balance AddRef in CloseOnIO.
+      call_release = true;
     }
     awakable_list_.AwakeForStateChange(GetHandleSignalsStateImplNoLock());
     started_transport_.Release();
   } else {
     // We must be waiting to call ReleaseHandle. It will call Shutdown.
   }
+
+  if (call_release)
+    Release();
 }
 
 MojoResult MessagePipeDispatcher::AttachTransportsNoLock(
@@ -824,9 +1019,13 @@ MojoResult MessagePipeDispatcher::AttachTransportsNoLock(
     if ((*transports)[i].GetType() == Dispatcher::Type::MESSAGE_PIPE) {
       MessagePipeDispatcher* mp =
           static_cast<MessagePipeDispatcher*>(((*transports)[i]).dispatcher());
-      if (channel_ && mp->channel_ && channel_->IsOtherEndOf(mp->channel_)) {
+      if (transferable_ && mp->transferable_ &&
+          channel_ && mp->channel_ && channel_->IsOtherEndOf(mp->channel_)) {
         // The other case should have been disallowed by |Core|. (Note: |port|
         // is the peer port of the handle given to |WriteMessage()|.)
+        return MOJO_RESULT_INVALID_ARGUMENT;
+      } else if (!transferable_ && !mp->transferable_ &&
+                 pipe_id_ == mp->pipe_id_) {
         return MOJO_RESULT_INVALID_ARGUMENT;
       }
     }
@@ -845,8 +1044,25 @@ MojoResult MessagePipeDispatcher::AttachTransportsNoLock(
       dispatchers->push_back(nullptr);
     }
   }
-  message->SetDispatchers(dispatchers.Pass());
+  message->SetDispatchers(std::move(dispatchers));
   return MOJO_RESULT_OK;
+}
+
+void MessagePipeDispatcher::RequestNontransferableChannel() {
+  lock().AssertAcquired();
+  CHECK(!transferable_);
+  CHECK_EQ(non_transferable_state_, WAITING_FOR_READ_OR_WRITE);
+  non_transferable_state_ = CONNECT_CALLED;
+#if !defined(OFFICIAL_BUILD)
+  non_transferable_bound_stack_.reset(new base::debug::StackTrace);
+#endif
+
+  // PostTask since the broker can call us back synchronously.
+  internal::g_io_thread_task_runner->PostTask(
+      FROM_HERE,
+      base::Bind(&Broker::ConnectMessagePipe,
+                 base::Unretained(internal::g_broker), pipe_id_,
+                 base::Unretained(this)));
 }
 
 }  // namespace edk

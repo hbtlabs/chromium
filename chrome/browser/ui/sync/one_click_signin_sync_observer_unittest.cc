@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -236,7 +237,8 @@ TEST_F(OneClickSigninSyncObserverTest,
 TEST_F(OneClickSigninSyncObserverTest,
        OnSyncStateChanged_SyncConfiguredSuccessfully_SourceIsSettings) {
   GURL continue_url = signin::GetPromoURL(
-      signin_metrics::SOURCE_SETTINGS, false);
+      signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
+      signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
   CreateSyncObserver(continue_url.spec());
   sync_service_->set_first_setup_in_progress(false);
   sync_service_->set_sync_active(true);

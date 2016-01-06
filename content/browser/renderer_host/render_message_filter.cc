@@ -6,18 +6,20 @@
 
 #include <errno.h>
 #include <string.h>
-
 #include <map>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
+#include "base/macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/worker_pool.h"
+#include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -87,10 +89,8 @@
 namespace content {
 namespace {
 
-const uint32 kFilteredMessageClasses[] = {
-  ChildProcessMsgStart,
-  RenderProcessMsgStart,
-  ViewMsgStart,
+const uint32_t kFilteredMessageClasses[] = {
+    ChildProcessMsgStart, RenderProcessMsgStart, ViewMsgStart,
 };
 
 #if defined(OS_WIN)
@@ -391,17 +391,10 @@ void RenderMessageFilter::DownloadUrl(int render_view_id,
           url, net::DEFAULT_PRIORITY, NULL));
   RecordDownloadSource(INITIATED_BY_RENDERER);
   resource_dispatcher_host_->BeginDownload(
-      request.Pass(),
-      referrer,
+      std::move(request), referrer,
       true,  // is_content_initiated
-      resource_context_,
-      render_process_id_,
-      render_view_id,
-      render_frame_id,
-      false,
-      false,
-      save_info.Pass(),
-      DownloadItem::kInvalidId,
+      resource_context_, render_process_id_, render_view_id, render_frame_id,
+      false, false, std::move(save_info), DownloadItem::kInvalidId,
       ResourceDispatcherHostImpl::DownloadStartedCallback());
 }
 
@@ -430,7 +423,7 @@ void RenderMessageFilter::OnSaveImageFromDataURL(int render_view_id,
 }
 
 void RenderMessageFilter::AllocateSharedMemoryOnFileThread(
-    uint32 buffer_size,
+    uint32_t buffer_size,
     IPC::Message* reply_msg) {
   base::SharedMemoryHandle handle;
   ChildProcessHostImpl::AllocateSharedMemory(buffer_size, PeerHandle(),
@@ -440,7 +433,7 @@ void RenderMessageFilter::AllocateSharedMemoryOnFileThread(
   Send(reply_msg);
 }
 
-void RenderMessageFilter::OnAllocateSharedMemory(uint32 buffer_size,
+void RenderMessageFilter::OnAllocateSharedMemory(uint32_t buffer_size,
                                                  IPC::Message* reply_msg) {
   BrowserThread::PostTask(
       BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
@@ -449,7 +442,7 @@ void RenderMessageFilter::OnAllocateSharedMemory(uint32 buffer_size,
 }
 
 void RenderMessageFilter::AllocateSharedBitmapOnFileThread(
-    uint32 buffer_size,
+    uint32_t buffer_size,
     const cc::SharedBitmapId& id,
     IPC::Message* reply_msg) {
   base::SharedMemoryHandle handle;
@@ -460,7 +453,7 @@ void RenderMessageFilter::AllocateSharedBitmapOnFileThread(
   Send(reply_msg);
 }
 
-void RenderMessageFilter::OnAllocateSharedBitmap(uint32 buffer_size,
+void RenderMessageFilter::OnAllocateSharedBitmap(uint32_t buffer_size,
                                                  const cc::SharedBitmapId& id,
                                                  IPC::Message* reply_msg) {
   BrowserThread::PostTask(
@@ -486,7 +479,7 @@ void RenderMessageFilter::OnDeletedSharedBitmap(const cc::SharedBitmapId& id) {
 }
 
 void RenderMessageFilter::AllocateLockedDiscardableSharedMemoryOnFileThread(
-    uint32 size,
+    uint32_t size,
     DiscardableSharedMemoryId id,
     IPC::Message* reply_msg) {
   base::SharedMemoryHandle handle;
@@ -499,7 +492,7 @@ void RenderMessageFilter::AllocateLockedDiscardableSharedMemoryOnFileThread(
 }
 
 void RenderMessageFilter::OnAllocateLockedDiscardableSharedMemory(
-    uint32 size,
+    uint32_t size,
     DiscardableSharedMemoryId id,
     IPC::Message* reply_msg) {
   BrowserThread::PostTask(
@@ -546,7 +539,7 @@ void RenderMessageFilter::OnCacheableMetadataAvailable(
                        data.size());
 }
 
-void RenderMessageFilter::OnKeygen(uint32 key_size_index,
+void RenderMessageFilter::OnKeygen(uint32_t key_size_index,
                                    const std::string& challenge_string,
                                    const GURL& url,
                                    IPC::Message* reply_msg) {
@@ -644,8 +637,8 @@ void RenderMessageFilter::OnWebAudioMediaCodec(
 #endif
 
 void RenderMessageFilter::OnAllocateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                                                    uint32 width,
-                                                    uint32 height,
+                                                    uint32_t width,
+                                                    uint32_t height,
                                                     gfx::BufferFormat format,
                                                     gfx::BufferUsage usage,
                                                     IPC::Message* reply) {

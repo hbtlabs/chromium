@@ -35,12 +35,11 @@
  * @param {!WebInspector.Workspace} workspace
  * @param {string} id
  * @param {!WebInspector.projectTypes} type
- * @param {string} url
  * @param {string} displayName
  */
-WebInspector.ContentProviderBasedProject = function(workspace, id, type, url, displayName)
+WebInspector.ContentProviderBasedProject = function(workspace, id, type, displayName)
 {
-    WebInspector.ProjectStore.call(this, workspace, id, type, url, displayName);
+    WebInspector.ProjectStore.call(this, workspace, id, type, displayName);
     /** @type {!Object.<string, !WebInspector.ContentProvider>} */
     this._contentProviders = {};
     workspace.addProject(this);
@@ -285,19 +284,25 @@ WebInspector.ContentProviderBasedProject.prototype = {
     },
 
     /**
-     * @param {string} parentPath
-     * @param {string} name
-     * @param {string} originURL
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {!WebInspector.ContentProvider} contentProvider
+     */
+    addUISourceCodeWithProvider: function(uiSourceCode, contentProvider)
+    {
+        this._contentProviders[uiSourceCode.path()] = contentProvider;
+        this.addUISourceCode(uiSourceCode, true);
+    },
+
+    /**
+     * @param {string} url
      * @param {!WebInspector.ContentProvider} contentProvider
      * @return {!WebInspector.UISourceCode}
      */
-    addContentProvider: function(parentPath, name, originURL, contentProvider)
+    addContentProvider: function(url, contentProvider)
     {
-        var path = parentPath ? parentPath + "/" + name : name;
-        if (this._contentProviders[path])
-            this.removeUISourceCode(path);
-        this._contentProviders[path] = contentProvider;
-        return this.addUISourceCode(parentPath, name, originURL, contentProvider.contentType());
+        var uiSourceCode = this.createUISourceCode(url, contentProvider.contentType());
+        this.addUISourceCodeWithProvider(uiSourceCode, contentProvider);
+        return uiSourceCode;
     },
 
     /**

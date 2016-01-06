@@ -22,7 +22,6 @@
  *
  */
 
-#include "config.h"
 #include "core/html/HTMLKeygenElement.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -35,6 +34,7 @@
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutBlockFlow.h"
+#include "core/loader/FrameLoaderClient.h"
 #include "platform/text/PlatformLocale.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLocalizedString.h"
@@ -50,6 +50,8 @@ HTMLKeygenElement::HTMLKeygenElement(Document& document, HTMLFormElement* form)
     : HTMLFormControlElementWithState(keygenTag, document, form)
 {
     UseCounter::count(document, UseCounter::HTMLKeygenElement);
+    if (document.frame())
+        document.frame()->loader().client()->didUseKeygen();
 }
 
 PassRefPtrWillBeRawPtr<HTMLKeygenElement> HTMLKeygenElement::create(Document& document, HTMLFormElement* form)

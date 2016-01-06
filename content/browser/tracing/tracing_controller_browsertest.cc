@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/public/browser/tracing_controller.h"
+
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
+#include "base/strings/pattern.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/tracing_controller.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -17,6 +23,37 @@ using base::trace_event::RECORD_UNTIL_FULL;
 using base::trace_event::TraceConfig;
 
 namespace content {
+
+namespace {
+
+const char* kMetadataWhitelist[] = {
+  "cpu-brand",
+  "network-type",
+  "os-name",
+  "user-agent"
+};
+
+bool IsMetadataWhitelisted(const std::string& metadata_name) {
+  for (auto key : kMetadataWhitelist) {
+    if (base::MatchPattern(metadata_name, key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool IsTraceEventArgsWhitelisted(
+    const char* category_group_name,
+    const char* event_name,
+    base::trace_event::ArgumentNameFilterPredicate* arg_filter) {
+  if (base::MatchPattern(category_group_name, "benchmark") &&
+      base::MatchPattern(event_name, "whitelisted")) {
+    return true;
+  }
+  return false;
+}
+
+}  // namespace
 
 class TracingControllerTestEndpoint
     : public TracingController::TraceDataEndpoint {
@@ -42,7 +79,8 @@ class TracingControllerTestEndpoint
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(done_callback_, base::Passed(metadata.Pass()), chunk_ptr));
+        base::Bind(done_callback_, base::Passed(std::move(metadata)),
+                   chunk_ptr));
   }
 
  protected:
@@ -91,6 +129,7 @@ class TracingControllerTest : public ContentBrowserTest {
       base::RefCountedString* data) {
     disable_recording_done_callback_count_++;
     last_metadata_.reset(metadata.release());
+    last_data_ = data->data();
     EXPECT_TRUE(data->size() > 0);
     quit_callback.Run();
   }
@@ -99,7 +138,7 @@ class TracingControllerTest : public ContentBrowserTest {
                                             const base::FilePath& file_path) {
     disable_recording_done_callback_count_++;
     EXPECT_TRUE(PathExists(file_path));
-    int64 file_size;
+    int64_t file_size;
     base::GetFileSize(file_path, &file_size);
     EXPECT_TRUE(file_size > 0);
     quit_callback.Run();
@@ -120,7 +159,7 @@ class TracingControllerTest : public ContentBrowserTest {
       base::Closure quit_callback, const base::FilePath& file_path) {
     capture_monitoring_snapshot_done_callback_count_++;
     EXPECT_TRUE(PathExists(file_path));
-    int64 file_size;
+    int64_t file_size;
     base::GetFileSize(file_path, &file_size);
     EXPECT_TRUE(file_size > 0);
     quit_callback.Run();
@@ -163,6 +202,10 @@ class TracingControllerTest : public ContentBrowserTest {
     return last_metadata_.get();
   }
 
+  const std::string& last_data() const {
+    return last_data_;
+  }
+
   void TestStartAndStopTracingString() {
     Navigate(shell());
 
@@ -190,6 +233,53 @@ class TracingControllerTest : public ContentBrowserTest {
           run_loop.QuitClosure());
       bool result = controller->StopTracing(
           TracingController::CreateStringSink(callback));
+      ASSERT_TRUE(result);
+      run_loop.Run();
+      EXPECT_EQ(disable_recording_done_callback_count(), 1);
+    }
+  }
+
+  void TestStartAndStopTracingStringWithFilter() {
+    Navigate(shell());
+
+    base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
+        base::Bind(&IsTraceEventArgsWhitelisted));
+    TracingController* controller = TracingController::GetInstance();
+
+    {
+      base::RunLoop run_loop;
+      TracingController::StartTracingDoneCallback callback =
+          base::Bind(&TracingControllerTest::StartTracingDoneCallbackTest,
+                     base::Unretained(this),
+                     run_loop.QuitClosure());
+
+      TraceConfig config = TraceConfig();
+      config.EnableArgumentFilter();
+
+      bool result = controller->StartTracing(config, callback);
+      ASSERT_TRUE(result);
+      run_loop.Run();
+      EXPECT_EQ(enable_recording_done_callback_count(), 1);
+    }
+
+    {
+      base::RunLoop run_loop;
+      base::Callback<void(scoped_ptr<const base::DictionaryValue>,
+                          base::RefCountedString*)> callback = base::Bind(
+          &TracingControllerTest::StopTracingStringDoneCallbackTest,
+          base::Unretained(this),
+          run_loop.QuitClosure());
+
+      scoped_refptr<TracingController::TraceDataSink> trace_data_sink =
+          TracingController::CreateStringSink(callback);
+
+      trace_data_sink->SetMetadataFilterPredicate(
+          base::Bind(&IsMetadataWhitelisted));
+      base::DictionaryValue metadata;
+      metadata.SetString("not-whitelisted", "this_not_found");
+      trace_data_sink->AddMetadata(metadata);
+
+      bool result = controller->StopTracing(trace_data_sink);
       ASSERT_TRUE(result);
       run_loop.Run();
       EXPECT_EQ(disable_recording_done_callback_count(), 1);
@@ -383,6 +473,7 @@ class TracingControllerTest : public ContentBrowserTest {
   base::FilePath last_actual_recording_file_path_;
   base::FilePath last_actual_monitoring_file_path_;
   scoped_ptr<const base::DictionaryValue> last_metadata_;
+  std::string last_data_;
 };
 
 IN_PROC_BROWSER_TEST_F(TracingControllerTest, GetCategories) {
@@ -421,6 +512,44 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest, DisableRecordingStoresMetadata) {
   std::string cpu_brand;
   last_metadata()->GetString("cpu-brand", &cpu_brand);
   EXPECT_TRUE(cpu_brand.length() > 0);
+}
+
+IN_PROC_BROWSER_TEST_F(TracingControllerTest, NotWhitelistedMetadataStripped) {
+  TestStartAndStopTracingStringWithFilter();
+  // Check that a number of important keys exist in the metadata dictionary.
+  EXPECT_TRUE(last_metadata() != NULL);
+  std::string cpu_brand;
+  last_metadata()->GetString("cpu-brand", &cpu_brand);
+  EXPECT_TRUE(cpu_brand.length() > 0);
+  EXPECT_TRUE(cpu_brand != "__stripped__");
+  std::string network_type;
+  last_metadata()->GetString("network-type", &network_type);
+  EXPECT_TRUE(network_type.length() > 0);
+  EXPECT_TRUE(network_type != "__stripped__");
+  std::string os_name;
+  last_metadata()->GetString("os-name", &os_name);
+  EXPECT_TRUE(os_name.length() > 0);
+  EXPECT_TRUE(os_name != "__stripped__");
+  std::string user_agent;
+  last_metadata()->GetString("user-agent", &user_agent);
+  EXPECT_TRUE(user_agent.length() > 0);
+  EXPECT_TRUE(user_agent != "__stripped__");
+
+  // Check that the not whitelisted metadata is stripped.
+  std::string not_whitelisted;
+  last_metadata()->GetString("not-whitelisted", &not_whitelisted);
+  EXPECT_TRUE(not_whitelisted.length() > 0);
+  EXPECT_TRUE(not_whitelisted == "__stripped__");
+
+  // Also check the string data.
+  EXPECT_TRUE(last_data().size() > 0);
+  EXPECT_TRUE(last_data().find("cpu-brand") != std::string::npos);
+  EXPECT_TRUE(last_data().find("network-type") != std::string::npos);
+  EXPECT_TRUE(last_data().find("os-name") != std::string::npos);
+  EXPECT_TRUE(last_data().find("user-agent") != std::string::npos);
+
+  EXPECT_TRUE(last_data().find("not-whitelisted") != std::string::npos);
+  EXPECT_TRUE(last_data().find("this_not_found") == std::string::npos);
 }
 
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,

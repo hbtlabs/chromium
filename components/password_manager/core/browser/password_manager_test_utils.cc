@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <ostream>
+#include <string>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -55,7 +56,7 @@ scoped_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
     form->blacklisted_by_user = true;
   }
   form->icon_url = GURL(kTestingIconUrlSpec);
-  return form.Pass();
+  return form;
 }
 
 bool ContainsEqualPasswordFormsUnordered(
@@ -93,5 +94,9 @@ bool ContainsEqualPasswordFormsUnordered(
 
   return !had_mismatched_actual_form && remaining_expectations.empty();
 }
+
+MockPasswordStoreObserver::MockPasswordStoreObserver() {}
+
+MockPasswordStoreObserver::~MockPasswordStoreObserver() {}
 
 }  // namespace password_manager

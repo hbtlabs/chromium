@@ -4,26 +4,28 @@
 
 #include "components/error_page/renderer/net_error_helper_core.h"
 
+#include <stddef.h>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/debug/alias.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/error_page/common/error_page_params.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/common/url_constants.h"
@@ -40,13 +42,17 @@ namespace error_page {
 
 namespace {
 
-#define MAX_DEBUG_HISTORY_EVENTS 50
+// |NetErrorNavigationCorrectionTypes| enum id for Web search query.
+// Other correction types uses the |kCorrectionResourceTable| array order.
+const int kWebSearchQueryUMAId = 100;
 
 struct CorrectionTypeToResourceTable {
   int resource_id;
   const char* correction_type;
 };
 
+// Note: Ordering should be the same as |NetErrorNavigationCorrectionTypes| enum
+// in histograms.xml.
 const CorrectionTypeToResourceTable kCorrectionResourceTable[] = {
   {IDS_ERRORPAGES_SUGGESTION_VISIT_GOOGLE_CACHE, "cachedPage"},
   // "reloadPage" is has special handling.
@@ -223,7 +229,7 @@ std::string CreateFixUrlRequestBody(
   scoped_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params->SetString("urlQuery", PrepareUrlForUpload(error.unreachableURL));
   return CreateRequestBody("linkdoctor.fixurl.fixurl", error_param,
-                           correction_params, params.Pass());
+                           correction_params, std::move(params));
 }
 
 std::string CreateClickTrackingUrlRequestBody(
@@ -248,7 +254,7 @@ std::string CreateClickTrackingUrlRequestBody(
   params->SetString("fingerprint", response.fingerprint);
 
   return CreateRequestBody("linkdoctor.fixurl.clicktracking", error_param,
-                           correction_params, params.Pass());
+                           correction_params, std::move(params));
 }
 
 base::string16 FormatURLForDisplay(const GURL& url, bool is_rtl,
@@ -272,7 +278,13 @@ scoped_ptr<NavigationCorrectionResponse> ParseNavigationCorrectionResponse(
   base::JSONValueConverter<NavigationCorrectionResponse> converter;
   if (!parsed || !converter.Convert(*parsed, response.get()))
     response.reset();
-  return response.Pass();
+  return response;
+}
+
+void LogCorrectionTypeShown(int type_id) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Net.ErrorPageCounts.NavigationCorrectionLinksShown", type_id,
+      kWebSearchQueryUMAId + 1);
 }
 
 scoped_ptr<ErrorPageParams> CreateErrorPageParams(
@@ -306,11 +318,12 @@ scoped_ptr<ErrorPageParams> CreateErrorPageParams(
     }
 
     if ((*it)->correction_type == "webSearchQuery") {
-      // If there are mutliple searches suggested, use the first suggestion.
+      // If there are multiple searches suggested, use the first suggestion.
       if (params->search_terms.empty()) {
         params->search_url = correction_params.search_url;
         params->search_terms = (*it)->url_correction;
         params->search_tracking_id = tracking_id;
+        LogCorrectionTypeShown(kWebSearchQueryUMAId);
       }
       continue;
     }
@@ -341,13 +354,14 @@ scoped_ptr<ErrorPageParams> CreateErrorPageParams(
       suggest->SetInteger("type", static_cast<int>(correction_index));
 
       params->override_suggestions->Append(suggest);
+      LogCorrectionTypeShown(static_cast<int>(correction_index));
       break;
     }
   }
 
   if (params->override_suggestions->empty() && !params->search_url.is_valid())
     params.reset();
-  return params.Pass();
+  return params;
 }
 
 void ReportAutoReloadSuccess(const blink::WebURLError& error, size_t count) {
@@ -368,6 +382,31 @@ void ReportAutoReloadFailure(const blink::WebURLError& error, size_t count) {
   UMA_HISTOGRAM_SPARSE_SLOWLY("Net.AutoReload.ErrorAtStop", -error.reason);
   UMA_HISTOGRAM_COUNTS("Net.AutoReload.CountAtStop",
                        static_cast<base::HistogramBase::Sample>(count));
+}
+
+// Tracks navigation correction service usage in UMA to enable more in depth
+// analysis.
+void TrackClickUMA(std::string type_id) {
+  // Web search suggestion isn't in |kCorrectionResourceTable| array.
+  if (type_id == "webSearchQuery") {
+    UMA_HISTOGRAM_ENUMERATION(
+       "Net.ErrorPageCounts.NavigationCorrectionLinksUsed",
+       kWebSearchQueryUMAId, kWebSearchQueryUMAId + 1);
+    return;
+  }
+
+  size_t correction_index;
+  for (correction_index = 0;
+       correction_index < arraysize(kCorrectionResourceTable);
+       ++correction_index) {
+    if (kCorrectionResourceTable[correction_index].correction_type ==
+        type_id) {
+      UMA_HISTOGRAM_ENUMERATION(
+         "Net.ErrorPageCounts.NavigationCorrectionLinksUsed",
+         static_cast<int>(correction_index), kWebSearchQueryUMAId + 1);
+      break;
+    }
+  }
 }
 
 }  // namespace
@@ -491,8 +530,6 @@ NetErrorHelperCore::~NetErrorHelperCore() {
 }
 
 void NetErrorHelperCore::CancelPendingFetches() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::CANCEL_PENDING_FETCHES);
-
   // Cancel loading the alternate error page, and prevent any pending error page
   // load from starting a new error page load.  Swapping in the error page when
   // it's finished loading could abort the navigation, otherwise.
@@ -506,8 +543,6 @@ void NetErrorHelperCore::CancelPendingFetches() {
 }
 
 void NetErrorHelperCore::OnStop() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_STOP);
-
   if (committed_error_page_info_ &&
       committed_error_page_info_->auto_reload_triggered) {
     ReportAutoReloadFailure(committed_error_page_info_->error,
@@ -520,8 +555,6 @@ void NetErrorHelperCore::OnStop() {
 }
 
 void NetErrorHelperCore::OnWasShown() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_WAS_SHOWN);
-
   visible_ = true;
   if (!auto_reload_visible_only_)
     return;
@@ -530,8 +563,6 @@ void NetErrorHelperCore::OnWasShown() {
 }
 
 void NetErrorHelperCore::OnWasHidden() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_WAS_HIDDEN);
-
   visible_ = false;
   if (!auto_reload_visible_only_)
     return;
@@ -541,8 +572,6 @@ void NetErrorHelperCore::OnWasHidden() {
 void NetErrorHelperCore::OnStartLoad(FrameType frame_type, PageType page_type) {
   if (frame_type != MAIN_FRAME)
     return;
-
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_START_LOAD);
 
   uncommitted_load_started_ = true;
 
@@ -555,8 +584,6 @@ void NetErrorHelperCore::OnStartLoad(FrameType frame_type, PageType page_type) {
 void NetErrorHelperCore::OnCommitLoad(FrameType frame_type, const GURL& url) {
   if (frame_type != MAIN_FRAME)
     return;
-
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_COMMIT_LOAD);
 
   // If a page is committing, either it's an error page and autoreload will be
   // started again below, or it's a success page and we need to clear autoreload
@@ -596,20 +623,14 @@ void NetErrorHelperCore::OnCommitLoad(FrameType frame_type, const GURL& url) {
   }
 
   committed_error_page_info_.reset(pending_error_page_info_.release());
-
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_COMMIT_LOAD_END);
 }
 
 void NetErrorHelperCore::OnFinishLoad(FrameType frame_type) {
   if (frame_type != MAIN_FRAME)
     return;
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_FINISH_LOAD);
-
   if (!committed_error_page_info_) {
     auto_reload_count_ = 0;
-    RecordHistoryDebugEvent(
-        HistoryDebugEvent::ON_FINISH_LOAD_END_NOT_ERROR_PAGE);
     return;
   }
 
@@ -655,12 +676,10 @@ void NetErrorHelperCore::OnFinishLoad(FrameType frame_type) {
 
   if (!committed_error_page_info_->needs_dns_updates ||
       last_probe_status_ == DNS_PROBE_POSSIBLE) {
-    RecordHistoryDebugEvent(HistoryDebugEvent::ON_FINISH_LOAD_END_DNS_PROBE);
     return;
   }
   DVLOG(1) << "Error page finished loading; sending saved status.";
   UpdateErrorPage();
-  RecordHistoryDebugEvent(HistoryDebugEvent::ON_FINISH_LOAD_END_NO_DNS_PROBE);
 }
 
 void NetErrorHelperCore::GetErrorHTML(FrameType frame_type,
@@ -673,7 +692,6 @@ void NetErrorHelperCore::GetErrorHTML(FrameType frame_type,
     // cancelled earlier by starting a new page load (Which has now failed).
     DCHECK(!committed_error_page_info_ ||
            !committed_error_page_info_->needs_load_navigation_corrections);
-    RecordHistoryDebugEvent(HistoryDebugEvent::GET_ERROR_HTML);
 
     pending_error_page_info_.reset(
         new ErrorPageInfo(error, is_failed_post, is_ignoring_cache));
@@ -701,8 +719,6 @@ void NetErrorHelperCore::GetErrorHTML(FrameType frame_type,
 
 void NetErrorHelperCore::OnNetErrorInfo(DnsProbeStatus status) {
   DCHECK_NE(DNS_PROBE_POSSIBLE, status);
-
-  RecordHistoryDebugEvent(HistoryDebugEvent::NET_ERROR_INFO_RECEIVED);
 
   last_probe_status_ = status;
 
@@ -782,8 +798,6 @@ void NetErrorHelperCore::UpdateErrorPage() {
   DCHECK(committed_error_page_info_->is_finished_loading);
   DCHECK_NE(DNS_PROBE_POSSIBLE, last_probe_status_);
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::UPDATE_ERROR_PAGE);
-
   UMA_HISTOGRAM_ENUMERATION("DnsProbe.ErrorPageUpdateStatus",
                             last_probe_status_,
                             DNS_PROBE_MAX);
@@ -814,8 +828,6 @@ void NetErrorHelperCore::OnNavigationCorrectionsFetched(
   DCHECK(committed_error_page_info_->needs_load_navigation_corrections);
   DCHECK(committed_error_page_info_->navigation_correction_params);
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::NAVIGATION_CORRECTIONS_FETCHED);
-
   pending_error_page_info_.reset(new ErrorPageInfo(
       committed_error_page_info_->error,
       committed_error_page_info_->was_failed_post,
@@ -839,10 +851,8 @@ void NetErrorHelperCore::OnNavigationCorrectionsFetched(
     delegate_->GenerateLocalizedErrorPage(
         pending_error_page_info_->error,
         pending_error_page_info_->was_failed_post,
-        can_show_network_diagnostics_dialog_,
-        GetOfflinePageStatus(),
-        params.Pass(),
-        &pending_error_page_info_->reload_button_in_page,
+        can_show_network_diagnostics_dialog_, GetOfflinePageStatus(),
+        std::move(params), &pending_error_page_info_->reload_button_in_page,
         &pending_error_page_info_->show_saved_copy_button_in_page,
         &pending_error_page_info_->show_cached_copy_button_in_page,
         &pending_error_page_info_->show_offline_pages_button_in_page,
@@ -879,8 +889,6 @@ blink::WebURLError NetErrorHelperCore::GetUpdatedError(
 }
 
 void NetErrorHelperCore::Reload(bool ignore_cache) {
-  RecordHistoryDebugEvent(HistoryDebugEvent::RELOAD);
-
   if (!committed_error_page_info_) {
     return;
   }
@@ -888,8 +896,6 @@ void NetErrorHelperCore::Reload(bool ignore_cache) {
 }
 
 bool NetErrorHelperCore::MaybeStartAutoReloadTimer() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::MAYBE_RELOAD);
-
   if (!committed_error_page_info_ ||
       !committed_error_page_info_->is_finished_loading ||
       pending_error_page_info_ ||
@@ -905,12 +911,9 @@ void NetErrorHelperCore::StartAutoReloadTimer() {
   DCHECK(committed_error_page_info_);
   DCHECK(IsReloadableError(*committed_error_page_info_));
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::START_RELOAD_TIMER);
-
   committed_error_page_info_->auto_reload_triggered = true;
 
   if (!online_ || (!visible_ && auto_reload_visible_only_)) {
-    RecordHistoryDebugEvent(HistoryDebugEvent::START_RELOAD_TIMER_PAUSED);
     auto_reload_paused_ = true;
     return;
   }
@@ -931,29 +934,12 @@ void NetErrorHelperCore::AutoReloadTimerFired() {
   //    auto-reload timer.
   DCHECK(committed_error_page_info_);
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::RELOAD_TIMER_FIRED);
-
   auto_reload_count_++;
   auto_reload_in_flight_ = true;
-
-  if (!committed_error_page_info_) {
-    HistoryDebugEvent history_debug_events[MAX_DEBUG_HISTORY_EVENTS];
-    size_t num_history_debug_events = history_debug_events_.size();
-    for (size_t i = 0; i < num_history_debug_events; ++i) {
-      history_debug_events[i] = history_debug_events_[i];
-    }
-    base::debug::Alias(history_debug_events);
-    base::debug::Alias(&num_history_debug_events);
-    base::debug::DumpWithoutCrashing();
-    return;
-  }
-
   Reload(committed_error_page_info_->was_ignoring_cache);
 }
 
 void NetErrorHelperCore::PauseAutoReloadTimer() {
-  RecordHistoryDebugEvent(HistoryDebugEvent::PAUSE_RELOAD_TIMER);
-
   if (!auto_reload_timer_->IsRunning())
     return;
   DCHECK(committed_error_page_info_);
@@ -964,8 +950,6 @@ void NetErrorHelperCore::PauseAutoReloadTimer() {
 }
 
 void NetErrorHelperCore::NetworkStateChanged(bool online) {
-  RecordHistoryDebugEvent(HistoryDebugEvent::NETWORK_STATE_CHANGED);
-
   bool was_online = online_;
   online_ = online;
   if (!was_online && online) {
@@ -986,8 +970,6 @@ bool NetErrorHelperCore::ShouldSuppressErrorPage(FrameType frame_type,
   if (frame_type != MAIN_FRAME)
     return false;
 
-  RecordHistoryDebugEvent(HistoryDebugEvent::SHOULD_SUPPRESS_ERROR_PAGE);
-
   // If there's no auto reload attempt in flight, this error page didn't come
   // from auto reload, so don't suppress it.
   if (!auto_reload_in_flight_)
@@ -1005,8 +987,6 @@ bool NetErrorHelperCore::ShouldSuppressErrorPage(FrameType frame_type,
 void NetErrorHelperCore::ExecuteButtonPress(Button button) {
   // If there's no committed error page, should not be invoked.
   DCHECK(committed_error_page_info_);
-
-  RecordHistoryDebugEvent(HistoryDebugEvent::EXECUTE_BUTTON_PRESS);
 
   switch (button) {
     case RELOAD_BUTTON:
@@ -1081,6 +1061,8 @@ void NetErrorHelperCore::TrackClick(int tracking_id) {
   if (committed_error_page_info_->clicked_corrections.count(tracking_id))
     return;
 
+  TrackClickUMA(response->corrections[tracking_id]->correction_type);
+
   committed_error_page_info_->clicked_corrections.insert(tracking_id);
   std::string request_body = CreateClickTrackingUrlRequestBody(
       committed_error_page_info_->error,
@@ -1098,18 +1080,6 @@ OfflinePageStatus NetErrorHelperCore::GetOfflinePageStatus() const {
 #else
   return OfflinePageStatus::NONE;
 #endif  // defined(OS_ANDROID)
-}
-
-void NetErrorHelperCore::RecordHistoryDebugEvent(
-    HistoryDebugEvent::EventType event_type) {
-  if (history_debug_events_.size() > MAX_DEBUG_HISTORY_EVENTS)
-    history_debug_events_.erase(history_debug_events_.begin());
-  HistoryDebugEvent event;
-  event.event_type = event_type;
-  event.pending_error_page_info_exists = !!pending_error_page_info_;
-  event.committed_error_page_info_exists = !!committed_error_page_info_;
-  event.timer_running = auto_reload_timer_->IsRunning();
-  history_debug_events_.push_back(event);
 }
 
 }  // namespace error_page

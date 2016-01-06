@@ -48,6 +48,7 @@ Session.vim
 tags
 Thumbs.db
 v8.log
+vs-chromium-project.txt
 # Settings directories for eclipse
 /.externalToolBuilders/
 /.settings/
@@ -57,6 +58,7 @@ v8.log
 /ash/ash_unittests_run.xml
 /base/base_unittests_run.xml
 /breakpad/src/
+/build/android/bin
 /build/Debug
 /build/Debug_x64
 /build/gomacc.lock
@@ -301,7 +303,6 @@ v8.log
 /third_party/class-dump/src
 /third_party/cld_2/src
 /third_party/colorama/src
-/third_party/crashpad/crashpad
 /third_party/cros
 /third_party/cros_system_api
 /third_party/custom_tabs_client/src
@@ -387,6 +388,7 @@ v8.log
 /third_party/python_26
 /third_party/pywebsocket/src
 /third_party/pywebsocket/src
+/third_party/re2/src
 /third_party/requests/src
 /third_party/robolectric/lib
 /third_party/safe_browsing/testing
@@ -449,8 +451,7 @@ v8.log
 /ui/surface/surface.xml
 /ui/surface/surface_gpu_tests.xml
 /v8
-# Results directory for run-webkit-tests. http://crbug.com/488288
-/webkit
+/webkit/data
 /webpagereplay_logs/
 /win8/delegate_execute/delegate_execute_version_resources.xml
 /win8/metro_driver/metro_driver_version_resources.xml

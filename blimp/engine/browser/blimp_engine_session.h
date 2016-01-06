@@ -5,10 +5,16 @@
 #ifndef BLIMP_ENGINE_BROWSER_BLIMP_ENGINE_SESSION_H_
 #define BLIMP_ENGINE_BROWSER_BLIMP_ENGINE_SESSION_H_
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "blimp/engine/browser/engine_render_widget_message_processor.h"
+#include "blimp/common/proto/blimp_message.pb.h"
+#include "blimp/engine/browser/engine_render_widget_feature.h"
 #include "blimp/net/blimp_message_processor.h"
+#include "blimp/net/connection_error_observer.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -34,6 +40,10 @@ namespace gfx {
 class Size;
 }
 
+namespace net {
+class NetLog;
+}
+
 namespace wm {
 class FocusController;
 }
@@ -50,31 +60,43 @@ class BlimpFocusClient;
 class BlimpScreen;
 class BlimpUiContextFactory;
 class BlimpWindowTreeHost;
+class EngineNetworkComponents;
 
 class BlimpEngineSession
     : public BlimpMessageProcessor,
       public content::WebContentsDelegate,
       public content::WebContentsObserver,
-      public EngineRenderWidgetMessageProcessor::RenderWidgetMessageDelegate {
+      public EngineRenderWidgetFeature::RenderWidgetMessageDelegate {
  public:
-  explicit BlimpEngineSession(scoped_ptr<BlimpBrowserContext> browser_context);
+  explicit BlimpEngineSession(scoped_ptr<BlimpBrowserContext> browser_context,
+                              net::NetLog* net_log);
   ~BlimpEngineSession() override;
 
+  // Starts the network stack on the IO thread, and sets default placeholder
+  // values for e.g. screen size pending real values being supplied by the
+  // client.
   void Initialize();
 
   BlimpBrowserContext* browser_context() { return browser_context_.get(); }
 
   // BlimpMessageProcessor implementation.
-  // TODO(haibinlu): Delete this and move to BlimpMessageDemultiplexer.
+  // This object handles incoming TAB_CONTROL and NAVIGATION messages.
   void ProcessMessage(scoped_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
  private:
-  // ControlMessage handler methods.
+  // Registers a message processor which will receive all messages of the |type|
+  // specified.  Returns a BlimpMessageProcessor object for sending messages of
+  // type |type|.
+  scoped_ptr<BlimpMessageProcessor> RegisterFeature(
+      BlimpMessage::Type type,
+      BlimpMessageProcessor* incoming_processor);
+
+  // TabControlMessage handler methods.
   // Creates a new WebContents, which will be indexed by |target_tab_id|.
   void CreateWebContents(const int target_tab_id);
   void CloseWebContents(const int target_tab_id);
-  void HandleResize(const gfx::Size& size);
+  void HandleResize(float device_pixel_ratio, const gfx::Size& size);
 
   // NavigationMessage handler methods.
   // Navigates the target tab to the |url|.
@@ -116,6 +138,7 @@ class BlimpEngineSession
   void PlatformSetContents(scoped_ptr<content::WebContents> new_contents);
 
   scoped_ptr<BlimpBrowserContext> browser_context_;
+
   scoped_ptr<BlimpScreen> screen_;
 
   // Context factory for compositor.
@@ -135,13 +158,19 @@ class BlimpEngineSession
   // Only one web_contents is supported for blimp 0.5
   scoped_ptr<content::WebContents> web_contents_;
 
-  // Currently attached client connection.
-  scoped_ptr<BlimpConnection> client_connection_;
+  // Container for connection manager, authentication handler, and
+  // browser connection handler. The components run on the I/O thread, and
+  // this object is destroyed there.
+  scoped_ptr<EngineNetworkComponents> net_components_;
 
-  // The bridge to the network layer that does the RenderWidget proto/id work.
+  // Handles all incoming and outgoing messages related to RenderWidget,
+  // including INPUT, COMPOSITOR and RENDER_WIDGET messages.
   // TODO(dtrainor, haibinlu): Move this to a higher level once we start dealing
   // with multiple tabs.
-  EngineRenderWidgetMessageProcessor render_widget_processor_;
+  EngineRenderWidgetFeature render_widget_feature_;
+
+  scoped_ptr<BlimpMessageProcessor> tab_control_message_sender_;
+  scoped_ptr<BlimpMessageProcessor> navigation_message_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(BlimpEngineSession);
 };

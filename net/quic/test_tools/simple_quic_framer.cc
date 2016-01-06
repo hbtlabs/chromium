@@ -4,6 +4,7 @@
 
 #include "net/quic/test_tools/simple_quic_framer.h"
 
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "net/quic/crypto/quic_decrypter.h"
 #include "net/quic/crypto/quic_encrypter.h"
@@ -17,9 +18,7 @@ namespace test {
 
 class SimpleFramerVisitor : public QuicFramerVisitorInterface {
  public:
-  SimpleFramerVisitor()
-      : error_(QUIC_NO_ERROR) {
-  }
+  SimpleFramerVisitor() : error_(QUIC_NO_ERROR) {}
 
   ~SimpleFramerVisitor() override {
     STLDeleteElements(&stream_frames_);
@@ -36,8 +35,7 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
   }
   void OnVersionNegotiationPacket(
       const QuicVersionNegotiationPacket& packet) override {
-    version_negotiation_packet_.reset(
-        new QuicVersionNegotiationPacket(packet));
+    version_negotiation_packet_.reset(new QuicVersionNegotiationPacket(packet));
   }
   void OnRevivedPacket() override {}
 
@@ -60,7 +58,8 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
   bool OnStreamFrame(const QuicStreamFrame& frame) override {
     // Save a copy of the data so it is valid after the packet is processed.
     string* string_data = new string();
-    frame.data.AppendToString(string_data);
+    StringPiece(frame.frame_buffer, frame.frame_length)
+        .AppendToString(string_data);
     stream_data_.push_back(string_data);
     // TODO(ianswett): A pointer isn't necessary with emplace_back.
     stream_frames_.push_back(new QuicStreamFrame(
@@ -131,9 +130,7 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
   const vector<QuicStopWaitingFrame>& stop_waiting_frames() const {
     return stop_waiting_frames_;
   }
-  const vector<QuicPingFrame>& ping_frames() const {
-    return ping_frames_;
-  }
+  const vector<QuicPingFrame>& ping_frames() const { return ping_frames_; }
   StringPiece fec_data() const { return fec_redundancy_; }
   const QuicVersionNegotiationPacket* version_negotiation_packet() const {
     return version_negotiation_packet_.get();
@@ -163,15 +160,12 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
 SimpleQuicFramer::SimpleQuicFramer()
     : framer_(QuicSupportedVersions(),
               QuicTime::Zero(),
-              Perspective::IS_SERVER) {
-}
+              Perspective::IS_SERVER) {}
 
 SimpleQuicFramer::SimpleQuicFramer(const QuicVersionVector& supported_versions)
-    : framer_(supported_versions, QuicTime::Zero(), Perspective::IS_SERVER) {
-}
+    : framer_(supported_versions, QuicTime::Zero(), Perspective::IS_SERVER) {}
 
-SimpleQuicFramer::~SimpleQuicFramer() {
-}
+SimpleQuicFramer::~SimpleQuicFramer() {}
 
 bool SimpleQuicFramer::ProcessPacket(const QuicEncryptedPacket& packet) {
   visitor_.reset(new SimpleFramerVisitor);
@@ -201,21 +195,18 @@ QuicFramer* SimpleQuicFramer::framer() {
 }
 
 size_t SimpleQuicFramer::num_frames() const {
-  return ack_frames().size() +
-      goaway_frames().size() +
-      rst_stream_frames().size() +
-      stop_waiting_frames().size() +
-      stream_frames().size() +
-      ping_frames().size() +
-      connection_close_frames().size();
+  return ack_frames().size() + goaway_frames().size() +
+         rst_stream_frames().size() + stop_waiting_frames().size() +
+         stream_frames().size() + ping_frames().size() +
+         connection_close_frames().size();
 }
 
 const vector<QuicAckFrame>& SimpleQuicFramer::ack_frames() const {
   return visitor_->ack_frames();
 }
 
-const vector<QuicStopWaitingFrame>&
-SimpleQuicFramer::stop_waiting_frames() const {
+const vector<QuicStopWaitingFrame>& SimpleQuicFramer::stop_waiting_frames()
+    const {
   return visitor_->stop_waiting_frames();
 }
 
@@ -231,8 +222,7 @@ const vector<QuicRstStreamFrame>& SimpleQuicFramer::rst_stream_frames() const {
   return visitor_->rst_stream_frames();
 }
 
-const vector<QuicGoAwayFrame>&
-SimpleQuicFramer::goaway_frames() const {
+const vector<QuicGoAwayFrame>& SimpleQuicFramer::goaway_frames() const {
   return visitor_->goaway_frames();
 }
 

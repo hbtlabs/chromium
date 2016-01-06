@@ -5,9 +5,13 @@
 #ifndef CC_BLINK_WEB_LAYER_IMPL_H_
 #define CC_BLINK_WEB_LAYER_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
@@ -109,6 +113,7 @@ class WebLayerImpl : public blink::WebLayer {
   void removeAnimation(int animation_id,
                        blink::WebCompositorAnimation::TargetProperty) override;
   void pauseAnimation(int animation_id, double time_offset) override;
+  void abortAnimation(int animation_id) override;
   bool hasActiveAnimation() override;
   void setForceRenderSurface(bool force) override;
   void setScrollPositionDouble(blink::WebDoublePoint position) override;
@@ -147,6 +152,10 @@ class WebLayerImpl : public blink::WebLayer {
   bool isOrphan() const override;
   void setLayerClient(cc::LayerClient* client) override;
   const cc::Layer* ccLayer() const override;
+  void setElementId(uint64_t id) override;
+  uint64_t elementId() const override;
+  void setCompositorMutableProperties(uint32_t properties) override;
+  uint32_t compositorMutableProperties() const override;
 
   void setScrollParent(blink::WebLayer* parent) override;
   void setClipParent(blink::WebLayer* parent) override;

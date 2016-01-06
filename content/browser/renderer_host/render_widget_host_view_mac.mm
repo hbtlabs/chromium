@@ -7,9 +7,11 @@
 #import <objc/runtime.h>
 #include <OpenGL/gl.h>
 #include <QuartzCore/QuartzCore.h>
+#include <stdint.h>
+
+#include <limits>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -52,14 +54,13 @@
 #include "content/common/edit_command.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "content/common/input_messages.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/common/webplugin_geometry.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #import "content/public/browser/render_widget_host_view_mac_delegate.h"
 #include "content/public/browser/web_contents.h"
@@ -68,7 +69,6 @@
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #import "third_party/mozilla/ComplexTextInputPanel.h"
-#include "ui/accelerated_widget_mac/surface_handle_types.h"
 #include "ui/base/cocoa/animation_utils.h"
 #import "ui/base/cocoa/fullscreen_window_manager.h"
 #import "ui/base/cocoa/underlay_opengl_hosting_window.h"
@@ -1056,23 +1056,6 @@ void RenderWidgetHostViewMac::RenderProcessGone(base::TerminationStatus status,
   Destroy();
 }
 
-void RenderWidgetHostViewMac::RenderWidgetHostGone() {
-  // Clear SurfaceID namespace ownership before we shutdown the
-  // compositor.
-  if (UseSurfacesEnabled() && render_widget_host_ &&
-      render_widget_host_->delegate() &&
-      render_widget_host_->delegate()->GetInputEventRouter()) {
-    render_widget_host_->delegate()
-        ->GetInputEventRouter()
-        ->RemoveSurfaceIdNamespaceOwner(GetSurfaceIdNamespace());
-  }
-
-  // Destroy the DelegatedFrameHost, to prevent crashes when Destroy is never
-  // called on the view.
-  // http://crbug.com/404828
-  ShutdownBrowserCompositor();
-}
-
 void RenderWidgetHostViewMac::Destroy() {
   [[NSNotificationCenter defaultCenter]
       removeObserver:cocoa_view_
@@ -1331,7 +1314,7 @@ bool RenderWidgetHostViewMac::GetLineBreakIndex(
   // TODO(nona): Bidi support.
   const size_t loop_end_idx = std::min(bounds.size(), range.end());
   int max_height = 0;
-  int min_y_offset = kint32max;
+  int min_y_offset = std::numeric_limits<int32_t>::max();
   for (size_t idx = range.start(); idx < loop_end_idx; ++idx) {
     max_height = std::max(max_height, bounds[idx].height());
     min_y_offset = std::min(min_y_offset, bounds[idx].y());
@@ -1465,7 +1448,8 @@ bool RenderWidgetHostViewMac::HasAcceleratedSurface(
 }
 
 void RenderWidgetHostViewMac::OnSwapCompositorFrame(
-    uint32 output_surface_id, scoped_ptr<cc::CompositorFrame> frame) {
+    uint32_t output_surface_id,
+    scoped_ptr<cc::CompositorFrame> frame) {
   TRACE_EVENT0("browser", "RenderWidgetHostViewMac::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
@@ -1607,6 +1591,18 @@ uint32_t RenderWidgetHostViewMac::SurfaceIdNamespaceAtPoint(
   return cc::SurfaceIdAllocator::NamespaceForId(id);
 }
 
+bool RenderWidgetHostViewMac::ShouldRouteEvent(
+    const WebInputEvent& event) const {
+  // See also RenderWidgetHostViewAura::ShouldRouteEvent.
+  // TODO(wjmaclean): Update this function if RenderWidgetHostViewMac implements
+  // OnTouchEvent(), to match what we are doing in RenderWidgetHostViewAura.
+  DCHECK(WebInputEvent::isMouseEventType(event.type) ||
+         event.type == WebInputEvent::MouseWheel);
+  return render_widget_host_->delegate() &&
+         render_widget_host_->delegate()->GetInputEventRouter() &&
+         SiteIsolationPolicy::AreCrossProcessFramesPossible();
+}
+
 void RenderWidgetHostViewMac::ProcessMouseEvent(
     const blink::WebMouseEvent& event) {
   render_widget_host_->ForwardMouseEvent(event);
@@ -1633,7 +1629,7 @@ bool RenderWidgetHostViewMac::Send(IPC::Message* message) {
 
 void RenderWidgetHostViewMac::ShutdownHost() {
   weak_factory_.InvalidateWeakPtrs();
-  render_widget_host_->Shutdown();
+  render_widget_host_->ShutdownAndDestroyWidget(true);
   // Do not touch any members at this point, |this| has been deleted.
 }
 
@@ -1953,14 +1949,12 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
       WebMouseEvent enterEvent = WebMouseEventBuilder::Build(theEvent, self);
       enterEvent.type = WebInputEvent::MouseMove;
       enterEvent.button = WebMouseEvent::ButtonNone;
-      if (renderWidgetHostView_->render_widget_host_->delegate() &&
-          renderWidgetHostView_->render_widget_host_->delegate()
-              ->GetInputEventRouter()) {
+      if (renderWidgetHostView_->ShouldRouteEvent(enterEvent)) {
         renderWidgetHostView_->render_widget_host_->delegate()
             ->GetInputEventRouter()
             ->RouteMouseEvent(renderWidgetHostView_.get(), &enterEvent);
       } else {
-        renderWidgetHostView_->ForwardMouseEvent(enterEvent);
+        renderWidgetHostView_->ProcessMouseEvent(enterEvent);
       }
     }
   }
@@ -1990,14 +1984,12 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   }
 
   WebMouseEvent event = WebMouseEventBuilder::Build(theEvent, self);
-  if (renderWidgetHostView_->render_widget_host_->delegate() &&
-      renderWidgetHostView_->render_widget_host_->delegate()
-          ->GetInputEventRouter()) {
+  if (renderWidgetHostView_->ShouldRouteEvent(event)) {
     renderWidgetHostView_->render_widget_host_->delegate()
         ->GetInputEventRouter()
         ->RouteMouseEvent(renderWidgetHostView_.get(), &event);
   } else {
-    renderWidgetHostView_->ForwardMouseEvent(event);
+    renderWidgetHostView_->ProcessMouseEvent(event);
   }
 }
 
@@ -2101,7 +2093,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
         renderWidgetHostView_->fullscreen_parent_host_view();
     if (parent)
       parent->cocoa_view()->suppressNextEscapeKeyUp_ = YES;
-    widgetHost->Shutdown();
+    widgetHost->ShutdownAndDestroyWidget(true);
     return;
   }
 
@@ -2109,6 +2101,8 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   // out-of-process iframes), pick the one that should process this event.
   if (widgetHost->delegate())
     widgetHost = widgetHost->delegate()->GetFocusedRenderWidgetHost(widgetHost);
+  if (!widgetHost)
+    return;
 
   // Suppress the escape key up event if necessary.
   if (event.windowsKeyCode == ui::VKEY_ESCAPE && suppressNextEscapeKeyUp_) {
@@ -2297,7 +2291,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
       event.skip_in_browser = true;
       widgetHost->ForwardKeyboardEvent(event);
     } else if ((!textInserted || delayEventUntilAfterImeCompostion) &&
-               [[theEvent characters] length] > 0 &&
+               event.text[0] != '\0' &&
                (([theEvent modifierFlags] & kCtrlCmdKeyMask) ||
                 (hasEditCommands_ && editCommands_.empty()))) {
       // We don't get insertText: calls if ctrl or cmd is down, or the key event
@@ -2499,14 +2493,12 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
     WebMouseWheelEvent webEvent = WebMouseWheelEventBuilder::Build(
         event, self, canRubberbandLeft, canRubberbandRight);
     webEvent.railsMode = mouseWheelFilter_.UpdateRailsMode(webEvent);
-    if (renderWidgetHostView_->render_widget_host_->delegate() &&
-        renderWidgetHostView_->render_widget_host_->delegate()
-            ->GetInputEventRouter()) {
+    if (renderWidgetHostView_->ShouldRouteEvent(webEvent)) {
       renderWidgetHostView_->render_widget_host_->delegate()
           ->GetInputEventRouter()
           ->RouteMouseWheelEvent(renderWidgetHostView_.get(), &webEvent);
     } else {
-      renderWidgetHostView_->render_widget_host_->ForwardWheelEvent(webEvent);
+      renderWidgetHostView_->ProcessMouseWheelEvent(webEvent);
     }
   }
 }

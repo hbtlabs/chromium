@@ -6,16 +6,20 @@
 
 #include "content/child/resource_dispatcher.h"
 
-#include "base/basictypes.h"
+#include <utility>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/request_info.h"
 #include "content/child/resource_scheduling_filter.h"
@@ -82,6 +86,9 @@ ResourceDispatcher::~ResourceDispatcher() {
 }
 
 bool ResourceDispatcher::OnMessageReceived(const IPC::Message& message) {
+  // TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+  content::CheckContentsOfResourceMessage(&message);
+
   if (!IsResourceDispatcherMessage(message)) {
     return false;
   }
@@ -130,8 +137,9 @@ ResourceDispatcher::GetPendingRequestInfo(int request_id) {
   return &(it->second);
 }
 
-void ResourceDispatcher::OnUploadProgress(int request_id, int64 position,
-                                          int64 size) {
+void ResourceDispatcher::OnUploadProgress(int request_id,
+                                          int64_t position,
+                                          int64_t size) {
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
@@ -215,6 +223,15 @@ void ResourceDispatcher::OnSetDataBuffer(int request_id,
   request_info->buffer_size = shm_size;
 }
 
+void ResourceDispatcher::OnReceivedDataDebug(int request_id, int data_offset) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (request_info) {
+    CHECK_GE(data_offset, 0);
+    CHECK_LE(data_offset, 512 * 1024);
+    request_info->data_offset = data_offset;
+  }
+}
+
 void ResourceDispatcher::OnReceivedData(int request_id,
                                         int data_offset,
                                         int data_length,
@@ -232,8 +249,12 @@ void ResourceDispatcher::OnReceivedData(int request_id,
     CHECK_LE(request_info->buffer_size, 512 * 1024);
     CHECK_GE(data_length, 0);
     CHECK_LE(data_length, 512 * 1024);
-    CHECK_GE(data_offset, 0);
-    CHECK_LE(data_offset, 512 * 1024);
+
+    if (data_offset > 512 * 1024) {
+      int cached_data_offset = request_info->data_offset;
+      base::debug::Alias(&cached_data_offset);
+      CHECK(false);
+    }
 
     // Ensure that the SHM buffer remains valid for the duration of this scope.
     // It is possible for Cancel() to be called before we exit this scope.
@@ -267,7 +288,7 @@ void ResourceDispatcher::OnReceivedData(int request_id,
           factory->Create(data_offset, data_length, encoded_data_length);
       // |data| takes care of ACKing.
       send_ack = false;
-      request_info->peer->OnReceivedData(data.Pass());
+      request_info->peer->OnReceivedData(std::move(data));
     }
 
     UMA_HISTOGRAM_TIMES("ResourceDispatcher.OnReceivedDataTime",
@@ -429,6 +450,28 @@ void ResourceDispatcher::Cancel(int request_id) {
     return;
   }
 
+  // |completion_time.is_null()| is a proxy for OnRequestComplete never being
+  // called.
+  // TODO(csharrison): Remove this code when crbug.com/557430 is resolved.
+  // ~250,000 ERR_ABORTED coming into canary with |request_time| < 100ms. Sample
+  // by .01% to get something reasonable.
+  PendingRequestInfo& info = it->second;
+  int64_t request_time =
+      (base::TimeTicks::Now() - info.request_start).InMilliseconds();
+  if (info.resource_type == ResourceType::RESOURCE_TYPE_MAIN_FRAME &&
+      info.completion_time.is_null() && request_time < 100 &&
+      base::RandDouble() < .0001) {
+    static bool should_dump = true;
+    if (should_dump) {
+      char url_copy[256] = {0};
+      strncpy(url_copy, info.response_url.spec().c_str(),
+              sizeof(url_copy));
+      base::debug::Alias(&url_copy);
+      base::debug::Alias(&request_time);
+      base::debug::DumpWithoutCrashing();
+      should_dump = false;
+    }
+  }
   // Cancel the request, and clean it up so the bridge will receive no more
   // messages.
   message_sender_->Send(new ResourceHostMsg_CancelRequest(request_id));
@@ -485,7 +528,8 @@ ResourceDispatcher::PendingRequestInfo::PendingRequestInfo()
       resource_type(RESOURCE_TYPE_SUB_RESOURCE),
       is_deferred(false),
       download_to_file(false),
-      buffer_size(0) {
+      buffer_size(0),
+      data_offset(-1) {
 }
 
 ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
@@ -504,7 +548,8 @@ ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
       frame_origin(frame_origin),
       response_url(request_url),
       download_to_file(download_to_file),
-      request_start(base::TimeTicks::Now()) {
+      request_start(base::TimeTicks::Now()),
+      data_offset(-1) {
 }
 
 ResourceDispatcher::PendingRequestInfo::~PendingRequestInfo() {
@@ -520,6 +565,7 @@ void ResourceDispatcher::DispatchMessage(const IPC::Message& message) {
                         OnReceivedCachedMetadata)
     IPC_MESSAGE_HANDLER(ResourceMsg_ReceivedRedirect, OnReceivedRedirect)
     IPC_MESSAGE_HANDLER(ResourceMsg_SetDataBuffer, OnSetDataBuffer)
+    IPC_MESSAGE_HANDLER(ResourceMsg_DataReceivedDebug, OnReceivedDataDebug)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataReceived, OnReceivedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_DataDownloaded, OnDownloadedData)
     IPC_MESSAGE_HANDLER(ResourceMsg_RequestComplete, OnRequestComplete)
@@ -680,8 +726,8 @@ base::TimeTicks ResourceDispatcher::ToRendererCompletionTime(
   // TimeTicks::Now() returned to WebKit. Is it worth trying to cache that?
   // Until then, |response_start| is used as it is the most recent value
   // returned for this request.
-  int64 result = std::max(browser_completion_time.ToInternalValue(),
-                          request_info.response_start.ToInternalValue());
+  int64_t result = std::max(browser_completion_time.ToInternalValue(),
+                            request_info.response_start.ToInternalValue());
   result = std::min(result, request_info.completion_time.ToInternalValue());
   return base::TimeTicks::FromInternalValue(result);
 }
@@ -703,6 +749,7 @@ bool ResourceDispatcher::IsResourceDispatcherMessage(
     case ResourceMsg_ReceivedCachedMetadata::ID:
     case ResourceMsg_ReceivedRedirect::ID:
     case ResourceMsg_SetDataBuffer::ID:
+    case ResourceMsg_DataReceivedDebug::ID:
     case ResourceMsg_DataReceived::ID:
     case ResourceMsg_DataDownloaded::ID:
     case ResourceMsg_RequestComplete::ID:
@@ -815,7 +862,7 @@ scoped_ptr<ResourceHostMsg_Request> ResourceDispatcher::CreateRequest(
   request->request_body = request_body;
   if (frame_origin)
     *frame_origin = extra_data->frame_origin();
-  return request.Pass();
+  return request;
 }
 
 void ResourceDispatcher::SetResourceSchedulingFilter(

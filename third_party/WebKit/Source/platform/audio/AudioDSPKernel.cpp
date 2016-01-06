@@ -28,8 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/audio/AudioDSPKernel.h"
+
+#if ENABLE(WEB_AUDIO)
 
 namespace blink {
 
@@ -38,3 +39,5 @@ AudioDSPKernel::~AudioDSPKernel()
 }
 
 } // namespace blink
+
+#endif // ENABLE(WEB_AUDIO)

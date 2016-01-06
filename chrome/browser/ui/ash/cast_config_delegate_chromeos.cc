@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/ash/cast_config_delegate_chromeos.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/cast_devices_private/cast_devices_private_api.h"
@@ -75,9 +78,9 @@ void CastConfigDelegateChromeos::RequestDeviceRefresh() {
   scoped_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::CAST_DEVICES_PRIVATE_ON_UPDATE_DEVICES_REQUESTED,
       extensions::api::cast_devices_private::UpdateDevicesRequested::kEventName,
-      args.Pass()));
+      std::move(args)));
   extensions::EventRouter::Get(GetProfile())
-      ->DispatchEventToExtension(FindCastExtension()->id(), event.Pass());
+      ->DispatchEventToExtension(FindCastExtension()->id(), std::move(event));
 }
 
 void CastConfigDelegateChromeos::CastToReceiver(
@@ -87,9 +90,9 @@ void CastConfigDelegateChromeos::CastToReceiver(
   scoped_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::CAST_DEVICES_PRIVATE_ON_START_CAST,
       extensions::api::cast_devices_private::StartCast::kEventName,
-      args.Pass()));
+      std::move(args)));
   extensions::EventRouter::Get(GetProfile())
-      ->DispatchEventToExtension(FindCastExtension()->id(), event.Pass());
+      ->DispatchEventToExtension(FindCastExtension()->id(), std::move(event));
 }
 
 void CastConfigDelegateChromeos::StopCasting(const std::string& activity_id) {
@@ -98,9 +101,9 @@ void CastConfigDelegateChromeos::StopCasting(const std::string& activity_id) {
   scoped_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::CAST_DEVICES_PRIVATE_ON_STOP_CAST,
       extensions::api::cast_devices_private::StopCast::kEventName,
-      args.Pass()));
+      std::move(args)));
   extensions::EventRouter::Get(GetProfile())
-      ->DispatchEventToExtension(FindCastExtension()->id(), event.Pass());
+      ->DispatchEventToExtension(FindCastExtension()->id(), std::move(event));
 }
 
 bool CastConfigDelegateChromeos::HasOptions() const {

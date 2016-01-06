@@ -27,7 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import "config.h"
 #import "platform/fonts/FontCache.h"
 
 #import <AppKit/AppKit.h>
@@ -185,14 +184,15 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(const FontDescri
     return getFontData(fontDescription, lucidaGrandeStr, false, shouldRetain);
 }
 
-FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontDescription, const FontFaceCreationParams& creationParams, float fontSize)
+PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription,
+    const FontFaceCreationParams& creationParams, float fontSize)
 {
     NSFontTraitMask traits = fontDescription.style() ? NSFontItalicTrait : 0;
     float size = fontSize;
 
     NSFont* nsFont = MatchNSFontFamily(creationParams.family(), traits, fontDescription.weight(), size);
     if (!nsFont)
-        return 0;
+        return nullptr;
 
     NSFontManager *fontManager = [NSFontManager sharedFontManager];
     NSFontTraitMask actualTraits = 0;
@@ -213,7 +213,7 @@ FontPlatformData* FontCache::createFontPlatformData(const FontDescription& fontD
     if (!platformData->typeface()) {
         return nullptr;
     }
-    return platformData.leakPtr();
+    return platformData.release();
 }
 
 } // namespace blink

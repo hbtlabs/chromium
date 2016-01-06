@@ -4,12 +4,15 @@
 
 #include "chrome/browser/extensions/api/bluetooth_low_energy/bluetooth_low_energy_api.h"
 
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/bluetooth_low_energy/bluetooth_api_advertisement.h"
 #include "chrome/browser/extensions/api/bluetooth_low_energy/utils.h"
 #include "chrome/common/extensions/api/bluetooth_low_energy.h"
@@ -616,7 +619,7 @@ bool BluetoothLowEnergyWriteCharacteristicValueFunction::DoWork() {
       apibtle::WriteCharacteristicValue::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get() != NULL);
 
-  std::vector<uint8> value(params->value.begin(), params->value.end());
+  std::vector<uint8_t> value(params->value.begin(), params->value.end());
   event_router->WriteCharacteristicValue(
       extension(),
       params->characteristic_id,
@@ -807,7 +810,7 @@ bool BluetoothLowEnergyWriteDescriptorValueFunction::DoWork() {
       apibtle::WriteDescriptorValue::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get() != NULL);
 
-  std::vector<uint8> value(params->value.begin(), params->value.end());
+  std::vector<uint8_t> value(params->value.begin(), params->value.end());
   event_router->WriteDescriptorValue(
       extension(),
       params->descriptor_id,
@@ -932,21 +935,20 @@ bool BluetoothLowEnergyRegisterAdvertisementFunction::DoWork() {
                     ADVERTISEMENT_TYPE_PERIPHERAL));
 
   advertisement_data->set_service_uuids(
-      params->advertisement.service_uuids.Pass());
+      std::move(params->advertisement.service_uuids));
   advertisement_data->set_solicit_uuids(
-      params->advertisement.solicit_uuids.Pass());
+      std::move(params->advertisement.solicit_uuids));
   if (params->advertisement.manufacturer_data) {
     advertisement_data->set_manufacturer_data(
-        CreateManufacturerData(params->advertisement.manufacturer_data.get())
-            .Pass());
+        CreateManufacturerData(params->advertisement.manufacturer_data.get()));
   }
   if (params->advertisement.service_data) {
     advertisement_data->set_service_data(
-        CreateServiceData(params->advertisement.service_data.get()).Pass());
+        CreateServiceData(params->advertisement.service_data.get()));
   }
 
   event_router->adapter()->RegisterAdvertisement(
-      advertisement_data.Pass(),
+      std::move(advertisement_data),
       base::Bind(
           &BluetoothLowEnergyRegisterAdvertisementFunction::SuccessCallback,
           this),

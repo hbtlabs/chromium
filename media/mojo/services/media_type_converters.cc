@@ -4,6 +4,9 @@
 
 #include "media/mojo/services/media_type_converters.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/buffering_state.h"
@@ -11,6 +14,7 @@
 #include "media/base/cdm_key_information.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
+#include "media/base/decryptor.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_keys.h"
 #include "media/base/video_decoder_config.h"
@@ -226,6 +230,20 @@ ASSERT_ENUM_EQ(VideoCodecProfile,
                VIDEO_CODEC_PROFILE_,
                VIDEO_CODEC_PROFILE_MAX);
 
+// Decryptor Status
+ASSERT_ENUM_EQ_RAW(Decryptor::Status,
+                   Decryptor::kSuccess,
+                   Decryptor::STATUS_SUCCESS);
+ASSERT_ENUM_EQ_RAW(Decryptor::Status,
+                   Decryptor::kNoKey,
+                   Decryptor::STATUS_NO_KEY);
+ASSERT_ENUM_EQ_RAW(Decryptor::Status,
+                   Decryptor::kNeedMoreData,
+                   Decryptor::STATUS_NEED_MORE_DATA);
+ASSERT_ENUM_EQ_RAW(Decryptor::Status,
+                   Decryptor::kError,
+                   Decryptor::STATUS_ERROR);
+
 // CdmException
 #define ASSERT_CDM_EXCEPTION(value)                                \
   static_assert(media::MediaKeys::value ==                         \
@@ -286,6 +304,54 @@ ASSERT_CDM_MESSAGE_TYPE(LICENSE_REQUEST);
 ASSERT_CDM_MESSAGE_TYPE(LICENSE_RENEWAL);
 ASSERT_CDM_MESSAGE_TYPE(LICENSE_RELEASE);
 
+namespace {
+
+// Copy the data for plane |plane| from |input| into the vector |dest|. This
+// function only copies the actual frame data. Any padding data is skipped.
+void CopyPlaneDataToVector(const scoped_refptr<media::VideoFrame>& input,
+                           size_t plane,
+                           std::vector<uint8_t>* dest) {
+  DCHECK(dest->empty());
+  uint8_t* source = input->data(plane);
+  size_t num_rows = input->rows(plane);
+  size_t stride = input->stride(plane);
+  size_t row_bytes = input->row_bytes(plane);
+  DCHECK_GE(stride, row_bytes);
+
+  // Copy |row_bytes| for each row, but increment by |stride| to point at the
+  // subsequent row.
+  dest->reserve(num_rows * row_bytes);
+  for (size_t i = 0; i < num_rows; ++i) {
+    dest->insert(dest->end(), source, source + row_bytes);
+    source += stride;
+  }
+}
+
+// Copy the data from |input| into the plane |plane| of |frame|. If there is
+// padding in |frame|, it is unchanged.
+void CopyPlaneData(const std::vector<uint8_t>& input,
+                   size_t plane,
+                   const scoped_refptr<media::VideoFrame>& frame) {
+  const uint8_t* source = input.data();
+  uint8_t* dest = frame->data(plane);
+  size_t num_rows = frame->rows(plane);
+  size_t stride = frame->stride(plane);
+  size_t row_bytes = frame->row_bytes(plane);
+  DCHECK_GE(stride, row_bytes);
+  DCHECK_EQ(input.size(), num_rows * row_bytes);
+
+  // Copy |row_bytes| for each row. |input| contains only the data bytes, so
+  // |source| is only incremented by |row_bytes|. |dest| may contain padding,
+  // so increment by |stride| to point at the subsequent row.
+  for (size_t i = 0; i < num_rows; ++i) {
+    memcpy(dest, source, row_bytes);
+    source += row_bytes;
+    dest += stride;
+  }
+}
+
+}  // namespace
+
 // static
 media::interfaces::SubsampleEntryPtr TypeConverter<
     media::interfaces::SubsampleEntryPtr,
@@ -294,7 +360,7 @@ media::interfaces::SubsampleEntryPtr TypeConverter<
       media::interfaces::SubsampleEntry::New());
   mojo_subsample_entry->clear_bytes = input.clear_bytes;
   mojo_subsample_entry->cypher_bytes = input.cypher_bytes;
-  return mojo_subsample_entry.Pass();
+  return mojo_subsample_entry;
 }
 
 // static
@@ -314,7 +380,7 @@ media::interfaces::DecryptConfigPtr TypeConverter<
   mojo_decrypt_config->iv = input.iv();
   mojo_decrypt_config->subsamples =
       Array<media::interfaces::SubsampleEntryPtr>::From(input.subsamples());
-  return mojo_decrypt_config.Pass();
+  return mojo_decrypt_config;
 }
 
 // static
@@ -337,7 +403,7 @@ TypeConverter<media::interfaces::DecoderBufferPtr,
   media::interfaces::DecoderBufferPtr mojo_buffer(
       media::interfaces::DecoderBuffer::New());
   if (input->end_of_stream())
-    return mojo_buffer.Pass();
+    return mojo_buffer;
 
   mojo_buffer->timestamp_usec = input->timestamp().InMicroseconds();
   mojo_buffer->duration_usec = input->duration().InMicroseconds();
@@ -365,7 +431,7 @@ TypeConverter<media::interfaces::DecoderBufferPtr,
   // the DecoderBuffer here; this must instead be done by clients via their
   // own DataPipe.  See http://crbug.com/432960
 
-  return mojo_buffer.Pass();
+  return mojo_buffer;
 }
 
 // static
@@ -428,7 +494,7 @@ media::interfaces::AudioDecoderConfigPtr TypeConverter<
   config->seek_preroll_usec = input.seek_preroll().InMicroseconds();
   config->codec_delay = input.codec_delay();
   config->is_encrypted = input.is_encrypted();
-  return config.Pass();
+  return config;
 }
 
 // static
@@ -463,9 +529,9 @@ media::interfaces::VideoDecoderConfigPtr TypeConverter<
   config->coded_size = Size::From(input.coded_size());
   config->visible_rect = Rect::From(input.visible_rect());
   config->natural_size = Size::From(input.natural_size());
-  config->extra_data = mojo::Array<uint8>::From(input.extra_data());
+  config->extra_data = mojo::Array<uint8_t>::From(input.extra_data());
   config->is_encrypted = input.is_encrypted();
-  return config.Pass();
+  return config;
 }
 
 // static
@@ -495,7 +561,7 @@ media::interfaces::CdmKeyInformationPtr TypeConverter<
   info->key_id.Swap(&key_id_copy);
   info->status = static_cast<media::interfaces::CdmKeyStatus>(input.status);
   info->system_code = input.system_code;
-  return info.Pass();
+  return info;
 }
 
 // static
@@ -517,7 +583,7 @@ TypeConverter<media::interfaces::CdmConfigPtr, media::CdmConfig>::Convert(
   config->allow_distinctive_identifier = input.allow_distinctive_identifier;
   config->allow_persistent_state = input.allow_persistent_state;
   config->use_hw_secure_codecs = input.use_hw_secure_codecs;
-  return config.Pass();
+  return config;
 }
 
 // static
@@ -554,7 +620,7 @@ TypeConverter<media::interfaces::AudioBufferPtr,
     buffer->data.Swap(&input_data);
   }
 
-  return buffer.Pass();
+  return buffer;
 }
 
 // static
@@ -591,7 +657,7 @@ TypeConverter<media::interfaces::VideoFramePtr,
   buffer->end_of_stream =
       input->metadata()->IsTrue(media::VideoFrameMetadata::END_OF_STREAM);
   if (buffer->end_of_stream)
-    return buffer.Pass();
+    return buffer;
 
   // handle non EOS buffer.
   buffer->format = static_cast<media::interfaces::VideoFormat>(input->format());
@@ -603,29 +669,20 @@ TypeConverter<media::interfaces::VideoFramePtr,
   if (!input->coded_size().IsEmpty()) {
     // TODO(jrummell): Use a shared buffer rather than copying the data for
     // each plane.
-    std::vector<uint8_t> y_data(
-        input->data(media::VideoFrame::kYPlane),
-        input->data(media::VideoFrame::kYPlane) +
-            input->rows(media::VideoFrame::kYPlane) *
-                input->stride(media::VideoFrame::kYPlane));
+    std::vector<uint8_t> y_data;
+    CopyPlaneDataToVector(input, media::VideoFrame::kYPlane, &y_data);
     buffer->y_data.Swap(&y_data);
 
-    std::vector<uint8_t> u_data(
-        input->data(media::VideoFrame::kUPlane),
-        input->data(media::VideoFrame::kUPlane) +
-            input->rows(media::VideoFrame::kUPlane) *
-                input->stride(media::VideoFrame::kUPlane));
+    std::vector<uint8_t> u_data;
+    CopyPlaneDataToVector(input, media::VideoFrame::kUPlane, &u_data);
     buffer->u_data.Swap(&u_data);
 
-    std::vector<uint8_t> v_data(
-        input->data(media::VideoFrame::kVPlane),
-        input->data(media::VideoFrame::kVPlane) +
-            input->rows(media::VideoFrame::kVPlane) *
-                input->stride(media::VideoFrame::kVPlane));
+    std::vector<uint8_t> v_data;
+    CopyPlaneDataToVector(input, media::VideoFrame::kVPlane, &v_data);
     buffer->v_data.Swap(&v_data);
   }
 
-  return buffer.Pass();
+  return buffer;
 }
 
 // static
@@ -641,12 +698,9 @@ TypeConverter<scoped_refptr<media::VideoFrame>,
       input->coded_size.To<gfx::Size>(), input->visible_rect.To<gfx::Rect>(),
       input->natural_size.To<gfx::Size>(),
       base::TimeDelta::FromMicroseconds(input->timestamp_usec));
-  memcpy(frame->data(media::VideoFrame::kYPlane),
-         input->y_data.storage().data(), input->y_data.storage().size());
-  memcpy(frame->data(media::VideoFrame::kUPlane),
-         input->u_data.storage().data(), input->u_data.storage().size());
-  memcpy(frame->data(media::VideoFrame::kVPlane),
-         input->v_data.storage().data(), input->v_data.storage().size());
+  CopyPlaneData(input->y_data.storage(), media::VideoFrame::kYPlane, frame);
+  CopyPlaneData(input->u_data.storage(), media::VideoFrame::kUPlane, frame);
+  CopyPlaneData(input->v_data.storage(), media::VideoFrame::kVPlane, frame);
 
   return frame;
 }

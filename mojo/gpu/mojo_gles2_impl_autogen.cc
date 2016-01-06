@@ -1668,6 +1668,11 @@ void MojoGLES2Impl::GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
   MojoGLES2MakeCurrent(context_);
   glGenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token);
 }
+void MojoGLES2Impl::VerifySyncTokensCHROMIUM(GLbyte** sync_tokens,
+                                             GLsizei count) {
+  MojoGLES2MakeCurrent(context_);
+  glVerifySyncTokensCHROMIUM(sync_tokens, count);
+}
 void MojoGLES2Impl::WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
   MojoGLES2MakeCurrent(context_);
   glWaitSyncTokenCHROMIUM(sync_token);
@@ -1699,12 +1704,18 @@ void MojoGLES2Impl::ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
 void MojoGLES2Impl::ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                             const GLfloat* contents_rect,
                                             GLfloat opacity,
-                                            const GLuint background_color,
-                                            const GLfloat* bounds_size,
+                                            GLuint background_color,
+                                            GLuint edge_aa_mask,
+                                            const GLfloat* bounds_rect,
+                                            GLboolean is_clipped,
+                                            const GLfloat* clip_rect,
+                                            GLint sorting_context_id,
                                             const GLfloat* transform) {
   MojoGLES2MakeCurrent(context_);
   glScheduleCALayerCHROMIUM(contents_texture_id, contents_rect, opacity,
-                            background_color, bounds_size, transform);
+                            background_color, edge_aa_mask, bounds_rect,
+                            is_clipped, clip_rect, sorting_context_id,
+                            transform);
 }
 void MojoGLES2Impl::CommitOverlayPlanesCHROMIUM() {
   MojoGLES2MakeCurrent(context_);
@@ -1896,6 +1907,10 @@ void MojoGLES2Impl::ProgramPathFragmentInputGenCHROMIUM(GLuint program,
   MojoGLES2MakeCurrent(context_);
   glProgramPathFragmentInputGenCHROMIUM(program, location, genMode, components,
                                         coeffs);
+}
+void MojoGLES2Impl::CoverageModulationCHROMIUM(GLenum components) {
+  MojoGLES2MakeCurrent(context_);
+  glCoverageModulationCHROMIUM(components);
 }
 GLenum MojoGLES2Impl::GetGraphicsResetStatusKHR() {
   MojoGLES2MakeCurrent(context_);

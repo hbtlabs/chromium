@@ -4,7 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_provider_host.h"
 
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/guid.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -27,8 +28,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
-#include "content/public/common/content_switches.h"
 
 namespace content {
 
@@ -47,7 +48,8 @@ ServiceWorkerClientInfo FocusOnUIThread(int render_process_id,
   FrameTreeNode* frame_tree_node = render_frame_host->frame_tree_node();
 
   // Focus the frame in the frame tree node, in case it has changed.
-  frame_tree_node->frame_tree()->SetFocusedFrame(frame_tree_node);
+  frame_tree_node->frame_tree()->SetFocusedFrame(
+      frame_tree_node, render_frame_host->GetSiteInstance());
 
   // Focus the frame's view to make sure the frame is now considered as focused.
   render_frame_host->GetView()->Focus();
@@ -79,8 +81,7 @@ ServiceWorkerProviderHost::OneShotGetReadyCallback::~OneShotGetReadyCallback() {
 scoped_ptr<ServiceWorkerProviderHost>
 ServiceWorkerProviderHost::PreCreateNavigationHost(
     base::WeakPtr<ServiceWorkerContextCore> context) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   // Generate a new browser-assigned id for the host.
   int provider_id = g_next_navigation_provider_id--;
   return scoped_ptr<ServiceWorkerProviderHost>(new ServiceWorkerProviderHost(
@@ -109,8 +110,7 @@ ServiceWorkerProviderHost::ServiceWorkerProviderHost(
 
   // PlzNavigate
   CHECK(render_process_id != ChildProcessHost::kInvalidUniqueID ||
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableBrowserSideNavigation));
+        IsBrowserSideNavigationEnabled());
 
   if (provider_type_ == SERVICE_WORKER_PROVIDER_FOR_CONTROLLER) {
     // Actual thread id is set when the service worker context gets started.
@@ -218,7 +218,7 @@ void ServiceWorkerProviderHost::SetControllerVersionAttribute(
       notify_controllerchange));
 }
 
-bool ServiceWorkerProviderHost::SetHostedVersionId(int64 version_id) {
+bool ServiceWorkerProviderHost::SetHostedVersionId(int64_t version_id) {
   if (!context_)
     return true;  // System is shutting down.
   if (active_version())
@@ -325,7 +325,7 @@ void ServiceWorkerProviderHost::RemoveMatchingRegistration(
 
 void ServiceWorkerProviderHost::AddAllMatchingRegistrations() {
   DCHECK(context_);
-  const std::map<int64, ServiceWorkerRegistration*>& registrations =
+  const std::map<int64_t, ServiceWorkerRegistration*>& registrations =
       context_->GetLiveRegistrations();
   for (const auto& key_registration : registrations) {
     ServiceWorkerRegistration* registration = key_registration.second;
@@ -396,7 +396,7 @@ ServiceWorkerProviderHost::GetOrCreateServiceWorkerHandle(
   scoped_ptr<ServiceWorkerHandle> new_handle(
       ServiceWorkerHandle::Create(context_, AsWeakPtr(), version));
   handle = new_handle.get();
-  dispatcher_host_->RegisterServiceWorkerHandle(new_handle.Pass());
+  dispatcher_host_->RegisterServiceWorkerHandle(std::move(new_handle));
   return handle->GetObjectInfo();
 }
 
@@ -553,8 +553,7 @@ void ServiceWorkerProviderHost::CompleteNavigationInitialized(
     int process_id,
     int frame_routing_id,
     ServiceWorkerDispatcherHost* dispatcher_host) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   DCHECK_EQ(ChildProcessHost::kInvalidUniqueID, render_process_id_);
   DCHECK_EQ(SERVICE_WORKER_PROVIDER_FOR_WINDOW, provider_type_);
   DCHECK_EQ(kDocumentMainThreadId, render_thread_id_);

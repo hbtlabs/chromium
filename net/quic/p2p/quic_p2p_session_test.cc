@@ -4,8 +4,11 @@
 
 #include "net/quic/p2p/quic_p2p_session.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -102,11 +105,11 @@ class FakeP2PDatagramSocket : public Socket {
     return buf_len;
   }
 
-  int SetReceiveBufferSize(int32 size) override {
+  int SetReceiveBufferSize(int32_t size) override {
     NOTIMPLEMENTED();
     return ERR_NOT_IMPLEMENTED;
   }
-  int SetSendBufferSize(int32 size) override {
+  int SetSendBufferSize(int32_t size) override {
     NOTIMPLEMENTED();
     return ERR_NOT_IMPLEMENTED;
   }
@@ -229,10 +232,10 @@ class QuicP2PSessionTest : public ::testing::Test {
 
     QuicP2PCryptoConfig crypto_config(kTestSharedKey);
 
-    session1_ =
-        CreateP2PSession(socket1.Pass(), crypto_config, Perspective::IS_SERVER);
-    session2_ =
-        CreateP2PSession(socket2.Pass(), crypto_config, Perspective::IS_CLIENT);
+    session1_ = CreateP2PSession(std::move(socket1), crypto_config,
+                                 Perspective::IS_SERVER);
+    session2_ = CreateP2PSession(std::move(socket2), crypto_config,
+                                 Perspective::IS_CLIENT);
   }
 
   scoped_ptr<QuicP2PSession> CreateP2PSession(scoped_ptr<Socket> socket,
@@ -244,10 +247,11 @@ class QuicP2PSessionTest : public ::testing::Test {
         0, net::IPEndPoint(ip, 0), &quic_helper_, writer_factory,
         true /* owns_writer */, perspective, QuicSupportedVersions()));
 
-    scoped_ptr<QuicP2PSession> result(new QuicP2PSession(
-        config_, crypto_config, quic_connection1.Pass(), socket.Pass()));
+    scoped_ptr<QuicP2PSession> result(
+        new QuicP2PSession(config_, crypto_config, std::move(quic_connection1),
+                           std::move(socket)));
     result->Initialize();
-    return result.Pass();
+    return result;
   }
 
   void TestStreamConnection(QuicP2PSession* from_session,
@@ -272,7 +276,8 @@ void QuicP2PSessionTest::OnWriteResult(int result) {
 void QuicP2PSessionTest::TestStreamConnection(QuicP2PSession* from_session,
                                               QuicP2PSession* to_session,
                                               QuicStreamId expected_stream_id) {
-  QuicP2PStream* outgoing_stream = from_session->CreateOutgoingDynamicStream();
+  QuicP2PStream* outgoing_stream =
+      from_session->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_TRUE(outgoing_stream);
   TestP2PStreamDelegate outgoing_stream_delegate;
   outgoing_stream->SetDelegate(&outgoing_stream_delegate);
@@ -339,7 +344,8 @@ TEST_F(QuicP2PSessionTest, TransportWriteError) {
   TestP2PSessionDelegate session_delegate;
   session1_->SetDelegate(&session_delegate);
 
-  QuicP2PStream* stream = session1_->CreateOutgoingDynamicStream();
+  QuicP2PStream* stream =
+      session1_->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_TRUE(stream);
   TestP2PStreamDelegate stream_delegate;
   stream->SetDelegate(&stream_delegate);
@@ -369,7 +375,8 @@ TEST_F(QuicP2PSessionTest, TransportReceiveError) {
   TestP2PSessionDelegate session_delegate;
   session1_->SetDelegate(&session_delegate);
 
-  QuicP2PStream* stream = session1_->CreateOutgoingDynamicStream();
+  QuicP2PStream* stream =
+      session1_->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_TRUE(stream);
   TestP2PStreamDelegate stream_delegate;
   stream->SetDelegate(&stream_delegate);

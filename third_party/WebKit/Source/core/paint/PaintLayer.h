@@ -50,6 +50,7 @@
 #include "core/paint/PaintLayerClipper.h"
 #include "core/paint/PaintLayerFilterInfo.h"
 #include "core/paint/PaintLayerFragment.h"
+#include "core/paint/PaintLayerPainter.h"
 #include "core/paint/PaintLayerReflectionInfo.h"
 #include "core/paint/PaintLayerScrollableArea.h"
 #include "core/paint/PaintLayerStackingNode.h"
@@ -156,13 +157,15 @@ private:
 // A good example of this is PaintLayerScrollableArea, which can only happen
 // be instanciated for LayoutBoxes. With the current design, it's hard to know
 // that by reading the code.
-class CORE_EXPORT PaintLayer {
+class CORE_EXPORT PaintLayer : public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(PaintLayer);
 public:
     PaintLayer(LayoutBoxModelObject*, PaintLayerType);
     ~PaintLayer();
 
-    String debugName() const;
+    // DisplayItemClient methods
+    String debugName() const final;
+    IntRect visualRect() const override;
 
     LayoutBoxModelObject* layoutObject() const { return m_layoutObject; }
     LayoutBox* layoutBox() const { return m_layoutObject && m_layoutObject->isBox() ? toLayoutBox(m_layoutObject) : 0; }
@@ -259,14 +262,13 @@ public:
     bool hasVisibleNonLayerContent() const { return m_hasVisibleNonLayerContent; }
     bool hasNonCompositedChild() const { ASSERT(isAllowedToQueryCompositingState()); return m_hasNonCompositedChild; }
 
-    // Gets the ancestor layer that serves as the containing block of this layer. It is assumed
-    // that this layer is established by an out-of-flow positioned layout object (i.e. either
-    // absolutely or fixed positioned).
+    // Gets the ancestor layer that serves as the containing block of this layer. This is either
+    // another out of flow positioned layer, or one that contains paint.
     // If |ancestor| is specified, |*skippedAncestor| will be set to true if |ancestor| is found in
     // the ancestry chain between this layer and the containing block layer; if not found, it will
     // be set to false. Either both |ancestor| and |skippedAncestor| should be nullptr, or none of
     // them should.
-    PaintLayer* enclosingPositionedAncestor(const PaintLayer* ancestor = nullptr, bool* skippedAncestor = nullptr) const;
+    PaintLayer* containingLayerForOutOfFlowPositioned(const PaintLayer* ancestor = nullptr, bool* skippedAncestor = nullptr) const;
 
     bool isPaintInvalidationContainer() const;
 
@@ -457,15 +459,6 @@ public:
     PaintLayerClipper& clipper() { return m_clipper; }
     const PaintLayerClipper& clipper() const { return m_clipper; }
 
-    inline bool isPositionedContainer() const
-    {
-        // FIXME: This is not in sync with containingBlock.
-        // LayoutObject::canContainFixedPositionObjects() should probably be used
-        // instead.
-        LayoutBoxModelObject* layerlayoutObject = layoutObject();
-        return isRootLayer() || layerlayoutObject->isPositioned() || hasTransformRelatedProperty();
-    }
-
     bool scrollsOverflow() const;
 
     CompositingReasons potentialCompositingReasonsFromStyle() const { return m_potentialCompositingReasonsFromStyle; }
@@ -612,14 +605,21 @@ public:
     void setNeedsRepaint();
     void clearNeedsRepaintRecursively();
 
+    // These previousXXX() functions are for subsequence caching. They save the painting status of the layer
+    // during the previous painting with subsequence. A painting without subsequence [1] doesn't change this status.
+    // [1] See shouldCreateSubsequence() in PaintLayerPainter.cpp for the cases we use subsequence when painting a PaintLayer.
+
     IntSize previousScrollOffsetAccumulationForPainting() const { return m_previousScrollOffsetAccumulationForPainting; }
     void setPreviousScrollOffsetAccumulationForPainting(const IntSize& s) { m_previousScrollOffsetAccumulationForPainting = s; }
 
     ClipRects* previousPaintingClipRects() const { return m_previousPaintingClipRects.get(); }
     void setPreviousPaintingClipRects(ClipRects* clipRects) { m_previousPaintingClipRects = clipRects; }
 
-    // For subsequence display items.
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
+    LayoutRect previousPaintDirtyRect() const { return m_previousPaintDirtyRect; }
+    void setPreviousPaintDirtyRect(const LayoutRect& rect) { m_previousPaintDirtyRect = rect; }
+
+    PaintLayerPainter::PaintResult previousPaintResult() const { return static_cast<PaintLayerPainter::PaintResult>(m_previousPaintResult); }
+    void setPreviousPaintResult(PaintLayerPainter::PaintResult result) { m_previousPaintResult = static_cast<unsigned>(result); ASSERT(m_previousPaintResult == static_cast<unsigned>(result)); }
 
     PaintTiming* paintTiming();
 
@@ -663,6 +663,7 @@ private:
     bool hitTestContentsForFragments(const PaintLayerFragments&, HitTestResult&, const HitTestLocation&, HitTestFilter, bool& insideClipRect) const;
     PaintLayer* hitTestTransformedLayerInFragments(PaintLayer* rootLayer, PaintLayer* containerLayer, HitTestResult&,
         const LayoutRect& hitTestRect, const HitTestLocation&, const HitTestingTransformState*, double* zOffset, ClipRectsCacheSlot);
+    bool hitTestClippedOutByClipPath(PaintLayer* rootLayer, const HitTestLocation&) const;
 
     bool childBackgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const;
 
@@ -750,6 +751,7 @@ private:
     unsigned m_lostGroupedMapping : 1;
 
     unsigned m_needsRepaint : 1;
+    unsigned m_previousPaintResult : 1; // PaintLayerPainter::PaintResult
 
     LayoutBoxModelObject* m_layoutObject;
 
@@ -812,6 +814,7 @@ private:
 
     IntSize m_previousScrollOffsetAccumulationForPainting;
     RefPtr<ClipRects> m_previousPaintingClipRects;
+    LayoutRect m_previousPaintDirtyRect;
 };
 
 } // namespace blink

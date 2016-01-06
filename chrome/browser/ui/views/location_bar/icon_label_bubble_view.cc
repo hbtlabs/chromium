@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -62,6 +62,7 @@ IconLabelBubbleView::~IconLabelBubbleView() {
 
 void IconLabelBubbleView::SetBackgroundImageGrid(
     const int background_images[]) {
+  should_show_background_ = true;
   background_painter_.reset(
       views::Painter::CreateImageGridPainter(background_images));
   // Use the middle image of the background to represent the color of the entire
@@ -72,6 +73,11 @@ void IconLabelBubbleView::SetBackgroundImageGrid(
   SetLabelBackgroundColor(CalculateImageColor(background_image));
 }
 
+void IconLabelBubbleView::UnsetBackgroundImageGrid() {
+  should_show_background_ = false;
+  SetLabelBackgroundColor(SK_ColorTRANSPARENT);
+}
+
 void IconLabelBubbleView::SetLabel(const base::string16& label) {
   label_->SetText(label);
 }
@@ -80,8 +86,26 @@ void IconLabelBubbleView::SetImage(const gfx::ImageSkia& image_skia) {
   image_->SetImage(image_skia);
 }
 
+void IconLabelBubbleView::SetLabelBackgroundColor(
+    SkColor chip_background_color) {
+  // The background images are painted atop |parent_background_color_|.
+  // Alpha-blend |chip_background_color| with |parent_background_color_| to
+  // determine the actual color the label text will sit atop.
+  // Tricky bit: We alpha blend an opaque version of |chip_background_color|
+  // against |parent_background_color_| using the original image grid color's
+  // alpha. This is because AlphaBlend(a, b, 255) always returns |a| unchanged
+  // even if |a| is a color with non-255 alpha.
+  label_->SetBackgroundColor(color_utils::AlphaBlend(
+      SkColorSetA(chip_background_color, 255), GetParentBackgroundColor(),
+      SkColorGetA(chip_background_color)));
+}
+
+void IconLabelBubbleView::SetLabelForegroundColor(SkColor color) {
+  label_->SetEnabledColor(color);
+}
+
 bool IconLabelBubbleView::ShouldShowBackground() const {
-  return true;
+  return should_show_background_;
 }
 
 double IconLabelBubbleView::WidthMultiplier() const {
@@ -91,7 +115,7 @@ double IconLabelBubbleView::WidthMultiplier() const {
 int IconLabelBubbleView::GetImageAndPaddingWidth() const {
   const int image_width = image_->GetPreferredSize().width();
   return image_width
-             ? image_width + GetLayoutConstant(ICON_LABEL_VIEW_INTERNAL_PADDING)
+             ? image_width - GetLayoutConstant(ICON_LABEL_VIEW_INTERNAL_PADDING)
              : 0;
 }
 
@@ -169,20 +193,6 @@ int IconLabelBubbleView::GetBubbleOuterPaddingMd(bool leading) const {
 
   // Leading padding is 2dp.
   return 2;
-}
-
-void IconLabelBubbleView::SetLabelBackgroundColor(
-    SkColor chip_background_color) {
-  // The background images are painted atop |parent_background_color_|.
-  // Alpha-blend |chip_background_color| with |parent_background_color_| to
-  // determine the actual color the label text will sit atop.
-  // Tricky bit: We alpha blend an opaque version of |chip_background_color|
-  // against |parent_background_color_| using the original image grid color's
-  // alpha. This is because AlphaBlend(a, b, 255) always returns |a| unchanged
-  // even if |a| is a color with non-255 alpha.
-  label_->SetBackgroundColor(color_utils::AlphaBlend(
-      SkColorSetA(chip_background_color, 255), GetParentBackgroundColor(),
-      SkColorGetA(chip_background_color)));
 }
 
 const char* IconLabelBubbleView::GetClassName() const {

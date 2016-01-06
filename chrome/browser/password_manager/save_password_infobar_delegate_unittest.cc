@@ -5,7 +5,9 @@
 #include "chrome/browser/password_manager/save_password_infobar_delegate.h"
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
@@ -47,7 +49,7 @@ class TestSavePasswordInfobarDelegate : public SavePasswordInfoBarDelegate {
       password_manager::CredentialSourceType source_type,
       bool should_show_first_run_experience)
       : SavePasswordInfoBarDelegate(web_contents,
-                                    form_to_save.Pass(),
+                                    std::move(form_to_save),
                                     std::string(),
                                     source_type,
                                     true /* is_smartlock_branding_enabled */,
@@ -111,10 +113,10 @@ SavePasswordInfoBarDelegateTest::CreateDelegate(
     password_manager::CredentialSourceType type,
     bool should_show_first_run_experience) {
   scoped_ptr<ConfirmInfoBarDelegate> delegate(
-      new TestSavePasswordInfobarDelegate(web_contents(),
-                                          password_form_manager.Pass(), type,
-                                          should_show_first_run_experience));
-  return delegate.Pass();
+      new TestSavePasswordInfobarDelegate(
+          web_contents(), std::move(password_form_manager), type,
+          should_show_first_run_experience));
+  return delegate;
 }
 
 void SavePasswordInfoBarDelegateTest::SetUp() {
@@ -130,7 +132,7 @@ TEST_F(SavePasswordInfoBarDelegateTest, CancelTestCredentialSourceAPI) {
       CreateMockFormManager());
   EXPECT_CALL(*password_form_manager.get(), PermanentlyBlacklist());
   scoped_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegate(
-      password_form_manager.Pass(),
+      std::move(password_form_manager),
       password_manager::CredentialSourceType::CREDENTIAL_SOURCE_API, false));
   EXPECT_TRUE(infobar->Cancel());
 }
@@ -141,8 +143,8 @@ TEST_F(SavePasswordInfoBarDelegateTest,
       CreateMockFormManager());
   EXPECT_CALL(*password_form_manager.get(), PermanentlyBlacklist());
   scoped_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegate(
-      password_form_manager.Pass(), password_manager::CredentialSourceType::
-                                        CREDENTIAL_SOURCE_PASSWORD_MANAGER,
+      std::move(password_form_manager), password_manager::CredentialSourceType::
+                                            CREDENTIAL_SOURCE_PASSWORD_MANAGER,
       false));
   EXPECT_TRUE(infobar->Cancel());
 }
@@ -155,8 +157,8 @@ TEST_F(SavePasswordInfoBarDelegateTest,
   scoped_ptr<MockPasswordFormManager> password_form_manager(
       CreateMockFormManager());
   scoped_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegate(
-      password_form_manager.Pass(), password_manager::CredentialSourceType::
-                                        CREDENTIAL_SOURCE_PASSWORD_MANAGER,
+      std::move(password_form_manager), password_manager::CredentialSourceType::
+                                            CREDENTIAL_SOURCE_PASSWORD_MANAGER,
       true));
   EXPECT_TRUE(infobar->Cancel());
   infobar.reset();
@@ -172,8 +174,8 @@ TEST_F(SavePasswordInfoBarDelegateTest,
   scoped_ptr<MockPasswordFormManager> password_form_manager(
       CreateMockFormManager());
   scoped_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegate(
-      password_form_manager.Pass(), password_manager::CredentialSourceType::
-                                        CREDENTIAL_SOURCE_PASSWORD_MANAGER,
+      std::move(password_form_manager), password_manager::CredentialSourceType::
+                                            CREDENTIAL_SOURCE_PASSWORD_MANAGER,
       false));
   EXPECT_TRUE(infobar->Cancel());
   infobar.reset();

@@ -6,6 +6,7 @@
 
 #include "base/mac/bundle_locations.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -52,7 +53,8 @@ class LoginHandlerMac : public LoginHandler,
   void OnLoginModelDestroying() override {}
 
   // LoginHandler:
-  void BuildViewImpl(const base::string16& explanation,
+  void BuildViewImpl(const base::string16& authority,
+                     const base::string16& explanation,
                      LoginModelData* login_model_data) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -64,6 +66,7 @@ class LoginHandlerMac : public LoginHandler,
     else
       ResetModel();
 
+    [sheet_controller_ setAuthority:base::SysUTF16ToNSString(authority)];
     [sheet_controller_ setExplanation:base::SysUTF16ToNSString(explanation)];
 
     // Scary thread safety note: This can potentially be called *after* SetAuth
@@ -180,8 +183,19 @@ LoginHandler* LoginHandler::Create(net::AuthChallengeInfo* auth_info,
   }
 }
 
+- (void)setAuthority:(NSString*)authority {
+  [authorityField_ setStringValue:authority];
+
+  // Resize the text field.
+  CGFloat windowDelta = [GTMUILocalizerAndLayoutTweaker
+      sizeToFitFixedWidthTextField:authorityField_];
+
+  NSRect newFrame = [[self window] frame];
+  newFrame.size.height += windowDelta;
+  [[self window] setFrame:newFrame display:NO];
+}
+
 - (void)setExplanation:(NSString*)explanation {
-  // Put in the text.
   [explanationField_ setStringValue:explanation];
 
   // Resize the text field.

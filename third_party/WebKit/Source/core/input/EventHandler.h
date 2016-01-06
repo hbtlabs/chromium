@@ -47,6 +47,7 @@
 #include "wtf/HashMap.h"
 #include "wtf/HashTraits.h"
 #include "wtf/RefPtr.h"
+#include <deque>
 
 namespace blink {
 
@@ -361,7 +362,10 @@ private:
 
     const RawPtrWillBeMember<LocalFrame> m_frame;
 
+    // Current button-press state for mouse/mouse-like-stylus.
+    // TODO(crbug.com/563676): Buggy for chorded buttons.
     bool m_mousePressed;
+
     bool m_capturesDragging;
     RefPtrWillBeMember<Node> m_mousePressNode;
 
@@ -454,7 +458,7 @@ private:
     RefPtrWillBeMember<Element> m_lastDeferredTapElement;
 
     // Only used with the ScrollCustomization runtime enabled feature.
-    WillBeHeapDeque<RefPtrWillBeMember<Element>> m_currentScrollChain;
+    std::deque<int> m_currentScrollChain;
     // True iff some of the delta has been consumed for the current
     // scroll sequence in this frame, or any child frames. Only used
     // with ScrollCustomization. If some delta has been consumed, a

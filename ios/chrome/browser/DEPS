@@ -1,14 +1,17 @@
 include_rules = [
   "+breakpad/src/client/ios",
   "+breakpad/src/common",
+  "+components/about_handler",
   "+components/autofill/core/browser",
   "+components/autofill/core/common",
   "+components/autofill/ios/browser",
   "+components/bookmarks",
   "+components/browser_sync/browser",
   "+components/browser_sync/common",
+  "+components/certificate_reporting",
   "+components/component_updater",
   "+components/content_settings/core",
+  "+components/cookie_config",
   "+components/crash/core/browser",
   "+components/crash/core/common",
   "+components/data_reduction_proxy/core/browser",
@@ -44,10 +47,11 @@ include_rules = [
   "+components/proxy_config",
   "+components/rappor",
   "+components/rlz",
+  "+components/safe_browsing_db",
   "+components/search",
   "+components/search_engines",
+  "+components/security_interstitials",
   "+components/sessions",
-  "-components/sessions/content",
   "+components/signin/core/browser",
   "+components/signin/core/common",
   "+components/signin/ios/browser",
@@ -81,6 +85,7 @@ include_rules = [
 
   # Those depend on //content; exclude them.
   "-components/metrics/gpu",
+  "-components/sessions/content",
 
   # For tests.
   "+ios/chrome/test",

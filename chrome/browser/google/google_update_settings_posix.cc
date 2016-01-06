@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 
 #if defined(OS_MACOSX)
@@ -101,7 +102,7 @@ scoped_ptr<metrics::ClientInfo> GoogleUpdateSettings::LoadMetricsClientInfo() {
     return scoped_ptr<metrics::ClientInfo>();
   client_info->client_id = g_posix_client_id.Get();
 
-  return client_info.Pass();
+  return client_info;
 }
 
 // static

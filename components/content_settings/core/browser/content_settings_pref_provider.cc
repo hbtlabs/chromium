@@ -4,6 +4,8 @@
 
 #include "components/content_settings/core/browser/content_settings_pref_provider.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <utility>
@@ -32,14 +34,12 @@
 namespace {
 
 // Obsolete prefs.
-// TODO(msramek): Remove the cleanup code after two releases (i.e. in M48).
-const char kObsoleteContentSettingsPatternPairs[] =
-    "profile.content_settings.pattern_pairs";
-const char kObsoleteMigratedContentSettingsPatternPairs[] =
-    "profile.migrated_content_settings_exceptions";
 // TODO(msramek): Remove the cleanup code after two releases (i.e. in M50).
 const char kObsoleteMetroSwitchToDesktopExceptions[] =
     "profile.content_settings.exceptions.metro_switch_to_desktop";
+
+const char kObsoleteMediaStreamExceptions[] =
+    "profile.content_settings.exceptions.media_stream";
 
 }  // namespace
 
@@ -66,13 +66,10 @@ void PrefProvider::RegisterProfilePrefs(
   // Obsolete prefs ----------------------------------------------------------
 
   registry->RegisterDictionaryPref(
-      kObsoleteContentSettingsPatternPairs,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(kObsoleteMigratedContentSettingsPatternPairs,
-                                false);
-  registry->RegisterDictionaryPref(
       kObsoleteMetroSwitchToDesktopExceptions,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterDictionaryPref(kObsoleteMediaStreamExceptions);
 }
 
 PrefProvider::PrefProvider(PrefService* prefs, bool incognito)
@@ -190,7 +187,7 @@ ContentSettingsPref* PrefProvider::GetPref(ContentSettingsType type) const {
 }
 
 void PrefProvider::SetClockForTesting(scoped_ptr<base::Clock> clock) {
-  clock_ = clock.Pass();
+  clock_ = std::move(clock);
 }
 
 void PrefProvider::Notify(
@@ -205,9 +202,8 @@ void PrefProvider::Notify(
 }
 
 void PrefProvider::DiscardObsoletePreferences() {
-  prefs_->ClearPref(kObsoleteContentSettingsPatternPairs);
-  prefs_->ClearPref(kObsoleteMigratedContentSettingsPatternPairs);
   prefs_->ClearPref(kObsoleteMetroSwitchToDesktopExceptions);
+  prefs_->ClearPref(kObsoleteMediaStreamExceptions);
 }
 
 }  // namespace content_settings

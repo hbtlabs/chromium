@@ -6,20 +6,74 @@ package org.chromium.chrome.browser.datausage;
 
 import android.content.Context;
 
+import org.chromium.base.ApplicationState;
+import org.chromium.base.ApplicationStatus;
+import org.chromium.base.PackageUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.NativeClassQualifiedName;
 import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * This class provides a base class implementation of a data use observer that is external to
- * Chromium. This class should be accessed only on IO thread.
+ * Chromium. This class should be accessed only on UI thread.
  */
 @JNINamespace("chrome::android")
 public class ExternalDataUseObserver {
     /**
-     * Pointer to the native ExternalDataUseObserver object.
+     * Listens for application state changes and whenever Chromium state changes to running, checks
+     * and nofifies {@link #ExternalDataUseObserverBridge} if the control app is installed.
      */
-    private long mNativeExternalDataUseObserver;
+    private class ControlAppManager implements ApplicationStatus.ApplicationStateListener {
+        // Package name of the control app.
+        private final String mControlAppPackageName;
+
+        // True if the control app is installed.
+        private boolean mInstalled;
+
+        ControlAppManager(String controlAppPackageName) {
+            mControlAppPackageName = controlAppPackageName;
+            mInstalled = false;
+            ApplicationStatus.registerApplicationStateListener(this);
+            checkAndNotifyPackageInstall();
+        }
+
+        @Override
+        public void onApplicationStateChange(int newState) {
+            if (!mInstalled && newState == ApplicationState.HAS_RUNNING_ACTIVITIES) {
+                checkAndNotifyPackageInstall();
+            }
+        }
+
+        /**
+         * Checks if the control app is installed and notifies {@link
+         * #ExternalDataUseObserverBridge}.
+         */
+        private void checkAndNotifyPackageInstall() {
+            // Check if native object is destroyed. This may happen at the time of Chromium
+            // shutdown.
+            if (mNativeExternalDataUseObserverBridge == 0) {
+                return;
+            }
+            if (mControlAppPackageName != null && !mControlAppPackageName.isEmpty()
+                    && PackageUtils.getPackageVersion(
+                               ApplicationStatus.getApplicationContext(), mControlAppPackageName)
+                            != -1) {
+                mInstalled = true;
+                nativeOnControlAppInstalled(mNativeExternalDataUseObserverBridge);
+            }
+        }
+    }
+
+    /**
+     * Pointer to the native ExternalDataUseObserverBridge object.
+     */
+    private long mNativeExternalDataUseObserverBridge;
+
+    /**
+     * {@link #ControlAppManager} object that notifies when control app is installed.
+     */
+    private ControlAppManager mControlAppManager;
 
     @CalledByNative
     private static ExternalDataUseObserver create(Context context, long nativePtr) {
@@ -31,8 +85,17 @@ public class ExternalDataUseObserver {
      * @param nativePtr pointer to the native ExternalDataUseObserver object.
      */
     public ExternalDataUseObserver(long nativePtr) {
-        mNativeExternalDataUseObserver = nativePtr;
-        assert mNativeExternalDataUseObserver != 0;
+        mNativeExternalDataUseObserverBridge = nativePtr;
+        assert mNativeExternalDataUseObserverBridge != 0;
+    }
+
+    /**
+     * Sets the package name of the control app.
+     * @param controlAppPackageName package name of the control app.
+     */
+    @CalledByNative
+    protected void setControlAppPackageName(String controlAppPackageName) {
+        mControlAppManager = new ControlAppManager(controlAppPackageName);
     }
 
     /**
@@ -40,7 +103,7 @@ public class ExternalDataUseObserver {
      */
     @CalledByNative
     private void onDestroy() {
-        mNativeExternalDataUseObserver = 0;
+        mNativeExternalDataUseObserverBridge = 0;
     }
 
     /**
@@ -65,11 +128,11 @@ public class ExternalDataUseObserver {
     protected void fetchMatchingRulesDone(
             String[] appPackageName, String[] domainPathRegEx, String[] label) {
         // Check if native object is destroyed. This may happen at the time of Chromium shutdown.
-        if (mNativeExternalDataUseObserver == 0) {
+        if (mNativeExternalDataUseObserverBridge == 0) {
             return;
         }
         nativeFetchMatchingRulesDone(
-                mNativeExternalDataUseObserver, appPackageName, domainPathRegEx, label);
+                mNativeExternalDataUseObserverBridge, appPackageName, domainPathRegEx, label);
     }
 
     /**
@@ -87,8 +150,10 @@ public class ExternalDataUseObserver {
      * @param bytesDownloaded number of bytes downloaded by Chromium.
      * @param bytesUploaded number of bytes uploaded by Chromium.
      * The result of this request is returned asynchronously via
-     * {@link #nativeOnReportDataUseDone}. A new report should be submitted only after the
-     * result has been returned via {@link #nativeOnReportDataUseDone}.
+     * {@link #nativeOnReportDataUseDone}. A new report should preferably be submitted only after
+     * the result of the previous report has been returned via {@link #nativeOnReportDataUseDone}.
+     * Submitting another data use report while the previous is pending may cause the previous
+     * report to be lost.
      */
     @CalledByNative
     protected void reportDataUse(String label, int networkType, String mccMnc,
@@ -102,15 +167,20 @@ public class ExternalDataUseObserver {
      */
     protected void onReportDataUseDone(boolean success) {
         // Check if native object is destroyed.  This may happen at the time of Chromium shutdown.
-        if (mNativeExternalDataUseObserver == 0) {
+        if (mNativeExternalDataUseObserverBridge == 0) {
             return;
         }
-        nativeOnReportDataUseDone(mNativeExternalDataUseObserver, success);
+        nativeOnReportDataUseDone(mNativeExternalDataUseObserverBridge, success);
     }
 
-    public native void nativeFetchMatchingRulesDone(long nativeExternalDataUseObserver,
+    @NativeClassQualifiedName("ExternalDataUseObserverBridge")
+    private native void nativeFetchMatchingRulesDone(long nativeExternalDataUseObserver,
             String[] appPackageName, String[] domainPathRegEx, String[] label);
 
-    public native void nativeOnReportDataUseDone(
+    @NativeClassQualifiedName("ExternalDataUseObserverBridge")
+    private native void nativeOnReportDataUseDone(
             long nativeExternalDataUseObserver, boolean success);
+
+    @NativeClassQualifiedName("ExternalDataUseObserverBridge")
+    private native void nativeOnControlAppInstalled(long nativeExternalDataUseObserver);
 }

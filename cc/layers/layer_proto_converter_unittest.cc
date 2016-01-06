@@ -4,15 +4,41 @@
 
 #include "cc/layers/layer_proto_converter.h"
 
+#include "cc/layers/empty_content_layer_client.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_settings.h"
+#include "cc/layers/picture_layer.h"
 #include "cc/proto/layer.pb.h"
+#include "cc/test/fake_layer_tree_host.h"
+#include "cc/test/fake_layer_tree_host_client.h"
+#include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
+namespace {
+class LayerProtoConverterTest : public testing::Test {
+ public:
+  LayerProtoConverterTest()
+      : fake_client_(FakeLayerTreeHostClient::DIRECT_3D) {}
 
-TEST(LayerProtoConverterTest, TestKeepingRoot) {
+ protected:
+  void SetUp() override {
+    layer_tree_host_ =
+        FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_);
+  }
+
+  void TearDown() override {
+    layer_tree_host_->SetRootLayer(nullptr);
+    layer_tree_host_ = nullptr;
+  }
+
+  TestTaskGraphRunner task_graph_runner_;
+  FakeLayerTreeHostClient fake_client_;
+  scoped_ptr<FakeLayerTreeHost> layer_tree_host_;
+};
+
+TEST_F(LayerProtoConverterTest, TestKeepingRoot) {
   /* Test deserialization of a tree that looks like:
          root
         /   \
@@ -24,21 +50,21 @@ TEST(LayerProtoConverterTest, TestKeepingRoot) {
   scoped_refptr<Layer> old_root = Layer::Create(LayerSettings());
   proto::LayerNode root_node;
   root_node.set_id(old_root->id());
-  root_node.set_type(proto::LayerType::Base);
+  root_node.set_type(proto::LayerType::LAYER);
 
   proto::LayerNode* child_a_node = root_node.add_children();
   child_a_node->set_id(442);
-  child_a_node->set_type(proto::LayerType::Base);
+  child_a_node->set_type(proto::LayerType::LAYER);
   child_a_node->set_parent_id(old_root->id());  // root_node
 
   proto::LayerNode* child_b_node = root_node.add_children();
   child_b_node->set_id(443);
-  child_b_node->set_type(proto::LayerType::Base);
+  child_b_node->set_type(proto::LayerType::LAYER);
   child_b_node->set_parent_id(old_root->id());  // root_node
 
   proto::LayerNode* child_c_node = child_b_node->add_children();
   child_c_node->set_id(444);
-  child_c_node->set_type(proto::LayerType::Base);
+  child_c_node->set_type(proto::LayerType::LAYER);
   child_c_node->set_parent_id(child_b_node->id());
 
   scoped_refptr<Layer> new_root =
@@ -60,7 +86,7 @@ TEST(LayerProtoConverterTest, TestKeepingRoot) {
   EXPECT_EQ(child_c_node->id(), child_c->id());
 }
 
-TEST(LayerProtoConverterTest, TestSwappingRoot) {
+TEST_F(LayerProtoConverterTest, TestSwappingRoot) {
   /* Test deserialization of a tree that looks like:
          root
         /   \
@@ -71,21 +97,21 @@ TEST(LayerProtoConverterTest, TestSwappingRoot) {
   */
   proto::LayerNode root_node;
   root_node.set_id(441);
-  root_node.set_type(proto::LayerType::Base);
+  root_node.set_type(proto::LayerType::LAYER);
 
   proto::LayerNode* child_a_node = root_node.add_children();
   child_a_node->set_id(442);
-  child_a_node->set_type(proto::LayerType::Base);
+  child_a_node->set_type(proto::LayerType::LAYER);
   child_a_node->set_parent_id(root_node.id());
 
   proto::LayerNode* child_b_node = root_node.add_children();
   child_b_node->set_id(443);
-  child_b_node->set_type(proto::LayerType::Base);
+  child_b_node->set_type(proto::LayerType::LAYER);
   child_b_node->set_parent_id(root_node.id());
 
   proto::LayerNode* child_c_node = child_b_node->add_children();
   child_c_node->set_id(444);
-  child_c_node->set_type(proto::LayerType::Base);
+  child_c_node->set_type(proto::LayerType::LAYER);
   child_c_node->set_parent_id(child_b_node->id());
 
   scoped_refptr<Layer> old_root = Layer::Create(LayerSettings());
@@ -108,7 +134,7 @@ TEST(LayerProtoConverterTest, TestSwappingRoot) {
   EXPECT_EQ(child_c_node->id(), child_c->id());
 }
 
-TEST(LayerProtoConverterTest, RecursivePropertiesSerialization) {
+TEST_F(LayerProtoConverterTest, RecursivePropertiesSerialization) {
   /* Testing serialization of properties for a tree that looks like this:
           root+
           /  \
@@ -193,7 +219,7 @@ TEST(LayerProtoConverterTest, RecursivePropertiesSerialization) {
   EXPECT_TRUE(dest_b_mask.has_base());
 }
 
-TEST(LayerProtoConverterTest, RecursivePropertiesSerializationSingleChild) {
+TEST_F(LayerProtoConverterTest, RecursivePropertiesSerializationSingleChild) {
   /* Testing serialization of properties for a tree that looks like this:
           root+
              \
@@ -252,7 +278,7 @@ TEST(LayerProtoConverterTest, RecursivePropertiesSerializationSingleChild) {
   EXPECT_TRUE(dest_b_mask.has_base());
 }
 
-TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
+TEST_F(LayerProtoConverterTest, DeserializeLayerProperties) {
   /* Testing deserialization of properties for a tree that looks like this:
           root*+
           /  \
@@ -265,6 +291,7 @@ TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
   proto::LayerUpdate updates;
 
   scoped_refptr<Layer> root = Layer::Create(LayerSettings());
+  root->SetLayerTreeHost(layer_tree_host_.get());
   proto::LayerProperties* root_props = updates.add_layers();
   root_props->set_id(root->id());
   root_props->set_needs_push_properties(true);
@@ -272,6 +299,7 @@ TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
   root_props->mutable_base();
 
   scoped_refptr<Layer> a = Layer::Create(LayerSettings());
+  a->SetLayerTreeHost(layer_tree_host_.get());
   proto::LayerProperties* a_props = updates.add_layers();
   a_props->set_id(a->id());
   a_props->set_needs_push_properties(false);
@@ -279,6 +307,7 @@ TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
   root->AddChild(a);
 
   scoped_refptr<Layer> b = Layer::Create(LayerSettings());
+  b->SetLayerTreeHost(layer_tree_host_.get());
   proto::LayerProperties* b_props = updates.add_layers();
   b_props->set_id(b->id());
   b_props->set_needs_push_properties(false);
@@ -286,6 +315,7 @@ TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
   root->AddChild(b);
 
   scoped_refptr<Layer> c = Layer::Create(LayerSettings());
+  c->SetLayerTreeHost(layer_tree_host_.get());
   proto::LayerProperties* c_props = updates.add_layers();
   c_props->set_id(c->id());
   c_props->set_needs_push_properties(true);
@@ -306,6 +336,43 @@ TEST(LayerProtoConverterTest, DeserializeLayerProperties) {
 
   EXPECT_TRUE(c->needs_push_properties());
   EXPECT_FALSE(c->descendant_needs_push_properties());
+
+  // Recursively clear out LayerTreeHost.
+  root->SetLayerTreeHost(nullptr);
 }
 
+TEST_F(LayerProtoConverterTest, PictureLayerTypeSerialization) {
+  // Make sure that PictureLayers serialize to the
+  // proto::LayerType::PICTURE_LAYER type.
+  scoped_refptr<PictureLayer> layer = PictureLayer::Create(
+      LayerSettings(), EmptyContentLayerClient::GetInstance());
+
+  proto::LayerNode layer_hierarchy;
+  LayerProtoConverter::SerializeLayerHierarchy(layer.get(), &layer_hierarchy);
+  EXPECT_EQ(proto::LayerType::PICTURE_LAYER, layer_hierarchy.type());
+}
+
+TEST_F(LayerProtoConverterTest, PictureLayerTypeDeserialization) {
+  // Make sure that proto::LayerType::PICTURE_LAYER ends up building a
+  // PictureLayer.
+  scoped_refptr<Layer> old_root = PictureLayer::Create(
+      LayerSettings(), EmptyContentLayerClient::GetInstance());
+  proto::LayerNode root_node;
+  root_node.set_id(old_root->id());
+  root_node.set_type(proto::LayerType::PICTURE_LAYER);
+
+  scoped_refptr<Layer> new_root =
+      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node);
+
+  // Validate that the ids are equal.
+  EXPECT_EQ(old_root->id(), new_root->id());
+
+  // Check that the layer type is equal by using the type this layer would
+  // serialize to.
+  proto::LayerNode layer_node;
+  new_root->SetTypeForProtoSerialization(&layer_node);
+  EXPECT_EQ(proto::LayerType::PICTURE_LAYER, layer_node.type());
+}
+
+}  // namespace
 }  // namespace cc

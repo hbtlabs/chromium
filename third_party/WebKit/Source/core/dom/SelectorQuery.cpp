@@ -24,7 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/dom/SelectorQuery.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -511,14 +510,14 @@ void SelectorDataList::execute(ContainerNode& rootNode, typename SelectorQueryTr
     findTraverseRootsAndExecute<SelectorQueryTrait>(rootNode, output);
 }
 
-PassOwnPtr<SelectorQuery> SelectorQuery::adopt(CSSSelectorList& selectorList)
+PassOwnPtr<SelectorQuery> SelectorQuery::adopt(CSSSelectorList selectorList)
 {
-    return adoptPtr(new SelectorQuery(selectorList));
+    return adoptPtr(new SelectorQuery(std::move(selectorList)));
 }
 
-SelectorQuery::SelectorQuery(CSSSelectorList& selectorList)
+SelectorQuery::SelectorQuery(CSSSelectorList selectorList)
 {
-    m_selectorList.adopt(selectorList);
+    m_selectorList = std::move(selectorList);
     m_selectors.initialize(m_selectorList);
 }
 
@@ -548,8 +547,7 @@ SelectorQuery* SelectorQueryCache::add(const AtomicString& selectors, const Docu
     if (it != m_entries.end())
         return it->value.get();
 
-    CSSSelectorList selectorList;
-    CSSParser::parseSelector(CSSParserContext(document, nullptr), selectors, selectorList);
+    CSSSelectorList selectorList = CSSParser::parseSelector(CSSParserContext(document, nullptr), selectors);
 
     if (!selectorList.first()) {
         exceptionState.throwDOMException(SyntaxError, "'" + selectors + "' is not a valid selector.");
@@ -566,7 +564,7 @@ SelectorQuery* SelectorQueryCache::add(const AtomicString& selectors, const Docu
     if (m_entries.size() == maximumSelectorQueryCacheSize)
         m_entries.remove(m_entries.begin());
 
-    return m_entries.add(selectors, SelectorQuery::adopt(selectorList)).storedValue->value.get();
+    return m_entries.add(selectors, SelectorQuery::adopt(std::move(selectorList))).storedValue->value.get();
 }
 
 void SelectorQueryCache::invalidate()

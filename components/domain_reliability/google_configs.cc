@@ -4,6 +4,9 @@
 
 #include "components/domain_reliability/google_configs.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/domain_reliability/config.h"
 
@@ -518,7 +521,7 @@ CreateGoogleConfig(const GoogleConfigParams& params, bool is_www) {
   config->success_sample_rate = 0.05;
   config->failure_sample_rate = 1.00;
   config->path_prefixes.clear();
-  return config.Pass();
+  return config;
 }
 
 }  // namespace

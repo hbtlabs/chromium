@@ -4,8 +4,10 @@
 
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 
+#include <stddef.h>
 #include <cstddef>
 #include <set>
+#include <utility>
 
 #include "ash/multi_profile_uma.h"
 #include "base/bind.h"
@@ -56,6 +58,7 @@
 #include "chromeos/timezone/timezone_resolver.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/remove_user_delegate.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_type.h"
@@ -438,22 +441,24 @@ void ChromeUserManagerImpl::Observe(
 
 void ChromeUserManagerImpl::OnExternalDataSet(const std::string& policy,
                                               const std::string& user_id) {
+  const AccountId account_id =
+      user_manager::known_user::GetAccountId(user_id, std::string());
   if (policy == policy::key::kUserAvatarImage)
-    GetUserImageManager(AccountId::FromUserEmail(user_id))
-        ->OnExternalDataSet(policy);
+    GetUserImageManager(account_id)->OnExternalDataSet(policy);
   else if (policy == policy::key::kWallpaperImage)
-    WallpaperManager::Get()->OnPolicySet(policy, user_id);
+    WallpaperManager::Get()->OnPolicySet(policy, account_id);
   else
     NOTREACHED();
 }
 
 void ChromeUserManagerImpl::OnExternalDataCleared(const std::string& policy,
                                                   const std::string& user_id) {
+  const AccountId account_id =
+      user_manager::known_user::GetAccountId(user_id, std::string());
   if (policy == policy::key::kUserAvatarImage)
-    GetUserImageManager(AccountId::FromUserEmail(user_id))
-        ->OnExternalDataCleared(policy);
+    GetUserImageManager(account_id)->OnExternalDataCleared(policy);
   else if (policy == policy::key::kWallpaperImage)
-    WallpaperManager::Get()->OnPolicyCleared(policy, user_id);
+    WallpaperManager::Get()->OnPolicyCleared(policy, account_id);
   else
     NOTREACHED();
 }
@@ -462,17 +467,22 @@ void ChromeUserManagerImpl::OnExternalDataFetched(
     const std::string& policy,
     const std::string& user_id,
     scoped_ptr<std::string> data) {
+  const AccountId account_id =
+      user_manager::known_user::GetAccountId(user_id, std::string());
   if (policy == policy::key::kUserAvatarImage)
-    GetUserImageManager(AccountId::FromUserEmail(user_id))
-        ->OnExternalDataFetched(policy, data.Pass());
+    GetUserImageManager(account_id)
+        ->OnExternalDataFetched(policy, std::move(data));
   else if (policy == policy::key::kWallpaperImage)
-    WallpaperManager::Get()->OnPolicyFetched(policy, user_id, data.Pass());
+    WallpaperManager::Get()->OnPolicyFetched(policy, account_id,
+                                             std::move(data));
   else
     NOTREACHED();
 }
 
 void ChromeUserManagerImpl::OnPolicyUpdated(const std::string& user_id) {
-  const user_manager::User* user = FindUser(AccountId::FromUserEmail(user_id));
+  const AccountId account_id =
+      user_manager::known_user::GetAccountId(user_id, std::string());
+  const user_manager::User* user = FindUser(account_id);
   if (!user || user->GetType() != user_manager::USER_TYPE_PUBLIC_ACCOUNT)
     return;
   UpdatePublicAccountDisplayName(user_id);
@@ -658,8 +668,7 @@ void ChromeUserManagerImpl::GuestUserLoggedIn() {
       false);
 
   // Initializes wallpaper after active_user_ is set.
-  WallpaperManager::Get()->SetUserWallpaperNow(
-      login::GuestAccountId().GetUserEmail());
+  WallpaperManager::Get()->SetUserWallpaperNow(login::GuestAccountId());
 }
 
 void ChromeUserManagerImpl::RegularUserLoggedIn(const AccountId& account_id) {
@@ -674,7 +683,7 @@ void ChromeUserManagerImpl::RegularUserLoggedIn(const AccountId& account_id) {
   }
 
   if (IsCurrentUserNew())
-    WallpaperManager::Get()->SetUserWallpaperNow(account_id.GetUserEmail());
+    WallpaperManager::Get()->SetUserWallpaperNow(account_id);
 
   GetUserImageManager(account_id)->UserLoggedIn(IsCurrentUserNew(), false);
 
@@ -690,7 +699,7 @@ void ChromeUserManagerImpl::RegularUserLoggedInAsEphemeral(
   ChromeUserManager::RegularUserLoggedInAsEphemeral(account_id);
 
   GetUserImageManager(account_id)->UserLoggedIn(IsCurrentUserNew(), false);
-  WallpaperManager::Get()->SetUserWallpaperNow(account_id.GetUserEmail());
+  WallpaperManager::Get()->SetUserWallpaperNow(account_id);
 }
 
 void ChromeUserManagerImpl::SupervisedUserLoggedIn(
@@ -705,11 +714,11 @@ void ChromeUserManagerImpl::SupervisedUserLoggedIn(
     SetIsCurrentUserNew(true);
     active_user_ = user_manager::User::CreateSupervisedUser(account_id);
     // Leaving OAuth token status at the default state = unknown.
-    WallpaperManager::Get()->SetUserWallpaperNow(account_id.GetUserEmail());
+    WallpaperManager::Get()->SetUserWallpaperNow(account_id);
   } else {
     if (supervised_user_manager_->CheckForFirstRun(account_id.GetUserEmail())) {
       SetIsCurrentUserNew(true);
-      WallpaperManager::Get()->SetUserWallpaperNow(account_id.GetUserEmail());
+      WallpaperManager::Get()->SetUserWallpaperNow(account_id);
     } else {
       SetIsCurrentUserNew(false);
     }
@@ -736,7 +745,7 @@ void ChromeUserManagerImpl::SupervisedUserLoggedIn(
 
 bool ChromeUserManagerImpl::HasPendingBootstrap(
     const AccountId& account_id) const {
-  return bootstrap_manager_->HasPendingBootstrap(account_id.GetUserEmail());
+  return bootstrap_manager_->HasPendingBootstrap(account_id);
 }
 
 void ChromeUserManagerImpl::PublicAccountUserLoggedIn(
@@ -768,8 +777,7 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(
       user_manager::User::USER_IMAGE_INVALID,
       false);
 
-  WallpaperManager::Get()->SetUserWallpaperNow(
-      kiosk_app_account_id.GetUserEmail());
+  WallpaperManager::Get()->SetUserWallpaperNow(kiosk_app_account_id);
 
   // TODO(bartfab): Add KioskAppUsers to the users_ list and keep metadata like
   // the kiosk_app_id in these objects, removing the need to re-parse the
@@ -813,8 +821,7 @@ void ChromeUserManagerImpl::DemoAccountLoggedIn() {
               IDR_PROFILE_PICTURE_LOADING)),
       user_manager::User::USER_IMAGE_INVALID,
       false);
-  WallpaperManager::Get()->SetUserWallpaperNow(
-      login::DemoAccountId().GetUserEmail());
+  WallpaperManager::Get()->SetUserWallpaperNow(login::DemoAccountId());
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(::switches::kForceAppMode);
@@ -857,14 +864,14 @@ void ChromeUserManagerImpl::RemoveNonCryptohomeData(
     const AccountId& account_id) {
   ChromeUserManager::RemoveNonCryptohomeData(account_id);
 
-  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id.GetUserEmail());
+  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id);
   GetUserImageManager(account_id)->DeleteUserImage();
 
   supervised_user_manager_->RemoveNonCryptohomeData(account_id.GetUserEmail());
 
   multi_profile_user_controller_->RemoveCachedValues(account_id.GetUserEmail());
 
-  EasyUnlockService::ResetLocalStateForUser(account_id.GetUserEmail());
+  EasyUnlockService::ResetLocalStateForUser(account_id);
 }
 
 void
@@ -1094,8 +1101,7 @@ void ChromeUserManagerImpl::OnUserNotAllowed(const std::string& user_email) {
 }
 
 void ChromeUserManagerImpl::RemovePendingBootstrapUser(
-    const std::string& user_id) {
-  const AccountId account_id(AccountId::FromUserEmail(user_id));
+    const AccountId& account_id) {
   DCHECK(HasPendingBootstrap(account_id));
   RemoveNonOwnerUserInternal(account_id, nullptr);
 }
@@ -1151,8 +1157,7 @@ void ChromeUserManagerImpl::SetUserAffiliation(
     const std::string& user_email,
     const AffiliationIDSet& user_affiliation_ids) {
   const AccountId& account_id =
-      user_manager::UserManager::GetKnownUserAccountId(user_email,
-                                                       std::string());
+      user_manager::known_user::GetAccountId(user_email, std::string());
   user_manager::User* user = FindUserAndModify(account_id);
 
   if (user) {

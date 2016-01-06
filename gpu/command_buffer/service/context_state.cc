@@ -4,6 +4,8 @@
 
 #include "gpu/command_buffer/service/context_state.h"
 
+#include <stddef.h>
+
 #include <cmath>
 
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -563,6 +565,13 @@ void ContextState::UnbindTexture(TextureRef* texture) {
         active_unit = jj;
       }
       glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+    } else if (unit.bound_texture_rectangle_arb.get() == texture) {
+      unit.bound_texture_rectangle_arb = NULL;
+      if (active_unit != jj) {
+        glActiveTexture(GL_TEXTURE0 + jj);
+        active_unit = jj;
+      }
+      glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
     } else if (unit.bound_texture_3d.get() == texture) {
       unit.bound_texture_3d = NULL;
       if (active_unit != jj) {
@@ -583,6 +592,37 @@ void ContextState::UnbindTexture(TextureRef* texture) {
   if (active_unit != active_texture_unit) {
     glActiveTexture(GL_TEXTURE0 + active_texture_unit);
   }
+}
+
+void ContextState::UnbindSampler(Sampler* sampler) {
+  for (size_t jj = 0; jj < sampler_units.size(); ++jj) {
+    if (sampler_units[jj].get() == sampler) {
+      sampler_units[jj] = nullptr;
+      glBindSampler(jj, 0);
+    }
+  }
+}
+
+PixelStoreParams ContextState::GetPackParams() {
+  PixelStoreParams params;
+  params.alignment = pack_alignment;
+  params.row_length = pack_row_length;
+  params.skip_pixels = pack_skip_pixels;
+  params.skip_rows = pack_skip_rows;
+  return params;
+}
+
+PixelStoreParams ContextState::GetUnpackParams(Dimension dimension) {
+  PixelStoreParams params;
+  params.alignment = unpack_alignment;
+  params.row_length = unpack_row_length;
+  params.skip_pixels = unpack_skip_pixels;
+  params.skip_rows = unpack_skip_rows;
+  if (dimension == k3D) {
+    params.image_height = unpack_image_height;
+    params.skip_images = unpack_skip_images;
+  }
+  return params;
 }
 
 // Include the auto-generated part of this file. We split this because it means

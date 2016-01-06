@@ -31,13 +31,14 @@
 #include <string>
 #include <utility>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/system_monitor/system_monitor.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/media/audio_output_device_enumerator.h"
 #include "content/browser/renderer_host/media/media_stream_provider.h"
 #include "content/common/content_export.h"
@@ -102,7 +103,7 @@ class CONTENT_EXPORT MediaStreamManager
       int render_process_id,
       int render_frame_id,
       int page_request_id,
-      const StreamOptions& options,
+      const StreamControls& controls,
       const GURL& security_origin,
       const MediaRequestResponseCallback& callback);
 
@@ -115,7 +116,7 @@ class CONTENT_EXPORT MediaStreamManager
                       int render_frame_id,
                       const ResourceContext::SaltCallback& sc,
                       int page_request_id,
-                      const StreamOptions& components,
+                      const StreamControls& controls,
                       const GURL& security_origin,
                       bool user_gesture);
 
@@ -306,15 +307,15 @@ class CONTENT_EXPORT MediaStreamManager
   void SetupRequest(const std::string& label);
   // Prepare |request| of type MEDIA_DEVICE_AUDIO_CAPTURE and/or
   // MEDIA_DEVICE_VIDEO_CAPTURE for being posted to the UI by parsing
-  // StreamOptions::Constraints for requested device IDs.
+  // StreamControls for requested device IDs.
   bool SetupDeviceCaptureRequest(DeviceRequest* request);
   // Prepare |request| of type MEDIA_TAB_AUDIO_CAPTURE and/or
   // MEDIA_TAB_VIDEO_CAPTURE for being posted to the UI by parsing
-  // StreamOptions::Constraints for requested tab capture IDs.
+  // StreamControls for requested tab capture IDs.
   bool SetupTabCaptureRequest(DeviceRequest* request);
   // Prepare |request| of type MEDIA_DESKTOP_AUDIO_CAPTURE and/or
   // MEDIA_DESKTOP_VIDEO_CAPTURE for being posted to the UI by parsing
-  // StreamOptions::Constraints for the requested desktop ID.
+  // StreamControls for the requested desktop ID.
   bool SetupScreenCaptureRequest(DeviceRequest* request);
   // Called when a request has been setup and devices have been enumerated if
   // needed.
@@ -360,7 +361,19 @@ class CONTENT_EXPORT MediaStreamManager
   void StartMonitoringOnUIThread();
 #endif
 
-  // Finds the requested device id from constraints. The requested device type
+  // Picks a device ID from a list of required and alternate device IDs,
+  // presented as part of a TrackControls structure.
+  // Either the required device ID is picked (if present), or the first
+  // valid alternate device ID.
+  // Returns false if the required device ID is present and invalid.
+  // Otherwise, if no valid device is found, device_id is unchanged.
+  bool PickDeviceId(MediaStreamType type,
+                    const ResourceContext::SaltCallback& salt_callback,
+                    const GURL& security_origin,
+                    const TrackControls& controls,
+                    std::string* device_id) const;
+
+  // Finds the requested device id from request. The requested device type
   // must be MEDIA_DEVICE_AUDIO_CAPTURE or MEDIA_DEVICE_VIDEO_CAPTURE.
   bool GetRequestedDeviceCaptureId(const DeviceRequest* request,
                                    MediaStreamType type,
@@ -374,20 +387,6 @@ class CONTENT_EXPORT MediaStreamManager
   void OnMediaStreamUIWindowId(MediaStreamType video_type,
                                StreamDeviceInfoArray devices,
                                gfx::NativeViewId window_id);
-
-#if defined(OS_CHROMEOS)
-  // Ensures that we have checked for presence of a keyboard mic. This is only
-  // done once. This function should be called before posting a request on the
-  // UI thread.
-  void EnsureKeyboardMicChecked();
-
-  // Checks if the system has a keyboard mic, and if so, inform the audio
-  // manager via SetKeyboardMicOnDeviceThread().
-  void CheckKeyboardMicOnUIThread();
-
-  // Tells the audio mananger that the system supports a keyboard mic.
-  void SetKeyboardMicOnDeviceThread();
-#endif
 
   // Runs on the IO thread and does the actual [un]registration of callbacks.
   void DoNativeLogCallbackRegistration(int renderer_host_id,
@@ -410,14 +409,6 @@ class CONTENT_EXPORT MediaStreamManager
 
   // Indicator of device monitoring state.
   bool monitoring_started_;
-
-#if defined(OS_CHROMEOS)
-  // Flag that's set when we have checked if the system has a keyboard mic. We
-  // only need to check it once, and not when constructing since that will
-  // affect startup time.
-  // Must be accessed on the IO thread;
-  bool has_checked_keyboard_mic_;
-#endif
 
   // Stores most recently enumerated device lists. The cache is cleared when
   // monitoring is stopped or there is no request for that type of device.

@@ -131,6 +131,16 @@ What's the point in defaulting functions in C++11?</a></td>
 </tr>
 
 <tr>
+<td>Default Function Template Arguments</td>
+<td><code>template &lt;typename T = <i>type</i>&gt; <br />
+&nbsp;&nbsp;<i>type</i> <i>Function</i>(T <i>var</i>) {}</code></td>
+<td>Allow function templates, like classes, to have default arguments</td>
+<td><a href="http://stackoverflow.com/questions/2447458/default-template-arguments-for-function-templates">
+Default Template Arguments for Function Templates</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/9KtaAsome-o">Discussion thread</a></td>
+</tr>
+
+<tr>
 <td>Delegated Constructors</td>
 <td><code>Class() : Class(0) {}</code><br />
 <code>Class(<i>type</i> <i>var</i>) : Class(<i>var</i>, 0)</code></td>
@@ -245,6 +255,24 @@ Range-based for loop</a></td>
 </tr>
 
 <tr>
+<td>Rvalue References</td>
+<td><code>T(T&amp;&amp; t)</code> and <code>T&amp; operator=(T&amp;&amp; t)</code><br/><br/>
+    <code>template &lt;typename T&gt;<br/>void Function(T&& t) { ... }</code></td>
+<td>Reference that only binds to a temporary object</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/references#Rvalue_references">
+Rvalue references</a></td>
+<td>As per the <a href="https://google.github.io/styleguide/cppguide.html#Rvalue_references">Google style guide</a>: Only use these to define move constructors and move assignment operators, and for perfect forwarding.<br/>Most classes should not be copyable, even if movable. Continue to use DISALLOW_COPY_AND_ASSIGN (or DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND if needed) in most cases. <a href="https://groups.google.com/a/chromium.org/d/topic/chromium-dev/UnRaORb4TSw">Discussion thread</a> and <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/Q526tkruXpM">discussion thread</a>.
+<br/><br/>
+MSVC 2013 has some known bugs with rvalue references:
+<ul>
+<li>Exported classes generate copy constructors even if they are not used, which tries to use copy constructors on members. Use DISALLOW_COPY_AND_ASSIGN on the exported class to resolve it.</li>
+<li>The compiler chooses a T::(T&) constructor before T::(T&&). However copy constructors should be written as T::T(const T&) and these are prioritized correctly.</li>
+<li>The compiler does not create default move constructors, either implicitly or with the =default keyword. You must provide such constructors explicitly to create them.</li>
+</ul>
+</td>
+</tr>
+
+<tr>
 <td>Standard Integers</td>
 <td>Typedefs within <code>&lt;stdint.h&gt;</code>
 and <code>&lt;inttypes&gt;</code></td>
@@ -303,7 +331,7 @@ Parameter pack</a></td>
 <td><code>v.data()</code></td>
 <td>Returns a pointer to a <code>std::vector</code>'s underlying data, accounting for empty vectors.</td>
 <td><a href="http://en.cppreference.com/w/cpp/container/vector/data">std::vector::data</a></td>
-<td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/16V7fmtbzok">Discussion thread</a>.</td>
+<td><a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/16V7fmtbzok">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -316,6 +344,14 @@ std::begin</a> and
 <a href="http://en.cppreference.com/w/cpp/iterator/end">
 std::end</a></td>
 <td>Useful for fixed-size arrays. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/5iFNE8P5qT4/discussion">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Conditional Type Selection</td>
+<td><code>std::enable_if</code> and <code>std::conditional</code></td>
+<td>Enables compile-time conditional type selection</td>
+<td><a href="http://en.cppreference.com/w/cpp/types/enable_if">std::enable_if</a> and <a href="http://en.cppreference.com/w/cpp/types/conditional">conditional</a></td>
+<td>Usage should be rare. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -335,23 +371,27 @@ std::end</a></td>
 </tr>
 
 <tr>
-<td>Move Semantics</td>
-<td><code>std::move()</code></td>
-<td>Facilitates efficient move operations</td>
-<td><a href="http://en.cppreference.com/w/cpp/utility/move">
-<code>std::move</code> reference</a></td>
-<td>Note: std::move() is allowed but writing your own move constructors is still only allowed in exceptional cases for now, see 'Rvalue References (and Move Semantics)'. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/x_dWFxJFdbM'>Discussion thread</a></td>
+<td>Move Iterator Adaptor</td>
+<td><code>std::make_move_iterator()</code></td>
+<td>Wraps an iterator so that it moves objects instead of copying them.</td>
+<td><a href="http://en.cppreference.com/w/cpp/iterator/make_move_iterator">std::make_move_iterator</a></td>
+<td>Useful to move objects between containers that contain move-only types like <code>scoped_ptr</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/lccnUljOHQU">Discussion thread</a></td>
 </tr>
 
 <tr>
-<td>Conditional Type Selection</td>
-<td><code>std::enable_if</code> and <code>std::conditional</code></td>
-<td>Enables compile-time conditional type selection</td>
-<td><a href="http://en.cppreference.com/w/cpp/types/enable_if">
-std::enable_if</a> and
-<a href="http://en.cppreference.com/w/cpp/types/conditional">
-conditional</a></td>
-<td>Usage should be rare.<a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
+<td>Move Semantics</td>
+<td><code>std::move()</code></td>
+<td>Facilitates efficient move operations</td>
+<td><a href="http://en.cppreference.com/w/cpp/utility/move"><code>std::move</code> reference</a></td>
+<td><a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/x_dWFxJFdbM'>Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Range Move</td>
+<td><code>std::move()</code></td>
+<td>Moves contents of an iterator range to a different iterator. This is a counterpart of std::copy that applies std::move() to each element.</td>
+<td><a href="http://en.cppreference.com/w/cpp/algorithm/move"><code>std::move</code> reference</a></td>
+<td>This is allowed, but there is almost always a way to write code without using this version of std::move. Not using it usually results in cleaner, easier to read, and less confusing code. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/8WzmtYrZvQ8'>Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -364,12 +404,11 @@ Standard library header &lt;type_traits&gt;</a></td>
 </tr>
 
 <tr>
-<td>Move Iterator Adaptor</td>
-<td><code>std::make_move_iterator()</code></td>
-<td>Wraps an iterator so that it moves objects instead of copying them.</td>
-<td><a href="http://en.cppreference.com/w/cpp/iterator/make_move_iterator">
-std::make_move_iterator</a></td>
-<td>Useful to move objects between containers that contain move-only types like <code>scoped_ptr</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/lccnUljOHQU">Discussion thread</a></td>
+<td>Types, functions, and constants from <code>&lt;cmath&gt;</code></td>
+<td><code>std::round()</code>, <code>std::isnan()</code>, and others</td>
+<td>Useful for math-related code</td>
+<td><a href="http://en.cppreference.com/w/cpp/header/cmath"><code>&lt;cmath&gt;</code></a></td>
+<td>Anything in <code>&lt;cmath&gt;</code> is allowed. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/P-1bFBXMeUk">Discussion thread</a></td>
 </tr>
 
 </tbody>
@@ -394,6 +433,25 @@ codebase.
 <th style='width:240px;'>Description</th>
 <th style='width:240px;'>Documentation Link</th>
 <th style='width:240px;'>Notes</th>
+</tr>
+
+<tr>
+<td>Alignment Features</td>
+<td>
+<code>alignas</code> specifier,
+<code>alignof</code> operator
+<td>Object alignment</td>
+<td>
+<a href="http://en.cppreference.com/w/cpp/language/alignas">alignas</a>,
+<a href="http://en.cppreference.com/w/cpp/language/alignof">alignof</a>
+</td>
+<td>
+<a href="https://codereview.chromium.org/1497963002/">Doesn't work in
+MSVS2013</a>.
+<a href="https://msdn.microsoft.com/en-us/library/dn956970.aspx">MSVS2015
+supports them</a>; reevaluate after MSVS2015 is available.
+<a href="https://groups.google.com/a/chromium.org/d/msg/cxx/rwXN02jzzq0/CpUc1ZzMBQAJ">Discussion thread</a>
+</td>
 </tr>
 
 <tr>
@@ -455,15 +513,6 @@ sequences, easing parsing in regex expressions, for example</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/string_literal">
 string literal</a></td>
 <td>Causes incorrect line numbers in MSVS2013 and gcc. Reevaluate once that works. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/2kWQHbbuMHI">Discussion thread</a></td>
-</tr>
-
-<tr>
-<td>Rvalue References (and Move Semantics)</td>
-<td><code>T(T&amp;&amp; t)</code> and <code>T&amp; operator=(T&amp;&amp; t)</code></td>
-<td>Reference that only binds to a temporary object</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/references#Rvalue_references">
-Rvalue references</a></td>
-<td>To be revisited in the future.  Allowed in exceptional cases where approved by the OWNERS of src/styleguide/c++/. <a href="https://groups.google.com/a/chromium.org/d/topic/chromium-dev/UnRaORb4TSw">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -565,32 +614,12 @@ work in all our compilers yet.</p>
 </tr>
 
 <tr>
-<td>Alignment Features</td>
-<td>
-<code>alignas</code> specifier,
-<code>alignof</code> operator,
-<td>Object alignment</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/alignof">alignof</a></td>
-<td></td>
-</tr>
-
-<tr>
 <td>Attributes</td>
 <td><code>[[<i>attribute_name</i>]]</code></td>
 <td>Attaches properties to declarations that
 specific compiler implementations may use.</td>
 <td><a href="http://www.codesynthesis.com/~boris/blog/2012/04/18/cxx11-generalized-attributes/">
 C++11 generalized attributes</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Default Function Template Arguments</td>
-<td><code>template &lt;typename T = <i>type</i>&gt; <br />
-&nbsp;&nbsp;<i>type</i> <i>Function</i>(T <i>var</i>) {}</code></td>
-<td>Allow function templates, like classes, to have default arguments</td>
-<td><a href="http://stackoverflow.com/questions/2447458/default-template-arguments-for-function-templates">
-Default Template Arguments for Function Templates</a></td>
 <td></td>
 </tr>
 
@@ -666,9 +695,9 @@ User-defined literals</a></td>
 <td><a href="http://en.cppreference.com/w/cpp/memory/addressof">std::addressof</a></td>
 <td>Usage should be rare as
 <a href="https://google.github.io/styleguide/cppguide.html#Operator_Overloading">
-Operator Overloading</a> is rare and <code>&amps;</code>
+Operator Overloading</a> is rare and <code>&amp;</code>
 should suffice in most cases. May be preferable
-over <code>&amps;</code> for performing object
+over <code>&amp;</code> for performing object
 identity checks.</td>
 </tr>
 
@@ -830,14 +859,6 @@ std::declare_no_pointers</a></td>
 <td><code>std::is_heap()</code></td>
 <td>Checks whether an iterator range is in fact a heap</td>
 <td>TODO: documentation link</td>
-<td></td>
-</tr>
-
-<tr>
-<td>Is Nan</td>
-<td><code>std::isnan()</code></td>
-<td>Determines if a floating point value is not-a-number</td>
-<td><a href="http://en.cppreference.com/w/cpp/numeric/math/isnan">std::isnan</a></td>
 <td></td>
 </tr>
 

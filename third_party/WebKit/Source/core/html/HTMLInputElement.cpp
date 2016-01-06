@@ -26,7 +26,6 @@
  *
  */
 
-#include "config.h"
 #include "core/html/HTMLInputElement.h"
 
 #include "bindings/core/v8/ExceptionMessages.h"
@@ -37,6 +36,7 @@
 #include "core/InputTypeNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/IdTargetObserver.h"
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -776,7 +776,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         UseCounter::count(document(), UseCounter::PrefixedDirectoryAttribute);
     } else {
         if (name == formactionAttr)
-            logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "input", formactionAttr.toString(), oldValue, value);
+            logUpdateAttributeIfIsolatedWorldAndInDocument("input", formactionAttr, oldValue, value);
         HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
     }
     m_inputTypeView->attributeChanged();
@@ -1235,7 +1235,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
         // FIXME: Remove type check.
         if (type() == InputTypeNames::search)
-            onSearch();
+            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, PassRefPtrWillBeRawPtr<HTMLInputElement>(this)));
         // Form submission finishes editing, just as loss of focus does.
         // If there was a change, send the event now.
         if (wasChangedSinceLastFormControlChangeEvent())
@@ -1511,7 +1511,7 @@ Node::InsertionNotificationRequest HTMLInputElement::insertedInto(ContainerNode*
     if (insertionPoint->inDocument() && !form())
         addToRadioButtonGroup();
     resetListAttributeTargetObserver();
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "input", fastGetAttribute(typeAttr), fastGetAttribute(formactionAttr));
+    logAddElementIfIsolatedWorldAndInDocument("input", typeAttr, formactionAttr);
     return InsertionShouldCallDidNotifySubtreeInsertions;
 }
 

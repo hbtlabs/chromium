@@ -26,7 +26,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/page/AutoscrollController.h"
 
 #include "core/frame/FrameView.h"
@@ -264,12 +263,12 @@ void AutoscrollController::animate(double)
 #endif
     }
     if (m_autoscrollType != NoAutoscroll)
-        m_page->chromeClient().scheduleAnimation();
+        m_page->chromeClient().scheduleAnimation(m_autoscrollLayoutObject->frame()->view());
 }
 
 void AutoscrollController::startAutoscroll()
 {
-    m_page->chromeClient().scheduleAnimation();
+    m_page->chromeClient().scheduleAnimation(m_autoscrollLayoutObject->frame()->view());
 }
 
 #if OS(WIN)

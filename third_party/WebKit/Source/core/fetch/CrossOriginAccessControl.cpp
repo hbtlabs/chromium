@@ -24,7 +24,6 @@
  *
  */
 
-#include "config.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 
 #include "core/fetch/Resource.h"
@@ -57,7 +56,7 @@ static PassOwnPtr<HTTPHeaderSet> createAllowedCrossOriginResponseHeadersSet()
 
 bool isOnAccessControlResponseHeaderWhitelist(const String& name)
 {
-    AtomicallyInitializedStaticReference(HTTPHeaderSet, allowedCrossOriginResponseHeaders, (createAllowedCrossOriginResponseHeadersSet().leakPtr()));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(HTTPHeaderSet, allowedCrossOriginResponseHeaders, (createAllowedCrossOriginResponseHeadersSet().leakPtr()));
 
     return allowedCrossOriginResponseHeaders.contains(name);
 }
@@ -66,7 +65,6 @@ void updateRequestForAccessControl(ResourceRequest& request, SecurityOrigin* sec
 {
     request.removeCredentials();
     request.setAllowStoredCredentials(allowCredentials == AllowStoredCredentials);
-    request.setFetchCredentialsMode(allowCredentials == AllowStoredCredentials ? WebURLRequest::FetchCredentialsModeInclude : WebURLRequest::FetchCredentialsModeOmit);
 
     if (securityOrigin)
         request.setHTTPOrigin(securityOrigin);
@@ -76,8 +74,8 @@ ResourceRequest createAccessControlPreflightRequest(const ResourceRequest& reque
 {
     ResourceRequest preflightRequest(request.url());
     updateRequestForAccessControl(preflightRequest, securityOrigin, DoNotAllowStoredCredentials);
-    preflightRequest.setHTTPMethod("OPTIONS");
-    preflightRequest.setHTTPHeaderField("Access-Control-Request-Method", request.httpMethod());
+    preflightRequest.setHTTPMethod(HTTPNames::OPTIONS);
+    preflightRequest.setHTTPHeaderField(HTTPNames::Access_Control_Request_Method, AtomicString(request.httpMethod()));
     preflightRequest.setPriority(request.priority());
     preflightRequest.setRequestContext(request.requestContext());
     preflightRequest.setSkipServiceWorker(true);
@@ -105,7 +103,7 @@ ResourceRequest createAccessControlPreflightRequest(const ResourceRequest& reque
                 headerBuffer.appendLiteral(", ");
             headerBuffer.append(header);
         }
-        preflightRequest.setHTTPHeaderField("Access-Control-Request-Headers", AtomicString(headerBuffer.toString()));
+        preflightRequest.setHTTPHeaderField(HTTPNames::Access_Control_Request_Headers, AtomicString(headerBuffer.toString()));
     }
 
     return preflightRequest;
@@ -131,9 +129,9 @@ static String buildAccessControlFailureMessage(const String& detail, SecurityOri
 
 bool passesAccessControlCheck(const ResourceResponse& response, StoredCredentials includeCredentials, SecurityOrigin* securityOrigin, String& errorDescription, WebURLRequest::RequestContext context)
 {
-    AtomicallyInitializedStaticReference(AtomicString, allowOriginHeaderName, (new AtomicString("access-control-allow-origin", AtomicString::ConstructFromLiteral)));
-    AtomicallyInitializedStaticReference(AtomicString, allowCredentialsHeaderName, (new AtomicString("access-control-allow-credentials", AtomicString::ConstructFromLiteral)));
-    AtomicallyInitializedStaticReference(AtomicString, allowSuboriginHeaderName, (new AtomicString("access-control-allow-suborigin", AtomicString::ConstructFromLiteral)));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, allowOriginHeaderName, (new AtomicString("access-control-allow-origin", AtomicString::ConstructFromLiteral)));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, allowCredentialsHeaderName, (new AtomicString("access-control-allow-credentials", AtomicString::ConstructFromLiteral)));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, allowSuboriginHeaderName, (new AtomicString("access-control-allow-suborigin", AtomicString::ConstructFromLiteral)));
 
     int statusCode = response.httpStatusCode();
 

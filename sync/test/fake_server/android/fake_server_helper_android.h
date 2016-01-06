@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID
-#define SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID
+#ifndef SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID_H_
+#define SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID_H_
 
 #include <jni.h>
+#include <string>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "sync/test/fake_server/entity_builder_factory.h"
 
 // Helper for utilizing native FakeServer infrastructure in Android tests.
@@ -139,7 +139,7 @@ class FakeServerHelperAndroid {
   // Deserializes |serialized_entity_specifics| into |entity_specifics|.
   void DeserializeEntitySpecifics(JNIEnv* env,
                                   jbyteArray serialized_entity_specifics,
-                                  sync_pb::EntitySpecifics& entity_specifics);
+                                  sync_pb::EntitySpecifics* entity_specifics);
 
   // Creates a bookmark entity.
   scoped_ptr<fake_server::FakeServerEntity> CreateBookmarkEntity(
@@ -149,4 +149,4 @@ class FakeServerHelperAndroid {
       jstring parent_id);
 };
 
-#endif  // SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID
+#endif  // SYNC_TEST_FAKE_SERVER_ANDROID_FAKE_SERVER_HELPER_ANDROID_H_

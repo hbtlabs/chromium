@@ -4,6 +4,7 @@
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <stdint.h>
 
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
@@ -25,14 +26,7 @@ class GLEXTSRGBTest : public testing::Test {
 // Test to ensure that GL_SRGB_ALPHA as glTex(Sub)Image2D parameter works. This
 // is tricky because GL_SRGB_ALPHA is valid in OpenGL ES 2.0 but not valid in
 // OpenGL.
-#if defined(OS_ANDROID)
-// Test is failing for Lollipop 64 bit Tester.
-// See crbug/550292.
-#define MAYBE_TexImageSRGBALPHAFormat DISABLED_TexImageSRGBALPHAFormat
-#else
-#define MAYBE_TexImageSRGBALPHAFormat TexImageSRGBALPHAFormat
-#endif
-TEST_F(GLEXTSRGBTest, MAYBE_TexImageSRGBALPHAFormat) {
+TEST_F(GLEXTSRGBTest, TexImageSRGBALPHAFormat) {
   if (!IsApplicable())
     return;
   static const int kWidth = 10;
@@ -41,10 +35,10 @@ TEST_F(GLEXTSRGBTest, MAYBE_TexImageSRGBALPHAFormat) {
   static const int kSubImageY = kHeight / 2;
   static const int kSubImageWidth = kWidth / 2;
   static const int kSubImageHeight = kHeight / 2;
-  static const uint8 kImageColor[] = {255, 255, 255, 255};
-  static const uint8 kSubImageColor[] = {128, 128, 128, 128};
+  static const uint8_t kImageColor[] = {255, 255, 255, 255};
+  static const uint8_t kSubImageColor[] = {128, 128, 128, 128};
 
-  uint8 pixels[kWidth * kHeight * 4];
+  uint8_t pixels[kWidth * kHeight * 4];
 
   GLuint tex = 0;
   glGenTextures(1, &tex);

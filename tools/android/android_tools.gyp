@@ -38,6 +38,7 @@
       ],
     },
     {
+      # GN: //tools/android:memconsumer
       'target_name': 'memconsumer',
       'type': 'none',
       'dependencies': [
@@ -61,6 +62,7 @@
       ],
     },
     {
+      # GN: //tools/android:spnego_authenticator
       'target_name': 'spnego_authenticator',
       'type': 'none',
       'dependencies': [
@@ -73,6 +75,14 @@
       'type': 'none',
       'dependencies': [
         'customtabs_benchmark/customtabs_benchmark.gyp:customtabs_benchmark_apk',
+      ],
+    },
+    {
+      # GN: //tools/android:audio_focus_grabber
+      'target_name': 'audio_focus_grabber',
+      'type': 'none',
+      'dependencies': [
+        'audio_focus_grabber/audio_focus_grabber.gyp:audio_focus_grabber_apk',
       ],
     },
   ],

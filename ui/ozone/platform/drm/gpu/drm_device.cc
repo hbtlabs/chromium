@@ -9,8 +9,10 @@
 #include <unistd.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -215,7 +217,7 @@ DrmDevice::DrmDevice(const base::FilePath& device_path,
                      base::File file,
                      bool is_primary_device)
     : device_path_(device_path),
-      file_(file.Pass()),
+      file_(std::move(file)),
       page_flip_manager_(new PageFlipManager()),
       is_primary_device_(is_primary_device) {}
 
@@ -370,7 +372,7 @@ ScopedDrmPropertyPtr DrmDevice::GetProperty(drmModeConnector* connector,
       continue;
 
     if (strcmp(property->name, name) == 0)
-      return property.Pass();
+      return property;
   }
 
   return ScopedDrmPropertyPtr();

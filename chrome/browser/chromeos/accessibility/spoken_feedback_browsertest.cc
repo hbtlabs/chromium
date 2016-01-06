@@ -9,6 +9,7 @@
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -422,6 +423,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ScreenBrightness) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, VolumeSlider) {
   EnableChromeVox();
 
+  // Volume slider does not fire valueChanged event on first key press because
+  // it has no widget.
+  EXPECT_TRUE(PerformAcceleratorAction(ash::VOLUME_UP));
   EXPECT_TRUE(PerformAcceleratorAction(ash::VOLUME_UP));
   EXPECT_TRUE(
       base::MatchPattern(speech_monitor_.GetNextUtterance(), "* percent*"));
@@ -461,6 +465,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxShiftSearch) {
   // Press Search+Shift+/ to enter ChromeVox's "find in page".
   SendKeyPressWithSearchAndShift(ui::VKEY_OEM_2);
   EXPECT_EQ("Find in page.", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ(",", speech_monitor_.GetNextUtterance());
   EXPECT_EQ("Enter a search query.", speech_monitor_.GetNextUtterance());
 }
 
@@ -485,6 +490,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxPrefixKey) {
   SendKeyPressWithControl(ui::VKEY_OEM_1);
   SendKeyPress(ui::VKEY_OEM_2);
   EXPECT_EQ("Find in page.", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ(",", speech_monitor_.GetNextUtterance());
   EXPECT_EQ("Enter a search query.", speech_monitor_.GetNextUtterance());
 }
 
@@ -564,6 +570,28 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxStickyMode) {
   // Press the up arrow to go to the previous element.
   SendKeyPress(ui::VKEY_UP);
   EXPECT_EQ("One", speech_monitor_.GetNextUtterance());
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxNextStickyMode) {
+  LoadChromeVoxAndThenNavigateToURL(
+      GURL("data:text/html;charset=utf-8,<button autofocus>Click me</button>"
+           "<!-- chromevox_next_test -->"));
+  while ("Button" != speech_monitor_.GetNextUtterance()) {
+  }
+
+  // Press the sticky-key sequence: Search Search.
+  SendKeyPress(ui::VKEY_LWIN);
+  SendKeyPress(ui::VKEY_LWIN);
+  EXPECT_EQ("Sticky mode enabled", speech_monitor_.GetNextUtterance());
+
+  SendKeyPress(ui::VKEY_H);
+  while ("No next heading." != speech_monitor_.GetNextUtterance()) {
+  }
+
+  SendKeyPress(ui::VKEY_LWIN);
+  SendKeyPress(ui::VKEY_LWIN);
+  while ("Sticky mode disabled" != speech_monitor_.GetNextUtterance()) {
+  }
 }
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreStatusTray) {

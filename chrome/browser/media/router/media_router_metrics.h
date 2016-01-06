@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
 #define CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
 
+#include "base/time/time.h"
+
 namespace media_router {
 
 // NOTE: Do not renumber enums as that would confuse interpretation of
@@ -26,10 +28,10 @@ enum class MediaRouterDialogOpenOrigin {
 enum class MediaRouteProviderWakeReason {
   CREATE_ROUTE = 0,
   JOIN_ROUTE = 1,
-  CLOSE_ROUTE = 2,
+  TERMINATE_ROUTE = 2,
   SEND_SESSION_MESSAGE = 3,
   SEND_SESSION_BINARY_MESSAGE = 4,
-  PRESENTATION_SESSION_DETACHED = 5,
+  DETACH_ROUTE = 5,
   START_OBSERVING_MEDIA_SINKS = 6,
   STOP_OBSERVING_MEDIA_SINKS = 7,
   START_OBSERVING_MEDIA_ROUTES = 8,
@@ -52,6 +54,16 @@ class MediaRouterMetrics {
   // Records why the media route provider extension was woken up.
   static void RecordMediaRouteProviderWakeReason(
       MediaRouteProviderWakeReason reason);
+
+  // Records the duration it takes for the Media Router dialog to open and
+  // finish painting after a user clicks to open the dialog.
+  static void RecordMediaRouterDialogPaint(
+      const base::TimeDelta delta);
+
+  // Records the duration it takes for the Media Router dialog to load its
+  // initial data after a user clicks to open the dialog.
+  static void RecordMediaRouterDialogLoaded(
+      const base::TimeDelta delta);
 };
 
 }  // namespace media_router

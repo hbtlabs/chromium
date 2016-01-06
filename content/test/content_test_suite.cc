@@ -7,6 +7,8 @@
 #include "base/base_paths.h"
 #include "base/base_switches.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/test/test_content_client_initializer.h"
@@ -21,7 +23,6 @@
 #include "base/mac/scoped_nsautorelease_pool.h"
 #if !defined(OS_IOS)
 #include "base/test/mock_chrome_application_mac.h"
-#include "content/browser/in_process_io_surface_manager_mac.h"
 #endif
 #endif
 
@@ -82,7 +83,7 @@ void ContentTestSuite::Initialize() {
 #endif
 
 #if defined(OS_WIN)
-  gfx::InitDeviceScaleFactor(1.0f);
+  gfx::SetDefaultDeviceScaleFactor(1.0f);
 #endif
 
   ContentTestSuiteBase::Initialize();
@@ -108,9 +109,6 @@ void ContentTestSuite::Initialize() {
 #if defined(OS_ANDROID)
   SurfaceTextureManager::SetInstance(
       InProcessSurfaceTextureManager::GetInstance());
-#endif
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  gfx::IOSurfaceManager::SetInstance(InProcessIOSurfaceManager::GetInstance());
 #endif
 #if defined(USE_OZONE)
   if (!is_child_process) {

@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/CaretBase.h"
 
 #include "core/editing/EditingUtilities.h"
@@ -69,7 +68,7 @@ LayoutBlock* CaretBase::caretLayoutObject(Node* node)
 static void mapCaretRectToCaretPainter(LayoutObject* caretLayoutObject, LayoutBlock* caretPainter, LayoutRect& caretRect)
 {
     // FIXME: This shouldn't be called on un-rooted subtrees.
-    // FIXME: This should probably just use mapLocalToContainer.
+    // FIXME: This should probably just use mapLocalToAncestor.
     // Compute an offset between the caretLayoutObject and the caretPainter.
 
     ASSERT(caretLayoutObject->isDescendantOf(caretPainter));
@@ -138,7 +137,7 @@ void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
     LayoutRect inflatedRect = rect;
     inflatedRect.inflate(1);
 
-    // FIXME: We should use mapLocalToContainer() since we know we're not un-rooted.
+    // FIXME: We should use mapLocalToAncestor() since we know we're not un-rooted.
     mapCaretRectToCaretPainter(node->layoutObject(), caretPainter, inflatedRect);
 
     // FIXME: We should not allow paint invalidation out of paint invalidation state. crbug.com/457415
@@ -175,7 +174,7 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
     }
 }
 
-void CaretBase::paintCaret(Node* node, GraphicsContext* context, const LayoutPoint& paintOffset) const
+void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoint& paintOffset) const
 {
     if (m_caretVisibility == Hidden)
         return;
@@ -196,7 +195,7 @@ void CaretBase::paintCaret(Node* node, GraphicsContext* context, const LayoutPoi
     if (element && element->layoutObject())
         caretColor = element->layoutObject()->resolveColor(CSSPropertyColor);
 
-    context->fillRect(FloatRect(drawingRect), caretColor);
+    context.fillRect(FloatRect(drawingRect), caretColor);
 }
 
 } // namespace blink

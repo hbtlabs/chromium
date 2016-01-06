@@ -8,6 +8,8 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
@@ -28,7 +30,11 @@ const char kCreateRoute[] = "requestRoute";
 const char kActOnIssue[] = "actOnIssue";
 const char kCloseRoute[] = "closeRoute";
 const char kCloseDialog[] = "closeDialog";
+const char kReportClickedSinkIndex[] = "reportClickedSinkIndex";
+const char kReportNavigateToView[] = "reportNavigateToView";
+const char kReportSelectedCastMode[] = "reportSelectedCastMode";
 const char kReportSinkCount[] = "reportSinkCount";
+const char kOnInitialDataReceived[] = "onInitialDataReceived";
 
 // JS function names.
 const char kSetInitialData[] = "media_router.ui.setInitialData";
@@ -56,15 +62,15 @@ scoped_ptr<base::ListValue> SinksToValue(
     if (!sink.description().empty())
       sink_val->SetString("description", sink.description());
 
-    scoped_ptr<base::ListValue> cast_modes_val(new base::ListValue);
+    int cast_mode_bits = 0;
     for (MediaCastMode cast_mode : sink_with_cast_modes.cast_modes)
-      cast_modes_val->AppendInteger(cast_mode);
+      cast_mode_bits |= cast_mode;
 
-    sink_val->Set("castModes", cast_modes_val.Pass());
+    sink_val->SetInteger("castModes", cast_mode_bits);
     value->Append(sink_val.release());
   }
 
-  return value.Pass();
+  return value;
 }
 
 scoped_ptr<base::DictionaryValue> RouteToValue(
@@ -85,7 +91,7 @@ scoped_ptr<base::DictionaryValue> RouteToValue(
                           full_custom_controller_path);
   }
 
-  return dictionary.Pass();
+  return dictionary;
 }
 
 scoped_ptr<base::ListValue> RoutesToValue(
@@ -98,7 +104,7 @@ scoped_ptr<base::ListValue> RoutesToValue(
     value->Append(route_val.release());
   }
 
-  return value.Pass();
+  return value;
 }
 
 scoped_ptr<base::ListValue> CastModesToValue(const CastModeSet& cast_modes,
@@ -114,7 +120,7 @@ scoped_ptr<base::ListValue> CastModesToValue(const CastModeSet& cast_modes,
     value->Append(cast_mode_val.release());
   }
 
-  return value.Pass();
+  return value;
 }
 
 // Returns an Issue dictionary created from |issue| that can be used in WebUI.
@@ -132,7 +138,7 @@ scoped_ptr<base::DictionaryValue> IssueToValue(const Issue& issue) {
     dictionary->SetString("routeId", issue.route_id());
   dictionary->SetBoolean("isBlocking", issue.is_blocking());
 
-  return dictionary.Pass();
+  return dictionary;
 }
 
 bool IsValidIssueActionTypeNum(int issue_action_type_num) {
@@ -217,13 +223,8 @@ void MediaRouterWebUIMessageHandler::OnCreateRouteResponseReceived(
 
 void MediaRouterWebUIMessageHandler::UpdateIssue(const Issue* issue) {
   DVLOG(2) << "UpdateIssue";
-  if (issue) {
-    scoped_ptr<base::DictionaryValue> issue_val(IssueToValue(*issue));
-    web_ui()->CallJavascriptFunction(kSetIssue, *issue_val);
-  } else {
-    // Clears the issue in the WebUI.
-    web_ui()->CallJavascriptFunction(kSetIssue);
-  }
+  web_ui()->CallJavascriptFunction(kSetIssue,
+      issue ? *IssueToValue(*issue) : *base::Value::CreateNullValue());
 }
 
 void MediaRouterWebUIMessageHandler::NotifyRouteCreationTimeout() {
@@ -253,14 +254,31 @@ void MediaRouterWebUIMessageHandler::RegisterMessages() {
       base::Bind(&MediaRouterWebUIMessageHandler::OnCloseDialog,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      kReportClickedSinkIndex,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportClickedSinkIndex,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kReportSelectedCastMode,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportSelectedCastMode,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kReportNavigateToView,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportNavigateToView,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       kReportSinkCount,
       base::Bind(&MediaRouterWebUIMessageHandler::OnReportSinkCount,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kOnInitialDataReceived,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnInitialDataReceived,
                  base::Unretained(this)));
 }
 
 void MediaRouterWebUIMessageHandler::OnRequestInitialData(
     const base::ListValue* args) {
   DVLOG(1) << "OnRequestInitialData";
+  media_router_ui_->OnUIInitiallyLoaded();
   base::DictionaryValue initial_data;
 
   // "No Cast devices found?" Chromecast help center page.
@@ -279,10 +297,6 @@ void MediaRouterWebUIMessageHandler::OnRequestInitialData(
       CastModesToValue(cast_modes,
                        media_router_ui_->GetPresentationRequestSourceName()));
   initial_data.Set("castModes", cast_modes_list.release());
-  if (!cast_modes.empty()) {
-    initial_data.SetInteger("initialCastModeType",
-                            GetPreferredCastMode(cast_modes));
-  }
 
   web_ui()->CallJavascriptFunction(kSetInitialData, initial_data);
   media_router_ui_->UIInitialized();
@@ -308,6 +322,7 @@ void MediaRouterWebUIMessageHandler::OnCreateRoute(
   }
 
   if (!IsValidCastModeNum(cast_mode_num)) {
+    // TODO(imcheng): Record error condition with UMA.
     DVLOG(1) << "Invalid cast mode: " << cast_mode_num << ". Aborting.";
     return;
   }
@@ -366,12 +381,15 @@ void MediaRouterWebUIMessageHandler::OnCloseRoute(
   DVLOG(1) << "OnCloseRoute";
   const base::DictionaryValue* args_dict = nullptr;
   std::string route_id;
+  bool is_local = false;
   if (!args->GetDictionary(0, &args_dict) ||
-      !args_dict->GetString("routeId", &route_id)) {
+      !args_dict->GetString("routeId", &route_id) ||
+      !args_dict->GetBoolean("isLocal", &is_local)) {
     DVLOG(1) << "Unable to extract args.";
     return;
   }
   media_router_ui_->CloseRoute(route_id);
+  UMA_HISTOGRAM_BOOLEAN("MediaRouter.Ui.Action.StopRoute", !is_local);
 }
 
 void MediaRouterWebUIMessageHandler::OnCloseDialog(
@@ -384,6 +402,51 @@ void MediaRouterWebUIMessageHandler::OnCloseDialog(
   media_router_ui_->Close();
 }
 
+void MediaRouterWebUIMessageHandler::OnReportClickedSinkIndex(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnReportClickedSinkIndex";
+  int index;
+  if (!args->GetInteger(0, &index)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+  UMA_HISTOGRAM_SPARSE_SLOWLY("MediaRouter.Ui.Action.StartLocalPosition",
+                              std::min(index, 100));
+}
+
+void MediaRouterWebUIMessageHandler::OnReportNavigateToView(
+  const base::ListValue* args) {
+  DVLOG(1) << "OnReportNavigateToView";
+  std::string view;
+  if (!args->GetString(0, &view)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+
+  if (view == "cast-mode-list") {
+    base::RecordAction(base::UserMetricsAction(
+        "MediaRouter_Ui_Navigate_SinkListToSource"));
+  } else if (view == "route-details") {
+    base::RecordAction(base::UserMetricsAction(
+        "MediaRouter_Ui_Navigate_SinkListToRouteDetails"));
+  } else if (view == "sink-list") {
+    base::RecordAction(base::UserMetricsAction(
+        "MediaRouter_Ui_Navigate_RouteDetailsToSinkList"));
+  }
+}
+
+void MediaRouterWebUIMessageHandler::OnReportSelectedCastMode(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnReportSelectedCastMode";
+  int cast_mode_type;
+  if (!args->GetInteger(0, &cast_mode_type)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+  UMA_HISTOGRAM_SPARSE_SLOWLY("MediaRouter.Ui.Navigate.SourceSelection",
+                              cast_mode_type);
+}
+
 void MediaRouterWebUIMessageHandler::OnReportSinkCount(
     const base::ListValue* args) {
   DVLOG(1) << "OnReportSinkCount";
@@ -393,6 +456,12 @@ void MediaRouterWebUIMessageHandler::OnReportSinkCount(
     return;
   }
   UMA_HISTOGRAM_COUNTS_100("MediaRouter.Ui.Device.Count", sink_count);
+}
+
+void MediaRouterWebUIMessageHandler::OnInitialDataReceived(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnInitialDataReceived";
+  media_router_ui_->OnUIInitialDataReceived();
 }
 
 bool MediaRouterWebUIMessageHandler::ActOnIssueType(

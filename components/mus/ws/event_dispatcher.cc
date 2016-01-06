@@ -63,6 +63,7 @@ class EventMatcher {
       : fields_to_match_(NONE),
         event_type_(mojom::EVENT_TYPE_UNKNOWN),
         event_flags_(mojom::EVENT_FLAGS_NONE),
+        ignore_event_flags_(mojom::EVENT_FLAGS_NONE),
         keyboard_code_(mojom::KEYBOARD_CODE_UNKNOWN),
         pointer_kind_(mojom::POINTER_KIND_MOUSE) {
     if (matcher.type_matcher) {
@@ -72,6 +73,8 @@ class EventMatcher {
     if (matcher.flags_matcher) {
       fields_to_match_ |= FLAGS;
       event_flags_ = matcher.flags_matcher->flags;
+      if (matcher.ignore_flags_matcher)
+        ignore_event_flags_ = matcher.ignore_flags_matcher->flags;
     }
     if (matcher.key_matcher) {
       fields_to_match_ |= KEYBOARD_CODE;
@@ -93,7 +96,9 @@ class EventMatcher {
   bool MatchesEvent(const mojom::Event& event) const {
     if ((fields_to_match_ & TYPE) && event.action != event_type_)
       return false;
-    if ((fields_to_match_ & FLAGS) && event.flags != event_flags_)
+    mojom::EventFlags flags =
+        static_cast<mojom::EventFlags>(event.flags & ~ignore_event_flags_);
+    if ((fields_to_match_ & FLAGS) && flags != event_flags_)
       return false;
     if (fields_to_match_ & KEYBOARD_CODE) {
       if (!event.key_data)
@@ -121,6 +126,7 @@ class EventMatcher {
     return fields_to_match_ == matcher.fields_to_match_ &&
            event_type_ == matcher.event_type_ &&
            event_flags_ == matcher.event_flags_ &&
+           ignore_event_flags_ == matcher.ignore_event_flags_ &&
            keyboard_code_ == matcher.keyboard_code_ &&
            pointer_kind_ == matcher.pointer_kind_ &&
            pointer_region_ == matcher.pointer_region_;
@@ -139,6 +145,7 @@ class EventMatcher {
   uint32_t fields_to_match_;
   mojom::EventType event_type_;
   mojom::EventFlags event_flags_;
+  mojom::EventFlags ignore_event_flags_;
   mojom::KeyboardCode keyboard_code_;
   mojom::PointerKind pointer_kind_;
   gfx::RectF pointer_region_;
@@ -159,6 +166,14 @@ EventDispatcher::~EventDispatcher() {
         pointer_targets.insert(pair.second.window).second) {
       pair.second.window->RemoveObserver(this);
     }
+  }
+}
+
+void EventDispatcher::UpdateCursorProviderByLastKnownLocation() {
+  if (!mouse_button_down_) {
+    gfx::Point location = mouse_pointer_last_location_;
+    mouse_cursor_source_window_ =
+        FindDeepestVisibleWindowForEvents(root_, surface_id_, &location);
   }
 }
 
@@ -188,18 +203,18 @@ void EventDispatcher::OnEvent(mojom::EventPtr event) {
       !event->key_data->is_char) {
     uint32_t accelerator = 0u;
     if (FindAccelerator(*event, &accelerator)) {
-      delegate_->OnAccelerator(accelerator, event.Pass());
+      delegate_->OnAccelerator(accelerator, std::move(event));
       return;
     }
   }
 
   if (event->key_data) {
-    ProcessKeyEvent(event.Pass());
+    ProcessKeyEvent(std::move(event));
     return;
   }
 
   if (event->pointer_data.get()) {
-    ProcessPointerEvent(event.Pass());
+    ProcessPointerEvent(std::move(event));
     return;
   }
 
@@ -210,13 +225,17 @@ void EventDispatcher::ProcessKeyEvent(mojom::EventPtr event) {
   ServerWindow* focused_window =
       delegate_->GetFocusedWindowForEventDispatcher();
   if (focused_window)
-    delegate_->DispatchInputEventToWindow(focused_window, false, event.Pass());
+    delegate_->DispatchInputEventToWindow(focused_window, false,
+                                          std::move(event));
 }
 
 void EventDispatcher::ProcessPointerEvent(mojom::EventPtr event) {
   bool is_mouse_event =
       event->pointer_data &&
       event->pointer_data->kind == mojom::PointerKind::POINTER_KIND_MOUSE;
+
+  if (is_mouse_event)
+    mouse_pointer_last_location_ = EventLocationToPoint(*event);
 
   const int32_t pointer_id = event->pointer_data->pointer_id;
   if (event->action == mojom::EVENT_TYPE_WHEEL ||
@@ -229,10 +248,12 @@ void EventDispatcher::ProcessPointerEvent(mojom::EventPtr event) {
       gfx::Point location(EventLocationToPoint(*event));
       pointer_target.window =
           FindDeepestVisibleWindowForEvents(root_, surface_id_, &location);
+      pointer_target.in_nonclient_area =
+          IsLocationInNonclientArea(pointer_target.window, location);
     }
     if (is_mouse_event && !mouse_button_down_)
       mouse_cursor_source_window_ = pointer_target.window;
-    DispatchToPointerTarget(pointer_target, event.Pass());
+    DispatchToPointerTarget(pointer_target, std::move(event));
     return;
   }
 
@@ -280,7 +301,7 @@ void EventDispatcher::ProcessPointerEvent(mojom::EventPtr event) {
         FindDeepestVisibleWindowForEvents(root_, surface_id_, &location);
   }
 
-  DispatchToPointerTarget(pointer_targets_[pointer_id], event.Pass());
+  DispatchToPointerTarget(pointer_targets_[pointer_id], std::move(event));
 
   if (should_reset_target) {
     ServerWindow* target = pointer_targets_[pointer_id].window;
@@ -301,7 +322,7 @@ void EventDispatcher::DispatchToPointerTarget(const PointerTarget& target,
   event->pointer_data->location->x = location.x();
   event->pointer_data->location->y = location.y();
   delegate_->DispatchInputEventToWindow(target.window, target.in_nonclient_area,
-                                        event.Pass());
+                                        std::move(event));
 }
 
 void EventDispatcher::CancelPointerEventsToTarget(ServerWindow* window) {

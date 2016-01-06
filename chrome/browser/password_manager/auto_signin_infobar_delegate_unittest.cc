@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/password_manager/auto_signin_first_run_infobar_delegate.h"
 #include "chrome/browser/profiles/profile.h"
@@ -47,7 +48,7 @@ scoped_ptr<ConfirmInfoBarDelegate>
 AutoSigninFirstRunInfoBarDelegateTest::CreateDelegate() {
   scoped_ptr<ConfirmInfoBarDelegate> delegate(
       new TestAutoSigninFirstRunInfoBarDelegate(web_contents()));
-  return delegate.Pass();
+  return delegate;
 }
 
 PrefService* AutoSigninFirstRunInfoBarDelegateTest::prefs() {

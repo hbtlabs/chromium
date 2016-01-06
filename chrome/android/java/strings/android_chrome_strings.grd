@@ -161,6 +161,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_NO_THANKS" desc="Generic label to say no thanks for a feature. [CHAR-LIMIT=32]">
         No Thanks
       </message>
+      <message name="IDS_ENABLE" desc="Generic label to enable a feature. [CHAR-LIMIT=32]">
+        Enable
+      </message>
       <message name="IDS_NEXT" desc="Generic label for a button to advance to the next item. [CHAR-LIMIT=20]">
         Next
       </message>
@@ -202,9 +205,6 @@ CHAR-LIMIT guidelines:
       <!-- Search engine preferences -->
       <message name="IDS_PREFS_SEARCH_ENGINE" desc="Title for Search Engine preferences. [CHAR-LIMIT=32]">
         Search engine
-      </message>
-      <message name="IDS_SEARCH_ENGINE_NAME_AND_DOMAIN" desc="Label for a search engine, that includes its name and its domain, e.g. Google (google.co.uk).">
-        <ph name="SEARCH_ENGINE_NAME">%1$s<ex>Google</ex></ph> (<ph name="SEARCH_ENGINE_DOMAIN">%2$s<ex>google.co.uk</ex></ph>)
       </message>
       <message name="IDS_SEARCH_ENGINE_LOCATION_ALLOWED" desc="The text of a link displayed when location permission for a particular search engine is allowed.">
         Location is allowed
@@ -413,7 +413,7 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_DO_NOT_TRACK_DESCRIPTION" desc="Description for 'Do Not Track' preference">
         Enabling “Do Not Track” means that a request will be included with your browsing traffic. Any effect depends on whether a website responds to the request, and how the request is interpreted.
 
-For example, some websites may respond to this request by showing you ads that aren’t based on other websites you’ve visited. Many websites will still collect and use your browsing data - for example to improve security, to provide content, ads and recommendations on their websites, and to generate reporting statistics.
+For example, some websites may respond to this request by showing you ads that aren’t based on other websites you’ve visited. Many websites will still collect and use your browsing data — for example to improve security, to provide content, ads and recommendations, and to generate reporting statistics.
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_TITLE" desc="Button to Clear Browsing Data [CHAR-LIMIT=24]">
         Clear browsing data
@@ -846,8 +846,8 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_ACCOUNT_MANAGEMENT_CHILD_CONTENT_ALL" desc="Setting that permits child accounts to visit any websites.">
         Uncontrolled
       </message>
-      <message name="IDS_ACCOUNT_MANAGEMENT_CHILD_SAFE_SEARCH_TITLE" desc="Title of Google SafeSearch, which blocks inappropriate or explicit search results.">
-        SafeSearch
+      <message name="IDS_ACCOUNT_MANAGEMENT_CHILD_SAFE_SITES_TITLE" desc="Title of Google SafeSites, which blocks inappropriate or explicit websites.">
+        Google SafeSites filter
       </message>
       <message name="IDS_POWERED_BY_CHROME_MESSAGE" desc="A message indicating that the current page is running in Chrome.">
         Powered by Chrome
@@ -947,12 +947,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_SIGNOUT_MANAGED_ACCOUNT_MESSAGE" desc="Message to display for sign out of Chrome dialog when the account has enterprise management, and all user data will be erased">
         You are signing out of an account managed by <ph name="DOMAIN_NAME">%1$s<ex>google.com</ex></ph>. This will delete the Chrome data stored on this device, but the data will remain in your Google Account.
-      </message>
-      <message name="IDS_FIRSTRUN_SIGNED_IN_TITLE" desc="Message informing the user that they are now signed in.">
-        You’re now signed in to Chrome.
-      </message>
-      <message name="IDS_FIRSTRUN_SIGNED_IN_DESCRIPTION" desc="Message informing the user what is being synced.">
-        Your open bookmarks, history, passwords, and more are being synced with your Google Account.
       </message>
 
       <!-- Sync strings -->
@@ -1438,11 +1432,14 @@ You are signing in with a managed account and giving its administrator control o
       </message>
 
       <!-- Download UI -->
+      <message name="IDS_DOWNLOAD_NOTIFICATION_COMPLETED" desc="Download notification to be displayed when a download completes.">
+        Download complete.
+      </message>
       <message name="IDS_DOWNLOAD_NOTIFICATION_FAILED" desc="Download notification to be displayed when a download fails.">
         Download failed.
       </message>
-      <message name="IDS_DOWNLOAD_NOTIFICATION_COMPLETED" desc="Download notification to be displayed when a download completes.">
-        Download complete.
+      <message name="IDS_DOWNLOAD_NOTIFICATION_PAUSED" desc="Download notification to be displayed when a download pauses.">
+        Download paused.
       </message>
       <message name="IDS_DOWNLOAD_FAILED_REASON_FILE_ALREADY_EXISTS" desc="Message to explain that the download failed because file already exists.">
         <ph name="FILE_NAME">%1$s<ex>http://abc.com/test.pdf</ex></ph> download prevented because file already exists.
@@ -1678,6 +1675,12 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_NTP_BOOKMARKS" desc="Text for bookmarks button [CHAR-LIMIT=20]">
         Bookmarks
       </message>
+      <message name="IDS_NTP_INTERESTS" desc="Text for a button to display interests. Interests are topics that we think the user is interested in (eg. sports teams, hobbies, places). [CHAR-LIMIT=20]">
+        Interests
+      </message>
+      <message name="IDS_NTP_NO_INTERESTS_TOAST" desc="Toast notification displayed when interests retrieval fails">
+        Could not retrieve interests.
+      </message>
       <message name="IDS_RECENT_TABS" desc="Text for button to show 'Recent tabs', i.e. recently closed tabs and tabs that are open on other devices [CHAR-LIMIT=20]">
         Recent tabs
       </message>
@@ -1704,17 +1707,20 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       <message name="IDS_NTP_RECENT_TABS_SYNC_ENABLE_SYNC_BUTTON" desc="Text that displayed or button that allows the user to enable sync.">
         Enable sync
       </message>
-      <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED_DAYS" desc="Text to show the time since the device last synced in days">
-        Last synced: <ph name="DAYS">%1$d<ex>3</ex></ph> days ago
+      <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED" desc="Label for the time since a device was last synced">
+        Last synced: <ph name="WHEN">%1$s<ex>4 hours ago</ex></ph>
       </message>
-      <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED_HOURS" desc="Text to show the time since the device last synced in hours">
-        Last synced: <ph name="HOURS">%1$d<ex>3</ex></ph> hours ago
+      <message name="IDS_N_MINUTES_AGO" desc="A number of minutes in the past. [ICU Syntax]">
+        {MINUTES, plural, =1 {# minute ago} other {# minutes ago}}
       </message>
-      <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED_MINUTES" desc="Text to show the time since the device last synced in minutes">
-        Last synced: <ph name="MINUTES">%1$d<ex>50</ex></ph> minutes ago
+      <message name="IDS_N_HOURS_AGO" desc="A number of hours in the past. [ICU Syntax]">
+        {HOURS, plural, =1 {# hour ago} other {# hours ago}}
       </message>
-      <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED_JUST_NOW" desc="Text to show that the device was recently synced">
-        Last synced: just now
+      <message name="IDS_N_DAYS_AGO" desc="A number of days in the past. [ICU Syntax]">
+        {DAYS, plural, =1 {# day ago} other {# days ago}}
+      </message>
+      <message name="IDS_JUST_NOW" desc="A time label for an event that happened just now. For example 'Last synced: just now'">
+        just now
       </message>
       <message name="IDS_NTP_RECENT_TABS_ACCESSIBILITY_COLLAPSED_GROUP" desc="Content description for collapsed state indicator for the group view." >
         Collapsed - Click to expand
@@ -1756,6 +1762,12 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
 
       <!-- Main menu items -->
+      <message name="IDS_MENU_UPDATE" desc="Menu item for updating chrome. [CHAR-LIMIT=27]">
+        Update Chrome
+      </message>
+      <message name="IDS_MENU_UPDATE_SUMMARY_DEFAULT" desc="Summary string for update menu item explaing why Chrome should be updated. [CHAR-LIMIT=27]">
+        Newer version is available
+      </message>
       <message name="IDS_MENU_NEW_TAB" desc="Menu item for opening a new tab. [CHAR-LIMIT=27]">
         New tab
       </message>
@@ -1833,7 +1845,7 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
         Sign in
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_PAGE_SAVED" desc="Message shown after user adds a new bookmark. [CHAR-LIMIT=32]">
-        Bookmarked
+        Bookmarked to <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph>
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_DRAWER_ALL_ITEMS" desc="Menu item for showing all bookmark items in the enhanced bookmarks UI [CHAR-LIMIT=24]">
         All bookmarks
@@ -2083,12 +2095,6 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       <message name="IDS_READER_MODE_EXPANDED_TITLE" desc="Message shown on the reader mode button bar when it is opened to show reader mode. Reader mode extracts content and removes clutter from a web page and puts the result in a panel making it easier to read.">
         Mobile-friendly view
       </message>
-      <message name="IDS_UPDATE_AVAILABLE_INFOBAR" desc="Text to display when a new update is detected.">
-        Chrome is out of date. Important security improvements and new features are available in the latest version.
-      </message>
-      <message name="IDS_UPDATE_AVAILABLE_INFOBAR_BUTTON" desc="Open market button. [CHAR-LIMIT=32]">
-        Update
-      </message>
       <message name="IDS_FRE_LABEL" desc="First Run Experience Strings">
         First Run Experience
       </message>
@@ -2156,6 +2162,9 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
       <message name="IDS_ACCESSIBILITY_NTP_TOOLBAR_BTN_BOOKMARKS" desc="Content description for the bookmarks tab of the new tab page.">
         Bookmarks
+      </message>
+      <message name="IDS_ACCESSIBILITY_NTP_TOOLBAR_BTN_INTERESTS" desc="Content description for the interests section of the new tab page.">
+        Interests
       </message>
       <message name="IDS_ACCESSIBILITY_NTP_TOOLBAR_BTN_RECENT_TABS" desc="Content description for the recent tabs section of the new tab page.">
         Recent tabs
@@ -2278,19 +2287,36 @@ However, you aren’t invisible. Going incognito doesn’t hide your browsing fr
       </message>
 
       <!-- Physical Web strings -->
+      <message name="IDS_PHYSICAL_WEB_PREF_TITLE" desc="Title for Physical Web preference.">
+        Physical Web
+      </message>
+      <message name="IDS_PHYSICAL_WEB_PREF_DESCRIPTION" desc="Description for Physical Web preference">
+        Discover web pages sent by nearby objects. Chrome gathers web pages associated with objects around you, sends them anonymously to a Google service to find the ones most useful to you, then displays them.
+
+You must have Bluetooth and Location turned on in order to use the Physical Web.
+      </message>
+      <message name="IDS_PHYSICAL_WEB_OPTIN_TITLE" desc="The title for a dialog inviting the user to opt-in to the Physical Web.">
+        The Physical Web
+      </message>
+      <message name="IDS_PHYSICAL_WEB_OPTIN_DESCRIPTION" desc="Description of the Physical Web displayed in the opt-in dialog">
+        Discover web pages sent by nearby objects.
+
+Chrome will scan for nearby pages when your device is unlocked. These pages will go through a Google service to improve the quality of page results.
+      </message>
       <message name="IDS_PHYSICAL_WEB_LIST_URLS_ACTIVITY_TITLE" desc="The title for a dialog that shows a list of URLs broadcasted from nearby devices.">
         The Physical Web
       </message>
-      <message name="IDS_PHYSICAL_WEB_NOTIFICATION_TITLE" desc="Description of quantity of discovered URLs nearby.">
-        {NUM_URLS, plural,
-         =1 {1 Physical Web link nearby}
-         other {# Physical Web links nearby}}
+      <message name="IDS_PHYSICAL_WEB_NOTIFICATION_TITLE" desc="The message displayed in a notification when there are nearby URLs.">
+        Physical Web pages nearby
+      </message>
+      <message name="IDS_PHYSICAL_WEB_OPTIN_NOTIFICATION_TITLE" desc="A notification message inviting the user to opt-in to the Physical Web.">
+        Turn on the Physical Web
       </message>
       <message name="IDS_PHYSICAL_WEB_EMPTY_LIST" desc="The message displayed in place of a list of nearby URLs when there are no URLs to display.">
-        There are no nearby web pages found
+        No nearby Physical Web pages found
       </message>
       <message name="IDS_PHYSICAL_WEB_EMPTY_LIST_SCANNING" desc="The message displayed in place of a list of nearby URLs while still scanning for nearby URLs.">
-        Looking for nearby web pages
+        Looking for nearby Physical Web pages
       </message>
     </messages>
   </release>

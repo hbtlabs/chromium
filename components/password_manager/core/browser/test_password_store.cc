@@ -4,6 +4,8 @@
 
 #include "components/password_manager/core/browser/test_password_store.h"
 
+#include <stddef.h>
+
 #include "base/thread_task_runner_handle.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/statistics_table.h"
@@ -87,7 +89,7 @@ ScopedVector<autofill::PasswordForm> TestPasswordStore::FillMatchingLogins(
   for (const auto& stored_form : forms) {
     matched_forms.push_back(new autofill::PasswordForm(stored_form));
   }
-  return matched_forms.Pass();
+  return matched_forms;
 }
 
 void TestPasswordStore::ReportMetricsImpl(const std::string& sync_username,

@@ -32,7 +32,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/loader/FrameLoader.h"
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
@@ -68,8 +67,10 @@
 #include "core/loader/FormSubmission.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "core/loader/LinkLoader.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/loader/NavigationScheduler.h"
+#include "core/loader/NetworkHintsInterface.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
 #include "core/page/ChromeClient.h"
@@ -119,7 +120,7 @@ ResourceRequest FrameLoader::resourceRequestFromHistoryItem(HistoryItem* item,
     request.setHTTPReferrer(item->referrer());
     request.setCachePolicy(cachePolicy);
     if (formData) {
-        request.setHTTPMethod("POST");
+        request.setHTTPMethod(HTTPNames::POST);
         request.setHTTPBody(formData);
         request.setHTTPContentType(item->formContentType());
         RefPtr<SecurityOrigin> securityOrigin = SecurityOrigin::createFromString(item->referrer().referrer);
@@ -438,8 +439,10 @@ void FrameLoader::didBeginDocument(bool dispatch)
         dispatchDidClearDocumentOfWindowObject();
 
     m_frame->document()->initContentSecurityPolicy(m_documentLoader ? m_documentLoader->releaseContentSecurityPolicy() : ContentSecurityPolicy::create());
-    if (m_documentLoader)
+    if (m_documentLoader) {
         m_frame->document()->clientHintsPreferences().updateFrom(m_documentLoader->clientHintsPreferences());
+        LinkLoader::loadLinkFromHeader(m_documentLoader->response().httpHeaderField(HTTPNames::Link), m_frame->document(), NetworkHintsInterfaceImpl(), LinkLoader::LoadResources);
+    }
 
     Settings* settings = m_frame->document()->settings();
     if (settings) {
@@ -448,11 +451,11 @@ void FrameLoader::didBeginDocument(bool dispatch)
     }
 
     if (m_documentLoader) {
-        const AtomicString& dnsPrefetchControl = m_documentLoader->response().httpHeaderField("X-DNS-Prefetch-Control");
+        const AtomicString& dnsPrefetchControl = m_documentLoader->response().httpHeaderField(HTTPNames::X_DNS_Prefetch_Control);
         if (!dnsPrefetchControl.isEmpty())
             m_frame->document()->parseDNSPrefetchControlHeader(dnsPrefetchControl);
 
-        String headerContentLanguage = m_documentLoader->response().httpHeaderField("Content-Language");
+        String headerContentLanguage = m_documentLoader->response().httpHeaderField(HTTPNames::Content_Language);
         if (!headerContentLanguage.isEmpty()) {
             size_t commaIndex = headerContentLanguage.find(',');
             headerContentLanguage.truncate(commaIndex); // kNotFound == -1 == don't truncate
@@ -758,7 +761,7 @@ FrameLoadType FrameLoader::determineFrameLoadType(const FrameLoadRequest& reques
     if (request.resourceRequest().url() == m_documentLoader->urlForHistory()) {
         if (!request.originDocument())
             return FrameLoadTypeSame;
-        return request.resourceRequest().httpMethod() == "POST" ? FrameLoadTypeStandard : FrameLoadTypeReplaceCurrentItem;
+        return request.resourceRequest().httpMethod() == HTTPNames::POST ? FrameLoadTypeStandard : FrameLoadTypeReplaceCurrentItem;
     }
 
     if (request.substituteData().failingURL() == m_documentLoader->urlForHistory() && m_loadType == FrameLoadTypeReload)
@@ -1062,6 +1065,7 @@ bool FrameLoader::prepareForCommit()
     if (!m_frame->client())
         return false;
     // No more events will be dispatched so detach the Document.
+    // TODO(yoav): Should we also be nullifying domWindow's document (or domWindow) since the doc is now detached?
     if (m_frame->document())
         m_frame->document()->detach();
     m_documentLoader = m_provisionalDocumentLoader.release();
@@ -1237,7 +1241,7 @@ bool FrameLoader::shouldPerformFragmentNavigation(bool isFormSubmission, const S
 {
     // We don't do this if we are submitting a form with method other than "GET", explicitly reloading,
     // currently displaying a frameset, or if the URL does not have a fragment.
-    return (!isFormSubmission || equalIgnoringCase(httpMethod, "GET"))
+    return (!isFormSubmission || equalIgnoringCase(httpMethod, HTTPNames::GET))
         && loadType != FrameLoadTypeReload
         && loadType != FrameLoadTypeReloadFromOrigin
         && loadType != FrameLoadTypeSame
@@ -1517,13 +1521,7 @@ bool FrameLoader::shouldEnforceStrictMixedContentChecking() const
     if (!parentFrame)
         return false;
 
-    // FIXME: We need a way to propagate strict mixed content checking flags to
-    // out-of-process frames. For now, we'll always enforce.
-    if (!parentFrame->isLocalFrame())
-        return true;
-
-    ASSERT(toLocalFrame(parentFrame)->document());
-    return toLocalFrame(parentFrame)->document()->shouldEnforceStrictMixedContentChecking();
+    return parentFrame->securityContext()->shouldEnforceStrictMixedContentChecking();
 }
 
 SecurityContext::InsecureRequestsPolicy FrameLoader::insecureRequestsPolicy() const

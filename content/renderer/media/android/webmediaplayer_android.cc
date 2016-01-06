@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/android/webmediaplayer_android.h"
 
+#include <stddef.h>
+
 #include <limits>
 
 #include "base/android/build_info.h"
@@ -66,7 +68,7 @@
 #include "third_party/skia/include/gpu/SkGrPixelRef.h"
 #include "ui/gfx/image/image.h"
 
-static const uint32 kGLTextureExternalOES = 0x8D65;
+static const uint32_t kGLTextureExternalOES = 0x8D65;
 static const int kSDKVersionToSupportSecurityOriginCheck = 20;
 
 using blink::WebMediaPlayer;
@@ -83,10 +85,21 @@ namespace {
 // Prefix for histograms related to Encrypted Media Extensions.
 const char* kMediaEme = "Media.EME.";
 
+// Values for Media.Android.IsHttpLiveStreamingMediaPredictionResult UMA.
+// Never reuse values!
+enum MediaTypePredictionResult {
+  PREDICTION_RESULT_ALL_CORRECT,
+  PREDICTION_RESULT_ALL_INCORRECT,
+  PREDICTION_RESULT_PATH_BASED_WAS_BETTER,
+  PREDICTION_RESULT_URL_BASED_WAS_BETTER,
+  // Must always be larger than the largest logged value.
+  PREDICTION_RESULT_MAX
+};
+
 // File-static function is to allow it to run even after WMPA is deleted.
 void OnReleaseTexture(
     const scoped_refptr<content::StreamTextureFactory>& factories,
-    uint32 texture_id,
+    uint32_t texture_id,
     const gpu::SyncToken& sync_token) {
   GLES2Interface* gl = factories->ContextGL();
   gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
@@ -142,7 +155,7 @@ class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
     }
   }
   void WaitSyncToken(const gpu::SyncToken& sync_token) override {
-    web_graphics_context_->waitSyncToken(sync_token.GetConstData());
+    web_graphics_context_->waitSyncTokenCHROMIUM(sync_token.GetConstData());
   }
 
  private:
@@ -688,13 +701,13 @@ bool WebMediaPlayerAndroid::copyVideoTextureToPlatformTexture(
           mailbox_holder.texture_target == GL_TEXTURE_EXTERNAL_OES) ||
          (is_remote_ && mailbox_holder.texture_target == GL_TEXTURE_2D));
 
-  web_graphics_context->waitSyncToken(mailbox_holder.sync_token.GetConstData());
+  web_graphics_context->waitSyncTokenCHROMIUM(
+      mailbox_holder.sync_token.GetConstData());
 
   // Ensure the target of texture is set before copyTextureCHROMIUM, otherwise
   // an invalid texture target may be used for copy texture.
-  uint32 src_texture =
-      web_graphics_context->createAndConsumeTextureCHROMIUM(
-          mailbox_holder.texture_target, mailbox_holder.mailbox.name);
+  uint32_t src_texture = web_graphics_context->createAndConsumeTextureCHROMIUM(
+      mailbox_holder.texture_target, mailbox_holder.mailbox.name);
 
   // Application itself needs to take care of setting the right flip_y
   // value down to get the expected result.
@@ -963,7 +976,6 @@ void WebMediaPlayerAndroid::OnTimeUpdate(base::TimeDelta current_timestamp,
 void WebMediaPlayerAndroid::OnConnectedToRemoteDevice(
     const std::string& remote_playback_message) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  DCHECK(!media_source_delegate_);
   DrawRemotePlaybackText(remote_playback_message);
   is_remote_ = true;
   SetNeedsEstablishPeer(false);
@@ -972,7 +984,6 @@ void WebMediaPlayerAndroid::OnConnectedToRemoteDevice(
 
 void WebMediaPlayerAndroid::OnDisconnectedFromRemoteDevice() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  DCHECK(!media_source_delegate_);
   SetNeedsEstablishPeer(true);
   if (!paused())
     EstablishSurfaceTexturePeer();
@@ -1753,7 +1764,7 @@ void WebMediaPlayerAndroid::OnKeyAdded(const std::string& session_id) {
 
 void WebMediaPlayerAndroid::OnKeyError(const std::string& session_id,
                                        media::MediaKeys::KeyError error_code,
-                                       uint32 system_code) {
+                                       uint32_t system_code) {
   EmeUMAHistogramEnumeration(current_key_system_, "KeyError",
                              error_code, media::MediaKeys::kMaxKeyError);
 
@@ -1774,7 +1785,7 @@ void WebMediaPlayerAndroid::OnKeyError(const std::string& session_id,
 }
 
 void WebMediaPlayerAndroid::OnKeyMessage(const std::string& session_id,
-                                         const std::vector<uint8>& message,
+                                         const std::vector<uint8_t>& message,
                                          const GURL& destination_url) {
   DCHECK(destination_url.is_empty() || destination_url.is_valid());
 
@@ -1791,7 +1802,7 @@ void WebMediaPlayerAndroid::OnMediaSourceOpened(
 
 void WebMediaPlayerAndroid::OnEncryptedMediaInitData(
     media::EmeInitDataType init_data_type,
-    const std::vector<uint8>& init_data) {
+    const std::vector<uint8_t>& init_data) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
 
   // Do not fire NeedKey event if encrypted media is not enabled.
@@ -1915,12 +1926,29 @@ void WebMediaPlayerAndroid::enterFullscreen() {
   suppress_deleting_texture_ = false;
 }
 
-bool WebMediaPlayerAndroid::IsHLSStream() const {
-  std::string mime;
-  GURL url = redirected_url_.is_empty() ? url_ : redirected_url_;
-  if (!net::GetMimeTypeFromFile(base::FilePath(url.path()), &mime))
+// Test whether the path of a URL ends with '.m3u8'.
+static bool IsHLSPath(const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile())
     return false;
-  return !mime.compare("application/x-mpegurl");
+
+  std::string path = url.path();
+  return base::EndsWith(path, ".m3u8", base::CompareCase::INSENSITIVE_ASCII);
+}
+
+// Predict whether NuPlayer will use HTTPLiveSource.
+static bool IsHLSURL(const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile())
+    return false;
+
+  std::string spec = url.spec();
+  if (base::EndsWith(spec, ".m3u8", base::CompareCase::INSENSITIVE_ASCII))
+    return true;
+  return (spec.find("m3u8") != std::string::npos);
+}
+
+bool WebMediaPlayerAndroid::IsHLSStream() const {
+  const GURL& url = redirected_url_.is_empty() ? url_ : redirected_url_;
+  return IsHLSURL(url);
 }
 
 void WebMediaPlayerAndroid::ReportHLSMetrics() const {
@@ -1933,6 +1961,21 @@ void WebMediaPlayerAndroid::ReportHLSMetrics() const {
     media::RecordOriginOfHLSPlayback(
         GURL(frame_->document().securityOrigin().toString()));
   }
+
+  // Assuming that |is_hls| is the ground truth, test predictions.
+  bool is_hls_path = IsHLSPath(url_);
+  bool is_hls_url = IsHLSURL(url_);
+  MediaTypePredictionResult result = PREDICTION_RESULT_ALL_INCORRECT;
+  if (is_hls_path == is_hls && is_hls_url == is_hls) {
+    result = PREDICTION_RESULT_ALL_CORRECT;
+  } else if (is_hls_path == is_hls) {
+    result = PREDICTION_RESULT_PATH_BASED_WAS_BETTER;
+  } else if (is_hls_url == is_hls) {
+    result = PREDICTION_RESULT_URL_BASED_WAS_BETTER;
+  }
+  UMA_HISTOGRAM_ENUMERATION(
+      "Media.Android.IsHttpLiveStreamingMediaPredictionResult",
+      result, PREDICTION_RESULT_MAX);
 }
 
 }  // namespace content

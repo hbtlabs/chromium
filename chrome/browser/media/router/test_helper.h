@@ -5,9 +5,13 @@
 #ifndef CHROME_BROWSER_MEDIA_ROUTER_TEST_HELPER_H_
 #define CHROME_BROWSER_MEDIA_ROUTER_TEST_HELPER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "chrome/browser/media/router/issues_observer.h"
 #include "chrome/browser/media/router/media_router.mojom.h"
 #include "chrome/browser/media/router/media_router_mojo_impl.h"
@@ -97,7 +101,8 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
                     const mojo::String& origin,
                     int tab_id,
                     const JoinRouteCallback& callback));
-  MOCK_METHOD1(CloseRoute, void(const mojo::String& route_id));
+  MOCK_METHOD1(DetachRoute, void(const mojo::String& route_id));
+  MOCK_METHOD1(TerminateRoute, void(const mojo::String& route_id));
   MOCK_METHOD1(StartObservingMediaSinks, void(const mojo::String& source));
   MOCK_METHOD1(StopObservingMediaSinks, void(const mojo::String& source));
   MOCK_METHOD3(SendRouteMessage,
@@ -106,13 +111,13 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
                     const SendRouteMessageCallback& callback));
   void SendRouteBinaryMessage(
       const mojo::String& media_route_id,
-      mojo::Array<uint8> data,
+      mojo::Array<uint8_t> data,
       const SendRouteMessageCallback& callback) override {
     SendRouteBinaryMessageInternal(media_route_id, data.storage(), callback);
   }
   MOCK_METHOD3(SendRouteBinaryMessageInternal,
                void(const mojo::String& media_route_id,
-                    const std::vector<uint8>& data,
+                    const std::vector<uint8_t>& data,
                     const SendRouteMessageCallback& callback));
   MOCK_METHOD2(ListenForRouteMessages,
                void(const mojo::String& route_id,

@@ -4,16 +4,19 @@
 
 #include "media/base/android/media_source_player.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <limits>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/barrier_closure.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/android/audio_decoder_job.h"
@@ -34,7 +37,7 @@ MediaSourcePlayer::MediaSourcePlayer(
                          manager,
                          on_decoder_resources_released_cb,
                          frame_url),
-      demuxer_(demuxer.Pass()),
+      demuxer_(std::move(demuxer)),
       pending_event_(NO_EVENT_PENDING),
       playing_(false),
       interpolator_(&default_tick_clock_),
@@ -79,7 +82,7 @@ MediaSourcePlayer::~MediaSourcePlayer() {
 
 void MediaSourcePlayer::SetVideoSurface(gfx::ScopedJavaSurface surface) {
   DVLOG(1) << __FUNCTION__;
-  if (!video_decoder_job_->SetVideoSurface(surface.Pass()))
+  if (!video_decoder_job_->SetVideoSurface(std::move(surface)))
     return;
   // Retry video decoder creation.
   RetryDecoderCreation(false, true);
@@ -117,7 +120,7 @@ bool MediaSourcePlayer::Seekable() {
   // 2^31 is the bound due to java player using 32-bit integer for time
   // values at millisecond resolution.
   return duration_ <
-         base::TimeDelta::FromMilliseconds(std::numeric_limits<int32>::max());
+         base::TimeDelta::FromMilliseconds(std::numeric_limits<int32_t>::max());
 }
 
 void MediaSourcePlayer::Start() {
@@ -266,11 +269,19 @@ void MediaSourcePlayer::OnDemuxerDurationChanged(base::TimeDelta duration) {
 }
 
 void MediaSourcePlayer::OnMediaCryptoReady(
-    MediaDrmBridge::JavaObjectPtr /* media_crypto */,
+    MediaDrmBridge::JavaObjectPtr media_crypto,
     bool /* needs_protected_surface */) {
-  // Callback parameters are ignored in this player. They are intended for
-  // MediaCodecPlayer which uses a different threading scheme.
-  DCHECK(!static_cast<MediaDrmBridge*>(cdm_.get())->GetMediaCrypto().is_null());
+  DCHECK(media_crypto);
+  DCHECK(static_cast<MediaDrmBridge*>(cdm_.get())->GetMediaCrypto());
+
+  if (media_crypto->is_null()) {
+    // TODO(xhwang): Fail playback nicely here if needed. Note that we could get
+    // here even though the stream to play is unencrypted and therefore
+    // MediaCrypto is not needed. In that case, we may ignore this error and
+    // continue playback, or fail the playback.
+    LOG(ERROR) << "MediaCrypto creation failed!";
+    return;
+  }
 
   // Retry decoder creation if the decoders are waiting for MediaCrypto.
   RetryDecoderCreation(true, true);
@@ -306,16 +317,9 @@ void MediaSourcePlayer::SetCdm(const scoped_refptr<MediaKeys>& cdm) {
   audio_decoder_job_->SetDrmBridge(drm_bridge);
   video_decoder_job_->SetDrmBridge(drm_bridge);
 
-  if (drm_bridge->GetMediaCrypto().is_null()) {
-    // Use BindToCurrentLoop to avoid reentrancy.
-    MediaDrmBridge::MediaCryptoReadyCB cb = BindToCurrentLoop(
-        base::Bind(&MediaSourcePlayer::OnMediaCryptoReady, weak_this_));
-    drm_bridge->SetMediaCryptoReadyCB(cb);
-    return;
-  }
-
-  // If the player is previously waiting for CDM, retry decoder creation.
-  RetryDecoderCreation(true, true);
+  // Use BindToCurrentLoop to avoid reentrancy.
+  drm_bridge->SetMediaCryptoReadyCB(BindToCurrentLoop(
+      base::Bind(&MediaSourcePlayer::OnMediaCryptoReady, weak_this_)));
 }
 
 void MediaSourcePlayer::OnDemuxerSeekDone(
@@ -503,7 +507,7 @@ void MediaSourcePlayer::MediaDecoderCallback(
   if (IsEventPending(SEEK_EVENT_PENDING)) {
     ProcessPendingEvents();
     // In case of Seek GetCurrentTime() already tells the time to seek to.
-    if (is_clock_manager)
+    if (is_clock_manager && !doing_browser_seek_)
       media_stat_->StopAndReport(current_presentation_timestamp);
     return;
   }
@@ -567,8 +571,6 @@ void MediaSourcePlayer::MediaDecoderCallback(
   // in the middle of a seek or stop event and needs to wait for the IPCs to
   // come.
   if (status == MEDIA_CODEC_ABORT) {
-    if (is_clock_manager)
-      media_stat_->StopAndReport(GetCurrentTime());
     return;
   }
 
@@ -760,7 +762,8 @@ void MediaSourcePlayer::OnPrefetchDone() {
   if (!interpolator_.interpolating())
     interpolator_.StartInterpolating();
 
-  media_stat_->Start(start_presentation_timestamp_);
+  if (!AudioFinished() || !VideoFinished())
+    media_stat_->Start(start_presentation_timestamp_);
 
   if (!AudioFinished())
     DecodeMoreAudio();

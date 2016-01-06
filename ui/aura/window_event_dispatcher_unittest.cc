@@ -4,11 +4,16 @@
 
 #include "ui/aura/window_event_dispatcher.h"
 
+#include <stddef.h>
+
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/event_client.h"
@@ -2226,7 +2231,7 @@ class SelfDestructDelegate : public test::TestWindowDelegate {
   void OnMouseEvent(ui::MouseEvent* event) override { window_.reset(); }
 
   void set_window(scoped_ptr<aura::Window> window) {
-    window_ = window.Pass();
+    window_ = std::move(window);
   }
   bool has_window() const { return !!window_.get(); }
 
@@ -2257,7 +2262,7 @@ TEST_F(WindowEventDispatcherTest, SynthesizedLocatedEvent) {
   SelfDestructDelegate delegate;
   scoped_ptr<aura::Window> window(CreateTestWindowWithDelegate(
       &delegate, 1, gfx::Rect(50, 50, 100, 100), root_window()));
-  delegate.set_window(window.Pass());
+  delegate.set_window(std::move(window));
   EXPECT_TRUE(delegate.has_window());
 
   generator.MoveMouseTo(100, 100);
@@ -2276,7 +2281,7 @@ TEST_F(WindowEventDispatcherTest, DestroyWindowOnCaptureChanged) {
   Window* window_first_raw = window_first.get();
   window_first->Show();
   window_first->SetCapture();
-  delegate.set_window(window_first.Pass());
+  delegate.set_window(std::move(window_first));
   EXPECT_TRUE(delegate.has_window());
 
   scoped_ptr<aura::Window> window_second(

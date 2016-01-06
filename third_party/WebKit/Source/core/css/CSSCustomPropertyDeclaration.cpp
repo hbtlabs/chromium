@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 
 #include "core/css/parser/CSSParserTokenRange.h"
@@ -16,7 +15,9 @@ DEFINE_TRACE_AFTER_DISPATCH(CSSCustomPropertyDeclaration)
 
 String CSSCustomPropertyDeclaration::customCSSText() const
 {
-    return m_value->tokenRange().serialize();
+    if (m_value)
+        return m_value->tokenRange().serialize();
+    return emptyString();
 }
 
 } // namespace blink

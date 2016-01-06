@@ -6,12 +6,14 @@
 #define NET_QUIC_TEST_TOOLS_CRYPTO_TEST_UTILS_H_
 
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "net/quic/crypto/crypto_framer.h"
 #include "net/quic/quic_framer.h"
@@ -153,8 +155,14 @@ class CryptoTestUtils {
   // MockCommonCertSets returns a CommonCertSets that contains a single set with
   // hash |hash|, consisting of the certificate |cert| at index |index|.
   static CommonCertSets* MockCommonCertSets(base::StringPiece cert,
-                                            uint64 hash,
-                                            uint32 index);
+                                            uint64_t hash,
+                                            uint32_t index);
+
+  // Creates a minimal dummy reject message that will pass the client-config
+  // validation tests. This will include a server config, but no certs, proof
+  // source address token, or server nonce.
+  static void FillInDummyReject(CryptoHandshakeMessage* rej,
+                                bool reject_is_stateless);
 
   // ParseTag returns a QuicTag from parsing |tagstr|. |tagstr| may either be
   // in the format "EXMP" (i.e. ASCII format), or "#11223344" (an explicit hex

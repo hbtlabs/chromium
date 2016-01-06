@@ -63,6 +63,7 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_client.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_thread.h"
@@ -125,8 +126,7 @@ void RecordPasswordLoginEvent(const UserContext& user_context) {
   if (user_context.GetUserType() == user_manager::USER_TYPE_REGULAR &&
       user_context.GetAuthFlow() == UserContext::AUTH_FLOW_OFFLINE &&
       easy_unlock_service) {
-    easy_unlock_service->RecordPasswordLoginEvent(
-        user_context.GetAccountId().GetUserEmail());
+    easy_unlock_service->RecordPasswordLoginEvent(user_context.GetAccountId());
   }
 }
 
@@ -438,12 +438,13 @@ void ExistingUserController::Signout() {
   NOTREACHED();
 }
 
-bool ExistingUserController::IsUserWhitelisted(const std::string& user_id) {
+bool ExistingUserController::IsUserWhitelisted(const AccountId& account_id) {
   bool wildcard_match = false;
   if (login_performer_.get())
-    return login_performer_->IsUserWhitelisted(user_id, &wildcard_match);
+    return login_performer_->IsUserWhitelisted(account_id, &wildcard_match);
 
-  return chromeos::CrosSettings::IsWhitelisted(user_id, &wildcard_match);
+  return chromeos::CrosSettings::IsWhitelisted(account_id.GetUserEmail(),
+                                               &wildcard_match);
 }
 
 void ExistingUserController::OnConsumerKioskAutoLaunchCheckCompleted(
@@ -1065,8 +1066,7 @@ void ExistingUserController::DoCompleteLogin(
     const UserContext& user_context_wo_device_id) {
   UserContext user_context = user_context_wo_device_id;
   std::string device_id =
-      user_manager::UserManager::Get()->GetKnownUserDeviceId(
-          user_context.GetAccountId());
+      user_manager::known_user::GetDeviceId(user_context.GetAccountId());
   if (device_id.empty()) {
     bool is_ephemeral = ChromeUserManager::Get()->AreEphemeralUsersEnabled() &&
                         user_context.GetAccountId() !=
@@ -1077,8 +1077,8 @@ void ExistingUserController::DoCompleteLogin(
 
   const std::string& gaps_cookie = user_context.GetGAPSCookie();
   if (!gaps_cookie.empty()) {
-    user_manager::UserManager::Get()->SetKnownUserGAPSCookie(
-        user_context.GetAccountId(), gaps_cookie);
+    user_manager::known_user::SetGAPSCookie(user_context.GetAccountId(),
+                                            gaps_cookie);
   }
 
   PerformPreLoginActions(user_context);

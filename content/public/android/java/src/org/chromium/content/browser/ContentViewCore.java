@@ -591,9 +591,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     // The client that implements Contextual Search functionality, or null if none exists.
     private ContextualSearchClient mContextualSearchClient;
 
-    // Keep the current configuration to detect the change when onConfigurationChanged() is called.
-    private Configuration mCurrentConfig;
-
     /**
      * @param webContents The {@link WebContents} to find a {@link ContentViewCore} of.
      * @return            A {@link ContentViewCore} that is connected to {@code webContents} or
@@ -627,8 +624,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         mGestureStateListenersIterator = mGestureStateListeners.rewindableIterator();
 
         mContainerViewObservers = new ObserverList<ContainerViewObserver>();
-        // Deep copy newConfig so that we can notice the difference.
-        mCurrentConfig = new Configuration(getContext().getResources().getConfiguration());
     }
 
     /**
@@ -1519,17 +1514,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     public void onConfigurationChanged(Configuration newConfig) {
         try {
             TraceEvent.begin("ContentViewCore.onConfigurationChanged");
-
-            if (mCurrentConfig.keyboard != newConfig.keyboard
-                    || mCurrentConfig.keyboardHidden != newConfig.keyboardHidden
-                    || mCurrentConfig.hardKeyboardHidden != newConfig.hardKeyboardHidden) {
-                mImeAdapter.onKeyboardConfigurationChanged();
-            }
-            // Deep copy newConfig so that we can notice the difference.
-            mCurrentConfig = new Configuration(newConfig);
-
+            mImeAdapter.onKeyboardConfigurationChanged(newConfig);
             mContainerViewInternals.super_onConfigurationChanged(newConfig);
-
             // To request layout has side effect, but it seems OK as it only happen in
             // onConfigurationChange and layout has to be changed in most case.
             mContainerView.requestLayout();
@@ -1567,10 +1553,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         if (mNativeContentViewCore != 0) {
             nativeWasResized(mNativeContentViewCore);
         }
-    }
-
-    /* TODO(aelias): Remove this after downstream callers disappear. */
-    public void onOverdrawBottomHeightChanged(int overdrawHeightPix) {
     }
 
     private void updateAfterSizeChanged() {
@@ -2561,11 +2543,15 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
     @SuppressWarnings("unused")
     @CalledByNative
-    private void showPastePopupWithFeedback(int x, int y) {
+    private boolean showPastePopupWithFeedback(int x, int y) {
         // TODO(jdduke): Remove this when there is a better signal that long press caused
         // showing of the paste popup. See http://crbug.com/150151.
         if (showPastePopup(x, y)) {
             mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            if (mWebContents != null) mWebContents.onContextMenuOpened();
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -2593,6 +2579,11 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
                 public void paste() {
                     mWebContents.paste();
                     dismissTextHandles();
+                }
+
+                @Override
+                public void onDismiss() {
+                    if (mWebContents != null) mWebContents.onContextMenuClosed();
                 }
             };
             if (supportsFloatingActionMode()) {

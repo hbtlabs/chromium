@@ -4,6 +4,8 @@
 
 #include "content/child/child_gpu_memory_buffer_manager.h"
 
+#include <utility>
+
 #include "content/common/child_process_messages.h"
 #include "content/common/generic_shared_memory_id_generator.h"
 #include "content/common/gpu/client/gpu_memory_buffer_impl.h"
@@ -45,14 +47,19 @@ ChildGpuMemoryBufferManager::AllocateGpuMemoryBuffer(const gfx::Size& size,
       content::GetNextGenericSharedMemoryId(), size.width(), size.height(),
       format, usage, &handle);
   bool success = sender_->Send(message);
-  CHECK(success);
-  CHECK(!handle.is_null());
+  if (!success || handle.is_null())
+    return nullptr;
 
   scoped_ptr<GpuMemoryBufferImpl> buffer(GpuMemoryBufferImpl::CreateFromHandle(
       handle, size, format, usage,
       base::Bind(&DeletedGpuMemoryBuffer, sender_, handle.id)));
-  CHECK(buffer);
-  return buffer.Pass();
+  if (!buffer) {
+    sender_->Send(new ChildProcessHostMsg_DeletedGpuMemoryBuffer(
+        handle.id, gpu::SyncToken()));
+    return nullptr;
+  }
+
+  return std::move(buffer);
 }
 
 scoped_ptr<gfx::GpuMemoryBuffer>

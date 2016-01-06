@@ -40,6 +40,7 @@ class CSSImageSetValue;
 
 class StyleFetchedImageSet final : public StyleImage, private ImageResourceClient {
     USING_FAST_MALLOC_WILL_BE_REMOVED(StyleFetchedImageSet);
+    WILL_BE_USING_PRE_FINALIZER(StyleFetchedImageSet, dispose);
 public:
     static PassRefPtrWillBeRawPtr<StyleFetchedImageSet> create(ImageResource* image, float imageScaleFactor, CSSImageSetValue* value, const KURL& url)
     {
@@ -78,6 +79,8 @@ public:
 
 private:
     StyleFetchedImageSet(ImageResource*, float imageScaleFactor, CSSImageSetValue*, const KURL&);
+
+    void dispose();
 
     String debugName() const override { return "StyleFetchedImageSet"; }
 

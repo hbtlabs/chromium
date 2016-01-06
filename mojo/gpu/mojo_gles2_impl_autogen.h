@@ -769,6 +769,7 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
   void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override;
   void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
                                       GLbyte* sync_token) override;
+  void VerifySyncTokensCHROMIUM(GLbyte** sync_tokens, GLsizei count) override;
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override;
   void DrawBuffersEXT(GLsizei count, const GLenum* bufs) override;
   void DiscardBackbufferCHROMIUM() override;
@@ -786,8 +787,12 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
   void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                const GLfloat* contents_rect,
                                GLfloat opacity,
-                               const GLuint background_color,
-                               const GLfloat* bounds_size,
+                               GLuint background_color,
+                               GLuint edge_aa_mask,
+                               const GLfloat* bounds_rect,
+                               GLboolean is_clipped,
+                               const GLfloat* clip_rect,
+                               GLint sorting_context_id,
                                const GLfloat* transform) override;
   void CommitOverlayPlanesCHROMIUM() override;
   void SwapInterval(GLint interval) override;
@@ -885,6 +890,7 @@ class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
                                            GLenum genMode,
                                            GLint components,
                                            const GLfloat* coeffs) override;
+  void CoverageModulationCHROMIUM(GLenum components) override;
   GLenum GetGraphicsResetStatusKHR() override;
   void BlendBarrierKHR() override;
   void ApplyScreenSpaceAntialiasingCHROMIUM() override;

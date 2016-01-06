@@ -5,8 +5,8 @@
 #ifndef UI_EVENTS_BLINK_INPUT_HANDLER_PROXY_H_
 #define UI_EVENTS_BLINK_INPUT_HANDLER_PROXY_H_
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/input/input_handler.h"
 #include "third_party/WebKit/public/platform/WebGestureCurve.h"
@@ -130,6 +130,9 @@ class InputHandlerProxy
   void HandleOverscroll(
       const gfx::Point& causal_event_viewport_point,
       const cc::InputHandlerScrollResult& scroll_result);
+
+  // Whether to use a smooth scroll animation for this event.
+  bool ShouldAnimate(const blink::WebMouseWheelEvent& event) const;
 
   scoped_ptr<blink::WebGestureCurve> fling_curve_;
   // Parameters for the active fling animation, stored in case we need to

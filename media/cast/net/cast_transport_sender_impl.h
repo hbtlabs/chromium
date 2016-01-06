@@ -24,11 +24,14 @@
 #ifndef MEDIA_CAST_NET_CAST_TRANSPORT_SENDER_IMPL_H_
 #define MEDIA_CAST_NET_CAST_TRANSPORT_SENDER_IMPL_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -39,7 +42,7 @@
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_sender.h"
 #include "media/cast/net/pacing/paced_sender.h"
-#include "media/cast/net/rtcp/rtcp.h"
+#include "media/cast/net/rtcp/sender_rtcp_session.h"
 #include "media/cast/net/rtp/rtp_parser.h"
 #include "media/cast/net/rtp/rtp_sender.h"
 #include "net/base/network_interfaces.h"
@@ -99,25 +102,25 @@ class CastTransportSenderImpl : public CastTransportSender {
   void InitializeVideo(const CastTransportRtpConfig& config,
                        const RtcpCastMessageCallback& cast_message_cb,
                        const RtcpRttCallback& rtt_cb) final;
-  void InsertFrame(uint32 ssrc, const EncodedFrame& frame) final;
+  void InsertFrame(uint32_t ssrc, const EncodedFrame& frame) final;
 
-  void SendSenderReport(uint32 ssrc,
+  void SendSenderReport(uint32_t ssrc,
                         base::TimeTicks current_time,
-                        uint32 current_time_as_rtp_timestamp) final;
+                        RtpTimeTicks current_time_as_rtp_timestamp) final;
 
-  void CancelSendingFrames(uint32 ssrc,
-                           const std::vector<uint32>& frame_ids) final;
+  void CancelSendingFrames(uint32_t ssrc,
+                           const std::vector<uint32_t>& frame_ids) final;
 
-  void ResendFrameForKickstart(uint32 ssrc, uint32 frame_id) final;
+  void ResendFrameForKickstart(uint32_t ssrc, uint32_t frame_id) final;
 
   PacketReceiverCallback PacketReceiverForTesting() final;
 
   // CastTransportReceiver implementation.
-  void AddValidSsrc(uint32 ssrc) final;
+  void AddValidSsrc(uint32_t ssrc) final;
 
   void SendRtcpFromRtpReceiver(
-      uint32 ssrc,
-      uint32 sender_ssrc,
+      uint32_t ssrc,
+      uint32_t sender_ssrc,
       const RtcpTimeData& time_data,
       const RtcpCastMessage* cast_message,
       base::TimeDelta target_delay,
@@ -135,7 +138,7 @@ class CastTransportSenderImpl : public CastTransportSender {
   // If |cancel_rtx_if_not_in_list| is true then transmission of packets for the
   // frames but not in the list will be dropped.
   // See PacedSender::ResendPackets() to see how |dedup_info| works.
-  void ResendPackets(uint32 ssrc,
+  void ResendPackets(uint32_t ssrc,
                      const MissingFramesAndPacketsMap& missing_packets,
                      bool cancel_rtx_if_not_in_list,
                      const DedupInfo& dedup_info);
@@ -152,7 +155,7 @@ class CastTransportSenderImpl : public CastTransportSender {
                             const RtcpReceiverLogMessage& log);
 
   // Called when a RTCP Cast message is received.
-  void OnReceivedCastMessage(uint32 ssrc,
+  void OnReceivedCastMessage(uint32_t ssrc,
                              const RtcpCastMessageCallback& cast_message_cb,
                              const RtcpCastMessage& cast_message);
 
@@ -176,8 +179,8 @@ class CastTransportSenderImpl : public CastTransportSender {
   scoped_ptr<RtpSender> video_sender_;
 
   // Maintains RTCP session for audio and video.
-  scoped_ptr<Rtcp> audio_rtcp_session_;
-  scoped_ptr<Rtcp> video_rtcp_session_;
+  scoped_ptr<SenderRtcpSession> audio_rtcp_session_;
+  scoped_ptr<SenderRtcpSession> video_rtcp_session_;
 
   // Encrypts data in EncodedFrames before they are sent.  Note that it's
   // important for the encryption to happen here, in code that would execute in
@@ -192,10 +195,10 @@ class CastTransportSenderImpl : public CastTransportSender {
   // Right after a frame is sent we record the number of bytes sent to the
   // socket. We record the corresponding bytes sent for the most recent ACKed
   // audio packet.
-  int64 last_byte_acked_for_audio_;
+  int64_t last_byte_acked_for_audio_;
 
   // Packets that don't match these ssrcs are ignored.
-  std::set<uint32> valid_ssrcs_;
+  std::set<uint32_t> valid_ssrcs_;
 
   // Called with incoming packets. (Unless they match the
   // channels created by Initialize{Audio,Video}.

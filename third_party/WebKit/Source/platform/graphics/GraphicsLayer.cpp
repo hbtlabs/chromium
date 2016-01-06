@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/GraphicsLayer.h"
 
 #include "SkImageFilter.h"
@@ -58,9 +57,12 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
+#include "wtf/MathExtras.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 #include "wtf/text/WTFString.h"
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 #ifndef NDEBUG
 #include <stdio.h>
@@ -156,6 +158,11 @@ GraphicsLayer::~GraphicsLayer()
 
     resetTrackedPaintInvalidations();
     ASSERT(!m_parent);
+}
+
+IntRect GraphicsLayer::visualRect() const
+{
+    return enclosingIntRect(FloatRect(FloatPoint(0, 0), size()));
 }
 
 void GraphicsLayer::setDrawDebugRedFillForTesting(bool enabled)
@@ -303,13 +310,18 @@ IntRect GraphicsLayer::interestRect()
     return m_previousInterestRect;
 }
 
-void GraphicsLayer::paint(GraphicsContext& context, const IntRect* interestRect)
+void GraphicsLayer::paint(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
+{
+    if (paintWithoutCommit(interestRect, disabledMode))
+        paintController().commitNewDisplayItems();
+}
+
+bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
 {
     ASSERT(drawsContent());
-    ASSERT(&context.paintController() == m_paintController);
 
     if (!m_client)
-        return;
+        return false;
     if (firstPaintInvalidationTrackingEnabled())
         m_debugInfo.clearAnnotatedInvalidateRects();
     incrementPaintCount();
@@ -320,12 +332,16 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect* interestRect)
         interestRect = &newInterestRect;
     }
 
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled()) {
-        if (!m_client->needsRepaint() && !paintController()->cacheIsEmpty() && m_previousInterestRect == *interestRect) {
-            paintController()->createAndAppend<CachedDisplayItem>(*this, DisplayItem::CachedDisplayItemList);
-            return;
-        }
+    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled()
+        && !paintController().subsequenceCachingIsDisabled()
+        && !m_client->needsRepaint()
+        && !paintController().cacheIsEmpty()
+        && m_previousInterestRect == *interestRect) {
+        ASSERT(!paintController().hasInvalidations());
+        return false;
     }
+
+    GraphicsContext context(paintController(), disabledMode);
 
 #ifndef NDEBUG
     if (contentsOpaque() && s_drawDebugRedFill) {
@@ -340,6 +356,7 @@ void GraphicsLayer::paint(GraphicsContext& context, const IntRect* interestRect)
     m_previousInterestRect = *interestRect;
     m_client->paintContents(this, context, m_paintingPhase, *interestRect);
     notifyFirstPaintToClient();
+    return true;
 }
 
 void GraphicsLayer::notifyFirstPaintToClient()
@@ -844,7 +861,7 @@ void GraphicsLayer::setSize(const FloatSize& size)
 #ifndef NDEBUG
     // The red debug fill needs to be invalidated if the layer resizes.
     if (m_paintController)
-        m_paintController->invalidateUntracked(displayItemClient());
+        m_paintController->invalidateUntracked(*this);
 #endif
 }
 
@@ -976,7 +993,7 @@ void GraphicsLayer::setBackfaceVisibility(bool visible)
 
 void GraphicsLayer::setOpacity(float opacity)
 {
-    float clampedOpacity = std::max(std::min(opacity, 1.0f), 0.0f);
+    float clampedOpacity = clampTo(opacity, 0.0f, 1.0f);
     m_opacity = clampedOpacity;
     platformLayer()->setOpacity(opacity);
 }
@@ -1026,7 +1043,7 @@ void GraphicsLayer::setNeedsDisplay()
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->invalidate();
 
-    paintController()->invalidateAll();
+    paintController().invalidateAll();
     if (isTrackingPaintInvalidations())
         trackPaintInvalidationObject("##ALL##");
 }
@@ -1045,9 +1062,12 @@ void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidation
         m_linkHighlights[i]->invalidate();
 }
 
-void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClientWrapper& displayItemClient, PaintInvalidationReason paintInvalidationReason, const IntRect* visualRect)
+void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason paintInvalidationReason, const IntRect* visualRect)
 {
-    paintController()->invalidate(displayItemClient, paintInvalidationReason, visualRect);
+    if (!drawsContent())
+        return;
+
+    paintController().invalidate(displayItemClient, paintInvalidationReason, visualRect);
     if (isTrackingPaintInvalidations())
         trackPaintInvalidationObject(displayItemClient.debugName());
 }
@@ -1092,7 +1112,7 @@ void GraphicsLayer::setContentsToImage(Image* image, RespectImageOrientationEnum
 
 bool GraphicsLayer::addAnimation(PassOwnPtr<WebCompositorAnimation> popAnimation)
 {
-    OwnPtr<WebCompositorAnimation> animation(popAnimation);
+    OwnPtr<WebCompositorAnimation> animation(std::move(popAnimation));
     ASSERT(animation);
     platformLayer()->setAnimationDelegate(this);
 
@@ -1109,6 +1129,11 @@ void GraphicsLayer::pauseAnimation(int animationId, double timeOffset)
 void GraphicsLayer::removeAnimation(int animationId)
 {
     platformLayer()->removeAnimation(animationId);
+}
+
+void GraphicsLayer::abortAnimation(int animationId)
+{
+    platformLayer()->abortAnimation(animationId);
 }
 
 WebLayer* GraphicsLayer::platformLayer() const
@@ -1209,11 +1234,24 @@ scoped_refptr<base::trace_event::ConvertableToTraceFormat> GraphicsLayer::TakeDe
     return tracedValue;
 }
 
-PaintController* GraphicsLayer::paintController()
+PaintController& GraphicsLayer::paintController()
 {
+    RELEASE_ASSERT(drawsContent());
     if (!m_paintController)
         m_paintController = PaintController::create();
-    return m_paintController.get();
+    return *m_paintController;
+}
+
+void GraphicsLayer::setElementId(uint64_t id)
+{
+    if (WebLayer* layer = platformLayer())
+        layer->setElementId(id);
+}
+
+void GraphicsLayer::setCompositorMutableProperties(uint32_t properties)
+{
+    if (WebLayer* layer = platformLayer())
+        layer->setCompositorMutableProperties(properties);
 }
 
 } // namespace blink

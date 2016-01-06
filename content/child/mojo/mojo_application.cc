@@ -4,11 +4,13 @@
 
 #include "content/child/mojo/mojo_application.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/common/application_setup.mojom.h"
 #include "content/common/mojo/channel_init.h"
 #include "content/common/mojo/mojo_messages.h"
-#include "content/common/routed_service_provider.mojom.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 
@@ -46,14 +48,14 @@ void MojoApplication::OnActivate(
 
   ApplicationSetupPtr application_setup;
   application_setup.Bind(
-      mojo::InterfacePtrInfo<ApplicationSetup>(message_pipe.Pass(), 0u));
+      mojo::InterfacePtrInfo<ApplicationSetup>(std::move(message_pipe), 0u));
 
-  RoutedServiceProviderPtr services;
-  RoutedServiceProviderPtr exposed_services;
+  mojo::ServiceProviderPtr services;
+  mojo::ServiceProviderPtr exposed_services;
   service_registry_.Bind(GetProxy(&exposed_services));
   application_setup->ExchangeServiceProviders(GetProxy(&services),
-                                              exposed_services.Pass());
-  service_registry_.BindRemoteServiceProvider(services.Pass());
+                                              std::move(exposed_services));
+  service_registry_.BindRemoteServiceProvider(std::move(services));
 }
 
 }  // namespace content

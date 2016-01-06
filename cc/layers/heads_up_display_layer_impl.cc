@@ -4,6 +4,9 @@
 
 #include "cc/layers/heads_up_display_layer_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -46,7 +49,7 @@ static inline SkPaint CreatePaint() {
   swizzle_matrix.fMat[2 + 5 * 0] = 1;
   swizzle_matrix.fMat[3 + 5 * 3] = 1;
 
-  skia::RefPtr<SkColorMatrixFilter> filter =
+  skia::RefPtr<SkColorFilter> filter =
       skia::AdoptRef(SkColorMatrixFilter::Create(swizzle_matrix));
   paint.setColorFilter(filter.get());
 #endif

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <set>
 #include <utility>
@@ -11,6 +13,7 @@
 #include "apps/app_load_service.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_member.h"
 #include "base/prefs/pref_service.h"
@@ -18,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -1017,6 +1021,7 @@ void RenderViewContextMenu::AppendSearchWebForImageItems() {
 }
 
 void RenderViewContextMenu::AppendAudioItems() {
+  AppendMediaItems();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENAUDIONEWTAB);
@@ -1035,6 +1040,7 @@ void RenderViewContextMenu::AppendCanvasItems() {
 }
 
 void RenderViewContextMenu::AppendVideoItems() {
+  AppendMediaItems();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENAVNEWTAB,
                                   IDS_CONTENT_CONTEXT_OPENVIDEONEWTAB);
@@ -1043,6 +1049,13 @@ void RenderViewContextMenu::AppendVideoItems() {
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYAVLOCATION,
                                   IDS_CONTENT_CONTEXT_COPYVIDEOLOCATION);
   AppendMediaRouterItem();
+}
+
+void RenderViewContextMenu::AppendMediaItems() {
+  menu_model_.AddCheckItemWithStringId(IDC_CONTENT_CONTEXT_LOOP,
+                                       IDS_CONTENT_CONTEXT_LOOP);
+  menu_model_.AddCheckItemWithStringId(IDC_CONTENT_CONTEXT_CONTROLS,
+                                       IDS_CONTENT_CONTEXT_CONTROLS);
 }
 
 void RenderViewContextMenu::AppendPluginItems() {
@@ -1712,7 +1725,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       dl_params->set_referrer_encoding(params_.frame_charset);
       dl_params->set_suggested_name(params_.suggested_filename);
       dl_params->set_prompt(true);
-      dlm->DownloadUrl(dl_params.Pass());
+      dlm->DownloadUrl(std::move(dl_params));
       break;
     }
 
@@ -2146,7 +2159,10 @@ void RenderViewContextMenu::GetImageThumbnailForSearch() {
       CoreTabHelper::FromWebContents(source_web_contents_);
   if (!core_tab_helper)
     return;
-  core_tab_helper->SearchByImageInNewTab(params().src_url);
+  RenderFrameHost* render_frame_host = GetRenderFrameHost();
+  if (!render_frame_host)
+    return;
+  core_tab_helper->SearchByImageInNewTab(render_frame_host, params().src_url);
 }
 
 void RenderViewContextMenu::Inspect(int x, int y) {

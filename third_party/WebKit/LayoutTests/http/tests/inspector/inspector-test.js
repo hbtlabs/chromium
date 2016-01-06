@@ -49,6 +49,11 @@ InspectorTest.evaluateInPage = function(code, callback)
     InspectorTest.RuntimeAgent.evaluate(code, "console", false, mycallback);
 }
 
+InspectorTest.evaluateInPagePromise = function(code)
+{
+    return new Promise(succ => InspectorTest.evaluateInPage(code, succ));
+}
+
 InspectorTest.evaluateInPageWithTimeout = function(code)
 {
     // FIXME: we need a better way of waiting for chromium events to happen
@@ -694,6 +699,11 @@ InspectorTest.clearSpecificInfoFromStackFrames = function(text)
 InspectorTest.hideInspectorView = function()
 {
     WebInspector.inspectorView.element.setAttribute("style", "display:none !important");
+}
+
+InspectorTest.mainFrame = function()
+{
+    return InspectorTest.mainTarget.resourceTreeModel.mainFrame;
 }
 
 InspectorTest.StringOutputStream = function(callback)

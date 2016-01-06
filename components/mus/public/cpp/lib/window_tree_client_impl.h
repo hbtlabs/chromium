@@ -5,13 +5,17 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_LIB_WINDOW_TREE_CLIENT_IMPL_H_
 
+#include <stdint.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace gfx {
@@ -29,7 +33,8 @@ enum class ChangeType;
 
 // Manages the connection with the Window Server service.
 class WindowTreeClientImpl : public WindowTreeConnection,
-                             public mojom::WindowTreeClient {
+                             public mojom::WindowTreeClient,
+                             public mojom::WindowManagerInternal {
  public:
   WindowTreeClientImpl(WindowTreeDelegate* delegate,
                        WindowManagerDelegate* window_manager_delegate,
@@ -85,6 +90,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
              uint32_t policy_bitmask,
              const mojom::WindowTree::EmbedCallback& callback);
 
+  void RequestClose(Window* window);
+
   void AttachSurface(Id window_id,
                      mojom::SurfaceType type,
                      mojo::InterfaceRequest<mojom::Surface> surface,
@@ -96,14 +103,12 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // Start/stop tracking windows. While tracked, they can be retrieved via
   // WindowTreeConnection::GetWindowById.
   void AddWindow(Window* window);
-  void RemoveWindow(Id window_id);
 
   bool is_embed_root() const { return is_embed_root_; }
 
-  // Called after the root window's observers have been notified of destruction
-  // (as the last step of ~Window). This ordering ensures that the Window Server
-  // is torn down after the root.
-  void OnRootDestroyed(Window* root);
+  // Called after the window's observers have been notified of destruction (as
+  // the last step of ~Window).
+  void OnWindowDestroyed(Window* window);
 
  private:
   friend class WindowTreeClientImplPrivate;
@@ -129,7 +134,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                    ConnectionSpecificId connection_id,
                    mojom::WindowDataPtr root_data,
                    Id focused_window_id,
-                   uint32 access_policy);
+                   uint32_t access_policy);
 
   // Overridden from WindowTreeConnection:
   Window* GetRoot() override;
@@ -184,6 +189,12 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnWindowPredefinedCursorChanged(Id window_id,
                                        mojom::Cursor cursor) override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
+  void RequestClose(uint32_t window_id) override;
+  void GetWindowManagerInternal(
+      mojo::AssociatedInterfaceRequest<WindowManagerInternal> internal)
+      override;
+
+  // Overridden from WindowManagerInternal:
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
                    mojo::RectPtr transit_bounds) override;
@@ -191,8 +202,6 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                      Id window_id,
                      const mojo::String& name,
                      mojo::Array<uint8_t> transit_data) override;
-
-  mojo::Callback<void(bool)> ActionCompletedCallback();
 
   // This is set once and only once when we get OnEmbed(). It gives the unique
   // id for this connection.
@@ -226,6 +235,11 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   bool in_destructor_;
 
   base::ObserverList<WindowTreeConnectionObserver> observers_;
+
+  scoped_ptr<mojo::AssociatedBinding<mojom::WindowManagerInternal>>
+      window_manager_internal_;
+  mojom::WindowManagerInternalClientAssociatedPtr
+      window_manager_internal_client_;
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(WindowTreeClientImpl);
 };

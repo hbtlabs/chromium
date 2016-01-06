@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 
+#include <utility>
+
 #include "base/debug/leak_annotations.h"
 #include "base/i18n/rtl.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -50,8 +53,9 @@ BrowserFrame::BrowserFrame(BrowserView* browser_view)
       root_view_(nullptr),
       browser_frame_view_(nullptr),
       browser_view_(browser_view),
-      theme_provider_(ThemeServiceFactory::GetForProfile(
-                          browser_view_->browser()->profile())) {
+      theme_provider_(
+          &ThemeService::GetThemeProviderForProfile(browser_view_->browser()
+                                                        ->profile())) {
   browser_view_->set_frame(this);
   set_is_secondary_widget(false);
   // Don't focus anything on creation, selecting a tab will set the focus.
@@ -102,7 +106,7 @@ void BrowserFrame::InitBrowserFrame() {
 }
 
 void BrowserFrame::SetThemeProvider(scoped_ptr<ui::ThemeProvider> provider) {
-  owned_theme_provider_ = provider.Pass();
+  owned_theme_provider_ = std::move(provider);
   theme_provider_ = owned_theme_provider_.get();
 }
 

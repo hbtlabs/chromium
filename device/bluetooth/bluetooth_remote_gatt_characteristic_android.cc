@@ -73,7 +73,7 @@ bool BluetoothRemoteGattCharacteristicAndroid::IsLocal() const {
   return false;
 }
 
-const std::vector<uint8>& BluetoothRemoteGattCharacteristicAndroid::GetValue()
+const std::vector<uint8_t>& BluetoothRemoteGattCharacteristicAndroid::GetValue()
     const {
   return value_;
 }
@@ -127,7 +127,7 @@ bool BluetoothRemoteGattCharacteristicAndroid::AddDescriptor(
 }
 
 bool BluetoothRemoteGattCharacteristicAndroid::UpdateValue(
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   NOTIMPLEMENTED();
   return false;
 }
@@ -186,7 +186,7 @@ void BluetoothRemoteGattCharacteristicAndroid::ReadRemoteCharacteristic(
 }
 
 void BluetoothRemoteGattCharacteristicAndroid::WriteRemoteCharacteristic(
-    const std::vector<uint8>& new_value,
+    const std::vector<uint8_t>& new_value,
     const base::Closure& callback,
     const ErrorCallback& error_callback) {
   if (read_pending_ || write_pending_) {

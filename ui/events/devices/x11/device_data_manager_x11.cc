@@ -4,6 +4,7 @@
 
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 
+#include <stddef.h>
 #include <X11/extensions/XInput.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/Xlib.h>
@@ -13,8 +14,10 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "ui/events/devices/keyboard_device.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -712,7 +715,7 @@ void DeviceDataManagerX11::SetDisabledKeyboardAllowedKeys(
     scoped_ptr<std::set<KeyboardCode> > excepted_keys) {
   DCHECK(!excepted_keys.get() ||
          !blocked_keyboard_allowed_keys_.get());
-  blocked_keyboard_allowed_keys_ = excepted_keys.Pass();
+  blocked_keyboard_allowed_keys_ = std::move(excepted_keys);
 }
 
 void DeviceDataManagerX11::DisableDevice(int deviceid) {

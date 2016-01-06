@@ -66,7 +66,6 @@ static_library("search_engines") {
     # omnibox/browser target, but should ideally be fixed, then this
     # dependency added:
     #"//components/omnibox/browser",
-    "//components/policy:policy_component",
     "//components/pref_registry",
     "//components/rappor",
     "//components/strings",
@@ -89,7 +88,10 @@ static_library("search_engines") {
       "default_search_policy_handler.cc",
       "default_search_policy_handler.h",
     ]
-    deps += [ "//components/policy" ]
+    deps += [
+      "//components/policy",
+      "//components/policy:policy_component",
+    ]
   }
 }
 
@@ -116,29 +118,36 @@ source_set("unit_tests") {
     "default_search_pref_migration_unittest.cc",
     "desktop_search_win_unittest.cc",
     "keyword_table_unittest.cc",
+    "search_engine_data_type_controller_unittest.cc",
     "search_host_to_urls_map_unittest.cc",
     "template_url_prepopulate_data_unittest.cc",
     "template_url_service_util_unittest.cc",
     "template_url_unittest.cc",
   ]
-  if (enable_configuration_policy) {
-    sources += [ "default_search_policy_handler_unittest.cc" ]
-  }
 
   deps = [
     ":prepopulated_engines",
     ":test_support",
     "//base",
     "//components/google/core/browser",
-    "//components/policy",
-    "//components/policy:policy_component_test_support",
     "//components/pref_registry:test_support",
+    "//components/sync_driver:test_support",
     "//components/webdata/common",
     "//sql",
+    "//sync:test_support_sync_api",
     "//testing/gmock",
     "//testing/gtest",
     "//url",
   ]
+
+  if (enable_configuration_policy) {
+    sources += [ "default_search_policy_handler_unittest.cc" ]
+
+    deps += [
+      "//components/policy",
+      "//components/policy:policy_component_test_support",
+    ]
+  }
 }
 
 json_to_struct("prepopulated_engines") {

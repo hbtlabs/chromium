@@ -17,6 +17,8 @@ from telemetry.internal.util import binary_manager
 from telemetry.internal.util import command_line
 from telemetry.page import page_test
 from telemetry.util import wpr_modes
+from telemetry.web_perf import timeline_based_measurement
+from telemetry.web_perf import timeline_based_page_test
 
 
 class RecorderPageTest(page_test.PageTest):
@@ -128,9 +130,11 @@ class WprRecorder(object):
     self._ParseArgs(args)
     self._ProcessCommandLineArgs()
     if self._benchmark is not None:
+      test = self._benchmark.CreatePageTest(self.options)
+      if isinstance(test, timeline_based_measurement.TimelineBasedMeasurement):
+        test = timeline_based_page_test.TimelineBasedPageTest(test)
       # This must be called after the command line args are added.
-      self._record_page_test.page_test = self._benchmark.CreatePageTest(
-          self.options)
+      self._record_page_test.page_test = test
 
     self._page_set_base_dir = (
         self._options.page_set_base_dir if self._options.page_set_base_dir
@@ -174,6 +178,10 @@ class WprRecorder(object):
 
   def _ProcessCommandLineArgs(self):
     story_runner.ProcessCommandLineArgs(self._parser, self._options)
+
+    if self._options.use_live_sites:
+      self._parser.error("Can't --use-live-sites while recording")
+
     if self._benchmark is not None:
       self._benchmark.ProcessCommandLineArgs(self._parser, self._options)
 
@@ -187,7 +195,7 @@ class WprRecorder(object):
                        % target)
       if not self._HintMostLikelyBenchmarksStories(target):
         sys.stderr.write(
-            'Found no similiar benchmark or story. Please use '
+            'Found no similar benchmark or story. Please use '
             '--list-benchmarks or --list-stories to list candidates.\n')
         self._parser.print_usage()
       sys.exit(1)

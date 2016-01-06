@@ -69,6 +69,7 @@ class SerializedScriptValue;
 class ShadowRoot;
 class TypeConversions;
 class UnionTypesTest;
+class ScrollState;
 template <typename NodeType> class StaticNodeTypeList;
 typedef StaticNodeTypeList<Node> StaticNodeList;
 
@@ -236,7 +237,6 @@ public:
     String mainThreadScrollingReasons(Document*, ExceptionState&) const;
     ClientRectList* nonFastScrollableRects(Document*, ExceptionState&) const;
 
-    void garbageCollectDocumentResources(Document*) const;
     void evictAllResources() const;
 
     unsigned numberOfLiveNodes() const;
@@ -249,11 +249,11 @@ public:
 
     String counterValue(Element*);
 
-    int pageNumber(Element*, float pageWidth = 800, float pageHeight = 600);
+    int pageNumber(Element*, float pageWidth, float pageHeight, ExceptionState&);
     Vector<String> shortcutIconURLs(Document*) const;
     Vector<String> allIconURLs(Document*) const;
 
-    int numberOfPages(float pageWidthInPixels = 800, float pageHeightInPixels = 600);
+    int numberOfPages(float pageWidthInPixels, float pageHeightInPixels, ExceptionState&);
     String pageProperty(String, int, ExceptionState& = ASSERT_NO_EXCEPTION) const;
     String pageSizeAndMarginsInPixels(int, int, int, int, int, int, int, ExceptionState& = ASSERT_NO_EXCEPTION) const;
 

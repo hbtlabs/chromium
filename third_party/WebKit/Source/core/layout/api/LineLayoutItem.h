@@ -49,6 +49,11 @@ public:
         return m_layoutObject == layoutObject;
     }
 
+    String debugName() const
+    {
+        return m_layoutObject->debugName();
+    }
+
     bool needsLayout() const
     {
         return m_layoutObject->needsLayout();
@@ -214,6 +219,11 @@ public:
         return m_layoutObject->isInlineBlockOrInlineTable();
     }
 
+    bool isInlineElementContinuation() const
+    {
+        return m_layoutObject->isInlineElementContinuation();
+    }
+
     bool isLayoutBlock() const
     {
         return m_layoutObject->isLayoutBlock();
@@ -234,9 +244,9 @@ public:
         return m_layoutObject->isListMarker();
     }
 
-    bool isReplaced() const
+    bool isAtomicInlineLevel() const
     {
-        return m_layoutObject->isReplaced();
+        return m_layoutObject->isAtomicInlineLevel();
     }
 
     bool isRubyRun() const
@@ -332,6 +342,11 @@ public:
     LineLayoutItem previousInPreOrder(const LayoutObject* stayWithin) const
     {
         return LineLayoutItem(m_layoutObject->previousInPreOrder(stayWithin));
+    }
+
+    FloatQuad localToAbsoluteQuad(const FloatQuad& quad, MapCoordinatesFlags mode = 0, bool* wasFixed = nullptr) const
+    {
+        return m_layoutObject->localToAbsoluteQuad(quad, mode, wasFixed);
     }
 
 #ifndef NDEBUG

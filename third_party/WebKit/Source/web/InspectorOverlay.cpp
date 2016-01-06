@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/InspectorOverlay.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -119,7 +118,7 @@ public:
         DisplayItemCacheSkipper cacheSkipper(graphicsContext);
         FrameView* view = m_overlay->overlayMainFrame()->view();
         ASSERT(!view->needsLayout());
-        view->paint(&graphicsContext, CullRect(IntRect(0, 0, view->width(), view->height())));
+        view->paint(graphicsContext, CullRect(IntRect(0, 0, view->width(), view->height())));
     }
 
 private:
@@ -159,12 +158,12 @@ public:
         m_overlay->invalidate();
     }
 
-    void scheduleAnimation() override
+    void scheduleAnimation(Widget* widget) override
     {
         if (m_overlay->m_inLayout)
             return;
 
-        m_client->scheduleAnimation();
+        m_client->scheduleAnimation(widget);
     }
 
 private:
@@ -224,7 +223,7 @@ void InspectorOverlay::invalidate()
     m_pageOverlay->update();
 }
 
-void InspectorOverlay::layout()
+void InspectorOverlay::updateAllLifecyclePhases()
 {
     if (isEmpty())
         return;
@@ -373,7 +372,9 @@ void InspectorOverlay::scheduleUpdate()
         return;
     }
     m_needsUpdate = true;
-    m_webViewImpl->page()->chromeClient().scheduleAnimation();
+    FrameView* view = m_webViewImpl->mainFrameImpl()->frameView();
+    if (view)
+        m_webViewImpl->page()->chromeClient().scheduleAnimation(view);
 }
 
 void InspectorOverlay::rebuildOverlayPage()
@@ -463,7 +464,7 @@ Page* InspectorOverlay::overlayPage()
     ASSERT(!m_overlayChromeClient);
     m_overlayChromeClient = InspectorOverlayChromeClient::create(m_webViewImpl->page()->chromeClient(), *this);
     pageClients.chromeClient = m_overlayChromeClient.get();
-    m_overlayPage = adoptPtrWillBeNoop(new Page(pageClients));
+    m_overlayPage = Page::create(pageClients);
 
     Settings& settings = m_webViewImpl->page()->settings();
     Settings& overlaySettings = m_overlayPage->settings();
@@ -496,7 +497,7 @@ Page* InspectorOverlay::overlayPage()
     loader.load(FrameLoadRequest(0, blankURL(), SubstituteData(data, "text/html", "UTF-8", KURL(), ForceSynchronousLoad)));
     v8::Isolate* isolate = toIsolate(frame.get());
     ScriptState* scriptState = ScriptState::forMainWorld(frame.get());
-    ASSERT(scriptState->contextIsValid());
+    ASSERT(scriptState);
     ScriptState::Scope scope(scriptState);
     v8::Local<v8::Object> global = scriptState->context()->Global();
     v8::Local<v8::Value> overlayHostObj = toV8(m_overlayHost.get(), global, isolate);

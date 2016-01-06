@@ -4,6 +4,8 @@
 
 #include "cc/trees/layer_tree_host.h"
 
+#include <stdint.h>
+
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/layer_animation_controller.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
@@ -24,6 +26,14 @@ namespace {
 
 class LayerTreeHostAnimationTest : public LayerTreeTest {
  public:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->use_compositor_animation_timelines = false;
+  }
+
+  void InitializeLayerSettings(LayerSettings* layer_settings) override {
+    layer_settings->use_compositor_animation_timelines = false;
+  }
+
   void SetupTree() override {
     LayerTreeTest::SetupTree();
     layer_tree_host()->root_layer()->set_layer_animation_delegate(this);
@@ -362,10 +372,10 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
     : public LayerTreeHostAnimationTest {
  public:
   LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity()
-      : update_check_layer_(
-            FakePictureLayer::Create(layer_settings(), &client_)) {}
+      : update_check_layer_() {}
 
   void SetupTree() override {
+    update_check_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     update_check_layer_->SetOpacity(0.f);
     layer_tree_host()->SetRootLayer(update_check_layer_);
     client_.set_bounds(update_check_layer_->bounds());
@@ -564,6 +574,7 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostAnimationTest::InitializeSettings(settings);
     // Make sure that drawing many times doesn't cause a checkerboarded
     // animation to start so we avoid flake in this test.
     settings->timeout_and_draw_when_animation_checkerboards = false;
@@ -1302,8 +1313,8 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
                               Animation::TargetProperty target_property,
                               int group) override {
     called_animation_started_ = true;
-    layer_tree_host()->AnimateLayers(
-        base::TimeTicks::FromInternalValue(std::numeric_limits<int64>::max()));
+    layer_tree_host()->AnimateLayers(base::TimeTicks::FromInternalValue(
+        std::numeric_limits<int64_t>::max()));
     PostSetNeedsCommitToMainThread();
   }
 

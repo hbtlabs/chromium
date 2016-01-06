@@ -5,6 +5,7 @@
 #ifndef UI_COMPOSITOR_PAINT_CACHE_H_
 #define UI_COMPOSITOR_PAINT_CACHE_H_
 
+#include "base/macros.h"
 #include "cc/playback/drawing_display_item.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/gfx/geometry/rect.h"
@@ -30,7 +31,7 @@ class COMPOSITOR_EXPORT PaintCache {
   // Only PaintRecorder can modify these.
   friend PaintRecorder;
 
-  void SetCache(const cc::DrawingDisplayItem* item);
+  void SetCache(const cc::DrawingDisplayItem& item);
 
   bool has_cache_;
   cc::DrawingDisplayItem display_item_;

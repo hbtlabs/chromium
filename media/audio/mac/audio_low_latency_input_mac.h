@@ -38,9 +38,12 @@
 
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/CoreAudio.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/atomicops.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -162,7 +165,7 @@ class AUAudioInputStream : public AgcAudioStream<AudioInputStream> {
 
   // Temporary storage for recorded data. The InputProc() renders into this
   // array as soon as a frame of the desired buffer size has been recorded.
-  scoped_ptr<uint8[]> audio_data_buffer_;
+  scoped_ptr<uint8_t[]> audio_data_buffer_;
 
   // True after successful Start(), false after successful Stop().
   bool started_;

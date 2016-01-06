@@ -5,14 +5,15 @@
 #include "net/extras/sqlite/sqlite_channel_id_store.h"
 
 #include <set>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
@@ -175,7 +176,7 @@ void SQLiteChannelIDStore::Backend::LoadInBackground(
   if (!base::PathExists(dir) && !base::CreateDirectory(dir))
     return;
 
-  int64 db_size = 0;
+  int64_t db_size = 0;
   if (base::GetFileSize(path_, &db_size))
     UMA_HISTOGRAM_COUNTS("DomainBoundCerts.DBSizeInKB", db_size / 1024);
 
@@ -218,7 +219,7 @@ void SQLiteChannelIDStore::Backend::LoadInBackground(
   }
 
   while (smt.Step()) {
-    std::vector<uint8> private_key_from_db, public_key_from_db;
+    std::vector<uint8_t> private_key_from_db, public_key_from_db;
     smt.ColumnBlobAsVector(1, &private_key_from_db);
     smt.ColumnBlobAsVector(2, &public_key_from_db);
     scoped_ptr<crypto::ECPrivateKey> key(
@@ -230,7 +231,7 @@ void SQLiteChannelIDStore::Backend::LoadInBackground(
     scoped_ptr<DefaultChannelIDStore::ChannelID> channel_id(
         new DefaultChannelIDStore::ChannelID(
             smt.ColumnString(0),  // host
-            base::Time::FromInternalValue(smt.ColumnInt64(3)), key.Pass()));
+            base::Time::FromInternalValue(smt.ColumnInt64(3)), std::move(key)));
     channel_ids->push_back(std::move(channel_id));
   }
 
@@ -493,7 +494,7 @@ void SQLiteChannelIDStore::Backend::Commit() {
       case PendingOperation::CHANNEL_ID_ADD: {
         add_statement.Reset(true);
         add_statement.BindString(0, po->channel_id().server_identifier());
-        std::vector<uint8> private_key, public_key;
+        std::vector<uint8_t> private_key, public_key;
         if (!po->channel_id().key()->ExportEncryptedPrivateKey(
                 ChannelIDService::kEPKIPassword, 1, &private_key))
           continue;

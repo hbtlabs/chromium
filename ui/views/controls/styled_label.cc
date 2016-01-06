@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/styled_label.h"
 
+#include <stddef.h>
+
 #include <limits>
 #include <vector>
 
@@ -57,7 +59,7 @@ scoped_ptr<Label> CreateLabelRange(
         result->font_list().DeriveWithStyle(style_info.font_style));
   }
 
-  return result.Pass();
+  return result;
 }
 
 }  // namespace

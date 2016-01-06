@@ -69,10 +69,12 @@ cr.define('extensions', function() {
 
     ready: function() {
       /** @type {extensions.Sidebar} */
-      this.sidebar = this.$$('extensions-sidebar');
+      this.sidebar =
+          /** @type {extensions.Sidebar} */(this.$$('extensions-sidebar'));
       this.service = extensions.Service.getInstance();
       this.service.managerReady(this);
-      this.sidebar.setScrollDelegate(new ScrollHelper(this));
+      this.scrollHelper_ = new ScrollHelper(this);
+      this.sidebar.setScrollDelegate(this.scrollHelper_);
     },
 
     /**
@@ -114,6 +116,14 @@ cr.define('extensions', function() {
       return this[listId].findIndex(function(item) {
         return item.id == itemId;
       });
+    },
+
+    /**
+     * @param {!Array<!chrome.developerPrivate.ExtensionInfo>} list
+     * @return {boolean} Whether the list should be visible.
+     */
+    computeListHidden_: function(list) {
+      return list.length == 0;
     },
 
     /**
@@ -172,19 +182,19 @@ cr.define('extensions', function() {
     /** @override */
     scrollToExtensions: function() {
       this.items_.scrollTop =
-          this.items_.querySelector('#extensions-header').offsetTop;
+          this.items_.querySelector('#extensions-list').offsetTop;
     },
 
     /** @override */
     scrollToApps: function() {
       this.items_.scrollTop =
-          this.items_.querySelector('#apps-header').offsetTop;
+          this.items_.querySelector('#apps-list').offsetTop;
     },
 
     /** @override */
     scrollToWebsites: function() {
       this.items_.scrollTop =
-          this.items_.querySelector('#websites-header').offsetTop;
+          this.items_.querySelector('#websites-list').offsetTop;
     },
   };
 

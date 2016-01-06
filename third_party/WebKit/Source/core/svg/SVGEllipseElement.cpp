@@ -18,7 +18,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/svg/SVGEllipseElement.h"
 
 #include "core/layout/svg/LayoutSVGEllipse.h"
@@ -94,7 +93,7 @@ bool SVGEllipseElement::isPresentationAttributeWithSVGDOM(const QualifiedName& a
 
 void SVGEllipseElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_cx)
         addPropertyToPresentationAttributeStyle(style, CSSPropertyCx, m_cx->currentValue()->asCSSPrimitiveValue());
     else if (property == m_cy)

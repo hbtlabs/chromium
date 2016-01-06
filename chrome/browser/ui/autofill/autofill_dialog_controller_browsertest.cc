@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -12,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
@@ -313,7 +317,7 @@ class AutofillDialogControllerTest : public InProcessBrowserTest {
   }
 
   scoped_ptr<AutofillDialogViewTester> GetViewTester() {
-    return AutofillDialogViewTester::For(controller()->view()).Pass();
+    return AutofillDialogViewTester::For(controller()->view());
   }
 
   TestAutofillDialogController* controller() { return controller_; }
@@ -523,7 +527,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest, Submit) {
   AddAutofillProfileToProfile(controller()->profile(),
                               test::GetVerifiedProfile());
   scoped_ptr<AutofillDialogViewTester> view = AutofillDialogViewTester::For(
-      static_cast<TestAutofillDialogController*>(controller())->view());
+      controller()->view());
   view->SetTextContentsOfSuggestionInput(SECTION_CC, ASCIIToUTF16("123"));
   GetViewTester()->SubmitForTesting();
   RunMessageLoop();
@@ -886,8 +890,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest, AutocompleteEvent) {
                               test::GetVerifiedProfile());
 
   scoped_ptr<AutofillDialogViewTester> view =
-      AutofillDialogViewTester::For(
-          static_cast<TestAutofillDialogController*>(controller)->view());
+      AutofillDialogViewTester::For(controller->view());
   view->SetTextContentsOfSuggestionInput(SECTION_CC, ASCIIToUTF16("123"));
   view->SubmitForTesting();
   ExpectDomMessage("success");
@@ -908,8 +911,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest,
                               test::GetVerifiedProfile());
 
   scoped_ptr<AutofillDialogViewTester> view =
-      AutofillDialogViewTester::For(
-          static_cast<TestAutofillDialogController*>(controller)->view());
+      AutofillDialogViewTester::For(controller->view());
   view->SetTextContentsOfSuggestionInput(SECTION_CC, ASCIIToUTF16("123"));
   view->SubmitForTesting();
   ExpectDomMessage("error: invalid");
@@ -932,8 +934,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest,
   AutofillDialogControllerImpl* controller =
       SetUpHtmlAndInvoke("<input autocomplete='cc-name'>");
   ASSERT_TRUE(controller);
-  AutofillDialogViewTester::For(
-      static_cast<TestAutofillDialogController*>(controller)->view())->
+  AutofillDialogViewTester::For(controller->view())->
           CancelForTesting();
   ExpectDomMessage("error: cancel");
 }
@@ -956,8 +957,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest,
                                                      &unused));
   ExpectDomMessage("iframe loaded");
 
-  AutofillDialogViewTester::For(
-      static_cast<TestAutofillDialogController*>(controller)->view())->
+  AutofillDialogViewTester::For(controller->view())->
           CancelForTesting();
   ExpectDomMessage("error: cancel");
 }
@@ -985,8 +985,7 @@ IN_PROC_BROWSER_TEST_F(AutofillDialogControllerTest,
                               test::GetVerifiedProfile());
 
   scoped_ptr<AutofillDialogViewTester> view =
-      AutofillDialogViewTester::For(
-          static_cast<TestAutofillDialogController*>(controller)->view());
+      AutofillDialogViewTester::For(controller->view());
   view->SetTextContentsOfSuggestionInput(SECTION_CC, ASCIIToUTF16("123"));
   view->SubmitForTesting();
   ExpectDomMessage("success");

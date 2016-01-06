@@ -4,7 +4,10 @@
 
 #include "content/browser/service_worker/embedded_worker_instance.h"
 
+#include <utility>
+
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/trace_event/trace_event.h"
@@ -13,12 +16,12 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/mojo/service_registry_impl.h"
-#include "content/common/routed_service_provider.mojom.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/embedded_worker_setup.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/child_process_host.h"
 #include "ipc/ipc_message.h"
 #include "url/gurl.h"
 
@@ -49,7 +52,7 @@ void RegisterToWorkerDevToolsManagerOnUI(
     int process_id,
     const ServiceWorkerContextCore* service_worker_context,
     const base::WeakPtr<ServiceWorkerContextCore>& service_worker_context_weak,
-    int64 service_worker_version_id,
+    int64_t service_worker_version_id,
     const GURL& url,
     const base::Callback<void(int worker_devtools_agent_route_id,
                               bool wait_for_debugger)>& callback) {
@@ -78,16 +81,16 @@ void RegisterToWorkerDevToolsManagerOnUI(
 void SetupMojoOnUIThread(
     int process_id,
     int thread_id,
-    mojo::InterfaceRequest<RoutedServiceProvider> services,
-    mojo::InterfacePtrInfo<RoutedServiceProvider> exposed_services) {
+    mojo::InterfaceRequest<mojo::ServiceProvider> services,
+    mojo::InterfacePtrInfo<mojo::ServiceProvider> exposed_services) {
   RenderProcessHost* rph = RenderProcessHost::FromID(process_id);
   // |rph| or its ServiceRegistry may be NULL in unit tests.
   if (!rph || !rph->GetServiceRegistry())
     return;
   EmbeddedWorkerSetupPtr setup;
   rph->GetServiceRegistry()->ConnectToRemoteService(mojo::GetProxy(&setup));
-  setup->ExchangeServiceProviders(thread_id, services.Pass(),
-                                  mojo::MakeProxy(exposed_services.Pass()));
+  setup->ExchangeServiceProviders(thread_id, std::move(services),
+                                  mojo::MakeProxy(std::move(exposed_services)));
 }
 
 }  // namespace
@@ -134,13 +137,13 @@ class EmbeddedWorkerInstance::DevToolsProxy : public base::NonThreadSafe {
 EmbeddedWorkerInstance::~EmbeddedWorkerInstance() {
   DCHECK(status_ == STOPPING || status_ == STOPPED) << status_;
   devtools_proxy_.reset();
-  if (context_ && process_id_ != -1)
+  if (context_ && process_id_ != ChildProcessHost::kInvalidUniqueID)
     context_->process_manager()->ReleaseWorkerProcess(embedded_worker_id_);
   if (registry_->GetWorker(embedded_worker_id_))
     registry_->RemoveWorker(process_id_, embedded_worker_id_);
 }
 
-void EmbeddedWorkerInstance::Start(int64 service_worker_version_id,
+void EmbeddedWorkerInstance::Start(int64_t service_worker_version_id,
                                    const GURL& scope,
                                    const GURL& script_url,
                                    const StatusCallback& callback) {
@@ -234,12 +237,11 @@ EmbeddedWorkerInstance::EmbeddedWorkerInstance(
       embedded_worker_id_(embedded_worker_id),
       status_(STOPPED),
       starting_phase_(NOT_STARTING),
-      process_id_(-1),
+      process_id_(ChildProcessHost::kInvalidUniqueID),
       thread_id_(kInvalidEmbeddedWorkerThreadId),
       devtools_attached_(false),
       network_accessed_for_script_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 // static
 void EmbeddedWorkerInstance::RunProcessAllocated(
@@ -263,7 +265,7 @@ void EmbeddedWorkerInstance::RunProcessAllocated(
     callback.Run(SERVICE_WORKER_ERROR_ABORT);
     return;
   }
-  instance->ProcessAllocated(params.Pass(), callback, process_id,
+  instance->ProcessAllocated(std::move(params), callback, process_id,
                              is_new_process, status);
 }
 
@@ -273,7 +275,7 @@ void EmbeddedWorkerInstance::ProcessAllocated(
     int process_id,
     bool is_new_process,
     ServiceWorkerStatusCode status) {
-  DCHECK_EQ(process_id_, -1);
+  DCHECK_EQ(process_id_, ChildProcessHost::kInvalidUniqueID);
   TRACE_EVENT_ASYNC_END1("ServiceWorker",
                          "EmbeddedWorkerInstance::ProcessAllocate",
                          params.get(),
@@ -282,7 +284,7 @@ void EmbeddedWorkerInstance::ProcessAllocated(
     OnStartFailed(callback, status);
     return;
   }
-  const int64 service_worker_version_id = params->service_worker_version_id;
+  const int64_t service_worker_version_id = params->service_worker_version_id;
   process_id_ = process_id;
   GURL script_url(params->script_url);
 
@@ -342,7 +344,7 @@ void EmbeddedWorkerInstance::SendStartWorker(
 
   starting_phase_ = SENT_START_WORKER;
   ServiceWorkerStatusCode status =
-      registry_->SendStartWorker(params.Pass(), process_id_);
+      registry_->SendStartWorker(std::move(params), process_id_);
   if (status != SERVICE_WORKER_OK) {
     OnStartFailed(callback, status);
     return;
@@ -387,17 +389,17 @@ void EmbeddedWorkerInstance::OnThreadStarted(int thread_id) {
   thread_id_ = thread_id;
   FOR_EACH_OBSERVER(Listener, listener_list_, OnThreadStarted());
 
-  RoutedServiceProviderPtr exposed_services;
+  mojo::ServiceProviderPtr exposed_services;
   service_registry_->Bind(GetProxy(&exposed_services));
-  RoutedServiceProviderPtr services;
-  mojo::InterfaceRequest<RoutedServiceProvider> services_request =
+  mojo::ServiceProviderPtr services;
+  mojo::InterfaceRequest<mojo::ServiceProvider> services_request =
       GetProxy(&services);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(SetupMojoOnUIThread, process_id_, thread_id_,
                  base::Passed(&services_request),
                  base::Passed(exposed_services.PassInterface())));
-  service_registry_->BindRemoteServiceProvider(services.Pass());
+  service_registry_->BindRemoteServiceProvider(std::move(services));
 }
 
 void EmbeddedWorkerInstance::OnScriptLoadFailed() {
@@ -506,11 +508,11 @@ void EmbeddedWorkerInstance::OnNetworkAccessedForScriptLoad() {
 
 void EmbeddedWorkerInstance::ReleaseProcess() {
   devtools_proxy_.reset();
-  if (context_ && process_id_ != -1)
+  if (context_ && process_id_ != ChildProcessHost::kInvalidUniqueID)
     context_->process_manager()->ReleaseWorkerProcess(embedded_worker_id_);
   status_ = STOPPED;
-  process_id_ = -1;
-  thread_id_ = -1;
+  process_id_ = ChildProcessHost::kInvalidUniqueID;
+  thread_id_ = kInvalidEmbeddedWorkerThreadId;
   service_registry_.reset();
   start_callback_.Reset();
 }

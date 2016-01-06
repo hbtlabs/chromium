@@ -5,6 +5,8 @@
 #ifndef MOJO_RUNNER_HOST_CHILD_PROCESS_HOST_H_
 #define MOJO_RUNNER_HOST_CHILD_PROCESS_HOST_H_
 
+#include <stdint.h>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -50,7 +52,8 @@ class ChildProcessHost {
 
   // |Start()|s the child process; calls |DidStart()| (on the thread on which
   // |Start()| was called) when the child has been started (or failed to start).
-  void Start();
+  void Start(
+      const base::Callback<void(base::ProcessId)>& pid_available_callback);
 
   // Waits for the child process to terminate, and returns its exit code.
   int Join();
@@ -62,7 +65,8 @@ class ChildProcessHost {
 
  protected:
   // virtual for testing.
-  virtual void DidStart();
+  virtual void DidStart(
+      const base::Callback<void(base::ProcessId)>& pid_available_callback);
 
  private:
   void DoLaunch();

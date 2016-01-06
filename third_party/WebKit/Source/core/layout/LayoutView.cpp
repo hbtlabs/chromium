@@ -18,7 +18,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/LayoutView.h"
 
 #include "core/dom/Document.h"
@@ -38,6 +37,7 @@
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutQuote.h"
 #include "core/layout/LayoutScrollbarPart.h"
+#include "core/layout/ViewFragmentationContext.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
@@ -238,8 +238,13 @@ void LayoutView::layout()
     if (!document().paginated())
         setPageLogicalHeight(0);
 
-    if (shouldUsePrintingLayout())
+    if (shouldUsePrintingLayout()) {
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = logicalWidth();
+        if (!m_fragmentationContext)
+            m_fragmentationContext = adoptPtr(new ViewFragmentationContext(*this));
+    } else if (m_fragmentationContext) {
+        m_fragmentationContext.clear();
+    }
 
     SubtreeLayoutScope layoutScope(*this);
 
@@ -306,14 +311,14 @@ LayoutRect LayoutView::visualOverflowRect() const
     // In normal compositing mode, LayoutView doesn't actually apply clipping
     // on its descendants. Instead their visual overflow is propagated to
     // compositor()->m_rootContentLayer for accelerated scrolling.
-    return LayoutRect(unscaledDocumentRect());
+    return LayoutRect(documentRect());
 }
 
-void LayoutView::mapLocalToContainer(const LayoutBoxModelObject* paintInvalidationContainer, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
+void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
 {
     ASSERT_UNUSED(wasFixed, !wasFixed || *wasFixed == static_cast<bool>(mode & IsFixed));
 
-    if (!paintInvalidationContainer && mode & UseTransforms && shouldUseTransformFromContainer(0)) {
+    if (!ancestor && mode & UseTransforms && shouldUseTransformFromContainer(0)) {
         TransformationMatrix t;
         getTransformFromContainer(0, LayoutSize(), t);
         transformState.applyTransform(t);
@@ -327,7 +332,7 @@ void LayoutView::mapLocalToContainer(const LayoutBoxModelObject* paintInvalidati
         mode &= ~IsFixed;
     }
 
-    if (paintInvalidationContainer == this)
+    if (ancestor == this)
         return;
 
     if (mode & TraverseDocumentBoundaries) {
@@ -335,7 +340,7 @@ void LayoutView::mapLocalToContainer(const LayoutBoxModelObject* paintInvalidati
             transformState.move(-frame()->view()->scrollOffset());
             transformState.move(parentDocLayoutObject->contentBoxOffset());
 
-            parentDocLayoutObject->mapLocalToContainer(paintInvalidationContainer, transformState, mode, wasFixed, paintInvalidationState);
+            parentDocLayoutObject->mapLocalToAncestor(ancestor, transformState, mode, wasFixed, paintInvalidationState);
         }
     }
 }
@@ -389,9 +394,8 @@ void LayoutView::mapAbsoluteToLocalPoint(MapCoordinatesFlags mode, TransformStat
     if (mode & TraverseDocumentBoundaries) {
         if (LayoutPart* parentDocLayoutObject = frame()->ownerLayoutObject()) {
             parentDocLayoutObject->mapAbsoluteToLocalPoint(mode, transformState);
-
-            transformState.move(-parentDocLayoutObject->contentBoxOffset());
-            transformState.move(frame()->view()->scrollOffset());
+            transformState.move(parentDocLayoutObject->contentBoxOffset());
+            transformState.move(-frame()->view()->scrollOffset());
         }
     }
 }
@@ -454,12 +458,12 @@ void LayoutView::invalidatePaintForViewAndCompositedLayers()
         compositor()->fullyInvalidatePaint();
 }
 
-void LayoutView::mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* paintInvalidationContainer, LayoutRect& rect, const PaintInvalidationState* invalidationState) const
+void LayoutView::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, const PaintInvalidationState* invalidationState) const
 {
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, IsNotFixedPosition, invalidationState);
+    mapToVisibleRectInAncestorSpace(ancestor, rect, IsNotFixedPosition, invalidationState);
 }
 
-void LayoutView::mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* paintInvalidationContainer, LayoutRect& rect, ViewportConstrainedPosition viewportConstraint, const PaintInvalidationState* state) const
+void LayoutView::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, ViewportConstrainedPosition viewportConstraint, const PaintInvalidationState* state) const
 {
     if (document().printing())
         return;
@@ -476,11 +480,11 @@ void LayoutView::mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* p
     adjustViewportConstrainedOffset(rect, viewportConstraint);
 
     // Apply our transform if we have one (because of full page zooming).
-    if (!paintInvalidationContainer && layer() && layer()->transform())
+    if (!ancestor && layer() && layer()->transform())
         rect = layer()->transform()->mapRect(rect);
 
-    ASSERT(paintInvalidationContainer);
-    if (paintInvalidationContainer == this)
+    ASSERT(ancestor);
+    if (ancestor == this)
         return;
 
     Element* owner = document().ownerElement();
@@ -499,7 +503,7 @@ void LayoutView::mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* p
 
         // Adjust for frame border.
         rect.move(obj->contentBoxOffset());
-        obj->mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
+        obj->mapToVisibleRectInAncestorSpace(ancestor, rect, 0);
     }
 }
 
@@ -847,7 +851,7 @@ LayoutRect LayoutView::overflowClipRect(const LayoutPoint& location, OverlayScro
     return rect;
 }
 
-IntRect LayoutView::unscaledDocumentRect() const
+IntRect LayoutView::documentRect() const
 {
     LayoutRect overflowRect(layoutOverflowRect());
     flipForWritingMode(overflowRect);
@@ -861,15 +865,7 @@ bool LayoutView::rootBackgroundIsEntirelyFixed() const
 
 LayoutRect LayoutView::backgroundRect(LayoutBox* backgroundLayoutObject) const
 {
-    return LayoutRect(unscaledDocumentRect());
-}
-
-IntRect LayoutView::documentRect() const
-{
-    FloatRect overflowRect(unscaledDocumentRect());
-    if (hasTransformRelatedProperty())
-        overflowRect = layer()->currentTransform().mapRect(overflowRect);
-    return IntRect(overflowRect);
+    return LayoutRect(documentRect());
 }
 
 IntSize LayoutView::layoutSize(IncludeScrollbarsInRect scrollbarInclusion) const
@@ -980,6 +976,10 @@ double LayoutView::layoutViewportHeight() const
 
 void LayoutView::willBeDestroyed()
 {
+    // TODO(wangxianzhu): This is a workaround of crbug.com/570706.
+    // Should find and fix the root cause.
+    if (PaintLayer* layer = this->layer())
+        layer->setNeedsRepaint();
     LayoutBlockFlow::willBeDestroyed();
     m_compositor.clear();
 }

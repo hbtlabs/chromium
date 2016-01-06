@@ -153,7 +153,7 @@ public:
     void bindBufferRange(GLenum, GLuint, WebGLBuffer*, long long, long long);
     ScriptValue getIndexedParameter(ScriptState*, GLenum, GLuint);
     Vector<GLuint> getUniformIndices(WebGLProgram*, const Vector<String>&);
-    Vector<GLint> getActiveUniforms(WebGLProgram*, const Vector<GLuint>&, GLenum);
+    ScriptValue getActiveUniforms(ScriptState*, WebGLProgram*, const Vector<GLuint>&, GLenum);
     GLuint getUniformBlockIndex(WebGLProgram*, const String&);
     ScriptValue getActiveUniformBlockParameter(ScriptState*, WebGLProgram*, GLuint, GLenum);
     String getActiveUniformBlockName(WebGLProgram*, GLuint);
@@ -196,8 +196,8 @@ protected:
         TexStorageType3D,
     };
     bool validateTexStorage(const char*, GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, TexStorageType);
-    bool validateTexImage3D(const char* functionName, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type);
-    bool validateTexSubImage3D(const char*, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLenum format, GLenum type, GLsizei width, GLsizei height, GLsizei depth);
+
+    bool validateUniformBlockIndex(const char*, WebGLProgram*, GLuint);
 
     ScriptValue getInt64Parameter(ScriptState*, GLenum);
 
@@ -224,6 +224,8 @@ protected:
     WebGLTexture* validateTextureBinding(const char* functionName, GLenum target, bool useSixEnumsForCubeMap) override;
     bool validateFramebufferTarget(GLenum target) override;
     bool validateReadPixelsFormatAndType(GLenum format, GLenum type) override;
+    bool validateVertexAttribPointerTypeAndSize(GLenum type, GLint size) override;
+
     DOMArrayBufferView::ViewType readPixelsExpectedArrayBufferViewType(GLenum type) override;
     WebGLFramebuffer* getFramebufferBinding(GLenum target) override;
     GLint getMaxTextureLevelForTarget(GLenum target) override;
@@ -258,6 +260,7 @@ protected:
 
     PersistentHeapVectorWillBeHeapVector<Member<WebGLBuffer>> m_boundIndexedTransformFeedbackBuffers;
     PersistentHeapVectorWillBeHeapVector<Member<WebGLBuffer>> m_boundIndexedUniformBuffers;
+    GLint m_maxTransformFeedbackSeparateAttribs;
     size_t m_maxBoundUniformBufferIndex;
 
     PersistentWillBeMember<WebGLQuery> m_currentBooleanOcclusionQuery;

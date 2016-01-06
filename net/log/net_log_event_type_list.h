@@ -461,7 +461,12 @@ EVENT_TYPE(SSL_SERVER_HANDSHAKE)
 // The SSL server requested a client certificate.
 EVENT_TYPE(SSL_CLIENT_CERT_REQUESTED)
 
-// The SSL stack blocked on a private key operation.
+// The SSL stack blocked on a private key operation. The following parameters
+// are attached to the event.
+//   {
+//     "type": <type of the key>,
+//     "hash": <hash function used>,
+//   }
 EVENT_TYPE(SSL_PRIVATE_KEY_OPERATION)
 
 // The start/end of getting a domain-bound certificate and private key.
@@ -1866,6 +1871,10 @@ EVENT_TYPE(SERVICE_WORKER_ERROR_NO_ACTIVE_VERSION)
 // This event is emitted when Service Worker fails to respond because
 // the underlying request was detached.
 EVENT_TYPE(SERVICE_WORKER_ERROR_NO_REQUEST)
+
+// This event is emitted when Service Worker fails to respond because
+// the job delegate behaved incorrectly.
+EVENT_TYPE(SERVICE_WORKER_ERROR_BAD_DELEGATE)
 
 // This event is emitted when Service Worker fails to respond because
 // the fetch event could not be dispatched to the worker.

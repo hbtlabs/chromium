@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -10,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -30,11 +34,11 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebElementCollection.h"
+#include "third_party/WebKit/public/web/WebFrameSerializer.h"
+#include "third_party/WebKit/public/web/WebFrameSerializerClient.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebMetaElement.h"
 #include "third_party/WebKit/public/web/WebNode.h"
-#include "third_party/WebKit/public/web/WebPageSerializer.h"
-#include "third_party/WebKit/public/web/WebPageSerializerClient.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
 using blink::WebCString;
@@ -44,10 +48,10 @@ using blink::WebElement;
 using blink::WebMetaElement;
 using blink::WebElementCollection;
 using blink::WebFrame;
+using blink::WebFrameSerializer;
+using blink::WebFrameSerializerClient;
 using blink::WebLocalFrame;
 using blink::WebNode;
-using blink::WebPageSerializer;
-using blink::WebPageSerializerClient;
 using blink::WebString;
 using blink::WebURL;
 using blink::WebView;
@@ -75,11 +79,9 @@ class LoadObserver : public RenderViewObserver {
 };
 
 class DomSerializerTests : public ContentBrowserTest,
-                           public WebPageSerializerClient {
+                           public WebFrameSerializerClient {
  public:
-  DomSerializerTests()
-      : serialization_reported_end_of_data_(false),
-        local_directory_name_(FILE_PATH_LITERAL("./dummy_files/")) {}
+  DomSerializerTests() : serialization_reported_end_of_data_(false) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kSingleProcess);
@@ -96,7 +98,7 @@ class DomSerializerTests : public ContentBrowserTest,
 
   // DomSerializerDelegate.
   void didSerializeDataForFrame(const WebCString& data,
-                                PageSerializationStatus status) override {
+                                FrameSerializationStatus status) override {
     // Check finish status of current frame.
     ASSERT_FALSE(serialization_reported_end_of_data_);
 
@@ -104,7 +106,7 @@ class DomSerializerTests : public ContentBrowserTest,
     serialized_contents_ += data;
 
     // Current frame is completed saving, change the finish status.
-    if (status == WebPageSerializerClient::CurrentFrameIsFinished)
+    if (status == WebFrameSerializerClient::CurrentFrameIsFinished)
       serialization_reported_end_of_data_ = true;
   }
 
@@ -161,18 +163,14 @@ class DomSerializerTests : public ContentBrowserTest,
     // Find corresponding WebFrame according to frame_url.
     WebFrame* web_frame = FindSubFrameByURL(frame_url);
     ASSERT_TRUE(web_frame != NULL);
-    WebVector<WebURL> links;
-    links.assign(&frame_url, 1);
     WebString file_path =
         base::FilePath(FILE_PATH_LITERAL("c:\\dummy.htm")).AsUTF16Unsafe();
-    WebVector<WebString> local_paths;
-    local_paths.assign(&file_path, 1);
+    std::vector<std::pair<WebURL, WebString>> url_to_local_path;
+    url_to_local_path.push_back(std::make_pair(WebURL(frame_url), file_path));
     // Start serializing DOM.
-    bool result = WebPageSerializer::serialize(web_frame->toWebLocalFrame(),
-       static_cast<WebPageSerializerClient*>(this),
-       links,
-       local_paths,
-       local_directory_name_.AsUTF16Unsafe());
+    bool result = WebFrameSerializer::serialize(
+        web_frame->toWebLocalFrame(),
+        static_cast<WebFrameSerializerClient*>(this), url_to_local_path);
     ASSERT_TRUE(result);
   }
 
@@ -225,7 +223,7 @@ class DomSerializerTests : public ContentBrowserTest,
       const GURL& file_url, const std::string& original_contents) {
     // Make sure original contents does not have MOTW;
     std::string motw_declaration =
-       WebPageSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
+        WebFrameSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
     ASSERT_FALSE(motw_declaration.empty());
     // The encoding of original contents is ISO-8859-1, so we convert the MOTW
     // declaration to ASCII and search whether original contents has it or not.
@@ -371,7 +369,7 @@ class DomSerializerTests : public ContentBrowserTest,
     // Because we add MOTW when serializing DOM, so before comparison, we also
     // need to add MOTW to original_contents.
     std::string original_str =
-      WebPageSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
+        WebFrameSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
     original_str += original_contents;
     // Since WebCore now inserts a new HEAD element if there is no HEAD element
     // when creating BODY element. (Please see
@@ -385,7 +383,7 @@ class DomSerializerTests : public ContentBrowserTest,
       pos += htmlTag.length();
       std::string head_part("<head>");
       head_part +=
-          WebPageSerializer::generateMetaCharsetDeclaration(encoding).utf8();
+          WebFrameSerializer::generateMetaCharsetDeclaration(encoding).utf8();
       head_part += "</head>";
       original_str.insert(pos, head_part);
     }
@@ -420,7 +418,7 @@ class DomSerializerTests : public ContentBrowserTest,
     // Compare the serialized contents with original contents to make sure
     // they are same.
     std::string original_str =
-        WebPageSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
+        WebFrameSerializer::generateMarkOfTheWebDeclaration(file_url).utf8();
     original_str += original_contents;
     if (!doc.isNull()) {
       WebString encoding = web_frame->document().encoding();
@@ -430,7 +428,7 @@ class DomSerializerTests : public ContentBrowserTest,
       pos += htmlTag.length();
       std::string head_part("<head>");
       head_part +=
-          WebPageSerializer::generateMetaCharsetDeclaration(encoding).utf8();
+          WebFrameSerializer::generateMetaCharsetDeclaration(encoding).utf8();
       head_part += "</head>";
       original_str.insert(pos, head_part);
     }
@@ -612,12 +610,9 @@ class DomSerializerTests : public ContentBrowserTest,
   }
 
  private:
-  int32 render_view_routing_id_;
+  int32_t render_view_routing_id_;
   std::string serialized_contents_;
   bool serialization_reported_end_of_data_;
-  // The local_directory_name_ is dummy relative path of directory which
-  // contain all saved auxiliary files included all sub frames and resources.
-  const base::FilePath local_directory_name_;
 };
 
 // If original contents have document type, the serialized contents also have

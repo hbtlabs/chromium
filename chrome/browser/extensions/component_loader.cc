@@ -15,6 +15,7 @@
 #include "base/profiler/scoped_profile.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/component_extensions_whitelist/whitelist.h"
 #include "chrome/browser/extensions/data_deleter.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -108,7 +109,7 @@ LoadManifestOnFileThread(
   bool localized = extension_l10n_util::LocalizeExtension(
       root_directory, manifest.get(), &error);
   CHECK(localized) << error;
-  return manifest.Pass();
+  return manifest;
 }
 
 bool IsNormalSession() {

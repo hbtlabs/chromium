@@ -4,6 +4,7 @@
 
 #include "components/crash/content/app/crashpad.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include <algorithm>
@@ -15,10 +16,12 @@
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
@@ -143,8 +146,15 @@ void InitializeCrashpad(bool initial_client, const std::string& process_type) {
   g_simple_string_dictionary = new crashpad::SimpleStringDictionary();
   crashpad_info->set_simple_annotations(g_simple_string_dictionary);
 
+#if !defined(OS_WIN) || !defined(COMPONENT_BUILD)
+  // chrome/common/child_process_logging_win.cc registers crash keys for
+  // chrome.dll. In a component build, that is sufficient as chrome.dll and
+  // chrome.exe share a copy of base (in base.dll). In a static build, the EXE
+  // must separately initialize the crash keys configuration as it has its own
+  // statically linked copy of base.
   base::debug::SetCrashKeyReportingFunctions(SetCrashKeyValue, ClearCrashKey);
   crash_reporter_client->RegisterCrashKeys();
+#endif
 
   SetCrashKeyValue("ptype", browser_process ? base::StringPiece("browser")
                                             : base::StringPiece(process_type));
@@ -233,4 +243,67 @@ void GetUploadedReports(std::vector<UploadedReport>* uploaded_reports) {
             });
 }
 
+#if defined(KASKO)
+
+void GetCrashKeysForKasko(std::vector<kasko::api::CrashKey>* crash_keys) {
+  // Reserve room for an extra key, the guid.
+  crash_keys->clear();
+  crash_keys->reserve(g_simple_string_dictionary->GetCount() + 1);
+
+  // Set the Crashpad client ID in the crash keys.
+  bool got_guid = false;
+  if (g_database) {
+    crashpad::Settings* settings = g_database->GetSettings();
+    crashpad::UUID uuid;
+    if (settings->GetClientID(&uuid)) {
+      kasko::api::CrashKey kv;
+      wcsncpy_s(kv.name, L"guid", _TRUNCATE);
+      wcsncpy_s(kv.value, base::UTF8ToWide(uuid.ToString()).c_str(), _TRUNCATE);
+      crash_keys->push_back(kv);
+      got_guid = true;
+    }
+  }
+
+  crashpad::SimpleStringDictionary::Iterator iter(*g_simple_string_dictionary);
+  for (;;) {
+    const auto* entry = iter.Next();
+    if (!entry)
+      break;
+
+    // Skip the 'guid' key if it was already set.
+    static const char kGuid[] = "guid";
+    if (got_guid && ::strncmp(entry->key, kGuid, arraysize(kGuid)) == 0)
+      continue;
+
+    kasko::api::CrashKey kv;
+    wcsncpy_s(kv.name, base::UTF8ToWide(entry->key).c_str(), _TRUNCATE);
+    wcsncpy_s(kv.value, base::UTF8ToWide(entry->value).c_str(), _TRUNCATE);
+    crash_keys->push_back(kv);
+  }
+}
+
+#endif  // KASKO
+
 }  // namespace crash_reporter
+
+#if defined(OS_WIN)
+
+extern "C" {
+
+// NOTE: This function is used by SyzyASAN to annotate crash reports. If you
+// change the name or signature of this function you will break SyzyASAN
+// instrumented releases of Chrome. Please contact syzygy-team@chromium.org
+// before doing so! See also http://crbug.com/567781.
+void __declspec(dllexport) __cdecl SetCrashKeyValueImpl(const wchar_t* key,
+                                                        const wchar_t* value) {
+  crash_reporter::SetCrashKeyValue(base::UTF16ToUTF8(key),
+                                   base::UTF16ToUTF8(value));
+}
+
+void __declspec(dllexport) __cdecl ClearCrashKeyValueImpl(const wchar_t* key) {
+  crash_reporter::ClearCrashKey(base::UTF16ToUTF8(key));
+}
+
+}  // extern "C"
+
+#endif  // OS_WIN

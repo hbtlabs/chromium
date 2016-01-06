@@ -5,11 +5,14 @@
 // IPC messages for printing.
 // Multiply-included message file, hence no include guard.
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/memory/shared_memory.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/printing/common/printing_param_traits_macros.h"
 #include "ipc/ipc_message_macros.h"
 #include "printing/page_range.h"
@@ -45,7 +48,7 @@ struct PrintMsg_Print_Params {
   int document_cookie;
   bool selection_only;
   bool supports_alpha_blend;
-  int32 preview_ui_id;
+  int32_t preview_ui_id;
   int preview_request_id;
   bool is_first_request;
   blink::WebPrintScalingOption print_scaling_option;
@@ -222,7 +225,7 @@ IPC_STRUCT_BEGIN(PrintHostMsg_DidPreviewDocument_Params)
   IPC_STRUCT_MEMBER(base::SharedMemoryHandle, metafile_data_handle)
 
   // Size of metafile data.
-  IPC_STRUCT_MEMBER(uint32, data_size)
+  IPC_STRUCT_MEMBER(uint32_t, data_size)
 
   // Cookie for the document to ensure correctness.
   IPC_STRUCT_MEMBER(int, document_cookie)
@@ -243,10 +246,9 @@ IPC_STRUCT_BEGIN(PrintHostMsg_DidPreviewPage_Params)
   IPC_STRUCT_MEMBER(base::SharedMemoryHandle, metafile_data_handle)
 
   // Size of metafile data.
-  IPC_STRUCT_MEMBER(uint32, data_size)
+  IPC_STRUCT_MEMBER(uint32_t, data_size)
 
-  // |page_number| is zero-based and can be |printing::INVALID_PAGE_INDEX| if it
-  // is just a check.
+  // |page_number| is zero-based and should not be negative.
   IPC_STRUCT_MEMBER(int, page_number)
 
   // The id of the preview request.
@@ -278,7 +280,7 @@ IPC_STRUCT_BEGIN(PrintHostMsg_DidPrintPage_Params)
   IPC_STRUCT_MEMBER(base::SharedMemoryHandle, metafile_data_handle)
 
   // Size of the metafile data.
-  IPC_STRUCT_MEMBER(uint32, data_size)
+  IPC_STRUCT_MEMBER(uint32_t, data_size)
 
   // Cookie for the document to ensure correctness.
   IPC_STRUCT_MEMBER(int, document_cookie)
@@ -433,7 +435,7 @@ IPC_MESSAGE_ROUTED1(PrintHostMsg_DidPreviewPage,
 
 // Asks the browser whether the print preview has been cancelled.
 IPC_SYNC_MESSAGE_ROUTED2_1(PrintHostMsg_CheckForCancel,
-                           int32 /* PrintPreviewUI ID */,
+                           int32_t /* PrintPreviewUI ID */,
                            int /* request id */,
                            bool /* print preview cancelled */)
 

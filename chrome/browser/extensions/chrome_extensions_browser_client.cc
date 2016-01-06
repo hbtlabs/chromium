@@ -4,8 +4,11 @@
 
 #include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
@@ -290,7 +293,7 @@ void ChromeExtensionsBrowserClient::BroadcastEventToRenderers(
     const std::string& event_name,
     scoped_ptr<base::ListValue> args) {
   g_browser_process->extension_event_router_forwarder()
-      ->BroadcastEventToRenderers(histogram_value, event_name, args.Pass(),
+      ->BroadcastEventToRenderers(histogram_value, event_name, std::move(args),
                                   GURL());
 }
 
@@ -336,7 +339,7 @@ ChromeExtensionsBrowserClient::GetExtensionWebContentsObserver(
 void ChromeExtensionsBrowserClient::ReportError(
     content::BrowserContext* context,
     scoped_ptr<ExtensionError> error) {
-  ErrorConsole::Get(context)->ReportError(error.Pass());
+  ErrorConsole::Get(context)->ReportError(std::move(error));
 }
 
 void ChromeExtensionsBrowserClient::CleanUpWebView(
@@ -366,10 +369,12 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
       return;
 
     case VIEW_TYPE_BACKGROUND_CONTENTS:
+    case VIEW_TYPE_EXTENSION_GUEST:
     case VIEW_TYPE_PANEL:
     case VIEW_TYPE_TAB_CONTENTS:
       // Those types are tracked by other tags:
       // BACKGROUND_CONTENTS --> task_management::BackgroundContentsTag.
+      // GUEST --> extensions::ChromeGuestViewManagerDelegate.
       // PANEL --> task_management::PanelTag.
       // TAB_CONTENTS --> task_management::TabContentsTag.
       // These tags are created and attached to the web_contents in other

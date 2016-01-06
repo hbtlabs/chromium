@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/surfaces/display.h"
+
+#include <utility>
+
 #include "base/test/null_task_runner.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/output/delegated_frame_data.h"
 #include "cc/quads/render_pass.h"
 #include "cc/resources/shared_bitmap_manager.h"
-#include "cc/surfaces/display.h"
 #include "cc/surfaces/display_client.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
@@ -394,6 +397,30 @@ TEST_F(DisplayTest, DisplayDamaged) {
     display.Resize(gfx::Size(100, 100));
     EXPECT_TRUE(scheduler.swapped);
     EXPECT_EQ(6u, output_surface_ptr_->num_sent_frames());
+  }
+
+  {
+    // Surface that's damaged completely should be resized and swapped.
+    pass = RenderPass::Create();
+    pass->output_rect = gfx::Rect(0, 0, 99, 99);
+    pass->damage_rect = gfx::Rect(0, 0, 99, 99);
+    pass->id = RenderPassId(1, 1);
+
+    pass_list.push_back(std::move(pass));
+    scheduler.ResetDamageForTest();
+    SubmitCompositorFrame(&pass_list, surface_id);
+    EXPECT_TRUE(scheduler.damaged);
+    EXPECT_FALSE(scheduler.display_resized_);
+    EXPECT_FALSE(scheduler.has_new_root_surface);
+
+    scheduler.swapped = false;
+    display.DrawAndSwap();
+    EXPECT_TRUE(scheduler.swapped);
+    EXPECT_EQ(7u, output_surface_ptr_->num_sent_frames());
+    EXPECT_EQ(gfx::Size(100, 100),
+              software_output_device_->viewport_pixel_size());
+    EXPECT_EQ(gfx::Rect(0, 0, 100, 100),
+              software_output_device_->damage_rect());
   }
 
   factory_.Destroy(surface_id);

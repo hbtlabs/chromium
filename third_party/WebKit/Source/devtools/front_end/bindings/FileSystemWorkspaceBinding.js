@@ -54,8 +54,11 @@ WebInspector.FileSystemWorkspaceBinding = function(isolatedFileSystemManager, wo
     InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.SearchCompleted, this._onSearchCompleted, this);
 }
 
-WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions = ["css", "scss", "sass", "less"].keySet();
-WebInspector.FileSystemWorkspaceBinding._documentExtensions = ["htm", "html", "asp", "aspx", "phtml", "jsp"].keySet();
+WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions = new Set(["css", "scss", "sass", "less"]);
+WebInspector.FileSystemWorkspaceBinding._documentExtensions = new Set(["htm", "html", "asp", "aspx", "phtml", "jsp"]);
+WebInspector.FileSystemWorkspaceBinding._scriptExtensions = new Set(["asp", "aspx", "c", "cc", "cljs", "coffee", "cpp", "cs", "dart", "java", "js", "jsp", "h", "m", "mm", "py", "sh", "ts"]);
+
+WebInspector.FileSystemWorkspaceBinding._imageExtensions = WebInspector.IsolatedFileSystem.ImageExtensions;
 
 WebInspector.FileSystemWorkspaceBinding._lastRequestId = 0;
 
@@ -65,7 +68,45 @@ WebInspector.FileSystemWorkspaceBinding._lastRequestId = 0;
  */
 WebInspector.FileSystemWorkspaceBinding.projectId = function(fileSystemPath)
 {
-    return "filesystem:" + fileSystemPath;
+    return fileSystemPath;
+}
+
+/**
+ * @param {!WebInspector.UISourceCode} uiSourceCode
+ * @return {!Array<string>}
+ */
+WebInspector.FileSystemWorkspaceBinding.relativePath = function(uiSourceCode)
+{
+    var baseURL = /** @type {!WebInspector.FileSystemWorkspaceBinding.FileSystem}*/(uiSourceCode.project())._fileSystemBaseURL;
+    return uiSourceCode.path().substring(baseURL.length).split("/");
+}
+
+/**
+ * @param {!WebInspector.Project} project
+ * @param {string} relativePath
+ * @return {string}
+ */
+WebInspector.FileSystemWorkspaceBinding.completeURL = function(project, relativePath)
+{
+    var fsProject = /** @type {!WebInspector.FileSystemWorkspaceBinding.FileSystem}*/(project);
+    return fsProject._fileSystemBaseURL + relativePath;
+}
+
+/**
+ * @param {string} extension
+ * @return {!WebInspector.ResourceType}
+ */
+WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension = function(extension)
+{
+    if (WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions.has(extension))
+        return WebInspector.resourceTypes.Stylesheet;
+    if (WebInspector.FileSystemWorkspaceBinding._documentExtensions.has(extension))
+        return WebInspector.resourceTypes.Document;
+    if (WebInspector.FileSystemWorkspaceBinding._imageExtensions.has(extension))
+        return WebInspector.resourceTypes.Image;
+    if (WebInspector.FileSystemWorkspaceBinding._scriptExtensions.has(extension))
+        return WebInspector.resourceTypes.Script;
+    return WebInspector.resourceTypes.Other;
 }
 
 WebInspector.FileSystemWorkspaceBinding.prototype = {
@@ -84,7 +125,7 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     {
         var fileSystem = /** @type {!WebInspector.IsolatedFileSystem} */ (event.data);
         var boundFileSystem = new WebInspector.FileSystemWorkspaceBinding.FileSystem(this, fileSystem, this._workspace);
-        this._boundFileSystems.set(fileSystem.normalizedPath(), boundFileSystem);
+        this._boundFileSystems.set(fileSystem.path(), boundFileSystem);
     },
 
     /**
@@ -93,9 +134,9 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
     _fileSystemRemoved: function(event)
     {
         var fileSystem = /** @type {!WebInspector.IsolatedFileSystem} */ (event.data);
-        var boundFileSystem = this._boundFileSystems.get(fileSystem.normalizedPath());
+        var boundFileSystem = this._boundFileSystems.get(fileSystem.path());
         boundFileSystem.dispose();
-        this._boundFileSystems.remove(fileSystem.normalizedPath());
+        this._boundFileSystems.remove(fileSystem.path());
     },
 
     /**
@@ -120,9 +161,7 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
      */
     fileSystemPath: function(projectId)
     {
-        var fileSystemPath = projectId.substr("filesystem:".length);
-        var normalizedPath = WebInspector.IsolatedFileSystem.normalizePath(fileSystemPath);
-        return projectId.substr("filesystem:".length);
+        return projectId;
     },
 
     /**
@@ -226,7 +265,7 @@ WebInspector.FileSystemWorkspaceBinding.prototype = {
         InspectorFrontendHost.events.removeEventListener(InspectorFrontendHostAPI.Events.SearchCompleted, this._onSearchCompleted, this);
         for (var fileSystem of this._boundFileSystems.values()) {
             fileSystem.dispose();
-            this._boundFileSystems.remove(fileSystem._fileSystem.normalizedPath());
+            this._boundFileSystems.remove(fileSystem._fileSystem.path());
         }
     }
 }
@@ -243,16 +282,14 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem = function(fileSystemWorkspac
 {
     this._fileSystemWorkspaceBinding = fileSystemWorkspaceBinding;
     this._fileSystem = isolatedFileSystem;
-    this._fileSystemBaseURL = "file://" + this._fileSystem.normalizedPath() + "/";
+    this._fileSystemBaseURL = this._fileSystem.path() + "/";
+    this._fileSystemPath = this._fileSystem.path();
 
-    var id = WebInspector.FileSystemWorkspaceBinding.projectId(this._fileSystem.path());
+    var id = WebInspector.FileSystemWorkspaceBinding.projectId(this._fileSystemPath);
     console.assert(!workspace.project(id));
 
-    var url = "filesystem:" + this._fileSystem.normalizedPath();
-    var normalizedPath = isolatedFileSystem.normalizedPath();
-    var displayName = normalizedPath.substr(normalizedPath.lastIndexOf("/") + 1);
-
-    WebInspector.ProjectStore.call(this, workspace, id, WebInspector.projectTypes.FileSystem, url, displayName);
+    var displayName = this._fileSystemPath.substr(this._fileSystemPath.lastIndexOf("/") + 1);
+    WebInspector.ProjectStore.call(this, workspace, id, WebInspector.projectTypes.FileSystem, displayName);
 
     workspace.addProject(this);
     this.populate();
@@ -264,7 +301,7 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
      */
     fileSystemPath: function()
     {
-        return this._fileSystem.path();
+        return this._fileSystemPath;
     },
 
     /**
@@ -273,7 +310,7 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
      */
     _filePathForUISourceCode: function(uiSourceCode)
     {
-        return "/" + uiSourceCode.path();
+        return uiSourceCode.path().substring(this._fileSystemPath.length);
     },
 
     /**
@@ -284,7 +321,22 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
     requestFileContent: function(uiSourceCode, callback)
     {
         var filePath = this._filePathForUISourceCode(uiSourceCode);
-        this._fileSystem.requestFileContent(filePath, callback);
+        var isImage = WebInspector.FileSystemWorkspaceBinding._imageExtensions.has(WebInspector.TextUtils.extension(filePath));
+
+        this._fileSystem.requestFileContent(filePath, isImage ? base64CallbackWrapper : callback);
+
+        /**
+         * @param {?string} result
+         */
+        function base64CallbackWrapper(result)
+        {
+            if (!result) {
+                callback(result);
+                return;
+            }
+            var index = result.indexOf(",");
+            callback(result.substring(index + 1));
+        }
     },
 
     /**
@@ -351,7 +403,7 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
             filePath = filePath.substr(1);
             var extension = this._extensionForPath(newName);
             var newOriginURL = this._fileSystemBaseURL + filePath;
-            var newContentType = this._contentTypeForExtension(extension);
+            var newContentType = WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
             this.renameUISourceCode(uiSourceCode, newName);
             callback(true, newName, newOriginURL, newContentType);
         }
@@ -432,28 +484,27 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
      */
     _searchInPath: function(query, progress, callback)
     {
-        var requestId = this._fileSystemWorkspaceBinding.registerCallback(innerCallback.bind(this));
+        var requestId = this._fileSystemWorkspaceBinding.registerCallback(innerCallback);
         InspectorFrontendHost.searchInPath(requestId, this._fileSystem.path(), query);
 
         /**
          * @param {!Array.<string>} files
-         * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
          */
         function innerCallback(files)
         {
             /**
              * @param {string} fullPath
-             * @this {WebInspector.FileSystemWorkspaceBinding.FileSystem}
+             * @return {string}
              */
             function trimAndNormalizeFileSystemPath(fullPath)
             {
-                var trimmedPath = fullPath.substr(this._fileSystem.path().length + 1);
+                fullPath = "file://" + fullPath;
                 if (WebInspector.isWin())
-                    trimmedPath = trimmedPath.replace(/\\/g, "/");
-                return trimmedPath;
+                    fullPath = fullPath.replace(/\\/g, "/");
+                return fullPath;
             }
 
-            files = files.map(trimAndNormalizeFileSystemPath.bind(this));
+            files = files.map(trimAndNormalizeFileSystemPath);
             progress.worked(1);
             callback(files);
         }
@@ -482,19 +533,6 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
         return path.substring(extensionIndex + 1).toLowerCase();
     },
 
-    /**
-     * @param {string} extension
-     * @return {!WebInspector.ResourceType}
-     */
-    _contentTypeForExtension: function(extension)
-    {
-        if (WebInspector.FileSystemWorkspaceBinding._styleSheetExtensions[extension])
-            return WebInspector.resourceTypes.Stylesheet;
-        if (WebInspector.FileSystemWorkspaceBinding._documentExtensions[extension])
-            return WebInspector.resourceTypes.Document;
-        return WebInspector.resourceTypes.Script;
-    },
-
     populate: function()
     {
         this._fileSystem.requestFilesRecursive("", this._addFile.bind(this));
@@ -516,11 +554,17 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
      */
     excludeFolder: function(path)
     {
-        this._fileSystem.addExcludedFolder(path);
+        var relativeFolder = path.substring(this._fileSystemBaseURL.length);
+        if (!relativeFolder.startsWith("/"))
+            relativeFolder = "/" + relativeFolder;
+        if (!relativeFolder.endsWith("/"))
+            relativeFolder += "/";
+        this._fileSystem.addExcludedFolder(relativeFolder);
+
         var uiSourceCodes = this.uiSourceCodes().slice();
         for (var i = 0; i < uiSourceCodes.length; ++i) {
             var uiSourceCode = uiSourceCodes[i];
-            if (uiSourceCode.path().startsWith(path.substr(1)))
+            if (uiSourceCode.path().startsWith(path))
                 this.removeUISourceCode(uiSourceCode.path());
         }
     },
@@ -591,14 +635,12 @@ WebInspector.FileSystemWorkspaceBinding.FileSystem.prototype = {
         if (!filePath)
             console.assert(false);
 
-        var slash = filePath.lastIndexOf("/");
-        var parentPath = filePath.substring(0, slash);
-        var name = filePath.substring(slash + 1);
+        var extension = this._extensionForPath(filePath);
+        var contentType = WebInspector.FileSystemWorkspaceBinding._contentTypeForExtension(extension);
 
-        var extension = this._extensionForPath(name);
-        var contentType = this._contentTypeForExtension(extension);
-
-        return this.addUISourceCode(parentPath, name, this._fileSystemBaseURL + filePath, contentType);
+        var uiSourceCode = this.createUISourceCode(this._fileSystemBaseURL + filePath, contentType);
+        this.addUISourceCode(uiSourceCode);
+        return uiSourceCode;
     },
 
     /**

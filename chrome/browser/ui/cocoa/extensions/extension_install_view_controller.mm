@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/extensions/extension_install_view_controller.h"
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/i18n/rtl.h"
 #include "base/mac/bundle_locations.h"
@@ -224,7 +226,7 @@ bool HasAttribute(id item, CellAttributesMask attributeMask) {
 - (id)initWithProfile:(Profile*)profile
             navigator:(content::PageNavigator*)navigator
              delegate:(ExtensionInstallPrompt::Delegate*)delegate
-               prompt:(scoped_refptr<ExtensionInstallPrompt::Prompt>)prompt {
+               prompt:(scoped_ptr<ExtensionInstallPrompt::Prompt>)prompt {
   // We use a different XIB in the case of bundle installs, installs with
   // webstore data, or no permission warnings. These are laid out nicely for
   // the data they display.
@@ -246,8 +248,8 @@ bool HasAttribute(id item, CellAttributesMask attributeMask) {
     profile_ = profile;
     navigator_ = navigator;
     delegate_ = delegate;
-    prompt_ = prompt;
-    warnings_.reset([[self buildWarnings:*prompt] retain]);
+    prompt_ = prompt.Pass();
+    warnings_.reset([[self buildWarnings:*prompt_] retain]);
   }
   return self;
 }
@@ -305,9 +307,10 @@ bool HasAttribute(id item, CellAttributesMask attributeMask) {
         prompt_->GetRatingCount())];
     [userCountField_ setStringValue:base::SysUTF16ToNSString(
         prompt_->GetUserCount())];
-    [[storeLinkButton_ cell] setUnderlineOnHover:YES];
+    [[storeLinkButton_ cell] setUnderlineBehavior:
+        hyperlink_button_cell::UnderlineBehavior::ON_HOVER];
     [[storeLinkButton_ cell] setTextColor:
-        gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
+        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
   }
 
   [iconView_ setImage:prompt_->icon().ToNSImage()];
@@ -564,9 +567,10 @@ bool HasAttribute(id item, CellAttributesMask attributeMask) {
     [cell setTarget:self];
     [cell setLinkClickedAction:@selector(onToggleDetailsLinkClicked:)];
     [cell setAlignment:NSLeftTextAlignment];
-    [cell setUnderlineOnHover:YES];
+    [cell setUnderlineBehavior:
+        hyperlink_button_cell::UnderlineBehavior::ON_HOVER];
     [cell setTextColor:
-        gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
+        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
 
     size_t detailsIndex =
         [[item objectForKey:kPermissionsDetailIndex] unsignedIntegerValue];

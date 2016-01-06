@@ -19,6 +19,7 @@
 #include "platform/graphics/paint/Transform3DDisplayItem.h"
 #include "wtf/Alignment.h"
 #include "wtf/HashMap.h"
+#include "wtf/HashSet.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Utility.h"
 #include "wtf/Vector.h"
@@ -47,14 +48,14 @@ public:
     // which might be painted into by the display item client, in coordinate space of the GraphicsLayer.
     // TODO(pdr): define it for spv2.
     // |visualRect| can be nullptr if we know it's unchanged and PaintController has cached the previous value.
-    void invalidate(const DisplayItemClientWrapper&, PaintInvalidationReason, const IntRect* visualRect);
-    void invalidateUntracked(DisplayItemClient);
+    void invalidate(const DisplayItemClient&, PaintInvalidationReason, const IntRect* visualRect);
+    void invalidateUntracked(const DisplayItemClient&);
     void invalidateAll();
 
     // Record when paint offsets change during paint.
-    void invalidatePaintOffset(const DisplayItemClientWrapper&);
+    void invalidatePaintOffset(const DisplayItemClient&);
 #if ENABLE(ASSERT)
-    bool paintOffsetWasInvalidated(DisplayItemClient) const;
+    bool paintOffsetWasInvalidated(const DisplayItemClient&) const;
 #endif
 
     // These methods are called during painting.
@@ -123,11 +124,14 @@ public:
     const DisplayItemList& displayItemList() const { return paintArtifact().displayItemList(); }
     const Vector<PaintChunk>& paintChunks() const { return paintArtifact().paintChunks(); }
 
-    bool clientCacheIsValid(DisplayItemClient) const;
+    bool clientCacheIsValid(const DisplayItemClient&) const;
     bool cacheIsEmpty() const { return m_currentPaintArtifact.isEmpty(); }
 
+    // For micro benchmarking of record time.
     bool displayItemConstructionIsDisabled() const { return m_constructionDisabled; }
     void setDisplayItemConstructionIsDisabled(const bool disable) { m_constructionDisabled = disable; }
+    bool subsequenceCachingIsDisabled() const { return m_subsequenceCachingDisabled; }
+    void setSubsequenceCachingIsDisabled(bool disable) { m_subsequenceCachingDisabled = disable; }
 
     bool textPainted() const { return m_textPainted; }
     void setTextPainted() { m_textPainted = true; }
@@ -140,6 +144,10 @@ public:
 
 #ifndef NDEBUG
     void showDebugData() const;
+#endif
+
+#if ENABLE(ASSERT)
+    bool hasInvalidations() { return !m_invalidations.isEmpty(); }
 #endif
 
     void startTrackingPaintInvalidationObjects()
@@ -158,26 +166,31 @@ public:
         return m_trackedPaintInvalidationObjects ? *m_trackedPaintInvalidationObjects : Vector<String>();
     }
 
-    bool clientHasCheckedPaintInvalidation(DisplayItemClient client) const
+    bool clientHasCheckedPaintInvalidation(const DisplayItemClient& client) const
     {
         ASSERT(RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
-        return m_clientsCheckedPaintInvalidation.contains(client);
+        return m_clientsCheckedPaintInvalidation.contains(&client);
     }
-    void setClientHasCheckedPaintInvalidation(DisplayItemClient client)
+    void setClientHasCheckedPaintInvalidation(const DisplayItemClient& client)
     {
         ASSERT(RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
-        m_clientsCheckedPaintInvalidation.add(client);
+        m_clientsCheckedPaintInvalidation.add(&client);
     }
+
+#if ENABLE(ASSERT)
+    void assertDisplayItemClientsAreLive();
+#endif
 
 protected:
     PaintController()
         : m_newDisplayItemList(kInitialDisplayItemListCapacityBytes)
         , m_validlyCachedClientsDirty(false)
         , m_constructionDisabled(false)
+        , m_subsequenceCachingDisabled(false)
         , m_textPainted(false)
         , m_imagePainted(false)
         , m_skippingCacheCount(0)
-        , m_numCachedItems(0)
+        , m_numCachedNewItems(0)
         , m_nextScope(1) { }
 
 private:
@@ -186,7 +199,7 @@ private:
 
     void updateValidlyCachedClientsIfNeeded() const;
 
-    void invalidateClient(const DisplayItemClientWrapper&);
+    void invalidateClient(const DisplayItemClient&);
 
 #ifndef NDEBUG
     WTF::String displayItemListAsDebugString(const DisplayItemList&) const;
@@ -194,7 +207,7 @@ private:
 
     // Indices into PaintList of all DrawingDisplayItems and BeginSubsequenceDisplayItems of each client.
     // Temporarily used during merge to find out-of-order display items.
-    using DisplayItemIndicesByClientMap = HashMap<DisplayItemClient, Vector<size_t>>;
+    using DisplayItemIndicesByClientMap = HashMap<const DisplayItemClient*, Vector<size_t>>;
 
     static size_t findMatchingItemFromIndex(const DisplayItem::Id&, const DisplayItemIndicesByClientMap&, const DisplayItemList&);
     static void addItemToIndexIfNeeded(const DisplayItem&, size_t index, DisplayItemIndicesByClientMap&);
@@ -212,6 +225,8 @@ private:
     void checkNoRemainingCachedDisplayItems();
 #endif
 
+    void commitNewDisplayItemsInternal();
+
     // The last complete paint artifact.
     // In SPv2, this includes paint chunks as well as display items.
     PaintArtifact m_currentPaintArtifact;
@@ -224,23 +239,26 @@ private:
     // It's lazily updated in updateValidlyCachedClientsIfNeeded().
     // TODO(wangxianzhu): In the future we can replace this with client-side repaint flags
     // to avoid the cost of building and querying the hash table.
-    mutable HashSet<DisplayItemClient> m_validlyCachedClients;
+    mutable HashSet<const DisplayItemClient*> m_validlyCachedClients;
     mutable bool m_validlyCachedClientsDirty;
 
     // Used during painting. Contains clients that have checked paint invalidation and
     // are known to be valid.
     // TODO(wangxianzhu): Use client side flag to avoid const of hash table.
-    HashSet<DisplayItemClient> m_clientsCheckedPaintInvalidation;
+    HashSet<const DisplayItemClient*> m_clientsCheckedPaintInvalidation;
 
 #if ENABLE(ASSERT)
     // Set of clients which had paint offset changes since the last commit. This is used for
     // ensuring paint offsets are only updated once and are the same in all phases.
-    HashSet<DisplayItemClient> m_clientsWithPaintOffsetInvalidations;
+    HashSet<const DisplayItemClient*> m_clientsWithPaintOffsetInvalidations;
 #endif
 
     // Allow display item construction to be disabled to isolate the costs of construction
     // in performance metrics.
     bool m_constructionDisabled;
+
+    // Allow subsequence caching to be disabled to test the cost of display item caching.
+    bool m_subsequenceCachingDisabled;
 
     // Indicates this PaintController has ever had text. It is never reset to false.
     bool m_textPainted;
@@ -248,7 +266,7 @@ private:
 
     int m_skippingCacheCount;
 
-    int m_numCachedItems;
+    int m_numCachedNewItems;
 
     unsigned m_nextScope;
     Vector<unsigned> m_scopeStack;

@@ -4,8 +4,11 @@
 
 #include "ui/ozone/platform/drm/client_native_pixmap_factory_gbm.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "ui/gfx/native_pixmap_handle_ozone.h"
-#include "ui/ozone/public/client_native_pixmap_factory.h"
+#include "ui/ozone/public/client_native_pixmap_factory.h"  // nogncheck
 
 #if defined(USE_VGEM_MAP)
 #include "ui/ozone/platform/drm/common/client_native_pixmap_vgem.h"
@@ -41,7 +44,7 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
     // It's called in IO thread. We rely on clients for thread-safety.
     // Switching to an IPC message filter ensures thread-safety.
     DCHECK_LT(vgem_fd_.get(), 0);
-    vgem_fd_ = device_fd.Pass();
+    vgem_fd_ = std::move(device_fd);
 #endif
   }
   bool IsConfigurationSupported(gfx::BufferFormat format,
@@ -50,6 +53,7 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
       case gfx::BufferUsage::GPU_READ:
       case gfx::BufferUsage::SCANOUT:
         return format == gfx::BufferFormat::RGBA_8888 ||
+               format == gfx::BufferFormat::RGBX_8888 ||
                format == gfx::BufferFormat::BGRA_8888 ||
                format == gfx::BufferFormat::BGRX_8888;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:

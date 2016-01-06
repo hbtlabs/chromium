@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_member.h"
@@ -148,12 +149,6 @@ class ToolbarView : public views::AccessiblePaneView,
   const char* GetClassName() const override;
   bool AcceleratorPressed(const ui::Accelerator& acc) override;
 
-  enum {
-    // The apparent horizontal space between most items, and the vertical
-    // padding above and below them.
-    kStandardSpacing = 3,
-  };
-
  protected:
   // AccessiblePaneView:
   bool SetPaneFocusAndFocusDefault() override;
@@ -178,6 +173,12 @@ class ToolbarView : public views::AccessiblePaneView,
 
   // Returns the number of pixels above the location bar in non-normal display.
   int PopupTopSpacing() const;
+
+  // Used to avoid duplicating the near-identical logic of
+  // ToolbarView::GetPreferredSize() and ToolbarView::GetMinimumSize(). These
+  // two functions call through to GetSizeInternal(), passing themselves as the
+  // function pointer |View::*get_size|.
+  gfx::Size GetSizeInternal(gfx::Size (View::*get_size)() const) const;
 
   // Given toolbar contents of size |size|, returns the total toolbar size.
   gfx::Size SizeForContentSize(gfx::Size size) const;

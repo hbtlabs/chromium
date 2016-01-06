@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_PLUGINS_PLUGIN_INFOBAR_DELEGATES_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "url/gurl.h"
 
@@ -46,6 +48,7 @@ class OutdatedPluginInfoBarDelegate : public ConfirmInfoBarDelegate,
   ~OutdatedPluginInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   void InfoBarDismissed() override;
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
@@ -100,6 +103,7 @@ class PluginMetroModeInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~PluginMetroModeInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   int GetIconId() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/frame/DOMWindow.h"
 
 #include "bindings/core/v8/ScriptCallStackFactory.h"
@@ -16,14 +15,17 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Location.h"
+#include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/ScriptCallStack.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/ChromeClient.h"
+#include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -163,8 +165,7 @@ bool DOMWindow::isSecureContext() const
     if (!frame())
         return false;
 
-    String unusedErrorMessage;
-    return document()->isSecureContext(unusedErrorMessage, ExecutionContext::StandardSecureContextCheck);
+    return document()->isSecureContext(ExecutionContext::StandardSecureContextCheck);
 }
 
 void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, const String& targetOrigin, LocalDOMWindow* source, ExceptionState& exceptionState)
@@ -339,6 +340,32 @@ void DOMWindow::close(ExecutionContext* context)
     // state of this window. Scripts may access window.closed
     // before the deferred close operation has gone ahead.
     m_windowIsClosing = true;
+}
+
+void DOMWindow::focus(ExecutionContext* context)
+{
+    if (!frame())
+        return;
+
+    Page* page = frame()->page();
+    if (!page)
+        return;
+
+    ASSERT(context);
+
+    bool allowFocus = context->isWindowInteractionAllowed();
+    if (allowFocus) {
+        context->consumeWindowInteraction();
+    } else {
+        ASSERT(isMainThread());
+        allowFocus = opener() && (opener() != this) && (toDocument(context)->domWindow() == opener());
+    }
+
+    // If we're a top level window, bring the window to the front.
+    if (frame()->isMainFrame() && allowFocus)
+        page->chromeClient().focus();
+
+    page->focusController().focusDocumentView(frame(), true /* notifyEmbedder */);
 }
 
 DEFINE_TRACE(DOMWindow)

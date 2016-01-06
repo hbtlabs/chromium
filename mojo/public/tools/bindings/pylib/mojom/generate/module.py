@@ -202,6 +202,7 @@ class UnionField(Field): pass
 
 class Struct(ReferenceKind):
   ReferenceKind.AddSharedProperty('name')
+  ReferenceKind.AddSharedProperty('native_only')
   ReferenceKind.AddSharedProperty('module')
   ReferenceKind.AddSharedProperty('imported_from')
   ReferenceKind.AddSharedProperty('fields')
@@ -214,6 +215,7 @@ class Struct(ReferenceKind):
       spec = None
     ReferenceKind.__init__(self, spec)
     self.name = name
+    self.native_only = False
     self.module = module
     self.imported_from = None
     self.fields = []
@@ -601,6 +603,8 @@ def IsCloneableKind(kind):
     if IsArrayKind(kind):
       return _IsCloneable(kind.kind, visited_kinds)
     if IsStructKind(kind) or IsUnionKind(kind):
+      if IsStructKind(kind) and kind.native_only:
+        return False
       for field in kind.fields:
         if not _IsCloneable(field.kind, visited_kinds):
           return False

@@ -5,9 +5,11 @@
 #include "media/capture/video/mac/video_capture_device_factory_mac.h"
 
 #import <IOKit/audio/IOAudioTypes.h>
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
@@ -79,11 +81,6 @@ static void RunDevicesEnumeratedCallback(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "458397 media::RunDevicesEnumeratedCallback"));
   callback.Run(device_names.Pass());
-}
-
-// static
-bool VideoCaptureDeviceFactoryMac::PlatformSupportsAVFoundation() {
-  return AVFoundationGlue::IsAVFoundationSupported();
 }
 
 VideoCaptureDeviceFactoryMac::VideoCaptureDeviceFactoryMac(

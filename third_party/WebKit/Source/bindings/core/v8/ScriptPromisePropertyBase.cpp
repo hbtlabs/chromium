@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "bindings/core/v8/ScriptPromisePropertyBase.h"
 
 #include "bindings/core/v8/ScopedPersistent.h"
@@ -47,7 +46,7 @@ ScriptPromise ScriptPromisePropertyBase::promise(DOMWrapperWorld& world)
     ASSERT(wrapper->CreationContext() == context);
 
     v8::Local<v8::Value> cachedPromise = V8HiddenValue::getHiddenValue(scriptState, wrapper, promiseName());
-    if (!cachedPromise.IsEmpty())
+    if (!cachedPromise.IsEmpty() && cachedPromise->IsPromise())
         return ScriptPromise(scriptState, cachedPromise);
 
     // Create and cache the Promise

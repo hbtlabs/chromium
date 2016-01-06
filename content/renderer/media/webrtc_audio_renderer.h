@@ -5,10 +5,13 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_RENDERER_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_AUDIO_RENDERER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
@@ -168,7 +171,9 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // media::AudioRendererSink::RenderCallback implementation.
   // These two methods are called on the AudioOutputDevice worker thread.
-  int Render(media::AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(media::AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Called by AudioPullFifo when more data is necessary.

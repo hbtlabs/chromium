@@ -17,9 +17,12 @@ namespace blimp {
 
 BlimpMessagePump::BlimpMessagePump(PacketReader* reader)
     : reader_(reader),
-      error_observer_(nullptr),
-      processor_(nullptr),
-      buffer_(new net::GrowableIOBuffer) {
+      buffer_(new net::GrowableIOBuffer),
+      process_msg_callback_(
+          base::Bind(&BlimpMessagePump::OnProcessMessageComplete,
+                     base::Unretained(this))),
+      read_callback_(base::Bind(&BlimpMessagePump::OnReadPacketComplete,
+                                base::Unretained(this))) {
   DCHECK(reader_);
   buffer_->SetCapacity(kMaxPacketPayloadSizeBytes);
 }
@@ -27,25 +30,35 @@ BlimpMessagePump::BlimpMessagePump(PacketReader* reader)
 BlimpMessagePump::~BlimpMessagePump() {}
 
 void BlimpMessagePump::SetMessageProcessor(BlimpMessageProcessor* processor) {
-  DCHECK(!processor_);
-  processor_ = processor;
-  ReadNextPacket();
+  DVLOG(1) << "SetMessageProcessor, processor=" << processor;
+  if (processor && !processor_) {
+    processor_ = processor;
+    ReadNextPacket();
+  } else {
+    // Don't allow |processor_| to be cleared while there's a read inflight.
+    if (processor) {
+      DCHECK(!processor_ || !read_inflight_);
+    }
+    processor_ = processor;
+  }
 }
 
 void BlimpMessagePump::ReadNextPacket() {
+  DVLOG(2) << "ReadNextPacket";
   DCHECK(processor_);
+  DCHECK(!read_inflight_);
+  read_inflight_ = true;
   buffer_->set_offset(0);
-  read_callback_.Reset(base::Bind(&BlimpMessagePump::OnReadPacketComplete,
-                                  base::Unretained(this)));
   reader_->ReadPacket(buffer_.get(), read_callback_.callback());
 }
 
 void BlimpMessagePump::OnReadPacketComplete(int result) {
+  DVLOG(2) << "OnReadPacketComplete, result=" << result;
+  DCHECK(read_inflight_);
+  read_inflight_ = false;
   if (result == net::OK) {
     scoped_ptr<BlimpMessage> message(new BlimpMessage);
     if (message->ParseFromArray(buffer_->StartOfBuffer(), buffer_->offset())) {
-      process_msg_callback_.Reset(base::Bind(
-          &BlimpMessagePump::OnProcessMessageComplete, base::Unretained(this)));
       processor_->ProcessMessage(std::move(message),
                                  process_msg_callback_.callback());
     } else {
@@ -59,9 +72,15 @@ void BlimpMessagePump::OnReadPacketComplete(int result) {
 }
 
 void BlimpMessagePump::OnProcessMessageComplete(int result) {
-  // No error is expected from the message receiver.
-  DCHECK_EQ(net::OK, result);
-  ReadNextPacket();
+  DVLOG(2) << "OnProcessMessageComplete, result=" << result;
+
+  if (result != net::OK) {
+    error_observer_->OnConnectionError(result);
+    return;
+  }
+
+  if (processor_)
+    ReadNextPacket();
 }
 
 }  // namespace blimp

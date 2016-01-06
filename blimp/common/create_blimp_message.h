@@ -5,6 +5,10 @@
 #ifndef BLIMP_COMMON_CREATE_BLIMP_MESSAGE_H_
 #define BLIMP_COMMON_CREATE_BLIMP_MESSAGE_H_
 
+#include <stdint.h>
+
+#include <string>
+
 #include "base/memory/scoped_ptr.h"
 #include "blimp/common/blimp_common_export.h"
 
@@ -12,8 +16,12 @@ namespace blimp {
 
 class BlimpMessage;
 class CompositorMessage;
+class TabControlMessage;
 class InputMessage;
+class NavigationMessage;
 class RenderWidgetMessage;
+class SizeMessage;
+class StartConnectionMessage;
 
 // Suite of helper methods to simplify the repetitive task of creating
 // new BlimpMessages, initializing them, and extracting type-specific
@@ -32,11 +40,28 @@ BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
     int target_tab_id);
 
 BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
+    TabControlMessage** control_message);
+
+BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
     InputMessage** input_message);
+
+BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
+    NavigationMessage** navigation_message,
+    int target_tab_id);
 
 BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
     RenderWidgetMessage** render_widget_message,
     int target_tab_id);
+
+BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateBlimpMessage(
+    SizeMessage** size_message);
+
+BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateStartConnectionMessage(
+    const std::string& client_token,
+    int protocol_version);
+
+BLIMP_COMMON_EXPORT scoped_ptr<BlimpMessage> CreateCheckpointAckMessage(
+    int64_t checkpoint_id);
 
 }  // namespace blimp
 

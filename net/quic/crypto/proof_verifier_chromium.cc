@@ -4,11 +4,14 @@
 
 #include "net/quic/crypto/proof_verifier_chromium.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -54,6 +57,7 @@ class ProofVerifierChromium::Job {
       CTVerifier* cert_transparency_verifier,
       int cert_verify_flags,
       const BoundNetLog& net_log);
+  ~Job();
 
   // Starts the proof verification.  If |QUIC_PENDING| is returned, then
   // |callback| will be invoked asynchronously when the verification completes.
@@ -111,6 +115,8 @@ class ProofVerifierChromium::Job {
 
   State next_state_;
 
+  base::TimeTicks start_time_;
+
   BoundNetLog net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(Job);
@@ -131,7 +137,19 @@ ProofVerifierChromium::Job::Job(
       cert_transparency_verifier_(cert_transparency_verifier),
       cert_verify_flags_(cert_verify_flags),
       next_state_(STATE_NONE),
+      start_time_(base::TimeTicks::Now()),
       net_log_(net_log) {}
+
+ProofVerifierChromium::Job::~Job() {
+  base::TimeTicks end_time = base::TimeTicks::Now();
+  UMA_HISTOGRAM_TIMES("Net.QuicSession.VerifyProofTime",
+                      end_time - start_time_);
+  // |hostname_| will always be canonicalized to lowercase.
+  if (hostname_.compare("www.google.com") == 0) {
+    UMA_HISTOGRAM_TIMES("Net.QuicSession.VerifyProofTime.google",
+                        end_time - start_time_);
+  }
+}
 
 QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     const string& hostname,
@@ -160,7 +178,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     *error_details = "Failed to create certificate chain. Certs are empty.";
     DLOG(WARNING) << *error_details;
     verify_details_->cert_verify_result.cert_status = CERT_STATUS_INVALID;
-    *verify_details = verify_details_.Pass();
+    *verify_details = std::move(verify_details_);
     return QUIC_FAILURE;
   }
 
@@ -174,7 +192,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     *error_details = "Failed to create certificate chain";
     DLOG(WARNING) << *error_details;
     verify_details_->cert_verify_result.cert_status = CERT_STATUS_INVALID;
-    *verify_details = verify_details_.Pass();
+    *verify_details = std::move(verify_details_);
     return QUIC_FAILURE;
   }
 
@@ -193,7 +211,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     *error_details = "Failed to verify signature of server config";
     DLOG(WARNING) << *error_details;
     verify_details_->cert_verify_result.cert_status = CERT_STATUS_INVALID;
-    *verify_details = verify_details_.Pass();
+    *verify_details = std::move(verify_details_);
     return QUIC_FAILURE;
   }
 
@@ -202,14 +220,14 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
   next_state_ = STATE_VERIFY_CERT;
   switch (DoLoop(OK)) {
     case OK:
-      *verify_details = verify_details_.Pass();
+      *verify_details = std::move(verify_details_);
       return QUIC_SUCCESS;
     case ERR_IO_PENDING:
       callback_.reset(callback);
       return QUIC_PENDING;
     default:
       *error_details = error_details_;
-      *verify_details = verify_details_.Pass();
+      *verify_details = std::move(verify_details_);
       return QUIC_FAILURE;
   }
 }
@@ -240,9 +258,9 @@ int ProofVerifierChromium::Job::DoLoop(int last_result) {
 void ProofVerifierChromium::Job::OnIOComplete(int result) {
   int rv = DoLoop(result);
   if (rv != ERR_IO_PENDING) {
-    scoped_ptr<ProofVerifierCallback> callback(callback_.Pass());
+    scoped_ptr<ProofVerifierCallback> callback(std::move(callback_));
     // Callback expects ProofVerifyDetails not ProofVerifyDetailsChromium.
-    scoped_ptr<ProofVerifyDetails> verify_details(verify_details_.Pass());
+    scoped_ptr<ProofVerifyDetails> verify_details(std::move(verify_details_));
     callback->Run(rv == OK, error_details_, &verify_details);
     // Will delete |this|.
     proof_verifier_->OnJobComplete(this);
@@ -317,8 +335,7 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
 
   size_t size_bits;
   X509Certificate::PublicKeyType type;
-  X509Certificate::GetPublicKeyInfo(cert_->os_cert_handle(), &size_bits,
-                                    &type);
+  X509Certificate::GetPublicKeyInfo(cert_->os_cert_handle(), &size_bits, &type);
   if (type == X509Certificate::kPublicKeyTypeRSA) {
     crypto::SignatureVerifier::HashAlgorithm hash_alg =
         crypto::SignatureVerifier::SHA256;
@@ -327,8 +344,8 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
 
     bool ok = verifier.VerifyInitRSAPSS(
         hash_alg, mask_hash_alg, hash_len,
-        reinterpret_cast<const uint8*>(signature.data()), signature.size(),
-        reinterpret_cast<const uint8*>(spki.data()), spki.size());
+        reinterpret_cast<const uint8_t*>(signature.data()), signature.size(),
+        reinterpret_cast<const uint8_t*>(spki.data()), spki.size());
     if (!ok) {
       DLOG(WARNING) << "VerifyInitRSAPSS failed";
       return false;
@@ -346,17 +363,14 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
     //   component, the OID ecdsa-with-SHA224, ecdsa-with-SHA256, ecdsa-with-
     //   SHA384, or ecdsa-with-SHA512.
     // See also RFC 5480, Appendix A.
-    static const uint8 kECDSAWithSHA256AlgorithmID[] = {
-      0x30, 0x0a,
-        0x06, 0x08,
-          0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
+    static const uint8_t kECDSAWithSHA256AlgorithmID[] = {
+        0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
     };
 
     if (!verifier.VerifyInit(
             kECDSAWithSHA256AlgorithmID, sizeof(kECDSAWithSHA256AlgorithmID),
-            reinterpret_cast<const uint8*>(signature.data()),
-            signature.size(),
-            reinterpret_cast<const uint8*>(spki.data()),
+            reinterpret_cast<const uint8_t*>(signature.data()),
+            signature.size(), reinterpret_cast<const uint8_t*>(spki.data()),
             spki.size())) {
       DLOG(WARNING) << "VerifyInit failed";
       return false;
@@ -366,9 +380,9 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
     return false;
   }
 
-  verifier.VerifyUpdate(reinterpret_cast<const uint8*>(kProofSignatureLabel),
+  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(kProofSignatureLabel),
                         sizeof(kProofSignatureLabel));
-  verifier.VerifyUpdate(reinterpret_cast<const uint8*>(signed_data.data()),
+  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(signed_data.data()),
                         signed_data.size());
 
   if (!verifier.VerifyFinal()) {

@@ -164,7 +164,7 @@ ui::MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
                            ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
 }
 
-bool DisplayChangeObserver::GetResolutionForDisplayId(int64 display_id,
+bool DisplayChangeObserver::GetResolutionForDisplayId(int64_t display_id,
                                                       gfx::Size* size) const {
   DisplayMode mode;
   if (!Shell::GetInstance()->display_manager()->GetSelectedModeForDisplayId(
@@ -180,7 +180,7 @@ void DisplayChangeObserver::OnDisplayModeChanged(
   UpdateInternalDisplayId(display_states);
 
   std::vector<DisplayInfo> displays;
-  std::set<int64> ids;
+  std::set<int64_t> ids;
   for (const ui::DisplaySnapshot* state : display_states) {
     const ui::DisplayMode* mode_info = state->current_mode();
     if (!mode_info)
@@ -218,15 +218,23 @@ void DisplayChangeObserver::OnDisplayModeChanged(
     }
     gfx::Rect display_bounds(state->origin(), mode_info->size());
 
-    std::string name =
-        state->type() == ui::DISPLAY_CONNECTION_TYPE_INTERNAL
-            ? l10n_util::GetStringUTF8(IDS_ASH_INTERNAL_DISPLAY_NAME)
-            : state->display_name();
+    std::string name;
+    switch (state->type()) {
+      case ui::DISPLAY_CONNECTION_TYPE_INTERNAL:
+        name = l10n_util::GetStringUTF8(IDS_ASH_INTERNAL_DISPLAY_NAME);
+        break;
+      case ui::DISPLAY_CONNECTION_TYPE_VIRTUAL:
+        name = l10n_util::GetStringUTF8(IDS_ASH_VIRTUAL_DISPLAY_NAME);
+        break;
+      default:
+        name = state->display_name();
+    }
+
     if (name.empty())
       name = l10n_util::GetStringUTF8(IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME);
 
     bool has_overscan = state->has_overscan();
-    int64 id = state->display_id();
+    int64_t id = state->display_id();
     ids.insert(id);
 
     displays.push_back(DisplayInfo(id, name, has_overscan));

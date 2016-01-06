@@ -57,18 +57,18 @@ ClientSocketPoolManager* CreateSocketPoolManager(
 }  // unnamed namespace
 
 // The maximum receive window sizes for HTTP/2 sessions and streams.
-const int32 kSpdySessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
-const int32 kSpdyStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
+const int32_t kSpdySessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
+const int32_t kSpdyStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
 // QUIC's socket receive buffer size.
 // We should adaptively set this buffer size, but for now, we'll use a size
 // that seems large enough to receive data at line rate for most connections,
 // and does not consume "too much" memory.
-const int32 kQuicSocketReceiveBufferSize = 1024 * 1024;  // 1MB
+const int32_t kQuicSocketReceiveBufferSize = 1024 * 1024;  // 1MB
 
 // Number of recent connections to consider for certain thresholds
 // that trigger disabling QUIC.  E.g. disable QUIC if PUBLIC_RESET was
 // received post handshake for at least 2 of 20 recent connections.
-const int32 kQuicMaxRecentDisabledReasons = 20;
+const int32_t kQuicMaxRecentDisabledReasons = 20;
 
 HttpNetworkSession::Params::Params()
     : client_socket_factory(NULL),
@@ -99,6 +99,7 @@ HttpNetworkSession::Params::Params()
       use_alternative_services(false),
       alternative_service_probability_threshold(1),
       enable_npn(true),
+      enable_brotli(false),
       enable_quic(false),
       enable_quic_for_proxies(false),
       enable_quic_port_selection(true),
@@ -124,6 +125,7 @@ HttpNetworkSession::Params::Params()
       quic_threshold_timeouts_streams_open(0),
       quic_close_sessions_on_ip_change(false),
       quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
+      quic_disable_preconnect_if_0rtt(false),
       proxy_delegate(NULL) {
   quic_supported_versions.push_back(QUIC_VERSION_25);
 }
@@ -304,14 +306,14 @@ scoped_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
        it != params_.quic_connection_options.end(); ++it) {
     connection_options->AppendString("'" + QuicUtils::TagToString(*it) + "'");
   }
-  dict->Set("connection_options", connection_options.Pass());
+  dict->Set("connection_options", std::move(connection_options));
   dict->SetString("origin_to_force_quic_on",
                   params_.origin_to_force_quic_on.ToString());
   dict->SetDouble("alternative_service_probability_threshold",
                   params_.alternative_service_probability_threshold);
   dict->SetString("disabled_reason",
                   quic_stream_factory_.QuicDisabledReasonString());
-  return dict.Pass();
+  return std::move(dict);
 }
 
 void HttpNetworkSession::CloseAllConnections() {

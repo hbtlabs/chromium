@@ -20,7 +20,9 @@ declare_args() {
   # garbage-collection infrastructure during compilation.
   blink_gc_plugin = true
 
-  blink_asserts_always_on = false
+  # If true, force blink asserts to be off in a release build.  When false,
+  # blink asserts in release build may be controlled by DCHECK_ALWAYS_ON.
+  blink_asserts_off_in_release = false
 }
 
 # Whether Android ARM or x86 build uses OpenMAX DL FFT. Currently only
@@ -58,8 +60,18 @@ if (!is_android || use_aura) {
   feature_defines_list += [ "ENABLE_INPUT_MULTIPLE_FIELDS_UI=1" ]
 }
 
-if (!is_android) {
-  feature_defines_list += [ "ENABLE_WEB_AUDIO=1" ]
+if (is_android) {
+  feature_defines_list += [ "WTF_USE_LOW_QUALITY_IMAGE_INTERPOLATION=1" ]
+} else {
+  feature_defines_list += [
+    "ENABLE_WEB_AUDIO=1",
+    "WTF_USE_ICCJPEG=1",
+    "WTF_USE_QCMSLIB=1",
+  ]
+}
+
+if (is_mac) {
+  feature_defines_list += [ "WTF_USE_NEW_THEME=1" ]
 }
 
 if (use_webaudio_ffmpeg) {
@@ -82,8 +94,8 @@ if (use_default_render_theme) {
 if (enable_oilpan) {
   feature_defines_list += [ "ENABLE_OILPAN=1" ]
 }
-if (blink_asserts_always_on) {
-  feature_defines_list += [ "ENABLE_ASSERT=1" ]
+if (blink_asserts_off_in_release && !is_debug) {
+  feature_defines_list += [ "ENABLE_ASSERT=0" ]
 }
 
 # feature_defines_string -------------------------------------------------------

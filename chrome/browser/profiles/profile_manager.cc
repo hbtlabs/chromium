@@ -4,7 +4,10 @@
 
 #include "chrome/browser/profiles/profile_manager.h"
 
+#include <stdint.h>
+
 #include <set>
+#include <string>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,6 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -38,6 +42,7 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_metrics.h"
+#include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
@@ -129,9 +134,9 @@ std::vector<base::FilePath>& ProfilesToDelete() {
   return profiles_to_delete;
 }
 
-int64 ComputeFilesSize(const base::FilePath& directory,
-                       const base::FilePath::StringType& pattern) {
-  int64 running_size = 0;
+int64_t ComputeFilesSize(const base::FilePath& directory,
+                         const base::FilePath::StringType& pattern) {
+  int64_t running_size = 0;
   base::FileEnumerator iter(directory, false, base::FileEnumerator::FILES,
                             pattern);
   while (!iter.Next().empty())
@@ -142,9 +147,9 @@ int64 ComputeFilesSize(const base::FilePath& directory,
 // Simple task to log the size of the current profile.
 void ProfileSizeTask(const base::FilePath& path, int enabled_app_count) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  const int64 kBytesInOneMB = 1024 * 1024;
+  const int64_t kBytesInOneMB = 1024 * 1024;
 
-  int64 size = ComputeFilesSize(path, FILE_PATH_LITERAL("*"));
+  int64_t size = ComputeFilesSize(path, FILE_PATH_LITERAL("*"));
   int size_MB = static_cast<int>(size / kBytesInOneMB);
   UMA_HISTOGRAM_COUNTS_10000("Profile.TotalSize", size_MB);
 
@@ -1055,6 +1060,15 @@ void ProfileManager::DoFinalInit(Profile* profile, bool go_off_the_record) {
       chrome::NOTIFICATION_PROFILE_ADDED,
       content::Source<Profile>(profile),
       content::NotificationService::NoDetails());
+
+  // Record statistics to ProfileInfoCache if statistics were not recorded
+  // during shutdown, i.e. the last shutdown was a system shutdown or a crash.
+  if (!profile->IsGuestSession() && !profile->IsSystemProfile() &&
+      !profile->IsNewProfile() && !go_off_the_record &&
+      profile->GetLastSessionExitType() != Profile::EXIT_NORMAL) {
+    profiles::GatherProfileStatistics(
+        profile, profiles::ProfileStatisticsCallback(), nullptr);
+  }
 }
 
 void ProfileManager::DoFinalInitForServices(Profile* profile,
@@ -1455,19 +1469,26 @@ void ProfileManager::BrowserListObserver::OnBrowserAdded(
 void ProfileManager::BrowserListObserver::OnBrowserRemoved(
     Browser* browser) {
   Profile* profile = browser->profile();
+  Profile* original_profile = profile->GetOriginalProfile();
+  // Do nothing if the closed window is not the last window of the same profile.
   for (chrome::BrowserIterator it; !it.done(); it.Next()) {
-    if (it->profile()->GetOriginalProfile() == profile->GetOriginalProfile())
-      // Not the last window for this profile.
+    if (it->profile()->GetOriginalProfile() == original_profile)
       return;
   }
 
-  // If the last browser of a profile that is scheduled for deletion is closed
-  // do that now.
   base::FilePath path = profile->GetPath();
-  if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles) &&
-      !IsProfileMarkedForDeletion(path)) {
+  if (IsProfileMarkedForDeletion(path)) {
+    // Do nothing if the profile is already being deleted.
+  } else if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles)) {
+    // Delete if the profile is an ephemeral profile.
     g_browser_process->profile_manager()->ScheduleProfileForDeletion(
         path, ProfileManager::CreateCallback());
+  } else if (!profile->IsSystemProfile()) {
+    // Gather statistics and store into ProfileInfoCache. For incognito profile
+    // we gather the statistics of its parent profile instead, because a window
+    // of the parent profile was open.
+    profiles::GatherProfileStatistics(
+        original_profile, profiles::ProfileStatisticsCallback(), nullptr);
   }
 }
 

@@ -4,8 +4,11 @@
 
 #include "content/renderer/media/video_track_recorder.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/sys_info.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
@@ -52,7 +55,7 @@ void OnFrameEncodeCompleted(
     bool keyframe) {
   DVLOG(1) << (keyframe ? "" : "non ") << "keyframe "<< data->length() << "B, "
            << capture_timestamp << " ms";
-  on_encoded_video_cb.Run(frame, data.Pass(), capture_timestamp, keyframe);
+  on_encoded_video_cb.Run(frame, std::move(data), capture_timestamp, keyframe);
 }
 
 }  // anonymous namespace

@@ -10,12 +10,11 @@
 #include <algorithm>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/adapters.h"
 #include "base/logging.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "net/quic/quic_write_blocked_list.h"
 
 using base::StringPiece;
@@ -24,13 +23,13 @@ using std::string;
 namespace net {
 
 // static
-uint64 QuicUtils::FNV1a_64_Hash(const char* data, int len) {
-  static const uint64 kOffset = UINT64_C(14695981039346656037);
-  static const uint64 kPrime = UINT64_C(1099511628211);
+uint64_t QuicUtils::FNV1a_64_Hash(const char* data, int len) {
+  static const uint64_t kOffset = UINT64_C(14695981039346656037);
+  static const uint64_t kPrime = UINT64_C(1099511628211);
 
-  const uint8* octets = reinterpret_cast<const uint8*>(data);
+  const uint8_t* octets = reinterpret_cast<const uint8_t*>(data);
 
-  uint64 hash = kOffset;
+  uint64_t hash = kOffset;
 
   for (int i = 0; i < len; ++i) {
     hash = hash ^ octets[i];
@@ -67,9 +66,9 @@ uint128 QuicUtils::FNV1a_128_Hash_Two(const char* data1,
 uint128 QuicUtils::IncrementalHash(uint128 hash, const char* data, size_t len) {
   // 309485009821345068724781371
   const uint128 kPrime(16777216, 315);
-  const uint8* octets = reinterpret_cast<const uint8*>(data);
+  const uint8_t* octets = reinterpret_cast<const uint8_t*>(data);
   for (size_t i = 0; i < len; ++i) {
-    hash  = hash ^ uint128(0, octets[i]);
+    hash = hash ^ uint128(0, octets[i]);
     hash = hash * kPrime;
   }
   return hash;
@@ -123,17 +122,17 @@ bool QuicUtils::FindMutualTag(const QuicTagVector& our_tags_vector,
 }
 
 // static
-void QuicUtils::SerializeUint128Short(uint128 v, uint8* out) {
-  const uint64 lo = Uint128Low64(v);
-  const uint64 hi = Uint128High64(v);
+void QuicUtils::SerializeUint128Short(uint128 v, uint8_t* out) {
+  const uint64_t lo = Uint128Low64(v);
+  const uint64_t hi = Uint128High64(v);
   // This assumes that the system is little-endian.
   memcpy(out, &lo, sizeof(lo));
   memcpy(out + sizeof(lo), &hi, sizeof(hi) / 2);
 }
 
 #define RETURN_STRING_LITERAL(x) \
-case x: \
-return #x;
+  case x:                        \
+    return #x;
 
 // static
 const char* QuicUtils::StreamErrorToString(QuicRstStreamErrorCode error) {
@@ -300,7 +299,7 @@ QuicTagVector QuicUtils::ParseQuicConnectionOptions(
   for (const base::StringPiece& token :
        base::SplitStringPiece(connection_options, ",", base::TRIM_WHITESPACE,
                               base::SPLIT_WANT_ALL)) {
-    uint32 option = 0;
+    uint32_t option = 0;
     for (char token_char : base::Reversed(token)) {
       option <<= 8;
       option |= static_cast<unsigned char>(token_char);
@@ -313,10 +312,10 @@ QuicTagVector QuicUtils::ParseQuicConnectionOptions(
 // static
 string QuicUtils::StringToHexASCIIDump(StringPiece in_buffer) {
   int offset = 0;
-  const int kBytesPerLine = 16;   // Max bytes dumped per line
+  const int kBytesPerLine = 16;  // Max bytes dumped per line
   const char* buf = in_buffer.data();
   int bytes_remaining = in_buffer.size();
-  string s;   // our output
+  string s;  // our output
   const char* p = buf;
   while (bytes_remaining > 0) {
     const int line_bytes = std::min(bytes_remaining, kBytesPerLine);
@@ -325,13 +324,14 @@ string QuicUtils::StringToHexASCIIDump(StringPiece in_buffer) {
       if (i < line_bytes) {
         base::StringAppendF(&s, "%02x", static_cast<unsigned char>(p[i]));
       } else {
-        s += "  ";    // two-space filler instead of two-space hex digits
+        s += "  ";  // two-space filler instead of two-space hex digits
       }
-      if (i % 2) s += ' ';
+      if (i % 2)
+        s += ' ';
     }
     s += ' ';
     for (int i = 0; i < line_bytes; ++i) {  // Do the ASCII dump
-      s+= (p[i] >  32 && p[i] < 127) ? p[i] : '.';
+      s += (p[i] > 32 && p[i] < 127) ? p[i] : '.';
     }
 
     bytes_remaining -= line_bytes;

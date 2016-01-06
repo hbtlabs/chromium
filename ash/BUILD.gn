@@ -6,6 +6,8 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
+assert(use_ash)
+
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("ash.gyp") ],
                           "scope",
@@ -31,7 +33,6 @@ component("ash") {
     "//components/signin/core/account_id",
     "//components/user_manager",
     "//components/wallpaper",
-    "//content/public/browser",
     "//media",
     "//net",
     "//skia",
@@ -49,13 +50,10 @@ component("ash") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/keyboard",
-    "//ui/keyboard:keyboard_with_content",
     "//ui/message_center",
     "//ui/resources",
     "//ui/strings",
     "//ui/views",
-    "//ui/views/controls/webview",
-    "//ui/web_dialogs",
     "//ui/wm",
     "//url",
   ]

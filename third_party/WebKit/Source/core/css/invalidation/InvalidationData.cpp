@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/invalidation/InvalidationData.h"
 
 namespace blink {
@@ -31,12 +30,12 @@ InvalidationSet& InvalidationData::ensureInvalidationSet(InvalidationType type)
 
 void InvalidationData::combine(const InvalidationData& other)
 {
-    if (other.descendants()) {
-        ensureDescendantInvalidationSet().combine(*other.descendants());
+    if (other.m_descendants) {
+        ensureDescendantInvalidationSet().combine(*other.m_descendants);
     }
 
-    if (other.siblings()) {
-        ensureSiblingInvalidationSet().combine(*other.siblings());
+    if (other.m_siblings) {
+        ensureSiblingInvalidationSet().combine(*other.m_siblings);
     }
 }
 

@@ -8,6 +8,7 @@
 
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_utils.h"
@@ -27,8 +28,7 @@ namespace {
 class DeleteSessionsAlarm : public QuicAlarm::Delegate {
  public:
   explicit DeleteSessionsAlarm(QuicDispatcher* dispatcher)
-      : dispatcher_(dispatcher) {
-  }
+      : dispatcher_(dispatcher) {}
 
   QuicTime OnAlarm() override {
     dispatcher_->DeleteSessions();
@@ -48,8 +48,7 @@ class DeleteSessionsAlarm : public QuicAlarm::Delegate {
 class QuicDispatcher::QuicFramerVisitor : public QuicFramerVisitorInterface {
  public:
   explicit QuicFramerVisitor(QuicDispatcher* dispatcher)
-      : dispatcher_(dispatcher),
-        connection_id_(0) {}
+      : dispatcher_(dispatcher), connection_id_(0) {}
 
   // QuicFramerVisitorInterface implementation
   void OnPacket() override {}
@@ -157,9 +156,8 @@ QuicDispatcher::PacketWriterFactoryAdapter::~PacketWriterFactoryAdapter() {}
 
 QuicPacketWriter* QuicDispatcher::PacketWriterFactoryAdapter::Create(
     QuicConnection* connection) const {
-  return dispatcher_->packet_writer_factory_->Create(
-      dispatcher_->writer_.get(),
-      connection);
+  return dispatcher_->packet_writer_factory_->Create(dispatcher_->writer_.get(),
+                                                     connection);
 }
 
 QuicDispatcher::QuicDispatcher(const QuicConfig& config,
@@ -390,7 +388,8 @@ bool QuicDispatcher::HasPendingWrites() const {
 void QuicDispatcher::Shutdown() {
   while (!session_map_.empty()) {
     QuicServerSession* session = session_map_.begin()->second;
-    session->connection()->SendConnectionClose(QUIC_PEER_GOING_AWAY);
+    session->connection()->SendConnectionCloseWithDetails(
+        QUIC_PEER_GOING_AWAY, "Server shutdown imminent");
     // Validate that the session removes itself from the session map on close.
     DCHECK(session_map_.empty() || session_map_.begin()->second != session);
   }
@@ -408,10 +407,9 @@ void QuicDispatcher::OnConnectionClosed(QuicConnectionId connection_id,
     return;
   }
 
-  DVLOG_IF(1, error != QUIC_NO_ERROR) << "Closing connection ("
-                                      << connection_id
-                                      << ") due to error: "
-                                      << QuicUtils::ErrorToString(error);
+  DVLOG_IF(1, error != QUIC_NO_ERROR)
+      << "Closing connection (" << connection_id
+      << ") due to error: " << QuicUtils::ErrorToString(error);
 
   if (closed_session_list_.empty()) {
     delete_sessions_alarm_->Cancel();
@@ -426,8 +424,8 @@ void QuicDispatcher::OnConnectionClosed(QuicConnectionId connection_id,
 void QuicDispatcher::OnWriteBlocked(
     QuicBlockedWriterInterface* blocked_writer) {
   if (!writer_->IsWriteBlocked()) {
-    LOG(DFATAL) <<
-        "QuicDispatcher::OnWriteBlocked called when the writer is not blocked.";
+    LOG(DFATAL) << "QuicDispatcher::OnWriteBlocked called when the writer is "
+                   "not blocked.";
     // Return without adding the connection to the blocked list, to avoid
     // infinite loops in OnCanWrite.
     return;

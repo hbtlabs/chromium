@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/layout/LayoutScrollbarPart.h"
 
 #include "core/frame/FrameView.h"
@@ -120,7 +119,7 @@ static int calcScrollbarThicknessUsing(SizeType sizeType, const Length& length, 
 {
     if (!length.isIntrinsicOrAuto() || (sizeType == MinSize && length.isAuto()))
         return minimumValueForLength(length, containingLength);
-    return ScrollbarTheme::theme()->scrollbarThickness();
+    return ScrollbarTheme::theme().scrollbarThickness();
 }
 
 void LayoutScrollbarPart::computeScrollbarWidth()

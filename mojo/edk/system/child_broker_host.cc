@@ -4,79 +4,209 @@
 
 #include "mojo/edk/system/child_broker_host.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/system/broker_messages.h"
 #include "mojo/edk/system/broker_state.h"
 #include "mojo/edk/system/configuration.h"
+#include "mojo/edk/system/core.h"
+#include "mojo/edk/system/platform_handle_dispatcher.h"
 
 namespace mojo {
 namespace edk {
 
 namespace {
+#if defined(OS_WIN)
 static const int kDefaultReadBufferSize = 256;
+#endif
 }
 
 ChildBrokerHost::ChildBrokerHost(base::ProcessHandle child_process,
                                  ScopedPlatformHandle pipe)
-    : child_process_(child_process),
-      pipe_(pipe.Pass()),
-      num_bytes_read_(0) {
-#if defined(OS_WIN)
+    : process_id_(base::GetProcId(child_process)), child_channel_(nullptr) {
+  ScopedPlatformHandle parent_async_channel_handle;
+#if defined(OS_POSIX)
+  parent_async_channel_handle = std::move(pipe);
+#else
+  DuplicateHandle(GetCurrentProcess(), child_process,
+                  GetCurrentProcess(), &child_process,
+                  0, FALSE, DUPLICATE_SAME_ACCESS);
+  child_process_ = base::Process(child_process);
+  sync_channel_ = pipe.Pass();
   memset(&read_context_.overlapped, 0, sizeof(read_context_.overlapped));
   read_context_.handler = this;
   memset(&write_context_.overlapped, 0, sizeof(write_context_.overlapped));
   write_context_.handler = this;
-#else
-  // TODO(jam)
-  (void)child_process_; // Suppress -Wunused-private-field.
-  (void)num_bytes_read_; // Suppress -Wunused-private-field.
+  read_data_.resize(kDefaultReadBufferSize);
+  num_bytes_read_ = 0;
+
+  // See comment in ChildBroker::SetChildBrokerHostHandle. Summary is we need
+  // two pipes on Windows, so send the second one over the first one.
+  PlatformChannelPair parent_pipe;
+  parent_async_channel_handle = parent_pipe.PassServerHandle();
+
+  HANDLE duplicated_child_handle =
+      DuplicateToChild(parent_pipe.PassClientHandle().release().handle);
+  BOOL rv = WriteFile(sync_channel_.get().handle,
+                      &duplicated_child_handle, sizeof(duplicated_child_handle),
+                      NULL, &write_context_.overlapped);
+  DCHECK(rv || GetLastError() == ERROR_IO_PENDING);
 #endif
 
-  read_data_.resize(kDefaultReadBufferSize);
-  BrokerState::GetInstance()->broker_thread()->PostTask(
+  internal::g_io_thread_task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&ChildBrokerHost::RegisterIOHandler, base::Unretained(this)));
+      base::Bind(&ChildBrokerHost::InitOnIO, base::Unretained(this),
+                 base::Passed(&parent_async_channel_handle)));
+}
+
+base::ProcessId ChildBrokerHost::GetProcessId() {
+  return process_id_;
+}
+
+void ChildBrokerHost::ConnectToProcess(base::ProcessId process_id,
+                                       ScopedPlatformHandle pipe) {
+  if (!child_channel_)
+    return;  // Can happen at process shutdown on Windows.
+  ConnectToProcessMessage data;
+  memset(&data, 0, sizeof(data));
+  data.type = CONNECT_TO_PROCESS;
+  data.process_id = process_id;
+  scoped_ptr<MessageInTransit> message(new MessageInTransit(
+      MessageInTransit::Type::MESSAGE, sizeof(data), &data));
+  scoped_refptr<Dispatcher> dispatcher =
+      PlatformHandleDispatcher::Create(std::move(pipe));
+  internal::g_core->AddDispatcher(dispatcher);
+  scoped_ptr<DispatcherVector> dispatchers(new DispatcherVector);
+  dispatchers->push_back(dispatcher);
+  message->SetDispatchers(std::move(dispatchers));
+  message->SerializeAndCloseDispatchers();
+  message->set_route_id(kBrokerRouteId);
+  child_channel_->channel()->WriteMessage(std::move(message));
+}
+
+void ChildBrokerHost::ConnectMessagePipe(uint64_t pipe_id,
+                                         base::ProcessId process_id) {
+  if (!child_channel_)
+    return;  // Can happen at process shutdown on Windows.
+  PeerPipeConnectedMessage data;
+  memset(&data, 0, sizeof(data));
+  data.type = PEER_PIPE_CONNECTED;
+  data.pipe_id = pipe_id;
+  data.process_id = process_id;
+  scoped_ptr<MessageInTransit> message(new MessageInTransit(
+      MessageInTransit::Type::MESSAGE, sizeof(data), &data));
+  message->set_route_id(kBrokerRouteId);
+  child_channel_->channel()->WriteMessage(std::move(message));
+}
+
+void ChildBrokerHost::PeerDied(uint64_t pipe_id) {
+  if (!child_channel_)
+    return;  // Can happen at process shutdown on Windows.
+  PeerDiedMessage data;
+  memset(&data, 0, sizeof(data));
+  data.type = PEER_DIED;
+  data.pipe_id = pipe_id;
+  scoped_ptr<MessageInTransit> message(new MessageInTransit(
+      MessageInTransit::Type::MESSAGE, sizeof(data), &data));
+  message->set_route_id(kBrokerRouteId);
+  child_channel_->channel()->WriteMessage(std::move(message));
 }
 
 ChildBrokerHost::~ChildBrokerHost() {
+  DCHECK(internal::g_io_thread_task_runner->RunsTasksOnCurrentThread());
+  BrokerState::GetInstance()->ChildBrokerHostDestructed(this);
+  if (child_channel_)
+    child_channel_->RemoveRoute(kBrokerRouteId);
 }
 
-void ChildBrokerHost::RegisterIOHandler() {
+void ChildBrokerHost::InitOnIO(
+    ScopedPlatformHandle parent_async_channel_handle) {
+  child_channel_ = new RoutedRawChannel(
+      std::move(parent_async_channel_handle),
+      base::Bind(&ChildBrokerHost::ChannelDestructed, base::Unretained(this)));
+  child_channel_->AddRoute(kBrokerRouteId, this);
+
+  BrokerState::GetInstance()->ChildBrokerHostCreated(this);
+
 #if defined(OS_WIN)
+  // Call this after RoutedRawChannel calls its RawChannel::Init because this
+  // call could cause us to get notified that the child has gone away and to
+  // delete this class and shut down child_channel_ before Init() has run.
   base::MessageLoopForIO::current()->RegisterIOHandler(
-      pipe_.get().handle, this);
+      sync_channel_.get().handle, this);
   BeginRead();
-#elif defined(OS_POSIX)
-  // TOOD(jam): setup
 #endif
 }
 
-void ChildBrokerHost::BeginRead() {
+void ChildBrokerHost::OnReadMessage(
+    const MessageInTransit::View& message_view,
+    ScopedPlatformHandleVectorPtr platform_handles) {
+  DCHECK(internal::g_io_thread_task_runner->RunsTasksOnCurrentThread());
+  CHECK(!platform_handles);
+  if (message_view.num_bytes() !=
+      static_cast<uint32_t>(sizeof(ConnectMessagePipeMessage))) {
+    NOTREACHED();
+    delete this;
+  }
+
+  const ConnectMessagePipeMessage* message =
+      static_cast<const ConnectMessagePipeMessage*>(message_view.bytes());
+  switch(message->type) {
+    case CONNECT_MESSAGE_PIPE:
+      BrokerState::GetInstance()->HandleConnectMessagePipe(this,
+                                                           message->pipe_id);
+      break;
+    case CANCEL_CONNECT_MESSAGE_PIPE:
+      BrokerState::GetInstance()->HandleCancelConnectMessagePipe(
+          message->pipe_id);
+      break;
+    default:
+      NOTREACHED();
+      delete this;
+  }
+}
+
+void ChildBrokerHost::OnError(Error error) {
+  DCHECK(internal::g_io_thread_task_runner->RunsTasksOnCurrentThread());
+  child_channel_->RemoveRoute(kBrokerRouteId);
+  child_channel_ = nullptr;
+}
+
+void ChildBrokerHost::ChannelDestructed(RoutedRawChannel* channel) {
+  // On Windows, we have two pipes to the child process. It's easier to wait
+  // until we get the error from the pipe that is used for synchronous I/O.
+#if !defined(OS_WIN)
+  delete this;
+#endif
+}
+
 #if defined(OS_WIN)
-  BOOL rv = ReadFile(pipe_.get().handle, &read_data_[num_bytes_read_],
+void ChildBrokerHost::BeginRead() {
+  BOOL rv = ReadFile(sync_channel_.get().handle,
+                     &read_data_[num_bytes_read_],
                      static_cast<int>(read_data_.size() - num_bytes_read_),
                      nullptr, &read_context_.overlapped);
   if (rv || GetLastError() == ERROR_IO_PENDING)
     return;
 
-  if (rv == ERROR_BROKEN_PIPE) {
+  if (GetLastError() == ERROR_BROKEN_PIPE) {
     delete this;
     return;
   }
 
   NOTREACHED() << "Unknown error in ChildBrokerHost " << rv;
-#endif
 }
 
-#if defined(OS_WIN)
 void ChildBrokerHost::OnIOCompleted(base::MessageLoopForIO::IOContext* context,
                                     DWORD bytes_transferred,
                                     DWORD error) {
-  if (context != &read_context_)
-    return;
-
+  DCHECK(internal::g_io_thread_task_runner->RunsTasksOnCurrentThread());
   if (error == ERROR_BROKEN_PIPE) {
     delete this;
     return;  // Child process exited or crashed.
@@ -88,12 +218,26 @@ void ChildBrokerHost::OnIOCompleted(base::MessageLoopForIO::IOContext* context,
     return;
   }
 
+  if (context == &write_context_) {
+    write_data_.clear();
+    return;
+  }
+
   num_bytes_read_ += bytes_transferred;
   CHECK_GE(num_bytes_read_, sizeof(uint32_t));
   BrokerMessage* message = reinterpret_cast<BrokerMessage*>(&read_data_[0]);
   if (num_bytes_read_ < message->size) {
     read_data_.resize(message->size);
     BeginRead();
+    return;
+  }
+
+  // This should never fire because we only get new requests from a child
+  // process after it has read all the previous data we wrote.
+  if (!write_data_.empty()) {
+    NOTREACHED() << "ChildBrokerHost shouldn't have data to write when it gets "
+                 << " a new request";
+    delete this;
     return;
   }
 
@@ -152,7 +296,7 @@ void ChildBrokerHost::OnIOCompleted(base::MessageLoopForIO::IOContext* context,
     return;
   }
 
-  BOOL rv = WriteFile(pipe_.get().handle, &write_data_[0],
+  BOOL rv = WriteFile(sync_channel_.get().handle, &write_data_[0],
                       static_cast<int>(write_data_.size()), NULL,
                       &write_context_.overlapped);
   DCHECK(rv || GetLastError() == ERROR_IO_PENDING);
@@ -165,7 +309,7 @@ void ChildBrokerHost::OnIOCompleted(base::MessageLoopForIO::IOContext* context,
 HANDLE ChildBrokerHost::DuplicateToChild(HANDLE handle) {
   HANDLE rv = INVALID_HANDLE_VALUE;
   BOOL result = DuplicateHandle(base::GetCurrentProcessHandle(), handle,
-                                child_process_, &rv, 0, FALSE,
+                                child_process_.Handle(), &rv, 0, FALSE,
                                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
   DCHECK(result);
   return rv;
@@ -173,7 +317,7 @@ HANDLE ChildBrokerHost::DuplicateToChild(HANDLE handle) {
 
 HANDLE ChildBrokerHost::DuplicateFromChild(HANDLE handle) {
   HANDLE rv = INVALID_HANDLE_VALUE;
-  BOOL result = DuplicateHandle(child_process_, handle,
+  BOOL result = DuplicateHandle(child_process_.Handle(), handle,
                                 base::GetCurrentProcessHandle(), &rv, 0, FALSE,
                                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE);
   DCHECK(result);

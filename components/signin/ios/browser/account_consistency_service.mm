@@ -9,6 +9,7 @@
 #import "base/ios/weak_nsobject.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
+#include "base/macros.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
@@ -100,10 +101,12 @@ bool AccountConsistencyHandler::ShouldAllowResponse(NSURLResponse* response) {
       [delegate_ onGoIncognito:continue_url];
       break;
     }
-    case signin::GAIA_SERVICE_TYPE_SIGNOUT:
-    case signin::GAIA_SERVICE_TYPE_ADDSESSION:
-    case signin::GAIA_SERVICE_TYPE_REAUTH:
     case signin::GAIA_SERVICE_TYPE_SIGNUP:
+    case signin::GAIA_SERVICE_TYPE_ADDSESSION:
+      [delegate_ onAddAccount];
+      break;
+    case signin::GAIA_SERVICE_TYPE_SIGNOUT:
+    case signin::GAIA_SERVICE_TYPE_REAUTH:
     case signin::GAIA_SERVICE_TYPE_DEFAULT:
       [delegate_ onManageAccounts];
       break;
@@ -205,6 +208,11 @@ AccountConsistencyService::AccountConsistencyService(
   signin_manager_->AddObserver(this);
   web::BrowserState::GetActiveStateManager(browser_state_)->AddObserver(this);
   LoadFromPrefs();
+  if (signin_manager_->IsAuthenticated()) {
+    AddXChromeConnectedCookies();
+  } else {
+    RemoveXChromeConnectedCookies();
+  }
 }
 
 AccountConsistencyService::~AccountConsistencyService() {

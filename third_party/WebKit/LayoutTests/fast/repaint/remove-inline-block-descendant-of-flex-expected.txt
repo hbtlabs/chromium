@@ -17,7 +17,6 @@
         "RootInlineBox",
         "LayoutBlockFlow DIV id='inline-block-1' class='item'",
         "InlineBox",
-        "LayoutText #text",
         "RootInlineBox",
         "InlineBox",
         "RootInlineBox",
@@ -25,6 +24,7 @@
         "RootInlineBox",
         "LayoutBlockFlow DIV",
         "LayoutBlockFlow DIV id='inline-block-2' class='item'",
+        "RootInlineBox",
         "LayoutBR BR",
         "InlineTextBox '\n'"
       ]

@@ -48,11 +48,11 @@ ReliableQuicStream::PendingData::PendingData(
     QuicAckListenerInterface* ack_listener_in)
     : data(data_in), offset(0), ack_listener(ack_listener_in) {}
 
-ReliableQuicStream::PendingData::~PendingData() {
-}
+ReliableQuicStream::PendingData::~PendingData() {}
 
 ReliableQuicStream::ReliableQuicStream(QuicStreamId id, QuicSession* session)
-    : sequencer_(this, session->connection()->clock()),
+    : queued_data_bytes_(0),
+      sequencer_(this, session->connection()->clock()),
       id_(id),
       session_(session),
       stream_bytes_read_(0),
@@ -79,8 +79,7 @@ ReliableQuicStream::ReliableQuicStream(QuicStreamId id, QuicSession* session)
   SetFromConfig();
 }
 
-ReliableQuicStream::~ReliableQuicStream() {
-}
+ReliableQuicStream::~ReliableQuicStream() {}
 
 void ReliableQuicStream::SetFromConfig() {
   if (session_->config()->HasClientSentConnectionOption(kFSTR, perspective_)) {
@@ -105,7 +104,7 @@ void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
   }
 
   // This count includes duplicate data received.
-  size_t frame_payload_size = frame.data.size();
+  size_t frame_payload_size = frame.frame_length;
   stream_bytes_read_ += frame_payload_size;
 
   // Flow control is interested in tracking highest received offset.
@@ -114,8 +113,9 @@ void ReliableQuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
     // violation of flow control.
     if (flow_controller_.FlowControlViolation() ||
         connection_flow_controller_->FlowControlViolation()) {
-      session_->connection()->SendConnectionClose(
-          QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA);
+      session_->connection()->SendConnectionCloseWithDetails(
+          QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA,
+          "Flow control violation after increasing offset");
       return;
     }
   }
@@ -216,6 +216,7 @@ void ReliableQuicStream::WriteOrBufferData(
   if (consumed_data.bytes_consumed < data.length() ||
       (fin && !consumed_data.fin_consumed)) {
     StringPiece remainder(data.substr(consumed_data.bytes_consumed));
+    queued_data_bytes_ += remainder.size();
     queued_data_.push_back(PendingData(remainder.as_string(), ack_listener));
   }
 }
@@ -242,6 +243,7 @@ void ReliableQuicStream::OnCanWrite() {
         const_cast<char*>(pending_data->data.data()) + pending_data->offset,
         remaining_len};
     QuicConsumedData consumed_data = WritevData(&iov, 1, fin, ack_listener);
+    queued_data_bytes_ -= consumed_data.bytes_consumed;
     if (consumed_data.bytes_consumed == remaining_len &&
         fin == consumed_data.fin_consumed) {
       queued_data_.pop_front();
@@ -420,7 +422,7 @@ void ReliableQuicStream::OnWindowUpdateFrame(
 
 bool ReliableQuicStream::MaybeIncreaseHighestReceivedOffset(
     QuicStreamOffset new_offset) {
-  uint64 increment =
+  uint64_t increment =
       new_offset - flow_controller_.highest_received_byte_offset();
   if (!flow_controller_.UpdateHighestReceivedOffset(new_offset)) {
     return false;

@@ -79,14 +79,12 @@ uint16_t ConnectionManager::GetAndAdvanceNextHostId() {
 }
 
 void ConnectionManager::OnConnectionError(ClientConnection* connection) {
-  // This will be null if the root has been destroyed.
-  const WindowId* window_id = connection->service()->root();
-  ServerWindow* window =
-      window_id ? GetWindow(*connection->service()->root()) : nullptr;
-  // If the WindowTree root is a viewport root, then we'll wait until
-  // the root connection goes away to cleanup.
-  if (window && (GetRootWindow(window) == window))
-    return;
+  for (auto* root : connection->service()->roots()) {
+    // If the WindowTree root is a viewport root, then we'll wait until
+    // the root connection goes away to cleanup.
+    if (GetRootWindow(root) == root)
+      return;
+  }
 
   scoped_ptr<ClientConnection> connection_owner(connection);
 
@@ -95,6 +93,16 @@ void ConnectionManager::OnConnectionError(ClientConnection* connection) {
   // Notify remaining connections so that they can cleanup.
   for (auto& pair : connection_map_)
     pair.second->service()->OnWillDestroyWindowTreeImpl(connection->service());
+
+  // Notify the hosts, taking care to only notify each host once.
+  std::set<WindowTreeHostImpl*> hosts_notified;
+  for (auto* root : connection->service()->roots()) {
+    WindowTreeHostImpl* host = GetWindowTreeHostByWindow(root);
+    if (host && hosts_notified.count(host) == 0) {
+      host->OnWindowTreeConnectionError(connection->service());
+      hosts_notified.insert(host);
+    }
+  }
 
   // Remove any requests from the client that resulted in a call to the window
   // manager and we haven't gotten a response back yet.
@@ -105,6 +113,11 @@ void ConnectionManager::OnConnectionError(ClientConnection* connection) {
   }
   for (uint32_t id : to_remove)
     in_flight_wm_change_map_.erase(id);
+}
+
+ClientConnection* ConnectionManager::GetClientConnection(
+    WindowTreeImpl* window_tree) {
+  return connection_map_[window_tree->id()];
 }
 
 void ConnectionManager::OnHostConnectionClosed(
@@ -131,18 +144,17 @@ void ConnectionManager::OnHostConnectionClosed(
 }
 
 WindowTreeImpl* ConnectionManager::EmbedAtWindow(
-    ConnectionSpecificId creator_id,
-    const WindowId& window_id,
+    ServerWindow* root,
     uint32_t policy_bitmask,
     mojom::WindowTreeClientPtr client) {
   mojom::WindowTreePtr service_ptr;
   ClientConnection* client_connection =
       delegate_->CreateClientConnectionForEmbedAtWindow(
-          this, GetProxy(&service_ptr), creator_id, window_id, policy_bitmask,
-          client.Pass());
+          this, GetProxy(&service_ptr), root, policy_bitmask,
+          std::move(client));
   AddConnection(client_connection);
   client_connection->service()->Init(client_connection->client(),
-                                     service_ptr.Pass());
+                                     std::move(service_ptr));
   OnConnectionMessagedClient(client_connection->service()->id());
 
   return client_connection->service();
@@ -201,13 +213,15 @@ mojom::ViewportMetricsPtr ConnectionManager::GetViewportMetricsForWindow(
 
   mojom::ViewportMetricsPtr metrics = mojom::ViewportMetrics::New();
   metrics->size_in_pixels = mojo::Size::New();
-  return metrics.Pass();
+  return metrics;
 }
 
 const WindowTreeImpl* ConnectionManager::GetConnectionWithRoot(
-    const WindowId& id) const {
+    const ServerWindow* window) const {
+  if (!window)
+    return nullptr;
   for (auto& pair : connection_map_) {
-    if (pair.second->service()->IsRoot(id))
+    if (pair.second->service()->HasRoot(window))
       return pair.second->service();
   }
   return nullptr;
@@ -231,20 +245,6 @@ const WindowTreeHostImpl* ConnectionManager::GetWindowTreeHostByWindow(
   return nullptr;
 }
 
-WindowTreeImpl* ConnectionManager::GetEmbedRoot(WindowTreeImpl* service) {
-  while (service) {
-    const WindowId* root_id = service->root();
-    if (!root_id || root_id->connection_id == service->id())
-      return nullptr;
-
-    WindowTreeImpl* parent_service = GetConnection(root_id->connection_id);
-    service = parent_service;
-    if (service && service->is_embed_root())
-      return service;
-  }
-  return nullptr;
-}
-
 WindowTreeHostImpl* ConnectionManager::GetActiveWindowTreeHost() {
   return host_connection_map_.begin()->first;
 }
@@ -260,18 +260,13 @@ uint32_t ConnectionManager::GenerateWindowManagerChangeId(
 void ConnectionManager::WindowManagerChangeCompleted(
     uint32_t window_manager_change_id,
     bool success) {
-  // There are valid reasons as to why we wouldn't know about the id. The
-  // most likely is the client disconnected before the response from the window
-  // manager came back.
-  auto iter = in_flight_wm_change_map_.find(window_manager_change_id);
-  if (iter == in_flight_wm_change_map_.end())
+  InFlightWindowManagerChange change;
+  if (!GetAndClearInFlightWindowManagerChange(window_manager_change_id,
+                                              &change))
     return;
 
-  const InFlightWindowManagerChange change = iter->second;
-  in_flight_wm_change_map_.erase(iter);
-
   WindowTreeImpl* connection = GetConnection(change.connection_id);
-  connection->client()->OnChangeCompleted(change.client_change_id, success);
+  connection->OnChangeCompleted(change.client_change_id, success);
 }
 
 void ConnectionManager::ProcessWindowBoundsChanged(
@@ -331,7 +326,7 @@ void ConnectionManager::ProcessWindowReorder(
   }
 }
 
-void ConnectionManager::ProcessWindowDeleted(const WindowId& window) {
+void ConnectionManager::ProcessWindowDeleted(const ServerWindow* window) {
   for (auto& pair : connection_map_) {
     pair.second->service()->ProcessWindowDeleted(window,
                                                  IsOperationSource(pair.first));
@@ -361,6 +356,21 @@ void ConnectionManager::ProcessViewportMetricsChanged(
   }
 }
 
+bool ConnectionManager::GetAndClearInFlightWindowManagerChange(
+    uint32_t window_manager_change_id,
+    InFlightWindowManagerChange* change) {
+  // There are valid reasons as to why we wouldn't know about the id. The
+  // most likely is the client disconnected before the response from the window
+  // manager came back.
+  auto iter = in_flight_wm_change_map_.find(window_manager_change_id);
+  if (iter == in_flight_wm_change_map_.end())
+    return false;
+
+  *change = iter->second;
+  in_flight_wm_change_map_.erase(iter);
+  return true;
+}
+
 void ConnectionManager::PrepareForOperation(Operation* op) {
   // Should only ever have one change in flight.
   CHECK(!current_operation_);
@@ -376,6 +386,13 @@ void ConnectionManager::FinishOperation() {
 void ConnectionManager::AddConnection(ClientConnection* connection) {
   DCHECK_EQ(0u, connection_map_.count(connection->service()->id()));
   connection_map_[connection->service()->id()] = connection;
+}
+
+void ConnectionManager::MaybeUpdateNativeCursor(ServerWindow* window) {
+  // This can be null in unit tests.
+  WindowTreeHostImpl* impl = GetWindowTreeHostByWindow(window);
+  if (impl)
+    impl->MaybeChangeCursorOnWindowTreeChange();
 }
 
 mus::SurfacesState* ConnectionManager::GetSurfacesState() {
@@ -404,7 +421,7 @@ void ConnectionManager::ScheduleSurfaceDestruction(ServerWindow* window) {
 
 void ConnectionManager::OnWindowDestroyed(ServerWindow* window) {
   if (!in_destructor_)
-    ProcessWindowDeleted(window->id());
+    ProcessWindowDeleted(window);
 }
 
 void ConnectionManager::OnWillChangeWindowHierarchy(ServerWindow* window,
@@ -429,6 +446,8 @@ void ConnectionManager::OnWindowHierarchyChanged(ServerWindow* window,
     SchedulePaint(old_parent, gfx::Rect(old_parent->bounds().size()));
   if (new_parent)
     SchedulePaint(new_parent, gfx::Rect(new_parent->bounds().size()));
+
+  MaybeUpdateNativeCursor(window);
 }
 
 void ConnectionManager::OnWindowBoundsChanged(ServerWindow* window,
@@ -444,6 +463,8 @@ void ConnectionManager::OnWindowBoundsChanged(ServerWindow* window,
   // TODO(sky): optimize this.
   SchedulePaint(window->parent(), old_bounds);
   SchedulePaint(window->parent(), new_bounds);
+
+  MaybeUpdateNativeCursor(window);
 }
 
 void ConnectionManager::OnWindowClientAreaChanged(
@@ -463,6 +484,7 @@ void ConnectionManager::OnWindowReordered(ServerWindow* window,
   ProcessWindowReorder(window, relative, direction);
   if (!in_destructor_)
     SchedulePaint(window, gfx::Rect(window->bounds().size()));
+  MaybeUpdateNativeCursor(window);
 }
 
 void ConnectionManager::OnWillChangeWindowVisibility(ServerWindow* window) {

@@ -227,17 +227,16 @@ public class MediaDrmBridge {
      * @return whether a MediaCrypto object is successfully created.
      */
     private boolean createMediaCrypto() throws android.media.NotProvisionedException {
-        if (mMediaDrm == null) {
-            return false;
-        }
+        assert mMediaDrm != null;
         assert !mProvisioningPending;
         assert mMediaCryptoSession == null;
         assert mMediaCrypto == null;
 
-        // Open media crypto session.
+        // Open media crypto session. This could throw NotProvisionedException.
         mMediaCryptoSession = openSession();
         if (mMediaCryptoSession == null) {
             Log.e(TAG, "Cannot create MediaCrypto Session.");
+            release();
             return false;
         }
         Log.d(TAG, "MediaCrypto Session created: %s", bytesToHexString(mMediaCryptoSession));
@@ -248,8 +247,6 @@ public class MediaDrmBridge {
             if (MediaCrypto.isCryptoSchemeSupported(mSchemeUUID)) {
                 mMediaCrypto = new MediaCrypto(mSchemeUUID, mMediaCryptoSession);
                 Log.d(TAG, "MediaCrypto successfully created!");
-                // Notify the native code that MediaCrypto is ready.
-                onMediaCryptoReady();
                 return true;
             } else {
                 Log.e(TAG, "Cannot create MediaCrypto for unsupported scheme.");
@@ -312,10 +309,12 @@ public class MediaDrmBridge {
      * Create a new MediaDrmBridge from the crypto scheme UUID.
      *
      * @param schemeUUID Crypto scheme UUID.
+     * @param securityLevel Security level. If empty, the default one should be used.
      * @param nativeMediaDrmBridge Native object of this class.
      */
     @CalledByNative
-    private static MediaDrmBridge create(byte[] schemeUUID, long nativeMediaDrmBridge) {
+    private static MediaDrmBridge create(
+            byte[] schemeUUID, String securityLevel, long nativeMediaDrmBridge) {
         UUID cryptoScheme = getUUIDFromBytes(schemeUUID);
         if (cryptoScheme == null || !MediaDrm.isCryptoSchemeSupported(cryptoScheme)) {
             return null;
@@ -333,6 +332,14 @@ public class MediaDrmBridge {
             Log.e(TAG, "Failed to create MediaDrmBridge", e);
         }
 
+        if (mediaDrmBridge == null) {
+            return null;
+        }
+
+        if (!securityLevel.isEmpty() && !mediaDrmBridge.setSecurityLevel(securityLevel)) {
+            return null;
+        }
+
         return mediaDrmBridge;
     }
 
@@ -344,8 +351,9 @@ public class MediaDrmBridge {
      * @param securityLevel Security level to be set.
      * @return whether the security level was successfully set.
      */
-    @CalledByNative
     private boolean setSecurityLevel(String securityLevel) {
+        assert !securityLevel.isEmpty();
+
         if (mMediaDrm == null || mMediaCrypto != null) {
             return false;
         }
@@ -390,14 +398,6 @@ public class MediaDrmBridge {
         }
 
         return false;
-    }
-
-    /**
-     * Return the MediaCrypto object if available.
-     */
-    @CalledByNative
-    private MediaCrypto getMediaCrypto() {
-        return mMediaCrypto;
     }
 
     /**
@@ -582,10 +582,16 @@ public class MediaDrmBridge {
         byte[] sessionId = null;
         try {
             // Create MediaCrypto if necessary.
-            if (mMediaCrypto == null && !createMediaCrypto()) {
-                onPromiseRejected(promiseId, "MediaCrypto creation failed.");
-                return;
+            if (mMediaCrypto == null) {
+                boolean success = createMediaCrypto();
+                // |mMediaCrypto| could be null upon failure. Notify the native code in all cases.
+                onMediaCryptoReady();
+                if (!success) {
+                    onPromiseRejected(promiseId, "MediaCrypto creation failed.");
+                    return;
+                }
             }
+
             assert mMediaCryptoSession != null;
             assert mMediaCrypto != null;
 
@@ -806,7 +812,7 @@ public class MediaDrmBridge {
 
     private void onMediaCryptoReady() {
         if (isNativeMediaDrmBridgeValid()) {
-            nativeOnMediaCryptoReady(mNativeMediaDrmBridge);
+            nativeOnMediaCryptoReady(mNativeMediaDrmBridge, mMediaCrypto);
         }
     }
 
@@ -972,7 +978,8 @@ public class MediaDrmBridge {
 
     // Native functions. At the native side, must post the task immediately to
     // avoid reentrancy issues.
-    private native void nativeOnMediaCryptoReady(long nativeMediaDrmBridge);
+    private native void nativeOnMediaCryptoReady(
+            long nativeMediaDrmBridge, MediaCrypto mediaCrypto);
 
     private native void nativeOnStartProvisioning(
             long nativeMediaDrmBridge, String defaultUrl, byte[] requestData);

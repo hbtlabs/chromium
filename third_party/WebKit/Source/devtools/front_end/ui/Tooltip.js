@@ -14,9 +14,10 @@ WebInspector.Tooltip = function(doc)
     this._tooltipElement = this._shadowRoot.createChild("div", "tooltip");
     doc.addEventListener("mousemove", this._mouseMove.bind(this), true);
     doc.addEventListener("mousedown", this._hide.bind(this, true), true);
-    doc.addEventListener("mouseleave", this._hide.bind(this, true), true);
+    doc.addEventListener("mouseleave", this._hide.bind(this, false), true);
     doc.addEventListener("keydown", this._hide.bind(this, true), true);
-    WebInspector.zoomManager.addEventListener(WebInspector.ZoomManager.Events.ZoomChanged, this._zoomChanged, this);
+    WebInspector.zoomManager.addEventListener(WebInspector.ZoomManager.Events.ZoomChanged, this._reset, this);
+    doc.defaultView.addEventListener("resize", this._reset.bind(this), false);
 }
 
 WebInspector.Tooltip.Timing = {
@@ -37,7 +38,7 @@ WebInspector.Tooltip.prototype = {
             return;
 
         if (this._anchorElement && path.indexOf(this._anchorElement) === -1)
-            this._hide();
+            this._hide(false);
 
         for (var element of path) {
             if (element === this._anchorElement) {
@@ -124,7 +125,7 @@ WebInspector.Tooltip.prototype = {
     },
 
     /**
-     * @param {boolean=} removeInstant
+     * @param {boolean} removeInstant
      */
     _hide: function(removeInstant)
     {
@@ -136,7 +137,7 @@ WebInspector.Tooltip.prototype = {
             delete this._tooltipLastClosed;
     },
 
-    _zoomChanged: function()
+    _reset: function()
     {
         this._hide(true);
         this._tooltipElement.positionAt(0, 0);

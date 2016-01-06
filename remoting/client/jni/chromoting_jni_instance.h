@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -14,6 +15,8 @@
 #include "remoting/client/chromoting_client.h"
 #include "remoting/client/client_context.h"
 #include "remoting/client/client_user_interface.h"
+#include "remoting/proto/control.pb.h"
+#include "remoting/proto/event.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/cursor_shape_stub.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
@@ -24,13 +27,13 @@ namespace protocol {
 class ClipboardEvent;
 class CursorShapeInfo;
 class PerformanceTracker;
+class VideoRenderer;
 }  // namespace protocol
 
 class ChromotingJniRuntime;
 class ClientStatusLogger;
 class JniFrameConsumer;
 class TokenFetcherProxy;
-class VideoRenderer;
 
 // ClientUserInterface that indirectly makes and receives JNI calls.
 class ChromotingJniInstance
@@ -151,7 +154,7 @@ class ChromotingJniInstance
   scoped_ptr<ClientContext> client_context_;
   scoped_ptr<protocol::PerformanceTracker> perf_tracker_;
   scoped_ptr<JniFrameConsumer> view_;
-  scoped_ptr<VideoRenderer> video_renderer_;
+  scoped_ptr<protocol::VideoRenderer> video_renderer_;
   scoped_ptr<protocol::Authenticator> authenticator_;
   scoped_ptr<ChromotingClient> client_;
   XmppSignalStrategy::XmppServerConfig xmpp_config_;

@@ -37,15 +37,18 @@ use_kerberos = !is_chromeos && !is_ios && !is_chromecast && !is_headless
 # So enable it for x86 only for now.
 posix_avoid_mmap = is_android && current_cpu != "x86"
 
-# WebSockets and socket stream code are used everywhere except iOS.
-enable_websockets = !is_ios
 use_v8_in_net = !is_ios
 enable_built_in_dns = !is_ios
-disable_ftp_support = is_ios
 
 declare_args() {
   # Disables support for file URLs.  File URL support requires use of icu.
   disable_file_support = false
+  enable_bidirectional_stream = false
+
+  # WebSockets and socket stream code are not used on iOS and are optional in
+  # cronet.
+  enable_websockets = !is_ios
+  disable_ftp_support = is_ios
 }
 
 config("net_config") {
@@ -58,6 +61,9 @@ config("net_config") {
   }
   if (disable_ftp_support) {
     defines += [ "DISABLE_FTP_SUPPORT=1" ]
+  }
+  if (enable_bidirectional_stream) {
+    defines += [ "ENABLE_BIDIRECTIONAL_STREAM=1" ]
   }
 }
 
@@ -162,6 +168,8 @@ if (!is_nacl) {
       "quic/crypto/aes_128_gcm_12_encrypter_nss.cc",
       "quic/crypto/chacha20_poly1305_decrypter_nss.cc",
       "quic/crypto/chacha20_poly1305_encrypter_nss.cc",
+      "quic/crypto/chacha20_poly1305_rfc7539_decrypter_nss.cc",
+      "quic/crypto/chacha20_poly1305_rfc7539_encrypter_nss.cc",
       "quic/crypto/channel_id_nss.cc",
       "quic/crypto/p256_key_exchange_nss.cc",
       "quic/crypto/proof_source_chromium_nss.cc",
@@ -195,6 +203,8 @@ if (!is_nacl) {
       "quic/crypto/aes_128_gcm_12_encrypter_openssl.cc",
       "quic/crypto/chacha20_poly1305_decrypter_openssl.cc",
       "quic/crypto/chacha20_poly1305_encrypter_openssl.cc",
+      "quic/crypto/chacha20_poly1305_rfc7539_decrypter_openssl.cc",
+      "quic/crypto/chacha20_poly1305_rfc7539_encrypter_openssl.cc",
       "quic/crypto/channel_id_openssl.cc",
       "quic/crypto/p256_key_exchange_openssl.cc",
       "quic/crypto/proof_source_chromium_openssl.cc",
@@ -423,6 +433,10 @@ component("net") {
       sources += gypi_values.net_ftp_support_sources
     }
 
+    if (enable_bidirectional_stream) {
+      sources += gypi_values.net_bidirectional_stream_sources
+    }
+
     if (enable_websockets) {
       sources += gypi_values.net_websockets_sources
     }
@@ -437,11 +451,16 @@ component("net") {
       "base/net_string_util_icu.cc",
       "base/net_util_icu.cc",
     ]
+
+    # Brotli support.
+    deps += [ "//third_party/brotli" ]
+    sources += [ "filter/brotli_filter.cc" ]
   }
 }
 
 if (is_android) {
-  # Same as net, but with ICU, file, ftp, and websocket support stripped.
+  # Same as net, but with brotli encoding, ICU, file, ftp, and websocket
+  # support stripped.
   component("net_small") {
     sources = net_shared_sources
 
@@ -470,6 +489,9 @@ if (is_android) {
       "base/net_string_util_icu_alternatives_android.cc",
       "base/net_string_util_icu_alternatives_android.h",
     ]
+
+    # Disable Brotli support.
+    sources += [ "filter/brotli_filter_disabled.cc" ]
   }
 }
 
@@ -787,7 +809,7 @@ if (use_v8_in_net && !is_android) {
 
     public_deps = [
       ":mojo_type_converters",
-      ":net",
+      ":net_with_v8",
       "//base",
       "//mojo/common",
       "//mojo/public/cpp/bindings",
@@ -811,6 +833,7 @@ if (use_v8_in_net && !is_android) {
 
     public_deps = [
       ":net",
+      "//base",
       "//mojo/public/cpp/bindings",
       "//net/interfaces",
     ]
@@ -829,6 +852,7 @@ if (use_v8_in_net && !is_android) {
 
     deps = [
       ":net_with_v8",
+      "//base",
     ]
 
     public_deps = [
@@ -1148,6 +1172,7 @@ if (is_linux) {
       ":balsa",
       ":epoll_server",
       ":net",
+      ":simple_quic_tools",
       "//base",
       "//base/third_party/dynamic_annotations",
       "//crypto",
@@ -1209,7 +1234,7 @@ if (is_android) {
     sources = [
       "android/javatests/src/org/chromium/net/AndroidKeyStoreTestUtil.java",
       "test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java",
-      "test/android/javatests/src/org/chromium/net/test/EmbeddedTestServer.java",
+      "test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java",
     ]
     jni_package = "net/test"
   }
@@ -1251,16 +1276,17 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server.h",
     "tools/quic/quic_simple_server_packet_writer.cc",
     "tools/quic/quic_simple_server_packet_writer.h",
+    "tools/quic/quic_simple_server_stream.cc",
+    "tools/quic/quic_simple_server_stream.h",
     "tools/quic/quic_spdy_client_stream.cc",
     "tools/quic/quic_spdy_client_stream.h",
-    "tools/quic/quic_spdy_server_stream.cc",
-    "tools/quic/quic_spdy_server_stream.h",
     "tools/quic/quic_time_wait_list_manager.cc",
     "tools/quic/quic_time_wait_list_manager.h",
     "tools/quic/synchronous_host_resolver.cc",
     "tools/quic/synchronous_host_resolver.h",
   ]
   deps = [
+    ":balsa",
     ":net",
     "//base",
     "//base/third_party/dynamic_annotations",
@@ -1438,14 +1464,9 @@ test("net_unittests") {
   }
 
   if (use_openssl) {
-    # When building for OpenSSL, we need to exclude NSS specific tests
-    # or functionality not supported by OpenSSL yet.
-    # TODO(bulach): Add equivalent tests when the underlying
-    #               functionality is ported to OpenSSL.
     sources -= [ "quic/test_tools/crypto_test_utils_nss.cc" ]
   } else {
     sources -= [
-      "cert/x509_util_openssl_unittest.cc",
       "quic/test_tools/crypto_test_utils_openssl.cc",
       "socket/ssl_client_socket_openssl_unittest.cc",
       "ssl/ssl_client_session_cache_openssl_unittest.cc",
@@ -1469,7 +1490,7 @@ test("net_unittests") {
     sources -= [ "http/http_auth_handler_negotiate_unittest.cc" ]
   }
 
-  if (use_openssl || (!is_desktop_linux && !is_chromeos && !is_ios)) {
+  if (!use_nss_certs && !is_ios) {
     # Only include this test when on Posix and using NSS for
     # cert verification or on iOS (which also uses NSS for certs).
     sources -= [ "cert_net/nss_ocsp_unittest.cc" ]
@@ -1529,6 +1550,9 @@ test("net_unittests") {
     ]
   }
 
+  if (!enable_bidirectional_stream) {
+    sources -= [ "http/bidirectional_stream_unittest.cc" ]
+  }
   if (!enable_built_in_dns) {
     sources -= [
       "dns/address_sorter_posix_unittest.cc",
@@ -1583,11 +1607,12 @@ test("net_unittests") {
     #        'test_data_files': [
     #          'data/certificate_policies_unittest/',
     #          'data/name_constraints_unittest/',
+    #          'data/parse_certificate_unittest/',
     #          'data/ssl/certificates/',
     #          'data/test.html',
     #          'data/url_request_unittest/',
+    #          'data/verify_certificate_chain_unittest/',
     #          'data/verify_name_match_unittest/names/',
-    #          'data/parse_certificate_unittest/',
     #        ],
     #        'test_data_prefix': 'net',
     #      },
@@ -1603,6 +1628,7 @@ test("net_unittests") {
       "disk_cache/blockfile/block_files_unittest.cc",
 
       # Need to read input data files.
+      "filter/brotli_filter_unittest.cc",
       "filter/gzip_filter_unittest.cc",
       "socket/ssl_server_socket_unittest.cc",
       "spdy/fuzzing/hpack_fuzz_util_test.cc",

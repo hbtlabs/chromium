@@ -53,6 +53,7 @@
 <translation id="2485422356828889247">நிறுவல் நீக்கு</translation>
 <translation id="2576431527583832481">Chrome தற்போதுதான் சிறப்பைப் பெற்றது! புதிய பதிப்பு உள்ளது.</translation>
 <translation id="2580411288591421699">நடப்பில் இயங்கிக்கொண்டிருக்கும் அதே Google Chrome பதிப்பை நிறுவ முடியாது. Google Chrome ஐ மூடிவிட்டு மீண்டும் முயற்சி செய்க.</translation>
+<translation id="2582790009689336987">இந்த Linux அமைப்பு இனி ஆதரிக்கப்படாது என்பதால் இந்தக் கணினி Google Chrome புதுப்பிப்புகளைப் பெறுவதை விரைவில் நிறுத்தும்.</translation>
 <translation id="2588322182880276190">Chrome லோகோ</translation>
 <translation id="2664962310688259219">Chrome OS ஓப்பன் சோர்ஸ் உரிமங்கள்</translation>
 <translation id="2665296953892887393">சிதைவு அறிக்கைகளையும் <ph name="UMA_LINK" /> உம் Google க்கு அனுப்புவதன் மூலம் Google Chrome ஐ மேலும் சிறப்பானதாக்க உதவவும்</translation>
@@ -72,6 +73,7 @@
 <translation id="3149510190863420837">Chrome பயன்பாடுகள்</translation>
 <translation id="3197823471738295152">உங்கள் சாதனம் புதுப்பித்த நிலையில் உள்ளது.</translation>
 <translation id="3282568296779691940">Chrome இல் உள்நுழைக</translation>
+<translation id="3311976847535831054">இந்தக் கணினி இனி 32-பிட் Google Chrome புதுப்பிப்புகளைப் பெறாது. 64-பிட் Google Chromeக்கு மேம்படுத்தவும்.</translation>
 <translation id="3360895254066713204">Chrome உதவி</translation>
 <translation id="3396977131400919238">நிறுவலின்போது இயக்கமுறைமையில் பிழை ஏற்பட்டது. Google Chrome ஐ மீண்டும் பதிவிறக்குக.</translation>
 <translation id="3398288718845740432">Chrome மெனுவில் மறை</translation>
@@ -98,6 +100,7 @@
 <translation id="4251615635259297716">உங்கள் Chrome தரவை இந்தக் கணக்குடன் இணைக்கவா?</translation>
 <translation id="4309555186815777032">(Chrome ஐ <ph name="BEGIN_BUTTON" />மறுதொடக்கம்<ph name="END_BUTTON" /> செய்வது அவசியம்)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="437002079035561265">இந்த Linux முறைமை இனி ஆதரிக்கப்படாது என்பதால் இந்தக் கணினி இனி Google Chrome புதுப்பிப்புகளைப் பெறாது.</translation>
 <translation id="4407807842708586359">Google Chrome OS</translation>
 <translation id="4458285410772214805">இந்த மாற்றம் செயல்பாட்டிற்கு வர, வெளியேறி, மீண்டும் உள்நுழைக.</translation>
 <translation id="4480040274068703980">உள்நுழைவதில் ஏற்பட்ட பிழைக் காரணமாக Chrome OS ஆல் உங்கள் தரவை ஒத்திசைக்க முடியவில்லை.</translation>
@@ -110,6 +113,7 @@
 <translation id="4728575227883772061">குறிப்பிடப்படாத பிழையின் காரணமாக, நிறுவல் தோல்வியடைந்தது. தற்போது  Google Chrome இயக்கத்தில் இருந்தால், அதை மூடிவிட்டு மீண்டும் முயற்சி செய்க.</translation>
 <translation id="473775607612524610">புதுப்பி</translation>
 <translation id="4743926867934016338">ஏற்கிறேன் &amp; தேடு</translation>
+<translation id="4751441238232965030">இந்தக் கணினி 32-பிட் Google Chrome புதுப்பிப்புகளைப் பெறுவதை விரைவில் நிறுத்தும். 64-பிட் Google Chromeக்கு மேம்படுத்தவும்.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4794050651896644714">விவரங்களை Chrome இல் சேமி</translation>
 <translation id="4891791193823137474">பின்னணியில் Google Chrome ஐ இயக்கு</translation>
@@ -136,28 +140,18 @@
 <translation id="5563479599352954471">ஒரே தொடுதலில் தேடவும்</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="5620765574781326016">பக்கத்தை விட்டு வெளியேறாமலே, இணையதளங்களில் தலைப்புகளைப் பற்றி அறியலாம்.</translation>
-<translation id="5626352146162055517">வழக்கமாக, <ph name="SITE" />  உங்கள் தகவலைப் பாதுகாப்பதற்காக முறைமையாக்கத்தைப் பயன்படுத்துகிறது. இந்த முறை <ph name="SITE" /> உடன் இணைவதற்கு  Chrome முயற்சித்தபோது வழக்கத்திற்கு மாறான மற்றும் தவறான நற்சான்றிதழ்களை இணையதளம் வழங்கியது. தாக்குபவர் தன்னை <ph name="SITE" /> ஆகக் காட்ட முயற்சிக்கும் போது அல்லது இணைப்பை வைஃபை உள்நுழைவுத் திரை குறுக்கிடும் போது இது ஏற்படலாம். இருப்பினும், தரவு எதுவும் பரிமாற்றப்படுவதற்கு முன் Chrome இணைப்பை நிறுத்தியதால் உங்கள் தகவல் பாதுகாப்பாகவே இருக்கிறது.</translation>
 <translation id="568643307450491754">Chrome மெனுவில் அல்லது புக்மார்க்குகள் பட்டியில் உங்கள் புக்மார்க்குகளைக் கண்டறிக.</translation>
 <translation id="573759479754913123">Chrome OS அறிமுகம்</translation>
 <translation id="5749068826913805084">கோப்புகளைப் பதிவிறக்க Chromeக்கு சேமிப்பிட அணுகல் தேவை.</translation>
 <translation id="5785746630574083988">Windows 8 பயன்முறையில் மீண்டும் தொடங்குவது, உங்கள் Chrome பயன்பாடுகளை மூடிவிட்டு மறுதுவக்கம் செய்யும்.</translation>
 <translation id="5855036575689098185">உங்கள் கணினியில் இயங்கும் மென்பொருள் Google Chrome உடன் இணங்கவில்லை.</translation>
 <translation id="5877064549588274448">சேனல் மாற்றப்பட்டது. மாற்றங்களைச் செயல்படுத்த உங்கள் சாதனத்தை மீண்டும் தொடங்கவும்.</translation>
-<translation id="5890698319714066019">உங்கள் கணினி இணையத்துடன் இணைக்கப்படாததால், Google Chrome ஆல் இணையப்பக்கத்தைக் காட்ட முடியாது.</translation>
 <translation id="5931853610562009806">Mac இல், கடவுச்சொற்கள் உங்கள் Keychain இல் சேமிக்கப்படலாம், இந்த OS X கணக்கைப் பகிரும் பிற Chrome பயனர்களால் அவற்றை அணுகவோ ஒத்திசைக்கவோ முடியும்.</translation>
 <translation id="5940385492829620908">உங்களின் இணையம், புத்தகக்குறிகள் மற்றும் பிற Chrome உருப்படிகள் இங்கே உள்ளன.</translation>
 <translation id="5941830788786076944">Google Chrome ஐ இயல்புநிலை உலாவியாக அமை</translation>
 <translation id="597770749449734237">Google Chromeஐப் பிழைத்திருத்துவதற்குப் பயன்படும் கூடுதல் விசைப்பலகைக் குறுக்குவழிகளை இயக்கும்.</translation>
-<translation id="6011049234605203654">Chrome மெனு &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          என்பதற்குச் சென்று, உங்கள் உள்ளமைவு "பிராக்சி இல்லை" அல்லது "நேரடி" என அமைக்கப்பட்டிருப்பதை உறுதிசெய்யவும்.</translation>
 <translation id="6012342843556706400">இந்தத் தளத்துடன் அதைப் பகிர Chromeக்கு இருப்பிட அணுகல் தேவை.</translation>
 <translation id="6014844626092547096">தற்போது Chrome இல் உள்நுழைந்துள்ளீர்கள்! உங்கள் நிர்வாகியால் ஒத்திசைவு முடக்கப்பட்டுள்ளது.</translation>
-<translation id="6049075767726609708">நிர்வாகி, இந்த கணினியில் Google Chrome ஐ நிறுவிட்டார். அதனால் அனைத்துப் பயனர்களையும் அதனைப் பயன்படுத்தலாம். கணினி-நிலை Google Chrome ஆனது, உங்கள் பயனர்-நிலை நிறுவலை இப்போது இடமாற்றும்.</translation>
 <translation id="6113794647360055231">Chrome இன்னும் சிறப்படைந்துள்ளது</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">&amp;Chrome OS ஐப் புதுப்பி</translation>
@@ -175,15 +169,6 @@
 <translation id="6676384891291319759">இணையத்தை அணுகுதல்</translation>
 <translation id="6757767188268205357">என்னை பிழையென அறிவிக்காதே</translation>
 <translation id="683440813066116847">mDNS ட்ராஃபிக்கை அனுமதிப்பதற்கான, Google Chrome Canary க்கான உள்வரும் விதி.</translation>
-<translation id="6855094794438142393">Chrome மெனு &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN அமைப்புகள்
-          என்பதற்குச் சென்று, "உங்கள் LAN க்குப் பிராக்சி சர்வரை பயன்படுத்தவும்" என்பதைத் தேர்வுநீக்கவும்.</translation>
 <translation id="6883876366448858277">Google தேடலுக்கு வார்த்தையையும் அதனுடன் தொடர்புடைய சூழலையும் அனுப்பி விளக்கங்கள், படங்கள் மற்றும் தேடல் முடிவுகளைப் பெறலாம்.</translation>
 <translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">உங்கள் சாதனம் புதுப்பிக்கப்படுகிறது...</translation>
@@ -205,7 +190,6 @@
 <translation id="7282192067747128786">Chrome - அறிவிப்புகள் (<ph name="QUANTITY" /> படிக்காதவை)</translation>
 <translation id="729375352412857283">Windows XP மற்றும் Windows Vista ஆகியவை இனி ஆதரிக்கப்படாது என்பதால் இந்தக் கணினி Google Chrome புதுப்பிப்புகளைப் பெறுவதை விரைவில் நிறுத்தும்.</translation>
 <translation id="7339898014177206373">புதிய சாளரம்</translation>
-<translation id="7396375882099008034">உங்கள் தீச்சுவர் அல்லது வைரஸ் தடுப்பு அமைப்புகளில் பிணையத்தை அணுக Chrome ஐ அனுமதிக்கவும்.</translation>
 <translation id="7398801000654795464">Chrome இல் <ph name="USER_EMAIL_ADDRESS" /> ஆக உள்நுழைந்திருந்தீர்கள். மீண்டும் உள்நுழைய அதே கணக்கைப் பயன்படுத்தவும்.</translation>
 <translation id="7400722733683201933">Google Chrome பற்றி</translation>
 <translation id="7408085963519505752">Chrome OS விதிமுறைகள்</translation>
@@ -227,7 +211,6 @@
 <translation id="781069973841903133">Chrome ஆழ்ந்த காட்சி பயன்முறையில் மீண்டும் தொடங்குவது, உங்கள் Chrome பயன்பாடுகளை மூடி மறுதுவக்கம் செய்யும்.</translation>
 <translation id="7825851276765848807">குறிப்பிடப்படாத பிழையின் காரணமாக, நிறுவல் தோல்வியடைந்தது. தயவுசெய்து Google Chrome ஐ மீண்டும் பதிவிறக்குக.</translation>
 <translation id="7890208801193284374">நீங்கள் கணினியைப் பகிர்ந்தால், நண்பர்களும் குடும்பத்தினரும் தனிப்பட்ட முறையில் உலாவலாம், மேலும் Chrome ஐ அவர்கள் விருப்பத்திற்கு ஏற்ப அமைத்துக்கொள்ளலாம்.</translation>
-<translation id="7984945080620862648">இணையதளமானது Chrome ஆல் செயல்படுத்த முடியாத வழக்கத்திற்கு மாறான நற்சான்றுகளை அனுப்பியுள்ளதால், நீங்கள் இப்போது <ph name="SITE" /> ஐப் பார்வையிட முடியாது, நெட்வொர்க் பிழைகள் மற்றும் தாக்குதல்கள் தற்காலிகமானவையாகும், எனவே இந்தப் பக்கம் சிறிது நேரம் கழித்து செயல்படும்.</translation>
 <translation id="8000275528373650868">Google Chrome க்கு Windows Vista அல்லது SP2 உடனான Windows XP அல்லது அதற்கு மேம்பட்டது தேவை.</translation>
 <translation id="8005540215158006229">Chrome தயாராகிவிட்டது.</translation>
 <translation id="8008534537613507642">Chrome ஐ மீண்டும்நிறுவு</translation>
@@ -235,8 +218,6 @@
 <translation id="8032142183999901390">Chrome இலிருந்து உங்கள் கணக்கை அகற்றிய பின்னர், மாற்றங்களைச் செயல்படுத்த உங்கள் திறந்த தாவல்களை மீண்டும் ஏற்ற வேண்டியிருக்கலாம்.</translation>
 <translation id="8037887340639533879">புதுப்பிப்பதற்கு Google Chrome இன் நிறுவல் எதுவுமில்லை.</translation>
 <translation id="8129812357326543296">&amp;Google Chrome அறிமுகம்</translation>
-<translation id="8187289872471304532">பயன்பாடுகள் &gt; முறைமை விருப்பத்தேர்வுகள் &gt; பிணையம் &gt; மேம்பட்டவை &gt; பிராக்சிகள்
-          என்பதற்குச் சென்று, தேர்ந்தெடுக்கப்பட்டுள்ள பிராக்சிகளைத் தேர்வுநீக்கவும்.</translation>
 <translation id="8205111949707227942">விருப்பத்தேர்வு: பயன்பாட்டு புள்ளிவிவரங்களையும், செயலிழப்பு புகார்களையும் தானாகவே Google க்கு அனுப்புவதன் மூலம் Chrome OS ஐ இன்னும் உருவாக்க உதவுக.</translation>
 <translation id="8227755444512189073"><ph name="SCHEME" /> இணைப்புகளைக் கையாளவதற்கு ஒரு வெளிப்புறப் பயன்பாட்டைத் தொடங்க Google Chrome தேவைப்படுகிறது. தேவையான இணைப்பு <ph name="PROTOLINK" /> ஆகும்.</translation>
 <translation id="8255190535488645436">Google Chrome உங்கள் கேமராவையும் மைக்ரோஃபோனையும் பயன்படுத்துகிறது.</translation>
@@ -262,7 +243,6 @@
 <translation id="8851136666856101339">முதன்மை</translation>
 <translation id="8862326446509486874">கணினி-சார்ந்த நிறுவலுக்கான முறையான உரிமைகள் உங்களிடம் இல்லை. அதனால் நிர்வாகியாக மீண்டும் நிறுவலை இயக்க முயற்சி செய்க.</translation>
 <translation id="8889942196804715220">Chrome ஆழ்ந்த காட்சி பயன்முறையில் மீண்டும் தொடங்கு</translation>
-<translation id="8987477933582888019">இணைய உலாவி</translation>
 <translation id="9026991721384951619">உங்கள் கணக்கின் உள்நுழைவு விவரங்கள் காலாவதியாகிவிட்டதால், உங்கள் தரவை Chrome OS ஆல் ஒத்திசைக்க முடியவில்லை.</translation>
 <translation id="9102715433345326100">இது தீங்கிழைக்கும் கோப்பு , இதை Chrome தடுத்துள்ளது.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />எச்சரிக்கை:<ph name="END_BOLD" /> நீட்டிப்புகள் உங்கள் உலாவல் வரலாற்றைப் பதிவுசெய்வதை Google Chrome ஆல் தடுக்க முடியவில்லை. மறைநிலைப் பயன்முறையில் இந்த நீட்டிப்பை முடக்க, இந்த விருப்பத்தைத் தேர்வுநீக்கம் செய்க.</translation>

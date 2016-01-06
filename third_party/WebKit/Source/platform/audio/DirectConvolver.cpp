@@ -26,12 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
-#if ENABLE(WEB_AUDIO)
-
 #include "platform/audio/DirectConvolver.h"
 
+#if ENABLE(WEB_AUDIO)
 #if OS(MACOSX)
 #include <Accelerate/Accelerate.h>
 #endif

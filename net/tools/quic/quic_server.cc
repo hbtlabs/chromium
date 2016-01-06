@@ -74,8 +74,8 @@ void QuicServer::Initialize() {
 
   // If an initial flow control window has not explicitly been set, then use a
   // sensible value for a server: 1 MB for session, 64 KB for each stream.
-  const uint32 kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
-  const uint32 kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
+  const uint32_t kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
+  const uint32_t kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
   if (config_.GetInitialStreamFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
     config_.SetInitialStreamFlowControlWindowToSend(
@@ -97,13 +97,11 @@ void QuicServer::Initialize() {
   QuicEpollClock clock(&epoll_server_);
 
   scoped_ptr<CryptoHandshakeMessage> scfg(
-      crypto_config_.AddDefaultConfig(
-          QuicRandom::GetInstance(), &clock,
-          QuicCryptoServerConfig::ConfigOptions()));
+      crypto_config_.AddDefaultConfig(QuicRandom::GetInstance(), &clock,
+                                      QuicCryptoServerConfig::ConfigOptions()));
 }
 
-QuicServer::~QuicServer() {
-}
+QuicServer::~QuicServer() {}
 
 bool QuicServer::Listen(const IPEndPoint& address) {
   port_ = address.port();
@@ -124,8 +122,8 @@ bool QuicServer::Listen(const IPEndPoint& address) {
   }
 
   int get_overflow = 1;
-  rc = setsockopt(
-      fd_, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow, sizeof(get_overflow));
+  rc = setsockopt(fd_, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow,
+                  sizeof(get_overflow));
 
   if (rc < 0) {
     DLOG(WARNING) << "Socket overflow detection not supported";
@@ -149,9 +147,8 @@ bool QuicServer::Listen(const IPEndPoint& address) {
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(address.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
                            &raw_addr_len));
-  rc = bind(fd_,
-            reinterpret_cast<const sockaddr*>(&raw_addr),
-            sizeof(raw_addr));
+  rc =
+      bind(fd_, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
     return false;
@@ -182,12 +179,9 @@ QuicDefaultPacketWriter* QuicServer::CreateWriter(int fd) {
 }
 
 QuicDispatcher* QuicServer::CreateQuicDispatcher() {
-  return new QuicDispatcher(
-      config_,
-      &crypto_config_,
-      supported_versions_,
-      new QuicDispatcher::DefaultPacketWriterFactory(),
-      new QuicEpollConnectionHelper(&epoll_server_));
+  return new QuicDispatcher(config_, &crypto_config_, supported_versions_,
+                            new QuicDispatcher::DefaultPacketWriterFactory(),
+                            new QuicEpollConnectionHelper(&epoll_server_));
 }
 
 void QuicServer::WaitForEvents() {

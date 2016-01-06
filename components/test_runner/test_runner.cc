@@ -4,9 +4,12 @@
 
 #include "components/test_runner/test_runner.h"
 
+#include <stddef.h>
 #include <limits>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "components/test_runner/mock_credential_manager_client.h"
@@ -272,6 +275,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetWindowIsKey(bool value);
   std::string PathToLocalResource(const std::string& path);
   void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
+  void EnableUseZoomForDSF(v8::Local<v8::Function> callback);
   void SetColorProfile(const std::string& name,
                        v8::Local<v8::Function> callback);
   void SetPOSIXLocale(const std::string& locale);
@@ -545,6 +549,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::PathToLocalResource)
       .SetMethod("setBackingScaleFactor",
                  &TestRunnerBindings::SetBackingScaleFactor)
+      .SetMethod("enableUseZoomForDSF",
+                 &TestRunnerBindings::EnableUseZoomForDSF)
       .SetMethod("setColorProfile", &TestRunnerBindings::SetColorProfile)
       .SetMethod("setPOSIXLocale", &TestRunnerBindings::SetPOSIXLocale)
       .SetMethod("setMIDIAccessorResult",
@@ -1345,6 +1351,12 @@ void TestRunnerBindings::SetBackingScaleFactor(
     double value, v8::Local<v8::Function> callback) {
   if (runner_)
     runner_->SetBackingScaleFactor(value, callback);
+}
+
+void TestRunnerBindings::EnableUseZoomForDSF(
+    v8::Local<v8::Function> callback) {
+  if (runner_)
+    runner_->EnableUseZoomForDSF(callback);
 }
 
 void TestRunnerBindings::SetColorProfile(
@@ -2859,6 +2871,11 @@ void TestRunner::SetBackingScaleFactor(double value,
   delegate_->PostTask(new InvokeCallbackTask(this, callback));
 }
 
+void TestRunner::EnableUseZoomForDSF(v8::Local<v8::Function> callback) {
+  delegate_->EnableUseZoomForDSF();
+  delegate_->PostTask(new InvokeCallbackTask(this, callback));
+}
+
 void TestRunner::SetColorProfile(const std::string& name,
                                  v8::Local<v8::Function> callback) {
   delegate_->SetDeviceColorProfile(name);
@@ -3027,7 +3044,7 @@ void TestRunner::CopyImageAtAndCapturePixelsAsyncThen(
 void TestRunner::GetManifestCallback(scoped_ptr<InvokeCallbackTask> task,
                                      const blink::WebURLResponse& response,
                                      const std::string& data) {
-  InvokeCallback(task.Pass());
+  InvokeCallback(std::move(task));
 }
 
 void TestRunner::CapturePixelsCallback(scoped_ptr<InvokeCallbackTask> task,
@@ -3071,7 +3088,7 @@ void TestRunner::CapturePixelsCallback(scoped_ptr<InvokeCallbackTask> task,
       &buffer, context->Global(), isolate);
 
   task->SetArguments(3, argv);
-  InvokeCallback(task.Pass());
+  InvokeCallback(std::move(task));
 }
 
 void TestRunner::DispatchBeforeInstallPromptCallback(
@@ -3090,7 +3107,7 @@ void TestRunner::DispatchBeforeInstallPromptCallback(
   argv[0] = v8::Boolean::New(isolate, canceled);
 
   task->SetArguments(1, argv);
-  InvokeCallback(task.Pass());
+  InvokeCallback(std::move(task));
 }
 
 void TestRunner::GetBluetoothManualChooserEventsCallback(
@@ -3112,7 +3129,7 @@ void TestRunner::GetBluetoothManualChooserEventsCallback(
 
   // Call the callback.
   task->SetArguments(1, arg);
-  InvokeCallback(task.Pass());
+  InvokeCallback(std::move(task));
 }
 
 void TestRunner::LocationChangeDone() {

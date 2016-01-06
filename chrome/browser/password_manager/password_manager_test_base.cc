@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -23,6 +24,7 @@
 #include "components/infobars/core/infobar_manager.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
@@ -195,8 +197,8 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
       password_manager::BuildPasswordStore<
           content::BrowserContext, password_manager::TestPasswordStore>);
   ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      password_manager::switches::kEnableAutomaticPasswordSaving));
+  ASSERT_FALSE(base::FeatureList::IsEnabled(
+      password_manager::features::kEnableAutomaticPasswordSaving));
 }
 
 void PasswordManagerBrowserTestBase::TearDownOnMainThread() {

@@ -19,6 +19,7 @@ executable("delegate_execute") {
   deps = [
     ":lib",
     ":version_resources",
+    "//base:base_static",
   ]
 }
 
@@ -43,7 +44,7 @@ source_set("lib") {
     "//base",
     "//breakpad:breakpad_handler",
     "//chrome/common:constants",
-    "//chrome/installer/util",
+    "//chrome/installer/util:with_no_strings",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",

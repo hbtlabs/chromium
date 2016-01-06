@@ -5,6 +5,8 @@
 #ifndef REMOTING_PROTOCOL_ICE_CONNECTION_TO_CLIENT_H_
 #define REMOTING_PROTOCOL_ICE_CONNECTION_TO_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/macros.h"
@@ -12,6 +14,7 @@
 #include "base/threading/thread_checker.h"
 #include "remoting/protocol/channel_dispatcher_base.h"
 #include "remoting/protocol/connection_to_client.h"
+#include "remoting/protocol/ice_transport.h"
 #include "remoting/protocol/session.h"
 
 namespace remoting {
@@ -29,10 +32,12 @@ class VideoFramePump;
 // stubs.
 class IceConnectionToClient : public ConnectionToClient,
                               public Session::EventHandler,
+                              public IceTransport::EventHandler,
                               public ChannelDispatcherBase::EventHandler {
  public:
   IceConnectionToClient(
       scoped_ptr<Session> session,
+      scoped_refptr<TransportContext> transport_context,
       scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner);
   ~IceConnectionToClient() override;
 
@@ -52,8 +57,11 @@ class IceConnectionToClient : public ConnectionToClient,
 
   // Session::EventHandler interface.
   void OnSessionStateChange(Session::State state) override;
-  void OnSessionRouteChange(const std::string& channel_name,
-                            const TransportRoute& route) override;
+
+  // IceTransport::EventHandler interface.
+  void OnIceTransportRouteChange(const std::string& channel_name,
+                                 const TransportRoute& route) override;
+  void OnIceTransportError(ErrorCode error) override;
 
   // ChannelDispatcherBase::EventHandler interface.
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
@@ -63,9 +71,6 @@ class IceConnectionToClient : public ConnectionToClient,
  private:
   void NotifyIfChannelsReady();
 
-  void Close(ErrorCode error);
-
-  // Stops writing in the channels.
   void CloseChannels();
 
   base::ThreadChecker thread_checker_;
@@ -73,10 +78,11 @@ class IceConnectionToClient : public ConnectionToClient,
   // Event handler for handling events sent from this object.
   ConnectionToClient::EventHandler* event_handler_;
 
-  // The libjingle channel used to send and receive data from the remote client.
   scoped_ptr<Session> session_;
 
   scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
+
+  IceTransport transport_;
 
   scoped_ptr<HostControlDispatcher> control_dispatcher_;
   scoped_ptr<HostEventDispatcher> event_dispatcher_;

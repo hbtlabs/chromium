@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/menu/menu_runner_impl.h"
 
+#include "build/build_config.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -22,7 +23,7 @@ namespace internal {
 #if !defined(OS_MACOSX)
 MenuRunnerImplInterface* MenuRunnerImplInterface::Create(
     ui::MenuModel* menu_model,
-    int32 run_types) {
+    int32_t run_types) {
   return new MenuRunnerImplAdapter(menu_model);
 }
 #endif
@@ -73,7 +74,7 @@ MenuRunner::RunResult MenuRunnerImpl::RunMenuAt(Widget* parent,
                                                 MenuButton* button,
                                                 const gfx::Rect& bounds,
                                                 MenuAnchorPosition anchor,
-                                                int32 run_types) {
+                                                int32_t run_types) {
   closing_event_time_ = base::TimeDelta();
   if (running_) {
     // Ignore requests to show the menu while it's already showing. MenuItemView
@@ -88,6 +89,7 @@ MenuRunner::RunResult MenuRunnerImpl::RunMenuAt(Widget* parent,
         controller->CancelAll();
         controller = NULL;
       }
+      controller->AddNestedDelegate(this);
     } else {
       // There's some other menu open and we're not nested. Cancel the menu.
       controller->CancelAll();
@@ -113,7 +115,7 @@ MenuRunner::RunResult MenuRunnerImpl::RunMenuAt(Widget* parent,
     controller = new MenuController(!for_drop_, this);
     owns_controller_ = true;
   }
-  controller->set_async_run(async_);
+  controller->SetAsyncRun(async_);
   controller->set_is_combobox((run_types & MenuRunner::COMBOBOX) != 0);
   controller_ = controller;
   menu_->set_controller(controller_);

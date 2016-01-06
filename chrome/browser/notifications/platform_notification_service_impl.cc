@@ -4,11 +4,14 @@
 
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
@@ -274,7 +277,7 @@ void PlatformNotificationServiceImpl::DisplayNotification(
   DCHECK_EQ(0u, notification_data.actions.size());
 
   NotificationObjectProxy* proxy =
-      new NotificationObjectProxy(browser_context, delegate.Pass());
+      new NotificationObjectProxy(browser_context, std::move(delegate));
   Notification notification = CreateNotificationFromData(
       profile, origin, icon, notification_data, proxy);
 

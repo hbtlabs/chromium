@@ -153,16 +153,20 @@ void AnimationPlayer::RemoveAnimation(int animation_id) {
   }
 }
 
-void AnimationPlayer::PushPropertiesTo(AnimationPlayer* player_impl) {
-  if (!element_animations_) {
-    if (player_impl->element_animations())
-      player_impl->DetachLayer();
-    return;
-  }
+void AnimationPlayer::AbortAnimation(int animation_id) {
+  DCHECK(element_animations_);
+  element_animations_->layer_animation_controller()->AbortAnimation(
+      animation_id);
+  SetNeedsCommit();
+}
 
-  DCHECK(layer_id_);
-  if (!player_impl->element_animations())
-    player_impl->AttachLayer(layer_id_);
+void AnimationPlayer::PushPropertiesTo(AnimationPlayer* player_impl) {
+  if (layer_id_ != player_impl->layer_id()) {
+    if (player_impl->layer_id())
+      player_impl->DetachLayer();
+    if (layer_id_)
+      player_impl->AttachLayer(layer_id_);
+  }
 }
 
 void AnimationPlayer::NotifyAnimationStarted(

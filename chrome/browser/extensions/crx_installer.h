@@ -10,6 +10,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/version.h"
@@ -197,9 +198,6 @@ class CrxInstaller
 
   void set_install_immediately(bool val) {
     set_install_flag(kInstallFlagInstallImmediately, val);
-  }
-  void set_is_ephemeral(bool val) {
-    set_install_flag(kInstallFlagIsEphemeral, val);
   }
   void set_do_not_sync(bool val) {
     set_install_flag(kInstallFlagDoNotSync, val);

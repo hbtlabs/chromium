@@ -5,13 +5,15 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_EMBEDDED_WORKER_INSTANCE_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_EMBEDDED_WORKER_INSTANCE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -102,7 +104,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   // Starts the worker. It is invalid to call this when the worker is not in
   // STOPPED status. |callback| is invoked after the worker script has been
   // started and evaluated, or when an error occurs.
-  void Start(int64 service_worker_version_id,
+  void Start(int64_t service_worker_version_id,
              const GURL& scope,
              const GURL& script_url,
              const StatusCallback& callback);
@@ -260,7 +262,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance {
   Status status_;
   StartingPhase starting_phase_;
 
-  // Current running information. -1 indicates the worker is not running.
+  // Current running information.
   int process_id_;
   int thread_id_;
   scoped_ptr<ServiceRegistryImpl> service_registry_;

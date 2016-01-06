@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -26,6 +28,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
+#include "extensions/test/extension_test_message_listener.h"
 #include "net/url_request/test_url_request_interceptor.h"
 #include "sync/protocol/extension_specifics.pb.h"
 #include "sync/protocol/sync.pb.h"
@@ -73,7 +76,7 @@ class ExtensionDisabledGlobalErrorTest : public ExtensionBrowserTest {
   // Caution: currently only supports one error at a time.
   GlobalError* GetExtensionDisabledGlobalError() {
     return GlobalErrorServiceFactory::GetForProfile(profile())->
-        GetGlobalErrorByMenuItemCommandID(IDC_EXTENSION_DISABLED_FIRST);
+        GetGlobalErrorByMenuItemCommandID(IDC_EXTENSION_INSTALL_ERROR_FIRST);
   }
 
   // Install the initial version, which should happen just fine.
@@ -129,10 +132,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionDisabledGlobalErrorTest, AcceptPermissions) {
   ASSERT_TRUE(GetExtensionDisabledGlobalError());
   const size_t size_before = registry_->enabled_extensions().size();
 
+  ExtensionTestMessageListener listener("v2.onInstalled", false);
+  listener.set_failure_message("FAILED");
   service_->GrantPermissionsAndEnableExtension(extension);
   EXPECT_EQ(size_before + 1, registry_->enabled_extensions().size());
   EXPECT_EQ(0u, registry_->disabled_extensions().size());
   ASSERT_FALSE(GetExtensionDisabledGlobalError());
+  // Expect onInstalled event to fire.
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
 }
 
 // Tests uninstalling an extension that was disabled due to higher permissions.

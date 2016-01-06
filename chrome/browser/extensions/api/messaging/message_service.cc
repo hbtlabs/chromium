@@ -4,14 +4,20 @@
 
 #include "chrome/browser/extensions/api/messaging/message_service.h"
 
+#include <stdint.h>
+#include <limits>
+#include <utility>
+
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/messaging/extension_message_port.h"
 #include "chrome/browser/extensions/api/messaging/incognito_connectability.h"
@@ -169,7 +175,7 @@ struct MessageService::OpenChannelParams {
         include_tls_channel_id(include_tls_channel_id),
         include_guest_process_info(include_guest_process_info) {
     if (source_tab)
-      this->source_tab = source_tab.Pass();
+      this->source_tab = std::move(source_tab);
   }
 
  private:
@@ -200,8 +206,8 @@ content::RenderProcessHost*
 void MessageService::AllocatePortIdPair(int* port1, int* port2) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  unsigned channel_id =
-      static_cast<unsigned>(g_next_channel_id.GetNext()) % (kint32max/2);
+  unsigned channel_id = static_cast<unsigned>(g_next_channel_id.GetNext()) %
+                        (std::numeric_limits<int32_t>::max() / 2);
   unsigned port1_id = channel_id * 2;
   unsigned port2_id = channel_id * 2 + 1;
 
@@ -356,7 +362,7 @@ void MessageService::OpenChannelToExtension(
   }
 
   scoped_ptr<OpenChannelParams> params(new OpenChannelParams(
-      source_process_id, source_tab.Pass(), source_frame_id, -1,
+      source_process_id, std::move(source_tab), source_frame_id, -1,
       -1,  // no target_tab_id/target_frame_id for connections to extensions
       nullptr, receiver_port_id, source_extension_id, target_extension_id,
       source_url, channel_name, include_tls_channel_id,
@@ -376,7 +382,7 @@ void MessageService::OpenChannelToExtension(
     //   enabling in incognito. In practice this means platform apps only.
     if (!is_web_connection || IncognitoInfo::IsSplitMode(target_extension) ||
         util::CanBeIncognitoEnabled(target_extension)) {
-      OnOpenChannelAllowed(params.Pass(), false);
+      OnOpenChannelAllowed(std::move(params), false);
       return;
     }
 
@@ -394,7 +400,7 @@ void MessageService::OpenChannelToExtension(
           event_router->ExtensionHasEventListener(target_extension_id, *event);
     }
     if (!has_event_listener) {
-      OnOpenChannelAllowed(params.Pass(), false);
+      OnOpenChannelAllowed(std::move(params), false);
       return;
     }
 
@@ -406,7 +412,7 @@ void MessageService::OpenChannelToExtension(
     return;
   }
 
-  OnOpenChannelAllowed(params.Pass(), true);
+  OnOpenChannelAllowed(std::move(params), true);
 }
 
 void MessageService::OpenChannelToNativeApp(
@@ -475,7 +481,7 @@ void MessageService::OpenChannelToNativeApp(
     return;
   }
   channel->receiver.reset(new NativeMessagePort(
-      weak_factory_.GetWeakPtr(), receiver_port_id, native_host.Pass()));
+      weak_factory_.GetWeakPtr(), receiver_port_id, std::move(native_host)));
 
   // Keep the opener alive until the channel is closed.
   channel->opener->IncrementLazyKeepaliveCount();
@@ -559,7 +565,7 @@ void MessageService::OpenChannelToTab(int source_process_id,
       channel_name,
       false,    // Connections to tabs don't get TLS channel IDs.
       false));  // Connections to tabs aren't webview guests.
-  OpenChannelImpl(contents->GetBrowserContext(), params.Pass(), extension,
+  OpenChannelImpl(contents->GetBrowserContext(), std::move(params), extension,
                   false /* did_enqueue */);
 }
 
@@ -605,11 +611,11 @@ void MessageService::OpenChannelImpl(BrowserContext* browser_context,
   // Send the connect event to the receiver.  Give it the opener's port ID (the
   // opener has the opposite port ID).
   channel->receiver->DispatchOnConnect(
-      params->receiver_port_id, params->channel_name, params->source_tab.Pass(),
-      params->source_frame_id, params->target_tab_id, params->target_frame_id,
-      guest_process_id, guest_render_frame_routing_id,
-      params->source_extension_id, params->target_extension_id,
-      params->source_url, params->tls_channel_id);
+      params->receiver_port_id, params->channel_name,
+      std::move(params->source_tab), params->source_frame_id,
+      params->target_tab_id, params->target_frame_id, guest_process_id,
+      guest_render_frame_routing_id, params->source_extension_id,
+      params->target_extension_id, params->source_url, params->tls_channel_id);
 
   // Report the event to the event router, if the target is an extension.
   //
@@ -927,7 +933,7 @@ void MessageService::OnOpenChannelAllowed(scoped_ptr<OpenChannelParams> params,
   // page.
   if (!MaybeAddPendingLazyBackgroundPageOpenChannelTask(
           context, target_extension, &params, pending_messages)) {
-    OpenChannelImpl(context, params.Pass(), target_extension,
+    OpenChannelImpl(context, std::move(params), target_extension,
                     false /* did_enqueue */);
     DispatchPendingMessages(pending_messages, channel_id);
   }
@@ -969,7 +975,7 @@ void MessageService::GotChannelID(scoped_ptr<OpenChannelParams> params,
 
   if (!MaybeAddPendingLazyBackgroundPageOpenChannelTask(
           context, target_extension, &params, pending_messages)) {
-    OpenChannelImpl(context, params.Pass(), target_extension,
+    OpenChannelImpl(context, std::move(params), target_extension,
                     false /* did_enqueue */);
     DispatchPendingMessages(pending_messages, channel_id);
   }
@@ -987,7 +993,7 @@ void MessageService::PendingLazyBackgroundPageOpenChannel(
   params->receiver.reset(new ExtensionMessagePort(host->render_process_host(),
                                                   MSG_ROUTING_CONTROL,
                                                   params->target_extension_id));
-  OpenChannelImpl(host->browser_context(), params.Pass(), host->extension(),
+  OpenChannelImpl(host->browser_context(), std::move(params), host->extension(),
                   true /* did_enqueue */);
 }
 

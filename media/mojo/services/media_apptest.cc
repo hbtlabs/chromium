@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
@@ -104,7 +107,8 @@ class MediaAppTest : public mojo::test::ApplicationTestBase {
     EXPECT_CALL(*this, OnRendererInitialized(expected_result))
         .Times(Exactly(1))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
-    renderer_->Initialize(client_ptr.Pass(), nullptr, video_stream.Pass(),
+    renderer_->Initialize(std::move(client_ptr), nullptr,
+                          std::move(video_stream),
                           base::Bind(&MediaAppTest::OnRendererInitialized,
                                      base::Unretained(this)));
   }

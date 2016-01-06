@@ -4,6 +4,8 @@
 
 #include "mash/wm/layout_manager.h"
 
+#include <stdint.h>
+
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
@@ -12,14 +14,21 @@ namespace mash {
 namespace wm {
 
 LayoutManager::~LayoutManager() {
-  owner_->RemoveObserver(this);
-  for (auto child : owner_->children())
-    child->RemoveObserver(this);
+  Uninstall();
 }
 
 LayoutManager::LayoutManager(mus::Window* owner) : owner_(owner) {
   owner_->AddObserver(this);
   DCHECK(owner->children().empty());
+}
+
+void LayoutManager::Uninstall() {
+  if (!owner_)
+    return;
+  owner_->RemoveObserver(this);
+  for (auto child : owner_->children())
+    child->RemoveObserver(this);
+  owner_ = nullptr;
 }
 
 void LayoutManager::OnTreeChanged(
@@ -35,6 +44,11 @@ void LayoutManager::OnTreeChanged(
     params.target->RemoveObserver(this);
     WindowRemoved(params.target);
   }
+}
+
+void LayoutManager::OnWindowDestroying(mus::Window* window) {
+  if (owner_ == window)
+    Uninstall();
 }
 
 void LayoutManager::OnWindowBoundsChanged(mus::Window* window,

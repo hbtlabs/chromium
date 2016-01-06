@@ -7,7 +7,7 @@
 namespace gfx {
 
 base::trace_event::MemoryAllocatorDumpGuid GetGpuMemoryBufferGUIDForTracing(
-    uint64 tracing_process_id,
+    uint64_t tracing_process_id,
     GpuMemoryBufferId buffer_id) {
   // TODO(ericrk): Currently this function just wraps
   // GetGenericSharedMemoryGUIDForTracing, we may want to special case this if
@@ -19,5 +19,7 @@ base::trace_event::MemoryAllocatorDumpGuid GetGpuMemoryBufferGUIDForTracing(
 GpuMemoryBufferHandle::GpuMemoryBufferHandle()
     : type(EMPTY_BUFFER), id(0), handle(base::SharedMemory::NULLHandle()) {
 }
+
+GpuMemoryBufferHandle::~GpuMemoryBufferHandle() {}
 
 }  // namespace gfx

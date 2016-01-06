@@ -23,6 +23,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
@@ -52,6 +53,7 @@
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/registry_entry.h"
+#include "chrome/installer/util/scoped_user_protocol_entry.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 
@@ -613,28 +615,11 @@ void GetXPStyleDefaultBrowserUserEntries(BrowserDistribution* dist,
   entries->push_back(new RegistryEntry(start_menu, app_name));
 }
 
-// This method converts all the RegistryEntries from the given list to
-// Set/CreateRegWorkItems and runs them using WorkItemList.
-bool AddRegistryEntries(HKEY root, const ScopedVector<RegistryEntry>& entries) {
-  scoped_ptr<WorkItemList> items(WorkItem::CreateWorkItemList());
-
-  for (ScopedVector<RegistryEntry>::const_iterator itr = entries.begin();
-       itr != entries.end(); ++itr)
-    (*itr)->AddToWorkItemList(root, items.get());
-
-  // Apply all the registry changes and if there is a problem, rollback
-  if (!items->Do()) {
-    items->Rollback();
-    return false;
-  }
-  return true;
-}
-
 // Checks that all |entries| are present on this computer (or absent if their
 // |removal_flag_| is set). |look_for_in| is passed to
 // RegistryEntry::ExistsInRegistry(). Documentation for it can be found there.
 bool AreEntriesAsDesired(const ScopedVector<RegistryEntry>& entries,
-                          uint32 look_for_in) {
+                         uint32_t look_for_in) {
   for (const auto* entry : entries) {
     if (entry->ExistsInRegistry(look_for_in) != !entry->IsFlaggedForRemoval())
       return false;
@@ -655,7 +640,7 @@ bool AreEntriesAsDesired(const ScopedVector<RegistryEntry>& entries,
 bool IsChromeRegistered(BrowserDistribution* dist,
                         const base::FilePath& chrome_exe,
                         const base::string16& suffix,
-                        uint32 look_for_in) {
+                        uint32_t look_for_in) {
   ScopedVector<RegistryEntry> entries;
   GetChromeProgIdEntries(dist, chrome_exe, suffix, &entries);
   GetShellIntegrationEntries(dist, chrome_exe, suffix, &entries);
@@ -669,7 +654,7 @@ bool IsChromeRegistered(BrowserDistribution* dist,
 bool IsChromeRegisteredForProtocol(BrowserDistribution* dist,
                                    const base::string16& suffix,
                                    const base::string16& protocol,
-                                   uint32 look_for_in) {
+                                   uint32_t look_for_in) {
   ScopedVector<RegistryEntry> entries;
   GetProtocolCapabilityEntries(dist, suffix, protocol, &entries);
   return AreEntriesAsDesired(entries, look_for_in);
@@ -880,14 +865,14 @@ bool RegisterChromeAsDefaultXPStyle(BrowserDistribution* dist,
 
   // Change the default browser for current user.
   if ((shell_change & ShellUtil::CURRENT_USER) &&
-      !AddRegistryEntries(HKEY_CURRENT_USER, entries)) {
+      !ShellUtil::AddRegistryEntries(HKEY_CURRENT_USER, entries)) {
     ret = false;
     LOG(ERROR) << "Could not make Chrome default browser (XP/current user).";
   }
 
   // Chrome as default browser at system level.
   if ((shell_change & ShellUtil::SYSTEM_LEVEL) &&
-      !AddRegistryEntries(HKEY_LOCAL_MACHINE, entries)) {
+      !ShellUtil::AddRegistryEntries(HKEY_LOCAL_MACHINE, entries)) {
     ret = false;
     LOG(ERROR) << "Could not make Chrome default browser (XP/system level).";
   }
@@ -912,7 +897,7 @@ bool RegisterChromeAsDefaultProtocolClientXPStyle(
           dist->GetIconIndex(BrowserDistribution::SHORTCUT_CHROME)));
   GetXPStyleUserProtocolEntries(protocol, chrome_icon, chrome_open, &entries);
   // Change the default protocol handler for current user.
-  if (!AddRegistryEntries(HKEY_CURRENT_USER, entries)) {
+  if (!ShellUtil::AddRegistryEntries(HKEY_CURRENT_USER, entries)) {
     LOG(ERROR) << "Could not make Chrome default protocol client (XP).";
     return false;
   }
@@ -1640,8 +1625,7 @@ void ShellUtil::GetRegisteredBrowsers(
   // HKCU has precedence over HKLM for these registrations: http://goo.gl/xjczJ.
   // Look in HKCU second to override any identical values found in HKLM.
   const HKEY roots[] = { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER };
-  for (int i = 0; i < arraysize(roots); ++i) {
-    const HKEY root = roots[i];
+  for (const HKEY root : roots) {
     for (base::win::RegistryKeyIterator iter(root, base_key.c_str());
          iter.Valid(); ++iter) {
       client_path.assign(base_key).append(1, L'\\').append(iter.Name());
@@ -1920,6 +1904,7 @@ bool ShellUtil::ShowMakeChromeDefaultSystemUI(
       // "Set Program Associations" section of the "Default Programs"
       // control panel, which is a mess, or pop the concise "How you want to
       // open webpages?" dialog.  We choose the latter.
+      ScopedUserProtocolEntry user_protocol_entry;
       succeeded = LaunchSelectDefaultProtocolHandlerDialog(L"http");
     } else {
       // On Windows 10, you can't even launch the associations dialog.
@@ -2049,8 +2034,8 @@ bool ShellUtil::RegisterChromeBrowser(BrowserDistribution* dist,
   // install is also present, it will lead IsChromeRegistered() to think this
   // system-level install isn't registered properly as it is shadowed by the
   // user-level install's registrations).
-  uint32 look_for_in = user_level ?
-      RegistryEntry::LOOK_IN_HKCU_THEN_HKLM : RegistryEntry::LOOK_IN_HKLM;
+  uint32_t look_for_in = user_level ? RegistryEntry::LOOK_IN_HKCU_THEN_HKLM
+                                    : RegistryEntry::LOOK_IN_HKLM;
 
   // Check if chrome is already registered with this suffix.
   if (IsChromeRegistered(dist, chrome_exe, suffix, look_for_in))
@@ -2131,8 +2116,8 @@ bool ShellUtil::RegisterChromeForProtocol(BrowserDistribution* dist,
   // install is also present, it could lead IsChromeRegisteredForProtocol() to
   // think this system-level install isn't registered properly as it may be
   // shadowed by the user-level install's registrations).
-  uint32 look_for_in = user_level ?
-      RegistryEntry::LOOK_IN_HKCU_THEN_HKLM : RegistryEntry::LOOK_IN_HKLM;
+  uint32_t look_for_in = user_level ? RegistryEntry::LOOK_IN_HKCU_THEN_HKLM
+                                    : RegistryEntry::LOOK_IN_HKLM;
 
   // Check if chrome is already registered with this suffix.
   if (IsChromeRegisteredForProtocol(dist, suffix, protocol, look_for_in))
@@ -2241,7 +2226,7 @@ bool ShellUtil::GetOldUserSpecificRegistrySuffix(base::string16* suffix) {
   return true;
 }
 
-base::string16 ShellUtil::ByteArrayToBase32(const uint8* bytes, size_t size) {
+base::string16 ShellUtil::ByteArrayToBase32(const uint8_t* bytes, size_t size) {
   static const char kEncoding[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
   // Eliminate special cases first.
@@ -2268,7 +2253,7 @@ base::string16 ShellUtil::ByteArrayToBase32(const uint8* bytes, size_t size) {
 
   // A bit stream which will be read from the left and appended to from the
   // right as it's emptied.
-  uint16 bit_stream = (bytes[0] << 8) + bytes[1];
+  uint16_t bit_stream = (bytes[0] << 8) + bytes[1];
   size_t next_byte_index = 2;
   int free_bits = 0;
   while (free_bits < 16) {
@@ -2341,4 +2326,21 @@ bool ShellUtil::DeleteFileAssociations(const base::string16& prog_id) {
   // TODO(mgiuca): Remove the extension association entries. This requires that
   // the extensions associated with a particular prog_id are stored in that
   // prog_id's key.
+}
+
+// static
+bool ShellUtil::AddRegistryEntries(HKEY root,
+                                   const ScopedVector<RegistryEntry>& entries) {
+  scoped_ptr<WorkItemList> items(WorkItem::CreateWorkItemList());
+
+  for (ScopedVector<RegistryEntry>::const_iterator itr = entries.begin();
+       itr != entries.end(); ++itr)
+    (*itr)->AddToWorkItemList(root, items.get());
+
+  // Apply all the registry changes and if there is a problem, rollback
+  if (!items->Do()) {
+    items->Rollback();
+    return false;
+  }
+  return true;
 }

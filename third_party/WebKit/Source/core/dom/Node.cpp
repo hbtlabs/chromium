@@ -22,7 +22,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/dom/Node.h"
 
 #include "bindings/core/v8/DOMDataStore.h"
@@ -79,6 +78,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBox.h"
 #include "core/page/ContextMenuController.h"
@@ -960,7 +960,12 @@ bool Node::canStartSelection() const
 
 bool Node::canParticipateInComposedTree() const
 {
-    return !isShadowRoot() && !isActiveInsertionPoint(*this);
+    return !isShadowRoot() && !isSlotOrActiveInsertionPoint();
+}
+
+bool Node::isSlotOrActiveInsertionPoint() const
+{
+    return isHTMLSlotElement(*this) || isActiveInsertionPoint(*this);
 }
 
 Element* Node::shadowHost() const
@@ -1055,9 +1060,9 @@ Document* Node::ownerDocument() const
     return doc == this ? nullptr : doc;
 }
 
-KURL Node::baseURI() const
+const KURL& Node::baseURI() const
 {
-    return parentNode() ? parentNode()->baseURI() : KURL();
+    return document().baseURL();
 }
 
 bool Node::isEqualNode(Node* other) const
@@ -2201,6 +2206,19 @@ PassRefPtrWillBeRawPtr<StaticNodeList> Node::getDestinationInsertionPoints()
         filteredInsertionPoints.append(insertionPoint);
     }
     return StaticNodeList::adopt(filteredInsertionPoints);
+}
+
+HTMLSlotElement* Node::assignedSlot() const
+{
+    ASSERT(!needsDistributionRecalc());
+    Element* parent = parentElement();
+    if (!parent)
+        return nullptr;
+    if (ElementShadow* shadow = parent->shadow()) {
+        if (shadow->isV1() && shadow->isOpen())
+            return shadow->assignedSlotFor(*this);
+    }
+    return nullptr;
 }
 
 void Node::setFocus(bool flag)

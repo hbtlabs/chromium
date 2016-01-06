@@ -57,10 +57,7 @@ config("media_dependent_config") {
     ]
   }
   if (media_use_ffmpeg && is_android) {
-    defines += [
-      "ENABLE_MEDIA_PIPELINE_ON_ANDROID",
-      "DISABLE_FFMPEG_VIDEO_DECODERS",
-    ]
+    defines += [ "DISABLE_FFMPEG_VIDEO_DECODERS" ]
   }
 }
 
@@ -169,6 +166,10 @@ component("media") {
     "cdm/aes_decryptor.h",
     "cdm/cdm_adapter.cc",
     "cdm/cdm_adapter.h",
+    "cdm/cdm_buffer_impl.cc",
+    "cdm/cdm_buffer_impl.h",
+    "cdm/cdm_helpers.cc",
+    "cdm/cdm_helpers.h",
     "cdm/default_cdm_factory.cc",
     "cdm/default_cdm_factory.h",
     "cdm/json_web_key.cc",
@@ -395,6 +396,16 @@ component("media") {
       "//media/base/android:media_jni_headers",
       "//media/base/android:video_capture_jni_headers",
     ]
+
+    # Only 64 bit builds are using android-21 NDK library, check common.gypi
+    if (current_cpu == "arm64" || current_cpu == "x64" ||
+        current_cpu == "mips64el") {
+      sources += [
+        "base/android/ndk_media_codec_bridge.cc",
+        "base/android/ndk_media_codec_bridge.h",
+        "base/android/ndk_media_codec_wrapper.cc",
+      ]
+    }
     allow_circular_includes_from = [ "//media/base/android" ]
   }
 
@@ -604,6 +615,8 @@ test("media_unittests") {
     "capture/video/video_capture_device_unittest.cc",
     "capture/webm_muxer_unittest.cc",
     "cdm/aes_decryptor_unittest.cc",
+    "cdm/external_clear_key_test_helper.cc",
+    "cdm/external_clear_key_test_helper.h",
     "cdm/json_web_key_unittest.cc",
     "filters/audio_clock_unittest.cc",
     "filters/audio_decoder_selector_unittest.cc",
@@ -702,19 +715,22 @@ test("media_unittests") {
   if (media_use_ffmpeg) {
     sources += [
       "ffmpeg/ffmpeg_common_unittest.cc",
-      "filters/audio_decoder_unittest.cc",
-      "filters/ffmpeg_demuxer_unittest.cc",
+      "filters/blocking_url_protocol_unittest.cc",
       "filters/ffmpeg_glue_unittest.cc",
+      "filters/in_memory_url_protocol_unittest.cc",
     ]
 
-    # Even if FFmpeg is enabled we do not want these files on Android.
-    # TODO(watk): Refactor tests that could be made to run on Android.
     if (!is_android) {
       sources += [
+        # These tests are confused by Android always having proprietary
+        # codecs enabled, but ffmpeg_branding=Chromium.  These should be
+        # fixed, http://crbug.com/570762.
+        "filters/audio_decoder_unittest.cc",
         "filters/audio_file_reader_unittest.cc",
-        "filters/blocking_url_protocol_unittest.cc",
+        "filters/ffmpeg_demuxer_unittest.cc",
+
+        # FFmpeg on Android does not include video decoders.
         "filters/ffmpeg_video_decoder_unittest.cc",
-        "filters/in_memory_url_protocol_unittest.cc",
       ]
     }
   }
@@ -805,6 +821,15 @@ test("media_perftests") {
   }
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("audio_unittests_run") {
+  testonly = true
+  deps = [
+    ":audio_unittests",
+  ]
+}
+
 # For running the subset of media_unittests that might require audio hardware
 # separately on GPU bots. media_unittests includes these too.
 test("audio_unittests") {
@@ -865,7 +890,9 @@ component("shared_memory_support") {
   ]
 }
 
-if (media_use_ffmpeg) {
+# TODO(watk): Refactor tests that could be made to run on Android. See
+# http://crbug.com/570762
+if (media_use_ffmpeg && !is_android) {
   test("ffmpeg_regression_tests") {
     sources = [
       "base/run_all_unittests.cc",

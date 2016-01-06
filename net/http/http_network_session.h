@@ -5,11 +5,13 @@
 #ifndef NET_HTTP_HTTP_NETWORK_SESSION_H_
 #define NET_HTTP_HTTP_NETWORK_SESSION_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -79,8 +81,8 @@ class NET_EXPORT HttpNetworkSession
     HostMappingRules* host_mapping_rules;
     SocketPerformanceWatcherFactory* socket_performance_watcher_factory;
     bool ignore_certificate_errors;
-    uint16 testing_fixed_http_port;
-    uint16 testing_fixed_https_port;
+    uint16_t testing_fixed_http_port;
+    uint16_t testing_fixed_https_port;
     bool enable_tcp_fast_open_for_ssl;
 
     // Compress SPDY headers.
@@ -112,6 +114,9 @@ class NET_EXPORT HttpNetworkSession
 
     // Enables NPN support.  Note that ALPN is always enabled.
     bool enable_npn;
+
+    // Enables Brotli Content-Encoding support.
+    bool enable_brotli;
 
     // Enables QUIC support.
     bool enable_quic;
@@ -174,6 +179,8 @@ class NET_EXPORT HttpNetworkSession
     bool quic_close_sessions_on_ip_change;
     // Specifes QUIC idle connection state lifetime.
     int quic_idle_connection_timeout_seconds;
+    // If true, disable preconnections if QUIC can do 0RTT.
+    bool quic_disable_preconnect_if_0rtt;
     ProxyDelegate* proxy_delegate;
   };
 

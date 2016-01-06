@@ -5,11 +5,13 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
@@ -103,11 +105,11 @@ class CONTENT_EXPORT BrowserAccessibility {
 
   // Returns the number of children of this object, or 0 if PlatformIsLeaf()
   // returns true.
-  uint32 PlatformChildCount() const;
+  uint32_t PlatformChildCount() const;
 
   // Return a pointer to the child at the given index, or NULL for an
   // invalid index. Returns NULL if PlatformIsLeaf() returns true.
-  BrowserAccessibility* PlatformGetChild(uint32 child_index) const;
+  BrowserAccessibility* PlatformGetChild(uint32_t child_index) const;
 
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to the
@@ -137,6 +139,10 @@ class CONTENT_EXPORT BrowserAccessibility {
   // Same as GetLocalBoundsForRange, in screen coordinates. Only valid when
   // the role is WebAXRoleStaticText.
   gfx::Rect GetGlobalBoundsForRange(int start, int len) const;
+
+  // This is to handle the cases such as ARIA textbox, where the value should
+  // be calculated from the object's inner text.
+  base::string16 GetValue() const;
 
   // Searches in the given text and from the given offset until the start of
   // the next or previous word is found and returns its position.
@@ -184,17 +190,18 @@ class CONTENT_EXPORT BrowserAccessibility {
   // reflect the accessibility tree that should be exposed on each platform.
   // Use PlatformChildCount and PlatformGetChild to implement platform
   // accessibility APIs.
-  uint32 InternalChildCount() const;
-  BrowserAccessibility* InternalGetChild(uint32 child_index) const;
+  uint32_t InternalChildCount() const;
+  BrowserAccessibility* InternalGetChild(uint32_t child_index) const;
+  BrowserAccessibility* InternalGetParent() const;
 
   BrowserAccessibility* GetParent() const;
-  int32 GetIndexInParent() const;
+  int32_t GetIndexInParent() const;
 
-  int32 GetId() const;
+  int32_t GetId() const;
   const ui::AXNodeData& GetData() const;
   gfx::Rect GetLocation() const;
-  int32 GetRole() const;
-  int32 GetState() const;
+  int32_t GetRole() const;
+  int32_t GetState() const;
 
   typedef base::StringPairs HtmlAttributes;
   const HtmlAttributes& GetHtmlAttributes() const;
@@ -254,10 +261,10 @@ class CONTENT_EXPORT BrowserAccessibility {
       ui::AXStringAttribute attribute) const;
 
   bool HasIntListAttribute(ui::AXIntListAttribute attribute) const;
-  const std::vector<int32>& GetIntListAttribute(
+  const std::vector<int32_t>& GetIntListAttribute(
       ui::AXIntListAttribute attribute) const;
   bool GetIntListAttribute(ui::AXIntListAttribute attribute,
-                           std::vector<int32>* value) const;
+                           std::vector<int32_t>* value) const;
 
   // Retrieve the value of a html attribute from the attribute map and
   // returns true if found.
@@ -314,9 +321,8 @@ class CONTENT_EXPORT BrowserAccessibility {
   ui::AXNode* node_;
 
  private:
-  // Return the sum of the lengths of all static text descendants,
-  // including this object if it's static text.
-  int GetStaticTextLenRecursive() const;
+  base::string16 GetInnerText() const;
+  int GetInnerTextLength() const;
 
   // If a bounding rectangle is empty, compute it based on the union of its
   // children, since most accessibility APIs don't like elements with no

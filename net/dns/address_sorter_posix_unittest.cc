@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
 #include "net/base/test_completion_callback.h"
@@ -43,8 +44,8 @@ class TestUDPClientSocket : public DatagramClientSocket {
     NOTIMPLEMENTED();
     return OK;
   }
-  int SetReceiveBufferSize(int32) override { return OK; }
-  int SetSendBufferSize(int32) override { return OK; }
+  int SetReceiveBufferSize(int32_t) override { return OK; }
+  int SetSendBufferSize(int32_t) override { return OK; }
 
   void Close() override {}
   int GetPeerAddress(IPEndPoint* address) const override {
@@ -59,7 +60,14 @@ class TestUDPClientSocket : public DatagramClientSocket {
   }
   int BindToNetwork(NetworkChangeNotifier::NetworkHandle network) override {
     NOTIMPLEMENTED();
-    return OK;
+    return ERR_NOT_IMPLEMENTED;
+  }
+  int BindToDefaultNetwork() override {
+    NOTIMPLEMENTED();
+    return ERR_NOT_IMPLEMENTED;
+  }
+  NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override {
+    return NetworkChangeNotifier::kInvalidNetworkHandle;
   }
 
   int Connect(const IPEndPoint& remote) override {

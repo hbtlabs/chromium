@@ -4,13 +4,16 @@
 
 #include "chrome/renderer/chrome_render_process_observer.h"
 
+#include <stddef.h>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -20,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -120,10 +124,11 @@ static const int kWaitForWorkersStatsTimeoutMS = 20;
 
 class ResourceUsageReporterImpl : public ResourceUsageReporter {
  public:
-  ResourceUsageReporterImpl(
-      base::WeakPtr<ChromeRenderProcessObserver> observer,
-      mojo::InterfaceRequest<ResourceUsageReporter> req)
-      : binding_(this, req.Pass()), observer_(observer), weak_factory_(this) {}
+  ResourceUsageReporterImpl(base::WeakPtr<ChromeRenderProcessObserver> observer,
+                            mojo::InterfaceRequest<ResourceUsageReporter> req)
+      : binding_(this, std::move(req)),
+        observer_(observer),
+        weak_factory_(this) {}
   ~ResourceUsageReporterImpl() override {}
 
  private:
@@ -154,7 +159,7 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
 
   void SendResults() {
     if (!callback_.is_null())
-      callback_.Run(usage_data_.Pass());
+      callback_.Run(std::move(usage_data_));
     callback_.reset();
     weak_factory_.InvalidateWeakPtrs();
     workers_to_go_ = 0;
@@ -216,7 +221,7 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
 void CreateResourceUsageReporter(
     base::WeakPtr<ChromeRenderProcessObserver> observer,
     mojo::InterfaceRequest<ResourceUsageReporter> request) {
-  new ResourceUsageReporterImpl(observer, request.Pass());
+  new ResourceUsageReporterImpl(observer, std::move(request));
 }
 
 }  // namespace

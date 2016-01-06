@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/parser/CSSSelectorParser.h"
 
 #include "core/css/CSSSelectorList.h"
@@ -39,6 +38,22 @@ static void recordSelectorStats(const CSSParserContext& context, const CSSSelect
             case CSSSelector::PseudoFullScreen:
                 feature = UseCounter::CSSSelectorPseudoFullScreen;
                 break;
+            case CSSSelector::PseudoListBox:
+                if (context.mode() != UASheetMode)
+                    feature = UseCounter::CSSSelectorInternalPseudoListBox;
+                break;
+            case CSSSelector::PseudoWebKitCustomElement:
+                if (context.mode() != UASheetMode) {
+                    if (current->value() == "-internal-media-controls-cast-button")
+                        feature = UseCounter::CSSSelectorInternalMediaControlsCastButton;
+                    else if (current->value() == "-internal-media-controls-overlay-cast-button")
+                        feature = UseCounter::CSSSelectorInternalMediaControlsOverlayCastButton;
+                }
+                break;
+            case CSSSelector::PseudoSpatialNavigationFocus:
+                if (context.mode() != UASheetMode)
+                    feature = UseCounter::CSSSelectorInternalPseudoSpatialNavigationFocus;
+                break;
             default:
                 break;
             }
@@ -50,17 +65,16 @@ static void recordSelectorStats(const CSSParserContext& context, const CSSSelect
     }
 }
 
-void CSSSelectorParser::parseSelector(CSSParserTokenRange range, const CSSParserContext& context, StyleSheetContents* styleSheet, CSSSelectorList& output)
+CSSSelectorList CSSSelectorParser::parseSelector(CSSParserTokenRange range, const CSSParserContext& context, StyleSheetContents* styleSheet)
 {
     CSSSelectorParser parser(context, styleSheet);
     range.consumeWhitespace();
-    CSSSelectorList result;
-    parser.consumeComplexSelectorList(range, result);
-    if (range.atEnd()) {
-        output.adopt(result);
-        recordSelectorStats(context, output);
-    }
-    ASSERT(!(output.isValid() && parser.m_failedParsing));
+    CSSSelectorList result = parser.consumeComplexSelectorList(range);
+    if (!range.atEnd())
+        return CSSSelectorList();
+
+    recordSelectorStats(context, result);
+    return result;
 }
 
 CSSSelectorParser::CSSSelectorParser(const CSSParserContext& context, StyleSheetContents* styleSheet)
@@ -70,32 +84,34 @@ CSSSelectorParser::CSSSelectorParser(const CSSParserContext& context, StyleSheet
 {
 }
 
-void CSSSelectorParser::consumeComplexSelectorList(CSSParserTokenRange& range, CSSSelectorList& output)
+CSSSelectorList CSSSelectorParser::consumeComplexSelectorList(CSSParserTokenRange& range)
 {
     Vector<OwnPtr<CSSParserSelector>> selectorList;
     OwnPtr<CSSParserSelector> selector = consumeComplexSelector(range);
     if (!selector)
-        return;
+        return CSSSelectorList();
     selectorList.append(selector.release());
     while (!range.atEnd() && range.peek().type() == CommaToken) {
         range.consumeIncludingWhitespace();
         selector = consumeComplexSelector(range);
         if (!selector)
-            return;
+            return CSSSelectorList();
         selectorList.append(selector.release());
     }
 
-    if (!m_failedParsing)
-        output.adoptSelectorVector(selectorList);
+    if (m_failedParsing)
+        return CSSSelectorList();
+
+    return CSSSelectorList::adoptSelectorVector(selectorList);
 }
 
-void CSSSelectorParser::consumeCompoundSelectorList(CSSParserTokenRange& range, CSSSelectorList& output)
+CSSSelectorList CSSSelectorParser::consumeCompoundSelectorList(CSSParserTokenRange& range)
 {
     Vector<OwnPtr<CSSParserSelector>> selectorList;
     OwnPtr<CSSParserSelector> selector = consumeCompoundSelector(range);
     range.consumeWhitespace();
     if (!selector)
-        return;
+        return CSSSelectorList();
     selectorList.append(selector.release());
     while (!range.atEnd() && range.peek().type() == CommaToken) {
         // FIXME: This differs from the spec grammar:
@@ -105,12 +121,14 @@ void CSSSelectorParser::consumeCompoundSelectorList(CSSParserTokenRange& range, 
         selector = consumeCompoundSelector(range);
         range.consumeWhitespace();
         if (!selector)
-            return;
+            return CSSSelectorList();
         selectorList.append(selector.release());
     }
 
-    if (!m_failedParsing)
-        output.adoptSelectorVector(selectorList);
+    if (m_failedParsing)
+        return CSSSelectorList();
+
+    return CSSSelectorList::adoptSelectorVector(selectorList);
 }
 
 PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumeComplexSelector(CSSParserTokenRange& range)
@@ -232,10 +250,7 @@ PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumeId(CSSParserTokenRange& 
     OwnPtr<CSSParserSelector> selector = CSSParserSelector::create();
     selector->setMatch(CSSSelector::Id);
     const AtomicString& value = range.consume().value();
-    if (isQuirksModeBehavior(m_context.mode()))
-        selector->setValue(value.lower());
-    else
-        selector->setValue(value);
+    selector->setValue(value, isQuirksModeBehavior(m_context.mode()));
     return selector.release();
 }
 
@@ -249,10 +264,7 @@ PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumeClass(CSSParserTokenRang
     OwnPtr<CSSParserSelector> selector = CSSParserSelector::create();
     selector->setMatch(CSSSelector::Class);
     const AtomicString& value = range.consume().value();
-    if (isQuirksModeBehavior(m_context.mode()))
-        selector->setValue(value.lower());
-    else
-        selector->setValue(value);
+    selector->setValue(value, isQuirksModeBehavior(m_context.mode()));
     return selector.release();
 }
 
@@ -341,7 +353,7 @@ PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumePseudo(CSSParserTokenRan
     case CSSSelector::PseudoCue:
         {
             OwnPtr<CSSSelectorList> selectorList = adoptPtr(new CSSSelectorList());
-            consumeCompoundSelectorList(block, *selectorList);
+            *selectorList = consumeCompoundSelectorList(block);
             if (!selectorList->isValid() || !block.atEnd())
                 return nullptr;
             selector->setSelectorList(selectorList.release());
@@ -451,10 +463,8 @@ CSSSelector::AttributeMatchType CSSSelectorParser::consumeAttributeFlags(CSSPars
     if (range.peek().type() != IdentToken)
         return CSSSelector::CaseSensitive;
     const CSSParserToken& flag = range.consumeIncludingWhitespace();
-    if (String(flag.value()) == "i") {
-        if (RuntimeEnabledFeatures::cssAttributeCaseSensitivityEnabled() || isUASheetBehavior(m_context.mode()))
-            return CSSSelector::CaseInsensitive;
-    }
+    if (String(flag.value()) == "i")
+        return CSSSelector::CaseInsensitive;
     m_failedParsing = true;
     return CSSSelector::CaseSensitive;
 }

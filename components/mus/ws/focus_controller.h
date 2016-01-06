@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_MUS_WS_FOCUS_CONTROLLER_H_
 #define COMPONENTS_MUS_WS_FOCUS_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "components/mus/ws/server_window_drawn_tracker_observer.h"
@@ -49,9 +50,6 @@ class FocusController : public ServerWindowDrawnTrackerObserver {
   bool CanBeFocused(ServerWindow* window) const;
   bool CanBeActivated(ServerWindow* window) const;
 
-  ServerWindow* GetNextActivatableWindow(ServerWindow* window) const;
-  ServerWindow* FindNextWindowInTree(ServerWindow* window) const;
-
   // Returns the closest activatable ancestor of |window|. Returns nullptr if
   // there is no such ancestor.
   ServerWindow* GetActivatableAncestorOf(ServerWindow* window) const;
@@ -61,6 +59,9 @@ class FocusController : public ServerWindowDrawnTrackerObserver {
                             ServerWindow* window);
 
   // ServerWindowDrawnTrackerObserver:
+  void OnDrawnStateWillChange(ServerWindow* ancestor,
+                              ServerWindow* window,
+                              bool is_drawn) override;
   void OnDrawnStateChanged(ServerWindow* ancestor,
                            ServerWindow* window,
                            bool is_drawn) override;

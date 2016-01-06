@@ -4,6 +4,8 @@
 
 #include "chrome/browser/renderer_host/safe_browsing_resource_throttle.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
@@ -31,7 +33,7 @@ namespace {
 const int kCheckUrlTimeoutMs = 5000;
 
 void RecordHistogramResourceTypeSafe(content::ResourceType resource_type) {
-  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes.Safe", resource_type,
+  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Safe", resource_type,
                             content::RESOURCE_TYPE_LAST_TYPE);
 }
 
@@ -49,7 +51,7 @@ scoped_ptr<base::Value> NetLogUrlCallback(
   if (name && value)
     event_params->SetString(name, value);
   request->net_log().source().AddToEventParameters(event_params.get());
-  return event_params.Pass();
+  return std::move(event_params);
 }
 
 // Return a dictionary with |name|=|value|, for netlogging.
@@ -60,7 +62,7 @@ scoped_ptr<base::Value> NetLogStringCallback(
   scoped_ptr<base::DictionaryValue> event_params(new base::DictionaryValue());
   if (name && value)
     event_params->SetString(name, value);
-  return event_params.Pass();
+  return std::move(event_params);
 }
 
 }  // namespace
@@ -233,12 +235,12 @@ void SafeBrowsingResourceThrottle::OnCheckBrowseUrlResult(
   if (request_->load_flags() & net::LOAD_PREFETCH) {
     // Don't prefetch resources that fail safe browsing, disallow them.
     controller()->Cancel();
-    UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes.UnsafePrefetchCanceled",
+    UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.UnsafePrefetchCanceled",
                               resource_type_, content::RESOURCE_TYPE_LAST_TYPE);
     return;
   }
 
-  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes.Unsafe", resource_type_,
+  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Unsafe", resource_type_,
                             content::RESOURCE_TYPE_LAST_TYPE);
 
   const content::ResourceRequestInfo* info =
@@ -323,13 +325,13 @@ bool SafeBrowsingResourceThrottle::CheckUrl(const GURL& url) {
   // To reduce aggregate latency on mobile, check only the most dangerous
   // resource types.
   if (!database_manager_->CanCheckResourceType(resource_type_)) {
-    UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes.Skipped", resource_type_,
+    UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Skipped", resource_type_,
                               content::RESOURCE_TYPE_LAST_TYPE);
     return true;
   }
 
   bool succeeded_synchronously = database_manager_->CheckBrowseUrl(url, this);
-  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes.Checked", resource_type_,
+  UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Checked", resource_type_,
                             content::RESOURCE_TYPE_LAST_TYPE);
 
   if (succeeded_synchronously) {

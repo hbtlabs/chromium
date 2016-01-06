@@ -7,11 +7,12 @@
 #ifndef COMPONENTS_SAFE_BROWSING_DB_UTIL_H_
 #define COMPONENTS_SAFE_BROWSING_DB_UTIL_H_
 
+#include <stdint.h>
+
 #include <cstring>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 
@@ -50,7 +51,7 @@ enum SBThreatType {
 
 
 // A truncated hash's type.
-typedef uint32 SBPrefix;
+typedef uint32_t SBPrefix;
 
 // A full hash.
 union SBFullHash {
@@ -148,6 +149,15 @@ bool GetListName(ListType list_id, std::string* list);
 void CanonicalizeUrl(const GURL& url, std::string* canonicalized_hostname,
                      std::string* canonicalized_path,
                      std::string* canonicalized_query);
+
+
+// Generate the set of full hashes to check for |url|.  If
+// |include_whitelist_hashes| is true we will generate additional path-prefixes
+// to match against the csd whitelist.  E.g., if the path-prefix /foo is on the
+// whitelist it should also match /foo/bar which is not the case for all the
+// other lists.  We'll also always add a pattern for the empty path.
+void UrlToFullHashes(const GURL& url, bool include_whitelist_hashes,
+                     std::vector<SBFullHash>* full_hashes);
 
 // Given a URL, returns all the hosts we need to check.  They are returned
 // in order of size (i.e. b.c is first, then a.b.c).

@@ -4,7 +4,10 @@
 
 #include "components/scheduler/renderer/throttling_helper.h"
 
+#include <stddef.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/test/ordered_simple_task_runner.h"
@@ -165,6 +168,13 @@ TEST_F(ThrottlingHelperTest, TimerAlignment_Unthrottled) {
                   start_time + base::TimeDelta::FromMilliseconds(800.0),
                   start_time + base::TimeDelta::FromMilliseconds(1200.0),
                   start_time + base::TimeDelta::FromMilliseconds(8300.0)));
+}
+
+TEST_F(ThrottlingHelperTest,
+       ThrotlingAnEmptyQueueDoesNotPostPumpThrottledTasksLocked) {
+  throttling_helper_->Throttle(timer_queue_.get());
+
+  EXPECT_TRUE(throttling_helper_->task_runner()->IsEmpty());
 }
 
 TEST_F(ThrottlingHelperTest, WakeUpForNonDelayedTask) {

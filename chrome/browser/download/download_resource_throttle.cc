@@ -4,7 +4,10 @@
 
 #include "chrome/browser/download/download_resource_throttle.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_stats.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_controller.h"
@@ -40,7 +43,7 @@ void OnAcquireFileAccessPermissionDone(
     bool granted) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (granted)
-    CanDownload(info.Pass());
+    CanDownload(std::move(info));
   else
     info->continue_callback.Run(false);
 }
@@ -52,12 +55,12 @@ void CanDownloadOnUIThread(
 #if defined(OS_ANDROID)
   content::WebContents* contents = info->web_contents_getter.Run();
   if (!contents)
-    OnAcquireFileAccessPermissionDone(info.Pass(), false);
+    OnAcquireFileAccessPermissionDone(std::move(info), false);
   content::DownloadControllerAndroid::Get()->AcquireFileAccessPermission(
       contents, base::Bind(&OnAcquireFileAccessPermissionDone,
-                           base::Passed(info.Pass())));
+                           base::Passed(std::move(info))));
 #else
-  CanDownload(info.Pass());
+  CanDownload(std::move(info));
 #endif
 }
 

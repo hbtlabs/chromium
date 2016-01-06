@@ -12,7 +12,6 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.bookmark.BookmarksBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -164,11 +163,7 @@ public final class OfflinePageBridge {
      */
     public static boolean isEnabled() {
         ThreadUtils.assertOnUiThread();
-        if (sIsEnabled == null) {
-            // Enhanced bookmarks feature should also be enabled.
-            sIsEnabled = nativeIsOfflinePagesEnabled()
-                    && BookmarksBridge.isEnhancedBookmarksEnabled();
-        }
+        if (sIsEnabled == null) sIsEnabled = nativeIsOfflinePagesEnabled();
         return sIsEnabled;
     }
 
@@ -232,6 +227,17 @@ public final class OfflinePageBridge {
     }
 
     /**
+     * Gets an offline page associated with a provided online URL.
+     *
+     * @param onlineURL URL of the page.
+     * @return An {@link OfflinePageItem} matching the URL or <code>null</code> if none exist.
+     */
+    @VisibleForTesting
+    public OfflinePageItem getPageByOnlineURL(String onlineURL) {
+        return nativeGetPageByOnlineURL(mNativeOfflinePageBridge, onlineURL);
+    }
+
+    /**
      * Saves the web page loaded into web contents offline.
      *
      * @param webContents Contents of the page to save.
@@ -248,7 +254,9 @@ public final class OfflinePageBridge {
         SavePageCallback callbackWrapper = new SavePageCallback() {
             @Override
             public void onSavePageDone(int savePageResult, String url) {
-                if (savePageResult == SavePageResult.SUCCESS) {
+                // TODO(fgorski): Eliminate call to getAllPages() here.
+                // See http://crbug.com/566939
+                if (savePageResult == SavePageResult.SUCCESS && isOfflinePageModelLoaded()) {
                     long totalPageSizeAfter = getTotalSize(getAllPages());
                     recordStorageHistograms(0, totalPageSizeAfter);
                 }
@@ -340,7 +348,9 @@ public final class OfflinePageBridge {
         return new DeletePageCallback() {
             @Override
             public void onDeletePageDone(int deletePageResult) {
-                if (deletePageResult == DeletePageResult.SUCCESS) {
+                // TODO(fgorski): Eliminate call to getAllPages() here.
+                // See http://crbug.com/566939
+                if (deletePageResult == DeletePageResult.SUCCESS && isOfflinePageModelLoaded()) {
                     long totalPageSizeAfter = getTotalSize(getAllPages());
                     recordStorageHistograms(totalPageSizeBefore, totalPageSizeAfter);
                 }
@@ -398,6 +408,8 @@ public final class OfflinePageBridge {
             long nativeOfflinePageBridge, List<OfflinePageItem> offlinePages);
     private native OfflinePageItem nativeGetPageByBookmarkId(
             long nativeOfflinePageBridge, long bookmarkId);
+    private native OfflinePageItem nativeGetPageByOnlineURL(
+            long nativeOfflinePageBridge, String onlineURL);
     private native void nativeSavePage(long nativeOfflinePageBridge, SavePageCallback callback,
             WebContents webContents, long bookmarkId);
     private native void nativeMarkPageAccessed(long nativeOfflinePageBridge, long bookmarkId);

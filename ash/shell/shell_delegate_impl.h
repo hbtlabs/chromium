@@ -9,6 +9,7 @@
 
 #include "ash/shell_delegate.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace keyboard {
 class KeyboardUI;
@@ -18,14 +19,11 @@ namespace ash {
 namespace shell {
 
 class ShelfDelegateImpl;
-class WindowWatcher;
 
 class ShellDelegateImpl : public ash::ShellDelegate {
  public:
   ShellDelegateImpl();
   ~ShellDelegateImpl() override;
-
-  void SetWatcher(WindowWatcher* watcher);
 
   bool IsFirstRunAfterBoot() const override;
   bool IsIncognitoAllowed() const override;
@@ -58,9 +56,6 @@ class ShellDelegateImpl : public ash::ShellDelegate {
   gfx::Image GetDeprecatedAcceleratorImage() const override;
 
  private:
-  // Used to update Launcher. Owned by main.
-  WindowWatcher* watcher_;
-
   ShelfDelegateImpl* shelf_delegate_;
   scoped_ptr<app_list::AppListViewDelegate> app_list_view_delegate_;
 

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/graphics/paint/DisplayItem.h"
 
 namespace blink {
@@ -83,6 +82,7 @@ static WTF::String specialDrawingTypeAsDebugString(DisplayItem::Type type)
         DEBUG_STRING_CASE(PopupListBoxBackground);
         DEBUG_STRING_CASE(PopupListBoxRow);
         DEBUG_STRING_CASE(PrintedContentBackground);
+        DEBUG_STRING_CASE(PrintedContentDestinationLocations);
         DEBUG_STRING_CASE(PrintedContentLineBoundary);
         DEBUG_STRING_CASE(PrintedContentPDFURLRect);
         DEBUG_STRING_CASE(Resizer);
@@ -199,7 +199,6 @@ WTF::String DisplayItem::typeAsDebugString(Type type)
         DEBUG_STRING_CASE(Subsequence);
         DEBUG_STRING_CASE(EndSubsequence);
         DEBUG_STRING_CASE(CachedSubsequence);
-        DEBUG_STRING_CASE(CachedDisplayItemList);
         DEBUG_STRING_CASE(UninitializedType);
         DEFAULT_CASE;
     }
@@ -216,14 +215,14 @@ WTF::String DisplayItem::asDebugString() const
 
 void DisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder) const
 {
-    if (!isValid()) {
-        stringBuilder.append("valid: false, originalDebugString: ");
+    if (!hasValidClient()) {
+        stringBuilder.append("validClient: false, originalDebugString: ");
         // This is the original debug string which is in json format.
         stringBuilder.append(clientDebugString());
         return;
     }
 
-    stringBuilder.append(String::format("client: \"%p", client()));
+    stringBuilder.append(String::format("client: \"%p", &client()));
     if (!clientDebugString().isEmpty()) {
         stringBuilder.append(' ');
         stringBuilder.append(clientDebugString());

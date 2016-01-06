@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/power/cpu_data_collector.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/bind.h"
@@ -94,7 +96,8 @@ bool CpuIsOnline(const int i) {
   std::string cpu_online_string;
   if (base::ReadFileToString(base::FilePath(cpu_online_file),
                              &cpu_online_string)) {
-    base::TrimWhitespace(cpu_online_string, base::TRIM_ALL, &cpu_online_string);
+    base::TrimWhitespaceASCII(cpu_online_string, base::TRIM_ALL,
+                              &cpu_online_string);
     if (base::StringToInt(cpu_online_string, &online))
       return online == kCpuOnlineStatus;
   }
@@ -145,7 +148,7 @@ void SampleCpuIdleData(
         DCHECK(base::PathExists(base::FilePath(time_file_path)));
 
         std::string state_name, occupancy_time_string;
-        int64 occupancy_time_usec;
+        int64_t occupancy_time_usec;
         if (!base::ReadFileToString(base::FilePath(name_file_path),
                                     &state_name) ||
             !base::ReadFileToString(base::FilePath(time_file_path),
@@ -159,12 +162,12 @@ void SampleCpuIdleData(
           return;
         }
 
-        base::TrimWhitespace(state_name, base::TRIM_ALL, &state_name);
-        base::TrimWhitespace(
-            occupancy_time_string, base::TRIM_ALL, &occupancy_time_string);
+        base::TrimWhitespaceASCII(state_name, base::TRIM_ALL, &state_name);
+        base::TrimWhitespaceASCII(occupancy_time_string, base::TRIM_ALL,
+                                  &occupancy_time_string);
         if (base::StringToInt64(occupancy_time_string, &occupancy_time_usec)) {
           // idle state occupancy time in sysfs is recorded in microseconds.
-          int64 time_in_state_ms = occupancy_time_usec / 1000;
+          int64_t time_in_state_ms = occupancy_time_usec / 1000;
           size_t index = IndexInVector(state_name, cpu_idle_state_names);
           if (index >= idle_sample.time_in_state.size())
             idle_sample.time_in_state.resize(index + 1);
@@ -183,7 +186,7 @@ void SampleCpuIdleData(
 
   // If there was an interruption in sampling (like system suspended),
   // discard the samples!
-  int64 delay =
+  int64_t delay =
       base::TimeDelta(base::Time::Now() - start_time).InMilliseconds();
   if (delay > kSamplingDurationLimitMs) {
     idle_samples->clear();
@@ -215,7 +218,7 @@ bool ReadCpuFreqFromOldFile(
     state_count -= 1;
   for (size_t state = 0; state < state_count; ++state) {
     int freq_in_khz;
-    int64 occupancy_time_centisecond;
+    int64_t occupancy_time_centisecond;
 
     // Occupancy of each state is in the format "<state> <time>"
     std::vector<base::StringPiece> pair = base::SplitStringPiece(
@@ -285,7 +288,7 @@ void SampleCpuFreqData(
 
   // If there was an interruption in sampling (like system suspended),
   // discard the samples!
-  int64 delay =
+  int64_t delay =
       base::TimeDelta(base::Time::Now() - start_time).InMilliseconds();
   if (delay > kSamplingDurationLimitMs) {
     freq_samples->clear();
@@ -324,7 +327,8 @@ void SampleCpuStateOnBlockingPool(
         int max_cpu;
         // The possible CPUs are listed in the format "0-N". Hence, N is present
         // in the substring starting at offset 2.
-        base::TrimWhitespace(possible_string, base::TRIM_ALL, &possible_string);
+        base::TrimWhitespaceASCII(possible_string, base::TRIM_ALL,
+                                  &possible_string);
         if (possible_string.find("-") != std::string::npos &&
             possible_string.length() > 2 &&
             base::StringToInt(possible_string.substr(2), &max_cpu)) {

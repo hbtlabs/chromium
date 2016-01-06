@@ -5,6 +5,8 @@
 #ifndef NET_SPDY_SPDY_HEADER_BLOCK_H_
 #define NET_SPDY_SPDY_HEADER_BLOCK_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <memory>
 #include <string>
@@ -51,6 +53,10 @@ class NET_EXPORT SpdyHeaderBlock {
   SpdyHeaderBlock& operator=(const SpdyHeaderBlock& other);
   bool operator==(const SpdyHeaderBlock& other) const;
   bool operator!=(const SpdyHeaderBlock& other) const;
+
+  // Provides a human readable multi-line representation of the stored header
+  // keys and values.
+  std::string DebugString() const;
 
   // These methods delegate to our MapType member.
   iterator begin() { return block_.begin(); }

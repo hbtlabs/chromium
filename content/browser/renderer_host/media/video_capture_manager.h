@@ -17,6 +17,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -24,6 +25,7 @@
 #include "base/process/process_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/elapsed_timer.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/media/media_stream_provider.h"
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
 #include "content/common/content_export.h"
@@ -235,6 +237,26 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   void SetDesktopCaptureWindowIdOnDeviceThread(
       media::VideoCaptureDevice* device,
       gfx::NativeViewId window_id);
+
+#if defined(OS_MACOSX)
+  // Called on the IO thread after the device layer has been initialized on Mac.
+  // Sets |capture_device_api_initialized_| to true and then executes and_then.
+  void OnDeviceLayerInitialized(const base::Closure& and_then);
+
+  // Returns true if the current operation needs to be preempted by a call to
+  // InitializeCaptureDeviceApiOnUIThread.
+  // Called on the IO thread.
+  bool NeedToInitializeCaptureDeviceApi(MediaStreamType stream_type);
+
+  // Called on the IO thread to do async initialization of the capture api.
+  // Once initialization is done, and_then will be run on the IO thread.
+  void InitializeCaptureDeviceApiOnUIThread(const base::Closure& and_then);
+
+  // Due to initialization issues with AVFoundation and QTKit on Mac, we need
+  // to make sure we initialize the APIs on the UI thread before we can reliably
+  // use them.  This variable is only checked and set on the IO thread.
+  bool capture_device_api_initialized_ = false;
+#endif
 
   // The message loop of media stream device thread, where VCD's live.
   scoped_refptr<base::SingleThreadTaskRunner> device_task_runner_;

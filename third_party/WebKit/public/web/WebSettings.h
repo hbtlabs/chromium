@@ -127,6 +127,7 @@ public:
     virtual void setNavigateOnDragDrop(bool) = 0;
     virtual void setCursiveFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) = 0;
     virtual void setDNSPrefetchingEnabled(bool) = 0;
+    virtual void setDataSaverEnabled(bool) = 0;
     virtual void setDOMPasteAllowed(bool) = 0;
     virtual void setDefaultFixedFontSize(int) = 0;
     virtual void setDefaultFontSize(int) = 0;
@@ -155,7 +156,6 @@ public:
     virtual void setImageAnimationPolicy(ImageAnimationPolicy) = 0;
     virtual void setImagesEnabled(bool) = 0;
     virtual void setInlineTextBoxAccessibilityEnabled(bool) = 0;
-    virtual void setInvertViewportScrollOrder(bool) = 0;
     virtual void setJavaScriptCanAccessClipboard(bool) = 0;
     virtual void setJavaScriptCanOpenWindowsAutomatically(bool) = 0;
     virtual void setJavaScriptEnabled(bool) = 0;

@@ -80,10 +80,17 @@ class GCMDriver {
   typedef base::Callback<void(const std::string& message_id,
                               GCMClient::Result result)> SendCallback;
   typedef base::Callback<void(const std::string&, const std::string&)>
-      GetPublicKeyCallback;
+      GetEncryptionInfoCallback;
   typedef base::Callback<void(GCMClient::Result result)> UnregisterCallback;
   typedef base::Callback<void(const GCMClient::GCMStatistics& stats)>
       GetGCMStatisticsCallback;
+
+  // Enumeration to be used with GetGCMStatistics() for indicating whether the
+  // existing logs should be cleared or kept.
+  enum ClearActivityLogs {
+    CLEAR_LOGS,
+    KEEP_LOGS
+  };
 
   GCMDriver(
       const base::FilePath& store_path,
@@ -131,9 +138,8 @@ class GCMDriver {
   // Get the public encryption key and the authentication secret associated with
   // |app_id|. If none have been associated with |app_id| yet, they will be
   // created. The |callback| will be invoked when it is available.
-  // TODO(peter): Rename this method to GetEncryptionInfo().
-  void GetPublicKey(const std::string& app_id,
-                    const GetPublicKeyCallback& callback);
+  void GetEncryptionInfo(const std::string& app_id,
+                         const GetEncryptionInfoCallback& callback);
 
   const GCMAppHandlerMap& app_handlers() const { return app_handlers_; }
 
@@ -173,11 +179,10 @@ class GCMDriver {
   // Returns true if the gcm client has an open and active connection.
   virtual bool IsConnected() const = 0;
 
-  // Get GCM client internal states and statistics.
-  // If clear_logs is true then activity logs will be cleared before the stats
-  // are returned.
+  // Get GCM client internal states and statistics. The activity logs will be
+  // cleared before returning the stats when |clear_logs| is set to CLEAR_LOGS.
   virtual void GetGCMStatistics(const GetGCMStatisticsCallback& callback,
-                                bool clear_logs) = 0;
+                                ClearActivityLogs clear_logs) = 0;
 
   // Enables/disables GCM activity recording, and then returns the stats.
   virtual void SetGCMRecording(const GetGCMStatisticsCallback& callback,

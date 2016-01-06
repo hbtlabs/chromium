@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_MANAGER_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_MANAGER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/ax_tree_id_registry.h"
@@ -42,7 +45,10 @@ CONTENT_EXPORT ui::AXTreeUpdate MakeAXTreeUpdate(
     const ui::AXNodeData& node6 = ui::AXNodeData(),
     const ui::AXNodeData& node7 = ui::AXNodeData(),
     const ui::AXNodeData& node8 = ui::AXNodeData(),
-    const ui::AXNodeData& node9 = ui::AXNodeData());
+    const ui::AXNodeData& node9 = ui::AXNodeData(),
+    const ui::AXNodeData& node10 = ui::AXNodeData(),
+    const ui::AXNodeData& node11 = ui::AXNodeData(),
+    const ui::AXNodeData& node12 = ui::AXNodeData());
 
 // Class that can perform actions on behalf of the BrowserAccessibilityManager.
 // Note: BrowserAccessibilityManager should never cache any of the return
@@ -140,7 +146,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
 
   // Return a pointer to the object corresponding to the given id,
   // does not make a new reference.
-  BrowserAccessibility* GetFromID(int32 id) const;
+  BrowserAccessibility* GetFromID(int32_t id) const;
 
   // If this tree has a parent tree, return the parent node in that tree.
   BrowserAccessibility* GetParentNodeFromParentTree();
@@ -250,6 +256,9 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   // active descendant if it has one.
   BrowserAccessibility* GetActiveDescendantFocus(BrowserAccessibility* root);
 
+  // Returns true if native focus is anywhere in this WebContents or not.
+  bool NativeViewHasFocus();
+
   // True by default, but some platforms want to treat the root
   // scroll offsets separately.
   virtual bool UseRootScrollOffsetsWhenComputingBounds();
@@ -332,7 +341,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   ui::AXNode* focus_;
 
   // A mapping from a node id to its wrapper of type BrowserAccessibility.
-  base::hash_map<int32, BrowserAccessibility*> id_wrapper_map_;
+  base::hash_map<int32_t, BrowserAccessibility*> id_wrapper_map_;
 
   // True if the user has initiated a navigation to another page.
   bool user_is_navigating_away_;

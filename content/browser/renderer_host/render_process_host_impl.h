@@ -5,14 +5,19 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_PROCESS_HOST_IMPL_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_PROCESS_HOST_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/power_monitor_message_broadcaster.h"
@@ -24,10 +29,6 @@
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-#include "content/common/mac/io_surface_manager_token.h"
-#endif
 
 namespace base {
 class CommandLine;
@@ -106,8 +107,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void EnableSendQueue() override;
   bool Init() override;
   int GetNextRoutingID() override;
-  void AddRoute(int32 routing_id, IPC::Listener* listener) override;
-  void RemoveRoute(int32 routing_id) override;
+  void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
+  void RemoveRoute(int32_t routing_id) override;
   void AddObserver(RenderProcessHostObserver* observer) override;
   void RemoveObserver(RenderProcessHostObserver* observer) override;
   void ShutdownForBadMessage() override;
@@ -142,6 +143,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #if defined(ENABLE_WEBRTC)
   void EnableAudioDebugRecordings(const base::FilePath& file) override;
   void DisableAudioDebugRecordings() override;
+  void EnableEventLogRecordings(const base::FilePath& file) override;
+  void DisableEventLogRecordings() override;
   void SetWebRtcLogMessageCallback(
       base::Callback<void(const std::string&)> callback) override;
   WebRtcStopRtpDumpCallback StartRtpDump(
@@ -162,13 +165,16 @@ class CONTENT_EXPORT RenderProcessHostImpl
   scoped_refptr<media::MediaKeys> GetCdm(int render_frame_id,
                                          int cdm_id) const override;
 #endif
+  bool IsProcessBackgrounded() const override;
+  void IncrementWorkerRefCount() override;
+  void DecrementWorkerRefCount() override;
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
 
   // IPC::Listener via RenderProcessHost.
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
   void OnBadMessageReceived(const IPC::Message& message) override;
 
@@ -252,11 +258,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
     is_for_guests_only_ = is_for_guests_only;
   }
 
-  // Called when the existence of the other renderer process which is connected
-  // to the Worker in this renderer process has changed.
-  void IncrementWorkerRefCount();
-  void DecrementWorkerRefCount();
-
   void GetAudioOutputControllers(
       const GetAudioOutputControllersCallback& callback) const override;
 
@@ -280,7 +281,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // The count of currently swapped out but pending RenderViews.  We have
   // started to swap these in, so the renderer process should not exit if
   // this count is non-zero.
-  int32 pending_views_;
+  int32_t pending_views_;
 
  private:
   friend class VisitRelayingRenderProcessHost;
@@ -299,7 +300,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void OnShutdownRequest();
   void SuddenTerminationChanged(bool enabled);
   void OnUserMetricsRecordAction(const std::string& action);
-  void OnSavedPageAsMHTML(int job_id, int64 mhtml_file_size);
   void OnCloseACK(int old_route_id);
 
   // Generates a command line to be used to spawn a renderer and appends the
@@ -326,15 +326,24 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
 #if defined(ENABLE_WEBRTC)
   void OnRegisterAecDumpConsumer(int id);
+  void OnRegisterEventLogConsumer(int id);
   void OnUnregisterAecDumpConsumer(int id);
+  void OnUnregisterEventLogConsumer(int id);
   void RegisterAecDumpConsumerOnUIThread(int id);
+  void RegisterEventLogConsumerOnUIThread(int id);
   void UnregisterAecDumpConsumerOnUIThread(int id);
+  void UnregisterEventLogConsumerOnUIThread(int id);
   void EnableAecDumpForId(const base::FilePath& file, int id);
+  void EnableEventLogForId(const base::FilePath& file, int id);
   // Sends |file_for_transit| to the render process.
   void SendAecDumpFileToRenderer(int id,
                                  IPC::PlatformFileForTransit file_for_transit);
+  void SendEventLogFileToRenderer(int id,
+                                  IPC::PlatformFileForTransit file_for_transit);
   void SendDisableAecDumpToRenderer();
+  void SendDisableEventLogToRenderer();
   base::FilePath GetAecDumpFilePathWithExtensions(const base::FilePath& file);
+  base::FilePath GetEventLogFilePathWithExtensions(const base::FilePath& file);
 #endif
 
   scoped_ptr<MojoApplicationHost> mojo_application_host_;
@@ -346,7 +355,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // The count of currently visible widgets.  Since the host can be a container
   // for multiple widgets, it uses this count to determine when it should be
   // backgrounded.
-  int32 visible_widgets_;
+  int32_t visible_widgets_;
 
   // Whether this process currently has backgrounded priority. Tracked so that
   // UpdateProcessPriority() can avoid redundantly setting the priority.
@@ -484,12 +493,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Whether or not the CHROMIUM_subscribe_uniform WebGL extension is enabled
   bool subscribe_uniform_enabled_;
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // Unique unguessable token that the child process is using to acquire
-  // IOSurface references.
-  IOSurfaceManagerToken io_surface_manager_token_;
-#endif
 
   bool channel_connected_;
   bool sent_render_process_ready_;

@@ -13,6 +13,7 @@ import android.graphics.RectF;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.view.ViewCompat;
+import android.support.v4.view.accessibility.AccessibilityEventCompat;
 import android.support.v4.view.accessibility.AccessibilityNodeInfoCompat;
 import android.support.v4.widget.ExploreByTouchHelper;
 import android.util.AttributeSet;
@@ -423,16 +424,6 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void onOverdrawBottomHeightChanged(int overdrawHeight) {
-        if (mLayoutManager == null) return;
-
-        sCachedCVCList.clear();
-        mLayoutManager.getActiveLayout().getAllContentViewCores(sCachedCVCList);
-
-        for (int i = 0; i < sCachedCVCList.size(); i++) {
-            sCachedCVCList.get(i).onOverdrawBottomHeightChanged(overdrawHeight);
-        }
-        sCachedCVCList.clear();
-
         mSkipNextToolbarTextureUpdate = true;
         requestRender();
     }
@@ -938,8 +929,6 @@ public class CompositorViewHolder extends FrameLayout
 
         adjustPhysicalBackingSize(contentViewCore,
                 mCompositorView.getWidth(), mCompositorView.getHeight());
-
-        contentViewCore.onOverdrawBottomHeightChanged(mCompositorView.getOverdrawBottomHeight());
     }
 
     /**
@@ -1017,6 +1006,8 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     public void invalidateAccessibilityProvider() {
         if (mNodeProvider != null) {
+            mNodeProvider.sendEventForVirtualView(mNodeProvider.getFocusedVirtualView(),
+                    AccessibilityEventCompat.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED);
             mNodeProvider.invalidateRoot();
         }
     }

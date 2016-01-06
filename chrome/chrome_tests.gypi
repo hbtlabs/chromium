@@ -54,9 +54,6 @@
       'browser/apps/app_speech_recognition_browsertest.cc',
       'browser/apps/app_url_redirector_browsertest.cc',
       'browser/apps/app_window_browsertest.cc',
-      'browser/apps/ephemeral_app_browsertest.cc',
-      'browser/apps/ephemeral_app_browsertest.h',
-      'browser/apps/ephemeral_app_service_browsertest.cc',
       'browser/apps/event_page_browsertest.cc',
       'browser/apps/guest_view/app_view_browsertest.cc',
       'browser/apps/guest_view/extension_view/extension_view_browsertest.cc',
@@ -94,14 +91,12 @@
       'browser/content_settings/content_settings_browsertest.cc',
       'browser/crash_recovery_browsertest.cc',
       'browser/custom_handlers/protocol_handler_registry_browsertest.cc',
+      'browser/data_saver/data_saver_browsertest.cc',
       'browser/devtools/device/adb/adb_client_socket_browsertest.cc',
       'browser/devtools/device/adb/mock_adb_server.cc',
       'browser/devtools/device/adb/mock_adb_server.h',
       'browser/devtools/device/port_forwarding_browsertest.cc',
       'browser/devtools/device/usb/android_usb_browsertest.cc',
-      'browser/devtools/device/webrtc/devtools_bridge_client_browsertest.cc',
-      'browser/devtools/device/webrtc/devtools_bridge_client_browsertest.h',
-      'browser/devtools/device/webrtc/webrtc_device_provider_browsertest.cc',
       'browser/devtools/devtools_sanity_browsertest.cc',
       'browser/devtools/devtools_window_testing.cc',
       'browser/devtools/devtools_window_testing.h',
@@ -924,7 +919,6 @@
     # and are handled by a rule, but in the GN build they're in a separate
     # action so need to be separated out.
     'chrome_browser_tests_webui_js_sources': [
-      'browser/devtools/device/webrtc/devtools_bridge_client_browsertest.js',
       'browser/ui/webui/app_list/start_page_browsertest.js',
       'browser/ui/webui/chromeos/bluetooth_pairing_ui_browsertest.js',
       'browser/ui/webui/chromeos/certificate_manager_dialog_browsertest.js',
@@ -992,10 +986,14 @@
       'test/data/webui/polymer_browser_test_base.js',
       'test/data/webui/print_preview.js',
       'test/data/webui/sandboxstatus_browsertest.js',
+      'test/data/webui/settings/advanced_page_browsertest.js',
       'test/data/webui/settings/appearance_browsertest.js',
+      'test/data/webui/settings/basic_page_browsertest.js',
+      'test/data/webui/settings/bluetooth_page_browsertest_chromeos.js',
       'test/data/webui/settings/cr_settings_browsertest.js',
-      'test/data/webui/settings/main_page_browsertest.js',
       'test/data/webui/settings/settings_page_browsertest.js',
+      'test/data/webui/settings/settings_passwords_section_browsertest.js',
+      'test/data/webui/settings/settings_subpage_browsertest.js',
     ],
     # TODO(rockot) bug 505926: These should be moved to a target in
     # //extensions but have old dependencies on chrome files. The chrome
@@ -1156,7 +1154,6 @@
       'browser/ui/views/tabs/tab_drag_controller_interactive_uitest.cc',
       'browser/ui/views/tabs/tab_drag_controller_interactive_uitest.h',
       'browser/ui/views/toolbar/toolbar_action_view_interactive_uitest.cc',
-      'browser/ui/views/toolbar/toolbar_button_test.cc',
       'browser/ui/views/toolbar/toolbar_view_interactive_uitest.cc',
       'browser/ui/views/translate/translate_bubble_test_utils_views.cc',
     ],
@@ -1433,16 +1430,10 @@
       'app/chrome_dll.rc',
       'app/chrome_dll_resource.h',
       'app/chrome_version.rc.version',
-      'browser/sync/test/integration/cross_platform_sync_test.cc',
       'browser/sync/test/integration/enable_disable_test.cc',
       'browser/sync/test/integration/migration_test.cc',
-      'browser/sync/test/integration/multiple_client_bookmarks_sync_test.cc',
       'browser/sync/test/integration/multiple_client_dictionary_sync_test.cc',
-      'browser/sync/test/integration/multiple_client_password_manager_setting_migrator_service_sync_test.cc',
       'browser/sync/test/integration/multiple_client_passwords_sync_test.cc',
-      'browser/sync/test/integration/multiple_client_preferences_sync_test.cc',
-      'browser/sync/test/integration/multiple_client_sessions_sync_test.cc',
-      'browser/sync/test/integration/multiple_client_typed_urls_sync_test.cc',
       'browser/sync/test/integration/single_client_app_list_sync_test.cc',
       'browser/sync/test/integration/single_client_apps_sync_test.cc',
       'browser/sync/test/integration/single_client_backup_rollback_test.cc',
@@ -1673,13 +1664,6 @@
           'dependencies': [
             '../build/linux/system.gyp:xtst',
             '../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
-          ],
-        }],
-        ['OS=="linux"', {
-          # TODO(gbillock): aura linux does not support the automation for
-          # SendMouseMoveNotifyWhenDone
-          'sources!': [
-            'browser/ui/views/toolbar/toolbar_button_test.cc',
           ],
         }],
         ['OS=="linux"', {
@@ -2139,6 +2123,7 @@
         '../components/components.gyp:dom_distiller_content_renderer',
         '../components/components.gyp:dom_distiller_test_support',
         '../components/components.gyp:guest_view_test_support',
+        '../components/components.gyp:history_core_test_support',
         '../components/components.gyp:ssl_config',
         '../components/components.gyp:translate_core_common',
         '../components/components.gyp:ui_zoom_test_support',
@@ -2388,6 +2373,7 @@
             'browser/ui/views/select_file_dialog_extension_browsertest.cc',
             'test/data/webui/certificate_viewer_dialog_test.js',
             'test/data/webui/certificate_viewer_ui_test-inl.h',
+            'test/data/webui/settings/bluetooth_page_browsertest_chromeos.js',
           ],
         }],
         ['configuration_policy==1', {
@@ -3126,6 +3112,16 @@
   ],
   'conditions': [
     ['OS == "android"', {
+        'variables' : {
+           'test_support_apk_target' : 'chrome_public_test_support_apk',
+           'test_support_apk_name' : 'ChromePublicTestSupport',
+           'test_support_apk_manifest_path' : '../chrome/test/android/chrome_public_test_support/AndroidManifest.xml',
+            'test_support_apk_dependencies' : ['cast_emulator',],
+
+        },
+        'includes' : [
+            'chrome_test_support.gypi',
+        ],
       'targets': [
         {
           # GN: //chrome/android:chrome_junit_tests
@@ -3178,6 +3174,21 @@
             '../sync/sync.gyp:sync_java',
             '../sync/sync.gyp:sync_java_test_support',
           ],
+          'includes': [ '../build/java.gypi' ],
+        },
+        {
+          # GN: //chrome/test/android/cast_emulator:cast_emulator
+          'target_name': 'cast_emulator',
+          'type': 'none',
+          'dependencies': [
+            '../base/base.gyp:base_java',
+            '../third_party/android_tools/android_tools.gyp:android_support_v7_appcompat_javalib',
+            '../third_party/android_tools/android_tools.gyp:android_support_v7_mediarouter_javalib',
+            '../third_party/android_tools/android_tools.gyp:google_play_services_javalib',
+          ],
+          'variables': {
+            'java_in_dir': '../chrome/test/android/cast_emulator',
+          },
           'includes': [ '../build/java.gypi' ],
         },
       ],

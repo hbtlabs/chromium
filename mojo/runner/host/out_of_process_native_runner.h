@@ -5,6 +5,8 @@
 #ifndef MOJO_RUNNER_HOST_OUT_OF_PROCESS_NATIVE_RUNNER_H_
 #define MOJO_RUNNER_HOST_OUT_OF_PROCESS_NATIVE_RUNNER_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -28,10 +30,12 @@ class OutOfProcessNativeRunner : public shell::NativeRunner {
   ~OutOfProcessNativeRunner() override;
 
   // NativeRunner:
-  void Start(const base::FilePath& app_path,
-             bool start_sandboxed,
-             InterfaceRequest<Application> application_request,
-             const base::Closure& app_completed_callback) override;
+  void Start(
+      const base::FilePath& app_path,
+      bool start_sandboxed,
+      InterfaceRequest<Application> application_request,
+      const base::Callback<void(base::ProcessId)>& pid_available_callback,
+      const base::Closure& app_completed_callback) override;
   void InitHost(ScopedHandle channel,
                 InterfaceRequest<Application> application_request) override;
 

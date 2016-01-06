@@ -4,6 +4,8 @@
 
 #include "chrome/browser/safe_browsing/srt_fetcher_win.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
@@ -11,7 +13,9 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
@@ -35,7 +39,7 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "components/component_updater/pref_names.h"
 #include "components/rappor/rappor_service.h"
-#include "components/variations/net/variations_http_header_provider.h"
+#include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -230,9 +234,8 @@ class SRTFetcher : public net::URLFetcherDelegate {
     ProfileIOData* io_data = ProfileIOData::FromResourceContext(
         profile_->GetResourceContext());
     net::HttpRequestHeaders headers;
-    variations::VariationsHttpHeaderProvider::GetInstance()->AppendHeaders(
-        url_fetcher_->GetOriginalURL(),
-        io_data->IsOffTheRecord(),
+    variations::AppendVariationHeaders(
+        url_fetcher_->GetOriginalURL(), io_data->IsOffTheRecord(),
         ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
         &headers);
     url_fetcher_->SetExtraRequestHeaders(headers.ToString());
@@ -346,7 +349,7 @@ void ReportSwReporterRuntime(const base::TimeDelta& reporter_running_time) {
   }
 
   bool has_start_time = false;
-  int64 start_time_value = 0;
+  int64_t start_time_value = 0;
   if (reporter_key.HasValue(kStartTimeValueName) &&
       reporter_key.ReadInt64(kStartTimeValueName, &start_time_value) ==
           ERROR_SUCCESS) {
@@ -355,7 +358,7 @@ void ReportSwReporterRuntime(const base::TimeDelta& reporter_running_time) {
   }
 
   bool has_end_time = false;
-  int64 end_time_value = 0;
+  int64_t end_time_value = 0;
   if (reporter_key.HasValue(kEndTimeValueName) &&
       reporter_key.ReadInt64(kEndTimeValueName, &end_time_value) ==
           ERROR_SUCCESS) {
@@ -398,7 +401,7 @@ void ReportSwReporterScanTimes() {
 
   base::string16 value_name;
   int uws_id = 0;
-  int64 raw_scan_time = 0;
+  int64_t raw_scan_time = 0;
   int num_scan_times = scan_times_key.GetValueCount();
   for (int i = 0; i < num_scan_times; ++i) {
     if (scan_times_key.GetValueNameAt(i, &value_name) == ERROR_SUCCESS &&

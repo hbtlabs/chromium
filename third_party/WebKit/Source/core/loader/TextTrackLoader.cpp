@@ -23,8 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "core/loader/TextTrackLoader.h"
 
 #include "core/dom/Document.h"
@@ -105,14 +103,14 @@ void TextTrackLoader::notifyFinished(Resource* resource)
     cancelLoad();
 }
 
-bool TextTrackLoader::load(const KURL& url, const AtomicString& crossOriginMode)
+bool TextTrackLoader::load(const KURL& url, CrossOriginAttributeValue crossOrigin)
 {
     cancelLoad();
 
     FetchRequest cueRequest(ResourceRequest(document().completeURL(url)), FetchInitiatorTypeNames::texttrack);
 
-    if (!crossOriginMode.isNull()) {
-        cueRequest.setCrossOriginAccessControl(document().securityOrigin(), crossOriginMode);
+    if (crossOrigin != CrossOriginAttributeNotSet) {
+        cueRequest.setCrossOriginAccessControl(document().securityOrigin(), crossOrigin);
     } else if (!document().securityOrigin()->canRequestNoSuborigin(url)) {
         // Text track elements without 'crossorigin' set on the parent are "No CORS"; report error if not same-origin.
         corsPolicyPreventedLoad(document().securityOrigin(), url);

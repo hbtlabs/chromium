@@ -6,7 +6,6 @@
 
 #include <CoreServices/CoreServices.h>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -80,7 +79,7 @@ AUAudioInputStream::AUAudioInputStream(AudioManagerMac* manager,
   format_.mBytesPerFrame = format_.mBytesPerPacket;
   format_.mReserved = 0;
 
-  DVLOG(1) << "Desired ouput format: " << format_;
+  DVLOG(1) << "Desired output (client side) format: " << format_;
 
   // Derive size (in bytes) of the buffers that we will render to.
   UInt32 data_byte_size = number_of_frames_ * format_.mBytesPerFrame;
@@ -89,7 +88,7 @@ AUAudioInputStream::AUAudioInputStream(AudioManagerMac* manager,
   // Allocate AudioBuffers to be used as storage for the received audio.
   // The AudioBufferList structure works as a placeholder for the
   // AudioBuffer structure, which holds a pointer to the actual data buffer.
-  audio_data_buffer_.reset(new uint8[data_byte_size]);
+  audio_data_buffer_.reset(new uint8_t[data_byte_size]);
   audio_buffer_list_.mNumberBuffers = 1;
 
   AudioBuffer* audio_buffer = audio_buffer_list_.mBuffers;
@@ -113,9 +112,32 @@ bool AUAudioInputStream::Open() {
     return false;
   }
 
-  // Start by obtaining an AudioOuputUnit using an AUHAL component description.
+  OSStatus result = noErr;
+
+  // Try to set the I/O buffer size for the HAL to |number_of_frames_| and set
+  // |buffer_size_was_changed_| to true if the size was changed. The status of
+  // other active audio input and output streams are involved in the final
+  // setting.
+  // NOTE: always do this setting before configuring the audio unit since there
+  // is a risk of deadlocking in Core Audio otherwise.
+  const bool is_input = true;
+  if (!manager_->MaybeChangeBufferSize(input_device_id_, is_input,
+                                       number_of_frames_,
+                                       &buffer_size_was_changed_)) {
+    result = kAudioUnitErr_FormatNotSupported;
+    HandleError(result);
+    return false;
+  }
+  DLOG_IF(WARNING, buffer_size_was_changed_) << "IO buffer size was changed to "
+                                             << number_of_frames_;
+
+  // Obtain an AudioOuputUnit using an AUHAL component description.
 
   // Description for the Audio Unit we want to use (AUHAL in this case).
+  // The kAudioUnitSubType_HALOutput audio unit interfaces to any audio device.
+  // The user specifies which  audio device to track. The audio unit can do
+  // input from the device as well as output to the device. Bus 0 is used for
+  // the output side, bus 1 is used to get audio input from the device.
   AudioComponentDescription desc = {
       kAudioUnitType_Output,
       kAudioUnitSubType_HALOutput,
@@ -124,12 +146,19 @@ bool AUAudioInputStream::Open() {
       0
   };
 
-  AudioComponent comp = AudioComponentFindNext(0, &desc);
+  AudioComponent comp = AudioComponentFindNext(NULL, &desc);
   DCHECK(comp);
 
   // Get access to the service provided by the specified Audio Unit.
-  OSStatus result = AudioComponentInstanceNew(comp, &audio_unit_);
+  result = AudioComponentInstanceNew(comp, &audio_unit_);
   if (result) {
+    HandleError(result);
+    return false;
+  }
+
+  // Initialize the AUHAL before making any changes or using it.
+  result = AudioUnitInitialize(audio_unit_);
+  if (result != noErr) {
     HandleError(result);
     return false;
   }
@@ -195,16 +224,6 @@ bool AUAudioInputStream::Open() {
     HandleError(result);
     return false;
   }
-
-  if (!manager_->MaybeChangeBufferSize(input_device_id_, audio_unit_, 1,
-                                       number_of_frames_,
-                                       &buffer_size_was_changed_)) {
-    result = kAudioUnitErr_FormatNotSupported;
-    HandleError(result);
-    return false;
-  }
-  DLOG_IF(WARNING, buffer_size_was_changed_) << "IO buffer size was changed to "
-                                             << number_of_frames_;
 
   // Register the input procedure for the AUHAL.
   // This procedure will be called when the AUHAL has received new data
@@ -512,7 +531,7 @@ OSStatus AUAudioInputStream::InputProc(void* user_data,
       // handles it.
       // See See http://www.crbug.com/434681 for one example when we can enter
       // this scope.
-      audio_input->audio_data_buffer_.reset(new uint8[new_size]);
+      audio_input->audio_data_buffer_.reset(new uint8_t[new_size]);
       audio_buffer->mData = audio_input->audio_data_buffer_.get();
     }
 
@@ -573,9 +592,9 @@ OSStatus AUAudioInputStream::Provide(UInt32 number_of_frames,
   GetAgcVolume(&normalized_volume);
 
   AudioBuffer& buffer = io_data->mBuffers[0];
-  uint8* audio_data = reinterpret_cast<uint8*>(buffer.mData);
-  uint32 capture_delay_bytes = static_cast<uint32>
-      ((capture_latency_frames + 0.5) * format_.mBytesPerFrame);
+  uint8_t* audio_data = reinterpret_cast<uint8_t*>(buffer.mData);
+  uint32_t capture_delay_bytes = static_cast<uint32_t>(
+      (capture_latency_frames + 0.5) * format_.mBytesPerFrame);
   DCHECK(audio_data);
   if (!audio_data)
     return kAudioUnitErr_InvalidElement;
@@ -769,11 +788,6 @@ void AUAudioInputStream::CheckInputStartupSuccess() {
       // Now when we know that startup has failed for some reason, add extra
       // UMA stats in an attempt to figure out the exact reason.
       AddHistogramsForFailedStartup();
-      // Kill the browser and create a crash log. This is just a temporary
-      // test (intended for Canary) where the goal is to gather some more
-      // detailed stats about how and why we can hit this problem.
-      // See crbug.com/549021 for details.
-      CHECK(false);
     }
   }
 }
@@ -803,6 +817,8 @@ void AUAudioInputStream::AddHistogramsForFailedStartup() {
                             manager_->low_latency_input_streams());
   UMA_HISTOGRAM_COUNTS_1000("Media.Audio.NumberOfBasicInputStreamsMac",
                             manager_->basic_input_streams());
+  UMA_HISTOGRAM_BOOLEAN("Media.Audio.AutomaticGainControlMac",
+                        GetAutomaticGainControl());
 }
 
 }  // namespace media

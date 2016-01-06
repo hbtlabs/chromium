@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
@@ -108,7 +110,7 @@ void IconWithBadgeImageSource::SetIcon(const gfx::Image& icon) {
 }
 
 void IconWithBadgeImageSource::SetBadge(scoped_ptr<Badge> badge) {
-  badge_ = badge.Pass();
+  badge_ = std::move(badge);
 }
 
 void IconWithBadgeImageSource::Draw(gfx::Canvas* canvas) {

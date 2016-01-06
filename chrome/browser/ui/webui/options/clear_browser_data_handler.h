@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_CLEAR_BROWSER_DATA_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_CLEAR_BROWSER_DATA_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/browsing_data/browsing_data_counter.h"
@@ -31,10 +32,6 @@ class ClearBrowserDataHandler : public OptionsPageUIHandler,
   void RegisterMessages() override;
 
   void UpdateInfoBannerVisibility();
-
-  // Constructs the text to be displayed by a counter from the given |result|.
-  static base::string16 GetCounterTextFromResult(
-      const BrowsingDataCounter::Result* result);
 
  private:
   // Javascript callback for when the CBD dialog is opened. The caller does

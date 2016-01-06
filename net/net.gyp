@@ -81,7 +81,7 @@
     },
     {
       # Protobuf compiler / generator for QUIC crypto protocol buffer.
-      # GN version: //net/quic/proto
+      # GN version: //net:net_quic_proto
       'target_name': 'net_quic_proto',
       'type': 'static_library',
       'sources': [
@@ -107,6 +107,7 @@
       'target_name': 'net',
       'dependencies': [
         '../base/base.gyp:base_i18n',
+        '../third_party/brotli/brotli.gyp:brotli',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
         '../third_party/protobuf/protobuf.gyp:protobuf_lite',
@@ -117,6 +118,7 @@
         'base/filename_util_icu.cc',
         'base/net_string_util_icu.cc',
         'base/net_util_icu.cc',
+        'filter/brotli_filter.cc',
       ],
       'includes': [ 'net_common.gypi' ],
     },
@@ -235,25 +237,19 @@
             'http/http_auth_handler_negotiate_unittest.cc',
           ],
         }],
-        [ 'use_openssl == 1 or (desktop_linux == 0 and chromeos == 0 and OS != "ios")', {
-          # Only include this test when on Posix and using NSS for
-          # cert verification or on iOS (which also uses NSS for certs).
+        [ 'use_nss_certs == 0 and OS != "ios"', {
+          # Only include this test when using system NSS for cert verification
+          # or on iOS (which also uses NSS for certs).
           'sources!': [
             'cert_net/nss_ocsp_unittest.cc',
           ],
         }],
         [ 'use_openssl==1', {
-            # When building for OpenSSL, we need to exclude NSS specific tests
-            # or functionality not supported by OpenSSL yet.
-            # TODO(bulach): Add equivalent tests when the underlying
-            #               functionality is ported to OpenSSL.
             'sources!': [
-              'cert/x509_util_nss_unittest.cc',
               'quic/test_tools/crypto_test_utils_nss.cc',
             ],
           }, {  # else !use_openssl: remove the unneeded files and pull in NSS.
             'sources!': [
-              'cert/x509_util_openssl_unittest.cc',
               'quic/test_tools/crypto_test_utils_openssl.cc',
               'socket/ssl_client_socket_openssl_unittest.cc',
               'ssl/ssl_client_session_cache_openssl_unittest.cc',
@@ -288,6 +284,16 @@
               'url_request/url_request_ftp_job_unittest.cc',
             ],
           },
+        ],
+        [ 'enable_bidirectional_stream!=1', {
+            'sources!': [
+              'http/bidirectional_stream_unittest.cc',
+            ],
+          }, { # else
+           'defines': [
+              'ENABLE_BIDIRECTIONAL_STREAM',
+            ],
+          }
         ],
         [ 'enable_built_in_dns!=1', {
             'sources!': [
@@ -364,11 +370,12 @@
                   'test_data_files': [
                     'data/certificate_policies_unittest/',
                     'data/name_constraints_unittest/',
+                    'data/parse_certificate_unittest/',
                     'data/ssl/certificates/',
                     'data/test.html',
                     'data/url_request_unittest/',
+                    'data/verify_certificate_chain_unittest/',
                     'data/verify_name_match_unittest/names/',
-                    'data/parse_certificate_unittest/',
                   ],
                   'test_data_prefix': 'net',
                 },
@@ -383,6 +390,7 @@
               'disk_cache/backend_unittest.cc',
               'disk_cache/blockfile/block_files_unittest.cc',
               # Need to read input data files.
+              'filter/brotli_filter_unittest.cc',
               'filter/gzip_filter_unittest.cc',
               # Need TestServer.
               "cert_net/cert_net_fetcher_impl_unittest.cc",
@@ -644,8 +652,6 @@
             'net_test_jni_headers',
           ],
           'sources': [
-            'test/android/net_test_jni_onload.cc',
-            'test/android/net_test_jni_onload.h',
             'test/embedded_test_server/android/embedded_test_server_android.cc',
             'test/embedded_test_server/android/embedded_test_server_android.h',
             'test/spawned_test_server/remote_test_server.cc',
@@ -693,7 +699,6 @@
         {
           'action_name': 'net_resources',
           'variables': {
-            'grit_whitelist': '',
             'grit_grd_file': 'base/net_resources.grd',
           },
           'includes': [ '../build/grit_action.gypi' ],
@@ -843,8 +848,8 @@
         'tools/quic/quic_simple_server_packet_writer.h',
         'tools/quic/quic_spdy_client_stream.cc',
         'tools/quic/quic_spdy_client_stream.h',
-        'tools/quic/quic_spdy_server_stream.cc',
-        'tools/quic/quic_spdy_server_stream.h',
+        'tools/quic/quic_simple_server_stream.cc',
+        'tools/quic/quic_simple_server_stream.h',
         'tools/quic/quic_time_wait_list_manager.cc',
         'tools/quic/quic_time_wait_list_manager.h',
         'tools/quic/synchronous_host_resolver.cc',
@@ -854,14 +859,11 @@
     {
       # GN version: //net:stale_while_revalidate_experiment_domains
       'target_name': 'stale_while_revalidate_experiment_domains',
-      'type': '<(component)',
+      'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
         'net',
         'net_derived_sources',
-      ],
-      'defines': [
-        'NET_IMPLEMENTATION',
       ],
       'sources': [
         'base/stale_while_revalidate_experiment_domains.cc',
@@ -1362,6 +1364,7 @@
             'DISABLE_FTP_SUPPORT=1',
           ],
           'sources': [
+            'filter/brotli_filter_disabled.cc',
             'base/net_string_util_icu_alternatives_android.cc',
             'base/net_string_util_icu_alternatives_android.h',
           ],
@@ -1392,7 +1395,7 @@
           'type': 'none',
           'sources': [
             'android/javatests/src/org/chromium/net/AndroidKeyStoreTestUtil.java',
-            'test/android/javatests/src/org/chromium/net/test/EmbeddedTestServer.java',
+            'test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java',
             'test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java',
           ],
           'variables': {
@@ -1419,6 +1422,17 @@
           'includes': [ '../build/java.gypi' ],
         },
         {
+          'target_name': 'embedded_test_server_aidl',
+          'type': 'none',
+          'variables': {
+            'aidl_interface_file': '../net/test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerInterface.aidl',
+          },
+          'sources': [
+            '../net/test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerImpl.aidl',
+          ],
+          'includes': [ '../build/java_aidl.gypi' ],
+        },
+        {
           'target_name': 'net_java_test_support',
           'type': 'none',
           'variables': {
@@ -1427,13 +1441,69 @@
             'chromium_code': 0,
           },
           'dependencies': [
+            'embedded_test_server_aidl',
             'net_java',
-            'net_test_support',
             'url_request_failed_job_java',
             '../base/base.gyp:base_java',
+            '../base/base.gyp:base_java_test_support',
             '../third_party/android_tools/android_tools.gyp:legacy_http_javalib',
           ],
           'includes': [ '../build/java.gypi' ],
+        },
+        {
+          'target_name': 'libnet_java_test_support',
+          'type': 'shared_library',
+          'dependencies': [
+            'net_test_support',
+            '../base/base.gyp:base',
+          ],
+          'sources': [
+            'test/android/net_test_entry_point.cc',
+            'test/android/net_test_jni_onload.cc',
+            'test/android/net_test_jni_onload.h',
+          ],
+        },
+        {
+          'target_name': 'net_test_support_apk',
+          'type': 'none',
+          'dependencies': [
+            'net_java_test_support',
+          ],
+          'variables': {
+            'android_manifest_path': 'test/android/javatests/AndroidManifest.xml',
+            'apk_name': 'ChromiumNetTestSupport',
+            'is_test_apk': 1,
+            'java_in_dir': 'test/android/javatests',
+            'java_in_dir_suffix': '/src_dummy',
+            'native_lib_target': 'libnet_java_test_support',
+          },
+          'includes': [
+            '../build/java_apk.gypi',
+          ],
+        },
+        {
+          # Targets that need the net test support APK should depend on this
+          # target. It ensures that the APK is built without passing the
+          # classpath on to dependent targets.
+          'target_name': 'require_net_test_support_apk',
+          'type': 'none',
+          'actions': [
+            {
+              'action_name': 'require_ChromiumNetTestSupport',
+              'variables': {
+                'required_file': '<(PRODUCT_DIR)/net_test_support_apk/ChromiumNetTestSupport.apk.required',
+              },
+              'inputs': [
+                '<(PRODUCT_DIR)/apks/ChromiumNetTestSupport.apk',
+              ],
+              'outputs': [
+                '<(required_file)',
+              ],
+              'action': [
+                'python', '../build/android/gyp/touch.py', '<(required_file)',
+              ],
+            },
+          ],
         },
         {
           'target_name': 'url_request_failed_job_java',

@@ -4,7 +4,11 @@
 
 #include "sync/engine/model_type_worker.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
@@ -36,8 +40,8 @@ ModelTypeWorker::ModelTypeWorker(
     scoped_ptr<ModelTypeProcessor> model_type_processor)
     : type_(type),
       data_type_state_(initial_state),
-      model_type_processor_(model_type_processor.Pass()),
-      cryptographer_(cryptographer.Pass()),
+      model_type_processor_(std::move(model_type_processor)),
+      cryptographer_(std::move(cryptographer)),
       nudge_handler_(nudge_handler),
       weak_ptr_factory_(this) {
   // Request an initial sync if it hasn't been completed yet.
@@ -76,7 +80,7 @@ bool ModelTypeWorker::IsEncryptionRequired() const {
 void ModelTypeWorker::UpdateCryptographer(
     scoped_ptr<Cryptographer> cryptographer) {
   DCHECK(cryptographer);
-  cryptographer_ = cryptographer.Pass();
+  cryptographer_ = std::move(cryptographer);
 
   // Update our state and that of the proxy.
   OnCryptographerUpdated();
@@ -241,7 +245,7 @@ scoped_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   DCHECK(CalledOnValidThread());
 
   size_t space_remaining = max_entries;
-  std::vector<int64> sequence_numbers;
+  std::vector<int64_t> sequence_numbers;
   google::protobuf::RepeatedPtrField<sync_pb::SyncEntity> commit_entities;
 
   if (!CanCommitItems())
@@ -253,7 +257,7 @@ scoped_ptr<CommitContribution> ModelTypeWorker::GetContribution(
     EntityTracker* entity = it->second.get();
     if (entity->HasPendingCommit()) {
       sync_pb::SyncEntity* commit_entity = commit_entities.Add();
-      int64 sequence_number = -1;
+      int64_t sequence_number = -1;
 
       entity->PrepareCommitProto(commit_entity, &sequence_number);
       HelpInitializeCommitEntity(commit_entity);
@@ -461,4 +465,4 @@ bool ModelTypeWorker::DecryptSpecifics(Cryptographer* cryptographer,
   return true;
 }
 
-}  // namespace syncer
+}  // namespace syncer_v2

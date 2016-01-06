@@ -5,13 +5,15 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_ROUTER_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_ROUTER_H_
 
+#include <stdint.h>
+
 #include <map>
 
+#include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/lib/connector.h"
 #include "mojo/public/cpp/bindings/lib/filter_chain.h"
 #include "mojo/public/cpp/bindings/lib/shared_data.h"
-#include "mojo/public/cpp/bindings/lib/thread_checker.h"
 #include "mojo/public/cpp/environment/environment.h"
 #include "mojo/public/cpp/environment/logging.h"
 
@@ -132,7 +134,7 @@ class Router : public MessageReceiverWithResponder {
   ResponderMap responders_;
   uint64_t next_request_id_;
   bool testing_mode_;
-  ThreadChecker thread_checker_;
+  base::ThreadChecker thread_checker_;
 };
 
 }  // namespace internal

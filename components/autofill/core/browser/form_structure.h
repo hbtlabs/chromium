@@ -5,12 +5,15 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_STRUCTURE_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_STRUCTURE_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
@@ -61,6 +64,7 @@ class FormStructure {
   bool EncodeUploadRequest(const ServerFieldTypeSet& available_field_types,
                            bool form_was_autofilled,
                            const std::string& login_form_signature,
+                           bool observed_submission,
                            std::string* encoded_xml) const;
 
   // Encodes a XML block contains autofill field type from this FormStructure.
@@ -126,12 +130,16 @@ class FormStructure {
   // This method should only be called after the possible field types have been
   // set for each field.  |interaction_time| should be a timestamp corresponding
   // to the user's first interaction with the form.  |submission_time| should be
-  // a timestamp corresponding to the form's submission.
+  // a timestamp corresponding to the form's submission. |observed_submission|
+  // indicates whether this method is called as a result of observing a
+  // submission event (otherwise, it may be that an upload was triggered after
+  // a form was unfocused or a navigation occurred).
   void LogQualityMetrics(const base::TimeTicks& load_time,
                          const base::TimeTicks& interaction_time,
                          const base::TimeTicks& submission_time,
                          rappor::RapporService* rappor_service,
-                         bool did_show_suggestions) const;
+                         bool did_show_suggestions,
+                         bool observed_submission) const;
 
   // Classifies each field in |fields_| based upon its |autocomplete| attribute,
   // if the attribute is available.  The association is stored into the field's
@@ -193,6 +201,8 @@ class FormStructure {
   const base::string16& form_name() const { return form_name_; }
 
   const GURL& source_url() const { return source_url_; }
+
+  const GURL& target_url() const { return target_url_; }
 
   bool has_author_specified_types() { return has_author_specified_types_; }
 

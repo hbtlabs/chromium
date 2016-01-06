@@ -6,11 +6,13 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/crypto/null_encrypter.h"
 #include "net/quic/crypto/quic_decrypter.h"
 #include "net/quic/crypto/quic_encrypter.h"
 #include "net/quic/quic_flags.h"
+#include "net/quic/quic_simple_buffer_allocator.h"
 #include "net/quic/quic_utils.h"
 #include "net/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/quic/test_tools/quic_packet_generator_peer.h"
@@ -32,11 +34,10 @@ namespace net {
 namespace test {
 namespace {
 
-const int64 kMinFecTimeoutMs = 5u;
+const int64_t kMinFecTimeoutMs = 5u;
 
 static const FecSendPolicy kFecSendPolicyList[] = {
-    FEC_ANY_TRIGGER,
-    FEC_ALARM_TRIGGER,
+    FEC_ANY_TRIGGER, FEC_ALARM_TRIGGER,
 };
 
 class MockDelegate : public QuicPacketGenerator::DelegateInterface {
@@ -49,7 +50,7 @@ class MockDelegate : public QuicPacketGenerator::DelegateInterface {
                     IsHandshake handshake));
   MOCK_METHOD1(PopulateAckFrame, void(QuicAckFrame*));
   MOCK_METHOD1(PopulateStopWaitingFrame, void(QuicStopWaitingFrame*));
-  MOCK_METHOD1(OnSerializedPacket, void(const SerializedPacket& packet));
+  MOCK_METHOD1(OnSerializedPacket, void(SerializedPacket* packet));
   MOCK_METHOD2(CloseConnection, void(QuicErrorCode, bool));
   MOCK_METHOD0(OnResetFecGroup, void());
 
@@ -113,7 +114,7 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
       : framer_(QuicSupportedVersions(),
                 QuicTime::Zero(),
                 Perspective::IS_CLIENT),
-        generator_(42, &framer_, &random_, &delegate_),
+        generator_(42, &framer_, &random_, &buffer_allocator_, &delegate_),
         creator_(QuicPacketGeneratorPeer::GetPacketCreator(&generator_)) {
     generator_.set_fec_send_policy(GetParam());
   }
@@ -125,9 +126,9 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
     }
   }
 
-  void SavePacket(const SerializedPacket& packet) {
-    packets_.push_back(packet);
-    ASSERT_FALSE(packet.packet->owns_buffer());
+  void SavePacket(SerializedPacket* packet) {
+    packets_.push_back(*packet);
+    ASSERT_FALSE(packet->packet->owns_buffer());
     scoped_ptr<QuicEncryptedPacket> encrypted_deleter(packets_.back().packet);
     packets_.back().packet = packets_.back().packet->Clone();
   }
@@ -222,6 +223,7 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
 
   QuicFramer framer_;
   MockRandom random_;
+  SimpleBufferAllocator buffer_allocator_;
   StrictMock<MockDelegate> delegate_;
   QuicPacketGenerator generator_;
   QuicPacketCreator* creator_;
@@ -233,10 +235,9 @@ class QuicPacketGeneratorTest : public ::testing::TestWithParam<FecSendPolicy> {
   struct iovec iov_;
 };
 
-class MockDebugDelegate : public QuicPacketGenerator::DebugDelegate {
+class MockDebugDelegate : public QuicPacketCreator::DebugDelegate {
  public:
-  MOCK_METHOD1(OnFrameAddedToPacket,
-               void(const QuicFrame&));
+  MOCK_METHOD1(OnFrameAddedToPacket, void(const QuicFrame&));
 };
 
 // Run all end to end tests with all supported FEC send polocies.
@@ -699,11 +700,11 @@ TEST_P(QuicPacketGeneratorTest, ConsumeData_FramesPreviouslyQueued) {
   generator_.SetMaxPacketLength(length, /*force=*/false);
   delegate_.SetCanWriteAnything();
   {
-     InSequence dummy;
-     EXPECT_CALL(delegate_, OnSerializedPacket(_))
-         .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
-     EXPECT_CALL(delegate_, OnSerializedPacket(_))
-         .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
+    InSequence dummy;
+    EXPECT_CALL(delegate_, OnSerializedPacket(_))
+        .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
+    EXPECT_CALL(delegate_, OnSerializedPacket(_))
+        .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
   }
   generator_.StartBatchOperations();
   // Queue enough data to prevent a stream frame with a non-zero offset from
@@ -1678,6 +1679,35 @@ TEST_P(QuicPacketGeneratorTest, DontCrashOnInvalidStopWaiting) {
   EXPECT_DFATAL(generator_.FinishBatchOperations(),
                 "packet_number_length 1 is too small "
                 "for least_unacked_delta: 1001");
+}
+
+TEST_P(QuicPacketGeneratorTest, SetCurrentPath) {
+  delegate_.SetCanWriteAnything();
+  generator_.StartBatchOperations();
+
+  QuicConsumedData consumed = generator_.ConsumeData(
+      kHeadersStreamId, MakeIOVector("foo"), 2, true, MAY_FEC_PROTECT, nullptr);
+  EXPECT_EQ(3u, consumed.bytes_consumed);
+  EXPECT_TRUE(consumed.fin_consumed);
+  EXPECT_TRUE(generator_.HasQueuedFrames());
+  EXPECT_EQ(kDefaultPathId, QuicPacketCreatorPeer::GetCurrentPath(creator_));
+  // Does not change current path.
+  generator_.SetCurrentPath(kDefaultPathId, 1, 0);
+  EXPECT_EQ(kDefaultPathId, QuicPacketCreatorPeer::GetCurrentPath(creator_));
+
+  // Try to switch path when a packet is under construction.
+  QuicPathId kTestPathId1 = 1;
+  EXPECT_DFATAL(generator_.SetCurrentPath(kTestPathId1, 1, 0),
+                "Unable to change paths when a packet is under construction");
+  EXPECT_EQ(kDefaultPathId, QuicPacketCreatorPeer::GetCurrentPath(creator_));
+
+  // Try to switch path after current open packet gets serialized.
+  EXPECT_CALL(delegate_, OnSerializedPacket(_))
+      .WillOnce(Invoke(this, &QuicPacketGeneratorTest::SavePacket));
+  generator_.FlushAllQueuedFrames();
+  EXPECT_FALSE(generator_.HasQueuedFrames());
+  generator_.SetCurrentPath(kTestPathId1, 1, 0);
+  EXPECT_EQ(kTestPathId1, QuicPacketCreatorPeer::GetCurrentPath(creator_));
 }
 
 }  // namespace test

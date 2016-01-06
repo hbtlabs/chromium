@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/prefs/pref_service.h"
@@ -78,7 +81,7 @@ void FontHandler::FontListHasLoaded(scoped_ptr<base::ListValue> list) {
       // Add empty value to indicate a separator item.
       option->AppendString(std::string());
     }
-    encoding_list.Append(option.Pass());
+    encoding_list.Append(std::move(option));
   }
 
   web_ui()->CallJavascriptFunction("Settings.setFontsData", *list,

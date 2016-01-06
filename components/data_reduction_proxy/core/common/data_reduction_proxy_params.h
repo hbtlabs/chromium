@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "net/proxy/proxy_server.h"
 #include "url/gurl.h"
@@ -136,8 +137,6 @@ bool GetOverrideProxiesForHttpFromCommandLine(
 
 }  // namespace params
 
-class ClientConfig;
-
 // Contains information about a given proxy server. |proxies_for_http| and
 // |proxies_for_https| contain the configured data reduction proxy servers.
 // |is_fallback| and |is_ssl| note whether the given proxy is a fallback or a
@@ -186,10 +185,6 @@ class DataReductionProxyParams : public DataReductionProxyConfigValues {
 
   // If true, uses QUIC instead of SPDY to connect to proxies that use TLS.
   void EnableQuic(bool enable);
-
-  // Populates |response| with the Data Reduction Proxy server configuration.
-  // Virtual for mocking.
-  virtual void PopulateConfigResponse(ClientConfig* config) const;
 
   // Overrides of |DataReductionProxyConfigValues|
   bool UsingHTTPTunnel(const net::HostPortPair& proxy_server) const override;

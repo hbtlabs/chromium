@@ -5,9 +5,11 @@
 #include "net/test/spawned_test_server/spawner_communicator.h"
 
 #include <limits>
+#include <utility>
 
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/supports_user_data.h"
 #include "base/test/test_timeouts.h"
@@ -191,7 +193,7 @@ void SpawnerCommunicator::SendCommandAndWaitForResultOnIOThread(
     scoped_ptr<UploadElementReader> reader(
         UploadOwnedBytesElementReader::CreateWithString(post_data));
     cur_request_->set_upload(
-        ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+        ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
     HttpRequestHeaders headers;
     headers.SetHeader(HttpRequestHeaders::kContentType,
                       "application/json");

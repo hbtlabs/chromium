@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "media/base/cdm_config.h"
 #include "media/base/cdm_context.h"
@@ -81,7 +82,7 @@ MojoCdmService::MojoCdmService(
     mojo::ServiceProvider* service_provider,
     CdmFactory* cdm_factory,
     mojo::InterfaceRequest<interfaces::ContentDecryptionModule> request)
-    : binding_(this, request.Pass()),
+    : binding_(this, std::move(request)),
       context_(context),
       service_provider_(service_provider),
       cdm_factory_(cdm_factory),
@@ -100,7 +101,7 @@ MojoCdmService::~MojoCdmService() {
 
 void MojoCdmService::SetClient(
     interfaces::ContentDecryptionModuleClientPtr client) {
-  client_ = client.Pass();
+  client_ = std::move(client);
 }
 
 void MojoCdmService::Initialize(const mojo::String& key_system,
@@ -230,7 +231,7 @@ void MojoCdmService::OnSessionMessage(const std::string& session_id,
                                       MediaKeys::MessageType message_type,
                                       const std::vector<uint8_t>& message,
                                       const GURL& legacy_destination_url) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << "(" << message_type << ")";
   client_->OnSessionMessage(
       session_id, static_cast<interfaces::CdmMessageType>(message_type),
       mojo::Array<uint8_t>::From(message),
@@ -240,18 +241,20 @@ void MojoCdmService::OnSessionMessage(const std::string& session_id,
 void MojoCdmService::OnSessionKeysChange(const std::string& session_id,
                                          bool has_additional_usable_key,
                                          CdmKeysInfo keys_info) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__
+           << " has_additional_usable_key=" << has_additional_usable_key;
+
   mojo::Array<interfaces::CdmKeyInformationPtr> keys_data;
   for (const auto& key : keys_info)
     keys_data.push_back(interfaces::CdmKeyInformation::From(*key));
   client_->OnSessionKeysChange(session_id, has_additional_usable_key,
-                               keys_data.Pass());
+                               std::move(keys_data));
 }
 
 void MojoCdmService::OnSessionExpirationUpdate(
     const std::string& session_id,
     const base::Time& new_expiry_time_sec) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << " expiry=" << new_expiry_time_sec;
   client_->OnSessionExpirationUpdate(session_id,
                                      new_expiry_time_sec.ToDoubleT());
 }
@@ -265,7 +268,7 @@ void MojoCdmService::OnLegacySessionError(const std::string& session_id,
                                           MediaKeys::Exception exception,
                                           uint32_t system_code,
                                           const std::string& error_message) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << "(" << exception << ") " << error_message;
   client_->OnLegacySessionError(
       session_id, static_cast<interfaces::CdmException>(exception), system_code,
       error_message);

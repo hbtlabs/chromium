@@ -26,11 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
+#include "platform/audio/AudioFIFO.h"
 
 #if ENABLE(WEB_AUDIO)
-
-#include "platform/audio/AudioFIFO.h"
 
 namespace blink {
 

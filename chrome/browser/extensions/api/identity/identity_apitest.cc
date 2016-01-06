@@ -4,6 +4,7 @@
 
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -11,6 +12,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
@@ -305,7 +307,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   void set_login_ui_result(bool result) { login_ui_result_ = result; }
 
   void set_mint_token_flow(scoped_ptr<OAuth2MintTokenFlow> flow) {
-    flow_ = flow.Pass();
+    flow_ = std::move(flow);
   }
 
   void set_mint_token_result(TestOAuth2MintTokenFlow::ResultType result_type) {
@@ -558,10 +560,9 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
     will_create_browser_context_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
             ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                  base::Bind(&IdentityTestWithSignin::
-                                 OnWillCreateBrowserContextServices,
-                             base::Unretained(this)))
-            .Pass();
+                base::Bind(
+                    &IdentityTestWithSignin::OnWillCreateBrowserContextServices,
+                    base::Unretained(this)));
   }
 
   void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
@@ -1657,17 +1658,16 @@ class GetAuthTokenFunctionPublicSessionTest : public GetAuthTokenFunctionTest {
 
   scoped_refptr<Extension> CreateTestExtension(const std::string& id) {
     return ExtensionBuilder()
-        .SetManifest(
-             DictionaryBuilder()
-                 .Set("name", "Test")
-                 .Set("version", "1.0")
-                 .Set(
-                     "oauth2",
-                     DictionaryBuilder()
-                         .Set("client_id", "clientId")
-                         .Set(
-                             "scopes",
-                             ListBuilder().Append("scope1"))))
+        .SetManifest(std::move(
+            DictionaryBuilder()
+                .Set("name", "Test")
+                .Set("version", "1.0")
+                .Set("oauth2",
+                     std::move(
+                         DictionaryBuilder()
+                             .Set("client_id", "clientId")
+                             .Set("scopes",
+                                  std::move(ListBuilder().Append("scope1")))))))
         .SetLocation(Manifest::UNPACKED)
         .SetID(id)
         .Build();

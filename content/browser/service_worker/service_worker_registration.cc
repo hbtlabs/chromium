@@ -25,7 +25,7 @@ ServiceWorkerVersionInfo GetVersionInfo(ServiceWorkerVersion* version) {
 
 ServiceWorkerRegistration::ServiceWorkerRegistration(
     const GURL& pattern,
-    int64 registration_id,
+    int64_t registration_id,
     base::WeakPtr<ServiceWorkerContextCore> context)
     : pattern_(pattern),
       registration_id_(registration_id),
@@ -234,29 +234,6 @@ void ServiceWorkerRegistration::AbortPendingClear(
                  this,
                  callback,
                  most_recent_version));
-}
-
-void ServiceWorkerRegistration::GetUserData(
-    const std::string& key,
-    const GetUserDataCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->GetUserData(registration_id_, key, callback);
-}
-
-void ServiceWorkerRegistration::StoreUserData(
-    const std::string& key,
-    const std::string& data,
-    const StatusCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->StoreUserData(
-      registration_id_, pattern().GetOrigin(), key, data, callback);
-}
-
-void ServiceWorkerRegistration::ClearUserData(
-    const std::string& key,
-    const StatusCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->ClearUserData(registration_id_, key, callback);
 }
 
 void ServiceWorkerRegistration::OnNoControllees(ServiceWorkerVersion* version) {

@@ -5,6 +5,8 @@
 #ifndef MEDIA_BLINK_MULTIBUFFER_DATA_SOURCE_H_
 #define MEDIA_BLINK_MULTIBUFFER_DATA_SOURCE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -61,6 +63,10 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // Adjusts the buffering algorithm based on the given preload value.
   void SetPreload(Preload preload) override;
 
+  // Adjusts the buffering algorithm based on the given buffering strategy
+  // value.
+  void SetBufferingStrategy(BufferingStrategy buffering_strategy) override;
+
   // Returns true if the media resource has a single origin, false otherwise.
   // Only valid to call after Initialize() has completed.
   //
@@ -81,7 +87,6 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // behavior.
   void MediaPlaybackRateChanged(double playback_rate) override;
   void MediaIsPlaying() override;
-  void MediaIsPaused() override;
   bool media_has_played() const override;
 
   // Returns true if the resource is local.
@@ -98,11 +103,11 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // Called from demuxer thread.
   void Stop() override;
 
-  void Read(int64 position,
+  void Read(int64_t position,
             int size,
-            uint8* data,
+            uint8_t* data,
             const DataSource::ReadCB& read_cb) override;
-  bool GetSize(int64* size_out) override;
+  bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
 
@@ -111,8 +116,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
 
   // A factory method to create a BufferedResourceLoader based on the read
   // parameters.
-  void CreateResourceLoader(int64 first_byte_position,
-                            int64 last_byte_position);
+  void CreateResourceLoader(int64_t first_byte_position,
+                            int64_t last_byte_position);
 
   friend class MultibufferDataSourceTest;
 
@@ -136,10 +141,12 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   void UpdateSingleOrigin();
 
   // MultiBufferReader progress callback.
-  void ProgressCallback(int64 begin, int64 end);
+  void ProgressCallback(int64_t begin, int64_t end);
 
   // call downloading_cb_ if needed.
-  void UpdateLoadingState();
+  // If |force_loading| is true, we call downloading_cb_ and tell it that
+  // we are currently loading, regardless of what reader_->IsLoading() says.
+  void UpdateLoadingState(bool force_loading);
 
   // Update |reader_|'s preload and buffer settings.
   void UpdateBufferSizes();
@@ -153,12 +160,14 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // The total size of the resource. Set during StartCallback() if the size is
   // known, otherwise it will remain kPositionNotSpecified until the size is
   // determined by reaching EOF.
-  int64 total_bytes_;
+  int64_t total_bytes_;
 
   // This value will be true if this data source can only support streaming.
   // i.e. range request is not supported.
   bool streaming_;
 
+  // This is the loading state that we last reported to our owner through
+  // |downloading_cb_|.
   bool loading_;
 
   // The task runner of the render thread.
@@ -191,8 +200,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource
   // least once.
   bool media_has_played_;
 
-  // Are we currently paused.
-  bool paused_;
+  // Buffering strategy set by SetBufferingStrategy.
+  BufferingStrategy buffering_strategy_;
 
   // As we follow redirects, we set this variable to false if redirects
   // go between different origins.

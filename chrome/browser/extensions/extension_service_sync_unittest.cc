@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -1408,6 +1412,40 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataPermissionApproval) {
   }
 }
 
+// Regression test for crbug.com/558299
+TEST_F(ExtensionServiceSyncTest, DontSyncThemes) {
+  InitializeEmptyExtensionService();
+
+  // The user has enabled sync.
+  ProfileSyncServiceFactory::GetForProfile(profile())->SetSyncSetupCompleted();
+  // Make sure ExtensionSyncService is created, so it'll be notified of changes.
+  extension_sync_service();
+
+  service()->Init();
+  ASSERT_TRUE(service()->is_ready());
+
+  syncer::FakeSyncChangeProcessor* processor =
+      new syncer::FakeSyncChangeProcessor;
+  extension_sync_service()->MergeDataAndStartSyncing(
+      syncer::EXTENSIONS,
+      syncer::SyncDataList(),
+      make_scoped_ptr(processor),
+      make_scoped_ptr(new syncer::SyncErrorFactoryMock));
+
+  processor->changes().clear();
+
+  // Sanity check: Installing an extension should result in a sync change.
+  InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
+  EXPECT_EQ(1u, processor->changes().size());
+
+  processor->changes().clear();
+
+  // Installing a theme should not result in a sync change (themes are handled
+  // separately by ThemeSyncableService).
+  InstallCRX(data_dir().AppendASCII("theme.crx"), INSTALL_NEW);
+  EXPECT_TRUE(processor->changes().empty());
+}
+
 #if defined(ENABLE_SUPERVISED_USERS)
 
 class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
@@ -1800,16 +1838,17 @@ TEST_F(ExtensionServiceSyncTest, SyncExtensionHasAllhostsWithheld) {
   const std::string kName("extension");
   scoped_refptr<const Extension> extension =
       extensions::ExtensionBuilder()
-      .SetLocation(Manifest::INTERNAL)
-      .SetManifest(
-          extensions::DictionaryBuilder()
-              .Set("name", kName)
-              .Set("description", "foo")
-              .Set("manifest_version", 2)
-              .Set("version", "1.0")
-              .Set("permissions", extensions::ListBuilder().Append("*://*/*")))
-      .SetID(crx_file::id_util::GenerateId(kName))
-      .Build();
+          .SetLocation(Manifest::INTERNAL)
+          .SetManifest(std::move(
+              extensions::DictionaryBuilder()
+                  .Set("name", kName)
+                  .Set("description", "foo")
+                  .Set("manifest_version", 2)
+                  .Set("version", "1.0")
+                  .Set("permissions",
+                       std::move(extensions::ListBuilder().Append("*://*/*")))))
+          .SetID(crx_file::id_util::GenerateId(kName))
+          .Build();
 
   // Install and enable it.
   service()->AddExtension(extension.get());

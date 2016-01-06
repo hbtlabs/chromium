@@ -4,12 +4,14 @@
 
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/testing_pref_service.h"
@@ -81,8 +83,9 @@ class TestingDeviceCloudPolicyManagerChromeOS
       scoped_ptr<DeviceCloudPolicyStoreChromeOS> store,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       ServerBackedStateKeysBroker* state_keys_broker)
-      : DeviceCloudPolicyManagerChromeOS(
-            store.Pass(), task_runner, state_keys_broker) {}
+      : DeviceCloudPolicyManagerChromeOS(std::move(store),
+                                         task_runner,
+                                         state_keys_broker) {}
   ~TestingDeviceCloudPolicyManagerChromeOS() override {}
 };
 
@@ -739,7 +742,7 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentBlankSystemSaltTest
  protected:
   DeviceCloudPolicyManagerChromeOSEnrollmentBlankSystemSaltTest() {
     // Set up a FakeCryptohomeClient with a blank system salt.
-    fake_cryptohome_client_->set_system_salt(std::vector<uint8>());
+    fake_cryptohome_client_->set_system_salt(std::vector<uint8_t>());
   }
 };
 

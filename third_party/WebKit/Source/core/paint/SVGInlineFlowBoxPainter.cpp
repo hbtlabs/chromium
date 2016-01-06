@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/SVGInlineFlowBoxPainter.h"
 
 #include "core/layout/LayoutInline.h"
@@ -32,18 +31,10 @@ void SVGInlineFlowBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoin
 {
     ASSERT(paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection);
 
-    {
-        SVGPaintContext paintContext(m_svgInlineFlowBox.layoutObject(), paintInfo);
-        if (paintContext.applyClipMaskAndFilterIfNecessary()) {
-            for (InlineBox* child = m_svgInlineFlowBox.firstChild(); child; child = child->nextOnLine())
-                child->paint(paintContext.paintInfo(), paintOffset, 0, 0);
-        }
-    }
-
-    if (m_svgInlineFlowBox.lineLayoutItem().styleRef().hasOutline()) {
-        PaintInfo outlinePaintInfo(paintInfo);
-        outlinePaintInfo.phase = PaintPhaseSelfOutline;
-        ObjectPainter(m_svgInlineFlowBox.layoutObject()).paintOutline(outlinePaintInfo, paintOffset);
+    SVGPaintContext paintContext(m_svgInlineFlowBox.layoutObject(), paintInfo);
+    if (paintContext.applyClipMaskAndFilterIfNecessary()) {
+        for (InlineBox* child = m_svgInlineFlowBox.firstChild(); child; child = child->nextOnLine())
+            child->paint(paintContext.paintInfo(), paintOffset, 0, 0);
     }
 }
 

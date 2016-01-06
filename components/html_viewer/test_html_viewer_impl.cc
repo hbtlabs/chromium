@@ -4,7 +4,10 @@
 
 #include "components/html_viewer/test_html_viewer_impl.h"
 
+#include <utility>
+
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "gin/converter.h"
@@ -42,11 +45,12 @@ class TestHTMLViewerImpl::ExecutionCallbackImpl
   ExecutionCallbackImpl(TestHTMLViewerImpl* host,
                         const mojo::Callback<void(mojo::String)>& callback)
       : host_(host), callback_(callback) {}
-  virtual ~ExecutionCallbackImpl() {}
+  ~ExecutionCallbackImpl() override {}
 
  private:
   // blink::WebScriptExecutionCallback:
-  virtual void completed(const blink::WebVector<v8::Local<v8::Value>>& result) {
+  void completed(
+      const blink::WebVector<v8::Local<v8::Value>>& result) override {
     mojo::String callback_result;
     if (!result.isEmpty())
       callback_result = V8ValueToJSONString(host_->web_frame_, result);
@@ -63,7 +67,7 @@ class TestHTMLViewerImpl::ExecutionCallbackImpl
 TestHTMLViewerImpl::TestHTMLViewerImpl(
     blink::WebLocalFrame* web_frame,
     mojo::InterfaceRequest<TestHTMLViewer> request)
-    : web_frame_(web_frame), binding_(this, request.Pass()) {}
+    : web_frame_(web_frame), binding_(this, std::move(request)) {}
 
 TestHTMLViewerImpl::~TestHTMLViewerImpl() {
   STLDeleteElements(&callbacks_);

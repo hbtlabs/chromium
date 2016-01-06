@@ -28,8 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "core/layout/LayoutRubyRun.h"
 
 #include "core/layout/LayoutRubyBase.h"
@@ -41,8 +39,8 @@ namespace blink {
 LayoutRubyRun::LayoutRubyRun()
     : LayoutBlockFlow(nullptr)
 {
-    setReplaced(true);
     setInline(true);
+    setIsAtomicInlineLevel(true);
 }
 
 LayoutRubyRun::~LayoutRubyRun()

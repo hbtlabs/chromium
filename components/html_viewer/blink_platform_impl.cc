@@ -5,8 +5,10 @@
 #include "components/html_viewer/blink_platform_impl.h"
 
 #include <cmath>
+#include <utility>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
@@ -50,11 +52,11 @@ class WebWaitableEventImpl : public blink::WebWaitableEvent {
     bool initially_signaled = state == InitialState::Signaled;
     impl_.reset(new base::WaitableEvent(manual_reset, initially_signaled));
   }
-  virtual ~WebWaitableEventImpl() {}
+  ~WebWaitableEventImpl() override {}
 
-  virtual void reset() { impl_->Reset(); }
-  virtual void wait() { impl_->Wait(); }
-  virtual void signal() { impl_->Signal(); }
+  void reset() override { impl_->Reset(); }
+  void wait() override { impl_->Wait(); }
+  void signal() override { impl_->Signal(); }
 
   base::WaitableEvent* impl() {
     return impl_.get();
@@ -83,11 +85,11 @@ BlinkPlatformImpl::BlinkPlatformImpl(
 
     mojo::CookieStorePtr cookie_store;
     connection->ConnectToService(&cookie_store);
-    cookie_jar_.reset(new WebCookieJarImpl(cookie_store.Pass()));
+    cookie_jar_.reset(new WebCookieJarImpl(std::move(cookie_store)));
 
     mojo::ClipboardPtr clipboard;
     app->ConnectToService("mojo:clipboard", &clipboard);
-    clipboard_.reset(new WebClipboardImpl(clipboard.Pass()));
+    clipboard_.reset(new WebClipboardImpl(std::move(clipboard)));
   }
 }
 
