@@ -22,7 +22,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/InspectorStyleSheet.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -55,6 +54,7 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/TextPosition.h"
+#include <algorithm>
 
 using blink::TypeBuilder::Array;
 using blink::RuleSourceDataList;

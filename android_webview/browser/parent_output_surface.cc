@@ -17,7 +17,14 @@ ParentOutputSurface::ParentOutputSurface(
 ParentOutputSurface::~ParentOutputSurface() {
 }
 
-void ParentOutputSurface::Reshape(const gfx::Size& size, float scale_factor) {
+void ParentOutputSurface::DidLoseOutputSurface() {
+  // Android WebView does not handle context loss.
+  LOG(FATAL) << "Render thread context loss";
+}
+
+void ParentOutputSurface::Reshape(const gfx::Size& size,
+                                  float scale_factor,
+                                  bool has_alpha) {
   DCHECK_EQ(1.f, scale_factor);
   surface_size_ = size;
 }

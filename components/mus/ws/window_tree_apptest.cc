@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -70,7 +74,8 @@ bool EmbedUrl(mojo::ApplicationImpl* app,
   {
     mojom::WindowTreeClientPtr client;
     app->ConnectToService(url.get(), &client);
-    ws->Embed(root_id, client.Pass(), mojom::WindowTree::ACCESS_POLICY_DEFAULT,
+    ws->Embed(root_id, std::move(client),
+              mojom::WindowTree::ACCESS_POLICY_DEFAULT,
               base::Bind(&EmbedCallbackImpl, &run_loop, &result));
   }
   run_loop.Run();
@@ -81,7 +86,8 @@ bool Embed(WindowTree* ws, Id root_id, mojom::WindowTreeClientPtr client) {
   bool result = false;
   base::RunLoop run_loop;
   {
-    ws->Embed(root_id, client.Pass(), mojom::WindowTree::ACCESS_POLICY_DEFAULT,
+    ws->Embed(root_id, std::move(client),
+              mojom::WindowTree::ACCESS_POLICY_DEFAULT,
               base::Bind(&EmbedCallbackImpl, &run_loop, &result));
   }
   run_loop.Run();
@@ -130,7 +136,7 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   }
 
   void Bind(mojo::InterfaceRequest<mojom::WindowTreeClient> request) {
-    binding_.Bind(request.Pass());
+    binding_.Bind(std::move(request));
   }
 
   mojom::WindowTree* tree() { return tree_.get(); }
@@ -214,7 +220,7 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   Id NewWindowWithCompleteId(Id id) {
     mojo::Map<mojo::String, mojo::Array<uint8_t>> properties;
     const uint32_t change_id = GetAndAdvanceChangeId();
-    tree()->NewWindow(change_id, id, properties.Pass());
+    tree()->NewWindow(change_id, id, std::move(properties));
     return WaitForChangeCompleted(change_id) ? id : 0;
   }
 
@@ -227,7 +233,7 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
     if (data)
       mojo_data = Array<uint8_t>::From(*data);
     const uint32_t change_id = GetAndAdvanceChangeId();
-    tree()->SetWindowProperty(change_id, window_id, name, mojo_data.Pass());
+    tree()->SetWindowProperty(change_id, window_id, name, std::move(mojo_data));
     return WaitForChangeCompleted(change_id);
   }
 
@@ -268,9 +274,9 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
                Id focused_window_id,
                uint32_t access_policy) override {
     // TODO(sky): add coverage of |focused_window_id|.
-    tree_ = tree.Pass();
+    tree_ = std::move(tree);
     connection_id_ = connection_id;
-    tracker()->OnEmbed(connection_id, root.Pass());
+    tracker()->OnEmbed(connection_id, std::move(root));
     if (embed_run_loop_)
       embed_run_loop_->Quit();
   }
@@ -286,8 +292,8 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
     // it is ignored.
     if (window_id == root_window_id_)
       return;
-    tracker()->OnWindowBoundsChanged(window_id, old_bounds.Pass(),
-                                     new_bounds.Pass());
+    tracker()->OnWindowBoundsChanged(window_id, std::move(old_bounds),
+                                     std::move(new_bounds));
   }
   void OnClientAreaChanged(
       uint32_t window_id,
@@ -311,7 +317,7 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
                                 Id old_parent,
                                 Array<WindowDataPtr> windows) override {
     tracker()->OnWindowHierarchyChanged(window, new_parent, old_parent,
-                                        windows.Pass());
+                                        std::move(windows));
   }
   void OnWindowReordered(Id window_id,
                          Id relative_window_id,
@@ -336,11 +342,11 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   void OnWindowSharedPropertyChanged(uint32_t window,
                                      const String& name,
                                      Array<uint8_t> new_data) override {
-    tracker_.OnWindowSharedPropertyChanged(window, name, new_data.Pass());
+    tracker_.OnWindowSharedPropertyChanged(window, name, std::move(new_data));
   }
   // TODO(sky): add testing coverage.
   void OnWindowFocused(uint32_t focused_window_id) override {}
-  void OnWindowPredefinedCursorChanged(uint32 window_id,
+  void OnWindowPredefinedCursorChanged(uint32_t window_id,
                                        mojom::Cursor cursor_id) override {
     tracker_.OnWindowPredefinedCursorChanged(window_id, cursor_id);
   }
@@ -350,13 +356,10 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
       change_completed_run_loop_->Quit();
     }
   }
-  void WmSetBounds(uint32_t change_id,
-                   Id window_id,
-                   mojo::RectPtr bounds) override {}
-  void WmSetProperty(uint32_t change_id,
-                     Id window_id,
-                     const mojo::String& name,
-                     mojo::Array<uint8_t> transit_data) override {}
+  void RequestClose(uint32_t window_id) override {}
+  void GetWindowManagerInternal(
+      mojo::AssociatedInterfaceRequest<mojom::WindowManagerInternal> internal)
+      override {}
 
   TestChangeTracker tracker_;
 
@@ -393,12 +396,12 @@ class WindowTreeClientFactory
   // Runs a nested MessageLoop until a new instance has been created.
   scoped_ptr<TestWindowTreeClientImpl> WaitForInstance() {
     if (!client_impl_.get()) {
-      DCHECK(!run_loop_.get());
+      DCHECK(!run_loop_);
       run_loop_.reset(new base::RunLoop);
       run_loop_->Run();
       run_loop_.reset();
     }
-    return client_impl_.Pass();
+    return std::move(client_impl_);
   }
 
  private:
@@ -406,7 +409,7 @@ class WindowTreeClientFactory
   void Create(ApplicationConnection* connection,
               InterfaceRequest<WindowTreeClient> request) override {
     client_impl_.reset(new TestWindowTreeClientImpl(app_));
-    client_impl_->Bind(request.Pass());
+    client_impl_->Bind(std::move(request));
     if (run_loop_.get())
       run_loop_->Quit();
   }
@@ -516,7 +519,7 @@ class WindowTreeAppTest : public mojo::test::ApplicationTestBase,
               SingleChangeToDescription(*client->tracker()->changes()));
     if (connection_id)
       *connection_id = (*client->tracker()->changes())[0].connection_id;
-    return client.Pass();
+    return client;
   }
 
   // ApplicationTestBase:
@@ -534,7 +537,7 @@ class WindowTreeAppTest : public mojo::test::ApplicationTestBase,
 
     factory->CreateWindowTreeHost(GetProxy(&host_),
                                   mojom::WindowTreeHostClientPtr(),
-                                  tree_client_ptr.Pass(), nullptr);
+                                  std::move(tree_client_ptr), nullptr);
 
     // Next we should get an embed call on the "window manager" client.
     ws_client1_->WaitForIncomingMethodCall();
@@ -1635,8 +1638,8 @@ TEST_F(WindowTreeAppTest, EmbedSupplyingWindowTreeClient) {
   TestWindowTreeClientImpl client2(application_impl());
   mojom::WindowTreeClientPtr client2_ptr;
   mojo::Binding<WindowTreeClient> client2_binding(&client2, &client2_ptr);
-  ASSERT_TRUE(
-      Embed(ws1(), BuildWindowId(connection_id_1(), 1), client2_ptr.Pass()));
+  ASSERT_TRUE(Embed(ws1(), BuildWindowId(connection_id_1(), 1),
+                    std::move(client2_ptr)));
   client2.WaitForOnEmbed();
   EXPECT_EQ("OnEmbed",
             SingleChangeToDescription(*client2.tracker()->changes()));

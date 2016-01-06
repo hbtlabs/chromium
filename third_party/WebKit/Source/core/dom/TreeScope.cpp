@@ -24,7 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/dom/TreeScope.h"
 
 #include "core/HTMLNames.h"
@@ -186,11 +185,44 @@ void TreeScope::addElementById(const AtomicString& elementId, Element* element)
     m_idTargetObserverRegistry->notifyObservers(elementId);
 }
 
+
+#if ENABLE(ASSERT)
+namespace {
+
+class RemovingElementIdScope {
+    STACK_ALLOCATED();
+public:
+    RemovingElementIdScope(DocumentOrderedMap& elementsById, const AtomicString& id)
+        : m_elementsById(&elementsById)
+    {
+        m_elementsById->willRemoveId(id);
+    }
+    ~RemovingElementIdScope()
+    {
+        m_elementsById->willRemoveId(nullAtom);
+    }
+
+private:
+    RawPtrWillBeMember<DocumentOrderedMap> m_elementsById;
+};
+
+}
+#endif
+
 void TreeScope::removeElementById(const AtomicString& elementId, Element* element)
 {
     if (!m_elementsById)
         return;
     m_elementsById->remove(elementId, element);
+#if ENABLE(ASSERT)
+    // Register 'elementId' as being removed. This is done should observers
+    // attempt to also look it up, something that the underlying DocumentOrderedMap
+    // is incapable of answering precisely while an element (and its
+    // children) are being removed from the tree. This is _only_ done to avoid
+    // an assert in DocumentOrderedMap::get() from falsely triggering for such
+    // unusual and unexpected lookups.
+    RemovingElementIdScope removalScope(*m_elementsById, elementId);
+#endif
     m_idTargetObserverRegistry->notifyObservers(elementId);
 }
 

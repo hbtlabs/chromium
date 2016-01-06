@@ -6,7 +6,9 @@
 #define COMPONENTS_WEB_VIEW_PENDING_WEB_VIEW_LOAD_H_
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "mojo/services/network/public/interfaces/url_loader.mojom.h"
@@ -27,7 +29,7 @@ class PendingWebViewLoad {
   void Init(mojo::URLRequestPtr request);
 
   scoped_ptr<FrameConnection> frame_connection() {
-    return frame_connection_.Pass();
+    return std::move(frame_connection_);
   }
 
   bool is_content_handler_id_valid() const {

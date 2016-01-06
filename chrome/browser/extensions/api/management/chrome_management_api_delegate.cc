@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/management/chrome_management_api_delegate.h"
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
@@ -49,7 +50,13 @@ class ManagementSetEnabledFunctionInstallPromptDelegate
       : function_(function) {
     install_prompt_.reset(
         new ExtensionInstallPrompt(function->GetSenderWebContents()));
-    install_prompt_->ConfirmReEnable(this, extension);
+    ExtensionInstallPrompt::PromptType type =
+        ExtensionInstallPrompt::GetReEnablePromptTypeForExtension(
+            function->browser_context(), extension);
+    install_prompt_->ShowDialog(
+        this, extension, nullptr,
+        make_scoped_ptr(new ExtensionInstallPrompt::Prompt(type)),
+        ExtensionInstallPrompt::GetDefaultShowDialogCallback());
   }
   ~ManagementSetEnabledFunctionInstallPromptDelegate() override {}
 

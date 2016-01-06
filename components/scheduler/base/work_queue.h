@@ -5,10 +5,13 @@
 #ifndef CONTENT_RENDERER_SCHEDULER_BASE_WORK_QUEUE_H_
 #define CONTENT_RENDERER_SCHEDULER_BASE_WORK_QUEUE_H_
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
+#include "components/scheduler/base/enqueue_order.h"
 #include "components/scheduler/base/task_queue_impl.h"
 #include "components/scheduler/scheduler_export.h"
 
@@ -34,7 +37,7 @@ class SCHEDULER_EXPORT WorkQueue {
   // If the |work_queue_| isn't empty, |enqueue_order| gets set to the enqueue
   // order of the front task and the function returns true.  Otherwise the
   // function returns false.
-  bool GetFrontTaskEnqueueOrder(int* enqueue_order) const;
+  bool GetFrontTaskEnqueueOrder(EnqueueOrder* enqueue_order) const;
 
   // Pushes the task onto the |work_queue_| and informs the WorkQueueSets if
   // the head changed.
@@ -43,11 +46,12 @@ class SCHEDULER_EXPORT WorkQueue {
   // Pushes the task onto the |work_queue_|, sets the |enqueue_order| and
   // informs the WorkQueueSets if the head changed.
   void PushAndSetEnqueueOrder(const TaskQueueImpl::Task&& task,
-                              int enqueue_order);
+                              EnqueueOrder enqueue_order);
 
   // Swap the |work_queue_| with |incoming_queue| and informs the
-  // WorkQueueSets if the head changed.
-  void Swap(std::queue<TaskQueueImpl::Task>& incoming_queue);
+  // WorkQueueSets if the head changed. Assumes |task_queue_->any_thread_lock_|
+  // is locked.
+  void SwapLocked(std::queue<TaskQueueImpl::Task>& incoming_queue);
 
   size_t Size() const { return work_queue_.size(); }
 

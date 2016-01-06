@@ -118,6 +118,9 @@
   <message name="IDS_SETTINGS_PASSWORDS_DETAIL" desc="Description of what toggling the 'Manage passwords' setting does. Immediately underneath IDS_SETTINGS_PASSWORDS">
     Offer to save your web passwords
   </message>
+  <message name="IDS_SETTINGS_PASSWORDS_SAVED_HEADING" desc="The title for a list of username/site/password items. These items are already saved by the browser and can be deleted/edited.">
+    Saved Passwords
+  </message>
 
   <!-- Basic Page -->
   <message name="IDS_SETTINGS_BASIC" desc="Name of the settings page which displays advanced preferences.">
@@ -138,6 +141,9 @@
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_ENABLE" desc="Label for control to enable or disable bluetooth.">
       Enable Bluetooth
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_REMOVE" desc="Label for removing (unpairing) a paired bluetooth device">
+      Remove from list
     </message>
   </if>
 
@@ -449,6 +455,12 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS" desc="Name of the settings page which allows users to modify site settings.">
     Site Settings
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CATEGORY" desc="Name of the settings page which allows users to modify a specific category under site settings.">
+    Permission Category
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_DETAILS" desc="Name of the settings page which allows users to modify details about a particular site.">
+    Site Details
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ALL_SITES" desc="Label for the all sites site settings.">
     All sites
   </message>
@@ -488,13 +500,31 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST_RECOMMENDED" desc="The 'ask first' label in site settings -- a recommended setting for some categories, such as when sites want to use Full Screen.">
     Ask first (recommended)
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_ACCESSING" desc="The 'ask before accessing' label in site settings -- a recommended setting for some categories, such as when sites want to access geolocation information.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_ACCESSING" desc="The 'ask before accessing' label in site settings.">
+    Ask before accessing
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_ACCESSING_RECOMMENDED" desc="The 'ask before accessing' label in site settings -- a recommended setting for some categories, such as when sites want to access geolocation information.">
     Ask before accessing (recommended)
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_SENDING" desc="The 'ask before sending' label in site settings -- a recommended setting for some categories, such as when sites want to send push notifications.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_SENDING" desc="The 'ask before sending' label in site settings.">
+    Ask before sending
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_SENDING_RECOMMENDED" desc="The 'ask before sending' label in site settings -- a recommended setting for some categories, such as when sites want to send push notifications.">
     Ask before sending (recommended)
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW_SITES" desc="The 'allow cookies' label in site settings -- the recommended setting for when sites want to read/write cookie information.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_DONT_SHOW_IMAGES" desc="Label for the global 'Do not show any images' toggle (category default) in site settings.">
+    Do not show any images
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SHOW_ALL" desc="Label for the global 'Show all' toggle (category default) in site settings.">
+    Show all
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SHOW_ALL_RECOMMENDED" desc="Label for the global 'Show all' toggle (category default) in site settings -- a recommended setting for some categories, such as when sites want to show images.">
+    Show all (recommended)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW_SITES" desc="The 'allow cookies' label in site settings.">
+    Allow sites to save and read cookie data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW_SITES_RECOMMENDED" desc="The 'allow cookies' label in site settings -- the recommended setting for when sites want to read/write cookie information.">
     Allow sites to save and read cookie data (recommended)
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ALLOWED" desc="A generic Allowed label to show in Site Settings when Allow is NOT the recommended option.">
@@ -502,7 +532,8 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ALLOWED_RECOMMENDED" desc="A generic Allowed label to show in Site Settings when Allow is the recommended option.">
     Allowed (recommended)
-  </message>  <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCKED" desc="A generic Blocked label to show in Site Settings when Blocked is NOT the recommended option.">
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCKED" desc="A generic Blocked label to show in Site Settings when Blocked is NOT the recommended option.">
     Blocked
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCKED_RECOMMENDED" desc="A generic Blocked label to show in Site Settings when Blocked is the recommended option.">
@@ -546,9 +577,13 @@
   </message>
 
   <!-- Sync / People Page -->
-  <message name="IDS_SETTINGS_SYNC_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
+  <message name="IDS_SETTINGS_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
     People
   </message>
+  <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi profile user manager.">
+    Manage other people
+  </message>
+
   <message name="IDS_SETTINGS_SYNC_OVERVIEW" desc="The message that appears in the options dialog when sync has not been set up by the user.">
     Sign in to get your bookmarks, history, passwords and other settings on all your devices. You'll also automatically be signed in to your Google services.
   </message>
@@ -563,9 +598,6 @@
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_CONFIRM" desc="The text to display on the button to confirm the user wishes to stop syncing.">
     Clear and Disconnect
-  </message>
-  <message name="IDS_SETTINGS_SYNC_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi profile user manager.">
-    Manage other people
   </message>
 
   <message name="IDS_SETTINGS_SYNC" desc="Name of the settings page which manages syncing data between multiple browser instances with the same Google profile.">

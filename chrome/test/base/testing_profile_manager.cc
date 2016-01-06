@@ -4,8 +4,12 @@
 
 #include "chrome/test/base/testing_profile_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
@@ -80,7 +84,7 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
   // Create the profile and register it.
   TestingProfile::Builder builder;
   builder.SetPath(profile_path);
-  builder.SetPrefService(prefs.Pass());
+  builder.SetPrefService(std::move(prefs));
   builder.SetSupervisedUserId(supervised_user_id);
 
   for (TestingProfile::TestingFactories::const_iterator it = factories.begin();

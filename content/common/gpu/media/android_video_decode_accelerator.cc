@@ -4,16 +4,22 @@
 
 #include "content/common/gpu/media/android_video_decode_accelerator.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/gpu/gpu_channel.h"
+#include "content/common/gpu/media/android_copying_backing_strategy.h"
+#include "content/common/gpu/media/android_deferred_rendering_backing_strategy.h"
 #include "content/common/gpu/media/avda_return_on_failure.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/limits.h"
+#include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
 #include "media/video/picture.h"
@@ -28,11 +34,17 @@
 
 namespace content {
 
+// TODO(liberato): It is unclear if we have an issue with deadlock during
+// playback if we lower this.  Previously (crbug.com/176036), a deadlock
+// could occur during preroll.  More recent tests have shown some
+// instability with kNumPictureBuffers==2 with similar symptoms
+// during playback.  crbug.com/531588 .
+enum { kNumPictureBuffers = media::limits::kMaxVideoFrames + 1 };
+
 // Max number of bitstreams notified to the client with
 // NotifyEndOfBitstreamBuffer() before getting output from the bitstream.
 enum { kMaxBitstreamsNotifiedInAdvance = 32 };
 
-#if defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
 // MediaCodec is only guaranteed to support baseline, but some devices may
 // support others. Advertise support for all H264 profiles and let the
 // MediaCodec fail when decoding if it's not actually supported. It's assumed
@@ -50,7 +62,6 @@ static const media::VideoCodecProfile kSupportedH264Profiles[] = {
   media::H264PROFILE_STEREOHIGH,
   media::H264PROFILE_MULTIVIEWHIGH
 };
-#endif
 
 // Because MediaCodec is thread-hostile (must be poked on a single thread) and
 // has no callback mechanism (b/11990118), we must drive it by polling for
@@ -74,10 +85,13 @@ static inline const base::TimeDelta NoWaitTimeOut() {
   return base::TimeDelta::FromMicroseconds(0);
 }
 
+static inline const base::TimeDelta IdleTimerTimeOut() {
+  return base::TimeDelta::FromSeconds(1);
+}
+
 AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
     const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder,
-    const base::Callback<bool(void)>& make_context_current,
-    scoped_ptr<BackingStrategy> strategy)
+    const base::Callback<bool(void)>& make_context_current)
     : client_(NULL),
       make_context_current_(make_context_current),
       codec_(media::kCodecH264),
@@ -85,8 +99,12 @@ AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
       state_(NO_ERROR),
       picturebuffers_requested_(false),
       gl_decoder_(decoder),
-      strategy_(strategy.Pass()),
-      weak_this_factory_(this) {}
+      weak_this_factory_(this) {
+  if (UseDeferredRenderingStrategy())
+    strategy_.reset(new AndroidDeferredRenderingBackingStrategy());
+  else
+    strategy_.reset(new AndroidCopyingBackingStrategy());
+}
 
 AndroidVideoDecodeAccelerator::~AndroidVideoDecodeAccelerator() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -105,11 +123,9 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
   codec_ = VideoCodecProfileToVideoCodec(config.profile);
   is_encrypted_ = config.is_encrypted;
 
-  bool profile_supported = codec_ == media::kCodecVP8;
-#if defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
-  profile_supported |=
-      (codec_ == media::kCodecVP9 || codec_ == media::kCodecH264);
-#endif
+  bool profile_supported = codec_ == media::kCodecVP8 ||
+                           codec_ == media::kCodecVP9 ||
+                           codec_ == media::kCodecH264;
 
   if (!profile_supported) {
     LOG(ERROR) << "Unsupported profile: " << config.profile;
@@ -168,18 +184,20 @@ void AndroidVideoDecodeAccelerator::DoIOTask() {
     return;
   }
 
-  QueueInput();
+  bool did_work = QueueInput();
   while (DequeueOutput())
-    ;
+    did_work = true;
+
+  ManageTimer(did_work);
 }
 
-void AndroidVideoDecodeAccelerator::QueueInput() {
+bool AndroidVideoDecodeAccelerator::QueueInput() {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("media", "AVDA::QueueInput");
   if (bitstreams_notified_in_advance_.size() > kMaxBitstreamsNotifiedInAdvance)
-    return;
+    return false;
   if (pending_bitstream_buffers_.empty())
-    return;
+    return false;
 
   int input_buf_index = 0;
   media::MediaCodecStatus status =
@@ -187,7 +205,7 @@ void AndroidVideoDecodeAccelerator::QueueInput() {
   if (status != media::MEDIA_CODEC_OK) {
     DCHECK(status == media::MEDIA_CODEC_DEQUEUE_INPUT_AGAIN_LATER ||
            status == media::MEDIA_CODEC_ERROR);
-    return;
+    return false;
   }
 
   base::Time queued_time = pending_bitstream_buffers_.front().second;
@@ -201,13 +219,13 @@ void AndroidVideoDecodeAccelerator::QueueInput() {
 
   if (bitstream_buffer.id() == -1) {
     media_codec_->QueueEOS(input_buf_index);
-    return;
+    return true;
   }
 
   scoped_ptr<base::SharedMemory> shm(
       new base::SharedMemory(bitstream_buffer.handle(), true));
   RETURN_ON_FAILURE(this, shm->Map(bitstream_buffer.size()),
-                    "Failed to SharedMemory::Map()", UNREADABLE_INPUT);
+                    "Failed to SharedMemory::Map()", UNREADABLE_INPUT, false);
 
   const base::TimeDelta presentation_timestamp =
       bitstream_buffer.presentation_timestamp();
@@ -243,7 +261,8 @@ void AndroidVideoDecodeAccelerator::QueueInput() {
            << " status:" << status;
 
   RETURN_ON_FAILURE(this, status == media::MEDIA_CODEC_OK,
-                    "Failed to QueueInputBuffer: " << status, PLATFORM_FAILURE);
+                    "Failed to QueueInputBuffer: " << status, PLATFORM_FAILURE,
+                    false);
 
   // We should call NotifyEndOfBitstreamBuffer(), when no more decoded output
   // will be returned from the bitstream buffer. However, MediaCodec API is
@@ -258,6 +277,8 @@ void AndroidVideoDecodeAccelerator::QueueInput() {
                  weak_this_factory_.GetWeakPtr(),
                  bitstream_buffer.id()));
   bitstreams_notified_in_advance_.push_back(bitstream_buffer.id());
+
+  return true;
 }
 
 bool AndroidVideoDecodeAccelerator::DequeueOutput() {
@@ -273,7 +294,7 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
 
   bool eos = false;
   base::TimeDelta presentation_timestamp;
-  int32 buf_index = 0;
+  int32_t buf_index = 0;
   bool should_try_again = false;
   do {
     size_t offset = 0;
@@ -297,7 +318,7 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
         return false;
 
       case media::MEDIA_CODEC_OUTPUT_FORMAT_CHANGED: {
-        int32 width, height;
+        int32_t width, height;
         media_codec_->GetOutputFormat(&width, &height);
 
         if (!picturebuffers_requested_) {
@@ -353,7 +374,7 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
         base::Bind(&AndroidVideoDecodeAccelerator::NotifyFlushDone,
                    weak_this_factory_.GetWeakPtr()));
   } else {
-    const int32 bitstream_buffer_id = it->second;
+    const int32_t bitstream_buffer_id = it->second;
     bitstream_buffers_in_decoder_.erase(bitstream_buffers_in_decoder_.begin(),
                                         ++it);
     SendCurrentSurfaceToClient(buf_index, bitstream_buffer_id);
@@ -380,8 +401,8 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
 }
 
 void AndroidVideoDecodeAccelerator::SendCurrentSurfaceToClient(
-    int32 codec_buffer_index,
-    int32 bitstream_id) {
+    int32_t codec_buffer_index,
+    int32_t bitstream_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_NE(bitstream_id, -1);
   DCHECK(!free_picture_ids_.empty());
@@ -391,7 +412,7 @@ void AndroidVideoDecodeAccelerator::SendCurrentSurfaceToClient(
                     "Failed to make this decoder's GL context current.",
                     PLATFORM_FAILURE);
 
-  int32 picture_buffer_id = free_picture_ids_.front();
+  int32_t picture_buffer_id = free_picture_ids_.front();
   free_picture_ids_.pop();
   TRACE_COUNTER1("media", "AVDA::FreePictureIds", free_picture_ids_.size());
 
@@ -434,7 +455,7 @@ void AndroidVideoDecodeAccelerator::Decode(
 }
 
 void AndroidVideoDecodeAccelerator::RequestPictureBuffers() {
-  client_->ProvidePictureBuffers(strategy_->GetNumPictureBuffers(), size_,
+  client_->ProvidePictureBuffers(kNumPictureBuffers, size_,
                                  strategy_->GetTextureTarget());
 }
 
@@ -448,7 +469,7 @@ void AndroidVideoDecodeAccelerator::AssignPictureBuffers(
     RETURN_ON_FAILURE(this, buffers[i].size() == size_,
                       "Invalid picture buffer size was passed.",
                       INVALID_ARGUMENT);
-    int32 id = buffers[i].id();
+    int32_t id = buffers[i].id();
     output_picture_buffers_.insert(std::make_pair(id, buffers[i]));
     free_picture_ids_.push(id);
     // Since the client might be re-using |picture_buffer_id| values, forget
@@ -460,15 +481,14 @@ void AndroidVideoDecodeAccelerator::AssignPictureBuffers(
   }
   TRACE_COUNTER1("media", "AVDA::FreePictureIds", free_picture_ids_.size());
 
-  RETURN_ON_FAILURE(
-      this, output_picture_buffers_.size() >= strategy_->GetNumPictureBuffers(),
-      "Invalid picture buffers were passed.", INVALID_ARGUMENT);
+  RETURN_ON_FAILURE(this, output_picture_buffers_.size() >= kNumPictureBuffers,
+                    "Invalid picture buffers were passed.", INVALID_ARGUMENT);
 
   DoIOTask();
 }
 
 void AndroidVideoDecodeAccelerator::ReusePictureBuffer(
-    int32 picture_buffer_id) {
+    int32_t picture_buffer_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // This ReusePictureBuffer() might have been in a pipe somewhere (queued in
@@ -513,10 +533,7 @@ bool AndroidVideoDecodeAccelerator::ConfigureMediaCodec() {
   if (!media_codec_)
     return false;
 
-  io_timer_.Start(FROM_HERE,
-                  DecodePollDelay(),
-                  this,
-                  &AndroidVideoDecodeAccelerator::DoIOTask);
+  ManageTimer(true);
   return true;
 }
 
@@ -525,7 +542,7 @@ void AndroidVideoDecodeAccelerator::Reset() {
   TRACE_EVENT0("media", "AVDA::Reset");
 
   while (!pending_bitstream_buffers_.empty()) {
-    int32 bitstream_buffer_id = pending_bitstream_buffers_.front().first.id();
+    int32_t bitstream_buffer_id = pending_bitstream_buffers_.front().first.id();
     pending_bitstream_buffers_.pop();
 
     if (bitstream_buffer_id != -1) {
@@ -546,7 +563,7 @@ void AndroidVideoDecodeAccelerator::Reset() {
     dismissed_picture_ids_.insert(it->first);
   }
   output_picture_buffers_.clear();
-  std::queue<int32> empty;
+  std::queue<int32_t> empty;
   std::swap(free_picture_ids_, empty);
   CHECK(free_picture_ids_.empty());
   picturebuffers_requested_ = false;
@@ -633,10 +650,37 @@ void AndroidVideoDecodeAccelerator::NotifyError(
   client_->NotifyError(error);
 }
 
+void AndroidVideoDecodeAccelerator::ManageTimer(bool did_work) {
+  bool should_be_running = true;
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (!did_work) {
+    // Make sure that we have done work recently enough, else stop the timer.
+    if (now - most_recent_work_ > IdleTimerTimeOut())
+      should_be_running = false;
+  } else {
+    most_recent_work_ = now;
+  }
+
+  if (should_be_running && !io_timer_.IsRunning()) {
+    io_timer_.Start(FROM_HERE, DecodePollDelay(), this,
+                    &AndroidVideoDecodeAccelerator::DoIOTask);
+  } else if (!should_be_running && io_timer_.IsRunning()) {
+    io_timer_.Stop();
+  }
+}
+
 // static
-media::VideoDecodeAccelerator::SupportedProfiles
-AndroidVideoDecodeAccelerator::GetSupportedProfiles() {
-  SupportedProfiles profiles;
+bool AndroidVideoDecodeAccelerator::UseDeferredRenderingStrategy() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableUnifiedMediaPipeline);
+}
+
+// static
+media::VideoDecodeAccelerator::Capabilities
+AndroidVideoDecodeAccelerator::GetCapabilities() {
+  Capabilities capabilities;
+  SupportedProfiles& profiles = capabilities.supported_profiles;
 
   if (!media::VideoCodecBridge::IsKnownUnaccelerated(
           media::kCodecVP8, media::MEDIA_CODEC_DECODER)) {
@@ -647,7 +691,6 @@ AndroidVideoDecodeAccelerator::GetSupportedProfiles() {
     profiles.push_back(profile);
   }
 
-#if defined(ENABLE_MEDIA_PIPELINE_ON_ANDROID)
   if (!media::VideoCodecBridge::IsKnownUnaccelerated(
           media::kCodecVP9, media::MEDIA_CODEC_DECODER)) {
     SupportedProfile profile;
@@ -667,9 +710,13 @@ AndroidVideoDecodeAccelerator::GetSupportedProfiles() {
     profile.max_resolution.SetSize(3840, 2160);
     profiles.push_back(profile);
   }
-#endif
 
-  return profiles;
+  if (UseDeferredRenderingStrategy()) {
+    capabilities.flags = media::VideoDecodeAccelerator::Capabilities::
+        NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
+  }
+
+  return capabilities;
 }
 
 }  // namespace content

@@ -5,6 +5,9 @@
 #ifndef CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_HANDLE_REFERENCE_H_
 #define CONTENT_CHILD_SERVICE_WORKER_SERVICE_WORKER_HANDLE_REFERENCE_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
@@ -37,8 +40,7 @@ class CONTENT_EXPORT ServiceWorkerHandleReference {
   int handle_id() const { return info_.handle_id; }
   const GURL& url() const { return info_.url; }
   blink::WebServiceWorkerState state() const { return info_.state; }
-  void set_state(blink::WebServiceWorkerState state) { info_.state = state; }
-  int64 version_id() const { return info_.version_id; }
+  int64_t version_id() const { return info_.version_id; }
 
  private:
   ServiceWorkerHandleReference(const ServiceWorkerObjectInfo& info,

@@ -9,10 +9,12 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "content/public/renderer/render_view_observer_tracker.h"
 #include "printing/pdf_metafile_skia.h"
@@ -308,6 +310,12 @@ class PrintWebViewHelper
       bool ignore_css_margins,
       double* scale_factor,
       PageSizeMargins* page_layout_in_points);
+
+  // Return an array of pages to print given the print |params| and an expected
+  // |page_count|. Page numbers are zero-based.
+  static std::vector<int> GetPrintedPages(
+      const PrintMsg_PrintPages_Params& params,
+      int page_count);
 
 #if defined(ENABLE_PRINT_PREVIEW)
   // Given the |device| and |canvas| to draw on, prints the appropriate headers

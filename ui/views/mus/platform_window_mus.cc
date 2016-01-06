@@ -4,6 +4,7 @@
 
 #include "ui/views/mus/platform_window_mus.h"
 
+#include "build/build_config.h"
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window_property.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
@@ -24,10 +25,12 @@ PlatformWindowMus::PlatformWindowMus(ui::PlatformWindowDelegate* delegate,
       mus_window_(mus_window),
       show_state_(mus::mojom::SHOW_STATE_RESTORED),
       last_cursor_(mus::mojom::CURSOR_NULL),
-      has_capture_(false) {
+      has_capture_(false),
+      mus_window_destroyed_(false) {
   DCHECK(delegate_);
   DCHECK(mus_window_);
   mus_window_->AddObserver(this);
+  mus_window_->set_input_event_handler(this);
 
   // We need accelerated widget numbers to be different for each
   // window and fit in the smallest sizeof(AcceleratedWidget) uint32_t
@@ -47,9 +50,10 @@ PlatformWindowMus::~PlatformWindowMus() {
   if (!mus_window_)
     return;
   mus_window_->RemoveObserver(this);
-  mus_window_->Destroy();
+  mus_window_->set_input_event_handler(nullptr);
+  if (!mus_window_destroyed_)
+    mus_window_->Destroy();
 }
-
 
 void PlatformWindowMus::Activate() {
   mus_window_->SetFocus();
@@ -141,6 +145,7 @@ void PlatformWindowMus::SetShowState(mus::mojom::ShowState show_state) {
 
 void PlatformWindowMus::OnWindowDestroyed(mus::Window* window) {
   DCHECK_EQ(mus_window_, window);
+  mus_window_destroyed_ = true;
   delegate_->OnClosed();
   mus_window_ = nullptr;
 }
@@ -164,12 +169,6 @@ void PlatformWindowMus::OnWindowPredefinedCursorChanged(
     mus::mojom::Cursor cursor) {
   DCHECK_EQ(window, mus_window_);
   last_cursor_ = cursor;
-}
-
-void PlatformWindowMus::OnWindowInputEvent(mus::Window* view,
-                                           const mus::mojom::EventPtr& event) {
-  scoped_ptr<ui::Event> ui_event(event.To<scoped_ptr<ui::Event>>());
-  delegate_->DispatchEvent(ui_event.get());
 }
 
 void PlatformWindowMus::OnWindowSharedPropertyChanged(
@@ -203,6 +202,18 @@ void PlatformWindowMus::OnWindowSharedPropertyChanged(
       break;
   }
   delegate_->OnWindowStateChanged(state);
+}
+
+void PlatformWindowMus::OnRequestClose(mus::Window* window) {
+  delegate_->OnCloseRequest();
+}
+
+void PlatformWindowMus::OnWindowInputEvent(
+    mus::Window* view,
+    mus::mojom::EventPtr event,
+    scoped_ptr<base::Closure>* ack_callback) {
+  scoped_ptr<ui::Event> ui_event(event.To<scoped_ptr<ui::Event>>());
+  delegate_->DispatchEvent(ui_event.get());
 }
 
 }  // namespace views

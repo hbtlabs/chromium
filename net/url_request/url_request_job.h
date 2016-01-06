@@ -10,14 +10,14 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ref_counted.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_observer.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_states.h"
-#include "net/base/net_errors.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_progress.h"
@@ -45,15 +45,13 @@ class UploadDataStream;
 class URLRequestStatus;
 class X509Certificate;
 
-class NET_EXPORT URLRequestJob
-    : public base::RefCounted<URLRequestJob>,
-      public base::PowerObserver {
+class NET_EXPORT URLRequestJob : public base::PowerObserver {
  public:
   explicit URLRequestJob(URLRequest* request,
                          NetworkDelegate* network_delegate);
+  ~URLRequestJob() override;
 
-  // Returns the request that owns this job. THIS POINTER MAY BE NULL if the
-  // request was destroyed.
+  // Returns the request that owns this job.
   URLRequest* request() const {
     return request_;
   }
@@ -96,10 +94,6 @@ class NET_EXPORT URLRequestJob
   // The job should be prepared to receive multiple calls to kill it, but only
   // one notification must be issued.
   virtual void Kill();
-
-  // Called to detach the request from this Job.  Results in the Job being
-  // killed off eventually. The job must not use the request pointer any more.
-  void DetachRequest();
 
   // Called to read post-filtered data from this Job, returning the number of
   // bytes read, 0 when there is no more data, or -1 if there was an error.
@@ -150,6 +144,10 @@ class NET_EXPORT URLRequestJob
   // NOTE: This removes the cookies from the job, so it will only return
   //       useful results once per job.
   virtual bool GetResponseCookies(std::vector<std::string>* cookies);
+
+  // Populates the network error details of the most recent origin that the
+  // network stack makes the request to.
+  virtual void PopulateNetErrorDetails(NetErrorDetails* details) const;
 
   // Called to setup a stream filter for this request. An example of filter is
   // content encoding/decoding.
@@ -216,8 +214,8 @@ class NET_EXPORT URLRequestJob
   bool is_done() const { return done_; }
 
   // Get/Set expected content size
-  int64 expected_content_size() const { return expected_content_size_; }
-  void set_expected_content_size(const int64& size) {
+  int64_t expected_content_size() const { return expected_content_size_; }
+  void set_expected_content_size(const int64_t& size) {
     expected_content_size_ = size;
   }
 
@@ -254,9 +252,6 @@ class NET_EXPORT URLRequestJob
                                          const GURL& redirect_destination);
 
  protected:
-  friend class base::RefCounted<URLRequestJob>;
-  ~URLRequestJob() override;
-
   // Notifies the job that a certificate is requested.
   void NotifyCertificateRequested(SSLCertRequestInfo* cert_request_info);
 
@@ -350,11 +345,11 @@ class NET_EXPORT URLRequestJob
 
   // The number of bytes read before passing to the filter. This value reflects
   // bytes read even when there is no filter.
-  int64 prefilter_bytes_read() const { return prefilter_bytes_read_; }
+  int64_t prefilter_bytes_read() const { return prefilter_bytes_read_; }
 
   // The number of bytes read after passing through the filter. This value
   // reflects bytes read even when there is no filter.
-  int64 postfilter_bytes_read() const { return postfilter_bytes_read_; }
+  int64_t postfilter_bytes_read() const { return postfilter_bytes_read_; }
 
   // Turns an integer result code into an Error and a count of bytes read.
   // The semantics are:
@@ -367,8 +362,7 @@ class NET_EXPORT URLRequestJob
   // bytes read, or < 0 to indicate an error.
   void ReadRawDataComplete(int bytes_read);
 
-  // The request that initiated this job. This value MAY BE NULL if the
-  // request was released by DetachRequest().
+  // The request that initiated this job. This value will never be nullptr.
   URLRequest* request_;
 
  private:
@@ -432,8 +426,8 @@ class NET_EXPORT URLRequestJob
   // NotifyDone so that it is kept in sync with the request.
   bool done_;
 
-  int64 prefilter_bytes_read_;
-  int64 postfilter_bytes_read_;
+  int64_t prefilter_bytes_read_;
+  int64_t postfilter_bytes_read_;
 
   // The data stream filter which is enabled on demand.
   scoped_ptr<Filter> filter_;
@@ -458,7 +452,7 @@ class NET_EXPORT URLRequestJob
   bool has_handled_response_;
 
   // Expected content size
-  int64 expected_content_size_;
+  int64_t expected_content_size_;
 
   // Set when a redirect is deferred.
   RedirectInfo deferred_redirect_info_;

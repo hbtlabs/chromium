@@ -4,7 +4,10 @@
 
 #include "components/test_runner/test_plugin.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/shared_memory.h"
@@ -130,7 +133,8 @@ blink::WebPluginContainer::TouchEventRequestType ParseTouchEventRequestType(
 
 class DeferredDeleteTask : public blink::WebTaskRunner::Task {
  public:
-  DeferredDeleteTask(scoped_ptr<TestPlugin> plugin) : plugin_(plugin.Pass()) {}
+  DeferredDeleteTask(scoped_ptr<TestPlugin> plugin)
+      : plugin_(std::move(plugin)) {}
 
   void run() override {}
 
@@ -160,54 +164,31 @@ TestPlugin::TestPlugin(blink::WebFrame* frame,
       is_persistent_(params.mimeType == PluginPersistsMimeType()),
       can_create_without_renderer_(params.mimeType ==
                                    CanCreateWithoutRendererMimeType()) {
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributePrimitive, ("primitive"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributeBackgroundColor, ("background-color"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributePrimitiveColor, ("primitive-color"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributeOpacity, ("opacity"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributeAcceptsTouch, ("accepts-touch"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributeReRequestTouchEvents, ("re-request-touch"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributePrintEventDetails, ("print-event-details"));
-  const CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, kAttributeCanProcessDrag, ("can-process-drag"));
-  const CR_DEFINE_STATIC_LOCAL(blink::WebString,
-                               kAttributeSupportsKeyboardFocus,
-                               ("supports-keyboard-focus"));
-  const CR_DEFINE_STATIC_LOCAL(blink::WebString,
-                               kAttributePrintUserGestureStatus,
-                               ("print-user-gesture-status"));
-
   DCHECK_EQ(params.attributeNames.size(), params.attributeValues.size());
   size_t size = params.attributeNames.size();
   for (size_t i = 0; i < size; ++i) {
     const blink::WebString& attribute_name = params.attributeNames[i];
     const blink::WebString& attribute_value = params.attributeValues[i];
 
-    if (attribute_name == kAttributePrimitive)
+    if (attribute_name == "primitive")
       scene_.primitive = ParsePrimitive(attribute_value);
-    else if (attribute_name == kAttributeBackgroundColor)
+    else if (attribute_name == "background-color")
       ParseColor(attribute_value, scene_.background_color);
-    else if (attribute_name == kAttributePrimitiveColor)
+    else if (attribute_name == "primitive-color")
       ParseColor(attribute_value, scene_.primitive_color);
-    else if (attribute_name == kAttributeOpacity)
+    else if (attribute_name == "opacity")
       scene_.opacity = ParseOpacity(attribute_value);
-    else if (attribute_name == kAttributeAcceptsTouch)
+    else if (attribute_name == "accepts-touch")
       touch_event_request_ = ParseTouchEventRequestType(attribute_value);
-    else if (attribute_name == kAttributeReRequestTouchEvents)
+    else if (attribute_name == "re-request-touch")
       re_request_touch_events_ = ParseBoolean(attribute_value);
-    else if (attribute_name == kAttributePrintEventDetails)
+    else if (attribute_name == "print-event-details")
       print_event_details_ = ParseBoolean(attribute_value);
-    else if (attribute_name == kAttributeCanProcessDrag)
+    else if (attribute_name == "can-process-drag")
       can_process_drag_ = ParseBoolean(attribute_value);
-    else if (attribute_name == kAttributeSupportsKeyboardFocus)
+    else if (attribute_name == "supports-keyboard-focus")
       supports_keyboard_focus_ = ParseBoolean(attribute_value);
-    else if (attribute_name == kAttributePrintUserGestureStatus)
+    else if (attribute_name == "print-user-gesture-status")
       print_user_gesture_status_ = ParseBoolean(attribute_value);
   }
   if (can_create_without_renderer_)
@@ -326,7 +307,7 @@ void TestPlugin::updateGeometry(
       DrawSceneSoftware(bitmap->pixels());
       texture_mailbox_ = cc::TextureMailbox(
           bitmap.get(), gfx::Size(rect_.width, rect_.height));
-      shared_bitmap_ = bitmap.Pass();
+      shared_bitmap_ = std::move(bitmap);
     }
   }
 
@@ -441,11 +422,9 @@ void TestPlugin::DrawSceneGL() {
 }
 
 void TestPlugin::DrawSceneSoftware(void* memory) {
-  SkColor background_color =
-      SkColorSetARGB(static_cast<uint8>(scene_.opacity * 255),
-                     scene_.background_color[0],
-                     scene_.background_color[1],
-                     scene_.background_color[2]);
+  SkColor background_color = SkColorSetARGB(
+      static_cast<uint8_t>(scene_.opacity * 255), scene_.background_color[0],
+      scene_.background_color[1], scene_.background_color[2]);
 
   const SkImageInfo info =
       SkImageInfo::MakeN32Premul(rect_.width, rect_.height);
@@ -456,11 +435,9 @@ void TestPlugin::DrawSceneSoftware(void* memory) {
 
   if (scene_.primitive != PrimitiveNone) {
     DCHECK_EQ(PrimitiveTriangle, scene_.primitive);
-    SkColor foreground_color =
-        SkColorSetARGB(static_cast<uint8>(scene_.opacity * 255),
-                       scene_.primitive_color[0],
-                       scene_.primitive_color[1],
-                       scene_.primitive_color[2]);
+    SkColor foreground_color = SkColorSetARGB(
+        static_cast<uint8_t>(scene_.opacity * 255), scene_.primitive_color[0],
+        scene_.primitive_color[1], scene_.primitive_color[2]);
     SkPath triangle_path;
     triangle_path.moveTo(0.5f * rect_.width, 0.9f * rect_.height);
     triangle_path.lineTo(0.1f * rect_.width, 0.1f * rect_.height);

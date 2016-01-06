@@ -4,7 +4,10 @@
 
 #include "ui/aura/window_tree_host_platform.h"
 
+#include <utility>
+
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/compositor.h"
 #include "ui/events/event.h"
@@ -55,7 +58,7 @@ WindowTreeHostPlatform::WindowTreeHostPlatform()
 
 void WindowTreeHostPlatform::SetPlatformWindow(
     scoped_ptr<ui::PlatformWindow> window) {
-  window_ = window.Pass();
+  window_ = std::move(window);
 }
 
 WindowTreeHostPlatform::~WindowTreeHostPlatform() {

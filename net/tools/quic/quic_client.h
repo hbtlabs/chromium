@@ -8,10 +8,12 @@
 #ifndef NET_TOOLS_QUIC_QUIC_CLIENT_H_
 #define NET_TOOLS_QUIC_QUIC_CLIENT_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_endpoint.h"
@@ -118,8 +120,7 @@ class QuicClient : public QuicClientBase,
 
   // Sends a request simple GET for each URL in |args|, and then waits for
   // each to complete.
-  void SendRequestsAndWaitForResponse(
-      const std::vector<std::string>& url_list);
+  void SendRequestsAndWaitForResponse(const std::vector<std::string>& url_list);
 
   // Migrate to a new socket during an active connection.
   bool MigrateSocket(const IPAddressNumber& new_host);
@@ -166,9 +167,9 @@ class QuicClient : public QuicClientBase,
   size_t latest_response_code() const;
   const std::string& latest_response_headers() const;
   const std::string& latest_response_body() const;
+  const std::string& latest_response_trailers() const;
 
  protected:
-  virtual QuicEpollConnectionHelper* CreateQuicConnectionHelper();
   virtual QuicPacketWriter* CreateQuicPacketWriter();
 
   virtual int ReadPacket(char* buffer,
@@ -233,9 +234,6 @@ class QuicClient : public QuicClientBase,
   // UDP socket.
   int fd_;
 
-  // Helper to be used by created connections.
-  scoped_ptr<QuicEpollConnectionHelper> helper_;
-
   // Listens for full responses.
   scoped_ptr<ResponseListener> response_listener_;
 
@@ -254,10 +252,12 @@ class QuicClient : public QuicClientBase,
   bool store_response_;
   // HTTP response code from most recent response.
   size_t latest_response_code_;
-  // HTTP headers from most recent response.
+  // HTTP/2 headers from most recent response.
   std::string latest_response_headers_;
   // Body of most recent response.
   std::string latest_response_body_;
+  // HTTP/2 trailers from most recent response.
+  std::string latest_response_trailers_;
 
   // Keeps track of any data sent before the handshake.
   std::vector<QuicDataToResend*> data_sent_before_handshake_;

@@ -2,11 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 from telemetry.core import android_action_runner
 from telemetry.core import platform
 from telemetry.internal.app import android_app
 from telemetry.internal.backends import android_app_backend
+
 
 class AndroidPlatform(platform.Platform):
 
@@ -19,10 +19,20 @@ class AndroidPlatform(platform.Platform):
   def android_action_runner(self):
     return self._android_action_runner
 
+  @property
+  def system_ui(self):
+    """Returns an AppUi object to interact with Android's system UI.
+
+    See devil.android.app_ui for the documentation of the API provided.
+    """
+    return self._platform_backend.GetSystemUi()
+
   def IsSvelte(self):
     return self._platform_backend.IsSvelte()
 
-  def LaunchAndroidApplication(self, start_intent, is_app_ready_predicate=None,
+  def LaunchAndroidApplication(self,
+                               start_intent,
+                               is_app_ready_predicate=None,
                                app_has_webviews=True):
     """Launches an Android application given the intent.
 

@@ -4,10 +4,13 @@
 
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 
+#include <stddef.h>
+
 #include <list>
 #include <queue>
 #include <string>
 
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -358,14 +361,14 @@ class ServiceWorkerCacheWriterTest : public ::testing::Test {
       return make_scoped_ptr<ServiceWorkerResponseReader>(nullptr);
     scoped_ptr<ServiceWorkerResponseReader> reader(readers_.front());
     readers_.pop_front();
-    return reader.Pass();
+    return reader;
   }
   scoped_ptr<ServiceWorkerResponseWriter> CreateWriter() {
     if (writers_.empty())
       return make_scoped_ptr<ServiceWorkerResponseWriter>(nullptr);
     scoped_ptr<ServiceWorkerResponseWriter> writer(writers_.front());
     writers_.pop_front();
-    return writer.Pass();
+    return writer;
   }
 
   ServiceWorkerCacheWriter::OnWriteCompleteCallback CreateWriteCallback() {

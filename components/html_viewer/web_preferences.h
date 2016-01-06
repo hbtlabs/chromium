@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "net/base/network_change_notifier.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/ui_base_switches_util.h"
@@ -90,6 +91,9 @@ struct WebPreferences {
   // we disable the feature at a lower layer so that we catch non-WebKit uses
   // of DNS prefetch as well.
   bool dns_prefetching_enabled;
+  // Preference to save data. When enabled, requests will contain the header
+  // 'Save-Data: on'.
+  bool data_saver_enabled;
   bool local_storage_enabled;
   bool databases_enabled;
   bool application_cache_enabled;

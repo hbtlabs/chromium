@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/prefs/pref_service.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/app_window_registry_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -60,7 +61,7 @@ ui::BaseWindow* GetBaseWindowForWebContents(
 
 }  // namespace
 
-void LoadRiskData(uint64 obfuscated_gaia_id,
+void LoadRiskData(uint64_t obfuscated_gaia_id,
                   content::WebContents* web_contents,
                   const base::Callback<void(const std::string&)>& callback) {
   // No easy way to get window bounds on Android, and that signal isn't very

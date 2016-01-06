@@ -4,6 +4,8 @@
 
 #include "chrome/test/chromedriver/net/adb_client_socket.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/strings/string_number_conversions.h"
@@ -185,7 +187,7 @@ class HttpOverAdbSocket {
         if (endline_pos != std::string::npos) {
           std::string len = response_.substr(content_pos + 15,
                                              endline_pos - content_pos - 15);
-          base::TrimWhitespace(len, base::TRIM_ALL, &len);
+          base::TrimWhitespaceASCII(len, base::TRIM_ALL, &len);
           if (!base::StringToInt(len, &expected_length)) {
             CheckNetResultOrDie(net::ERR_FAILED);
             return;

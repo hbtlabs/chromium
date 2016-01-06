@@ -17,8 +17,8 @@
         [65, 386, 304, 18],
         [65, 368, 304, 18],
         [65, 368, 145, 18],
-        [14, 494, 407, 90],
-        [14, 476, 407, 90],
+        [14, 494, 406, 90],
+        [14, 476, 406, 90],
         [14, 440, 355, 54],
         [14, 422, 355, 54],
         [14, 404, 355, 36],
@@ -112,6 +112,7 @@
         "LayoutView #document",
         "LayoutBlockFlow HTML",
         "LayoutBlockFlow P",
+        "RootInlineBox",
         "LayoutBlockFlow (floating) SPAN id='yellowFloat'",
         "LayoutText #text",
         "InlineTextBox 'difficult game indeed.\n'",
@@ -140,8 +141,8 @@
         "InlineTextBox 'me? They\u2019re dreadfully fond of beheading people'",
         "InlineTextBox 'here; the great\n'",
         "InlineTextBox 'wonder is, that there\u2018s any one left alive!\u2019'",
-        "VerticalScrollbar",
-        "LayoutView #document"
+        "LayoutView #document",
+        "VerticalScrollbar"
       ]
     }
   ]

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/graphics/paint/SubsequenceRecorder.h"
 
 #include "platform/RuntimeEnabledFeatures.h"
@@ -13,15 +12,15 @@
 
 namespace blink {
 
-bool SubsequenceRecorder::useCachedSubsequenceIfPossible(GraphicsContext& context, const DisplayItemClientWrapper& client)
+bool SubsequenceRecorder::useCachedSubsequenceIfPossible(GraphicsContext& context, const DisplayItemClient& client)
 {
     if (!RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
         return false;
 
-    if (context.paintController().displayItemConstructionIsDisabled())
+    if (context.paintController().displayItemConstructionIsDisabled() || context.paintController().subsequenceCachingIsDisabled())
         return false;
 
-    if (!context.paintController().clientCacheIsValid(client.displayItemClient()))
+    if (!context.paintController().clientCacheIsValid(client))
         return false;
 
     context.paintController().createAndAppend<CachedDisplayItem>(client, DisplayItem::CachedSubsequence);
@@ -36,7 +35,7 @@ bool SubsequenceRecorder::useCachedSubsequenceIfPossible(GraphicsContext& contex
     return true;
 }
 
-SubsequenceRecorder::SubsequenceRecorder(GraphicsContext& context, const DisplayItemClientWrapper& client)
+SubsequenceRecorder::SubsequenceRecorder(GraphicsContext& context, const DisplayItemClient& client)
     : m_paintController(context.paintController())
     , m_client(client)
     , m_beginSubsequenceIndex(0)
@@ -70,18 +69,6 @@ SubsequenceRecorder::~SubsequenceRecorder()
     }
 
     m_paintController.createAndAppend<EndSubsequenceDisplayItem>(m_client);
-}
-
-void SubsequenceRecorder::setUncacheable()
-{
-    if (!RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
-        return;
-
-    if (m_paintController.displayItemConstructionIsDisabled())
-        return;
-
-    ASSERT(m_paintController.newDisplayItemList()[m_beginSubsequenceIndex].type() == DisplayItem::Subsequence);
-    m_paintController.newDisplayItemList()[m_beginSubsequenceIndex].setSkippedCache();
 }
 
 } // namespace blink

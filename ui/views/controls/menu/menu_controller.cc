@@ -6,8 +6,10 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/events/event.h"
@@ -417,10 +419,22 @@ void MenuController::Cancel(ExitType type) {
     return;
   }
   if (async_run_) {
+    internal::MenuControllerDelegate* delegate = delegate_;
     MenuItemView* result = ExitMenuRun();
-    delegate_->OnMenuClosed(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
-                            result, accept_event_flags_);
+    delegate->OnMenuClosed(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
+                           result, accept_event_flags_);
   }
+}
+
+void MenuController::AddNestedDelegate(
+    internal::MenuControllerDelegate* delegate) {
+  delegate_stack_.push_back(std::make_pair(delegate, async_run_));
+  delegate_ = delegate;
+}
+
+void MenuController::SetAsyncRun(bool is_async) {
+  delegate_stack_.back().second = is_async;
+  async_run_ = is_async;
 }
 
 bool MenuController::OnMousePressed(SubmenuView* source,
@@ -1186,6 +1200,7 @@ MenuController::MenuController(bool blocking,
       current_mouse_event_target_(nullptr),
       current_mouse_pressed_state_(0),
       message_loop_(MenuMessageLoop::Create()) {
+  delegate_stack_.push_back(std::make_pair(delegate_, async_run_));
   active_instance_ = this;
 }
 
@@ -1262,9 +1277,10 @@ void MenuController::Accept(MenuItemView* item, int event_flags) {
   }
   accept_event_flags_ = event_flags;
   if (async_run_) {
+    internal::MenuControllerDelegate* delegate = delegate_;
     MenuItemView* result = ExitMenuRun();
-    delegate_->OnMenuClosed(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
-                            result, accept_event_flags_);
+    delegate->OnMenuClosed(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
+                           result, accept_event_flags_);
   }
 }
 
@@ -1678,9 +1694,8 @@ void MenuController::BuildMenuItemPath(MenuItemView* item,
 }
 
 void MenuController::StartShowTimer() {
-  MenuItemView* item = pending_state_.item ? pending_state_.item : state_.item;
   show_timer_.Start(
-      FROM_HERE, TimeDelta::FromMilliseconds(item->GetMenuConfig().show_delay),
+      FROM_HERE, TimeDelta::FromMilliseconds(MenuConfig::instance().show_delay),
       this, &MenuController::CommitPendingSelection);
 }
 
@@ -1723,7 +1738,7 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
 
   int x, y;
 
-  const MenuConfig& menu_config = item->GetMenuConfig();
+  const MenuConfig& menu_config = MenuConfig::instance();
 
   if (!item->GetParentMenuItem()) {
     // First item, position relative to initial location.
@@ -2442,6 +2457,12 @@ MenuItemView* MenuController::ExitMenuRun() {
     pending_state_ = menu_stack_.back().first;
     nested_pressed_lock = menu_stack_.back().second;
     menu_stack_.pop_back();
+    // Even though the menus are nested, there may not be nested delegates.
+    if (delegate_stack_.size() > 1) {
+      delegate_stack_.pop_back();
+      delegate_ = delegate_stack_.back().first;
+      async_run_ = delegate_stack_.back().second;
+    }
   } else {
     showing_ = false;
     did_capture_ = false;

@@ -97,11 +97,6 @@ WebInspector.Project.prototype = {
     displayName: function() { },
 
     /**
-     * @return {string}
-     */
-    url: function() { },
-
-    /**
      * @param {!WebInspector.UISourceCode} uiSourceCode
      * @param {function(?string)} callback
      */
@@ -215,15 +210,13 @@ WebInspector.projectTypes = {
  * @param {!WebInspector.Workspace} workspace
  * @param {string} id
  * @param {!WebInspector.projectTypes} type
- * @param {string} url
  * @param {string} displayName
  */
-WebInspector.ProjectStore = function(workspace, id, type, url, displayName)
+WebInspector.ProjectStore = function(workspace, id, type, displayName)
 {
     this._workspace = workspace;
     this._id = id;
     this._type = type;
-    this._url = url;
     this._displayName = displayName;
 
     /** @type {!Map.<string, !{uiSourceCode: !WebInspector.UISourceCode, index: number}>} */
@@ -254,14 +247,6 @@ WebInspector.ProjectStore.prototype = {
     /**
      * @return {string}
      */
-    url: function()
-    {
-        return this._url;
-    },
-
-    /**
-     * @return {string}
-     */
     displayName: function()
     {
         return this._displayName;
@@ -276,23 +261,33 @@ WebInspector.ProjectStore.prototype = {
     },
 
     /**
-     * @param {string} parentPath
-     * @param {string} name
-     * @param {string} originURL
+     * @param {string} url
      * @param {!WebInspector.ResourceType} contentType
      * @return {!WebInspector.UISourceCode}
      */
-    addUISourceCode: function(parentPath, name, originURL, contentType)
+    createUISourceCode: function(url, contentType)
     {
-        var path = parentPath ? parentPath + "/" + name : name;
-        var uiSourceCode = this.uiSourceCode(path);
-        if (uiSourceCode)
-            return uiSourceCode;
-        uiSourceCode = new WebInspector.UISourceCode(this._project, parentPath, name, originURL, contentType);
+        return new WebInspector.UISourceCode(this._project, url, contentType);
+    },
+
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {boolean=} replace
+     * @return {boolean}
+     */
+    addUISourceCode: function(uiSourceCode, replace)
+    {
+        var path = uiSourceCode.path();
+        if (this.uiSourceCode(path)) {
+            if (replace)
+                this.removeUISourceCode(path);
+            else
+                return false;
+        }
         this._uiSourceCodesMap.set(path, {uiSourceCode: uiSourceCode, index: this._uiSourceCodesList.length});
         this._uiSourceCodesList.push(uiSourceCode);
         this._workspace.dispatchEventToListeners(WebInspector.Workspace.Events.UISourceCodeAdded, uiSourceCode);
-        return uiSourceCode;
+        return true;
     },
 
     /**

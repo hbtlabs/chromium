@@ -5,10 +5,11 @@
 #ifndef COMPONENTS_MUS_PUBLIC_CPP_WINDOW_OBSERVER_H_
 #define COMPONENTS_MUS_PUBLIC_CPP_WINDOW_OBSERVER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "components/mus/public/cpp/window.h"
-#include "components/mus/public/interfaces/input_events.mojom.h"
 
 namespace mus {
 
@@ -67,10 +68,6 @@ class WindowObserver {
 
   virtual void OnWindowPredefinedCursorChanged(Window* window,
                                                mojom::Cursor cursor) {}
-
-  virtual void OnWindowInputEvent(Window* window,
-                                  const mojom::EventPtr& event) {}
-
   virtual void OnWindowVisibilityChanging(Window* window) {}
   virtual void OnWindowVisibilityChanged(Window* window) {}
 
@@ -100,6 +97,10 @@ class WindowObserver {
   // when embedded.
   virtual void OnWindowDrawnChanging(Window* window) {}
   virtual void OnWindowDrawnChanged(Window* window) {}
+
+  // The WindowManager has requested the window to close. If the observer
+  // allows the close it should destroy the window as appropriate.
+  virtual void OnRequestClose(Window* window) {}
 
  protected:
   virtual ~WindowObserver() {}

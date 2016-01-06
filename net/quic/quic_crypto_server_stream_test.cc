@@ -62,7 +62,7 @@ class QuicCryptoServerStreamPeer {
 namespace {
 
 const char kServerHostname[] = "test.example.com";
-const uint16 kServerPort = 443;
+const uint16_t kServerPort = 443;
 
 class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
  public:
@@ -84,17 +84,23 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
           QuicCryptoServerConfigPeer::GetPrimaryOrbit(server_crypto_config_);
       strike_register_client_ = new DelayedVerifyStrikeRegisterClient(
           10000,  // strike_register_max_entries
-          static_cast<uint32>(
+          static_cast<uint32_t>(
               server_connection_->clock()->WallNow().ToUNIXSeconds()),
           60,  // strike_register_window_secs
-          reinterpret_cast<const uint8*>(orbit.data()),
+          reinterpret_cast<const uint8_t*>(orbit.data()),
           StrikeRegister::NO_STARTUP_PERIOD_NEEDED);
       strike_register_client_->StartDelayingVerification();
       server_crypto_config_.SetStrikeRegisterClient(strike_register_client_);
     }
   }
 
-  ~QuicCryptoServerStreamTest() override { STLDeleteElements(&helpers_); }
+  ~QuicCryptoServerStreamTest() override {
+    // Ensure that anything that might reference |helpers_| is destroyed before
+    // |helpers_| is destroyed.
+    server_session_.reset();
+    client_session_.reset();
+    STLDeleteElements(&helpers_);
+  }
 
   // Initializes the crypto server stream state for testing.  May be
   // called multiple times.
@@ -375,11 +381,12 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {
+  FLAGS_quic_require_fix = false;
   Initialize();
   CompleteCryptoHandshake();
-  EXPECT_CALL(
-      *server_connection_,
-      SendConnectionClose(QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE));
+  EXPECT_CALL(*server_connection_,
+              SendConnectionCloseWithDetails(
+                  QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE, _));
   message_.set_tag(kCHLO);
   ConstructHandshakeMessage();
   server_stream()->OnStreamFrame(
@@ -388,12 +395,13 @@ TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, BadMessageType) {
+  FLAGS_quic_require_fix = false;
   Initialize();
 
   message_.set_tag(kSHLO);
   ConstructHandshakeMessage();
-  EXPECT_CALL(*server_connection_,
-              SendConnectionClose(QUIC_INVALID_CRYPTO_MESSAGE_TYPE));
+  EXPECT_CALL(*server_connection_, SendConnectionCloseWithDetails(
+                                       QUIC_INVALID_CRYPTO_MESSAGE_TYPE, _));
   server_stream()->OnStreamFrame(
       QuicStreamFrame(kCryptoStreamId, /*fin=*/false, /*offset=*/0,
                       message_data_->AsStringPiece()));
@@ -472,7 +480,7 @@ TEST_P(QuicCryptoServerStreamTest, NoTokenBindingWithoutClientSupport) {
 TEST_P(QuicCryptoServerStreamTest, CancelRPCBeforeVerificationCompletes) {
   // Tests that the client can close the connection while the remote strike
   // register verification RPC is still pending.
-  FLAGS_quic_set_client_hello_cb_nullptr = true;
+  ValueRestore<bool> old_flag(&FLAGS_quic_set_client_hello_cb_nullptr, true);
 
   // Set version to QUIC_VERSION_25 as QUIC_VERSION_26 and later don't support
   // asynchronous strike register RPCs.

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/WebSettingsImpl.h"
 
 #include "core/frame/Settings.h"
@@ -183,11 +182,6 @@ void WebSettingsImpl::setAccessibilityPasswordValuesEnabled(bool enabled)
 void WebSettingsImpl::setInlineTextBoxAccessibilityEnabled(bool enabled)
 {
     m_settings->setInlineTextBoxAccessibilityEnabled(enabled);
-}
-
-void WebSettingsImpl::setInvertViewportScrollOrder(bool enabled)
-{
-    m_settings->setInvertViewportScrollOrder(enabled);
 }
 
 void WebSettingsImpl::setDeviceScaleAdjustment(float deviceScaleAdjustment)
@@ -432,6 +426,11 @@ void WebSettingsImpl::setUnsafePluginPastingEnabled(bool enabled)
 void WebSettingsImpl::setDNSPrefetchingEnabled(bool enabled)
 {
     m_settings->setDNSPrefetchingEnabled(enabled);
+}
+
+void WebSettingsImpl::setDataSaverEnabled(bool enabled)
+{
+    m_settings->setDataSaverEnabled(enabled);
 }
 
 void WebSettingsImpl::setLocalStorageEnabled(bool enabled)

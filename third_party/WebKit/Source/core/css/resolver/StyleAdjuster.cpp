@@ -26,7 +26,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/css/resolver/StyleAdjuster.h"
 
 #include "core/HTMLNames.h"
@@ -49,6 +48,7 @@
 #include "core/svg/SVGSVGElement.h"
 #include "platform/Length.h"
 #include "platform/transforms/TransformOperations.h"
+#include "public/platform/WebCompositorMutableProperties.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
@@ -181,6 +181,9 @@ void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyl
         adjustStyleForFirstLetter(style);
     }
 
+    if (element && element->hasCompositorProxy())
+        style.setHasCompositorProxy(true);
+
     // Make sure our z-index value is only applied if the object is positioned.
     if (style.position() == StaticPosition && !parentStyleForcesZIndexToCreateStackingContext(parentStyle))
         style.setHasAutoZIndex();
@@ -199,7 +202,8 @@ void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyl
         || style.hasIsolation()
         || style.position() == FixedPosition
         || isInTopLayer(element, style)
-        || hasWillChangeThatCreatesStackingContext(style)))
+        || hasWillChangeThatCreatesStackingContext(style)
+        || style.containsPaint()))
         style.setZIndex(0);
 
     if (doesNotInheritTextDecoration(style, element))

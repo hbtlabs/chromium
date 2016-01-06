@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/content_description.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -115,8 +117,8 @@ bool ParseChannelConfig(const XmlElement* element, bool codec_required,
 ContentDescription::ContentDescription(
     scoped_ptr<CandidateSessionConfig> config,
     scoped_ptr<buzz::XmlElement> authenticator_message)
-    : candidate_config_(config.Pass()),
-      authenticator_message_(authenticator_message.Pass()) {
+    : candidate_config_(std::move(config)),
+      authenticator_message_(std::move(authenticator_message)) {
 }
 
 ContentDescription::~ContentDescription() { }
@@ -235,8 +237,8 @@ scoped_ptr<ContentDescription> ContentDescription::ParseXml(
   if (child)
     authenticator_message.reset(new XmlElement(*child));
 
-  return make_scoped_ptr(
-      new ContentDescription(config.Pass(), authenticator_message.Pass()));
+  return make_scoped_ptr(new ContentDescription(
+      std::move(config), std::move(authenticator_message)));
 }
 
 }  // namespace protocol

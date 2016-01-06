@@ -5,13 +5,16 @@
 #ifndef COMPONENTS_MUS_GLES2_COMMAND_BUFFER_DRIVER_H_
 #define COMPONENTS_MUS_GLES2_COMMAND_BUFFER_DRIVER_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "base/timer/timer.h"
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
+#include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -48,17 +51,14 @@ class CommandBufferDriver {
 
   ~CommandBufferDriver();
 
-  void set_client(scoped_ptr<Client> client) { client_ = client.Pass(); }
+  void set_client(scoped_ptr<Client> client) { client_ = std::move(client); }
 
-  void Initialize(
-      mojo::InterfacePtrInfo<mojom::CommandBufferSyncClient> sync_client,
-      mojo::InterfacePtrInfo<mojom::CommandBufferLostContextObserver>
-          loss_observer,
-      mojo::ScopedSharedBufferHandle shared_state,
-      mojo::Array<int32_t> attribs);
+  bool Initialize(mojo::InterfacePtrInfo<
+                      mojom::CommandBufferLostContextObserver> loss_observer,
+                  mojo::ScopedSharedBufferHandle shared_state,
+                  mojo::Array<int32_t> attribs);
   void SetGetBuffer(int32_t buffer);
   void Flush(int32_t put_offset);
-  void MakeProgress(int32_t last_get_offset);
   void RegisterTransferBuffer(int32_t id,
                               mojo::ScopedSharedBufferHandle transfer_buffer,
                               uint32_t size);
@@ -72,6 +72,12 @@ class CommandBufferDriver {
   void DestroyImage(int32_t id);
   bool IsScheduled() const;
   bool HasUnprocessedCommands() const;
+  gpu::Capabilities GetCapabilities();
+  gpu::CommandBuffer::State GetLastState();
+  gpu::CommandBufferNamespace GetNamespaceID() const {
+    return gpu::CommandBufferNamespace::MOJO;
+  }
+  uint64_t GetCommandBufferID() const { return command_buffer_id_; }
   gpu::SyncPointOrderData* sync_point_order_data() {
     return sync_point_order_data_.get();
   }
@@ -92,7 +98,6 @@ class CommandBufferDriver {
 
   const uint64_t command_buffer_id_;
   scoped_ptr<Client> client_;
-  mojom::CommandBufferSyncClientPtr sync_client_;
   mojom::CommandBufferLostContextObserverPtr loss_observer_;
   scoped_ptr<gpu::CommandBufferService> command_buffer_;
   scoped_ptr<gpu::gles2::GLES2Decoder> decoder_;

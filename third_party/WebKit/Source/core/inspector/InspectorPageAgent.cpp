@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/InspectorPageAgent.h"
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
@@ -127,7 +126,7 @@ static bool decodeBuffer(const char* buffer, unsigned size, const String& textEn
 static bool prepareResourceBuffer(Resource* cachedResource, bool* hasZeroSize)
 {
     *hasZeroSize = false;
-    if (!cachedResource)
+    if (!cachedResource || cachedResource->wasPurged())
         return false;
 
     if (cachedResource->dataBufferingPolicy() == DoNotBufferData)
@@ -430,6 +429,8 @@ static void cachedResourcesForDocument(Document* document, WillBeHeapVector<RawP
     const ResourceFetcher::DocumentResourceMap& allResources = document->fetcher()->allResources();
     for (const auto& resource : allResources) {
         Resource* cachedResource = resource.value.get();
+        if (!cachedResource)
+            continue;
 
         switch (cachedResource->type()) {
         case Resource::Image:

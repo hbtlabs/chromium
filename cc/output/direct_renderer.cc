@@ -4,6 +4,8 @@
 
 #include "cc/output/direct_renderer.h"
 
+#include <stddef.h>
+
 #include <utility>
 #include <vector>
 
@@ -218,7 +220,8 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // Only reshape when we know we are going to draw. Otherwise, the reshape
   // can leave the window at the wrong size if we never draw and the proper
   // viewport size is never set.
-  output_surface_->Reshape(device_viewport_rect.size(), device_scale_factor);
+  output_surface_->Reshape(device_viewport_rect.size(), device_scale_factor,
+                           frame.root_render_pass->has_transparent_background);
 
   BeginDrawingFrame(&frame);
 

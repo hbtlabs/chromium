@@ -65,7 +65,7 @@ void AudioRendererMixerInput::Stop() {
   // Stop() may be called at any time, if Pause() hasn't been called we need to
   // remove our mixer input before shutdown.
   if (playing_) {
-    mixer_->RemoveMixerInput(this);
+    mixer_->RemoveMixerInput(params_, this);
     playing_ = false;
   }
 
@@ -88,7 +88,7 @@ void AudioRendererMixerInput::Play() {
   if (playing_ || !mixer_)
     return;
 
-  mixer_->AddMixerInput(this);
+  mixer_->AddMixerInput(params_, this);
   playing_ = true;
 }
 
@@ -96,7 +96,7 @@ void AudioRendererMixerInput::Pause() {
   if (!playing_ || !mixer_)
     return;
 
-  mixer_->RemoveMixerInput(this);
+  mixer_->RemoveMixerInput(params_, this);
   playing_ = false;
 }
 
@@ -166,7 +166,7 @@ OutputDeviceStatus AudioRendererMixerInput::GetDeviceStatus() {
 double AudioRendererMixerInput::ProvideInput(AudioBus* audio_bus,
                                              base::TimeDelta buffer_delay) {
   int frames_filled = callback_->Render(
-      audio_bus, static_cast<int>(buffer_delay.InMillisecondsF() + 0.5));
+      audio_bus, static_cast<int>(buffer_delay.InMillisecondsF() + 0.5), 0);
 
   // AudioConverter expects unfilled frames to be zeroed.
   if (frames_filled < audio_bus->frames()) {

@@ -5,15 +5,19 @@
 #ifndef COMPONENTS_NACL_RENDERER_PLUGIN_PNACL_TRANSLATE_THREAD_H_
 #define COMPONENTS_NACL_RENDERER_PLUGIN_PNACL_TRANSLATE_THREAD_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <vector>
 
+#include "base/macros.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "native_client/src/include/nacl_macros.h"
 #include "native_client/src/include/nacl_scoped_ptr.h"
 #include "native_client/src/shared/platform/nacl_sync_checked.h"
 #include "native_client/src/shared/platform/nacl_threads.h"
 #include "ppapi/cpp/completion_callback.h"
+#include "ppapi/proxy/serialized_handle.h"
 
 struct PP_PNaClOptions;
 
@@ -81,6 +85,9 @@ class PnaclTranslateThread {
   bool started() const { return coordinator_ != NULL; }
 
  private:
+  ppapi::proxy::SerializedHandle GetHandleForSubprocess(TempFile* file,
+                                                        int32_t open_flags);
+
   // Helper thread entry point for compilation. Takes a pointer to
   // PnaclTranslateThread and calls DoCompile().
   static void WINAPI DoCompileThread(void* arg);
@@ -146,6 +153,15 @@ class PnaclTranslateThread {
   PP_PNaClOptions* pnacl_options_;
   std::string architecture_attributes_;
   PnaclCoordinator* coordinator_;
+
+  // This IPC::SyncChannel can only be used and freed by the parent thread.
+  scoped_ptr<IPC::SyncChannel> ld_channel_;
+  // This IPC::SyncMessageFilter can be used by the child thread.
+  scoped_refptr<IPC::SyncMessageFilter> ld_channel_filter_;
+  // PID of the subprocess, needed for copying handles to the subprocess on
+  // Windows.  This is used by the child thread.
+  base::ProcessId ld_channel_peer_pid_;
+
  private:
   NACL_DISALLOW_COPY_AND_ASSIGN(PnaclTranslateThread);
 };

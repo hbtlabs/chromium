@@ -327,6 +327,18 @@ components/rappor/rappor_service.cc.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="Extensions.AffectedByIsolateExtensions"
+    type="UMA_RAPPOR_TYPE">
+  <owner>nick@chromium.org</owner>
+  <summary>
+    The ID of an extension which will trigger out-of-process iframes under
+    --isolate-extensions. This metric is logged even if --isolate-extensions is
+    disabled. Includes framing in both directions: non-extension documents that
+    contain chrome-extension:// iframes, or vice versa. Hosted apps are not
+    considered extensions for the purposes of this metric.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="Extensions.PossibleAdInjection2" type="ETLD_PLUS_ONE">
   <owner>rdevlin.cronin@chromium.org</owner>
   <summary>
@@ -1003,6 +1015,47 @@ components/rappor/rappor_service.cc.
       Bitfield for the tasks memory usage range.
     </summary>
   </flags-field>
+</rappor-metric>
+
+<rappor-metric name="SafeBrowsing.UnverifiedDownloads.Allowed"
+    type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL for which a download was allowed without
+    being verified by Safe Browsing.  Recorded before the download is started.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="SafeBrowsing.UnverifiedDownloads.AllowedByWhitelist"
+    type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL for which a download was allowed without
+    being verified by Safe Browsing because it was on a whitelisted domain.
+    Recorded before the download is started.  The candidates should come from
+    the domain whitelist.
+  </summary>
+</rappor-metric>
+
+<rappor-metric
+    name="SafeBrowsing.UnverifiedDownloads.AllowedDueToDisabledService"
+    type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL for which a download was allowed without
+    being verified by Safe Browsing because the service was disabled at the
+    time.  Recorded before the download is started.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="SafeBrowsing.UnverifiedDownloads.Blocked"
+    type="SAFEBROWSING_RAPPOR_TYPE">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL for which a download was blocked without
+    being verified by Safe Browsing because the extension matched the blacklist
+    provided by Finch.  Recorded before the download is started.
+  </summary>
 </rappor-metric>
 
 <rappor-metric name="Search.DefaultSearchProvider" type="ETLD_PLUS_ONE">

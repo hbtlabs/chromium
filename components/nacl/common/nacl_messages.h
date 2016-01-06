@@ -5,7 +5,11 @@
 // Defines messages between the browser and NaCl process.
 
 // Multiply-included message file, no traditional include guard.
+
+#include <stdint.h>
+
 #include "base/process/process.h"
+#include "build/build_config.h"
 #include "components/nacl/common/nacl_types.h"
 #include "components/nacl/common/nacl_types_param_traits.h"
 #include "ipc/ipc_channel_handle.h"
@@ -35,7 +39,6 @@ IPC_STRUCT_TRAITS_BEGIN(nacl::NaClStartParams)
   IPC_STRUCT_TRAITS_MEMBER(validation_cache_key)
   IPC_STRUCT_TRAITS_MEMBER(version)
   IPC_STRUCT_TRAITS_MEMBER(enable_debug_stub)
-  IPC_STRUCT_TRAITS_MEMBER(enable_ipc_proxy)
   IPC_STRUCT_TRAITS_MEMBER(process_type)
   IPC_STRUCT_TRAITS_MEMBER(crash_info_shmem_handle)
 IPC_STRUCT_TRAITS_END()
@@ -73,7 +76,7 @@ IPC_MESSAGE_CONTROL2(NaClProcessMsg_LoaderLaunched,
 // Tells the NaCl broker to attach a debug exception handler to the
 // given NaCl loader process.
 IPC_MESSAGE_CONTROL3(NaClProcessMsg_LaunchDebugExceptionHandler,
-                     int32 /* pid of the NaCl process */,
+                     int32_t /* pid of the NaCl process */,
                      base::ProcessHandle /* handle of the NaCl process */,
                      std::string /* NaCl internal process layout info */)
 
@@ -81,7 +84,7 @@ IPC_MESSAGE_CONTROL3(NaClProcessMsg_LaunchDebugExceptionHandler,
 // attaching a debug exception handler to the given NaCl loader
 // process.
 IPC_MESSAGE_CONTROL2(NaClProcessMsg_DebugExceptionHandlerLaunched,
-                     int32 /* pid */,
+                     int32_t /* pid */,
                      bool /* success */)
 
 // Notify the broker that all loader processes have been terminated and it
@@ -115,11 +118,11 @@ IPC_MESSAGE_CONTROL1(NaClProcessMsg_SetKnownToValidate,
 // from the browser, including the file's path as well as a fresh version of the
 // file handle.
 IPC_MESSAGE_CONTROL2(NaClProcessMsg_ResolveFileToken,
-                     uint64, /* file_token_lo */
-                     uint64 /* file_token_hi */)
+                     uint64_t, /* file_token_lo */
+                     uint64_t /* file_token_hi */)
 IPC_MESSAGE_CONTROL4(NaClProcessMsg_ResolveFileTokenReply,
-                     uint64, /* file_token_lo */
-                     uint64, /* file_token_hi */
+                     uint64_t,                    /* file_token_lo */
+                     uint64_t,                    /* file_token_hi */
                      IPC::PlatformFileForTransit, /* fd */
                      base::FilePath /* Path opened to get fd */)
 

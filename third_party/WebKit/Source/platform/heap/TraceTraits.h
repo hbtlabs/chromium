@@ -24,8 +24,6 @@ namespace blink {
 
 template<typename T> class CrossThreadPersistent;
 template<typename T> class CrossThreadWeakPersistent;
-template<typename T> struct GCInfoTrait;
-class HeapObjectHeader;
 template<typename T> class Member;
 template<typename T> class TraceTrait;
 template<typename T> class WeakMember;
@@ -387,7 +385,7 @@ struct TraceInCollectionTrait<NoWeakHandlingInCollections, strongify, blink::Hea
         //   This is fine because the fact that the object can be initialized
         //   with memset indicates that it is safe to treat the zerod slot
         //   as a valid object.
-        static_assert(!NeedsTracingTrait<Traits>::value || Traits::canClearUnusedSlotsWithMemset || WTF::IsPolymorphic<T>::value, "HeapVectorBacking doesn't support objects that cannot be cleared as unused with memset.");
+        static_assert(!NeedsTracingTrait<Traits>::value || Traits::canClearUnusedSlotsWithMemset || std::is_polymorphic<T>::value, "HeapVectorBacking doesn't support objects that cannot be cleared as unused with memset.");
 
         // This trace method is instantiated for vectors where
         // NeedsTracingTrait<Traits>::value is false, but the trace method
@@ -401,7 +399,7 @@ struct TraceInCollectionTrait<NoWeakHandlingInCollections, strongify, blink::Hea
         // Use the payload size as recorded by the heap to determine how many
         // elements to trace.
         size_t length = header->payloadSize() / sizeof(T);
-        if (WTF::IsPolymorphic<T>::value) {
+        if (std::is_polymorphic<T>::value) {
             for (size_t i = 0; i < length; ++i) {
                 if (blink::vTableInitialized(&array[i]))
                     blink::TraceIfEnabled<T, NeedsTracingTrait<Traits>::value>::trace(visitor, array[i]);

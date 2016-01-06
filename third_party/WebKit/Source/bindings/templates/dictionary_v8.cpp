@@ -1,6 +1,5 @@
-{% from 'conversions.cpp' import declare_enum_validation_variable %}
+{% from 'utilities.cpp' import declare_enum_validation_variable %}
 {% include 'copyright_block.txt' %}
-#include "config.h"
 #include "{{v8_original_class}}.h"
 
 {% for filename in cpp_includes if filename != '%s.h' % v8_class %}
@@ -9,7 +8,7 @@
 
 namespace blink {
 
-{% from 'conversions.cpp' import v8_value_to_local_cpp_value %}
+{% from 'utilities.cpp' import v8_value_to_local_cpp_value %}
 void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{cpp_class}}& impl, ExceptionState& exceptionState)
 {
     if (isUndefinedOrNull(v8Value))

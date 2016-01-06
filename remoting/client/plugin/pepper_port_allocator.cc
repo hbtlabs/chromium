@@ -4,7 +4,12 @@
 
 #include "remoting/client/plugin/pepper_port_allocator.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/base/net_util.h"
 #include "ppapi/c/pp_errors.h"
@@ -206,13 +211,9 @@ void PepperPortAllocatorSession::OnResponseBodyRead(int32_t result) {
 // static
 scoped_ptr<PepperPortAllocator> PepperPortAllocator::Create(
     const pp::InstanceHandle& instance) {
-  scoped_ptr<rtc::NetworkManager> network_manager(
-      new PepperNetworkManager(instance));
-  scoped_ptr<rtc::PacketSocketFactory> socket_factory(
-      new PepperPacketSocketFactory(instance));
-  scoped_ptr<PepperPortAllocator> result(new PepperPortAllocator(
-      instance, network_manager.Pass(), socket_factory.Pass()));
-  return result.Pass();
+  return make_scoped_ptr(new PepperPortAllocator(
+      instance, make_scoped_ptr(new PepperNetworkManager(instance)),
+      make_scoped_ptr(new PepperPacketSocketFactory(instance))));
 }
 
 PepperPortAllocator::PepperPortAllocator(
@@ -223,19 +224,10 @@ PepperPortAllocator::PepperPortAllocator(
                             socket_factory.get(),
                             std::string()),
       instance_(instance),
-      network_manager_(network_manager.Pass()),
-      socket_factory_(socket_factory.Pass()) {
-  // TCP transport is disabled becase PseudoTCP works poorly over
-  // it. ENABLE_SHARED_UFRAG flag is specified so that the same
-  // username fragment is shared between all candidates for this
-  // channel.
-  set_flags(cricket::PORTALLOCATOR_DISABLE_TCP |
-            cricket::PORTALLOCATOR_ENABLE_SHARED_UFRAG|
-            cricket::PORTALLOCATOR_ENABLE_IPV6);
-}
+      network_manager_(std::move(network_manager)),
+      socket_factory_(std::move(socket_factory)) {}
 
-PepperPortAllocator::~PepperPortAllocator() {
-}
+PepperPortAllocator::~PepperPortAllocator() {}
 
 cricket::PortAllocatorSession* PepperPortAllocator::CreateSessionInternal(
     const std::string& content_name,
@@ -245,6 +237,17 @@ cricket::PortAllocatorSession* PepperPortAllocator::CreateSessionInternal(
    return new PepperPortAllocatorSession(
        this, content_name, component, ice_username_fragment, ice_password,
        stun_hosts(), relay_hosts(), relay_token(), instance_);
+}
+
+PepperPortAllocatorFactory::PepperPortAllocatorFactory(
+    const pp::InstanceHandle& instance)
+    : instance_(instance) {}
+
+PepperPortAllocatorFactory::~PepperPortAllocatorFactory() {}
+
+scoped_ptr<cricket::HttpPortAllocatorBase>
+PepperPortAllocatorFactory::CreatePortAllocator() {
+  return PepperPortAllocator::Create(instance_);
 }
 
 }  // namespace remoting

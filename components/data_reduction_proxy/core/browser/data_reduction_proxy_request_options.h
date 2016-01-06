@@ -5,13 +5,18 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_AUTH_REQUEST_HANDLER_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_AUTH_REQUEST_HANDLER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace net {
 class HostPortPair;
@@ -56,28 +61,11 @@ typedef enum {
 } Client;
 #undef CLIENT_ENUM
 
-class ClientConfig;
 class DataReductionProxyConfig;
 
 class DataReductionProxyRequestOptions {
  public:
   static bool IsKeySetOnCommandLine();
-
-  // A pair of functions to convert the session and credentials for the Data
-  // Reduction Proxy to and from a single string; they are used to encode the
-  // session and credentials values into the |session_key| field of the
-  // ClientConfig protocol buffer. The delimiter used is '|', as it is not a
-  // valid character in a session or credentials string.
-  //
-  // CreateLocalSessionKey joins session and credentials with the delimiter.
-  static std::string CreateLocalSessionKey(const std::string& session,
-                                           const std::string& credentials);
-
-  // ParseLocalSessionKey splits the output of CreateLocalSessionKey into its
-  // two components. |session| and |credentials| must not be null.
-  static bool ParseLocalSessionKey(const std::string& session_key,
-                                   std::string* session,
-                                   std::string* credentials);
 
   // Constructs a DataReductionProxyRequestOptions object with the given
   // client type, and config.
@@ -95,8 +83,7 @@ class DataReductionProxyRequestOptions {
   // proxy authentication credentials. Only adds this header if the
   // provided |proxy_server| is a data reduction proxy and not the data
   // reduction proxy's CONNECT server.
-  void MaybeAddRequestHeader(net::URLRequest* request,
-                             const net::ProxyServer& proxy_server,
+  void MaybeAddRequestHeader(const net::ProxyServer& proxy_server,
                              net::HttpRequestHeaders* request_headers);
 
   // Adds a 'Chrome-Proxy' header to |request_headers| with the data reduction
@@ -116,14 +103,6 @@ class DataReductionProxyRequestOptions {
   // SetKeyOnIO is called.
   void SetKeyOnIO(const std::string& key);
 
-  // Populates |response| with the Data Reduction Proxy authentication info.
-  // Virtualized for testing.
-  virtual void PopulateConfigResponse(ClientConfig* config) const;
-
-  // Sets the credentials for sending to the Data Reduction Proxy.
-  void SetCredentials(const std::string& session,
-                      const std::string& credentials);
-
   // Sets the credentials for sending to the Data Reduction Proxy.
   void SetSecureSession(const std::string& secure_session);
 
@@ -134,14 +113,12 @@ class DataReductionProxyRequestOptions {
   void Invalidate();
 
  protected:
-  void SetHeader(const net::URLRequest* request,
-                 net::HttpRequestHeaders* headers);
+  void SetHeader(net::HttpRequestHeaders* headers);
 
   // Returns a UTF16 string that's the hash of the configured authentication
   // |key| and |salt|. Returns an empty UTF16 string if no key is configured or
   // the data reduction proxy feature isn't available.
-  static base::string16 AuthHashForSalt(int64 salt,
-                                        const std::string& key);
+  static base::string16 AuthHashForSalt(int64_t salt, const std::string& key);
   // Visible for testing.
   virtual base::Time Now() const;
   virtual void RandBytes(void* output, size_t length) const;
@@ -187,8 +164,7 @@ class DataReductionProxyRequestOptions {
   // |proxy_server| is a data reduction proxy used for ssl tunneling via
   // HTTP CONNECT, or |expect_ssl| is false and |proxy_server| is a data
   // reduction proxy for HTTP traffic.
-  void MaybeAddRequestHeaderImpl(const net::URLRequest* request,
-                                 const net::HostPortPair& proxy_server,
+  void MaybeAddRequestHeaderImpl(const net::HostPortPair& proxy_server,
                                  bool expect_ssl,
                                  net::HttpRequestHeaders* request_headers);
 

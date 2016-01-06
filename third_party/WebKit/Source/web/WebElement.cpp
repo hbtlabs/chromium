@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "public/web/WebElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -146,9 +145,9 @@ bool WebElement::hasNonEmptyLayoutSize() const
     return constUnwrap<Element>()->hasNonEmptyLayoutSize();
 }
 
-WebRect WebElement::boundsInViewport()
+WebRect WebElement::boundsInViewport() const
 {
-    return unwrap<Element>()->boundsInViewport();
+    return constUnwrap<Element>()->boundsInViewport();
 }
 
 WebImage WebElement::imageContents()

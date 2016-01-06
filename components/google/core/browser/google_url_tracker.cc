@@ -4,9 +4,12 @@
 
 #include "components/google/core/browser/google_url_tracker.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -28,10 +31,10 @@ const char GoogleURLTracker::kSearchDomainCheckURL[] =
 
 GoogleURLTracker::GoogleURLTracker(scoped_ptr<GoogleURLTrackerClient> client,
                                    Mode mode)
-    : client_(client.Pass()),
-      google_url_(mode == UNIT_TEST_MODE ?
-          kDefaultGoogleHomepage :
-          client_->GetPrefs()->GetString(prefs::kLastKnownGoogleURL)),
+    : client_(std::move(client)),
+      google_url_(mode == UNIT_TEST_MODE ? kDefaultGoogleHomepage
+                                         : client_->GetPrefs()->GetString(
+                                               prefs::kLastKnownGoogleURL)),
       fetcher_id_(0),
       in_startup_sleep_(true),
       already_fetched_(false),
@@ -97,7 +100,7 @@ void GoogleURLTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   // See if the response data was valid.  It should be ".google.<TLD>".
   std::string url_str;
   source->GetResponseAsString(&url_str);
-  base::TrimWhitespace(url_str, base::TRIM_ALL, &url_str);
+  base::TrimWhitespaceASCII(url_str, base::TRIM_ALL, &url_str);
   if (!base::StartsWith(url_str, ".google.",
                         base::CompareCase::INSENSITIVE_ASCII))
     return;

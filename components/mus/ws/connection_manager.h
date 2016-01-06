@@ -5,11 +5,13 @@
 #ifndef COMPONENTS_MUS_WS_CONNECTION_MANAGER_H_
 #define COMPONENTS_MUS_WS_CONNECTION_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
@@ -60,14 +62,15 @@ class ConnectionManager : public ServerWindowDelegate,
   // Invoked when a WindowTreeImpl's connection encounters an error.
   void OnConnectionError(ClientConnection* connection);
 
+  ClientConnection* GetClientConnection(WindowTreeImpl* window_tree);
+
   // Invoked when a WindowTreeHostConnection encounters an error or the
   // associated Display window is closed.
   void OnHostConnectionClosed(WindowTreeHostConnection* connection);
 
   // See description of WindowTree::Embed() for details. This assumes
   // |transport_window_id| is valid.
-  WindowTreeImpl* EmbedAtWindow(ConnectionSpecificId creator_id,
-                                const WindowId& window_id,
+  WindowTreeImpl* EmbedAtWindow(ServerWindow* root,
                                 uint32_t policy_bitmask,
                                 mojom::WindowTreeClientPtr client);
 
@@ -105,18 +108,16 @@ class ConnectionManager : public ServerWindowDelegate,
       const ServerWindow* window);
 
   // Returns the WindowTreeImpl that has |id| as a root.
-  WindowTreeImpl* GetConnectionWithRoot(const WindowId& id) {
+  WindowTreeImpl* GetConnectionWithRoot(const ServerWindow* window) {
     return const_cast<WindowTreeImpl*>(
-        const_cast<const ConnectionManager*>(this)->GetConnectionWithRoot(id));
+        const_cast<const ConnectionManager*>(this)
+            ->GetConnectionWithRoot(window));
   }
-  const WindowTreeImpl* GetConnectionWithRoot(const WindowId& id) const;
+  const WindowTreeImpl* GetConnectionWithRoot(const ServerWindow* window) const;
 
   WindowTreeHostImpl* GetWindowTreeHostByWindow(const ServerWindow* window);
   const WindowTreeHostImpl* GetWindowTreeHostByWindow(
       const ServerWindow* window) const;
-
-  // Returns the first ancestor of |service| that is marked as an embed root.
-  WindowTreeImpl* GetEmbedRoot(WindowTreeImpl* service);
 
   WindowTreeHostImpl* GetActiveWindowTreeHost();
 
@@ -158,7 +159,7 @@ class ConnectionManager : public ServerWindowDelegate,
   void ProcessWindowReorder(const ServerWindow* window,
                             const ServerWindow* relative_window,
                             const mojom::OrderDirection direction);
-  void ProcessWindowDeleted(const WindowId& window);
+  void ProcessWindowDeleted(const ServerWindow* window);
   void ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
                                                int32_t cursor_id);
 
@@ -180,6 +181,10 @@ class ConnectionManager : public ServerWindowDelegate,
   using InFlightWindowManagerChangeMap =
       std::map<uint32_t, InFlightWindowManagerChange>;
 
+  bool GetAndClearInFlightWindowManagerChange(
+      uint32_t window_manager_change_id,
+      InFlightWindowManagerChange* change);
+
   // Invoked when a connection is about to execute a window server operation.
   // Subsequently followed by FinishOperation() once the change is done.
   //
@@ -199,6 +204,9 @@ class ConnectionManager : public ServerWindowDelegate,
 
   // Adds |connection| to internal maps.
   void AddConnection(ClientConnection* connection);
+
+  // Run in response to events which may cause us to change the native cursor.
+  void MaybeUpdateNativeCursor(ServerWindow* window);
 
   // Overridden from ServerWindowDelegate:
   mus::SurfacesState* GetSurfacesState() override;

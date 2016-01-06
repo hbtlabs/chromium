@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/run_loop.h"
@@ -274,7 +278,7 @@ void TemplateURLServiceSyncTest::TearDown() {
 
 scoped_ptr<syncer::SyncChangeProcessor>
 TemplateURLServiceSyncTest::PassProcessor() {
-  return sync_processor_wrapper_.Pass();
+  return std::move(sync_processor_wrapper_);
 }
 
 scoped_ptr<syncer::SyncErrorFactory> TemplateURLServiceSyncTest::
@@ -1316,10 +1320,8 @@ TEST_F(TemplateURLServiceSyncTest, MergeTwoClientsBasic) {
   scoped_ptr<syncer::SyncChangeProcessorWrapperForTest> delegate_b(
       new syncer::SyncChangeProcessorWrapperForTest(model_b()));
   model_a()->MergeDataAndStartSyncing(
-      syncer::SEARCH_ENGINES,
-      model_b()->GetAllSyncData(syncer::SEARCH_ENGINES),
-      delegate_b.Pass(),
-      CreateAndPassSyncErrorFactory());
+      syncer::SEARCH_ENGINES, model_b()->GetAllSyncData(syncer::SEARCH_ENGINES),
+      std::move(delegate_b), CreateAndPassSyncErrorFactory());
 
   // They should be consistent.
   AssertEquals(model_a()->GetAllSyncData(syncer::SEARCH_ENGINES),
@@ -1346,10 +1348,8 @@ TEST_F(TemplateURLServiceSyncTest, MergeTwoClientsDupesAndConflicts) {
   scoped_ptr<syncer::SyncChangeProcessorWrapperForTest> delegate_b(
       new syncer::SyncChangeProcessorWrapperForTest(model_b()));
   model_a()->MergeDataAndStartSyncing(
-      syncer::SEARCH_ENGINES,
-      model_b()->GetAllSyncData(syncer::SEARCH_ENGINES),
-      delegate_b.Pass(),
-      CreateAndPassSyncErrorFactory());
+      syncer::SEARCH_ENGINES, model_b()->GetAllSyncData(syncer::SEARCH_ENGINES),
+      std::move(delegate_b), CreateAndPassSyncErrorFactory());
 
   // They should be consistent.
   AssertEquals(model_a()->GetAllSyncData(syncer::SEARCH_ENGINES),

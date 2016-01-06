@@ -4,15 +4,21 @@
 
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
+#include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/google/google_brand.h"
+#include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/browser/profile_resetter/brandcode_config_fetcher.h"
 #include "chrome/browser/profile_resetter/brandcoded_default_settings.h"
+#include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,6 +70,15 @@ ResetSettingsHandler* ResetSettingsHandler::Create(
   html_source->AddBoolean("allowPowerwash", allow_powerwash);
 #endif  // defined(OS_CHROMEOS)
 
+  bool show_reset_profile_banner = false;
+  static const int kBannerShowTimeInDays = 5;
+  const base::Time then = chrome_prefs::GetResetTime(profile);
+  if (!then.is_null()) {
+    show_reset_profile_banner =
+        (base::Time::Now() - then).InDays() < kBannerShowTimeInDays;
+  }
+  html_source->AddBoolean("showResetProfileBanner", show_reset_profile_banner);
+
   // Inject |allow_powerwash| for testing.
   return new ResetSettingsHandler(profile, allow_powerwash);
 }
@@ -77,6 +92,9 @@ void ResetSettingsHandler::RegisterMessages() {
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback("onHideResetProfileDialog",
       base::Bind(&ResetSettingsHandler::OnHideResetProfileDialog,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback("onHideResetProfileBanner",
+      base::Bind(&ResetSettingsHandler::OnHideResetProfileBanner,
                  base::Unretained(this)));
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
@@ -119,6 +137,12 @@ void ResetSettingsHandler::OnResetProfileSettingsDone(
       std::string report = SerializeSettingsReport(*setting_snapshot_,
                                                    difference);
       SendSettingsFeedback(report, profile_);
+
+      // Send the same report as a protobuf to a different endpoint.
+      scoped_ptr<reset_report::ChromeResetReport> report_proto =
+          SerializeSettingsReportToProto(*setting_snapshot_, difference);
+      if (report_proto)
+        SendSettingsFeedbackProto(*report_proto, profile_);
     }
   }
   setting_snapshot_.reset();
@@ -148,6 +172,11 @@ void ResetSettingsHandler::OnHideResetProfileDialog(
     setting_snapshot_.reset();
 }
 
+void ResetSettingsHandler::OnHideResetProfileBanner(
+    const base::ListValue* value) {
+  chrome_prefs::ClearResetTime(profile_);
+}
+
 void ResetSettingsHandler::OnSettingsFetched() {
   DCHECK(config_fetcher_);
   DCHECK(!config_fetcher_->IsActive());
@@ -172,10 +201,8 @@ void ResetSettingsHandler::ResetProfile(bool send_settings) {
     default_settings.reset(new BrandcodedDefaultSettings);
 
   GetResetter()->Reset(
-      ProfileResetter::ALL,
-      default_settings.Pass(),
-      base::Bind(&ResetSettingsHandler::OnResetProfileSettingsDone,
-                 AsWeakPtr(),
+      ProfileResetter::ALL, std::move(default_settings),
+      base::Bind(&ResetSettingsHandler::OnResetProfileSettingsDone, AsWeakPtr(),
                  send_settings));
   content::RecordAction(base::UserMetricsAction("ResetProfile"));
   UMA_HISTOGRAM_BOOLEAN("ProfileReset.SendFeedback", send_settings);

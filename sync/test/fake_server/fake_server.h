@@ -5,11 +5,12 @@
 #ifndef SYNC_TEST_FAKE_SERVER_FAKE_SERVER_H_
 #define SYNC_TEST_FAKE_SERVER_FAKE_SERVER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -138,13 +139,6 @@ class FakeServer {
   // Returns the entity ID of the Bookmark Bar folder.
   std::string GetBookmarkBarFolderId() const;
 
-  // Instructs the server to not create explicit permanent folders.
-  // This method should be called before syncing begins.
-  //
-  // TODO(pvalenzuela): Remove this method when this feature becomes the
-  // default in the real sync server.
-  void EnableImplicitPermanentFolderCreation();
-
   // Returns the current FakeServer as a WeakPtr.
   base::WeakPtr<FakeServer> AsWeakPtr();
 
@@ -211,10 +205,10 @@ class FakeServer {
 
   // This is the last version number assigned to an entity. The next entity will
   // have a version number of version_ + 1.
-  int64 version_;
+  int64_t version_;
 
   // The current store birthday value.
-  int64 store_birthday_;
+  int64_t store_birthday_;
 
   // Whether the server should act as if incoming connections are properly
   // authenticated.
@@ -251,15 +245,6 @@ class FakeServer {
   // When true, the server operates normally. When false, a failure is returned
   // on every request. This is used to simulate a network failure on the client.
   bool network_enabled_;
-
-  // Whether the implicit permanent folder feature should be enabled. When true,
-  // permanent folders are only created for the required types (Bookmarks and
-  // Nigori). When false, permanent folders are created for all types. The plan
-  // (as of late 2015) is to migrate the real sync server to use this feature.
-  //
-  // TODO(pvalenzuela): Remove this boolean and make this behavior the default
-  // when it becomes normal operation in the real server.
-  bool enable_implicit_permanent_folder_creation_;
 
   // Used to verify that FakeServer is only used from one thread.
   base::ThreadChecker thread_checker_;

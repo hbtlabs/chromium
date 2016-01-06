@@ -5,7 +5,9 @@
 #ifndef CHROMECAST_MEDIA_CMA_PIPELINE_MEDIA_PIPELINE_IMPL_H_
 #define CHROMECAST_MEDIA_CMA_PIPELINE_MEDIA_PIPELINE_IMPL_H_
 
-#include "base/basictypes.h"
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -23,18 +25,19 @@ class VideoDecoderConfig;
 
 namespace chromecast {
 namespace media {
+class AudioDecoderSoftwareWrapper;
 class AudioPipelineImpl;
-struct AvPipelineClient;
-struct VideoPipelineClient;
 class BrowserCdmCast;
 class BufferingController;
 class CodedFrameProvider;
 class VideoPipelineImpl;
+struct AvPipelineClient;
+struct VideoPipelineClient;
 
-class MediaPipelineImpl : public MediaPipelineBackend::Delegate {
+class MediaPipelineImpl {
  public:
   MediaPipelineImpl();
-  ~MediaPipelineImpl() override;
+  ~MediaPipelineImpl();
 
   // Initialize the media pipeline: the pipeline is configured based on
   // |load_type|.
@@ -44,22 +47,11 @@ class MediaPipelineImpl : public MediaPipelineBackend::Delegate {
   void SetClient(const MediaPipelineClient& client);
   void SetCdm(int cdm_id);
 
-  // MediaPipelineBackendDelegate implementation:
-  void OnVideoResolutionChanged(MediaPipelineBackend::VideoDecoder* decoder,
-                                const Size& size) override;
-  void OnPushBufferComplete(MediaPipelineBackend::Decoder* decoder,
-                            MediaPipelineBackend::BufferStatus status) override;
-  void OnEndOfStream(MediaPipelineBackend::Decoder* decoder) override;
-  void OnDecoderError(MediaPipelineBackend::Decoder* decoder) override;
-  void OnKeyStatusChanged(const std::string& key_id,
-                          CastKeyStatus key_status,
-                          uint32_t system_code) override;
-
   void InitializeAudio(const ::media::AudioDecoderConfig& config,
                        const AvPipelineClient& client,
                        scoped_ptr<CodedFrameProvider> frame_provider,
                        const ::media::PipelineStatusCB& status_cb);
-  void InitializeVideo(const std::vector< ::media::VideoDecoderConfig>& configs,
+  void InitializeVideo(const std::vector<::media::VideoDecoderConfig>& configs,
                        const VideoPipelineClient& client,
                        scoped_ptr<CodedFrameProvider> frame_provider,
                        const ::media::PipelineStatusCB& status_cb);
@@ -89,7 +81,7 @@ class MediaPipelineImpl : public MediaPipelineBackend::Delegate {
 
   // Interface with the underlying hardware media pipeline.
   scoped_ptr<MediaPipelineBackend> media_pipeline_backend_;
-  MediaPipelineBackend::AudioDecoder* audio_decoder_;
+  scoped_ptr<AudioDecoderSoftwareWrapper> audio_decoder_;
   MediaPipelineBackend::VideoDecoder* video_decoder_;
 
   bool backend_initialized_;
@@ -103,8 +95,7 @@ class MediaPipelineImpl : public MediaPipelineBackend::Delegate {
   float target_playback_rate_;
 
   // The media time is retrieved at regular intervals.
-  // Indicate whether time update is enabled.
-  bool enable_time_update_;
+  bool backend_started_;  // Whether or not the backend is playing/paused.
   bool pending_time_update_task_;
   base::TimeDelta last_media_time_;
 

@@ -23,7 +23,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/LayoutTable.h"
 
 #include "core/HTMLNames.h"
@@ -1366,7 +1365,7 @@ bool LayoutTable::nodeAtPoint(HitTestResult& result, const HitTestLocation& loca
 
 LayoutTable* LayoutTable::createAnonymousWithParent(const LayoutObject* parent)
 {
-    RefPtr<ComputedStyle> newStyle = ComputedStyle::createAnonymousStyleWithDisplay(parent->styleRef(), TABLE);
+    RefPtr<ComputedStyle> newStyle = ComputedStyle::createAnonymousStyleWithDisplay(parent->styleRef(), parent->isLayoutInline() ? INLINE_TABLE : TABLE);
     LayoutTable* newTable = new LayoutTable(nullptr);
     newTable->setDocumentForAnonymous(&parent->document());
     newTable->setStyle(newStyle.release());

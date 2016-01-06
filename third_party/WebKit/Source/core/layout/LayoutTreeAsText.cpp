@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/layout/LayoutTreeAsText.h"
 
 #include "core/HTMLNames.h"
@@ -410,7 +409,7 @@ static void writeInlineBox(TextStream& ts, const InlineBox& box, int indent)
 {
     writeIndent(ts, indent);
     ts << "+ ";
-    ts << box.boxName() << " {" << box.layoutObject().debugName() << "}"
+    ts << box.boxName() << " {" << box.lineLayoutItem().debugName() << "}"
         << " pos=(" << box.x() << "," << box.y() << ")"
         << " size=(" << box.width() << "," << box.height() << ")"
         << " baseline=" << box.baselinePosition(AlphabeticBaseline)

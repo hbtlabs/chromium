@@ -5,15 +5,18 @@
 #ifndef CONTENT_RENDERER_RENDER_VIEW_IMPL_H_
 #define CONTENT_RENDERER_RENDER_VIEW_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -326,6 +329,15 @@ class CONTENT_EXPORT RenderViewImpl
                                   const gfx::Size& max_size);
   void DisableAutoResizeForTesting(const gfx::Size& new_size);
 
+  // RenderWidgetInputHandlerDelegate implementation ---------------------------
+
+  // Most methods are handled by RenderWidget
+  void FocusChangeComplete() override;
+  bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
+  void OnDidHandleKeyEvent() override;
+  bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
+  bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
+
   // IPC::Listener implementation ----------------------------------------------
 
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -451,6 +463,7 @@ class CONTENT_EXPORT RenderViewImpl
                               bool animate) override;
 #endif
   void convertViewportToWindow(blink::WebRect* rect) override;
+  gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
 
   bool uses_temporary_zoom_level() const { return uses_temporary_zoom_level_; }
 
@@ -466,10 +479,6 @@ class CONTENT_EXPORT RenderViewImpl
   void DidInitiatePaint() override;
   void DidFlushPaint() override;
   gfx::Vector2d GetScrollOffset() override;
-  void DidHandleKeyEvent() override;
-  bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
-  bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
-  bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
   void OnSetFocus(bool enable) override;
   void OnWasHidden() override;
   void OnWasShown(bool needs_repainting,
@@ -483,18 +492,17 @@ class CONTENT_EXPORT RenderViewImpl
   void OnImeConfirmComposition(const base::string16& text,
                                const gfx::Range& replacement_range,
                                bool keep_selection) override;
-  void SetDeviceScaleFactor(float device_scale_factor) override;
   bool SetDeviceColorProfile(const std::vector<char>& color_profile) override;
   void OnOrientationChange() override;
   ui::TextInputType GetTextInputType() override;
   void GetSelectionBounds(gfx::Rect* start, gfx::Rect* end) override;
-  void FocusChangeComplete() override;
   void GetCompositionCharacterBounds(
-      std::vector<gfx::Rect>* character_bounds) override;
+      std::vector<gfx::Rect>* character_bounds_in_window) override;
   void GetCompositionRange(gfx::Range* range) override;
   bool CanComposeInline() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
+  void OnDeviceScaleFactorChanged() override;
 
  protected:
   RenderViewImpl(CompositorDependencies* compositor_deps,
@@ -562,8 +570,12 @@ class CONTENT_EXPORT RenderViewImpl
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, SendCandidateWindowEvents);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, RenderFrameClearedAfterClose);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, PaintAfterSwapOut);
+  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
+                           SetZoomLevelAfterCrossProcessNavigation);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplScaleFactorTest,
                            ConverViewportToScreenWithZoomForDSF);
+  FRIEND_TEST_ALL_PREFIXES(RenderViewImplScaleFactorTest,
+                           GetCompositionCharacterBoundsTest);
 
   typedef std::map<GURL, double> HostZoomLevels;
 
@@ -606,7 +618,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetEditCommandsForNextKeyEvent(const EditCommands& edit_commands);
   void OnAllowBindings(int enabled_bindings_flags);
   void OnAllowScriptToClose(bool script_can_close);
-  void OnCancelDownload(int32 download_id);
+  void OnCancelDownload(int32_t download_id);
   void OnClearFocusedElement();
   void OnClosePage();
   void OnClose();
@@ -771,7 +783,7 @@ class CONTENT_EXPORT RenderViewImpl
   void UpdateThemePrefs() {}
 #endif
 
-  void UpdateDeviceScaleFactor();
+  void UpdateWebViewWithDeviceScaleFactor();
 
   // ---------------------------------------------------------------------------
   // ADDING NEW FUNCTIONS? Please keep private functions alphabetized and put
@@ -837,11 +849,11 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Page IDs ------------------------------------------------------------------
   // See documentation in RenderView.
-  int32 page_id_;
+  int32_t page_id_;
 
   // The next available page ID to use for this RenderView.  These IDs are
   // specific to a given RenderView and the frames within it.
-  int32 next_page_id_;
+  int32_t next_page_id_;
 
   // The offset of the current item in the history list.
   int history_list_offset_;
@@ -1000,7 +1012,7 @@ class CONTENT_EXPORT RenderViewImpl
   // The SessionStorage namespace that we're assigned to has an ID, and that ID
   // is passed to us upon creation.  WebKit asks for this ID upon first use and
   // uses it whenever asking the browser process to allocate new storage areas.
-  int64 session_storage_namespace_id_;
+  int64_t session_storage_namespace_id_;
 
   // Stores edit commands associated to the next key event.
   // Shall be cleared as soon as the next key event is processed.

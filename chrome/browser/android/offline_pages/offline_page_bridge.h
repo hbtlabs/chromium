@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_ANDROID_OFFLINE_PAGES_OFFLINE_PAGE_BRIDGE_H_
 #define CHROME_BROWSER_ANDROID_OFFLINE_PAGES_OFFLINE_PAGE_BRIDGE_H_
 
+#include <stdint.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/macros.h"
 #include "components/offline_pages/offline_page_model.h"
 
 namespace content {
@@ -22,9 +25,6 @@ namespace android {
  */
 class OfflinePageBridge : public OfflinePageModel::Observer {
  public:
-  // Returns true if |url| might points to an offline page.
-  static bool MightBeOfflineURL(const GURL& url);
-
   OfflinePageBridge(JNIEnv* env,
                     jobject obj,
                     content::BrowserContext* browser_context);
@@ -33,7 +33,7 @@ class OfflinePageBridge : public OfflinePageModel::Observer {
   // OfflinePageModel::Observer implementation.
   void OfflinePageModelLoaded(OfflinePageModel* model) override;
   void OfflinePageModelChanged(OfflinePageModel* model) override;
-  void OfflinePageDeleted(int64 bookmark_id) override;
+  void OfflinePageDeleted(int64_t bookmark_id) override;
 
   void GetAllPages(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
@@ -47,6 +47,11 @@ class OfflinePageBridge : public OfflinePageModel::Observer {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jlong bookmark_id);
+
+  base::android::ScopedJavaLocalRef<jobject> GetPageByOnlineURL(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& online_url);
 
   void SavePage(JNIEnv* env,
                 const base::android::JavaParamRef<jobject>& obj,
@@ -75,6 +80,10 @@ class OfflinePageBridge : public OfflinePageModel::Observer {
 
  private:
   void NotifyIfDoneLoading() const;
+
+  base::android::ScopedJavaLocalRef<jobject> CreateOfflinePageItem(
+      JNIEnv* env,
+      const OfflinePageItem& offline_page) const;
 
   JavaObjectWeakGlobalRef weak_java_ref_;
   // Not owned.

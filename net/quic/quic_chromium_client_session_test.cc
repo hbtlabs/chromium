@@ -42,7 +42,7 @@ namespace test {
 namespace {
 
 const char kServerHostname[] = "test.example.com";
-const uint16 kServerPort = 443;
+const uint16_t kServerPort = 443;
 
 class QuicChromiumClientSessionTest
     : public ::testing::TestWithParam<QuicVersion> {
@@ -54,7 +54,7 @@ class QuicChromiumClientSessionTest
                                                SupportedVersions(GetParam()))),
         session_(
             connection_,
-            GetSocket().Pass(),
+            GetSocket(),
             /*stream_factory=*/nullptr,
             /*crypto_client_stream_factory=*/nullptr,
             &clock_,
@@ -124,23 +124,26 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
 
   std::vector<QuicReliableClientStream*> streams;
   for (size_t i = 0; i < kDefaultMaxStreamsPerConnection; i++) {
-    QuicReliableClientStream* stream = session_.CreateOutgoingDynamicStream();
+    QuicReliableClientStream* stream =
+        session_.CreateOutgoingDynamicStream(kDefaultPriority);
     EXPECT_TRUE(stream);
     streams.push_back(stream);
   }
-  EXPECT_FALSE(session_.CreateOutgoingDynamicStream());
+  EXPECT_FALSE(session_.CreateOutgoingDynamicStream(kDefaultPriority));
 
-  EXPECT_EQ(kDefaultMaxStreamsPerConnection, session_.GetNumOpenStreams());
+  EXPECT_EQ(kDefaultMaxStreamsPerConnection,
+            session_.GetNumOpenOutgoingStreams());
 
   // Close a stream and ensure I can now open a new one.
   QuicStreamId stream_id = streams[0]->id();
   session_.CloseStream(stream_id);
 
-  EXPECT_FALSE(session_.CreateOutgoingDynamicStream());
+  EXPECT_FALSE(session_.CreateOutgoingDynamicStream(kDefaultPriority));
   QuicRstStreamFrame rst1(stream_id, QUIC_STREAM_NO_ERROR, 0);
   session_.OnRstStream(rst1);
-  EXPECT_EQ(kDefaultMaxStreamsPerConnection - 1, session_.GetNumOpenStreams());
-  EXPECT_TRUE(session_.CreateOutgoingDynamicStream());
+  EXPECT_EQ(kDefaultMaxStreamsPerConnection - 1,
+            session_.GetNumOpenOutgoingStreams());
+  EXPECT_TRUE(session_.CreateOutgoingDynamicStream(kDefaultPriority));
 }
 
 TEST_P(QuicChromiumClientSessionTest, MaxNumStreamsViaRequest) {
@@ -148,7 +151,8 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreamsViaRequest) {
 
   std::vector<QuicReliableClientStream*> streams;
   for (size_t i = 0; i < kDefaultMaxStreamsPerConnection; i++) {
-    QuicReliableClientStream* stream = session_.CreateOutgoingDynamicStream();
+    QuicReliableClientStream* stream =
+        session_.CreateOutgoingDynamicStream(kDefaultPriority);
     EXPECT_TRUE(stream);
     streams.push_back(stream);
   }
@@ -177,7 +181,7 @@ TEST_P(QuicChromiumClientSessionTest, GoAwayReceived) {
   // streams.
   session_.connection()->OnGoAwayFrame(
       QuicGoAwayFrame(QUIC_PEER_GOING_AWAY, 1u, "Going away."));
-  EXPECT_EQ(nullptr, session_.CreateOutgoingDynamicStream());
+  EXPECT_EQ(nullptr, session_.CreateOutgoingDynamicStream(kDefaultPriority));
 }
 
 TEST_P(QuicChromiumClientSessionTest, CanPool) {
@@ -224,9 +228,9 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithTlsChannelId) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
-  uint8 primary_pin = 1;
-  uint8 backup_pin = 2;
-  uint8 bad_pin = 3;
+  uint8_t primary_pin = 1;
+  uint8_t backup_pin = 2;
+  uint8_t bad_pin = 3;
   AddPin(&transport_security_state_, "mail.example.org", primary_pin,
          backup_pin);
 
@@ -248,8 +252,8 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithMatchingPin) {
-  uint8 primary_pin = 1;
-  uint8 backup_pin = 2;
+  uint8_t primary_pin = 1;
+  uint8_t backup_pin = 2;
   AddPin(&transport_security_state_, "mail.example.org", primary_pin,
          backup_pin);
 

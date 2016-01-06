@@ -4,11 +4,16 @@
 
 #include "chrome/browser/policy/configuration_policy_handler_list_factory.h"
 
-#include "base/basictypes.h"
+#include <limits.h>
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/prefs/pref_value_map.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/policy/managed_bookmarks_policy_handler.h"
 #include "chrome/browser/profiles/incognito_mode_policy_handler.h"
 #include "chrome/common/chrome_switches.h"
@@ -16,7 +21,6 @@
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/policy/core/browser/autofill_policy_handler.h"
@@ -510,7 +514,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   { key::kDataCompressionProxyEnabled,
-    data_reduction_proxy::prefs::kDataReductionProxyEnabled,
+    prefs::kDataSaverEnabled,
     base::Value::TYPE_BOOLEAN },
   { key::kAuthAndroidNegotiateAccountType,
     prefs::kAuthAndroidNegotiateAccountType,
@@ -799,12 +803,12 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   // http://crbug.com/346229
   handlers->AddHandler(
       make_scoped_ptr(new LegacyPoliciesDeprecatingPolicyHandler(
-          power_management_idle_legacy_policies.Pass(),
+          std::move(power_management_idle_legacy_policies),
           make_scoped_ptr(
               new PowerManagementIdleSettingsPolicyHandler(chrome_schema)))));
   handlers->AddHandler(
       make_scoped_ptr(new LegacyPoliciesDeprecatingPolicyHandler(
-          screen_lock_legacy_policies.Pass(),
+          std::move(screen_lock_legacy_policies),
           make_scoped_ptr(new ScreenLockDelayPolicyHandler(chrome_schema)))));
   handlers->AddHandler(
       make_scoped_ptr(new ExternalDataPolicyHandler(key::kUserAvatarImage)));
@@ -818,7 +822,7 @@ scoped_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       new chromeos::KeyPermissionsPolicyHandler(chrome_schema)));
 #endif  // defined(OS_CHROMEOS)
 
-  return handlers.Pass();
+  return handlers;
 }
 
 }  // namespace policy

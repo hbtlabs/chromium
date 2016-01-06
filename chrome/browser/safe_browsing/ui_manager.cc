@@ -8,6 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/debug/leak_tracker.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
@@ -86,6 +87,24 @@ bool SafeBrowsingUIManager::UnsafeResource::IsMainPageLoadBlocked() const {
   }
 
   return true;
+}
+
+content::NavigationEntry*
+SafeBrowsingUIManager::UnsafeResource::GetNavigationEntryForResource() const {
+  WebContents* contents =
+      tab_util::GetWebContentsByID(render_process_host_id, render_view_id);
+  if (!contents)
+    return nullptr;
+  // If a safebrowsing hit occurs during main frame navigation, the navigation
+  // will not be committed, and the pending navigation entry refers to the hit.
+  if (IsMainPageLoadBlocked())
+    return contents->GetController().GetPendingEntry();
+  // If a safebrowsing hit occurs on a subresource load, or on a main frame
+  // after the navigation is committed, the last committed navigation entry
+  // refers to the page with the hit. Note that there may concurrently be an
+  // unrelated pending navigation to another site, so GetActiveEntry() would be
+  // wrong.
+  return contents->GetController().GetLastCommittedEntry();
 }
 
 // SafeBrowsingUIManager -------------------------------------------------------
@@ -174,14 +193,15 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
   if (resource.threat_type != SB_THREAT_TYPE_SAFE) {
     HitReport hit_report;
     hit_report.malicious_url = resource.url;
-    hit_report.page_url = web_contents->GetURL();
     hit_report.is_subresource = resource.is_subresource;
     hit_report.threat_type = resource.threat_type;
     hit_report.threat_source = resource.threat_source;
 
-    NavigationEntry* entry = web_contents->GetController().GetActiveEntry();
-    if (entry)
+    NavigationEntry* entry = resource.GetNavigationEntryForResource();
+    if (entry) {
+      hit_report.page_url = entry->GetURL();
       hit_report.referrer_url = entry->GetReferrer().url;
+    }
 
     // When the malicious url is on the main frame, and resource.original_url
     // is not the same as the resource.url, that means we have a redirect from
@@ -311,8 +331,16 @@ void SafeBrowsingUIManager::AddToWhitelist(const UnsafeResource& resource) {
     web_contents->SetUserData(kWhitelistKey, site_list);
   }
 
-  GURL whitelisted_url(resource.is_subresource ? web_contents->GetVisibleURL()
-                                               : resource.url);
+  GURL whitelisted_url;
+  if (resource.is_subresource) {
+    NavigationEntry* entry = resource.GetNavigationEntryForResource();
+    if (!entry)
+      return;
+    whitelisted_url = entry->GetURL();
+  } else {
+    whitelisted_url = resource.url;
+  }
+
   site_list->Insert(whitelisted_url);
 }
 
@@ -323,8 +351,16 @@ bool SafeBrowsingUIManager::IsWhitelisted(const UnsafeResource& resource) {
   WebContents* web_contents = tab_util::GetWebContentsByID(
       resource.render_process_host_id, resource.render_view_id);
 
-  GURL maybe_whitelisted_url(
-      resource.is_subresource ? web_contents->GetVisibleURL() : resource.url);
+  GURL maybe_whitelisted_url;
+  if (resource.is_subresource) {
+    NavigationEntry* entry = resource.GetNavigationEntryForResource();
+    if (!entry)
+      return false;
+    maybe_whitelisted_url = entry->GetURL();
+  } else {
+    maybe_whitelisted_url = resource.url;
+  }
+
   WhitelistUrlSet* site_list =
       static_cast<WhitelistUrlSet*>(web_contents->GetUserData(kWhitelistKey));
   if (!site_list)

@@ -5,6 +5,7 @@
 #ifndef CONTENT_CHILD_MOJO_MOJO_APPLICATION_H_
 #define CONTENT_CHILD_MOJO_MOJO_APPLICATION_H_
 
+#include "base/macros.h"
 #include "content/common/mojo/channel_init.h"
 #include "content/common/mojo/service_registry_impl.h"
 #include "ipc/ipc_platform_file.h"
@@ -31,7 +32,7 @@ class MojoApplication {
 
   bool OnMessageReceived(const IPC::Message& msg);
 
-  ServiceRegistryImpl* service_registry() { return &service_registry_; }
+  ServiceRegistry* service_registry() { return &service_registry_; }
 
  private:
   void OnActivate(const IPC::PlatformFileForTransit& file);

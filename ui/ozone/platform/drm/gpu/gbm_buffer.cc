@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <gbm.h>
 #include <xf86drm.h>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
@@ -19,7 +20,7 @@
 #include "ui/ozone/platform/drm/gpu/gbm_device.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
-#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_platform.h"  // nogncheck
 #include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace {
@@ -31,9 +32,9 @@ namespace ui {
 
 GbmBuffer::GbmBuffer(const scoped_refptr<GbmDevice>& gbm,
                      gbm_bo* bo,
+                     gfx::BufferFormat format,
                      gfx::BufferUsage usage)
-    : GbmBufferBase(gbm, bo, usage == gfx::BufferUsage::SCANOUT),
-      usage_(usage) {}
+    : GbmBufferBase(gbm, bo, format, usage), format_(format), usage_(usage) {}
 
 GbmBuffer::~GbmBuffer() {
   if (bo())
@@ -58,7 +59,7 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBuffer(
   if (!bo)
     return nullptr;
 
-  scoped_refptr<GbmBuffer> buffer(new GbmBuffer(gbm, bo, usage));
+  scoped_refptr<GbmBuffer> buffer(new GbmBuffer(gbm, bo, format, usage));
   if (use_scanout && !buffer->GetFramebufferId())
     return nullptr;
 
@@ -69,7 +70,7 @@ GbmPixmap::GbmPixmap(GbmSurfaceFactory* surface_manager)
     : surface_manager_(surface_manager) {}
 
 void GbmPixmap::Initialize(base::ScopedFD dma_buf, int dma_buf_pitch) {
-  dma_buf_ = dma_buf.Pass();
+  dma_buf_ = std::move(dma_buf);
   dma_buf_pitch_ = dma_buf_pitch;
 }
 
@@ -82,7 +83,7 @@ bool GbmPixmap::InitializeFromBuffer(const scoped_refptr<GbmBuffer>& buffer) {
     PLOG(ERROR) << "Failed to export buffer to dma_buf";
     return false;
   }
-  Initialize(dma_buf.Pass(), gbm_bo_get_stride(buffer->bo()));
+  Initialize(std::move(dma_buf), gbm_bo_get_stride(buffer->bo()));
   buffer_ = buffer;
   return true;
 }
@@ -142,7 +143,7 @@ int GbmPixmap::GetDmaBufPitch() const {
 }
 
 gfx::BufferFormat GbmPixmap::GetBufferFormat() const {
-  return GetBufferFormatFromFourCCFormat(buffer_->GetFramebufferPixelFormat());
+  return buffer_->GetFormat();
 }
 
 gfx::Size GbmPixmap::GetBufferSize() const {

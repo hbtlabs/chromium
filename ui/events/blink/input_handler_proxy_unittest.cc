@@ -4,7 +4,7 @@
 
 #include "ui/events/blink/input_handler_proxy.h"
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -390,7 +390,12 @@ TEST_P(InputHandlerProxyTest, MouseWheelWithCtrlNotScroll) {
   VERIFY_AND_RESET_MOCKS();
 }
 
+// Mac does not smooth scroll wheel events (crbug.com/574283).
+#if !defined(OS_MACOSX)
 TEST_P(InputHandlerProxyTest, MouseWheelWithPreciseScrollingDeltas) {
+#else
+TEST_P(InputHandlerProxyTest, DISABLED_MouseWheelWithPreciseScrollingDeltas) {
+#endif
   SetSmoothScrollEnabled(true);
   expected_disposition_ = InputHandlerProxy::DID_HANDLE;
   WebMouseWheelEvent wheel;
@@ -418,7 +423,12 @@ TEST_P(InputHandlerProxyTest, MouseWheelWithPreciseScrollingDeltas) {
   VERIFY_AND_RESET_MOCKS();
 }
 
+// Mac does not smooth scroll wheel events (crbug.com/574283).
+#if !defined(OS_MACOSX)
 TEST_P(InputHandlerProxyTest, MouseWheelScrollIgnored) {
+#else
+TEST_P(InputHandlerProxyTest, DISABLED_MouseWheelScrollIgnored) {
+#endif
   SetSmoothScrollEnabled(true);
   expected_disposition_ = InputHandlerProxy::DROP_EVENT;
   WebMouseWheelEvent wheel;

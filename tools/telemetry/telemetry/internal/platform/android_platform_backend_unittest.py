@@ -30,12 +30,8 @@ class AndroidPlatformBackendTest(unittest.TestCase):
     self.battery_patcher.start()
 
     def get_prop(name, cache=None):
+      del cache  # unused
       return {'ro.product.cpu.abi': 'armeabi-v7a'}.get(name)
-
-    self.setup_prebuilt_tool_patcher = mock.patch(
-        'telemetry.internal.platform.android_platform_backend._SetupPrebuiltTools') # pylint: disable=line-too-long
-    m = self.setup_prebuilt_tool_patcher.start()
-    m.return_value = True
 
     self.device_patcher = mock.patch.multiple(
         device_utils.DeviceUtils,
@@ -47,7 +43,6 @@ class AndroidPlatformBackendTest(unittest.TestCase):
     self._stubs.Restore()
     android_platform_backend.psutil = self._actual_ps_util
     self.battery_patcher.stop()
-    self.setup_prebuilt_tool_patcher.stop()
     self.device_patcher.stop()
 
   @decorators.Disabled('chromeos')
@@ -177,18 +172,10 @@ class AndroidPlatformBackendPsutilTest(unittest.TestCase):
     self.battery_patcher = mock.patch.object(battery_utils, 'BatteryUtils')
     self.battery_patcher.start()
     self._actual_ps_util = android_platform_backend.psutil
-    self.setup_prebuilt_tool_patcher = mock.patch(
-        'telemetry.internal.platform.android_platform_backend._SetupPrebuiltTools') # pylint: disable=line-too-long
-    m = self.setup_prebuilt_tool_patcher.start()
-    m.return_value = True
 
     def get_prop(name, cache=None):
+      del cache  # unused
       return {'ro.product.cpu.abi': 'armeabi-v7a'}.get(name)
-
-    self.helper_patcher = mock.patch(
-        'telemetry.internal.platform.android_platform_backend._SetupPrebuiltTools', # pylint: disable=line-too-long
-        return_value=True)
-    self.helper_patcher.start()
 
     self.device_patcher = mock.patch.multiple(
         device_utils.DeviceUtils,
@@ -202,8 +189,6 @@ class AndroidPlatformBackendPsutilTest(unittest.TestCase):
     android_platform_backend.psutil = self._actual_ps_util
     self.battery_patcher.stop()
     self.device_patcher.stop()
-    self.helper_patcher.stop()
-    self.setup_prebuilt_tool_patcher.stop()
 
   @decorators.Disabled('chromeos')
   def testPsutil1(self):

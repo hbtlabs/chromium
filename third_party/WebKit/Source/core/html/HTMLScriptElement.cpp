@@ -20,7 +20,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/html/HTMLScriptElement.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -81,7 +80,7 @@ void HTMLScriptElement::parseAttribute(const QualifiedName& name, const AtomicSt
 {
     if (name == srcAttr) {
         m_loader->handleSourceAttribute(value);
-        logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "script", srcAttr.toString(), oldValue, value);
+        logUpdateAttributeIfIsolatedWorldAndInDocument("script", srcAttr, oldValue, value);
     } else if (name == asyncAttr) {
         m_loader->handleAsyncAttribute();
     } else {
@@ -94,7 +93,7 @@ Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(ContainerNode
     if (insertionPoint->inDocument() && hasSourceAttribute() && !loader()->isScriptTypeSupported(ScriptLoader::DisallowLegacyTypeInTypeAttribute))
         UseCounter::count(document(), UseCounter::ScriptElementWithInvalidTypeHasSrc);
     HTMLElement::insertedInto(insertionPoint);
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "script", fastGetAttribute(srcAttr));
+    logAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
     return InsertionShouldCallDidNotifySubtreeInsertions;
 }
 

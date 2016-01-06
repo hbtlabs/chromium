@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -11,7 +13,6 @@
 
 #if defined(OS_ANDROID)
 // TODO(cpaulin): when crbug.com/561068 is fixed, enable this test
-// on android platform.
 #define MAYBE_WebRtcMediaRecorderTest DISABLED_WebRtcMediaRecorderTest
 #else
 #define MAYBE_WebRtcMediaRecorderTest WebRtcMediaRecorderTest
@@ -64,35 +65,13 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
   MakeTypicalCall("testStartAndDataAvailable();", kMediaRecorderHtmlFile);
 }
 
-// Fails flakily under ThreadSanitizer, http://crbug.com/562406.
-#if defined(THREAD_SANITIZER)
-#define MAYBE_MediaRecorderStartWithTimeSlice DISABLED_MediaRecorderStartWithTimeSlice
-#else
-#define MAYBE_MediaRecorderStartWithTimeSlice MediaRecorderStartWithTimeSlice
-#endif
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
-                       MAYBE_MediaRecorderStartWithTimeSlice) {
+                       MediaRecorderStartWithTimeSlice) {
   MakeTypicalCall("testStartWithTimeSlice();", kMediaRecorderHtmlFile);
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest, MediaRecorderStartEvent) {
-  MakeTypicalCall("testStartAndStartEventTriggered();", kMediaRecorderHtmlFile);
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
-                       MediaRecorderStopEvent) {
-  MakeTypicalCall("testStartStopAndStopEventTriggered();",
-      kMediaRecorderHtmlFile);
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest, MediaRecorderResume) {
   MakeTypicalCall("testResumeAndRecorderState();", kMediaRecorderHtmlFile);
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
-                       MediaRecorderResumeEvent) {
-  MakeTypicalCall("testResumeAndResumeEventTriggered();",
-      kMediaRecorderHtmlFile);
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
@@ -104,6 +83,46 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
                        MediaRecorderResumeAndDataAvailable) {
   MakeTypicalCall("testResumeAndDataAvailable();", kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderPause) {
+  MakeTypicalCall("testPauseAndRecorderState();", kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderPauseStop) {
+  MakeTypicalCall("testPauseStopAndRecorderState();", kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderPausePreventsDataavailableFromBeingFired) {
+  MakeTypicalCall("testPausePreventsDataavailableFromBeingFired();",
+      kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderIllegalPauseThrowsDOMError) {
+  MakeTypicalCall("testIllegalPauseThrowsDOMError();",
+      kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderIllegalStopThrowsDOMError) {
+  MakeTypicalCall("testIllegalStopThrowsDOMError();",
+      kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderIllegalStartWhileRecordingThrowsDOMError) {
+  MakeTypicalCall("testIllegalStartInRecordingStateThrowsDOMError();",
+      kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderIllegalStartWhilePausedThrowsDOMError) {
+  MakeTypicalCall("testIllegalStartInPausedStateThrowsDOMError();",
+      kMediaRecorderHtmlFile);
 }
 
 }  // namespace content

@@ -5,12 +5,16 @@
 #ifndef CC_LAYERS_LAYER_IMPL_H_
 #define CC_LAYERS_LAYER_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "cc/animation/animation_delegate.h"
@@ -25,6 +29,7 @@
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer_lists.h"
 #include "cc/layers/layer_position_constraint.h"
+#include "cc/layers/performance_properties.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scroll_blocks_on.h"
 #include "cc/output/filter_operations.h"
@@ -202,7 +207,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   // For compatibility with Layer.
   bool has_render_surface() const { return !!render_surface(); }
-
+  bool force_render_surface() const { return force_render_surface_; }
   void SetNumDescendantsThatDrawContent(int num_descendants);
   void SetClipParent(LayerImpl* ancestor);
 
@@ -317,6 +322,12 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   bool HasPotentiallyRunningOpacityAnimation() const;
   bool OpacityIsAnimatingOnImplOnly() const;
 
+  void SetElementId(uint64_t element_id);
+  uint64_t element_id() const { return element_id_; }
+
+  void SetMutableProperties(uint32_t properties);
+  uint32_t mutable_properties() const { return mutable_properties_; }
+
   void SetBlendMode(SkXfermode::Mode);
   SkXfermode::Mode blend_mode() const { return blend_mode_; }
   void set_draw_blend_mode(SkXfermode::Mode blend_mode) {
@@ -346,10 +357,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
     return is_container_for_fixed_position_layers_;
   }
 
-  bool IsAffectedByPageScale() const { return is_affected_by_page_scale_; }
-  void SetIsAffectedByPageScale(bool is_affected) {
-    is_affected_by_page_scale_ = is_affected;
-  }
+  bool IsAffectedByPageScale() const;
 
   gfx::Vector2dF FixedContainerSizeDelta() const;
 
@@ -380,6 +388,8 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   void ClearRenderSurfaceLayerList();
   void SetHasRenderSurface(bool has_render_surface);
 
+  void SetForceRenderSurface(bool has_render_surface);
+
   RenderSurfaceImpl* render_surface() const { return render_surface_.get(); }
 
   DrawProperties& draw_properties() { return draw_properties_; }
@@ -387,6 +397,9 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
 
   gfx::Transform DrawTransform() const;
   gfx::Transform ScreenSpaceTransform() const;
+  PerformanceProperties<LayerImpl>& performance_properties() {
+    return performance_properties_;
+  }
 
   // The following are shortcut accessors to get various information from
   // draw_properties_
@@ -528,6 +541,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   bool HasPotentiallyRunningTransformAnimation() const;
   bool TransformIsAnimatingOnImplOnly() const;
   bool HasOnlyTranslationTransforms() const;
+  bool AnimationsPreserveAxisAlignment() const;
   void SetTransformAndInvertibility(const gfx::Transform& transform,
                                     bool transform_is_invertible);
   bool transform_is_invertible() const { return transform_is_invertible_; }
@@ -673,6 +687,14 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   }
 
   void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
+
+  void set_is_hidden_from_property_trees(bool is_hidden) {
+    if (is_hidden == is_hidden_from_property_trees_)
+      return;
+    is_hidden_from_property_trees_ = is_hidden;
+    SetNeedsPushProperties();
+  }
+  bool LayerIsHidden() const;
 
   float GetIdealContentsScale() const;
 
@@ -844,6 +866,8 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   DrawMode current_draw_mode_;
 
  private:
+  uint64_t element_id_;
+  uint32_t mutable_properties_;
   // Rect indicating what was repainted/updated during update.
   // Note that plugin layers bypass this and leave it empty.
   // This is in the layer's space.
@@ -861,9 +885,12 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   // Group of properties that need to be computed based on the layer tree
   // hierarchy before layers can be drawn.
   DrawProperties draw_properties_;
+  PerformanceProperties<LayerImpl> performance_properties_;
 
   scoped_refptr<base::trace_event::ConvertableToTraceFormat> debug_info_;
   scoped_ptr<RenderSurfaceImpl> render_surface_;
+
+  bool force_render_surface_;
 
   std::vector<FrameTimingRequest> frame_timing_requests_;
   int num_layer_or_descendants_with_copy_request_;
@@ -873,6 +900,7 @@ class CC_EXPORT LayerImpl : public LayerAnimationValueObserver,
   // If true, the layer or one of its descendants has a wheel or touch handler.
   bool layer_or_descendant_has_input_handler_;
   bool sorted_for_recursion_;
+  bool is_hidden_from_property_trees_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerImpl);
 };

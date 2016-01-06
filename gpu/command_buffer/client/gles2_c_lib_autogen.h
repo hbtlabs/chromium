@@ -1490,6 +1490,10 @@ void GL_APIENTRY GLES2GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
                                                      GLbyte* sync_token) {
   gles2::GetGLContext()->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token);
 }
+void GL_APIENTRY GLES2VerifySyncTokensCHROMIUM(GLbyte** sync_tokens,
+                                               GLsizei count) {
+  gles2::GetGLContext()->VerifySyncTokensCHROMIUM(sync_tokens, count);
+}
 void GL_APIENTRY GLES2WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
   gles2::GetGLContext()->WaitSyncTokenCHROMIUM(sync_token);
 }
@@ -1517,12 +1521,17 @@ void GL_APIENTRY GLES2ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
 void GL_APIENTRY GLES2ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                               const GLfloat* contents_rect,
                                               GLfloat opacity,
-                                              const GLuint background_color,
-                                              const GLfloat* bounds_size,
+                                              GLuint background_color,
+                                              GLuint edge_aa_mask,
+                                              const GLfloat* bounds_rect,
+                                              GLboolean is_clipped,
+                                              const GLfloat* clip_rect,
+                                              GLint sorting_context_id,
                                               const GLfloat* transform) {
   gles2::GetGLContext()->ScheduleCALayerCHROMIUM(
       contents_texture_id, contents_rect, opacity, background_color,
-      bounds_size, transform);
+      edge_aa_mask, bounds_rect, is_clipped, clip_rect, sorting_context_id,
+      transform);
 }
 void GL_APIENTRY GLES2CommitOverlayPlanesCHROMIUM() {
   gles2::GetGLContext()->CommitOverlayPlanesCHROMIUM();
@@ -1694,6 +1703,9 @@ GLES2ProgramPathFragmentInputGenCHROMIUM(GLuint program,
                                          const GLfloat* coeffs) {
   gles2::GetGLContext()->ProgramPathFragmentInputGenCHROMIUM(
       program, location, genMode, components, coeffs);
+}
+void GL_APIENTRY GLES2CoverageModulationCHROMIUM(GLenum components) {
+  gles2::GetGLContext()->CoverageModulationCHROMIUM(components);
 }
 GLenum GL_APIENTRY GLES2GetGraphicsResetStatusKHR() {
   return gles2::GetGLContext()->GetGraphicsResetStatusKHR();
@@ -2862,6 +2874,10 @@ extern const NameToFunc g_gles2_function_table[] = {
             glGenUnverifiedSyncTokenCHROMIUM),
     },
     {
+        "glVerifySyncTokensCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glVerifySyncTokensCHROMIUM),
+    },
+    {
         "glWaitSyncTokenCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glWaitSyncTokenCHROMIUM),
     },
@@ -2994,6 +3010,10 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glProgramPathFragmentInputGenCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glProgramPathFragmentInputGenCHROMIUM),
+    },
+    {
+        "glCoverageModulationCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glCoverageModulationCHROMIUM),
     },
     {
         "glGetGraphicsResetStatusKHR",

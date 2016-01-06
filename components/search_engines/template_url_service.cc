@@ -224,15 +224,16 @@ TemplateURLService::TemplateURLService(
     rappor::RapporService* rappor_service,
     const base::Closure& dsp_change_callback)
     : prefs_(prefs),
-      search_terms_data_(search_terms_data.Pass()),
+      search_terms_data_(std::move(search_terms_data)),
       web_data_service_(web_data_service),
-      client_(client.Pass()),
+      client_(std::move(client)),
       google_url_tracker_(google_url_tracker),
       rappor_service_(rappor_service),
       dsp_change_callback_(dsp_change_callback),
       provider_map_(new SearchHostToURLsMap),
       loaded_(false),
       load_failed_(false),
+      disable_load_(false),
       load_handle_(0),
       default_search_provider_(NULL),
       next_id_(kInvalidTemplateURLID + 1),
@@ -258,6 +259,7 @@ TemplateURLService::TemplateURLService(const Initializer* initializers,
       provider_map_(new SearchHostToURLsMap),
       loaded_(false),
       load_failed_(false),
+      disable_load_(false),
       load_handle_(0),
       default_search_provider_(NULL),
       next_id_(kInvalidTemplateURLID + 1),
@@ -548,7 +550,7 @@ void TemplateURLService::RegisterOmniboxKeyword(
   scoped_ptr<TemplateURL::AssociatedExtensionInfo> info(
       new TemplateURL::AssociatedExtensionInfo(
           TemplateURL::OMNIBOX_API_EXTENSION, extension_id));
-  AddExtensionControlledTURL(url, info.Pass());
+  AddExtensionControlledTURL(url, std::move(info));
 }
 
 TemplateURLService::TemplateURLVector TemplateURLService::GetTemplateURLs() {
@@ -705,7 +707,7 @@ void TemplateURLService::RemoveObserver(TemplateURLServiceObserver* observer) {
 }
 
 void TemplateURLService::Load() {
-  if (loaded_ || load_handle_)
+  if (loaded_ || load_handle_ || disable_load_)
     return;
 
   if (web_data_service_.get())
@@ -1056,8 +1058,8 @@ syncer::SyncMergeResult TemplateURLService::MergeDataAndStartSyncing(
     return merge_result;
   }
 
-  sync_processor_ = sync_processor.Pass();
-  sync_error_factory_ = sync_error_factory.Pass();
+  sync_processor_ = std::move(sync_processor);
+  sync_error_factory_ = std::move(sync_error_factory);
 
   // We do a lot of calls to Add/Remove/ResetTemplateURL here, so ensure we
   // don't step on our own toes.
@@ -1360,7 +1362,7 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
     }
   }
 
-  return turl.Pass();
+  return turl;
 }
 
 // static

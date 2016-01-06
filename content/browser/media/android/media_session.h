@@ -6,9 +6,11 @@
 #define CONTENT_BROWSER_MEDIA_ANDROID_MEDIA_SESSION_H_
 
 #include <jni.h>
+#include <stddef.h>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "content/browser/media/android/media_session_uma_helper.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -39,6 +41,13 @@ class CONTENT_EXPORT MediaSession
     Transient
   };
 
+  enum class RemoveReason {
+    PLAYBACK_COMPLETE,
+    INVISIBLE,
+    USER_PAUSE,
+    DESTROYED,
+  };
+
   static bool RegisterMediaSession(JNIEnv* env);
 
   // Returns the MediaSession associated to this WebContents. Creates one if
@@ -54,11 +63,13 @@ class CONTENT_EXPORT MediaSession
 
   // Removes the given player from the current media session. Abandons audio
   // focus if that was the last player in the session.
-  void RemovePlayer(MediaSessionObserver* observer, int player_id);
+  void RemovePlayer(MediaSessionObserver* observer, int player_id,
+                    RemoveReason remove_reason);
 
   // Removes all the players associated with |observer|. Abandons audio focus if
   // these were the last players in the session.
-  void RemovePlayers(MediaSessionObserver* observer);
+  void RemovePlayers(MediaSessionObserver* observer,
+                     RemoveReason remove_reason);
 
   // Called when the Android system requests the MediaSession to be suspended.
   // Called by Java through JNI.
@@ -136,7 +147,7 @@ class CONTENT_EXPORT MediaSession
   // Setup the JNI.
   void Initialize();
 
-  void OnSuspendInternal(SuspendType type);
+  void OnSuspendInternal(SuspendType type, State new_state);
   void OnResumeInternal(SuspendType type);
 
   // Requests audio focus to Android using |j_media_session_|.

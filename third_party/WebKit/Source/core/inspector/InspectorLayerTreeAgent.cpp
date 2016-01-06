@@ -29,8 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "core/inspector/InspectorLayerTreeAgent.h"
 
 #include "core/dom/DOMNodeIds.h"
@@ -190,7 +188,7 @@ void InspectorLayerTreeAgent::layerTreeDidChange()
     frontend()->layerTreeDidChange(buildLayerTree());
 }
 
-void InspectorLayerTreeAgent::didPaint(LayoutObject*, const GraphicsLayer* graphicsLayer, GraphicsContext*, const LayoutRect& rect)
+void InspectorLayerTreeAgent::didPaint(LayoutObject*, const GraphicsLayer* graphicsLayer, GraphicsContext&, const LayoutRect& rect)
 {
     // Should only happen for FrameView paints when compositing is off. Consider different instrumentation method for that.
     if (!graphicsLayer)
@@ -321,18 +319,17 @@ void InspectorLayerTreeAgent::compositingReasons(ErrorString* errorString, const
 void InspectorLayerTreeAgent::makeSnapshot(ErrorString* errorString, const String& layerId, String* snapshotId)
 {
     GraphicsLayer* layer = layerById(errorString, layerId);
-    if (!layer)
+    if (!layer || !layer->drawsContent())
         return;
 
     IntSize size = expandedIntSize(layer->size());
 
-    GraphicsContext context(*layer->paintController());
     IntRect interestRect(IntPoint(0, 0), size);
-    layer->paint(context, &interestRect);
-    layer->paintController()->commitNewDisplayItems();
+    layer->paint(&interestRect);
 
+    GraphicsContext context(layer->paintController());
     context.beginRecording(interestRect);
-    layer->paintController()->paintArtifact().replay(context);
+    layer->paintController().paintArtifact().replay(context);
     RefPtr<PictureSnapshot> snapshot = adoptRef(new PictureSnapshot(context.endRecording()));
 
     *snapshotId = String::number(++s_lastSnapshotId);

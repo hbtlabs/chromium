@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/WebDevToolsAgentImpl.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -296,7 +295,7 @@ PassOwnPtrWillBeRawPtr<WebDevToolsAgentImpl> WebDevToolsAgentImpl::create(WebLoc
     // remote->local transition we cannot access mainFrameImpl() yet, so we have to store the
     // frame which will become the main frame later.
     agent->registerAgent(InspectorRenderingAgent::create(frame));
-    agent->registerAgent(InspectorEmulationAgent::create(frame));
+    agent->registerAgent(InspectorEmulationAgent::create(frame, agent));
     // TODO(dgozman): migrate each of the following agents to frame once module is ready.
     agent->registerAgent(InspectorDatabaseAgent::create(view->page()));
     agent->registerAgent(DeviceOrientationInspectorAgent::create(view->page()));
@@ -602,6 +601,11 @@ void WebDevToolsAgentImpl::enableTracing(const String& categoryFilter)
 void WebDevToolsAgentImpl::disableTracing()
 {
     m_client->disableTracing();
+}
+
+void WebDevToolsAgentImpl::setCPUThrottlingRate(double rate)
+{
+    m_client->setCPUThrottlingRate(rate);
 }
 
 void WebDevToolsAgentImpl::dispatchOnInspectorBackend(int sessionId, const WebString& message)

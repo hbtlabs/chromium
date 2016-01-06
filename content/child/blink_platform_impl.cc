@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
@@ -32,6 +33,7 @@
 #include "base/trace_event/trace_event.h"
 #include "blink/public/resources/grit/blink_image_resources.h"
 #include "blink/public/resources/grit/blink_resources.h"
+#include "build/build_config.h"
 #include "components/mime_util/mime_util.h"
 #include "components/scheduler/child/web_task_runner_impl.h"
 #include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
@@ -55,7 +57,7 @@
 #include "content/child/web_url_loader_impl.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/websocket_bridge.h"
-#include "content/child/worker_task_runner.h"
+#include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "net/base/data_url.h"
 #include "net/base/ip_address_number.h"
@@ -681,43 +683,7 @@ blink::Platform::TraceEventHandle BlinkPlatformImpl::addTraceEvent(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp);
   base::trace_event::TraceEventHandle handle =
       TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
-          phase, category_group_enabled, name, id, trace_event_internal::kNoId,
-          bind_id, base::PlatformThread::CurrentId(), timestamp_tt, num_args,
-          arg_names, arg_types, arg_values, convertable_wrappers, flags);
-  blink::Platform::TraceEventHandle result;
-  memcpy(&result, &handle, sizeof(result));
-  return result;
-}
-
-blink::Platform::TraceEventHandle BlinkPlatformImpl::addTraceEvent(
-    char phase,
-    const unsigned char* category_group_enabled,
-    const char* name,
-    unsigned long long id,
-    double timestamp,
-    int num_args,
-    const char** arg_names,
-    const unsigned char* arg_types,
-    const unsigned long long* arg_values,
-    blink::WebConvertableToTraceFormat* convertable_values,
-    unsigned char flags) {
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat>
-      convertable_wrappers[2];
-  if (convertable_values) {
-    size_t size = std::min(static_cast<size_t>(num_args),
-                           arraysize(convertable_wrappers));
-    for (size_t i = 0; i < size; ++i) {
-      if (arg_types[i] == TRACE_VALUE_TYPE_CONVERTABLE) {
-        convertable_wrappers[i] =
-            new ConvertableToTraceFormatWrapper(convertable_values[i]);
-      }
-    }
-  }
-  base::TimeTicks timestamp_tt =
-      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp);
-  base::trace_event::TraceEventHandle handle =
-      TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
-          phase, category_group_enabled, name, id, trace_event_internal::kNoId,
+          phase, category_group_enabled, name, id, bind_id,
           base::PlatformThread::CurrentId(), timestamp_tt, num_args, arg_names,
           arg_types, arg_values, convertable_wrappers, flags);
   blink::Platform::TraceEventHandle result;
@@ -1147,16 +1113,15 @@ blink::WebGestureCurve* BlinkPlatformImpl::createFlingAnimationCurve(
 }
 
 void BlinkPlatformImpl::didStartWorkerRunLoop() {
-  WorkerTaskRunner* worker_task_runner = WorkerTaskRunner::Instance();
-  worker_task_runner->DidStartWorkerRunLoop();
+  // TODO(kinuko): Cleanup this code.
+  WorkerThreadRegistry::Instance()->DidStartCurrentWorkerThread();
 }
 
 void BlinkPlatformImpl::didStopWorkerRunLoop() {
   // TODO(kalman): blink::Platform::didStopWorkerRunLoop should be called
   // willStopWorkerRunLoop, because at this point the run loop hasn't been
   // stopped. WillStopWorkerRunLoop is the correct name.
-  WorkerTaskRunner* worker_task_runner = WorkerTaskRunner::Instance();
-  worker_task_runner->WillStopWorkerRunLoop();
+  WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
 }
 
 blink::WebCrypto* BlinkPlatformImpl::crypto() {

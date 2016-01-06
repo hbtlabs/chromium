@@ -4,6 +4,9 @@
 
 #include "cc/output/gl_renderer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -11,12 +14,13 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "build/build_config.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/base/container_util.h"
 #include "cc/base/math_util.h"
 #include "cc/output/compositor_frame.h"
@@ -49,7 +53,6 @@
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/GrTexture.h"
 #include "third_party/skia/include/gpu/GrTextureProvider.h"
-#include "third_party/skia/include/gpu/SkGrTexturePixelRef.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -622,29 +625,19 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
   backend_texture_description.fConfig = kSkia8888_GrPixelConfig;
   backend_texture_description.fTextureHandle = lock.texture_id();
   backend_texture_description.fOrigin = kBottomLeft_GrSurfaceOrigin;
-  skia::RefPtr<GrTexture> texture = skia::AdoptRef(
-      use_gr_context->context()->textureProvider()->wrapBackendTexture(
-          backend_texture_description));
-  if (!texture) {
+
+  skia::RefPtr<SkImage> srcImage = skia::AdoptRef(SkImage::NewFromTexture(
+      use_gr_context->context(), backend_texture_description));
+  if (!srcImage.get()) {
     TRACE_EVENT_INSTANT0("cc",
                          "ApplyImageFilter wrap background texture failed",
                          TRACE_EVENT_SCOPE_THREAD);
     return skia::RefPtr<SkImage>();
   }
 
-  SkImageInfo src_info =
-      SkImageInfo::MakeN32Premul(source_texture_resource->size().width(),
-                                 source_texture_resource->size().height());
-  // Place the platform texture inside an SkBitmap.
-  SkBitmap source;
-  source.setInfo(src_info);
-  skia::RefPtr<SkGrPixelRef> pixel_ref =
-      skia::AdoptRef(new SkGrPixelRef(src_info, texture.get()));
-  source.setPixelRef(pixel_ref.get());
-
   // Create surface to draw into.
   SkImageInfo dst_info =
-      SkImageInfo::MakeN32Premul(source.width(), source.height());
+      SkImageInfo::MakeN32Premul(srcImage->width(), srcImage->height());
   skia::RefPtr<SkSurface> surface = skia::AdoptRef(SkSurface::NewRenderTarget(
       use_gr_context->context(), SkSurface::kYes_Budgeted, dst_info, 0));
   if (!surface) {
@@ -652,27 +645,29 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
                          TRACE_EVENT_SCOPE_THREAD);
     return skia::RefPtr<SkImage>();
   }
-  skia::RefPtr<SkCanvas> canvas = skia::SharePtr(surface->getCanvas());
-
-  // Draw the source bitmap through the filter to the canvas.
-  SkPaint paint;
-  paint.setImageFilter(filter);
-  canvas->clear(SK_ColorTRANSPARENT);
 
   // The origin of the filter is top-left and the origin of the source is
   // bottom-left, but the orientation is the same, so we must translate the
   // filter so that it renders at the bottom of the texture to avoid
   // misregistration.
-  int y_translate = source.height() - rect.height() - rect.origin().y();
-  canvas->translate(-rect.origin().x(), y_translate);
-  canvas->scale(scale.x(), scale.y());
-  canvas->drawSprite(source, 0, 0, &paint);
+  int y_translate = source_texture_resource->size().height() - rect.height() -
+                    rect.origin().y();
+  SkMatrix localM;
+  localM.setTranslate(-rect.origin().x(), y_translate);
+  localM.preScale(scale.x(), scale.y());
+  skia::RefPtr<SkImageFilter> localIMF =
+      skia::AdoptRef(filter->newWithLocalMatrix(localM));
+
+  SkPaint paint;
+  paint.setImageFilter(localIMF.get());
+  surface->getCanvas()->drawImage(srcImage.get(), 0, 0, &paint);
 
   skia::RefPtr<SkImage> image = skia::AdoptRef(surface->newImageSnapshot());
   if (!image || !image->isTextureBacked()) {
     return skia::RefPtr<SkImage>();
   }
 
+  CHECK(image->isTextureBacked());
   return image;
 }
 
@@ -2846,19 +2841,19 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
   DCHECK(iter != reverse_end);
   PendingAsyncReadPixels* current_read = iter->get();
 
-  uint8* src_pixels = NULL;
+  uint8_t* src_pixels = NULL;
   scoped_ptr<SkBitmap> bitmap;
 
   if (source_buffer != 0) {
     gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, source_buffer);
-    src_pixels = static_cast<uint8*>(gl_->MapBufferCHROMIUM(
+    src_pixels = static_cast<uint8_t*>(gl_->MapBufferCHROMIUM(
         GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, GL_READ_ONLY));
 
     if (src_pixels) {
       bitmap.reset(new SkBitmap);
       bitmap->allocN32Pixels(size.width(), size.height());
       scoped_ptr<SkAutoLockPixels> lock(new SkAutoLockPixels(*bitmap));
-      uint8* dest_pixels = static_cast<uint8*>(bitmap->getPixels());
+      uint8_t* dest_pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
       size_t row_bytes = size.width() * 4;
       int num_rows = size.height();
@@ -3414,8 +3409,6 @@ const GLRenderer::VideoYUVAProgram* GLRenderer::GetVideoYUVAProgram(
 
 const GLRenderer::VideoStreamTextureProgram*
 GLRenderer::GetVideoStreamTextureProgram(TexCoordPrecision precision) {
-  if (!Capabilities().using_egl_image)
-    return NULL;
   DCHECK_GE(precision, 0);
   DCHECK_LE(precision, LAST_TEX_COORD_PRECISION);
   VideoStreamTextureProgram* program =
@@ -3553,15 +3546,21 @@ void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
         ca_layer_overlay.contents_rect.width(),
         ca_layer_overlay.contents_rect.height(),
     };
-    GLfloat bounds_size[2] = {
-        ca_layer_overlay.bounds_size.width(),
+    GLfloat bounds_rect[4] = {
+        0, 0, ca_layer_overlay.bounds_size.width(),
         ca_layer_overlay.bounds_size.height(),
     };
+    GLboolean is_clipped = GL_FALSE;
+    GLfloat clip_rect[4] = {
+        0, 0, 0, 0,
+    };
+    GLint sorting_context_id = 0;
     GLfloat transform[16];
     ca_layer_overlay.transform.asColMajorf(transform);
     gl_->ScheduleCALayerCHROMIUM(
         texture_id, contents_rect, ca_layer_overlay.opacity,
-        ca_layer_overlay.background_color, bounds_size, transform);
+        ca_layer_overlay.background_color, ca_layer_overlay.edge_aa_mask,
+        bounds_rect, is_clipped, clip_rect, sorting_context_id, transform);
   }
 }
 

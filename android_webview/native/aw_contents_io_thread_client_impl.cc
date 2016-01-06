@@ -308,7 +308,7 @@ scoped_ptr<AwWebResourceResponse> RunShouldInterceptRequest(
           web_request.jstringArray_header_names.obj(),
           web_request.jstringArray_header_values.obj());
   return scoped_ptr<AwWebResourceResponse>(
-      ret.is_null() ? nullptr : new AwWebResourceResponseImpl(ret)).Pass();
+      ret.is_null() ? nullptr : new AwWebResourceResponseImpl(ret));
 }
 
 scoped_ptr<AwWebResourceResponse> ReturnNull() {
@@ -383,7 +383,7 @@ void AwContentsIoThreadClientImpl::NewDownload(
     const string& user_agent,
     const string& content_disposition,
     const string& mime_type,
-    int64 content_length) {
+    int64_t content_length) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (java_object_.is_null())
     return;

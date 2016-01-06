@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/local_discovery/local_discovery_ui_handler.h"
 
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -12,6 +13,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/local_discovery/cloud_device_list.h"
 #include "chrome/browser/local_discovery/privet_confirm_api_flow.h"
 #include "chrome/browser/local_discovery/privet_constants.h"
@@ -65,7 +67,7 @@ scoped_ptr<base::DictionaryValue> CreateDeviceInfo(
   return_value->SetString(kDictionaryKeyDescription, description.description);
   return_value->SetString(kDictionaryKeyType, description.type);
 
-  return return_value.Pass();
+  return return_value;
 }
 
 void ReadDevicesList(
@@ -261,12 +263,14 @@ void LocalDiscoveryUIHandler::HandleShowSyncUI(
   Browser* browser = chrome::FindBrowserWithWebContents(
       web_ui()->GetWebContents());
   DCHECK(browser);
-  chrome::ShowBrowserSignin(browser, signin_metrics::SOURCE_DEVICES_PAGE);
+  chrome::ShowBrowserSignin(
+      browser, signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE);
 }
 
 void LocalDiscoveryUIHandler::StartRegisterHTTP(
     scoped_ptr<PrivetHTTPClient> http_client) {
-  current_http_client_ = PrivetV1HTTPClient::CreateDefault(http_client.Pass());
+  current_http_client_ =
+      PrivetV1HTTPClient::CreateDefault(std::move(http_client));
 
   std::string user = GetSyncAccount();
 

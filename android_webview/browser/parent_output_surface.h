@@ -5,6 +5,7 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_PARENT_OUTPUT_SURFACE_H_
 #define ANDROID_WEBVIEW_BROWSER_PARENT_OUTPUT_SURFACE_H_
 
+#include "base/macros.h"
 #include "cc/output/output_surface.h"
 
 namespace android_webview {
@@ -16,7 +17,10 @@ class ParentOutputSurface : NON_EXPORTED_BASE(public cc::OutputSurface) {
   ~ParentOutputSurface() override;
 
   // OutputSurface overrides.
-  void Reshape(const gfx::Size& size, float scale_factor) override;
+  void DidLoseOutputSurface() override;
+  void Reshape(const gfx::Size& size,
+               float scale_factor,
+               bool has_alpha) override;
   void SwapBuffers(cc::CompositorFrame* frame) override;
   using cc::OutputSurface::SetExternalStencilTest;
 

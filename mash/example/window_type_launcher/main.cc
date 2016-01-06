@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
@@ -49,6 +52,7 @@ int main(int argc, char** argv) {
 #endif
 
   {
+    mojo::embedder::PreInitializeChildProcess();
     mojo::embedder::Init();
 
     ProcessDelegate process_delegate;
@@ -61,16 +65,14 @@ int main(int argc, char** argv) {
                                    io_thread.task_runner().get(),
                                    mojo::embedder::ScopedPlatformHandle());
 
+    mojo::InterfaceRequest<mojo::Application> application_request;
+    scoped_ptr<mojo::runner::RunnerConnection> connection(
+        mojo::runner::RunnerConnection::ConnectToRunner(
+            &application_request, mojo::ScopedMessagePipeHandle()));
     base::MessageLoop loop(mojo::common::MessagePumpMojo::Create());
     WindowTypeLauncher delegate;
-    {
-      mojo::InterfaceRequest<mojo::Application> application_request;
-      scoped_ptr<mojo::runner::RunnerConnection> connection(
-          mojo::runner::RunnerConnection::ConnectToRunner(
-              &application_request, mojo::ScopedMessagePipeHandle()));
-      mojo::ApplicationImpl impl(&delegate, application_request.Pass());
-      loop.Run();
-    }
+    mojo::ApplicationImpl impl(&delegate, std::move(application_request));
+    loop.Run();
 
     mojo::embedder::ShutdownIPCSupport();
   }

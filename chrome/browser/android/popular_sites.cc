@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/popular_sites.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -172,7 +174,7 @@ scoped_ptr<std::vector<PopularSites::Site>> ReadAndParseJsonFile(
                                         GURL(thumbnail_url)));
   }
 
-  return sites.Pass();
+  return sites;
 }
 
 }  // namespace
@@ -222,10 +224,6 @@ PopularSites::PopularSites(Profile* profile,
       popular_sites_local_path_(GetPopularSitesPath()),
       profile_(profile),
       weak_ptr_factory_(this) {
-  // Re-download the file once on every Chrome startup, but use the cached
-  // local file afterwards.
-  static bool first_time = true;
-
   const base::Time last_download_time = base::Time::FromInternalValue(
       profile_->GetPrefs()->GetInt64(kPopularSitesLastDownloadPref));
   const base::TimeDelta time_since_last_download =
@@ -235,11 +233,10 @@ PopularSites::PopularSites(Profile* profile,
   const bool download_time_is_future = base::Time::Now() < last_download_time;
 
   const bool should_redownload_if_exists =
-      first_time || force_download || download_time_is_future ||
+      force_download || download_time_is_future ||
       (time_since_last_download > redownload_interval);
 
   FetchPopularSites(url, should_redownload_if_exists, false /* is_fallback */);
-  first_time = false;
 }
 
 void PopularSites::FetchPopularSites(const GURL& url,

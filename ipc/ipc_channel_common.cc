@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 
 namespace IPC {
+
+static Channel::MessageVerifier g_message_verifier = nullptr;
 
 // static
 scoped_ptr<Channel> Channel::CreateClient(
@@ -45,6 +48,16 @@ scoped_ptr<Channel> Channel::CreateServer(
 }
 
 Channel::~Channel() {
+}
+
+// static
+void Channel::SetMessageVerifier(MessageVerifier verifier) {
+  g_message_verifier = verifier;
+}
+
+// static
+Channel::MessageVerifier Channel::GetMessageVerifier() {
+  return g_message_verifier;
 }
 
 bool Channel::IsSendThreadSafe() const {

@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "media/base/media_log.h"
@@ -47,7 +51,7 @@ class TestMultiBufferDataProvider : public ResourceMultiBufferDataProvider {
       : ResourceMultiBufferDataProvider(url_data, pos), loading_(false) {
     CHECK(test_data_providers.insert(this).second);
   }
-  ~TestMultiBufferDataProvider() {
+  ~TestMultiBufferDataProvider() override {
     CHECK_EQ(static_cast<size_t>(1), test_data_providers.erase(this));
   }
   void Start() override {
@@ -162,8 +166,8 @@ class MockBufferedDataSourceHost : public BufferedDataSourceHost {
   MockBufferedDataSourceHost() {}
   virtual ~MockBufferedDataSourceHost() {}
 
-  MOCK_METHOD1(SetTotalBytes, void(int64 total_bytes));
-  MOCK_METHOD2(AddBufferedByteRange, void(int64 start, int64 end));
+  MOCK_METHOD1(SetTotalBytes, void(int64_t total_bytes));
+  MOCK_METHOD2(AddBufferedByteRange, void(int64_t start, int64_t end));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockBufferedDataSourceHost);
@@ -203,8 +207,8 @@ class MockMultibufferDataSource : public MultibufferDataSource {
   DISALLOW_COPY_AND_ASSIGN(MockMultibufferDataSource);
 };
 
-static const int64 kFileSize = 5000000;
-static const int64 kFarReadPosition = 3997696;
+static const int64_t kFileSize = 5000000;
+static const int64_t kFarReadPosition = 3997696;
 static const int kDataSize = 32 << 10;
 
 static const char kHttpUrl[] = "http://localhost/foo.webm";
@@ -243,8 +247,8 @@ class MultibufferDataSourceTest : public testing::Test {
         &MultibufferDataSourceTest::OnInitialize, base::Unretained(this)));
     message_loop_.RunUntilIdle();
 
-    // Always loading after initialize.
-    EXPECT_EQ(data_source_->downloading(), true);
+    // Not really loading until after OnInitialize is called.
+    EXPECT_EQ(data_source_->downloading(), false);
   }
 
   // Helper to initialize tests with a valid 200 response.
@@ -331,7 +335,7 @@ class MultibufferDataSourceTest : public testing::Test {
 
   MOCK_METHOD1(ReadCallback, void(int size));
 
-  void ReadAt(int64 position, int64 howmuch = kDataSize) {
+  void ReadAt(int64_t position, int64_t howmuch = kDataSize) {
     data_source_->Read(position, howmuch, buffer_,
                        base::Bind(&MultibufferDataSourceTest::ReadCallback,
                                   base::Unretained(this)));
@@ -429,11 +433,11 @@ class MultibufferDataSourceTest : public testing::Test {
   void set_preload(MultibufferDataSource::Preload preload) {
     preload_ = preload;
   }
-  int64 preload_high() {
+  int64_t preload_high() {
     CHECK(loader());
     return loader()->preload_high();
   }
-  int64 preload_low() {
+  int64_t preload_low() {
     CHECK(loader());
     return loader()->preload_low();
   }
@@ -459,7 +463,7 @@ class MultibufferDataSourceTest : public testing::Test {
   base::MessageLoop message_loop_;
 
   // Used for calling MultibufferDataSource::Read().
-  uint8 buffer_[kDataSize * 2];
+  uint8_t buffer_[kDataSize * 2];
 
   DISALLOW_COPY_AND_ASSIGN(MultibufferDataSourceTest);
 };
@@ -863,7 +867,7 @@ TEST_F(MultibufferDataSourceTest, File_Successful) {
 TEST_F(MultibufferDataSourceTest, StopDuringRead) {
   InitializeWith206Response();
 
-  uint8 buffer[256];
+  uint8_t buffer[256];
   data_source_->Read(0, arraysize(buffer), buffer,
                      base::Bind(&MultibufferDataSourceTest::ReadCallback,
                                 base::Unretained(this)));
@@ -1035,10 +1039,10 @@ TEST_F(MultibufferDataSourceTest, File_FinishLoading) {
 
   ReceiveData(kDataSize);
 
-  EXPECT_TRUE(data_source_->downloading());
+  EXPECT_FALSE(data_source_->downloading());
   // premature didFinishLoading() will cause a retry.
   FinishLoading();
-  EXPECT_TRUE(data_source_->downloading());
+  EXPECT_FALSE(data_source_->downloading());
 
   Stop();
 }
@@ -1053,7 +1057,8 @@ TEST_F(MultibufferDataSourceTest, LocalResource_DeferStrategy) {
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1070,7 +1075,8 @@ TEST_F(MultibufferDataSourceTest, LocalResource_PreloadMetadata_DeferStrategy) {
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1087,7 +1093,8 @@ TEST_F(MultibufferDataSourceTest, ExternalResource_Reponse200_DeferStrategy) {
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1106,7 +1113,8 @@ TEST_F(MultibufferDataSourceTest,
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1123,14 +1131,18 @@ TEST_F(MultibufferDataSourceTest, ExternalResource_Reponse206_DeferStrategy) {
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
   set_might_be_reused_from_cache_in_future(true);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckNeverDefer();
 
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_NORMAL);
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
   set_might_be_reused_from_cache_in_future(false);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1150,13 +1162,17 @@ TEST_F(MultibufferDataSourceTest,
   CheckCapacityDefer();
 
   set_might_be_reused_from_cache_in_future(true);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckNeverDefer();
 
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_NORMAL);
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
   set_might_be_reused_from_cache_in_future(false);
-  data_source_->MediaIsPaused();
+  data_source_->SetBufferingStrategy(
+      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();

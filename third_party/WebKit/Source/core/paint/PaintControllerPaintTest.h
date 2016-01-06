@@ -26,7 +26,7 @@ public:
 
 protected:
     LayoutView& layoutView() { return *document().layoutView(); }
-    PaintController& rootPaintController() { return *layoutView().layer()->graphicsLayerBacking()->paintController(); }
+    PaintController& rootPaintController() { return layoutView().layer()->graphicsLayerBacking()->paintController(); }
 
     void SetUp() override
     {
@@ -61,19 +61,16 @@ protected:
         document().view()->synchronizedPaint();
     }
 
-    void paint(const IntRect* interestRect = nullptr)
+    bool paintWithoutCommit(const IntRect* interestRect = nullptr)
     {
         ASSERT(RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
-        // For v1, only root graphics layer is supported.
-        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && !interestRect) {
-            document().view()->synchronizedPaint();
-        } else {
-            document().view()->lifecycle().advanceTo(DocumentLifecycle::InPaint);
-            GraphicsContext context(rootPaintController());
-            layoutView().layer()->graphicsLayerBacking()->paint(context, interestRect);
-            if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
-                document().view()->lifecycle().advanceTo(DocumentLifecycle::PaintClean);
+        // Only root graphics layer is supported.
+        document().view()->lifecycle().advanceTo(DocumentLifecycle::InPaint);
+        if (!layoutView().layer()->graphicsLayerBacking()->paintWithoutCommit(interestRect)) {
+            document().view()->lifecycle().advanceTo(DocumentLifecycle::PaintClean);
+            return false;
         }
+        return true;
     }
 
     void commit()
@@ -81,6 +78,13 @@ protected:
         // Only root graphics layer is supported.
         rootPaintController().commitNewDisplayItems();
         document().view()->lifecycle().advanceTo(DocumentLifecycle::PaintClean);
+    }
+
+    void paint(const IntRect* interestRect = nullptr)
+    {
+        // Only root graphics layer is supported.
+        if (paintWithoutCommit(interestRect))
+            commit();
     }
 
 private:
@@ -109,7 +113,7 @@ public:
 
 class TestDisplayItem final : public DisplayItem {
 public:
-    TestDisplayItem(const DisplayItemClientWrapper& client, Type type) : DisplayItem(client, type, sizeof(*this)) { }
+    TestDisplayItem(const DisplayItemClient& client, Type type) : DisplayItem(client, type, sizeof(*this)) { }
 
     void replay(GraphicsContext&) const final { ASSERT_NOT_REACHED(); }
     void appendToWebDisplayItemList(const IntRect&, WebDisplayItemList*) const final { ASSERT_NOT_REACHED(); }

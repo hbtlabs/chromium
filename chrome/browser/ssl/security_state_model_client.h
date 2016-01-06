@@ -7,6 +7,8 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "chrome/browser/ssl/security_state_model.h"
+#include "net/cert/cert_status_flags.h"
 
 namespace net {
 class X509Certificate;
@@ -19,12 +21,20 @@ class SecurityStateModelClient {
   SecurityStateModelClient() {}
   virtual ~SecurityStateModelClient() {}
 
+  // Retrieves the visible security state that is relevant to the
+  // SecurityStateModel.
+  virtual void GetVisibleSecurityState(
+      SecurityStateModel::VisibleSecurityState* state) = 0;
+
   // Returns the certificate used to load the page or request.
   virtual bool RetrieveCert(scoped_refptr<net::X509Certificate>* cert) = 0;
 
   // Returns true if the page or request is known to be loaded with a
   // certificate installed by the system administrator.
   virtual bool UsedPolicyInstalledCertificate() = 0;
+
+  // Returns true if the given |url|'s origin should be considered secure.
+  virtual bool IsOriginSecure(const GURL& url) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SecurityStateModelClient);

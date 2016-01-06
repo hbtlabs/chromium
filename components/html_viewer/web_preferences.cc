@@ -4,9 +4,9 @@
 
 #include "components/html_viewer/web_preferences.h"
 
-#include "base/basictypes.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 
@@ -43,6 +43,7 @@ WebPreferences::WebPreferences()
       xslt_enabled(true),
       xss_auditor_enabled(true),
       dns_prefetching_enabled(true),
+      data_saver_enabled(false),
       local_storage_enabled(false),
       databases_enabled(false),
       application_cache_enabled(false),

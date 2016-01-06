@@ -4,6 +4,8 @@
 
 #include "cc/layers/render_surface_impl.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -241,7 +243,7 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
         content_rect_.height() / unclipped_mask_target_size.height());
   }
 
-  DCHECK(owning_layer_->draw_properties().target_space_transform.IsScale2d());
+  DCHECK(owning_layer_draw_transform.IsScale2d());
   gfx::Vector2dF owning_layer_to_target_scale =
       owning_layer_draw_transform.Scale2d();
 

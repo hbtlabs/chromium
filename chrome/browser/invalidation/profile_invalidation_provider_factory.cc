@@ -4,8 +4,11 @@
 
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_registry.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
@@ -124,7 +127,7 @@ KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
   }
 
   scoped_ptr<TiclInvalidationService> service(new TiclInvalidationService(
-      GetUserAgent(), identity_provider.Pass(),
+      GetUserAgent(), std::move(identity_provider),
       scoped_ptr<TiclSettingsProvider>(
           new TiclProfileSettingsProvider(profile->GetPrefs())),
       gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver(),
@@ -132,7 +135,7 @@ KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
   service->Init(scoped_ptr<syncer::InvalidationStateTracker>(
       new InvalidatorStorage(profile->GetPrefs())));
 
-  return new ProfileInvalidationProvider(service.Pass());
+  return new ProfileInvalidationProvider(std::move(service));
 #endif
 }
 

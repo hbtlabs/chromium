@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings/string_number_conversions.h"
@@ -35,7 +36,7 @@ namespace {
 // 4: approximately 64ms of content in 60 fps movies.
 const size_t kAccessUnitSizeForMediaSource = 4;
 
-const uint8 kVorbisPadding[] = { 0xff, 0xff, 0xff, 0xff };
+const uint8_t kVorbisPadding[] = {0xff, 0xff, 0xff, 0xff};
 
 }  // namespace
 
@@ -342,7 +343,7 @@ void MediaSourceDelegate::OnReadFromDemuxer(media::DemuxerStream::Type type) {
   scoped_ptr<DemuxerData> data(new DemuxerData());
   data->type = type;
   data->access_units.resize(access_unit_size_);
-  ReadFromDemuxerStream(type, data.Pass(), 0);
+  ReadFromDemuxerStream(type, std::move(data), 0);
 }
 
 void MediaSourceDelegate::ReadFromDemuxerStream(media::DemuxerStream::Type type,
@@ -449,7 +450,7 @@ void MediaSourceDelegate::OnBufferReady(
             buffer->decrypt_config()->subsamples();
       }
       if (++index < data->access_units.size()) {
-        ReadFromDemuxerStream(type, data.Pass(), index);
+        ReadFromDemuxerStream(type, std::move(data), index);
         return;
       }
       break;
@@ -668,7 +669,7 @@ void MediaSourceDelegate::OnDemuxerOpened() {
 
 void MediaSourceDelegate::OnEncryptedMediaInitData(
     media::EmeInitDataType init_data_type,
-    const std::vector<uint8>& init_data) {
+    const std::vector<uint8_t>& init_data) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   if (encrypted_media_init_data_cb_.is_null())
     return;

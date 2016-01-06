@@ -4,8 +4,11 @@
 
 #include "cc/output/output_surface.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -53,7 +56,7 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
   void setMemoryBacking(const char* dump_name,
                         const char* backing_type,
                         const char* backing_object_id) override {
-    const uint64 tracing_process_id =
+    const uint64_t tracing_process_id =
         base::trace_event::MemoryDumpManager::GetInstance()
             ->GetTracingProcessId();
 
@@ -124,6 +127,7 @@ OutputSurface::OutputSurface(
       worker_context_provider_(worker_context_provider),
       software_device_(std::move(software_device)),
       device_scale_factor_(-1),
+      has_alpha_(true),
       external_stencil_test_enabled_(false),
       weak_ptr_factory_(this) {
   client_thread_checker_.DetachFromThread();
@@ -176,21 +180,6 @@ void OutputSurface::DidLoseOutputSurface() {
 
 void OutputSurface::SetExternalStencilTest(bool enabled) {
   external_stencil_test_enabled_ = enabled;
-}
-
-void OutputSurface::SetExternalDrawConstraints(
-    const gfx::Transform& transform,
-    const gfx::Rect& viewport,
-    const gfx::Rect& clip,
-    const gfx::Rect& viewport_rect_for_tile_priority,
-    const gfx::Transform& transform_for_tile_priority,
-    bool resourceless_software_draw) {
-  client_->SetExternalDrawConstraints(transform,
-                                      viewport,
-                                      clip,
-                                      viewport_rect_for_tile_priority,
-                                      transform_for_tile_priority,
-                                      resourceless_software_draw);
 }
 
 OutputSurface::~OutputSurface() {
@@ -250,15 +239,19 @@ void OutputSurface::DiscardBackbuffer() {
     software_device_->DiscardBackbuffer();
 }
 
-void OutputSurface::Reshape(const gfx::Size& size, float scale_factor) {
-  if (size == surface_size_ && scale_factor == device_scale_factor_)
+void OutputSurface::Reshape(const gfx::Size& size,
+                            float scale_factor,
+                            bool has_alpha) {
+  if (size == surface_size_ && scale_factor == device_scale_factor_ &&
+      has_alpha == has_alpha_)
     return;
 
   surface_size_ = size;
   device_scale_factor_ = scale_factor;
+  has_alpha_ = has_alpha;
   if (context_provider_.get()) {
     context_provider_->ContextGL()->ResizeCHROMIUM(size.width(), size.height(),
-                                                   scale_factor, GL_TRUE);
+                                                   scale_factor, has_alpha);
   }
   if (software_device_)
     software_device_->Resize(size, scale_factor);

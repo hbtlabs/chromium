@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <list>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/timer.h"
@@ -377,7 +380,7 @@ class QueueTouchEventDelegate : public GestureEventConsumeDelegate {
     DCHECK(!sent_events_ids_.empty());
     if (sent_events_ids_.empty())
       return;
-    uint32 sent_event_id = sent_events_ids_.front();
+    uint32_t sent_event_id = sent_events_ids_.front();
     sent_events_ids_.pop_front();
     dispatcher_->ProcessedTouchEvent(
         sent_event_id, window_,
@@ -387,7 +390,7 @@ class QueueTouchEventDelegate : public GestureEventConsumeDelegate {
   Window* window_;
   WindowEventDispatcher* dispatcher_;
   AckState synchronous_ack_for_next_event_;
-  std::list<uint32> sent_events_ids_;
+  std::list<uint32_t> sent_events_ids_;
 
   DISALLOW_COPY_AND_ASSIGN(QueueTouchEventDelegate);
 };
@@ -4364,6 +4367,87 @@ TEST_F(GestureRecognizerTest,
   delegate->ReceivedAck();
   EXPECT_2_EVENTS(delegate->events(), ui::ET_GESTURE_SCROLL_UPDATE,
                   ui::ET_GESTURE_SCROLL_UPDATE);
+}
+
+TEST_F(GestureRecognizerTest, GestureEventTwoWindowsActive) {
+  scoped_ptr<QueueTouchEventDelegate> queued_delegate(
+      new QueueTouchEventDelegate(host()->dispatcher()));
+  TimedEvents tes;
+  const int kWindowWidth = 123;
+  const int kWindowHeight = 45;
+  const int kTouchId1 = 6;
+  const int kTouchId2 = 4;
+  gfx::Rect bounds(150, 200, kWindowWidth, kWindowHeight);
+  scoped_ptr<aura::Window> window(CreateTestWindowWithDelegate(
+      queued_delegate.get(), -1234, bounds, root_window()));
+  queued_delegate->set_window(window.get());
+
+  // Touch down on the window. This should not generate any gesture event.
+  queued_delegate->Reset();
+  ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(151, 201), kTouchId1,
+                       tes.Now());
+  DispatchEventUsingWindowDispatcher(&press);
+  EXPECT_FALSE(queued_delegate->tap());
+  EXPECT_FALSE(queued_delegate->tap_down());
+  EXPECT_FALSE(queued_delegate->tap_cancel());
+  EXPECT_FALSE(queued_delegate->begin());
+  EXPECT_FALSE(queued_delegate->scroll_begin());
+  EXPECT_FALSE(queued_delegate->scroll_update());
+  EXPECT_FALSE(queued_delegate->scroll_end());
+
+  // Touch down on the second window. This should not generate any
+  // gesture event.
+  scoped_ptr<QueueTouchEventDelegate> queued_delegate2(
+      new QueueTouchEventDelegate(host()->dispatcher()));
+  gfx::Rect bounds2(0, 0, kWindowWidth, kWindowHeight);
+  scoped_ptr<aura::Window> window2(CreateTestWindowWithDelegate(
+      queued_delegate2.get(), -2345, bounds2, root_window()));
+  queued_delegate2->set_window(window2.get());
+
+  queued_delegate2->Reset();
+  ui::TouchEvent press2(ui::ET_TOUCH_PRESSED, gfx::Point(1, 1), kTouchId2,
+                        tes.Now());
+  DispatchEventUsingWindowDispatcher(&press2);
+  EXPECT_FALSE(queued_delegate2->tap());
+  EXPECT_FALSE(queued_delegate2->tap_down());
+  EXPECT_FALSE(queued_delegate2->tap_cancel());
+  EXPECT_FALSE(queued_delegate2->begin());
+  EXPECT_FALSE(queued_delegate2->scroll_begin());
+  EXPECT_FALSE(queued_delegate2->scroll_update());
+  EXPECT_FALSE(queued_delegate2->scroll_end());
+
+  // Ack the first window's touch; make sure it is processed by the first
+  // window.
+  queued_delegate->Reset();
+  queued_delegate->ReceivedAck();
+  EXPECT_FALSE(queued_delegate->tap());
+  EXPECT_FALSE(queued_delegate->show_press());
+  EXPECT_TRUE(queued_delegate->tap_down());
+  EXPECT_FALSE(queued_delegate->tap_cancel());
+  EXPECT_TRUE(queued_delegate->begin());
+  EXPECT_FALSE(queued_delegate->scroll_begin());
+  EXPECT_FALSE(queued_delegate->scroll_update());
+  EXPECT_FALSE(queued_delegate->scroll_end());
+  EXPECT_FALSE(queued_delegate->long_press());
+
+  // Ack the second window's touch; make sure it is processed by the second
+  // window.
+  queued_delegate2->Reset();
+  queued_delegate2->ReceivedAck();
+  EXPECT_FALSE(queued_delegate2->tap());
+  EXPECT_FALSE(queued_delegate2->show_press());
+  EXPECT_TRUE(queued_delegate2->tap_down());
+  EXPECT_FALSE(queued_delegate2->tap_cancel());
+  EXPECT_TRUE(queued_delegate2->begin());
+  EXPECT_FALSE(queued_delegate2->scroll_begin());
+  EXPECT_FALSE(queued_delegate2->scroll_update());
+  EXPECT_FALSE(queued_delegate2->scroll_end());
+  EXPECT_FALSE(queued_delegate2->long_press());
+
+  queued_delegate->Reset();
+  queued_delegate->WaitUntilReceivedGesture(ui::ET_GESTURE_SHOW_PRESS);
+  EXPECT_TRUE(queued_delegate->show_press());
+  EXPECT_FALSE(queued_delegate->tap_down());
 }
 
 }  // namespace test

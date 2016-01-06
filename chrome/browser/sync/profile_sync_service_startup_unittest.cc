@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
@@ -59,6 +62,34 @@ const char kGaiaId[] = "12345";
 const char kEmail[] = "test_user@gmail.com";
 const char kDummyPassword[] = "";
 
+ProfileSyncService::InitParams GetInitParams(
+    scoped_ptr<sync_driver::SyncClient> sync_client,
+    Profile* profile,
+    scoped_ptr<SigninManagerWrapper> signin_wrapper,
+    ProfileOAuth2TokenService* oauth2_token_service,
+    browser_sync::ProfileSyncServiceStartBehavior start_behavior) {
+  ProfileSyncService::InitParams init_params;
+
+  init_params.signin_wrapper = std::move(signin_wrapper);
+  init_params.oauth2_token_service = oauth2_token_service;
+  init_params.start_behavior = start_behavior;
+  init_params.sync_client = std::move(sync_client);
+  init_params.network_time_update_callback =
+      base::Bind(&EmptyNetworkTimeUpdate);
+  init_params.base_directory = profile->GetPath();
+  init_params.url_request_context = profile->GetRequestContext();
+  init_params.debug_identifier = profile->GetDebugName();
+  init_params.channel = chrome::GetChannel();
+  init_params.db_thread = content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::DB);
+  init_params.file_thread =
+      content::BrowserThread::GetMessageLoopProxyForThread(
+          content::BrowserThread::FILE);
+  init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
+
+  return init_params;
+}
+
 }  // namespace
 
 ACTION_P(InvokeOnConfigureStart, pss) {
@@ -85,20 +116,11 @@ class TestProfileSyncServiceNoBackup : public ProfileSyncService {
       scoped_ptr<SigninManagerWrapper> signin_wrapper,
       ProfileOAuth2TokenService* oauth2_token_service,
       browser_sync::ProfileSyncServiceStartBehavior start_behavior)
-      : ProfileSyncService(sync_client.Pass(),
-                           signin_wrapper.Pass(),
-                           oauth2_token_service,
-                           start_behavior,
-                           base::Bind(&EmptyNetworkTimeUpdate),
-                           profile->GetPath(),
-                           profile->GetRequestContext(),
-                           profile->GetDebugName(),
-                           chrome::GetChannel(),
-                           content::BrowserThread::GetMessageLoopProxyForThread(
-                               content::BrowserThread::DB),
-                           content::BrowserThread::GetMessageLoopProxyForThread(
-                               content::BrowserThread::FILE),
-                           content::BrowserThread::GetBlockingPool()) {}
+      : ProfileSyncService(GetInitParams(std::move(sync_client),
+                                         profile,
+                                         std::move(signin_wrapper),
+                                         oauth2_token_service,
+                                         start_behavior)) {}
 
  protected:
   bool NeedBackup() const override { return false; }
@@ -143,7 +165,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
     sync_client->SetSyncApiComponentFactoryForTesting(
         make_scoped_ptr(new SyncApiComponentFactoryMock()));
     return make_scoped_ptr(new TestProfileSyncServiceNoBackup(
-        sync_client.Pass(), profile,
+        std::move(sync_client), profile,
         make_scoped_ptr(new SigninManagerWrapper(
             SigninManagerFactory::GetForProfile(profile))),
         ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
@@ -250,7 +272,7 @@ class ProfileSyncServiceStartupCrosTest : public ProfileSyncServiceStartupTest {
     sync_client->SetSyncApiComponentFactoryForTesting(
         make_scoped_ptr(new SyncApiComponentFactoryMock()));
     return make_scoped_ptr(new TestProfileSyncServiceNoBackup(
-        sync_client.Pass(), profile,
+        std::move(sync_client), profile,
         make_scoped_ptr(new SigninManagerWrapper(signin)), oauth2_token_service,
         browser_sync::AUTO_START));
   }

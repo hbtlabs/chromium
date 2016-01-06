@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -48,6 +48,7 @@ class CC_EXPORT LayerAnimationController
   void RemoveAnimation(int animation_id);
   void RemoveAnimation(int animation_id,
                        Animation::TargetProperty target_property);
+  void AbortAnimation(int animation_id);
   void AbortAnimations(Animation::TargetProperty target_property);
 
   // Ensures that the list of active animations on the main thread and the impl
@@ -180,6 +181,8 @@ class CC_EXPORT LayerAnimationController
   typedef base::hash_set<int> TargetProperties;
 
   void PushNewAnimationsToImplThread(
+      LayerAnimationController* controller_impl) const;
+  void MarkAbortedAnimationsForDeletion(
       LayerAnimationController* controller_impl) const;
   void RemoveAnimationsCompletedOnMainThread(
       LayerAnimationController* controller_impl) const;

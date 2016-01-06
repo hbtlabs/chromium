@@ -18,7 +18,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/css/parser/CSSParserSelector.h"
 
 #include "core/css/CSSSelectorList.h"
@@ -52,8 +51,7 @@ CSSParserSelector::~CSSParserSelector()
 
 void CSSParserSelector::adoptSelectorVector(Vector<OwnPtr<CSSParserSelector>>& selectorVector)
 {
-    CSSSelectorList* selectorList = new CSSSelectorList();
-    selectorList->adoptSelectorVector(selectorVector);
+    CSSSelectorList* selectorList = new CSSSelectorList(CSSSelectorList::adoptSelectorVector(selectorVector));
     m_selector->setSelectorList(adoptPtr(selectorList));
 }
 

@@ -4,6 +4,9 @@
 
 #include "gpu/ipc/gpu_command_buffer_traits.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/common/value_state.h"
@@ -79,7 +82,7 @@ bool ParamTraits<gpu::SyncToken>::Read(const Message* m,
     return false;
   }
 
-  p->Set(namespace_id, command_buffer_id, release_count);
+  p->Set(namespace_id, 0, command_buffer_id, release_count);
   if (p->HasData()) {
     if (!verified_flush)
       return false;

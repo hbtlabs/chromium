@@ -10,10 +10,12 @@
 #ifndef NET_QUIC_QUIC_CHROMIUM_CLIENT_SESSION_H_
 #define NET_QUIC_QUIC_CHROMIUM_CLIENT_SESSION_H_
 
+#include <stddef.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
@@ -150,7 +152,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // QuicSession methods:
   void OnStreamFrame(const QuicStreamFrame& frame) override;
-  QuicReliableClientStream* CreateOutgoingDynamicStream() override;
+  QuicReliableClientStream* CreateOutgoingDynamicStream(
+      SpdyPriority priority) override;
   QuicCryptoClientStream* GetCryptoStream() override;
   void CloseStream(QuicStreamId stream_id) override;
   void SendRstStream(QuicStreamId id,
@@ -174,7 +177,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void OnSuccessfulVersionNegotiation(const QuicVersion& version) override;
 
   // QuicPacketReader::Visitor methods:
-  void OnReadError(int result) override;
+  void OnReadError(int result, const DatagramClientSocket* socket) override;
   bool OnPacket(const QuicEncryptedPacket& packet,
                 IPEndPoint local_address,
                 IPEndPoint peer_address) override;

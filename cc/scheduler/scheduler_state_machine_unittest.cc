@@ -4,6 +4,8 @@
 
 #include "cc/scheduler/scheduler_state_machine.h"
 
+#include <stddef.h>
+
 #include "base/trace_event/trace_event.h"
 #include "cc/scheduler/scheduler.h"
 #include "cc/test/begin_frame_args_test.h"
@@ -1228,7 +1230,7 @@ TEST(SchedulerStateMachineTest, TestNoRequestOutputSurfaceWhenInvisible) {
       SchedulerStateMachine::ACTION_BEGIN_OUTPUT_SURFACE_CREATION);
 }
 
-// See ThreadProxy::BeginMainFrame "EarlyOut_NotVisible" /
+// See ProxyMain::BeginMainFrame "EarlyOut_NotVisible" /
 // "EarlyOut_OutputSurfaceLost" cases.
 TEST(SchedulerStateMachineTest, TestAbortBeginMainFrameBecauseInvisible) {
   SchedulerSettings default_scheduler_settings;
@@ -1282,7 +1284,7 @@ TEST(SchedulerStateMachineTest, TestAbortBeginMainFrameBecauseInvisible) {
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::ACTION_NONE);
 }
 
-// See ThreadProxy::BeginMainFrame "EarlyOut_NoUpdates" case.
+// See ProxyMain::BeginMainFrame "EarlyOut_NoUpdates" case.
 TEST(SchedulerStateMachineTest, TestAbortBeginMainFrameBecauseCommitNotNeeded) {
   SchedulerSettings default_scheduler_settings;
   StateMachine state(default_scheduler_settings);

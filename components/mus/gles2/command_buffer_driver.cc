@@ -4,12 +4,15 @@
 
 #include "components/mus/gles2/command_buffer_driver.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/process_handle.h"
-#include "components/mus/gles2/command_buffer_type_conversions.h"
+#include "build/build_config.h"
 #include "components/mus/gles2/gpu_memory_tracker.h"
 #include "components/mus/gles2/gpu_state.h"
 #include "components/mus/gles2/mojo_buffer_backing.h"
@@ -54,22 +57,13 @@ CommandBufferDriver::~CommandBufferDriver() {
   DestroyDecoder();
 }
 
-void CommandBufferDriver::Initialize(
-    mojo::InterfacePtrInfo<mojom::CommandBufferSyncClient> sync_client,
+bool CommandBufferDriver::Initialize(
     mojo::InterfacePtrInfo<mojom::CommandBufferLostContextObserver>
         loss_observer,
     mojo::ScopedSharedBufferHandle shared_state,
     mojo::Array<int32_t> attribs) {
-  sync_client_ = mojo::MakeProxy(sync_client.Pass());
-  loss_observer_ = mojo::MakeProxy(loss_observer.Pass());
-  bool success = DoInitialize(shared_state.Pass(), attribs.Pass());
-  mojom::GpuCapabilitiesPtr capabilities =
-      success ? mojom::GpuCapabilities::From(decoder_->GetCapabilities())
-              : nullptr;
-  sync_client_->DidInitialize(success,
-                              gpu::CommandBufferNamespace::MOJO,
-                              command_buffer_id_,
-                              capabilities.Pass());
+  loss_observer_ = mojo::MakeProxy(std::move(loss_observer));
+  return DoInitialize(std::move(shared_state), std::move(attribs));
 }
 
 bool CommandBufferDriver::MakeCurrent() {
@@ -128,8 +122,7 @@ bool CommandBufferDriver::DoInitialize(
                                          decoder_.get()));
   sync_point_order_data_ = gpu::SyncPointOrderData::Create();
   sync_point_client_ = gpu_state_->sync_point_manager()->CreateSyncPointClient(
-      sync_point_order_data_, gpu::CommandBufferNamespace::MOJO,
-      command_buffer_id_);
+      sync_point_order_data_, GetNamespaceID(), command_buffer_id_);
   decoder_->set_engine(scheduler_.get());
   decoder_->SetWaitSyncPointCallback(base::Bind(
       &CommandBufferDriver::OnWaitSyncPoint, base::Unretained(this)));
@@ -141,7 +134,7 @@ bool CommandBufferDriver::DoInitialize(
   gpu::gles2::DisallowedFeatures disallowed_features;
 
   const bool offscreen = true;
-  std::vector<int32> attrib_vector;
+  std::vector<int32_t> attrib_vector;
   attrib_helper.Serialize(&attrib_vector);
   if (!decoder_->Initialize(surface_, context_, offscreen, gfx::Size(1, 1),
                             disallowed_features, attrib_vector))
@@ -158,11 +151,11 @@ bool CommandBufferDriver::DoInitialize(
 
   const size_t kSize = sizeof(gpu::CommandBufferSharedState);
   scoped_ptr<gpu::BufferBacking> backing(
-      MojoBufferBacking::Create(shared_state.Pass(), kSize));
+      MojoBufferBacking::Create(std::move(shared_state), kSize));
   if (!backing)
     return false;
 
-  command_buffer_->SetSharedStateBuffer(backing.Pass());
+  command_buffer_->SetSharedStateBuffer(std::move(backing));
   return true;
 }
 
@@ -181,12 +174,6 @@ void CommandBufferDriver::Flush(int32_t put_offset) {
   command_buffer_->Flush(put_offset);
 }
 
-void CommandBufferDriver::MakeProgress(int32_t last_get_offset) {
-  // TODO(piman): handle out-of-order.
-  sync_client_->DidMakeProgress(
-      mojom::CommandBufferState::From(command_buffer_->GetLastState()));
-}
-
 void CommandBufferDriver::RegisterTransferBuffer(
     int32_t id,
     mojo::ScopedSharedBufferHandle transfer_buffer,
@@ -194,12 +181,12 @@ void CommandBufferDriver::RegisterTransferBuffer(
   // Take ownership of the memory and map it into this process.
   // This validates the size.
   scoped_ptr<gpu::BufferBacking> backing(
-      MojoBufferBacking::Create(transfer_buffer.Pass(), size));
+      MojoBufferBacking::Create(std::move(transfer_buffer), size));
   if (!backing) {
     DVLOG(0) << "Failed to map shared memory.";
     return;
   }
-  command_buffer_->RegisterTransferBuffer(id, backing.Pass());
+  command_buffer_->RegisterTransferBuffer(id, std::move(backing));
 }
 
 void CommandBufferDriver::DestroyTransferBuffer(int32_t id) {
@@ -208,7 +195,7 @@ void CommandBufferDriver::DestroyTransferBuffer(int32_t id) {
 
 void CommandBufferDriver::CreateImage(int32_t id,
                                       mojo::ScopedHandle memory_handle,
-                                      int32 type,
+                                      int32_t type,
                                       mojo::SizePtr size,
                                       int32_t format,
                                       int32_t internal_format) {
@@ -296,6 +283,14 @@ bool CommandBufferDriver::HasUnprocessedCommands() const {
         !gpu::error::IsError(state.error);
   }
   return false;
+}
+
+gpu::Capabilities CommandBufferDriver::GetCapabilities() {
+  return decoder_->GetCapabilities();
+}
+
+gpu::CommandBuffer::State CommandBufferDriver::GetLastState() {
+  return command_buffer_->GetLastState();
 }
 
 void CommandBufferDriver::OnParseError() {

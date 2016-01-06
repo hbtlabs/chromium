@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/dom/ScriptRunner.h"
 
 #include "core/dom/Document.h"
@@ -43,6 +42,7 @@ ScriptRunner::ScriptRunner(Document* document)
     , m_numberOfInOrderScriptsWithPendingNotification(0)
     , m_isSuspended(false)
 #if !ENABLE(OILPAN)
+    , m_isDisposed(false)
     , m_weakPointerFactoryForTasks(this)
 #endif
 {
@@ -98,6 +98,7 @@ void ScriptRunner::dispose()
     m_pendingAsyncScripts.clear();
     m_inOrderScriptsToExecuteSoon.clear();
     m_asyncScriptsToExecuteSoon.clear();
+    m_isDisposed = true;
 }
 #endif
 
@@ -193,15 +194,21 @@ void ScriptRunner::notifyScriptReady(ScriptLoader* scriptLoader, ExecutionType e
 void ScriptRunner::notifyScriptLoadError(ScriptLoader* scriptLoader, ExecutionType executionType)
 {
     switch (executionType) {
-    case ASYNC_EXECUTION:
+    case ASYNC_EXECUTION: {
+        bool foundLoader = m_pendingAsyncScripts.contains(scriptLoader);
+#if !ENABLE(OILPAN)
+        // If the document and ScriptRunner has been disposed of, there's
+        // no bookkeeping to be done here.
+        foundLoader = foundLoader || m_isDisposed;
+#endif
         // RELEASE_ASSERT makes us crash in a controlled way in error cases
         // where the ScriptLoader is associated with the wrong ScriptRunner
         // (otherwise we'd cause a use-after-free in ~ScriptRunner when it tries
         // to detach).
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(m_pendingAsyncScripts.contains(scriptLoader));
+        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(foundLoader);
         m_pendingAsyncScripts.remove(scriptLoader);
         break;
-
+    }
     case IN_ORDER_EXECUTION:
         RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(m_numberOfInOrderScriptsWithPendingNotification > 0);
         m_numberOfInOrderScriptsWithPendingNotification--;
@@ -214,6 +221,9 @@ void ScriptRunner::notifyScriptLoadError(ScriptLoader* scriptLoader, ExecutionTy
                 break;
             }
         }
+#if !ENABLE(OILPAN)
+        foundPendingScript = foundPendingScript || m_isDisposed;
+#endif
         RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(foundPendingScript);
         break;
     }

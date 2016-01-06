@@ -23,10 +23,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/speech/SpeechSynthesis.h"
 
-#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/speech/SpeechSynthesisEvent.h"
 #include "platform/speech/PlatformSpeechSynthesisVoice.h"
@@ -106,12 +104,9 @@ void SpeechSynthesis::startSpeakingImmediately()
     m_platformSpeechSynthesizer->speak(utterance->platformUtterance());
 }
 
-void SpeechSynthesis::speak(SpeechSynthesisUtterance* utterance, ExceptionState& exceptionState)
+void SpeechSynthesis::speak(SpeechSynthesisUtterance* utterance)
 {
-    if (!utterance) {
-        exceptionState.throwTypeError("Invalid utterance argument");
-        return;
-    }
+    ASSERT(utterance);
 
     m_utteranceQueue.append(utterance);
 

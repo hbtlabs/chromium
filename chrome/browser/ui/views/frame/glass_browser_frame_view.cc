@@ -11,8 +11,8 @@
 #include "chrome/app/chrome_dll_resource.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/layout_constants.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/browser/ui/views/profiles/new_avatar_button.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -28,6 +28,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/icon_util.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/win/dpi.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/label.h"
@@ -64,13 +65,16 @@ const int kNewTabCaptionMaximizedSpacing = 16;
 
 // Converts the |image| to a Windows icon and returns the corresponding HICON
 // handle. |image| is resized to desired |width| and |height| if needed.
-HICON CreateHICONFromSkBitmapSizedTo(const gfx::ImageSkia& image,
-                                     int width,
-                                     int height) {
-  if (width == image.width() && height == image.height())
-    return IconUtil::CreateHICONFromSkBitmap(*image.bitmap());
-  return IconUtil::CreateHICONFromSkBitmap(skia::ImageOperations::Resize(
-      *image.bitmap(), skia::ImageOperations::RESIZE_BEST, width, height));
+base::win::ScopedHICON CreateHICONFromSkBitmapSizedTo(
+    const gfx::ImageSkia& image,
+    int width,
+    int height) {
+  return IconUtil::CreateHICONFromSkBitmap(
+      width == image.width() && height == image.height()
+          ? *image.bitmap()
+          : skia::ImageOperations::Resize(*image.bitmap(),
+                                          skia::ImageOperations::RESIZE_BEST,
+                                          width, height));
 }
 
 }  // namespace
@@ -120,7 +124,7 @@ gfx::Rect GlassBrowserFrameView::GetBoundsForTabStrip(
       // In non-maximized mode, allow the new tab button to slide completely
       // under the avatar button.
       if (!frame()->IsMaximized()) {
-        end_x = std::min(end_x + GetLayoutConstant(NEW_TAB_BUTTON_WIDTH) +
+        end_x = std::min(end_x + GetLayoutSize(NEW_TAB_BUTTON).width() +
                              kNewTabCaptionRestoredSpacing,
                          old_end_x);
       }
@@ -275,8 +279,8 @@ void GlassBrowserFrameView::ButtonPressed(views::Button* sender,
       mode = BrowserWindow::AVATAR_BUBBLE_MODE_FAST_USER_SWITCH;
     }
     browser_view()->ShowAvatarBubbleFromAvatarButton(
-        mode,
-        signin::ManageAccountsParams());
+        mode, signin::ManageAccountsParams(),
+        signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
   }
 }
 
@@ -366,47 +370,76 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) {
         GetTopInset(false) + Tab::GetYInsetForActiveTabBackground();
     int w = toolbar_bounds.width();
 
-    // Background.  The top stroke is drawn using the IDR_CONTENT_TOP_XXX
-    // images, which overlay the toolbar.  The top 2 px of these images is the
-    // actual top stroke + shadow, and is partly transparent, so the toolbar
-    // background shouldn't be drawn over it.
-    const int split_point = std::min(kContentEdgeShadowThickness, h);
-    if (h > split_point) {
-      const int split_y = y + split_point;
-      canvas->TileImageInt(*bg, x + GetThemeBackgroundXInset(), split_y - bg_y,
-                           x, split_y, w, h - split_point);
+    if (md) {
+      // Background.  The top stroke is drawn above the toolbar bounds, so
+      // unlike in the non-Material Design code below, we don't need to exclude
+      // any region from having the background image drawn over it.
+      if (tp->HasCustomImage(IDR_THEME_TOOLBAR)) {
+        canvas->TileImageInt(*bg, x + GetThemeBackgroundXInset(), y - bg_y, x,
+                             y, w, h);
+      } else {
+        canvas->FillRect(toolbar_bounds,
+                         tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
+      }
+
+      // Material Design has no corners to mask out.
+
+      // Top stroke.  For Material Design, the toolbar has no side strokes.
+      gfx::Rect separator_rect(x, y, w, 0);
+      gfx::ScopedCanvas scoped_canvas(canvas);
+      gfx::Rect tabstrip_bounds(
+          GetBoundsForTabStrip(browser_view()->tabstrip()));
+      tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
+      canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
+                                    SkRegion::kDifference_Op);
+      separator_rect.set_y(tabstrip_bounds.bottom());
+      BrowserView::Paint1pxHorizontalLine(
+          canvas, SkColorSetA(SK_ColorBLACK, 0x40), separator_rect, true);
+    } else {
+      // Background.  The top stroke is drawn using the IDR_CONTENT_TOP_XXX
+      // images, which overlay the toolbar.  The top 2 px of these images is the
+      // actual top stroke + shadow, and is partly transparent, so the toolbar
+      // background shouldn't be drawn over it.
+      const int split_point = std::min(kContentEdgeShadowThickness, h);
+      if (h > split_point) {
+        const int split_y = y + split_point;
+        canvas->TileImageInt(*bg, x + GetThemeBackgroundXInset(),
+                             split_y - bg_y, x, split_y, w, h - split_point);
+      }
+
+      // On Windows 10+ where we don't draw our own window border but rather go
+      // right to the system border, the toolbar has no corners or side strokes.
+      if (base::win::GetVersion() < base::win::VERSION_WIN10) {
+        // Mask out the corners.
+        gfx::ImageSkia* left =
+            tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER);
+        const int img_w = left->width();
+        x -= kContentEdgeShadowThickness;
+        SkPaint paint;
+        paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
+        canvas->DrawImageInt(
+            *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER_MASK), 0, 0,
+            img_w, h, x, y, img_w, h, false, paint);
+        const int right_x =
+            toolbar_bounds.right() + kContentEdgeShadowThickness - img_w;
+        canvas->DrawImageInt(
+            *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER_MASK), 0, 0,
+            img_w, h, right_x, y, img_w, h, false, paint);
+
+        // Corner and side strokes.
+        canvas->DrawImageInt(*left, 0, 0, img_w, h, x, y, img_w, h, false);
+        canvas->DrawImageInt(
+            *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER), 0, 0, img_w,
+            h, right_x, y, img_w, h, false);
+
+        x += img_w;
+        w = right_x - x;
+      }
+
+      // Top stroke.
+      canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_TOP_CENTER), x, y,
+                           w, split_point);
     }
-
-    // On Windows 10+ where we don't draw our own window border but rather go
-    // right to the system border, the toolbar has no corners or side strokes.
-    if (base::win::GetVersion() < base::win::VERSION_WIN10) {
-      // Mask out the corners.
-      gfx::ImageSkia* left = tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER);
-      const int img_w = left->width();
-      x -= kContentEdgeShadowThickness;
-      SkPaint paint;
-      paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-      canvas->DrawImageInt(
-          *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_LEFT_CORNER_MASK), 0, 0, img_w,
-          h, x, y, img_w, h, false, paint);
-      const int right_x =
-          toolbar_bounds.right() + kContentEdgeShadowThickness - img_w;
-      canvas->DrawImageInt(
-          *tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER_MASK), 0, 0,
-          img_w, h, right_x, y, img_w, h, false, paint);
-
-      // Corner and side strokes.
-      canvas->DrawImageInt(*left, 0, 0, img_w, h, x, y, img_w, h, false);
-      canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_TOP_RIGHT_CORNER),
-                           0, 0, img_w, h, right_x, y, img_w, h, false);
-
-      x += img_w;
-      w = right_x - x;
-    }
-
-    // Top stroke.
-    canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_TOP_CENTER), x, y,
-                         w, split_point);
   }
 
   // Toolbar/content separator.
@@ -425,9 +458,11 @@ void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) {
   int y = client_bounds.y();
   const bool normal_mode = browser_view()->IsTabStripVisible();
   const ui::ThemeProvider* tp = GetThemeProvider();
-  const SkColor toolbar_color = normal_mode ?
-      tp->GetColor(ThemeProperties::COLOR_TOOLBAR) :
-      ThemeProperties::GetDefaultColor(ThemeProperties::COLOR_TOOLBAR);
+  const SkColor toolbar_color =
+      normal_mode
+          ? tp->GetColor(ThemeProperties::COLOR_TOOLBAR)
+          : ThemeProperties::GetDefaultColor(ThemeProperties::COLOR_TOOLBAR,
+                                             browser_view()->IsOffTheRecord());
 
   const gfx::Rect toolbar_bounds(browser_view()->GetToolbarBounds());
   if (!normal_mode) {
@@ -448,8 +483,11 @@ void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) {
     return;
 
   const int x = client_bounds.x();
-  y += toolbar_bounds.bottom();  // The side edges start below the toolbar.
-  const int img_y = y;
+  // Pre-Material Design, the client edge images start below the toolbar.  In MD
+  // the client edge images start at the top of the toolbar.
+  y += toolbar_bounds.bottom();
+  const int img_y = ui::MaterialDesignController::IsModeMaterial() ?
+      (y - toolbar_bounds.height()) : y;
   const int w = client_bounds.width();
   const int right = client_bounds.right();
   const int bottom = std::max(y, height() - NonClientBorderThickness(false));
@@ -581,6 +619,8 @@ void GlassBrowserFrameView::StopThrobber() {
   if (throbber_running_) {
     throbber_running_ = false;
 
+    base::win::ScopedHICON previous_small_icon;
+    base::win::ScopedHICON previous_big_icon;
     HICON small_icon = nullptr;
     HICON big_icon = nullptr;
 
@@ -588,10 +628,22 @@ void GlassBrowserFrameView::StopThrobber() {
     if (browser_view()->ShouldShowWindowIcon()) {
       gfx::ImageSkia icon = browser_view()->GetWindowIcon();
       if (!icon.isNull()) {
-        small_icon = CreateHICONFromSkBitmapSizedTo(
-            icon, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
-        big_icon = CreateHICONFromSkBitmapSizedTo(
-            icon, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+        // Keep previous icons alive as long as they are referenced by the HWND.
+        previous_small_icon = small_window_icon_.Pass();
+        previous_big_icon = big_window_icon_.Pass();
+
+        // Take responsibility for eventually destroying the created icons.
+        small_window_icon_ =
+            CreateHICONFromSkBitmapSizedTo(icon, GetSystemMetrics(SM_CXSMICON),
+                                           GetSystemMetrics(SM_CYSMICON))
+                .Pass();
+        big_window_icon_ =
+            CreateHICONFromSkBitmapSizedTo(icon, GetSystemMetrics(SM_CXICON),
+                                           GetSystemMetrics(SM_CYICON))
+                .Pass();
+
+        small_icon = small_window_icon_.get();
+        big_icon = big_window_icon_.get();
       }
     }
 
@@ -608,21 +660,13 @@ void GlassBrowserFrameView::StopThrobber() {
     // This will reset the icon which we set in the throbber code.
     // WM_SETICON with null icon restores the icon for title bar but not
     // for taskbar. See http://crbug.com/29996
-    HICON previous_small_icon = reinterpret_cast<HICON>(
-        SendMessage(views::HWNDForWidget(frame()), WM_SETICON,
-                    static_cast<WPARAM>(ICON_SMALL),
-                    reinterpret_cast<LPARAM>(small_icon)));
+    SendMessage(views::HWNDForWidget(frame()), WM_SETICON,
+                static_cast<WPARAM>(ICON_SMALL),
+                reinterpret_cast<LPARAM>(small_icon));
 
-    HICON previous_big_icon = reinterpret_cast<HICON>(
-        SendMessage(views::HWNDForWidget(frame()), WM_SETICON,
-                    static_cast<WPARAM>(ICON_BIG),
-                    reinterpret_cast<LPARAM>(big_icon)));
-
-    if (previous_small_icon)
-      ::DestroyIcon(previous_small_icon);
-
-    if (previous_big_icon)
-      ::DestroyIcon(previous_big_icon);
+    SendMessage(views::HWNDForWidget(frame()), WM_SETICON,
+                static_cast<WPARAM>(ICON_BIG),
+                reinterpret_cast<LPARAM>(big_icon));
   }
 }
 

@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -119,6 +123,13 @@ class BrowserFocusTest : public InProcessBrowserTest {
       }
 #endif
 
+      if (reverse) {
+        ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+            browser(), key, false, reverse, false, false,
+            content::NOTIFICATION_ALL,
+            content::NotificationService::AllSources()));
+      }
+
       for (size_t j = 0; j < arraysize(kExpectedIDs); ++j) {
         SCOPED_TRACE(base::StringPrintf("focus inner loop %" PRIuS, j));
         const size_t index = reverse ? arraysize(kExpectedIDs) - 1 - j : j;
@@ -147,9 +158,23 @@ class BrowserFocusTest : public InProcessBrowserTest {
           browser(), key, false, reverse, false, false,
           chrome::NOTIFICATION_FOCUS_RETURNED_TO_BROWSER,
           content::Source<Browser>(browser())));
+      EXPECT_TRUE(
+          IsViewFocused(reverse ? VIEW_ID_OMNIBOX : VIEW_ID_LOCATION_ICON));
+
+      ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+          browser(), key, false, reverse, false, false,
+          content::NOTIFICATION_ALL,
+          content::NotificationService::AllSources()));
 #endif
       content::RunAllPendingInMessageLoop();
-      EXPECT_TRUE(IsViewFocused(VIEW_ID_OMNIBOX));
+      EXPECT_TRUE(
+          IsViewFocused(reverse ? VIEW_ID_LOCATION_ICON : VIEW_ID_OMNIBOX));
+      if (reverse) {
+        ASSERT_TRUE(ui_test_utils::SendKeyPressAndWait(
+            browser(), key, false, false, false, false,
+            content::NOTIFICATION_ALL,
+            content::NotificationService::AllSources()));
+      }
     }
   }
 };

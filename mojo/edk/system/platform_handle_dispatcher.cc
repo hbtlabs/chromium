@@ -4,7 +4,10 @@
 
 #include "mojo/edk/system/platform_handle_dispatcher.h"
 
+#include <stddef.h>
+
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 
@@ -23,7 +26,7 @@ struct MOJO_ALIGNAS(8) SerializedPlatformHandleDispatcher {
 
 ScopedPlatformHandle PlatformHandleDispatcher::PassPlatformHandle() {
   base::AutoLock locker(lock());
-  return platform_handle_.Pass();
+  return std::move(platform_handle_);
 }
 
 Dispatcher::Type PlatformHandleDispatcher::GetType() const {
@@ -65,8 +68,7 @@ scoped_refptr<PlatformHandleDispatcher> PlatformHandleDispatcher::Deserialize(
 
 PlatformHandleDispatcher::PlatformHandleDispatcher(
     ScopedPlatformHandle platform_handle)
-    : platform_handle_(platform_handle.Pass()) {
-}
+    : platform_handle_(std::move(platform_handle)) {}
 
 PlatformHandleDispatcher::~PlatformHandleDispatcher() {
 }
@@ -79,7 +81,7 @@ void PlatformHandleDispatcher::CloseImplNoLock() {
 scoped_refptr<Dispatcher>
 PlatformHandleDispatcher::CreateEquivalentDispatcherAndCloseImplNoLock() {
   lock().AssertAcquired();
-  return Create(platform_handle_.Pass());
+  return Create(std::move(platform_handle_));
 }
 
 void PlatformHandleDispatcher::StartSerializeImplNoLock(

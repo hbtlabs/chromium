@@ -4,6 +4,8 @@
 
 #import "ios/web/shell/view_controller.h"
 
+#include <stdint.h>
+
 #include "base/mac/objc_property_releaser.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_ptr.h"
@@ -37,7 +39,11 @@ bool UseWKWebView() {
 }
 }
 
-@interface ViewController () {
+NSString* const kWebShellBackButtonAccessibilityLabel = @"Back";
+NSString* const kWebShellForwardButtonAccessibilityLabel = @"Forward";
+NSString* const kWebShellAddressFieldAccessibilityLabel = @"Address field";
+
+@interface ViewController ()<CRWWebUserInterfaceDelegate> {
   web::BrowserState* _browserState;
   base::scoped_nsobject<CRWWebController> _webController;
   scoped_ptr<web::RequestTrackerFactoryImpl> _requestTrackerFactory;
@@ -82,6 +88,7 @@ bool UseWKWebView() {
   [back addTarget:self
                 action:@selector(back)
       forControlEvents:UIControlEventTouchUpInside];
+  [back setAccessibilityLabel:kWebShellBackButtonAccessibilityLabel];
 
   UIButton* forward = [UIButton buttonWithType:UIButtonTypeCustom];
   [forward setImage:[UIImage imageNamed:@"toolbar_forward"]
@@ -92,6 +99,7 @@ bool UseWKWebView() {
   [forward addTarget:self
                 action:@selector(forward)
       forControlEvents:UIControlEventTouchUpInside];
+  [forward setAccessibilityLabel:kWebShellForwardButtonAccessibilityLabel];
 
   base::scoped_nsobject<UITextField> field([[UITextField alloc]
       initWithFrame:CGRectMake(88, 6, CGRectGetWidth([_toolbarView frame]) - 98,
@@ -103,6 +111,7 @@ bool UseWKWebView() {
   [field setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   [field setKeyboardType:UIKeyboardTypeWebSearch];
   [field setAutocorrectionType:UITextAutocorrectionTypeNo];
+  [field setAccessibilityLabel:kWebShellAddressFieldAccessibilityLabel];
   [field setClearButtonMode:UITextFieldViewModeWhileEditing];
   self.field = field;
 
@@ -119,6 +128,7 @@ bool UseWKWebView() {
       UseWKWebView() ? web::WK_WEB_VIEW_TYPE : web::UI_WEB_VIEW_TYPE;
   _webController.reset(web::CreateWebController(webViewType, webState.Pass()));
   [_webController setDelegate:self];
+  [_webController setUIDelegate:self];
   [_webController setWebUsageEnabled:YES];
 
   [[_webController view] setFrame:[_containerView bounds]];
@@ -350,6 +360,19 @@ bool UseWKWebView() {
                  callback:
                      (const web::WebState::ImageDownloadCallback&)callback {
   return -1;
+}
+
+// -----------------------------------------------------------------------
+// CRWWebUserInterfaceDelegate implementation.
+
+- (void)webController:(CRWWebController*)webController
+    runAuthDialogForProtectionSpace:(NSURLProtectionSpace*)protectionSpace
+                 proposedCredential:(NSURLCredential*)credential
+                  completionHandler:
+                      (void (^)(NSString* user, NSString* password))handler {
+  // Calling |handler| with nil objects is the same as not implemeting it. This
+  // method is implemented to make testing easier.
+  handler(nil, nil);
 }
 
 @end

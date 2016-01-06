@@ -20,7 +20,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/line/InlineTextBox.h"
 
 #include "core/layout/HitTestResult.h"
@@ -446,14 +445,19 @@ void InlineTextBox::selectionStartEnd(int& sPos, int& ePos) const
     ePos = std::min(endPos - m_start, (int)m_len);
 }
 
-void InlineTextBox::paintDocumentMarker(GraphicsContext* pt, const LayoutPoint& boxOrigin, DocumentMarker* marker, const ComputedStyle& style, const Font& font, bool grammar) const
+void InlineTextBox::paintDocumentMarker(GraphicsContext& pt, const LayoutPoint& boxOrigin, DocumentMarker* marker, const ComputedStyle& style, const Font& font, bool grammar) const
 {
     InlineTextBoxPainter(*this).paintDocumentMarker(pt, boxOrigin, marker, style, font, grammar);
 }
 
-void InlineTextBox::paintTextMatchMarker(GraphicsContext* pt, const LayoutPoint& boxOrigin, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
+void InlineTextBox::paintTextMatchMarkerForeground(const PaintInfo& paintInfo, const LayoutPoint& boxOrigin, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
 {
-    InlineTextBoxPainter(*this).paintTextMatchMarker(pt, boxOrigin, marker, style, font);
+    InlineTextBoxPainter(*this).paintTextMatchMarkerForeground(paintInfo, boxOrigin, marker, style, font);
+}
+
+void InlineTextBox::paintTextMatchMarkerBackground(const PaintInfo& paintInfo, const LayoutPoint& boxOrigin, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
+{
+    InlineTextBoxPainter(*this).paintTextMatchMarkerBackground(paintInfo, boxOrigin, marker, style, font);
 }
 
 int InlineTextBox::caretMinOffset() const
@@ -583,7 +587,6 @@ TextRun InlineTextBox::constructTextRun(const ComputedStyle& style, const Font& 
 
     TextRun run(string, textPos().toFloat(), expansion(), expansionBehavior(), direction(), dirOverride() || style.rtlOrdering() == VisualOrder);
     run.setTabSize(!style.collapseWhiteSpace(), style.tabSize());
-    run.setCodePath(lineLayoutItem().canUseSimpleFontCodePath() ? TextRun::ForceSimple : TextRun::ForceComplex);
     run.setTextJustify(style.textJustify());
 
     // Propagate the maximum length of the characters buffer to the TextRun, even when we're only processing a substring.

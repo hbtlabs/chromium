@@ -60,6 +60,11 @@
     "label": "//ash:ash_unittests",
     "type": "unknown",
   },
+  "audio_unittests": {
+    "label": "//media:audio_unittests",
+    "type": "raw",
+    "args": [],
+  },
   "aura_unittests": {
     "label": "//ui/aura:aura_unittests",
     "type": "windowed_test_launcher",
@@ -73,12 +78,12 @@
     "type": "console_test_launcher",
   },
   "blink_heap_unittests": {
-    "label": "//third_party/WebKit/public:blink_heap_unittests",
-    "type": "unknown",
+    "label": "//third_party/WebKit/Source/platform:blink_heap_unittests",
+    "type": "console_test_launcher",
   },
   "blink_platform_unittests": {
-    "label": "//third_party/WebKit/public:blink_platform_unittests",
-    "type": "unknown",
+    "label": "//third_party/WebKit/Source/platform:blink_platform_unittests",
+    "type": "console_test_launcher",
   },
   "breakpad_unittests": {
     "label": "//breakpad:breakpad_unittests",
@@ -192,6 +197,10 @@
     "label": "//ui/gfx:gfx_unittests",
     "type": "raw",
     "args": [],
+  },
+  "gin_unittests": {
+    "label": "//gin:gin_unittests",
+    "type": "console_test_launcher",
   },
   "gles2_conform_test": {
     "label": "//gpu/gles2_conform_support:gles2_conform_test",
@@ -313,7 +322,7 @@
     "type": "unknown",
   },
   "nacl_loader_unittests": {
-    "label": "//components/nacl:nacl_loader_unittests",
+    "label": "//components/nacl/loader:nacl_loader_unittests",
     "type": "raw",
     "args": [],
   },
@@ -387,18 +396,13 @@
     "type": "gpu_browser_test",
     "gtest_filter": "CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*",
   },
-  "telemetry_gpu_new_test": {
-    "label": "//chrome/test:telemetry_gpu_new_test",
+  "telemetry_gpu_test": {
+    "label": "//chrome/test:telemetry_gpu_test",
     "type": "script",
     "script": "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
     "args": [
       "../../content/test/gpu/run_gpu_test.py",
     ],
-  },
-  "telemetry_gpu_test": {
-    "label": "//chrome/test:telemetry_gpu_test",
-    "type": "script",
-    "script": "//content/test/gpu/run_gpu_test.py",
   },
   "telemetry_gpu_unittests": {
     "label": "//chrome/test:telemetry_gpu_unittests",
@@ -464,15 +468,15 @@
     "type": "unknown",
   },
   "webkit_unit_tests": {
-    "label": "//third_party/WebKit/public:webkit_unit_tests",
-    "type": "unknown",
+    "label": "//third_party/WebKit/Source/web:webkit_unit_tests",
+    "type": "console_test_launcher",
   },
   "wm_unittests": {
     "label": "//ui/wm:wm_unittests",
     "type": "windowed_test_launcher",
   },
   "wtf_unittests": {
-    "label": "//third_party/WebKit/public:wtf_unittests",
-    "type": "unknown",
+    "label": "//third_party/WebKit/Source/wtf:wtf_unittests",
+    "type": "console_test_launcher",
   },
 }

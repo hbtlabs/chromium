@@ -2,18 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/frame_host/render_frame_host_manager.h"
+
+#include <stdint.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/cross_site_transferring_request.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
@@ -31,7 +37,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/common/bindings_policy.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/javascript_message_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
@@ -65,6 +71,21 @@ void VerifyPageFocusMessage(MockRenderProcessHost* rph,
   InputMsg_SetFocus::Param params;
   EXPECT_TRUE(InputMsg_SetFocus::Read(message, &params));
   EXPECT_EQ(expected_focus, base::get<0>(params));
+}
+
+// Helper function for strict mixed content checking tests.
+void CheckMixedContentIPC(TestRenderFrameHost* rfh,
+                          bool expected_param,
+                          int expected_routing_id) {
+  const IPC::Message* message =
+      rfh->GetProcess()->sink().GetUniqueMessageMatching(
+          FrameMsg_EnforceStrictMixedContentChecking::ID);
+  ASSERT_TRUE(message);
+  EXPECT_EQ(expected_routing_id, message->routing_id());
+  FrameMsg_EnforceStrictMixedContentChecking::Param params;
+  EXPECT_TRUE(
+      FrameMsg_EnforceStrictMixedContentChecking::Read(message, &params));
+  EXPECT_EQ(expected_param, base::get<0>(params));
 }
 
 class RenderFrameHostManagerTestWebUIControllerFactory
@@ -329,8 +350,8 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
     EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, old_rfh->rfh_state());
 
     // Commit the navigation with a new page ID.
-    int32 max_page_id = contents()->GetMaxPageIDForSiteInstance(
-        active_rfh->GetSiteInstance());
+    int32_t max_page_id =
+        contents()->GetMaxPageIDForSiteInstance(active_rfh->GetSiteInstance());
 
     // Use an observer to avoid accessing a deleted renderer later on when the
     // state is being checked.
@@ -432,8 +453,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
       const NavigationEntryImpl& entry) {
     // Tests currently only navigate using main frame FrameNavigationEntries.
     FrameNavigationEntry* frame_entry = entry.root_node()->frame_entry.get();
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableBrowserSideNavigation)) {
+    if (IsBrowserSideNavigationEnabled()) {
       NavigationControllerImpl* controller =
           static_cast<NavigationControllerImpl*>(manager->current_frame_host()
                                                      ->frame_tree_node()
@@ -470,10 +490,9 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
   // PlzNavigate: returns the speculative RenderFrameHost.
   RenderFrameHostImpl* GetPendingFrameHost(
       RenderFrameHostManager* manager) {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableBrowserSideNavigation)) {
+    if (IsBrowserSideNavigationEnabled())
       return manager->speculative_render_frame_host_.get();
-    }
+
     return manager->pending_frame_host();
   }
 
@@ -590,9 +609,9 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // Send an update favicon message and make sure it works.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(ntp_rfh->GetRenderViewHost()->OnMessageReceived(
-                    ViewHostMsg_UpdateFaviconURL(
-                        ntp_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(ntp_rfh->GetRenderViewHost()->GetWidget()->OnMessageReceived(
+        ViewHostMsg_UpdateFaviconURL(
+            ntp_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
   // Create one more frame in the same SiteInstance where ntp_rfh
@@ -609,10 +628,9 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // The new RVH should be able to update its favicon.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(
-        dest_rfh->GetRenderViewHost()->OnMessageReceived(
-            ViewHostMsg_UpdateFaviconURL(
-                dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(dest_rfh->GetRenderViewHost()->GetWidget()->OnMessageReceived(
+        ViewHostMsg_UpdateFaviconURL(
+            dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
 
@@ -621,9 +639,8 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   {
     PluginFaviconMessageObserver observer(contents());
     EXPECT_TRUE(
-        ntp_rvh->OnMessageReceived(
-            ViewHostMsg_UpdateFaviconURL(
-                dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+        ntp_rvh->GetWidget()->OnMessageReceived(ViewHostMsg_UpdateFaviconURL(
+            dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
     EXPECT_FALSE(observer.favicon_received());
   }
 
@@ -688,9 +705,9 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // Send an update favicon message and make sure it works.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh1->GetRenderViewHost()->OnMessageReceived(
-                    ViewHostMsg_UpdateFaviconURL(
-                        rfh1->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(rfh1->GetRenderViewHost()->GetWidget()->OnMessageReceived(
+        ViewHostMsg_UpdateFaviconURL(rfh1->GetRenderViewHost()->GetRoutingID(),
+                                     icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
 
@@ -712,7 +729,7 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // The new RVH should be able to update its favicons.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh2->GetRenderViewHost()->OnMessageReceived(
+    EXPECT_TRUE(rfh2->GetRenderViewHost()->GetWidget()->OnMessageReceived(
         ViewHostMsg_UpdateFaviconURL(rfh2->GetRenderViewHost()->GetRoutingID(),
                                      icons)));
     EXPECT_TRUE(observer.favicon_received());
@@ -722,7 +739,7 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // be ignored.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh1->GetRenderViewHost()->OnMessageReceived(
+    EXPECT_TRUE(rfh1->GetRenderViewHost()->GetWidget()->OnMessageReceived(
         ViewHostMsg_UpdateFaviconURL(rfh1->GetRenderViewHost()->GetRoutingID(),
                                      icons)));
     EXPECT_FALSE(observer.favicon_received());
@@ -799,7 +816,8 @@ TEST_F(RenderFrameHostManagerTest, WhiteListSwapCompositorFrame) {
   ViewHostMsg_SwapCompositorFrame msg(
       rvh()->GetRoutingID(), 0, frame, std::vector<IPC::Message>());
 
-  EXPECT_TRUE(swapped_out_rfh->render_view_host()->OnMessageReceived(msg));
+  EXPECT_TRUE(
+      swapped_out_rfh->render_view_host()->GetWidget()->OnMessageReceived(msg));
   EXPECT_TRUE(swapped_out_rwhv->did_swap_compositor_frame());
 }
 
@@ -991,7 +1009,7 @@ TEST_F(RenderFrameHostManagerTest, AlwaysSendEnableViewSourceMode) {
   ASSERT_TRUE(contents()->GetPendingMainFrame())
       << "Expected new pending RenderFrameHost to be created.";
   RenderFrameHost* last_rfh = contents()->GetPendingMainFrame();
-  int32 new_id =
+  int32_t new_id =
       contents()->GetMaxPageIDForSiteInstance(last_rfh->GetSiteInstance()) + 1;
   contents()->GetPendingMainFrame()->SendNavigate(new_id, entry_id, true, kUrl);
 
@@ -1168,8 +1186,7 @@ TEST_F(RenderFrameHostManagerTest, WebUI) {
 
   // The Web UI is committed immediately because the RenderViewHost has not been
   // used yet. UpdateStateForNavigate() took the short cut path.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     // In PlzNavigate, there will be a navigating WebUI because
     // GetFrameHostForNavigation was already called twice and the committed
     // WebUI should be set to be reused.
@@ -1295,8 +1312,7 @@ TEST_F(RenderFrameHostManagerTest, WebUIWasCleared) {
 // Also tests that only user-gesture navigations can interrupt cross-process
 // navigations. http://crbug.com/75195
 TEST_F(RenderFrameHostManagerTest, PageDoesBackAndReload) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     // PlzNavigate uses a significantly different logic for renderer initiated
     // navigations and navigation cancellation. Adapting this test would make it
     // full of special cases and almost unreadable.
@@ -1915,10 +1931,8 @@ TEST_F(RenderFrameHostManagerTest, CloseWithPendingWhileUnresponsive) {
   // Start a navigation to a new site.
   controller().LoadURL(
       kUrl2, Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled())
     rfh1->PrepareForCommit();
-  }
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
 
   // Simulate the unresponsiveness timer.  The tab should close.
@@ -2493,6 +2507,7 @@ TEST_F(RenderFrameHostManagerTest, CreateOpenerProxiesWhenOpenerPointsToSelf) {
 // set separately in a second pass, since their opener routing IDs won't be
 // available during the first pass of CreateOpenerProxies.
 TEST_F(RenderFrameHostManagerTest, TraverseComplexOpenerChain) {
+  contents()->NavigateAndCommit(GURL("http://tab1.com"));
   FrameTree* tree1 = contents()->GetFrameTree();
   FrameTreeNode* root1 = tree1->root();
   int process_id = root1->current_frame_host()->GetProcess()->GetID();
@@ -2505,6 +2520,7 @@ TEST_F(RenderFrameHostManagerTest, TraverseComplexOpenerChain) {
 
   scoped_ptr<TestWebContents> tab2(
       TestWebContents::Create(browser_context(), nullptr));
+  tab2->NavigateAndCommit(GURL("http://tab2.com"));
   FrameTree* tree2 = tab2->GetFrameTree();
   FrameTreeNode* root2 = tree2->root();
   process_id = root2->current_frame_host()->GetProcess()->GetID();
@@ -2522,6 +2538,7 @@ TEST_F(RenderFrameHostManagerTest, TraverseComplexOpenerChain) {
 
   scoped_ptr<TestWebContents> tab4(
       TestWebContents::Create(browser_context(), nullptr));
+  tab4->NavigateAndCommit(GURL("http://tab4.com"));
   FrameTree* tree4 = tab4->GetFrameTree();
   FrameTreeNode* root4 = tree4->root();
   process_id = root4->current_frame_host()->GetProcess()->GetID();
@@ -2734,7 +2751,7 @@ TEST_F(RenderFrameHostManagerTest, RestoreNavigationToWebUI) {
           kInitUrl, Referrer(), ui::PAGE_TRANSITION_TYPED, false, std::string(),
           browser_context());
   new_entry->SetPageID(0);
-  entries.push_back(new_entry.Pass());
+  entries.push_back(std::move(new_entry));
   controller.Restore(
       0, NavigationController::RESTORE_LAST_SESSION_EXITED_CLEANLY, &entries);
   ASSERT_EQ(0u, entries.size());
@@ -3141,6 +3158,93 @@ TEST_F(RenderFrameHostManagerTestWithBrowserSideNavigation,
   EXPECT_FALSE(GetPendingFrameHost(manager));
   EXPECT_FALSE(speculative_host->pending_web_ui());
   EXPECT_FALSE(manager->GetNavigatingWebUI());
+}
+
+// Tests that frame proxies receive updates when a frame's enforcement
+// of strict mixed content checking changes.
+TEST_F(RenderFrameHostManagerTestWithSiteIsolation,
+       ProxiesReceiveShouldEnforceStrictMixedContentChecking) {
+  const GURL kUrl1("http://www.google.test");
+  const GURL kUrl2("http://www.google2.test");
+  const GURL kUrl3("http://www.google2.test/foo");
+
+  contents()->NavigateAndCommit(kUrl1);
+
+  // Create a child frame and navigate it cross-site.
+  main_test_rfh()->OnCreateChildFrame(
+      main_test_rfh()->GetProcess()->GetNextRoutingID(),
+      blink::WebTreeScopeType::Document, "frame1", blink::WebSandboxFlags::None,
+      blink::WebFrameOwnerProperties());
+
+  FrameTreeNode* root = contents()->GetFrameTree()->root();
+  RenderFrameHostManager* child = root->child_at(0)->render_manager();
+
+  // Navigate subframe to kUrl2.
+  NavigationEntryImpl entry1(nullptr /* instance */, -1 /* page_id */, kUrl2,
+                             Referrer(kUrl1, blink::WebReferrerPolicyDefault),
+                             base::string16() /* title */,
+                             ui::PAGE_TRANSITION_LINK,
+                             false /* is_renderer_init */);
+  TestRenderFrameHost* child_host =
+      static_cast<TestRenderFrameHost*>(NavigateToEntry(child, entry1));
+  child->DidNavigateFrame(child_host, true);
+
+  // Verify that parent and child are in different processes.
+  EXPECT_NE(child_host->GetProcess(), main_test_rfh()->GetProcess());
+
+  // Change the parent's enforcement of strict mixed content checking,
+  // and check that the correct IPC is sent to the child frame's
+  // process.
+  EXPECT_FALSE(root->current_replication_state()
+                   .should_enforce_strict_mixed_content_checking);
+  main_test_rfh()->DidEnforceStrictMixedContentChecking();
+  RenderFrameProxyHost* proxy_to_child =
+      root->render_manager()->GetRenderFrameProxyHost(
+          child_host->GetSiteInstance());
+  EXPECT_NO_FATAL_FAILURE(
+      CheckMixedContentIPC(child_host, true, proxy_to_child->GetRoutingID()));
+  EXPECT_TRUE(root->current_replication_state()
+                  .should_enforce_strict_mixed_content_checking);
+
+  // Do the same for the child's enforcement. In general, the parent
+  // needs to know the status of the child's flag in case a grandchild
+  // is created: if A.com embeds B.com, and B.com enforces strict mixed
+  // content checking, and B.com adds an iframe to A.com, then the
+  // A.com process needs to know B.com's flag so that the grandchild
+  // A.com frame can inherit it.
+  EXPECT_FALSE(root->child_at(0)
+                   ->current_replication_state()
+                   .should_enforce_strict_mixed_content_checking);
+  child_host->DidEnforceStrictMixedContentChecking();
+  RenderFrameProxyHost* proxy_to_parent =
+      child->GetRenderFrameProxyHost(main_test_rfh()->GetSiteInstance());
+  EXPECT_NO_FATAL_FAILURE(CheckMixedContentIPC(
+      main_test_rfh(), true, proxy_to_parent->GetRoutingID()));
+  EXPECT_TRUE(root->child_at(0)
+                  ->current_replication_state()
+                  .should_enforce_strict_mixed_content_checking);
+
+  // Check that the flag for the parent's proxy to the child is reset
+  // when the child navigates.
+  main_test_rfh()->GetProcess()->sink().ClearMessages();
+  FrameHostMsg_DidCommitProvisionalLoad_Params commit_params;
+  commit_params.page_id = 0;
+  commit_params.nav_entry_id = 0;
+  commit_params.did_create_new_entry = false;
+  commit_params.url = kUrl3;
+  commit_params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
+  commit_params.should_update_history = false;
+  commit_params.gesture = NavigationGestureAuto;
+  commit_params.was_within_same_page = false;
+  commit_params.is_post = false;
+  commit_params.page_state = PageState::CreateFromURL(kUrl3);
+  commit_params.should_enforce_strict_mixed_content_checking = false;
+  child_host->SendNavigateWithParams(&commit_params);
+  EXPECT_NO_FATAL_FAILURE(CheckMixedContentIPC(
+      main_test_rfh(), false, proxy_to_parent->GetRoutingID()));
+  EXPECT_FALSE(root->child_at(0)
+                   ->current_replication_state()
+                   .should_enforce_strict_mixed_content_checking);
 }
 
 }  // namespace content

@@ -4,10 +4,15 @@
 
 #include "content/browser/media/media_internals.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -205,7 +210,7 @@ void AudioLogImpl::SendWebContentsTitle(int component_id,
                                         int render_frame_id) {
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   StoreComponentMetadata(component_id, dict.get());
-  SendWebContentsTitleHelper(FormatCacheKey(component_id), dict.Pass(),
+  SendWebContentsTitleHelper(FormatCacheKey(component_id), std::move(dict),
                              render_process_id, render_frame_id);
 }
 
@@ -584,6 +589,10 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
 
   for (const auto& video_capture_device_info : video_capture_device_infos) {
     base::ListValue* format_list = new base::ListValue();
+    // TODO(nisse): Representing format information as a string, to be
+    // parsed by the javascript handler, is brittle. Consider passing
+    // a list of mappings instead.
+
     for (const auto& format : video_capture_device_info.supported_formats)
       format_list->AppendString(media::VideoCaptureFormat::ToString(format));
 

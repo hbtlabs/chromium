@@ -15,6 +15,7 @@
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -22,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
@@ -179,8 +181,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                                            RenderProcessHost* process,
                                            int32_t routing_id,
                                            bool hidden)
-    : view_(NULL),
-      renderer_initialized_(false),
+    : renderer_initialized_(false),
+      destroyed_(false),
       delegate_(delegate),
       owner_delegate_(nullptr),
       process_(process),
@@ -251,16 +253,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
 }
 
 RenderWidgetHostImpl::~RenderWidgetHostImpl() {
-  if (view_weak_)
-    view_weak_->RenderWidgetHostGone();
-  SetView(NULL);
-
-  process_->RemoveRoute(routing_id_);
-  g_routing_id_widget_map.Get().erase(
-      RenderWidgetHostID(process_->GetID(), routing_id_));
-
-  if (delegate_)
-    delegate_->RenderWidgetDeleted(this);
+  if (!destroyed_)
+    Destroy(false);
 }
 
 // static
@@ -299,7 +293,7 @@ scoped_ptr<RenderWidgetHostIterator> RenderWidgetHost::GetRenderWidgetHosts() {
       hosts->Add(widget);
   }
 
-  return hosts.Pass();
+  return std::move(hosts);
 }
 
 // static
@@ -310,7 +304,7 @@ RenderWidgetHostImpl::GetAllRenderWidgetHosts() {
   for (auto& it : g_routing_id_widget_map.Get())
     hosts->Add(it.second);
 
-  return hosts.Pass();
+  return std::move(hosts);
 }
 
 // static
@@ -320,10 +314,9 @@ RenderWidgetHostImpl* RenderWidgetHostImpl::From(RenderWidgetHost* rwh) {
 
 void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
   if (view)
-    view_weak_ = view->GetWeakPtr();
+    view_ = view->GetWeakPtr();
   else
-    view_weak_.reset();
-  view_ = view;
+    view_.reset();
 
   // If the renderer has not yet been initialized, then the surface ID
   // namespace will be sent during initialization.
@@ -344,7 +337,7 @@ int RenderWidgetHostImpl::GetRoutingID() const {
 }
 
 RenderWidgetHostViewBase* RenderWidgetHostImpl::GetView() const {
-  return view_;
+  return view_.get();
 }
 
 gfx::NativeViewId RenderWidgetHostImpl::GetNativeViewId() const {
@@ -427,7 +420,7 @@ void RenderWidgetHostImpl::InitForFrame() {
   renderer_initialized_ = true;
 }
 
-void RenderWidgetHostImpl::Shutdown() {
+void RenderWidgetHostImpl::ShutdownAndDestroyWidget(bool also_delete) {
   RejectMouseLockOrUnlockIfNecessary();
 
   if (process_->HasConnection()) {
@@ -436,7 +429,7 @@ void RenderWidgetHostImpl::Shutdown() {
     DCHECK(rv);
   }
 
-  Destroy();
+  Destroy(also_delete);
 }
 
 bool RenderWidgetHostImpl::IsLoading() const {
@@ -444,6 +437,9 @@ bool RenderWidgetHostImpl::IsLoading() const {
 }
 
 bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
+  if (owner_delegate_ && owner_delegate_->OnMessageReceived(msg))
+    return true;
+
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderWidgetHostImpl, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
@@ -459,7 +455,6 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER_GENERIC(ViewHostMsg_SwapCompositorFrame,
                                 OnSwapCompositorFrame(msg))
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateRect, OnUpdateRect)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SetCursor, OnSetCursor)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TextInputStateChanged,
                         OnTextInputStateChanged)
@@ -985,7 +980,7 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
       return;
   }
 
-  if (IgnoreInputEvents())
+  if (ShouldDropInputEvents())
     return;
 
   if (touch_emulator_ && touch_emulator_->HandleMouseEvent(mouse_event))
@@ -1018,7 +1013,7 @@ void RenderWidgetHostImpl::ForwardWheelEventWithLatencyInfo(
   TRACE_EVENT2("input", "RenderWidgetHostImpl::ForwardWheelEvent",
                "dx", wheel_event.deltaX, "dy", wheel_event.deltaY);
 
-  if (IgnoreInputEvents())
+  if (ShouldDropInputEvents())
     return;
 
   if (touch_emulator_ && touch_emulator_->HandleMouseWheelEvent(wheel_event))
@@ -1039,7 +1034,7 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
     const ui::LatencyInfo& ui_latency) {
   TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardGestureEvent");
   // Early out if necessary, prior to performing latency logic.
-  if (IgnoreInputEvents())
+  if (ShouldDropInputEvents())
     return;
 
   // TODO(wjmaclean) Remove the code for supporting resending gesture events
@@ -1066,6 +1061,7 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
         CreateScrollBeginForWrapping(gesture_event), ui::LatencyInfo());
   }
 
+  // Delegate must be non-null, due to |ShouldDropInputEvents()| test.
   if (delegate_->PreHandleGestureEvent(gesture_event))
     return;
 
@@ -1118,7 +1114,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
     return;
   }
 
-  if (IgnoreInputEvents())
+  if (ShouldDropInputEvents())
     return;
 
   if (!process_->HasConnection())
@@ -1191,12 +1187,11 @@ void RenderWidgetHostImpl::QueueSyntheticGesture(
     const base::Callback<void(SyntheticGesture::Result)>& on_complete) {
   if (!synthetic_gesture_controller_ && view_) {
     synthetic_gesture_controller_.reset(
-        new SyntheticGestureController(
-            view_->CreateSyntheticGestureTarget().Pass()));
+        new SyntheticGestureController(view_->CreateSyntheticGestureTarget()));
   }
   if (synthetic_gesture_controller_) {
     synthetic_gesture_controller_->QueueSyntheticGesture(
-        synthetic_gesture.Pass(), on_complete);
+        std::move(synthetic_gesture), on_complete);
   }
 }
 
@@ -1368,8 +1363,7 @@ void RenderWidgetHostImpl::RendererExited(base::TerminationStatus status,
 
   if (view_) {
     view_->RenderProcessGone(status, exit_code);
-    view_ = nullptr;  // The View should be deleted by RenderProcessGone.
-    view_weak_.reset();
+    view_.reset();  // The View should be deleted by RenderProcessGone.
   }
 
   // Reconstruct the input router to ensure that it has fresh state for a new
@@ -1445,10 +1439,12 @@ void RenderWidgetHostImpl::SetAutoResize(bool enable,
   max_size_for_auto_resize_ = max_size;
 }
 
-void RenderWidgetHostImpl::Destroy() {
+void RenderWidgetHostImpl::Destroy(bool also_delete) {
+  DCHECK(!destroyed_);
+  destroyed_ = true;
+
   NotificationService::current()->Notify(
-      NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(this),
+      NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED, Source<RenderWidgetHost>(this),
       NotificationService::NoDetails());
 
   // Tell the view to die.
@@ -1457,10 +1453,18 @@ void RenderWidgetHostImpl::Destroy() {
   // do it after this call to view_->Destroy().
   if (view_) {
     view_->Destroy();
-    view_ = nullptr;
+    view_.reset();
   }
 
-  delete this;
+  process_->RemoveRoute(routing_id_);
+  g_routing_id_widget_map.Get().erase(
+      RenderWidgetHostID(process_->GetID(), routing_id_));
+
+  if (delegate_)
+    delegate_->RenderWidgetDeleted(this);
+
+  if (also_delete)
+    delete this;
 }
 
 void RenderWidgetHostImpl::RendererIsUnresponsive() {
@@ -1494,14 +1498,14 @@ void RenderWidgetHostImpl::OnRenderProcessGone(int status, int exit_code) {
     // TODO(evanm): This synchronously ends up calling "delete this".
     // Is that really what we want in response to this message?  I'm matching
     // previous behavior of the code here.
-    Destroy();
+    Destroy(true);
   } else {
     RendererExited(static_cast<base::TerminationStatus>(status), exit_code);
   }
 }
 
 void RenderWidgetHostImpl::OnClose() {
-  Shutdown();
+  ShutdownAndDestroyWidget(true);
 }
 
 void RenderWidgetHostImpl::OnSetTooltipText(
@@ -1584,12 +1588,12 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
     touch_emulator_->SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
 
   if (view_) {
-    view_->OnSwapCompositorFrame(output_surface_id, frame.Pass());
+    view_->OnSwapCompositorFrame(output_surface_id, std::move(frame));
     view_->DidReceiveRendererFrame();
   } else {
     cc::CompositorFrameAck ack;
     if (frame->gl_frame_data) {
-      ack.gl_frame_data = frame->gl_frame_data.Pass();
+      ack.gl_frame_data = std::move(frame->gl_frame_data);
       ack.gl_frame_data->sync_token.Clear();
     } else if (frame->delegated_frame_data) {
       cc::TransferableResource::ReturnResources(
@@ -1717,11 +1721,6 @@ void RenderWidgetHostImpl::OnQueueSyntheticGesture(
                    weak_factory_.GetWeakPtr()));
 }
 
-void RenderWidgetHostImpl::OnFocus() {
-  // Only RenderViewHost can deal with that message.
-  bad_message::ReceivedBadMessage(GetProcess(), bad_message::RWH_FOCUS);
-}
-
 void RenderWidgetHostImpl::OnSetCursor(const WebCursor& cursor) {
   SetCursor(cursor);
 }
@@ -1731,7 +1730,8 @@ void RenderWidgetHostImpl::SetTouchEventEmulationEnabled(
   if (enabled) {
     if (!touch_emulator_) {
       touch_emulator_.reset(new TouchEmulator(
-          this, view_ ? content::GetScaleFactorForView(view_) : 1.0f));
+          this,
+          view_.get() ? content::GetScaleFactorForView(view_.get()) : 1.0f));
     }
     touch_emulator_->Enable(config_type);
   } else {
@@ -1889,7 +1889,7 @@ InputEventAckState RenderWidgetHostImpl::FilterInputEvent(
   // Don't ignore touch cancel events, since they may be sent while input
   // events are being ignored in order to keep the renderer from getting
   // confused about how many touches are active.
-  if (IgnoreInputEvents() && event.type != WebInputEvent::TouchCancel)
+  if (ShouldDropInputEvents() && event.type != WebInputEvent::TouchCancel)
     return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
 
   if (!process_->HasConnection())
@@ -1992,7 +1992,7 @@ void RenderWidgetHostImpl::OnWheelEventAck(
 
   if (!is_hidden() && view_) {
     if (ack_result != INPUT_EVENT_ACK_STATE_CONSUMED &&
-        delegate_->HandleWheelEvent(wheel_event.event)) {
+        delegate_ && delegate_->HandleWheelEvent(wheel_event.event)) {
       ack_result = INPUT_EVENT_ACK_STATE_CONSUMED;
     }
     view_->WheelEventAck(wheel_event.event, ack_result);
@@ -2035,8 +2035,8 @@ void RenderWidgetHostImpl::OnSyntheticGestureCompleted(
   Send(new InputMsg_SyntheticGestureCompleted(GetRoutingID()));
 }
 
-bool RenderWidgetHostImpl::IgnoreInputEvents() const {
-  return ignore_input_events_ || process_->IgnoreInputEvents();
+bool RenderWidgetHostImpl::ShouldDropInputEvents() const {
+  return ignore_input_events_ || process_->IgnoreInputEvents() || !delegate_;
 }
 
 void RenderWidgetHostImpl::SetBackgroundOpaque(bool opaque) {

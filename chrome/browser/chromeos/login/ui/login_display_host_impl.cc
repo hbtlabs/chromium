@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 
+#include <utility>
 #include <vector>
 
 #include "ash/audio/sounds.h"
@@ -14,6 +15,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -134,7 +136,7 @@ const char kWebUIInitPostpone[] = "postpone";
 // The delay of triggering initialization of the device policy subsystem
 // after the login screen is initialized. This makes sure that device policy
 // network requests are made while the system is idle waiting for user input.
-const int64 kPolicyServiceInitializationDelayMilliseconds = 100;
+const int64_t kPolicyServiceInitializationDelayMilliseconds = 100;
 
 // A class to observe an implicit animation and invokes the callback after the
 // animation is completed.
@@ -1264,7 +1266,7 @@ void ShowLoginWizard(const std::string& first_screen_name) {
           first_screen_name, startup_manifest, display_host));
 
   locale_util::SwitchLanguageCallback callback(
-      base::Bind(&OnLanguageSwitchedCallback, base::Passed(data.Pass())));
+      base::Bind(&OnLanguageSwitchedCallback, base::Passed(std::move(data))));
 
   // Load locale keyboards here. Hardware layout would be automatically enabled.
   locale_util::SwitchLanguage(locale, true, true /* login_layouts_only */,

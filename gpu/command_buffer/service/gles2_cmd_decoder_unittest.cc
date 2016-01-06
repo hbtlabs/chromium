@@ -4,6 +4,9 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_unittest.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -330,9 +333,7 @@ TEST_P(GLES3DecoderTest, ClientWaitSyncValid) {
   typedef cmds::ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   cmds::ClientWaitSync cmd;
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(0, &v32_0, &v32_1);
-  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, shared_memory_offset_);
   EXPECT_CALL(*gl_,
               ClientWaitSync(reinterpret_cast<GLsync>(kServiceSyncId),
@@ -353,9 +354,7 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncNonZeroTimeoutValid) {
   Result* result = static_cast<Result*>(shared_memory_address_);
   cmds::ClientWaitSync cmd;
   const GLuint64 kTimeout = 0xABCDEF0123456789;
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(kTimeout, &v32_0, &v32_1);
-  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, kTimeout,
            shared_memory_id_, shared_memory_offset_);
   EXPECT_CALL(*gl_,
               ClientWaitSync(reinterpret_cast<GLsync>(kServiceSyncId),
@@ -375,10 +374,8 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncInvalidSyncFails) {
   typedef cmds::ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   cmds::ClientWaitSync cmd;
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(0, &v32_0, &v32_1);
   decoder_->set_unsafe_es3_apis_enabled(true);
-  cmd.Init(kInvalidClientId, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(kInvalidClientId, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, shared_memory_offset_);
   *result = GL_WAIT_FAILED;
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
@@ -390,10 +387,8 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncResultNotInitFails) {
   typedef cmds::ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   cmds::ClientWaitSync cmd;
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(0, &v32_0, &v32_1);
   decoder_->set_unsafe_es3_apis_enabled(true);
-  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, shared_memory_offset_);
   *result = 1;  // Any value other than GL_WAIT_FAILED
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
@@ -403,16 +398,14 @@ TEST_P(GLES2DecoderTest, ClientWaitSyncBadSharedMemoryFails) {
   typedef cmds::ClientWaitSync::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
   cmds::ClientWaitSync cmd;
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(0, &v32_0, &v32_1);
   decoder_->set_unsafe_es3_apis_enabled(true);
   *result = GL_WAIT_FAILED;
-  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            kInvalidSharedMemoryId, shared_memory_offset_);
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 
   *result = GL_WAIT_FAILED;
-  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, v32_0, v32_1,
+  cmd.Init(client_sync_id_, GL_SYNC_FLUSH_COMMANDS_BIT, 0,
            shared_memory_id_, kInvalidSharedMemoryOffset);
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
@@ -424,10 +417,8 @@ TEST_P(GLES2DecoderTest, WaitSyncValidArgs) {
       .Times(1)
       .RetiresOnSaturation();
 
-  uint32_t v32_0 = 0, v32_1 = 0;
-  GLES2Util::MapUint64ToTwoUint32(kTimeout, &v32_0, &v32_1);
   cmds::WaitSync cmd;
-  cmd.Init(client_sync_id_, 0, v32_0, v32_1);
+  cmd.Init(client_sync_id_, 0, kTimeout);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -461,14 +452,14 @@ TEST_P(GLES2DecoderManualInitTest, BindGeneratesResourceFalse) {
 }
 
 TEST_P(GLES2DecoderTest, EnableFeatureCHROMIUMBadBucket) {
-  const uint32 kBadBucketId = 123;
+  const uint32_t kBadBucketId = 123;
   EnableFeatureCHROMIUM cmd;
   cmd.Init(kBadBucketId, shared_memory_id_, shared_memory_offset_);
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderTest, RequestExtensionCHROMIUMBadBucket) {
-  const uint32 kBadBucketId = 123;
+  const uint32_t kBadBucketId = 123;
   RequestExtensionCHROMIUM cmd;
   cmd.Init(kBadBucketId);
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
@@ -594,8 +585,8 @@ static error::Error ExecuteBeginQueryCmd(GLES2DecoderTestBase* test,
                                          GLenum target,
                                          GLuint client_id,
                                          GLuint service_id,
-                                         int32 shm_id,
-                                         uint32 shm_offset) {
+                                         int32_t shm_id,
+                                         uint32_t shm_offset) {
   if (GL_ANY_SAMPLES_PASSED_EXT == target) {
     EXPECT_CALL(*gl, BeginQuery(target, service_id))
         .Times(1)
@@ -638,14 +629,14 @@ static error::Error ExecuteEndQueryCmd(GLES2DecoderTestBase* test,
 }
 
 static error::Error ExecuteQueryCounterCmd(GLES2DecoderTestBase* test,
-                                         ::gfx::MockGLInterface* gl,
-                                         ::gfx::GPUTimingFake* timing_queries,
-                                         GLenum target,
-                                         GLuint client_id,
-                                         GLuint service_id,
-                                         int32 shm_id,
-                                         uint32 shm_offset,
-                                         uint32_t submit_count) {
+                                           ::gfx::MockGLInterface* gl,
+                                           ::gfx::GPUTimingFake* timing_queries,
+                                           GLenum target,
+                                           GLuint client_id,
+                                           GLuint service_id,
+                                           int32_t shm_id,
+                                           uint32_t shm_offset,
+                                           uint32_t submit_count) {
   if (GL_TIMESTAMP == target) {
     timing_queries->ExpectGPUTimeStampQuery(*gl, false);
   }
@@ -690,8 +681,8 @@ static void CheckBeginEndQueryBadMemoryFails(GLES2DecoderTestBase* test,
                                              GLuint client_id,
                                              GLuint service_id,
                                              const QueryType& query_type,
-                                             int32 shm_id,
-                                             uint32 shm_offset) {
+                                             int32_t shm_id,
+                                             uint32_t shm_offset) {
   // We need to reset the decoder on each iteration, because we lose the
   // context every time.
   GLES2DecoderTestBase::InitState init;

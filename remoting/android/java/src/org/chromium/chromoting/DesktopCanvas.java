@@ -20,10 +20,12 @@ public class DesktopCanvas {
     private final RenderData mRenderData;
 
     /**
-     * The current cursor position is stored here as a float so that the desktop image can be
-     * positioned with sub-pixel accuracy to give a smoother panning animation at high zoom levels.
+     * Represents the desired center of the viewport.  This value may not represent the actual
+     * center of the viewport as adjustments are made to ensure as much of the desktop is visible as
+     * possible.  This value needs to be a pair of floats so the desktop image can be positioned
+     * with sub-pixel accuracy for smoother panning animations at high zoom levels.
      */
-    private PointF mCursorPosition = new PointF();
+    private PointF mViewportPosition = new PointF();
 
     /**
      * Represents the amount of vertical space in pixels used by the soft input device and
@@ -37,29 +39,56 @@ public class DesktopCanvas {
      */
     private int mInputMethodOffsetX = 0;
 
-    /** Used to determine whether the view should be locked to the cursor. */
-    private boolean mCenterCursorInView = true;
-
     public DesktopCanvas(DesktopViewInterface viewer, RenderData renderData) {
         mViewer = viewer;
         mRenderData = renderData;
     }
 
-    public void setCenterCursorInView(boolean centerCursor) {
-        mCenterCursorInView = centerCursor;
+    /**
+     * Returns the desired center position of the viewport.  Note that this may not represent the
+     * true center of the viewport as other calculations are done to maximize the viewable area.
+     *
+     * @return A point representing the desired position of the viewport.
+     */
+    public PointF getViewportPosition() {
+        return new PointF(mViewportPosition.x, mViewportPosition.y);
     }
 
-    public PointF getCursorPosition() {
-        return new PointF(mCursorPosition.x, mCursorPosition.y);
+    /**
+     * Sets the desired center position of the viewport.
+     *
+     * @param newX The new x coordinate value for the desired center position.
+     * @param newY The new y coordinate value for the desired center position.
+     */
+    public void setViewportPosition(float newX, float newY) {
+        mViewportPosition.set(newX, newY);
     }
 
-    public void setCursorPosition(float newX, float newY) {
-        mCursorPosition.set(newX, newY);
-    }
-
+    /**
+     * Sets the offset values used to calculate the space used by the current soft input method.
+     *
+     * @param offsetX The space used by the soft input method UI on the right edge of the screen.
+     * @param offsetY The space used by the soft input method UI on the bottom edge of the screen.
+     */
     public void setInputMethodOffsetValues(int offsetX, int offsetY) {
         mInputMethodOffsetX = offsetX;
         mInputMethodOffsetY = offsetY;
+    }
+
+    /**
+     * Returns the current size of the viewport.  This size includes the offset calculations for
+     * any visible Input Method UI.
+     *
+     * @return A point representing the current size of the viewport.
+     */
+    public PointF getViewportSize() {
+        float adjustedScreenWidth, adjustedScreenHeight;
+        synchronized (mRenderData) {
+            adjustedScreenWidth = mRenderData.screenWidth - mInputMethodOffsetX;
+            adjustedScreenHeight = mRenderData.screenHeight - mInputMethodOffsetY;
+        }
+
+        return new PointF(adjustedScreenWidth, adjustedScreenHeight);
     }
 
     /** Repositions the image by zooming it such that the complete image fits on the screen. */
@@ -94,31 +123,31 @@ public class DesktopCanvas {
             }
         }
 
-        repositionImage();
+        repositionImage(true);
     }
 
     /**
-     * Repositions the image by translating it (without affecting the zoom level) to place the
-     * cursor close to the center of the screen.
+     * Repositions the image by translating it (without affecting the zoom level).
+     *
+     * @param centerViewport Determines whether the viewport will be translated to the desired
+     *                       center position before being adjusted to fit the screen boundaries.
      */
-    public void repositionImage() {
+    public void repositionImage(boolean centerViewport) {
+        PointF adjustedViewportSize = getViewportSize();
         synchronized (mRenderData) {
-            float adjustedScreenWidth = mRenderData.screenWidth - mInputMethodOffsetX;
-            float adjustedScreenHeight = mRenderData.screenHeight - mInputMethodOffsetY;
+            // The goal of the code below is to position the viewport as close to the desired center
+            // position as possible whilst keeping as much of the desktop in view as possible.
+            // To achieve these goals, we first position the desktop image at the desired center
+            // point and then re-position it to maximize the viewable area.
+            if (centerViewport) {
+                // Map the current viewport position to screen coordinates.
+                float[] viewportPosition = {mViewportPosition.x, mViewportPosition.y};
+                mRenderData.transform.mapPoints(viewportPosition);
 
-            if (mCenterCursorInView) {
-                // For indirect input modes such as Trackpad emulation, we want to try to position
-                // the view so the cursor is centered.  We move it here and then make adjustments
-                // below as needed to keep as much of the image on screen as possible.
-
-                // Get the current cursor position in screen coordinates.
-                float[] cursorScreen = {mCursorPosition.x, mCursorPosition.y};
-                mRenderData.transform.mapPoints(cursorScreen);
-
-                // Translate so the cursor is displayed in the middle of the screen.
+                // Translate so the viewport is displayed in the middle of the screen.
                 mRenderData.transform.postTranslate(
-                        (float) adjustedScreenWidth / 2 - cursorScreen[0],
-                        (float) adjustedScreenHeight / 2 - cursorScreen[1]);
+                        (float) adjustedViewportSize.x / 2 - viewportPosition[0],
+                        (float) adjustedViewportSize.y / 2 - viewportPosition[1]);
             }
 
             // Get the coordinates of the desktop rectangle (top-left/bottom-right corners) in
@@ -133,7 +162,7 @@ public class DesktopCanvas {
             float xAdjust = 0;
             float yAdjust = 0;
 
-            if (rectScreen.right - rectScreen.left < adjustedScreenWidth) {
+            if (rectScreen.right - rectScreen.left < adjustedViewportSize.x) {
                 // Image is narrower than the screen, so center it.
                 xAdjust = -(rightDelta + leftDelta) / 2;
             } else if (leftDelta > 0 && rightDelta > 0) {
@@ -145,7 +174,7 @@ public class DesktopCanvas {
             }
 
             // Apply similar logic for yAdjust.
-            if (rectScreen.bottom - rectScreen.top < adjustedScreenHeight) {
+            if (rectScreen.bottom - rectScreen.top < adjustedViewportSize.y) {
                 yAdjust = -(bottomDelta + topDelta) / 2;
             } else if (topDelta > 0 && bottomDelta > 0) {
                 yAdjust = -Math.min(topDelta, bottomDelta);
@@ -164,8 +193,11 @@ public class DesktopCanvas {
      * limits. The minimum zoom level is chosen to avoid black space around all 4 sides. The
      * maximum zoom level is set arbitrarily, so that the user can zoom out again in a reasonable
      * time, and to prevent arithmetic overflow problems from displaying the image.
+     *
+     * @param centerViewport Determines whether the viewport will be translated to the desired
+     *                       center position before being adjusted to fit the screen boundaries.
      */
-    public void repositionImageWithZoom() {
+    public void repositionImageWithZoom(boolean centerViewport) {
         synchronized (mRenderData) {
             // Avoid division by zero in case this gets called before the image size is initialized.
             if (mRenderData.imageWidth == 0 || mRenderData.imageHeight == 0) {
@@ -191,6 +223,6 @@ public class DesktopCanvas {
             }
         }
 
-        repositionImage();
+        repositionImage(centerViewport);
     }
 }

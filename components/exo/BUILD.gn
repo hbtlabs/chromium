@@ -11,6 +11,12 @@ source_set("exo") {
     "buffer.h",
     "display.cc",
     "display.h",
+    "keyboard.cc",
+    "keyboard.h",
+    "keyboard_delegate.h",
+    "pointer.cc",
+    "pointer.h",
+    "pointer_delegate.h",
     "shared_memory.cc",
     "shared_memory.h",
     "shell_surface.cc",
@@ -21,6 +27,9 @@ source_set("exo") {
     "surface.h",
     "surface_delegate.h",
     "surface_observer.h",
+    "touch.cc",
+    "touch.h",
+    "touch_delegate.h",
   ]
 
   deps = [
@@ -67,22 +76,29 @@ source_set("unit_tests") {
   sources = [
     "buffer_unittest.cc",
     "display_unittest.cc",
+    "keyboard_unittest.cc",
+    "pointer_unittest.cc",
     "shared_memory_unittest.cc",
     "shell_surface_unittest.cc",
     "sub_surface_unittest.cc",
     "surface_unittest.cc",
+    "touch_unittest.cc",
   ]
 
   deps = [
     ":exo",
     ":test_support",
+    "//ash",
     "//base",
     "//cc",
     "//components/user_manager",
     "//gpu/command_buffer/client:gles2_interface",
     "//skia",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:test_support",
     "//ui/gfx",
     "//ui/keyboard",
     "//ui/message_center",

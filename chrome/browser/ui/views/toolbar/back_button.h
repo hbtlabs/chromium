@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_BACK_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_BACK_BUTTON_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 
 namespace ui {
@@ -24,7 +25,9 @@ class BackButton : public ToolbarButton {
  public:
   // Takes ownership of the |model|, which can be null if no menu
   // is to be shown.
-  BackButton(views::ButtonListener* listener, ui::MenuModel* model);
+  BackButton(Profile* profile,
+             views::ButtonListener* listener,
+             ui::MenuModel* model);
   ~BackButton() override;
 
   // Sets |margin_leading_| when the browser is maximized and updates layout

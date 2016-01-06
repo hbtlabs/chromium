@@ -5,8 +5,9 @@
 #include "media/renderers/audio_renderer_impl.h"
 
 #include <math.h>
-
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -54,7 +55,7 @@ AudioRendererImpl::AudioRendererImpl(
       expecting_config_changes_(false),
       sink_(sink),
       audio_buffer_stream_(
-          new AudioBufferStream(task_runner, decoders.Pass(), media_log)),
+          new AudioBufferStream(task_runner, std::move(decoders), media_log)),
       hardware_config_(hardware_config),
       media_log_(media_log),
       tick_clock_(new base::DefaultTickClock()),
@@ -626,7 +627,8 @@ bool AudioRendererImpl::IsBeforeStartTime(
 }
 
 int AudioRendererImpl::Render(AudioBus* audio_bus,
-                              int audio_delay_milliseconds) {
+                              uint32_t audio_delay_milliseconds,
+                              uint32_t frames_skipped) {
   const int requested_frames = audio_bus->frames();
   base::TimeDelta playback_delay = base::TimeDelta::FromMilliseconds(
       audio_delay_milliseconds);

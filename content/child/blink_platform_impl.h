@@ -5,11 +5,15 @@
 #ifndef CONTENT_CHILD_BLINK_PLATFORM_IMPL_H_
 #define CONTENT_CHILD_BLINK_PLATFORM_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/threading/thread_local_storage.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/webcrypto/webcrypto_impl.h"
 #include "content/child/webfallbackthemeengine_impl.h"
 #include "content/common/content_export.h"
@@ -119,7 +123,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
       const char* category_name) override;
   TraceEventAPIAtomicWord* getTraceSamplingState(
       const unsigned thread_bucket) override;
-  virtual TraceEventHandle addTraceEvent(
+  TraceEventHandle addTraceEvent(
       char phase,
       const unsigned char* category_group_enabled,
       const char* name,
@@ -131,19 +135,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       blink::WebConvertableToTraceFormat* convertable_values,
-      unsigned int flags);
-  virtual TraceEventHandle addTraceEvent(
-      char phase,
-      const unsigned char* category_group_enabled,
-      const char* name,
-      unsigned long long id,
-      double timestamp,
-      int num_args,
-      const char** arg_names,
-      const unsigned char* arg_types,
-      const unsigned long long* arg_values,
-      blink::WebConvertableToTraceFormat* convertable_values,
-      unsigned char flags);
+      unsigned int flags) override;
   void updateTraceEventDuration(const unsigned char* category_group_enabled,
                                 const char* name,
                                 TraceEventHandle) override;

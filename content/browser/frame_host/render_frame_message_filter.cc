@@ -5,8 +5,10 @@
 #include "content/browser/frame_host/render_frame_message_filter.h"
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -351,22 +353,20 @@ void RenderFrameMessageFilter::OnSetCookie(int render_frame_id,
   }
 
   net::CookieOptions options;
+  bool experimental_web_platform_features_enabled =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableExperimentalWebPlatformFeatures);
+  const std::string enforce_strict_secure_group =
+      base::FieldTrialList::FindFullName(kEnforceStrictSecureExperiment);
+  if (experimental_web_platform_features_enabled ||
+      base::StartsWith(enforce_strict_secure_group, "Enabled",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    options.set_enforce_strict_secure();
+  }
   if (GetContentClient()->browser()->AllowSetCookie(
           url, first_party_for_cookies, cookie, resource_context_,
-          render_process_id_, render_frame_id, &options)) {
+          render_process_id_, render_frame_id, options)) {
     net::URLRequestContext* context = GetRequestContextForURL(url);
-    bool experimental_web_platform_features_enabled =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableExperimentalWebPlatformFeatures);
-    const std::string enforce_strict_secure_group =
-        base::FieldTrialList::FindFullName(kEnforceStrictSecureExperiment);
-    if (experimental_web_platform_features_enabled)
-      options.set_enforce_prefixes();
-    if (experimental_web_platform_features_enabled ||
-        base::StartsWith(enforce_strict_secure_group, "Enabled",
-                         base::CompareCase::INSENSITIVE_ASCII)) {
-      options.set_enforce_strict_secure();
-    }
     // Pass a null callback since we don't care about when the 'set' completes.
     context->cookie_store()->SetCookieWithOptionsAsync(
         url, cookie, options, net::CookieStore::SetCookiesCallback());
@@ -421,7 +421,8 @@ void RenderFrameMessageFilter::CheckPolicyForCookies(
   net::URLRequestContext* context = GetRequestContextForURL(url);
   // Check the policy for get cookies, and pass cookie_list to the
   // TabSpecificContentSetting for logging purpose.
-  if (GetContentClient()->browser()->AllowGetCookie(
+  if (context &&
+      GetContentClient()->browser()->AllowGetCookie(
           url, first_party_for_cookies, cookie_list, resource_context_,
           render_process_id_, render_frame_id)) {
     // Gets the cookies from cookie store if allowed.
@@ -580,7 +581,7 @@ void RenderFrameMessageFilter::OnOpenChannelToPepperPlugin(
 
 void RenderFrameMessageFilter::OnDidCreateOutOfProcessPepperInstance(
     int plugin_child_id,
-    int32 pp_instance,
+    int32_t pp_instance,
     PepperRendererInstanceData instance_data,
     bool is_external) {
   // It's important that we supply the render process ID ourselves based on the
@@ -606,7 +607,7 @@ void RenderFrameMessageFilter::OnDidCreateOutOfProcessPepperInstance(
 
 void RenderFrameMessageFilter::OnDidDeleteOutOfProcessPepperInstance(
     int plugin_child_id,
-    int32 pp_instance,
+    int32_t pp_instance,
     bool is_external) {
   if (is_external) {
     // We provide the BrowserPpapiHost to the embedder, so it's safe to cast.
@@ -632,7 +633,7 @@ void RenderFrameMessageFilter::OnOpenChannelToPpapiBroker(
 
 void RenderFrameMessageFilter::OnPluginInstanceThrottleStateChange(
     int plugin_child_id,
-    int32 pp_instance,
+    int32_t pp_instance,
     bool is_throttled) {
   // Feature is only implemented for non-external Plugins.
   PpapiPluginProcessHost::OnPluginInstanceThrottleStateChange(

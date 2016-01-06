@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/graphics/paint/PaintArtifactToSkCanvas.h"
 
 #include "platform/graphics/paint/DisplayItem.h"
@@ -54,21 +53,21 @@ private:
         onDrawRect(rect, paint, this);
     }
 
-    SaveLayerStrategy willSaveLayer(const SkRect* rect, const SkPaint* paint, SaveFlags saveFlags) override
+    SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec& rec) override
     {
-        willSaveLayer(paint->getAlpha(), this);
+        willSaveLayer(rec.fPaint->getAlpha(), this);
         return SaveLayerStrategy::kFullLayer_SaveLayerStrategy;
     }
 };
 
-class DummyRectClient {
+class DummyRectClient : public DisplayItemClient {
 public:
     DummyRectClient(const SkRect& rect, SkColor color) : m_rect(rect), m_color(color) {}
     const SkRect& rect() const { return m_rect; }
     SkColor color() const { return m_color; }
     PassRefPtr<SkPicture> makePicture() const { return pictureWithRect(m_rect, m_color); }
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
-    String debugName() const { return "<dummy>"; }
+    String debugName() const final { return "<dummy>"; }
+    IntRect visualRect() const override { return IntRect(); }
 
 private:
     SkRect m_rect;

@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
 
+#include "base/macros.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/ax_view_state.h"
@@ -41,9 +42,8 @@ class MenuScrollButton : public View {
   }
 
   gfx::Size GetPreferredSize() const override {
-    return gfx::Size(
-        host_->GetMenuItem()->GetMenuConfig().scroll_arrow_height * 2 - 1,
-        pref_height_);
+    return gfx::Size(MenuConfig::instance().scroll_arrow_height * 2 - 1,
+                     pref_height_);
   }
 
   bool CanDrop(const OSExchangeData& data) override {
@@ -71,7 +71,7 @@ class MenuScrollButton : public View {
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
-    const MenuConfig& config = host_->GetMenuItem()->GetMenuConfig();
+    const MenuConfig& config = MenuConfig::instance();
 
     // The background.
     gfx::Rect item_bounds(0, 0, width(), height());
@@ -250,7 +250,7 @@ void MenuScrollViewContainer::OnPaintBackground(gfx::Canvas* canvas) {
 
   gfx::Rect bounds(0, 0, width(), height());
   NativeTheme::ExtraParams extra;
-  const MenuConfig& menu_config = content_view_->GetMenuItem()->GetMenuConfig();
+  const MenuConfig& menu_config = MenuConfig::instance();
   extra.menu_background.corner_radius = menu_config.corner_radius;
   GetNativeTheme()->Paint(canvas->sk_canvas(),
       NativeTheme::kMenuPopupBackground, NativeTheme::kNormal, bounds, extra);
@@ -280,8 +280,7 @@ void MenuScrollViewContainer::CreateDefaultBorder() {
   DCHECK_EQ(arrow_, BubbleBorder::NONE);
   bubble_border_ = nullptr;
 
-  const MenuConfig& menu_config =
-      content_view_->GetMenuItem()->GetMenuConfig();
+  const MenuConfig& menu_config = MenuConfig::instance();
 
   int padding = menu_config.use_outer_border && menu_config.corner_radius > 0
                     ? kBorderPaddingDueToRoundedCorners

@@ -4,6 +4,8 @@
 
 #include "media/formats/mp4/box_definitions.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "media/base/video_types.h"
 #include "media/base/video_util.h"
@@ -101,12 +103,12 @@ bool SampleAuxiliaryInformationOffset::Parse(BoxReader* reader) {
   if (reader->flags() & 1)
     RCHECK(reader->SkipBytes(8));
 
-  uint32 count;
+  uint32_t count;
   RCHECK(reader->Read4(&count) &&
          reader->HasBytes(count * (reader->version() == 1 ? 8 : 4)));
   offsets.resize(count);
 
-  for (uint32 i = 0; i < count; i++) {
+  for (uint32_t i = 0; i < count; i++) {
     if (reader->version() == 1) {
       RCHECK(reader->Read8(&offsets[i]));
     } else {
@@ -160,7 +162,7 @@ TrackEncryption::~TrackEncryption() {}
 FourCC TrackEncryption::BoxType() const { return FOURCC_TENC; }
 
 bool TrackEncryption::Parse(BoxReader* reader) {
-  uint8 flag;
+  uint8_t flag;
   RCHECK(reader->ReadFullBoxHeader() &&
          reader->SkipBytes(2) &&
          reader->Read1(&flag) &&
@@ -291,7 +293,7 @@ SampleDescription::~SampleDescription() {}
 FourCC SampleDescription::BoxType() const { return FOURCC_STSD; }
 
 bool SampleDescription::Parse(BoxReader* reader) {
-  uint32 count;
+  uint32_t count;
   RCHECK(reader->SkipBytes(4) &&
          reader->Read4(&count));
   video_entries.clear();
@@ -332,7 +334,7 @@ EditList::~EditList() {}
 FourCC EditList::BoxType() const { return FOURCC_ELST; }
 
 bool EditList::Parse(BoxReader* reader) {
-  uint32 count;
+  uint32_t count;
   RCHECK(reader->ReadFullBoxHeader() && reader->Read4(&count));
 
   if (reader->version() == 1) {
@@ -397,7 +399,7 @@ bool AVCDecoderConfigurationRecord::Parse(BoxReader* reader) {
   return ParseInternal(reader, reader->media_log());
 }
 
-bool AVCDecoderConfigurationRecord::Parse(const uint8* data, int data_size) {
+bool AVCDecoderConfigurationRecord::Parse(const uint8_t* data, int data_size) {
   BufferReader reader(data, data_size);
   return ParseInternal(&reader, new MediaLog());
 }
@@ -410,19 +412,19 @@ bool AVCDecoderConfigurationRecord::ParseInternal(
          reader->Read1(&profile_compatibility) &&
          reader->Read1(&avc_level));
 
-  uint8 length_size_minus_one;
+  uint8_t length_size_minus_one;
   RCHECK(reader->Read1(&length_size_minus_one));
   length_size = (length_size_minus_one & 0x3) + 1;
 
   RCHECK(length_size != 3); // Only values of 1, 2, and 4 are valid.
 
-  uint8 num_sps;
+  uint8_t num_sps;
   RCHECK(reader->Read1(&num_sps));
   num_sps &= 0x1f;
 
   sps_list.resize(num_sps);
   for (int i = 0; i < num_sps; i++) {
-    uint16 sps_length;
+    uint16_t sps_length;
     RCHECK(reader->Read2(&sps_length) &&
            reader->ReadVec(&sps_list[i], sps_length));
     RCHECK(sps_list[i].size() > 4);
@@ -435,12 +437,12 @@ bool AVCDecoderConfigurationRecord::ParseInternal(
     }
   }
 
-  uint8 num_pps;
+  uint8_t num_pps;
   RCHECK(reader->Read1(&num_pps));
 
   pps_list.resize(num_pps);
   for (int i = 0; i < num_pps; i++) {
-    uint16 pps_length;
+    uint16_t pps_length;
     RCHECK(reader->Read2(&pps_length) &&
            reader->ReadVec(&pps_list[i], pps_length));
   }
@@ -520,8 +522,8 @@ bool VideoSampleEntry::Parse(BoxReader* reader) {
     scoped_ptr<AVCDecoderConfigurationRecord> avcConfig(
         new AVCDecoderConfigurationRecord());
     RCHECK(reader->ReadChild(avcConfig.get()));
-    frame_bitstream_converter = make_scoped_refptr(
-        new AVCBitstreamConverter(avcConfig.Pass()));
+    frame_bitstream_converter =
+        make_scoped_refptr(new AVCBitstreamConverter(std::move(avcConfig)));
     video_codec = kCodecH264;
     video_codec_profile = H264PROFILE_MAIN;
 #if defined(ENABLE_HEVC_DEMUXING)
@@ -531,8 +533,8 @@ bool VideoSampleEntry::Parse(BoxReader* reader) {
     scoped_ptr<HEVCDecoderConfigurationRecord> hevcConfig(
         new HEVCDecoderConfigurationRecord());
     RCHECK(reader->ReadChild(hevcConfig.get()));
-    frame_bitstream_converter = make_scoped_refptr(
-        new HEVCBitstreamConverter(hevcConfig.Pass()));
+    frame_bitstream_converter =
+        make_scoped_refptr(new HEVCBitstreamConverter(std::move(hevcConfig)));
     video_codec = kCodecHEVC;
 #endif
   } else {
@@ -564,7 +566,7 @@ FourCC ElementaryStreamDescriptor::BoxType() const {
 }
 
 bool ElementaryStreamDescriptor::Parse(BoxReader* reader) {
-  std::vector<uint8> data;
+  std::vector<uint8_t> data;
   ESDescriptor es_desc;
 
   RCHECK(reader->ReadFullBoxHeader());
@@ -831,7 +833,7 @@ FourCC TrackFragmentRun::BoxType() const { return FOURCC_TRUN; }
 bool TrackFragmentRun::Parse(BoxReader* reader) {
   RCHECK(reader->ReadFullBoxHeader() &&
          reader->Read4(&sample_count));
-  const uint32 flags = reader->flags();
+  const uint32_t flags = reader->flags();
 
   bool data_offset_present = (flags & 0x1) != 0;
   bool first_sample_flags_present = (flags & 0x4) != 0;
@@ -846,7 +848,7 @@ bool TrackFragmentRun::Parse(BoxReader* reader) {
     data_offset = 0;
   }
 
-  uint32 first_sample_flags = 0;
+  uint32_t first_sample_flags = 0;
   if (first_sample_flags_present)
     RCHECK(reader->Read4(&first_sample_flags));
 
@@ -863,7 +865,7 @@ bool TrackFragmentRun::Parse(BoxReader* reader) {
   if (sample_composition_time_offsets_present)
     sample_composition_time_offsets.resize(sample_count);
 
-  for (uint32 i = 0; i < sample_count; ++i) {
+  for (uint32_t i = 0; i < sample_count; ++i) {
     if (sample_duration_present)
       RCHECK(reader->Read4(&sample_durations[i]));
     if (sample_size_present)
@@ -901,10 +903,10 @@ bool SampleToGroup::Parse(BoxReader* reader) {
     return true;
   }
 
-  uint32 count;
+  uint32_t count;
   RCHECK(reader->Read4(&count));
   entries.resize(count);
-  for (uint32 i = 0; i < count; ++i) {
+  for (uint32_t i = 0; i < count; ++i) {
     RCHECK(reader->Read4(&entries[i].sample_count) &&
            reader->Read4(&entries[i].group_description_index));
   }
@@ -929,29 +931,29 @@ bool SampleGroupDescription::Parse(BoxReader* reader) {
     return true;
   }
 
-  const uint8 version = reader->version();
+  const uint8_t version = reader->version();
 
   const size_t kKeyIdSize = 16;
-  const size_t kEntrySize = sizeof(uint32) + kKeyIdSize;
-  uint32 default_length = 0;
+  const size_t kEntrySize = sizeof(uint32_t) + kKeyIdSize;
+  uint32_t default_length = 0;
   if (version == 1) {
       RCHECK(reader->Read4(&default_length));
       RCHECK(default_length == 0 || default_length >= kEntrySize);
   }
 
-  uint32 count;
+  uint32_t count;
   RCHECK(reader->Read4(&count));
   entries.resize(count);
-  for (uint32 i = 0; i < count; ++i) {
+  for (uint32_t i = 0; i < count; ++i) {
     if (version == 1) {
       if (default_length == 0) {
-        uint32 description_length = 0;
+        uint32_t description_length = 0;
         RCHECK(reader->Read4(&description_length));
         RCHECK(description_length >= kEntrySize);
       }
     }
 
-    uint8 flag;
+    uint8_t flag;
     RCHECK(reader->SkipBytes(2) &&  // reserved.
            reader->Read1(&flag) &&
            reader->Read1(&entries[i].iv_size) &&
@@ -1024,7 +1026,7 @@ bool IndependentAndDisposableSamples::Parse(BoxReader* reader) {
   int sample_count = reader->size() - reader->pos();
   sample_depends_on_.resize(sample_count);
   for (int i = 0; i < sample_count; ++i) {
-    uint8 sample_info;
+    uint8_t sample_info;
     RCHECK(reader->Read1(&sample_info));
 
     sample_depends_on_[i] =

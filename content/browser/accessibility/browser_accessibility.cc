@@ -4,6 +4,8 @@
 
 #include "content/browser/accessibility/browser_accessibility.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -66,7 +68,7 @@ bool BrowserAccessibility::PlatformIsLeaf() const {
   }
 }
 
-uint32 BrowserAccessibility::PlatformChildCount() const {
+uint32_t BrowserAccessibility::PlatformChildCount() const {
   if (HasIntAttribute(ui::AX_ATTR_CHILD_TREE_ID)) {
     BrowserAccessibilityManager* child_manager =
         BrowserAccessibilityManager::FromID(
@@ -101,7 +103,7 @@ bool BrowserAccessibility::IsTextOnlyObject() const {
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
-    uint32 child_index) const {
+    uint32_t child_index) const {
   DCHECK(child_index < PlatformChildCount());
   BrowserAccessibility* result = nullptr;
 
@@ -119,11 +121,11 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
 }
 
 bool BrowserAccessibility::PlatformIsChildOfLeaf() const {
-  BrowserAccessibility* ancestor = GetParent();
+  BrowserAccessibility* ancestor = InternalGetParent();
   while (ancestor) {
     if (ancestor->PlatformIsLeaf())
       return true;
-    ancestor = ancestor->GetParent();
+    ancestor = ancestor->InternalGetParent();
   }
 
   return false;
@@ -171,14 +173,14 @@ BrowserAccessibility* BrowserAccessibility::PlatformDeepestLastChild() const {
   return deepest_child;
 }
 
-uint32 BrowserAccessibility::InternalChildCount() const {
+uint32_t BrowserAccessibility::InternalChildCount() const {
   if (!node_ || !manager_)
     return 0;
-  return static_cast<uint32>(node_->child_count());
+  return static_cast<uint32_t>(node_->child_count());
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetChild(
-    uint32 child_index) const {
+    uint32_t child_index) const {
   if (!node_ || !manager_ || child_index >= InternalChildCount())
     return nullptr;
 
@@ -197,11 +199,21 @@ BrowserAccessibility* BrowserAccessibility::GetParent() const {
   return manager_->GetParentNodeFromParentTree();
 }
 
-int32 BrowserAccessibility::GetIndexInParent() const {
+BrowserAccessibility* BrowserAccessibility::InternalGetParent() const {
+  if (!node_ || !manager_)
+    return nullptr;
+  ui::AXNode* parent = node_->parent();
+  if (parent)
+    return manager_->GetFromAXNode(parent);
+
+  return nullptr;
+}
+
+int32_t BrowserAccessibility::GetIndexInParent() const {
   return node_ ? node_->index_in_parent() : -1;
 }
 
-int32 BrowserAccessibility::GetId() const {
+int32_t BrowserAccessibility::GetId() const {
   return node_ ? node_->id() : -1;
 }
 
@@ -217,11 +229,11 @@ gfx::Rect BrowserAccessibility::GetLocation() const {
   return GetData().location;
 }
 
-int32 BrowserAccessibility::GetRole() const {
+int32_t BrowserAccessibility::GetRole() const {
   return GetData().role;
 }
 
-int32 BrowserAccessibility::GetState() const {
+int32_t BrowserAccessibility::GetState() const {
   return GetData().state;
 }
 
@@ -256,7 +268,7 @@ gfx::Rect BrowserAccessibility::GetLocalBoundsForRange(int start, int len)
     gfx::Rect bounds;
     for (size_t i = 0; i < InternalChildCount(); ++i) {
       BrowserAccessibility* child = InternalGetChild(i);
-      int child_len = child->GetStaticTextLenRecursive();
+      int child_len = child->GetInnerTextLength();
       if (start < child_len && start + len > 0) {
         gfx::Rect child_rect = child->GetLocalBoundsForRange(start, len);
         bounds.Union(child_rect);
@@ -297,8 +309,8 @@ gfx::Rect BrowserAccessibility::GetLocalBoundsForRange(int start, int len)
     gfx::Rect child_rect = child->GetLocation();
     int text_direction = child->GetIntAttribute(
         ui::AX_ATTR_TEXT_DIRECTION);
-    const std::vector<int32>& character_offsets = child->GetIntListAttribute(
-        ui::AX_ATTR_CHARACTER_OFFSETS);
+    const std::vector<int32_t>& character_offsets =
+        child->GetIntListAttribute(ui::AX_ATTR_CHARACTER_OFFSETS);
     int start_pixel_offset =
         local_start > 0 ? character_offsets[local_start - 1] : 0;
     int end_pixel_offset =
@@ -359,11 +371,18 @@ gfx::Rect BrowserAccessibility::GetGlobalBoundsForRange(int start, int len)
   return bounds;
 }
 
+base::string16 BrowserAccessibility::GetValue() const {
+  base::string16 value = GetString16Attribute(ui::AX_ATTR_VALUE);
+  if (value.empty() && IsSimpleTextControl())
+    value = GetInnerText();
+  return value;
+}
+
 int BrowserAccessibility::GetWordStartBoundary(
     int start, ui::TextBoundaryDirection direction) const {
   DCHECK_GE(start, -1);
   // Special offset that indicates that a word boundary has not been found.
-  int word_start_not_found = GetStaticTextLenRecursive();
+  int word_start_not_found = GetInnerTextLength();
   int word_start = word_start_not_found;
 
   switch (GetRole()) {
@@ -383,15 +402,15 @@ int BrowserAccessibility::GetWordStartBoundary(
         int child_len = static_cast<int>(child_text.size());
         child_end += child_len; // End is one past the last character.
 
-        const std::vector<int32>& word_starts = child->GetIntListAttribute(
-            ui::AX_ATTR_WORD_STARTS);
+        const std::vector<int32_t>& word_starts =
+            child->GetIntListAttribute(ui::AX_ATTR_WORD_STARTS);
         if (word_starts.empty()) {
           word_start = child_end;
           continue;
         }
 
         int local_start = start - child_start;
-        std::vector<int32>::const_iterator iter = std::upper_bound(
+        std::vector<int32_t>::const_iterator iter = std::upper_bound(
             word_starts.begin(), word_starts.end(), local_start);
         if (iter != word_starts.end()) {
           if (direction == ui::FORWARDS_DIRECTION) {
@@ -436,7 +455,7 @@ int BrowserAccessibility::GetWordStartBoundary(
       int child_start = 0;
       for (size_t i = 0; i < InternalChildCount(); ++i) {
         BrowserAccessibility* child = InternalGetChild(i);
-        int child_len = child->GetStaticTextLenRecursive();
+        int child_len = child->GetInnerTextLength();
         int child_word_start = child->GetWordStartBoundary(start, direction);
         if (child_word_start < child_len) {
           // We have found a possible word boundary.
@@ -594,14 +613,14 @@ bool BrowserAccessibility::HasIntListAttribute(
   return GetData().HasIntListAttribute(attribute);
 }
 
-const std::vector<int32>& BrowserAccessibility::GetIntListAttribute(
+const std::vector<int32_t>& BrowserAccessibility::GetIntListAttribute(
     ui::AXIntListAttribute attribute) const {
   return GetData().GetIntListAttribute(attribute);
 }
 
 bool BrowserAccessibility::GetIntListAttribute(
     ui::AXIntListAttribute attribute,
-    std::vector<int32>* value) const {
+    std::vector<int32_t>* value) const {
   return GetData().GetIntListAttribute(attribute, value);
 }
 
@@ -658,7 +677,7 @@ bool BrowserAccessibility::HasCaret() const {
   }
 
   // The caret is always at the focus of the selection.
-  int32 focus_id = manager()->GetTreeData().sel_focus_object_id;
+  int32_t focus_id = manager()->GetTreeData().sel_focus_object_id;
   BrowserAccessibility* focus_object = manager()->GetFromID(focus_id);
   if (!focus_object)
     return false;
@@ -763,16 +782,18 @@ std::string BrowserAccessibility::ComputeAccessibleNameFromDescendants() {
   return name;
 }
 
-int BrowserAccessibility::GetStaticTextLenRecursive() const {
-  if (GetRole() == ui::AX_ROLE_STATIC_TEXT ||
-      GetRole() == ui::AX_ROLE_LINE_BREAK) {
-    return static_cast<int>(GetStringAttribute(ui::AX_ATTR_NAME).size());
-  }
+base::string16 BrowserAccessibility::GetInnerText() const {
+  if (IsTextOnlyObject())
+    return GetString16Attribute(ui::AX_ATTR_NAME);
 
-  int len = 0;
+  base::string16 text;
   for (size_t i = 0; i < InternalChildCount(); ++i)
-    len += InternalGetChild(i)->GetStaticTextLenRecursive();
-  return len;
+    text += InternalGetChild(i)->GetInnerText();
+  return text;
+}
+
+int BrowserAccessibility::GetInnerTextLength() const {
+  return static_cast<int>(GetInnerText().size());
 }
 
 void BrowserAccessibility::FixEmptyBounds(gfx::Rect* bounds) const

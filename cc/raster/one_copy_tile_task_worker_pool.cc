@@ -4,9 +4,13 @@
 
 #include "cc/raster/one_copy_tile_task_worker_pool.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -159,7 +163,7 @@ void OneCopyTileTaskWorkerPool::StagingBuffer::OnMemoryDump(
                          in_free_list ? buffer_size_in_bytes : 0);
 
   // Emit an ownership edge towards a global allocator dump node.
-  const uint64 tracing_process_id =
+  const uint64_t tracing_process_id =
       base::trace_event::MemoryDumpManager::GetInstance()
           ->GetTracingProcessId();
   base::trace_event::MemoryAllocatorDumpGuid shared_buffer_guid =
@@ -593,7 +597,7 @@ OneCopyTileTaskWorkerPool::AcquireStagingBuffer(const Resource* resource,
           return buffer->content_id == previous_content_id;
         });
     if (it != free_buffers_.end()) {
-      staging_buffer = it->Pass();
+      staging_buffer = std::move(*it);
       free_buffers_.erase(it);
       MarkStagingBufferAsBusy(staging_buffer.get());
     }
@@ -608,7 +612,7 @@ OneCopyTileTaskWorkerPool::AcquireStagingBuffer(const Resource* resource,
                               buffer->format == resource->format();
                      });
     if (it != free_buffers_.end()) {
-      staging_buffer = it->Pass();
+      staging_buffer = std::move(*it);
       free_buffers_.erase(it);
       MarkStagingBufferAsBusy(staging_buffer.get());
     }

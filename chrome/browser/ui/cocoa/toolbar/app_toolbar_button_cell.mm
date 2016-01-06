@@ -4,6 +4,7 @@
 
 #import "chrome/browser/ui/cocoa/toolbar/app_toolbar_button_cell.h"
 
+#include "base/macros.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "ui/gfx/canvas_skia_paint.h"
 #include "ui/gfx/geometry/rect.h"
@@ -49,7 +50,7 @@ class AppMenuIconPainterDelegateMac : public AppMenuIconPainter::Delegate {
   canvas.set_composite_alpha(true);
   canvas.SaveLayerAlpha(255 *
                         [self imageAlphaForWindowState:[controlView window]]);
-  ui::ThemeProvider* themeProvider = [[controlView window] themeProvider];
+  const ui::ThemeProvider* themeProvider = [[controlView window] themeProvider];
   if (themeProvider) {
     iconPainter_->Paint(&canvas, [[controlView window] themeProvider],
                         gfx::Rect(NSRectToCGRect(cellFrame)),

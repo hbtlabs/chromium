@@ -4,11 +4,15 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/testing_pref_service.h"
@@ -82,17 +86,17 @@ class DataReductionProxyBypassStatsTest : public testing::Test {
 
     // Create a test job that will fill in the given response headers for the
     // |fake_request|.
-    scoped_refptr<net::URLRequestTestJob> test_job(new net::URLRequestTestJob(
+    scoped_ptr<net::URLRequestTestJob> test_job(new net::URLRequestTestJob(
         fake_request.get(), context_.network_delegate(), response_headers,
         std::string(), true));
 
     // Configure the interceptor to use the test job to handle the next request.
-    test_job_interceptor_->set_main_intercept_job(test_job.get());
+    test_job_interceptor_->set_main_intercept_job(std::move(test_job));
     fake_request->Start();
     test_context_->RunUntilIdle();
 
     EXPECT_TRUE(fake_request->response_headers() != NULL);
-    return fake_request.Pass();
+    return fake_request;
   }
 
   bool IsUnreachable() const {
@@ -326,7 +330,7 @@ TEST_F(DataReductionProxyBypassStatsTest, RecordMissingViaHeaderBytes) {
       "DataReductionProxy.MissingViaHeader.Bytes.4xx";
   const std::string kOtherHistogramName =
       "DataReductionProxy.MissingViaHeader.Bytes.Other";
-  const int64 kResponseContentLength = 100;
+  const int64_t kResponseContentLength = 100;
 
   struct TestCase {
     bool was_proxy_used;

@@ -6,6 +6,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
@@ -28,17 +29,17 @@ void EnableSSLServerSockets() {
 scoped_ptr<SSLServerSocket> CreateSSLServerSocket(
     scoped_ptr<StreamSocket> socket,
     X509Certificate* certificate,
-    crypto::RSAPrivateKey* key,
+    const crypto::RSAPrivateKey& key,
     const SSLServerConfig& ssl_config) {
   crypto::EnsureOpenSSLInit();
-  return scoped_ptr<SSLServerSocket>(
-      new SSLServerSocketOpenSSL(socket.Pass(), certificate, key, ssl_config));
+  return scoped_ptr<SSLServerSocket>(new SSLServerSocketOpenSSL(
+      std::move(socket), certificate, key, ssl_config));
 }
 
 SSLServerSocketOpenSSL::SSLServerSocketOpenSSL(
     scoped_ptr<StreamSocket> transport_socket,
     scoped_refptr<X509Certificate> certificate,
-    crypto::RSAPrivateKey* key,
+    const crypto::RSAPrivateKey& key,
     const SSLServerConfig& ssl_config)
     : transport_send_busy_(false),
       transport_recv_busy_(false),
@@ -48,14 +49,14 @@ SSLServerSocketOpenSSL::SSLServerSocketOpenSSL(
       transport_write_error_(OK),
       ssl_(NULL),
       transport_bio_(NULL),
-      transport_socket_(transport_socket.Pass()),
+      transport_socket_(std::move(transport_socket)),
       ssl_config_(ssl_config),
       cert_(certificate),
       next_handshake_state_(STATE_NONE),
       completed_handshake_(false) {
   // TODO(byungchul): Need a better way to clone a key.
-  std::vector<uint8> key_bytes;
-  CHECK(key->ExportPrivateKey(&key_bytes));
+  std::vector<uint8_t> key_bytes;
+  CHECK(key.ExportPrivateKey(&key_bytes));
   key_.reset(crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(key_bytes));
   CHECK(key_.get());
 }
@@ -174,11 +175,11 @@ int SSLServerSocketOpenSSL::Write(IOBuffer* buf, int buf_len,
   return rv;
 }
 
-int SSLServerSocketOpenSSL::SetReceiveBufferSize(int32 size) {
+int SSLServerSocketOpenSSL::SetReceiveBufferSize(int32_t size) {
   return transport_socket_->SetReceiveBufferSize(size);
 }
 
-int SSLServerSocketOpenSSL::SetSendBufferSize(int32 size) {
+int SSLServerSocketOpenSSL::SetSendBufferSize(int32_t size) {
   return transport_socket_->SetSendBufferSize(size);
 }
 

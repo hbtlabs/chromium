@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/background/background_trigger.h"
 #include "chrome/browser/browser_shutdown.h"
@@ -52,7 +56,7 @@ scoped_ptr<TestingProfileManager> CreateTestingProfileManager() {
   scoped_ptr<TestingProfileManager> profile_manager(
       new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
   EXPECT_TRUE(profile_manager->SetUp());
-  return profile_manager.Pass();
+  return profile_manager;
 }
 
 class FakeBackgroundTrigger : public BackgroundTrigger {
@@ -308,20 +312,6 @@ class BackgroundModeManagerWithExtensionsTest : public testing::Test {
       return model->IsEnabledAt(index);
 
     return false;
-  }
-
-  void AddEphemeralApp(const extensions::Extension* extension,
-                       ExtensionService* service) {
-    extensions::ExtensionPrefs* prefs =
-        extensions::ExtensionPrefs::Get(service->profile());
-    ASSERT_TRUE(prefs);
-    prefs->OnExtensionInstalled(extension,
-                                extensions::Extension::ENABLED,
-                                syncer::StringOrdinal(),
-                                extensions::kInstallFlagIsEphemeral,
-                                std::string());
-
-    service->AddExtension(extension);
   }
 
   scoped_ptr<TestBackgroundModeManager> manager_;

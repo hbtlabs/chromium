@@ -4,7 +4,11 @@
 
 #include "content/browser/android/in_process/synchronous_compositor_factory_impl.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
@@ -74,7 +78,7 @@ ContextHolder CreateContextHolder(
   holder.command_buffer =
       scoped_ptr<WebGraphicsContext3DInProcessCommandBufferImpl>(
           WebGraphicsContext3DInProcessCommandBufferImpl::WrapContext(
-              context.Pass(), attributes));
+              std::move(context), attributes));
   holder.gl_in_process_context = context_ptr;
 
   return holder;
@@ -94,11 +98,11 @@ class SynchronousCompositorFactoryImpl::VideoContextProvider
   }
 
   scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture(
-      uint32 stream_id) override {
+      uint32_t stream_id) override {
     return gl_in_process_context_->GetSurfaceTexture(stream_id);
   }
 
-  uint32 CreateStreamTexture(uint32 texture_id) override {
+  uint32_t CreateStreamTexture(uint32_t texture_id) override {
     return gl_in_process_context_->CreateStreamTexture(texture_id);
   }
 
@@ -237,7 +241,7 @@ SynchronousCompositorFactoryImpl::TryCreateStreamTextureFactory() {
         CreateContextHolder(attributes, android_view_service_,
                             gpu::GLInProcessContextSharedMemoryLimits(), false);
     video_context_provider_ = new VideoContextProvider(
-        ContextProviderInProcess::Create(holder.command_buffer.Pass(),
+        ContextProviderInProcess::Create(std::move(holder.command_buffer),
                                          "Video-Offscreen-main-thread"),
         holder.gl_in_process_context);
   }

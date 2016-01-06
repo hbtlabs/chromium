@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -13,6 +15,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -69,6 +72,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "components/login/localized_values_builder.h"
 #include "components/proximity_auth/screenlock_bridge.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -287,7 +291,7 @@ SigninScreenHandler::~SigninScreenHandler() {
     max_mode_delegate_.reset(nullptr);
   }
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
-  proximity_auth::ScreenlockBridge::Get()->SetFocusedUser("");
+  proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(EmptyAccountId());
 }
 
 // static
@@ -1030,7 +1034,7 @@ void SigninScreenHandler::HandleShutdownSystem() {
 
 void SigninScreenHandler::HandleLoadWallpaper(const AccountId& account_id) {
   if (delegate_)
-    delegate_->LoadWallpaper(account_id.GetUserEmail());
+    delegate_->LoadWallpaper(account_id);
 }
 
 void SigninScreenHandler::HandleRebootSystem() {
@@ -1222,16 +1226,15 @@ void SigninScreenHandler::HandleShowLoadingTimeoutError() {
 
 void SigninScreenHandler::HandleFocusPod(const AccountId& account_id) {
   SetUserInputMethod(account_id.GetUserEmail(), ime_state_.get());
-  WallpaperManager::Get()->SetUserWallpaperDelayed(account_id.GetUserEmail());
-  proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(
-      account_id.GetUserEmail());
+  WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
+  proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(account_id);
   if (delegate_)
     delegate_->CheckUserStatus(account_id);
   if (!test_focus_pod_callback_.is_null())
     test_focus_pod_callback_.Run();
 
   bool use_24hour_clock = false;
-  if (user_manager::UserManager::Get()->GetKnownUserBooleanPref(
+  if (user_manager::known_user::GetBooleanPref(
           account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
     g_browser_process->platform_part()
         ->GetSystemClock()
@@ -1283,7 +1286,7 @@ void SigninScreenHandler::HandleFirstIncorrectPasswordAttempt(
     const AccountId& account_id) {
   // TODO(ginkage): Fix this case once crbug.com/469987 is ready.
   /*
-    if (user_manager::UserManager::Get()->FindUsingSAML(email))
+    if (user_manager::known_user::IsUsingSAML(email))
       RecordReauthReason(email, ReauthReason::INCORRECT_SAML_PASSWORD_ENTERED);
   */
 }

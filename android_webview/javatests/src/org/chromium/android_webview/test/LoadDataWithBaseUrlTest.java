@@ -11,7 +11,6 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.test.util.HistoryUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.WebContents;
@@ -185,8 +184,6 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
-    // Run in single-process mode only. Blocked by multiple RVHs crbug.com/533516.
-    @ParameterizedTest.Set
     public void testHistoryUrl() throws Throwable {
 
         final String pageHtml = "<html><body>Hello, world!</body></html>";
@@ -205,8 +202,6 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
-    // Run in single-process mode only. Blocked by multiple RVHs crbug.com/533516.
-    @ParameterizedTest.Set
     public void testOnPageFinishedUrlIsBaseUrl() throws Throwable {
         final String pageHtml = "<html><body>Hello, world!</body></html>";
         final String baseUrl = "http://example.com/";
@@ -229,8 +224,6 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView"})
-    // Run in single-process mode only. Blocked by multiple RVHs crbug.com/533516.
-    @ParameterizedTest.Set
     public void testHistoryUrlNavigation() throws Throwable {
         TestWebServer webServer = TestWebServer.start();
         try {
@@ -348,5 +341,25 @@ public class LoadDataWithBaseUrlTest extends AwTestBase {
         } finally {
             if (!tempImage.delete()) throw new AssertionError();
         }
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testLoadLargeData() throws Throwable {
+        // Chrome only allows URLs up to 2MB in IPC. Test something larger than this.
+        // Note that the real URI may be significantly large if it gets encoded into
+        // base64.
+        final int kDataLength = 5 * 1024 * 1024;
+        StringBuilder doc = new StringBuilder();
+        doc.append("<html><head></head><body><!-- ");
+        int i = doc.length();
+        doc.setLength(i + kDataLength);
+        while (i < doc.length()) doc.setCharAt(i++, 'A');
+        doc.append("--><script>window.gotToEndOfBody=true;</script></body></html>");
+
+        enableJavaScriptOnUiThread(mAwContents);
+        loadDataWithBaseUrlSync(doc.toString(), "text/html", false, null, null);
+        assertEquals("true", executeJavaScriptAndWaitForResult(mAwContents, mContentsClient,
+                        "window.gotToEndOfBody"));
     }
 }

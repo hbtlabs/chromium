@@ -4,6 +4,10 @@
 
 #include "components/html_viewer/ax_provider_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "components/html_viewer/blink_platform_impl.h"
@@ -72,7 +76,7 @@ class AxProviderImplTest : public testing::Test {
 };
 
 struct NodeCatcher {
-  void OnNodes(Array<AxNodePtr> nodes) { this->nodes = nodes.Pass(); }
+  void OnNodes(Array<AxNodePtr> nodes) { this->nodes = std::move(nodes); }
   Array<AxNodePtr> nodes;
 };
 
@@ -96,7 +100,7 @@ AxNodePtr CreateNode(int id,
     node->text = mojo::AxText::New();
     node->text->content = text;
   }
-  return node.Pass();
+  return node;
 }
 
 }  // namespace
@@ -121,7 +125,7 @@ TEST_F(AxProviderImplTest, Basic) {
   ax_provider_impl.GetTree(
       base::Bind(&NodeCatcher::OnNodes, base::Unretained(&catcher)));
 
-  std::map<uint32, AxNode*> lookup;
+  std::map<uint32_t, AxNode*> lookup;
   for (size_t i = 0; i < catcher.nodes.size(); ++i) {
     auto& node = catcher.nodes[i];
     lookup[node->id] = node.get();
@@ -164,7 +168,7 @@ TEST_F(AxProviderImplTest, Basic) {
                          "http://monkey.net/",
                          "")->Equals(*link));
 
-  auto is_descendant_of = [&lookup](uint32 id, uint32 ancestor) {
+  auto is_descendant_of = [&lookup](uint32_t id, uint32_t ancestor) {
     for (; (id = lookup[id]->parent_id) != 0;) {
       if (id == ancestor)
         return true;

@@ -5,9 +5,11 @@
 // A standalone tool for testing MCS connections and the MCS client on their
 // own.
 
+#include <stdint.h>
 #include <cstddef>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -25,6 +27,7 @@
 #include "base/threading/worker_pool.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "google_apis/gcm/base/fake_encryptor.h"
 #include "google_apis/gcm/base/mcs_message.h"
 #include "google_apis/gcm/base/mcs_util.h"
@@ -90,7 +93,7 @@ const char kChromeVersion[] = "Chrome MCS Probe";
 
 // The default server to communicate with.
 const char kMCSServerHost[] = "mtalk.google.com";
-const uint16 kMCSServerPort = 5228;
+const uint16_t kMCSServerPort = 5228;
 
 // Command line switches.
 const char kRMQFileName[] = "rmq_file";
@@ -122,7 +125,7 @@ void MessageReceivedCallback(const MCSMessage& message) {
   }
 }
 
-void MessageSentCallback(int64 user_serial_number,
+void MessageSentCallback(int64_t user_serial_number,
                          const std::string& app_id,
                          const std::string& message_id,
                          MCSClient::MessageSendStatus status) {
@@ -215,8 +218,8 @@ class MCSProbe {
 
   void Start();
 
-  uint64 android_id() const { return android_id_; }
-  uint64 secret() const { return secret_; }
+  uint64_t android_id() const { return android_id_; }
+  uint64_t secret() const { return secret_; }
 
  private:
   void CheckIn();
@@ -235,8 +238,8 @@ class MCSProbe {
   base::CommandLine command_line_;
 
   base::FilePath gcm_store_path_;
-  uint64 android_id_;
-  uint64 secret_;
+  uint64_t android_id_;
+  uint64_t secret_;
   std::string server_host_;
   int server_port_;
 
@@ -353,9 +356,8 @@ void MCSProbe::LoadCallback(scoped_ptr<GCMStore::LoadResult> load_result) {
   }
   mcs_client_->Initialize(
       base::Bind(&MCSProbe::ErrorCallback, base::Unretained(this)),
-      base::Bind(&MessageReceivedCallback),
-      base::Bind(&MessageSentCallback),
-      load_result.Pass());
+      base::Bind(&MessageReceivedCallback), base::Bind(&MessageSentCallback),
+      std::move(load_result));
 
   if (!android_id_ || !secret_) {
     DVLOG(1) << "Checkin to generate new MCS credentials.";
@@ -383,7 +385,7 @@ void MCSProbe::InitializeNetworkState() {
     logger_.reset(new net::WriteToFileNetLogObserver());
     logger_->set_capture_mode(
         net::NetLogCaptureMode::IncludeCookiesAndCredentials());
-    logger_->StartObserving(&net_log_, log_file.Pass(), nullptr, nullptr);
+    logger_->StartObserving(&net_log_, std::move(log_file), nullptr, nullptr);
   }
 
   host_resolver_ = net::HostResolver::CreateDefaultResolver(&net_log_);
@@ -399,10 +401,8 @@ void MCSProbe::InitializeNetworkState() {
           base::WorkerPool::GetTaskRunner(true)));
 
   transport_security_state_.reset(new net::TransportSecurityState());
-  http_auth_handler_factory_ =
-      net::HttpAuthHandlerRegistryFactory::Create(&http_auth_preferences_,
-                                                  host_resolver_.get())
-          .Pass();
+  http_auth_handler_factory_ = net::HttpAuthHandlerRegistryFactory::Create(
+      &http_auth_preferences_, host_resolver_.get());
   http_server_properties_.reset(new net::HttpServerPropertiesImpl());
   host_mapping_rules_.reset(new net::HostMappingRules());
   proxy_service_ = net::ProxyService::CreateDirectWithNetLog(&net_log_);

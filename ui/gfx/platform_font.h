@@ -9,6 +9,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "ui/gfx/gfx_export.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -57,7 +58,7 @@ class GFX_EXPORT PlatformFont : public base::RefCounted<PlatformFont> {
   virtual int GetStyle() const = 0;
 
   // Returns the specified font name in UTF-8.
-  virtual std::string GetFontName() const = 0;
+  virtual const std::string& GetFontName() const = 0;
 
   // Returns the actually used font name in UTF-8.
   virtual std::string GetActualFontNameForTesting() const = 0;

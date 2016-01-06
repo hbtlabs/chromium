@@ -9,8 +9,8 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -174,6 +174,10 @@ class CONTENT_EXPORT WebContentsAndroid
                         jfloat y,
                         jfloat width,
                         jfloat height);
+
+  void OnContextMenuClosed(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj);
+
   void set_synchronous_compositor_client(SynchronousCompositorClient* client) {
     synchronous_compositor_client_ = client;
   }

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -23,11 +24,7 @@
 namespace {
 
 bool HasIcon(const ContentSettingImageModel& model) {
-#if defined(OS_MACOSX)
-  return !model.icon().IsEmpty();
-#else
   return !model.GetIcon(gfx::kPlaceholderColor).IsEmpty();
-#endif
 }
 
 // Forward all NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED to the specified

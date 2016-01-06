@@ -4,6 +4,9 @@
 
 #include "content/browser/permissions/permission_service_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_manager.h"
@@ -65,7 +68,7 @@ PermissionServiceImpl::PendingRequest::~PendingRequest() {
       mojo::Array<PermissionStatus>::New(request_count);
   for (int i = 0; i < request_count; ++i)
     result[i] = PERMISSION_STATUS_DENIED;
-  callback.Run(result.Pass());
+  callback.Run(std::move(result));
 }
 
 PermissionServiceImpl::PendingSubscription::PendingSubscription(
@@ -87,7 +90,7 @@ PermissionServiceImpl::PermissionServiceImpl(
     PermissionServiceContext* context,
     mojo::InterfaceRequest<PermissionService> request)
     : context_(context),
-      binding_(this, request.Pass()),
+      binding_(this, std::move(request)),
       weak_factory_(this) {
   binding_.set_connection_error_handler(
       base::Bind(&PermissionServiceImpl::OnConnectionError,
@@ -174,7 +177,7 @@ void PermissionServiceImpl::RequestPermissions(
     mojo::Array<PermissionStatus> result(permissions.size());
     for (size_t i = 0; i < permissions.size(); ++i)
       result[i] = GetPermissionStatusFromName(permissions[i], GURL(origin));
-    callback.Run(result.Pass());
+    callback.Run(std::move(result));
     return;
   }
 

@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <setupapi.h>  // Must be included after windows.h
 #include <winspool.h>
+#include <stddef.h>
+
 #include <iomanip>
 
 #include "base/at_exit.h"
@@ -193,7 +195,7 @@ UINT CALLBACK CabinetCallback(PVOID data,
   if (notification == SPFILENOTIFY_FILEINCABINET) {
     FILE_IN_CABINET_INFO* info =
         reinterpret_cast<FILE_IN_CABINET_INFO*>(param1);
-    for (int i = 0; i < arraysize(kDependencyList); i++) {
+    for (size_t i = 0; i < arraysize(kDependencyList); i++) {
       base::FilePath base_name(info->NameInCabinet);
       base_name = base_name.BaseName();
       if (base::FilePath::CompareEqualIgnoreCase(base_name.value().c_str(),

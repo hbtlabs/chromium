@@ -5,6 +5,7 @@
 #include "net/spdy/spdy_proxy_client_socket.h"
 
 #include <algorithm>  // min
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -244,13 +245,13 @@ int SpdyProxyClientSocket::Write(IOBuffer* buf, int buf_len,
   return ERR_IO_PENDING;
 }
 
-int SpdyProxyClientSocket::SetReceiveBufferSize(int32 size) {
+int SpdyProxyClientSocket::SetReceiveBufferSize(int32_t size) {
   // Since this StreamSocket sits on top of a shared SpdySession, it
   // is not safe for callers to change this underlying socket.
   return ERR_NOT_IMPLEMENTED;
 }
 
-int SpdyProxyClientSocket::SetSendBufferSize(int32 size) {
+int SpdyProxyClientSocket::SetSendBufferSize(int32_t size) {
   // Since this StreamSocket sits on top of a shared SpdySession, it
   // is not safe for callers to change this underlying socket.
   return ERR_NOT_IMPLEMENTED;
@@ -373,7 +374,8 @@ int SpdyProxyClientSocket::DoSendRequest() {
                                    spdy_stream_->GetProtocolVersion(), true,
                                    headers.get());
 
-  return spdy_stream_->SendRequestHeaders(headers.Pass(), MORE_DATA_TO_SEND);
+  return spdy_stream_->SendRequestHeaders(std::move(headers),
+                                          MORE_DATA_TO_SEND);
 }
 
 int SpdyProxyClientSocket::DoSendRequestComplete(int result) {
@@ -468,7 +470,7 @@ void SpdyProxyClientSocket::OnDataReceived(scoped_ptr<SpdyBuffer> buffer) {
     net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED,
                                   buffer->GetRemainingSize(),
                                   buffer->GetRemainingData());
-    read_buffer_queue_.Enqueue(buffer.Pass());
+    read_buffer_queue_.Enqueue(std::move(buffer));
   } else {
     net_log_.AddByteTransferEvent(NetLog::TYPE_SOCKET_BYTES_RECEIVED, 0, NULL);
   }

@@ -4,6 +4,9 @@
 
 #include "content/child/npapi/plugin_host.h"
 
+#include <stddef.h>
+#include <string.h>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -199,7 +202,7 @@ void PluginHost::PatchNPNetscapeFuncs(NPNetscapeFuncs* overrides) {
 }
 
 bool PluginHost::SetPostData(const char* buf,
-                             uint32 length,
+                             uint32_t length,
                              std::vector<std::string>* names,
                              std::vector<std::string>* values,
                              std::vector<char>* body) {
@@ -259,7 +262,7 @@ bool PluginHost::SetPostData(const char* buf,
         case GETNAME:
           // Got a value.
           value = std::string(start, ptr - start);
-          base::TrimWhitespace(value, base::TRIM_ALL, &value);
+          base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
           // If the name field is empty, we'll skip this header
           // but we won't error out.
           if (!name.empty() && name != "content-length") {
@@ -271,7 +274,7 @@ bool PluginHost::SetPostData(const char* buf,
         case GETVALUE:
           // Got a header.
           name = base::ToLowerASCII(base::StringPiece(start, ptr - start));
-          base::TrimWhitespace(name, base::TRIM_ALL, &name);
+          base::TrimWhitespaceASCII(name, base::TRIM_ALL, &name);
           start = ptr + 1;
           break;
         case GETDATA: {

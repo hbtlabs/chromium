@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/cast/net/cast_transport_sender_impl.h"
+
 #include <gtest/gtest.h>
 #include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
 #include "media/cast/net/cast_transport_config.h"
-#include "media/cast/net/cast_transport_sender_impl.h"
-#include "media/cast/net/rtcp/rtcp.h"
+#include "media/cast/net/rtcp/rtcp_defines.h"
 #include "media/cast/test/fake_single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -20,9 +23,9 @@ namespace media {
 namespace cast {
 
 namespace {
-const int64 kStartMillisecond = INT64_C(12345678900000);
-const uint32 kVideoSsrc = 1;
-const uint32 kAudioSsrc = 2;
+const int64_t kStartMillisecond = INT64_C(12345678900000);
+const uint32_t kVideoSsrc = 1;
+const uint32_t kAudioSsrc = 2;
 }  // namespace
 
 class FakePacketSender : public PacketSender {
@@ -41,7 +44,7 @@ class FakePacketSender : public PacketSender {
     return true;
   }
 
-  int64 GetBytesSent() final { return bytes_sent_; }
+  int64_t GetBytesSent() final { return bytes_sent_; }
 
   void SetPaused(bool paused) {
     paused_ = paused;
@@ -58,7 +61,7 @@ class FakePacketSender : public PacketSender {
   base::Closure callback_;
   PacketRef stored_packet_;
   int packets_sent_;
-  int64 bytes_sent_;
+  int64_t bytes_sent_;
 
   DISALLOW_COPY_AND_ASSIGN(FakePacketSender);
 };
@@ -97,18 +100,11 @@ class CastTransportSenderImplTest : public ::testing::Test {
     options->SetBoolean("media_streaming_mode", true);
     options->SetInteger("pacer_target_burst_size", 20);
     options->SetInteger("pacer_max_burst_size", 100);
-    transport_sender_.reset(
-        new CastTransportSenderImpl(NULL,
-                                    &testing_clock_,
-                                    net::IPEndPoint(),
-                                    net::IPEndPoint(),
-                                    options.Pass(),
-                                    base::Bind(&UpdateCastTransportStatus),
-                                    BulkRawEventsCallback(),
-                                    base::TimeDelta(),
-                                    task_runner_,
-                                    PacketReceiverCallback(),
-                                    &transport_));
+    transport_sender_.reset(new CastTransportSenderImpl(
+        NULL, &testing_clock_, net::IPEndPoint(), net::IPEndPoint(),
+        std::move(options), base::Bind(&UpdateCastTransportStatus),
+        BulkRawEventsCallback(), base::TimeDelta(), task_runner_,
+        PacketReceiverCallback(), &transport_));
     task_runner_->RunTasks();
   }
 
@@ -185,7 +181,7 @@ TEST_F(CastTransportSenderImplTest, NacksCancelRetransmits) {
   // A fake frame that will be decomposed into 4 packets.
   EncodedFrame fake_frame;
   fake_frame.frame_id = 1;
-  fake_frame.rtp_timestamp = 1;
+  fake_frame.rtp_timestamp = RtpTimeTicks().Expand(UINT32_C(1));
   fake_frame.dependency = EncodedFrame::KEY;
   fake_frame.data.resize(5000, ' ');
 
@@ -234,7 +230,7 @@ TEST_F(CastTransportSenderImplTest, CancelRetransmits) {
   // A fake frame that will be decomposed into 4 packets.
   EncodedFrame fake_frame;
   fake_frame.frame_id = 1;
-  fake_frame.rtp_timestamp = 1;
+  fake_frame.rtp_timestamp = RtpTimeTicks().Expand(UINT32_C(1));
   fake_frame.dependency = EncodedFrame::KEY;
   fake_frame.data.resize(5000, ' ');
 
@@ -256,7 +252,7 @@ TEST_F(CastTransportSenderImplTest, CancelRetransmits) {
   task_runner_->Sleep(base::TimeDelta::FromMilliseconds(10));
   EXPECT_EQ(2, num_times_logging_callback_called_);
 
-  std::vector<uint32> cancel_sending_frames;
+  std::vector<uint32_t> cancel_sending_frames;
   cancel_sending_frames.push_back(1);
   transport_sender_->CancelSendingFrames(kVideoSsrc,
                                          cancel_sending_frames);
@@ -277,7 +273,7 @@ TEST_F(CastTransportSenderImplTest, Kickstart) {
   // A fake frame that will be decomposed into 4 packets.
   EncodedFrame fake_frame;
   fake_frame.frame_id = 1;
-  fake_frame.rtp_timestamp = 1;
+  fake_frame.rtp_timestamp = RtpTimeTicks().Expand(UINT32_C(1));
   fake_frame.dependency = EncodedFrame::KEY;
   fake_frame.data.resize(5000, ' ');
 

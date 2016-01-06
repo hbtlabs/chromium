@@ -1,3 +1,7 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 #ifndef KeywordValue_h
 #define KeywordValue_h
 
@@ -24,7 +28,7 @@ public:
     virtual const String& keywordValue() const;
 
     String cssString() const override;
-    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() override;
+    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() const override;
 
 protected:
     KeywordValue(const String& keyword) : m_keywordValue(keywordValueFromString(keyword)) {}

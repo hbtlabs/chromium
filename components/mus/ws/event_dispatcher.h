@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_MUS_WS_EVENT_DISPATCHER_H_
 #define COMPONENTS_MUS_WS_EVENT_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/surfaces/surface_id.h"
 #include "components/mus/public/interfaces/input_event_constants.mojom.h"
@@ -37,6 +40,11 @@ class EventDispatcher : public ServerWindowObserver {
   ServerWindow* mouse_cursor_source_window() const {
     return mouse_cursor_source_window_;
   }
+
+  // Possibly updates the cursor. If we aren't in an implicit capture, we take
+  // the last known location of the mouse pointer, and look for the
+  // ServerWindow* under it.
+  void UpdateCursorProviderByLastKnownLocation();
 
   // Adds an accelerator with the given id and event-matcher. If an accelerator
   // already exists with the same id or the same matcher, then the accelerator
@@ -102,6 +110,10 @@ class EventDispatcher : public ServerWindowObserver {
 
   bool mouse_button_down_;
   ServerWindow* mouse_cursor_source_window_;
+
+  // The on screen location of the mouse pointer. This can be outside the
+  // bounds of |mouse_cursor_source_window_|, which can capture the cursor.
+  gfx::Point mouse_pointer_last_location_;
 
   cc::SurfaceId surface_id_;
 

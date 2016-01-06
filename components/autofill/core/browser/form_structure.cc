@@ -4,10 +4,11 @@
 
 #include "components/autofill/core/browser/form_structure.h"
 
+#include <stdint.h>
+
 #include <map>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
@@ -34,7 +35,7 @@
 #include "components/rappor/rappor_service.h"
 #include "components/rappor/rappor_utils.h"
 #include "third_party/libxml/chromium/libxml_utils.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace autofill {
 namespace {
@@ -43,6 +44,7 @@ namespace {
 const char kAttributeAutofillUsed[] = "autofillused";
 const char kAttributeAutofillType[] = "autofilltype";
 const char kAttributeClientVersion[] = "clientversion";
+const char kAttributeSubmission[] = "submission";
 const char kAttributeDataPresent[] = "datapresent";
 const char kAttributeFieldID[] = "fieldid";
 const char kAttributeFieldType[] = "fieldtype";
@@ -90,7 +92,7 @@ std::string EncodeFieldTypes(const ServerFieldTypeSet& available_field_types) {
   const size_t kNumBytes = (MAX_VALID_FIELD_TYPE + 0x7) / 8;
 
   // Pack the types in |available_field_types| into |bit_field|.
-  std::vector<uint8> bit_field(kNumBytes, 0);
+  std::vector<uint8_t> bit_field(kNumBytes, 0);
   for (const auto& field_type : available_field_types) {
     // Set the appropriate bit in the field.  The bit we set is the one
     // |field_type| % 8 from the left of the byte.
@@ -453,6 +455,7 @@ bool FormStructure::EncodeUploadRequest(
     const ServerFieldTypeSet& available_field_types,
     bool form_was_autofilled,
     const std::string& login_form_signature,
+    bool observed_submission,
     std::string* encoded_xml) const {
   DCHECK(encoded_xml);
   DCHECK(ShouldBeCrowdsourced());
@@ -471,6 +474,9 @@ bool FormStructure::EncodeUploadRequest(
   xml_writer.StartWriting();
   xml_writer.StopIndenting();
   if (!xml_writer.StartElement(kXMLElementAutofillUpload))
+    return false;
+  if (!xml_writer.AddAttribute(kAttributeSubmission,
+                               observed_submission ? "true" : "false"))
     return false;
   if (!xml_writer.AddAttribute(kAttributeClientVersion, kClientVersion))
     return false;
@@ -827,7 +833,8 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
                                       const base::TimeTicks& interaction_time,
                                       const base::TimeTicks& submission_time,
                                       rappor::RapporService* rappor_service,
-                                      bool did_show_suggestions) const {
+                                      bool did_show_suggestions,
+                                      bool observed_submission) const {
   size_t num_detected_field_types = 0;
   size_t num_server_mismatches = 0;
   size_t num_heuristic_mismatches = 0;
@@ -889,101 +896,109 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
     // Log heuristic, server, and overall type quality metrics, independently of
     // whether the field was autofilled.
     if (heuristic_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                                  field_type);
+      AutofillMetrics::LogHeuristicTypePrediction(
+          AutofillMetrics::TYPE_UNKNOWN, field_type, observed_submission);
     } else if (field_types.count(heuristic_type)) {
-      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                                  field_type);
+      AutofillMetrics::LogHeuristicTypePrediction(
+          AutofillMetrics::TYPE_MATCH, field_type, observed_submission);
     } else {
       ++num_heuristic_mismatches;
       AutofillMetrics::LogHeuristicTypePrediction(
-          AutofillMetrics::TYPE_MISMATCH, field_type);
+          AutofillMetrics::TYPE_MISMATCH, field_type, observed_submission);
     }
 
     if (server_type == NO_SERVER_DATA) {
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                               field_type);
+                                               field_type, observed_submission);
     } else if (field_types.count(server_type)) {
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                               field_type);
+                                               field_type, observed_submission);
     } else {
       ++num_server_mismatches;
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MISMATCH,
-                                               field_type);
+                                               field_type, observed_submission);
     }
 
     if (predicted_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                                field_type);
+      AutofillMetrics::LogOverallTypePrediction(
+          AutofillMetrics::TYPE_UNKNOWN, field_type, observed_submission);
     } else if (field_types.count(predicted_type)) {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                                field_type);
+      AutofillMetrics::LogOverallTypePrediction(
+          AutofillMetrics::TYPE_MATCH, field_type, observed_submission);
     } else {
-      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MISMATCH,
-                                                field_type);
+      AutofillMetrics::LogOverallTypePrediction(
+          AutofillMetrics::TYPE_MISMATCH, field_type, observed_submission);
     }
   }
 
-  AutofillMetrics::LogNumberOfEditedAutofilledFieldsAtSubmission(
-      num_edited_autofilled_fields);
+  AutofillMetrics::LogNumberOfEditedAutofilledFields(
+      num_edited_autofilled_fields, observed_submission);
 
-  if (num_detected_field_types < kRequiredFieldsForPredictionRoutines) {
-    AutofillMetrics::LogAutofillFormSubmittedState(
-        AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA);
-  } else {
-    if (did_autofill_all_possible_fields) {
+  // We log "submission" and duration metrics if we are here after observing a
+  // submission event.
+  if (observed_submission) {
+    if (num_detected_field_types < kRequiredFieldsForPredictionRoutines) {
       AutofillMetrics::LogAutofillFormSubmittedState(
-          AutofillMetrics::FILLABLE_FORM_AUTOFILLED_ALL);
-    } else if (did_autofill_some_possible_fields) {
-      AutofillMetrics::LogAutofillFormSubmittedState(
-          AutofillMetrics::FILLABLE_FORM_AUTOFILLED_SOME);
-    } else if (!did_show_suggestions) {
-      AutofillMetrics::LogAutofillFormSubmittedState(
-          AutofillMetrics::
-              FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS);
+          AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA);
     } else {
-      AutofillMetrics::LogAutofillFormSubmittedState(
-          AutofillMetrics::FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS);
-    }
-
-    // Log some RAPPOR metrics for problematic cases.
-    if (num_server_mismatches >= kNumberOfMismatchesThreshold) {
-      rappor::SampleDomainAndRegistryFromGURL(
-          rappor_service, "Autofill.HighNumberOfServerMismatches", source_url_);
-    }
-    if (num_heuristic_mismatches >= kNumberOfMismatchesThreshold) {
-      rappor::SampleDomainAndRegistryFromGURL(
-          rappor_service, "Autofill.HighNumberOfHeuristicMismatches",
-          source_url_);
-    }
-
-    // Unlike the other times, the |submission_time| should always be available.
-    DCHECK(!submission_time.is_null());
-
-    // The |load_time| might be unset, in the case that the form was dynamically
-    // added to the DOM.
-    if (!load_time.is_null()) {
-      // Submission should always chronologically follow form load.
-      DCHECK(submission_time > load_time);
-      base::TimeDelta elapsed = submission_time - load_time;
-      if (did_autofill_some_possible_fields)
-        AutofillMetrics::LogFormFillDurationFromLoadWithAutofill(elapsed);
-      else
-        AutofillMetrics::LogFormFillDurationFromLoadWithoutAutofill(elapsed);
-    }
-
-    // The |interaction_time| might be unset, in the case that the user
-    // submitted a blank form.
-    if (!interaction_time.is_null()) {
-      // Submission should always chronologically follow interaction.
-      DCHECK(submission_time > interaction_time);
-      base::TimeDelta elapsed = submission_time - interaction_time;
-      if (did_autofill_some_possible_fields) {
-        AutofillMetrics::LogFormFillDurationFromInteractionWithAutofill(
-            elapsed);
+      if (did_autofill_all_possible_fields) {
+        AutofillMetrics::LogAutofillFormSubmittedState(
+            AutofillMetrics::FILLABLE_FORM_AUTOFILLED_ALL);
+      } else if (did_autofill_some_possible_fields) {
+        AutofillMetrics::LogAutofillFormSubmittedState(
+            AutofillMetrics::FILLABLE_FORM_AUTOFILLED_SOME);
+      } else if (!did_show_suggestions) {
+        AutofillMetrics::LogAutofillFormSubmittedState(
+            AutofillMetrics::
+                FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS);
       } else {
-        AutofillMetrics::LogFormFillDurationFromInteractionWithoutAutofill(
-            elapsed);
+        AutofillMetrics::LogAutofillFormSubmittedState(
+            AutofillMetrics::
+                FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS);
+      }
+
+      // Log some RAPPOR metrics for problematic cases.
+      if (num_server_mismatches >= kNumberOfMismatchesThreshold) {
+        rappor::SampleDomainAndRegistryFromGURL(
+            rappor_service, "Autofill.HighNumberOfServerMismatches",
+            source_url_);
+      }
+      if (num_heuristic_mismatches >= kNumberOfMismatchesThreshold) {
+        rappor::SampleDomainAndRegistryFromGURL(
+            rappor_service, "Autofill.HighNumberOfHeuristicMismatches",
+            source_url_);
+      }
+
+      // Unlike the other times, the |submission_time| should always be
+      // available.
+      DCHECK(!submission_time.is_null());
+
+      // The |load_time| might be unset, in the case that the form was
+      // dynamically
+      // added to the DOM.
+      if (!load_time.is_null()) {
+        // Submission should always chronologically follow form load.
+        DCHECK(submission_time > load_time);
+        base::TimeDelta elapsed = submission_time - load_time;
+        if (did_autofill_some_possible_fields)
+          AutofillMetrics::LogFormFillDurationFromLoadWithAutofill(elapsed);
+        else
+          AutofillMetrics::LogFormFillDurationFromLoadWithoutAutofill(elapsed);
+      }
+
+      // The |interaction_time| might be unset, in the case that the user
+      // submitted a blank form.
+      if (!interaction_time.is_null()) {
+        // Submission should always chronologically follow interaction.
+        DCHECK(submission_time > interaction_time);
+        base::TimeDelta elapsed = submission_time - interaction_time;
+        if (did_autofill_some_possible_fields) {
+          AutofillMetrics::LogFormFillDurationFromInteractionWithAutofill(
+              elapsed);
+        } else {
+          AutofillMetrics::LogFormFillDurationFromInteractionWithoutAutofill(
+              elapsed);
+        }
       }
     }
   }
@@ -1046,14 +1061,14 @@ std::string FormStructure::Hash64Bit(const std::string& str) {
   std::string hash_bin = base::SHA1HashString(str);
   DCHECK_EQ(base::kSHA1Length, hash_bin.length());
 
-  uint64 hash64 = (((static_cast<uint64>(hash_bin[0])) & 0xFF) << 56) |
-                  (((static_cast<uint64>(hash_bin[1])) & 0xFF) << 48) |
-                  (((static_cast<uint64>(hash_bin[2])) & 0xFF) << 40) |
-                  (((static_cast<uint64>(hash_bin[3])) & 0xFF) << 32) |
-                  (((static_cast<uint64>(hash_bin[4])) & 0xFF) << 24) |
-                  (((static_cast<uint64>(hash_bin[5])) & 0xFF) << 16) |
-                  (((static_cast<uint64>(hash_bin[6])) & 0xFF) << 8) |
-                   ((static_cast<uint64>(hash_bin[7])) & 0xFF);
+  uint64_t hash64 = (((static_cast<uint64_t>(hash_bin[0])) & 0xFF) << 56) |
+                    (((static_cast<uint64_t>(hash_bin[1])) & 0xFF) << 48) |
+                    (((static_cast<uint64_t>(hash_bin[2])) & 0xFF) << 40) |
+                    (((static_cast<uint64_t>(hash_bin[3])) & 0xFF) << 32) |
+                    (((static_cast<uint64_t>(hash_bin[4])) & 0xFF) << 24) |
+                    (((static_cast<uint64_t>(hash_bin[5])) & 0xFF) << 16) |
+                    (((static_cast<uint64_t>(hash_bin[6])) & 0xFF) << 8) |
+                    ((static_cast<uint64_t>(hash_bin[7])) & 0xFF);
 
   return base::Uint64ToString(hash64);
 }

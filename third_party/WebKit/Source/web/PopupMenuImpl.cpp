@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "web/PopupMenuImpl.h"
 
 #include "core/HTMLNames.h"
@@ -289,9 +288,11 @@ void PopupMenuImpl::writeDocument(SharedBuffer* data)
     context.finishGroupIfNecessary();
     PagePopupClient::addString("],\n", data);
 
-    float zoom = zoomFactor();
     addProperty("anchorRectInScreen", anchorRectInScreen, data);
-    addProperty("zoomFactor", zoom, data);
+    float zoom = zoomFactor();
+    IntRect inScreen = m_chromeClient->viewportToScreen(IntRect(0, 0, 100, 0));
+    float scaleFactor = 100.f / inScreen.width();
+    addProperty("zoomFactor", zoom / scaleFactor, data);
     bool isRTL = !ownerStyle->isLeftToRightDirection();
     addProperty("isRTL", isRTL, data);
     addProperty("paddingStart", isRTL ? ownerElement.clientPaddingRight().toDouble() / zoom : ownerElement.clientPaddingLeft().toDouble() / zoom, data);
@@ -406,14 +407,19 @@ void PopupMenuImpl::setValueAndClosePopup(int numValue, const String& stringValu
 {
     ASSERT(m_popup);
     ASSERT(m_ownerElement);
-    EventQueueScope scope;
     RefPtrWillBeRawPtr<PopupMenuImpl> protector(this);
     bool success;
     int listIndex = stringValue.toInt(&success);
     ASSERT(success);
-    m_ownerElement->valueChanged(listIndex);
-    if (m_popup)
-        m_chromeClient->closePagePopup(m_popup);
+    {
+        EventQueueScope scope;
+        m_ownerElement->valueChanged(listIndex);
+        if (m_popup)
+            m_chromeClient->closePagePopup(m_popup);
+        // 'change' event is dispatched here.  For compatbility with
+        // Angular 1.2, we need to dispatch a change event before
+        // mouseup/click events.
+    }
     // We dispatch events on the owner element to match the legacy behavior.
     // Other browsers dispatch click events before and after showing the popup.
     if (m_ownerElement) {

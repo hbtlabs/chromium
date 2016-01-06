@@ -4,8 +4,13 @@
 
 #include "content/browser/cache_storage/cache_storage_cache.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
@@ -51,13 +56,13 @@ scoped_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
 class DelayableBackend : public disk_cache::Backend {
  public:
   DelayableBackend(scoped_ptr<disk_cache::Backend> backend)
-      : backend_(backend.Pass()), delay_open_(false) {}
+      : backend_(std::move(backend)), delay_open_(false) {}
 
   // disk_cache::Backend overrides
   net::CacheType GetCacheType() const override {
     return backend_->GetCacheType();
   }
-  int32 GetEntryCount() const override { return backend_->GetEntryCount(); }
+  int32_t GetEntryCount() const override { return backend_->GetEntryCount(); }
   int OpenEntry(const std::string& key,
                 disk_cache::Entry** entry,
                 const CompletionCallback& callback) override {
@@ -139,7 +144,7 @@ void CopyBody(const storage::BlobDataHandle& blob_handle, std::string* output) {
       }
       case storage::DataElement::TYPE_DISK_CACHE_ENTRY: {
         disk_cache::Entry* entry = item->disk_cache_entry();
-        int32 body_size = entry->GetDataSize(item->disk_cache_stream_index());
+        int32_t body_size = entry->GetDataSize(item->disk_cache_stream_index());
 
         scoped_refptr<net::IOBuffer> io_buffer = new net::IOBuffer(body_size);
         net::TestCompletionCallback callback;
@@ -230,7 +235,8 @@ class TestCacheStorageCache : public CacheStorageCache {
   // created before calling this.
   DelayableBackend* UseDelayableBackend() {
     EXPECT_TRUE(backend_);
-    DelayableBackend* delayable_backend = new DelayableBackend(backend_.Pass());
+    DelayableBackend* delayable_backend =
+        new DelayableBackend(std::move(backend_));
     backend_.reset(delayable_backend);
     return delayable_backend;
   }
@@ -442,10 +448,10 @@ class CacheStorageCacheTest : public testing::Test {
       scoped_ptr<ServiceWorkerResponse> response,
       scoped_ptr<storage::BlobDataHandle> body_handle) {
     callback_error_ = error;
-    callback_response_ = response.Pass();
+    callback_response_ = std::move(response);
     callback_response_data_.reset();
     if (error == CACHE_STORAGE_OK && !callback_response_->blob_uuid.empty())
-      callback_response_data_ = body_handle.Pass();
+      callback_response_data_ = std::move(body_handle);
 
     if (run_loop)
       run_loop->Quit();
@@ -912,7 +918,7 @@ TEST_P(CacheStorageCacheTestP, QuotaManagerModified) {
   EXPECT_TRUE(Put(no_body_request_, no_body_response_));
   EXPECT_EQ(1, quota_manager_proxy_->notify_storage_modified_count());
   EXPECT_LT(0, quota_manager_proxy_->last_notified_delta());
-  int64 sum_delta = quota_manager_proxy_->last_notified_delta();
+  int64_t sum_delta = quota_manager_proxy_->last_notified_delta();
 
   EXPECT_TRUE(Put(body_request_, body_response_));
   EXPECT_EQ(2, quota_manager_proxy_->notify_storage_modified_count());
@@ -934,7 +940,7 @@ TEST_F(CacheStorageCacheMemoryOnlyTest, MemoryBackedSize) {
   EXPECT_EQ(0, cache_->MemoryBackedSize());
   EXPECT_TRUE(Put(no_body_request_, no_body_response_));
   EXPECT_LT(0, cache_->MemoryBackedSize());
-  int64 no_body_size = cache_->MemoryBackedSize();
+  int64_t no_body_size = cache_->MemoryBackedSize();
 
   EXPECT_TRUE(Delete(no_body_request_));
   EXPECT_EQ(0, cache_->MemoryBackedSize());

@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
@@ -64,13 +67,15 @@ void DebuggerApiTest::SetUpCommandLine(base::CommandLine* command_line) {
 
 void DebuggerApiTest::SetUpOnMainThread() {
   ExtensionApiTest::SetUpOnMainThread();
-  extension_ =
-      ExtensionBuilder().SetManifest(
-          DictionaryBuilder().Set("name", "debugger")
-                             .Set("version", "0.1")
-                             .Set("manifest_version", 2)
-                             .Set("permissions",
-                                  ListBuilder().Append("debugger"))).Build();
+  extension_ = ExtensionBuilder()
+                   .SetManifest(std::move(
+                       DictionaryBuilder()
+                           .Set("name", "debugger")
+                           .Set("version", "0.1")
+                           .Set("manifest_version", 2)
+                           .Set("permissions",
+                                std::move(ListBuilder().Append("debugger")))))
+                   .Build();
 }
 
 testing::AssertionResult DebuggerApiTest::RunAttachFunction(

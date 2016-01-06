@@ -4,6 +4,9 @@
 
 #include "components/policy/core/common/schema.h"
 
+#include <limits.h>
+#include <stddef.h>
+
 #include <algorithm>
 #include <climits>
 #include <map>
@@ -11,13 +14,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/json_schema/json_schema_constants.h"
 #include "components/json_schema/json_schema_validator.h"
 #include "components/policy/core/common/schema_internal.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace schema = json_schema_constants;
 

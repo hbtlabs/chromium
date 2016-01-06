@@ -8,6 +8,9 @@
 #include <cryptohi.h>
 #include <keyhi.h>
 #include <secder.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -444,9 +447,9 @@ void GenerateRSAKeyWithDB(scoped_ptr<GenerateRSAKeyState> state,
 
 // Does the actual signing on a worker thread. Used by SignRSAWithDB().
 void SignRSAOnWorkerThread(scoped_ptr<SignRSAState> state) {
-  const uint8* public_key_uint8 =
-      reinterpret_cast<const uint8*>(state->public_key_.data());
-  std::vector<uint8> public_key_vector(
+  const uint8_t* public_key_uint8 =
+      reinterpret_cast<const uint8_t*>(state->public_key_.data());
+  std::vector<uint8_t> public_key_vector(
       public_key_uint8, public_key_uint8 + state->public_key_.size());
 
   crypto::ScopedSECKEYPrivateKey rsa_key;
@@ -539,7 +542,7 @@ void SignRSAWithDB(scoped_ptr<SignRSAState> state,
 void DidSelectCertificatesOnIOThread(
     scoped_ptr<SelectCertificatesState> state) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  state->CallBack(FROM_HERE, state->certs_.Pass(),
+  state->CallBack(FROM_HERE, std::move(state->certs_),
                   std::string() /* no error */);
 }
 
@@ -581,7 +584,8 @@ void FilterCertificatesOnWorkerThread(scoped_ptr<GetCertificatesState> state) {
     client_certs->push_back(*it);
   }
 
-  state->CallBack(FROM_HERE, client_certs.Pass(), std::string() /* no error */);
+  state->CallBack(FROM_HERE, std::move(client_certs),
+                  std::string() /* no error */);
 }
 
 // Passes the obtained certificates to the worker thread for filtering. Used by
@@ -589,7 +593,7 @@ void FilterCertificatesOnWorkerThread(scoped_ptr<GetCertificatesState> state) {
 void DidGetCertificates(scoped_ptr<GetCertificatesState> state,
                         scoped_ptr<net::CertificateList> all_certs) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  state->certs_ = all_certs.Pass();
+  state->certs_ = std::move(all_certs);
   base::WorkerPool::PostTask(
       FROM_HERE,
       base::Bind(&FilterCertificatesOnWorkerThread, base::Passed(&state)),
@@ -689,7 +693,8 @@ void GetTokensWithDB(scoped_ptr<GetTokensState> state,
   if (cert_db->GetSystemSlot())
     token_ids->push_back(kTokenIdSystem);
 
-  state->CallBack(FROM_HERE, token_ids.Pass(), std::string() /* no error */);
+  state->CallBack(FROM_HERE, std::move(token_ids),
+                  std::string() /* no error */);
 }
 
 }  // namespace

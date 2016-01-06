@@ -8,7 +8,9 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "skia/ext/refptr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/font_render_params.h"
@@ -45,7 +47,7 @@ class GFX_EXPORT PlatformFontLinux : public PlatformFont {
   int GetCapHeight() const override;
   int GetExpectedTextWidth(int length) const override;
   int GetStyle() const override;
-  std::string GetFontName() const override;
+  const std::string& GetFontName() const override;
   std::string GetActualFontNameForTesting() const override;
   int GetFontSize() const override;
   const FontRenderParams& GetFontRenderParams() override;

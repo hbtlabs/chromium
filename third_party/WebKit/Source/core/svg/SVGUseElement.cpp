@@ -22,8 +22,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGUseElement.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -48,8 +46,8 @@ namespace blink {
 
 static SVGUseEventSender& svgUseLoadEventSender()
 {
-    DEFINE_STATIC_LOCAL(SVGUseEventSender, sharedLoadEventSender, (EventTypeNames::load));
-    return sharedLoadEventSender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SVGUseEventSender>, sharedLoadEventSender, (SVGUseEventSender::create(EventTypeNames::load)));
+    return *sharedLoadEventSender;
 }
 
 inline SVGUseElement::SVGUseElement(Document& document)
@@ -84,8 +82,8 @@ SVGUseElement::~SVGUseElement()
 #if !ENABLE(OILPAN)
     clearShadowTree();
     cancelShadowTreeRecreation();
-#endif
     svgUseLoadEventSender().cancelEvent(this);
+#endif
 }
 
 DEFINE_TRACE(SVGUseElement)
@@ -189,7 +187,7 @@ bool SVGUseElement::isPresentationAttributeWithSVGDOM(const QualifiedName& attrN
 
 void SVGUseElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_x)
         addPropertyToPresentationAttributeStyle(style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
     else if (property == m_y)

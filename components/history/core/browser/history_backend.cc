@@ -9,9 +9,9 @@
 #include <list>
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_enumerator.h"
@@ -24,6 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/favicon_base/select_favicon_frames.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
@@ -152,7 +153,9 @@ QueuedHistoryDBTask::QueuedHistoryDBTask(
     scoped_ptr<HistoryDBTask> task,
     scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled)
-    : task_(task.Pass()), origin_loop_(origin_loop), is_canceled_(is_canceled) {
+    : task_(std::move(task)),
+      origin_loop_(origin_loop),
+      is_canceled_(is_canceled) {
   DCHECK(task_);
   DCHECK(origin_loop_);
   DCHECK(!is_canceled_.is_null());
@@ -208,9 +211,8 @@ HistoryBackend::HistoryBackend(
       recent_redirects_(kMaxRedirectCount),
       backend_destroy_message_loop_(nullptr),
       segment_queried_(false),
-      backend_client_(backend_client.Pass()),
-      task_runner_(task_runner) {
-}
+      backend_client_(std::move(backend_client)),
+      task_runner_(task_runner) {}
 
 HistoryBackend::~HistoryBackend() {
   DCHECK(!scheduled_commit_) << "Deleting without cleanup";
@@ -411,7 +413,7 @@ void HistoryBackend::UpdateVisitDuration(VisitID visit_id, const Time end_ts) {
   }
 }
 
-TopHostsList HistoryBackend::TopHosts(int num_hosts) const {
+TopHostsList HistoryBackend::TopHosts(size_t num_hosts) const {
   if (!db_)
     return TopHostsList();
 
@@ -680,7 +682,7 @@ void HistoryBackend::InitImpl(
   {
     scoped_ptr<InMemoryHistoryBackend> mem_backend(new InMemoryHistoryBackend);
     if (mem_backend->Init(history_name))
-      delegate_->SetInMemoryBackend(mem_backend.Pass());
+      delegate_->SetInMemoryBackend(std::move(mem_backend));
   }
   db_->BeginExclusiveMode();  // Must be after the mem backend read the data.
 
@@ -1154,7 +1156,7 @@ void HistoryBackend::RemoveObserver(HistoryBackendObserver* observer) {
 
 // Downloads -------------------------------------------------------------------
 
-uint32 HistoryBackend::GetNextDownloadId() {
+uint32_t HistoryBackend::GetNextDownloadId() {
   return db_ ? db_->GetNextDownloadId() : kInvalidDownloadId;
 }
 
@@ -1180,14 +1182,14 @@ bool HistoryBackend::CreateDownload(const DownloadRow& history_info) {
   return success;
 }
 
-void HistoryBackend::RemoveDownloads(const std::set<uint32>& ids) {
+void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
   if (!db_)
     return;
   size_t downloads_count_before = db_->CountDownloads();
   base::TimeTicks started_removing = base::TimeTicks::Now();
   // HistoryBackend uses a long-running Transaction that is committed
   // periodically, so this loop doesn't actually hit the disk too hard.
-  for (std::set<uint32>::const_iterator it = ids.begin(); it != ids.end();
+  for (std::set<uint32_t>::const_iterator it = ids.begin(); it != ids.end();
        ++it) {
     db_->RemoveDownload(*it);
   }
@@ -2536,7 +2538,7 @@ void HistoryBackend::ProcessDBTask(
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled) {
   bool scheduled = !queued_history_db_tasks_.empty();
   queued_history_db_tasks_.push_back(
-      new QueuedHistoryDBTask(task.Pass(), origin_loop, is_canceled));
+      new QueuedHistoryDBTask(std::move(task), origin_loop, is_canceled));
   if (!scheduled)
     ProcessDBTaskImpl();
 }
@@ -2551,10 +2553,6 @@ void HistoryBackend::NotifyURLVisited(ui::PageTransition transition,
                                       const URLRow& row,
                                       const RedirectList& redirects,
                                       base::Time visit_time) {
-  if (typed_url_syncable_service_)
-    typed_url_syncable_service_->OnURLVisited(this, transition, row, redirects,
-                                              visit_time);
-
   FOR_EACH_OBSERVER(HistoryBackendObserver, observers_,
                     OnURLVisited(this, transition, row, redirects, visit_time));
 
@@ -2563,9 +2561,6 @@ void HistoryBackend::NotifyURLVisited(ui::PageTransition transition,
 }
 
 void HistoryBackend::NotifyURLsModified(const URLRows& rows) {
-  if (typed_url_syncable_service_)
-    typed_url_syncable_service_->OnURLsModified(this, rows);
-
   FOR_EACH_OBSERVER(HistoryBackendObserver, observers_,
                     OnURLsModified(this, rows));
 
@@ -2578,11 +2573,6 @@ void HistoryBackend::NotifyURLsDeleted(bool all_history,
                                        const URLRows& rows,
                                        const std::set<GURL>& favicon_urls) {
   URLRows copied_rows(rows);
-  if (typed_url_syncable_service_) {
-    typed_url_syncable_service_->OnURLsDeleted(this, all_history, expired,
-                                               copied_rows, favicon_urls);
-  }
-
   FOR_EACH_OBSERVER(
       HistoryBackendObserver, observers_,
       OnURLsDeleted(this, all_history, expired, copied_rows, favicon_urls));

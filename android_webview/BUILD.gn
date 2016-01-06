@@ -10,9 +10,11 @@ import("system_webview_apk_tmpl.gni")
 import("webview_repack_locales.gni")
 
 group("android_webview") {
-  deps = [
-    ":system_webview_apk",
-  ]
+  if (!use_webview_internal_framework) {
+    deps = [
+      ":system_webview_apk",
+    ]
+  }
 }
 
 jinja_template("system_webview_manifest") {
@@ -110,7 +112,7 @@ repack("repack_pack") {
 
 webview_license_path = "$target_gen_dir/webview_licenses.notice"
 
-android_assets("uncompressed_assets") {
+android_assets("pak_file_assets") {
   sources = [
     "$target_gen_dir/webviewchromium.pak",
   ]
@@ -126,7 +128,7 @@ android_assets("assets") {
   ]
   deps = [
     ":generate_webview_license_notice",
-    ":uncompressed_assets",
+    ":pak_file_assets",
     "//third_party/icu:icu_assets",
     "//v8:v8_external_startup_data_assets",
   ]
@@ -299,6 +301,50 @@ grit("generate_components_strings") {
     "components_strings_vi.pak",
     "components_strings_zh-CN.pak",
     "components_strings_zh-TW.pak",
+    "java/res/values-am/components_strings.xml",
+    "java/res/values-ar/components_strings.xml",
+    "java/res/values-bg/components_strings.xml",
+    "java/res/values-ca/components_strings.xml",
+    "java/res/values-cs/components_strings.xml",
+    "java/res/values-da/components_strings.xml",
+    "java/res/values-de/components_strings.xml",
+    "java/res/values-el/components_strings.xml",
+    "java/res/values-en-rGB/components_strings.xml",
+    "java/res/values-es-rUS/components_strings.xml",
+    "java/res/values-es/components_strings.xml",
+    "java/res/values-fa/components_strings.xml",
+    "java/res/values-fi/components_strings.xml",
+    "java/res/values-fr/components_strings.xml",
+    "java/res/values-hi/components_strings.xml",
+    "java/res/values-hr/components_strings.xml",
+    "java/res/values-hu/components_strings.xml",
+    "java/res/values-in/components_strings.xml",
+    "java/res/values-it/components_strings.xml",
+    "java/res/values-iw/components_strings.xml",
+    "java/res/values-ja/components_strings.xml",
+    "java/res/values-ko/components_strings.xml",
+    "java/res/values-lt/components_strings.xml",
+    "java/res/values-lv/components_strings.xml",
+    "java/res/values-nb/components_strings.xml",
+    "java/res/values-nl/components_strings.xml",
+    "java/res/values-pl/components_strings.xml",
+    "java/res/values-pt-rBR/components_strings.xml",
+    "java/res/values-pt-rPT/components_strings.xml",
+    "java/res/values-ro/components_strings.xml",
+    "java/res/values-ru/components_strings.xml",
+    "java/res/values-sk/components_strings.xml",
+    "java/res/values-sl/components_strings.xml",
+    "java/res/values-sr/components_strings.xml",
+    "java/res/values-sv/components_strings.xml",
+    "java/res/values-sw/components_strings.xml",
+    "java/res/values-th/components_strings.xml",
+    "java/res/values-tl/components_strings.xml",
+    "java/res/values-tr/components_strings.xml",
+    "java/res/values-uk/components_strings.xml",
+    "java/res/values-vi/components_strings.xml",
+    "java/res/values-zh-rCN/components_strings.xml",
+    "java/res/values-zh-rTW/components_strings.xml",
+    "java/res/values/components_strings.xml",
   ]
 }
 
@@ -348,6 +394,8 @@ source_set("common") {
     "browser/aw_message_port_message_filter.cc",
     "browser/aw_message_port_message_filter.h",
     "browser/aw_message_port_service.h",
+    "browser/aw_metrics_service_client.cc",
+    "browser/aw_metrics_service_client.h",
     "browser/aw_permission_manager.cc",
     "browser/aw_permission_manager.h",
     "browser/aw_pref_store.cc",
@@ -477,6 +525,11 @@ source_set("common") {
     "//components/crash/content/browser",
     "//components/data_reduction_proxy/core/browser",
     "//components/devtools_discovery",
+    "//components/metrics",
+    "//components/metrics:gpu",
+    "//components/metrics:net",
+    "//components/metrics:profiler",
+    "//components/metrics:ui",
     "//components/navigation_interception",
     "//components/printing/browser",
     "//components/printing/common",
@@ -517,6 +570,7 @@ source_set("common") {
 }
 
 android_library("android_webview_java") {
+  DEPRECATED_java_in_dir = "java/src"
   deps = [
     ":resources",
     ":strings_grd",
@@ -534,63 +588,6 @@ android_library("android_webview_java") {
   }
 
   srcjar_deps = [ "//android_webview/native:aw_permission_request_resource" ]
-
-  java_files = [
-    "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
-    "java/src/org/chromium/android_webview/AwAutofillClient.java",
-    "java/src/org/chromium/android_webview/AwBrowserContext.java",
-    "java/src/org/chromium/android_webview/AwBrowserProcess.java",
-    "java/src/org/chromium/android_webview/AwContentsBackgroundThreadClient.java",
-    "java/src/org/chromium/android_webview/AwContentsClientBridge.java",
-    "java/src/org/chromium/android_webview/AwContentsClientCallbackHelper.java",
-    "java/src/org/chromium/android_webview/AwContentsClient.java",
-    "java/src/org/chromium/android_webview/AwContentsIoThreadClient.java",
-    "java/src/org/chromium/android_webview/AwContents.java",
-    "java/src/org/chromium/android_webview/AwContentsStatics.java",
-    "java/src/org/chromium/android_webview/AwContentViewClient.java",
-    "java/src/org/chromium/android_webview/AwCookieManager.java",
-    "java/src/org/chromium/android_webview/AwDataReductionProxyManager.java",
-    "java/src/org/chromium/android_webview/AwDebug.java",
-    "java/src/org/chromium/android_webview/AwDevToolsServer.java",
-    "java/src/org/chromium/android_webview/AwFormDatabase.java",
-    "java/src/org/chromium/android_webview/AwGeolocationPermissions.java",
-    "java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
-    "java/src/org/chromium/android_webview/AwLayoutSizer.java",
-    "java/src/org/chromium/android_webview/AwMessagePort.java",
-    "java/src/org/chromium/android_webview/AwMessagePortService.java",
-    "java/src/org/chromium/android_webview/AwPdfExporter.java",
-    "java/src/org/chromium/android_webview/AwPicture.java",
-    "java/src/org/chromium/android_webview/AwPrintDocumentAdapter.java",
-    "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
-    "java/src/org/chromium/android_webview/AwResource.java",
-    "java/src/org/chromium/android_webview/AwScrollOffsetManager.java",
-    "java/src/org/chromium/android_webview/AwSettings.java",
-    "java/src/org/chromium/android_webview/AwSwitches.java",
-    "java/src/org/chromium/android_webview/AwViewMethods.java",
-    "java/src/org/chromium/android_webview/AwWebContentsDelegateAdapter.java",
-    "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
-    "java/src/org/chromium/android_webview/AwWebContentsObserver.java",
-    "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
-    "java/src/org/chromium/android_webview/AwZoomControls.java",
-    "java/src/org/chromium/android_webview/ClientCertLookupTable.java",
-    "java/src/org/chromium/android_webview/DefaultVideoPosterRequestHandler.java",
-    "java/src/org/chromium/android_webview/ErrorCodeConversionHelper.java",
-    "java/src/org/chromium/android_webview/FullScreenView.java",
-    "java/src/org/chromium/android_webview/HttpAuthDatabase.java",
-    "java/src/org/chromium/android_webview/InputStreamUtil.java",
-    "java/src/org/chromium/android_webview/JavaBrowserViewRendererHelper.java",
-    "java/src/org/chromium/android_webview/JsPromptResultReceiver.java",
-    "java/src/org/chromium/android_webview/JsResultHandler.java",
-    "java/src/org/chromium/android_webview/JsResultReceiver.java",
-    "java/src/org/chromium/android_webview/NullAwViewMethods.java",
-    "java/src/org/chromium/android_webview/OverScrollGlow.java",
-    "java/src/org/chromium/android_webview/permission/AwGeolocationCallback.java",
-    "java/src/org/chromium/android_webview/permission/AwPermissionRequest.java",
-    "java/src/org/chromium/android_webview/policy/AwPolicyProvider.java",
-    "java/src/org/chromium/android_webview/PostMessageSender.java",
-    "java/src/org/chromium/android_webview/ScrollAccessibilityHelper.java",
-    "java/src/org/chromium/android_webview/SslUtil.java",
-  ]
 }
 
 java_strings_grd("strings_grd") {
@@ -643,13 +640,15 @@ java_strings_grd("strings_grd") {
   ]
 }
 
-system_webview_apk_tmpl("system_webview_apk") {
-  android_manifest = get_target_outputs(":system_webview_manifest")
-  android_manifest = android_manifest[1]
-  android_manifest_dep = ":system_webview_manifest"
-  deps = [
-    ":system_webview_resources",
-    "//android_webview/glue",
-  ]
-  apk_name = "SystemWebView"
+if (!use_webview_internal_framework) {
+  system_webview_apk_tmpl("system_webview_apk") {
+    android_manifest = get_target_outputs(":system_webview_manifest")
+    android_manifest = android_manifest[1]
+    android_manifest_dep = ":system_webview_manifest"
+    deps = [
+      ":system_webview_resources",
+      "//android_webview/glue",
+    ]
+    apk_name = "SystemWebView"
+  }
 }

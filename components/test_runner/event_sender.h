@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_TEST_RUNNER_EVENT_SENDER_H_
 #define COMPONENTS_TEST_RUNNER_EVENT_SENDER_H_
 
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 #include <vector>
@@ -61,6 +63,8 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   void MouseDown(int button_number, int modifiers);
   void MouseUp(int button_number, int modifiers);
+  void SetMouseButtonState(int button_number, int modifiers);
+
   void KeyDown(const std::string& code_str,
                int modifiers,
                KeyLocationCode location);
@@ -258,8 +262,13 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
   // Location of the touch point that initiated a gesture.
   blink::WebPoint current_gesture_location_;
 
-  // Currently pressed mouse button (Left/Right/Middle or None).
+  // Last pressed mouse button (Left/Right/Middle or None).
   static blink::WebMouseEvent::Button pressed_button_;
+
+  // A bitwise OR of the WebMouseEvent::*ButtonDown values corresponding to
+  // currently pressed buttons of mouse.
+  static int current_buttons_;
+
   static int modifiers_;
 
   bool replaying_saved_events_;
@@ -281,7 +290,7 @@ class EventSender : public base::SupportsWeakPtr<EventSender> {
 
   blink::WebDragOperation current_drag_effect_;
 
-  uint32 time_offset_ms_;
+  uint32_t time_offset_ms_;
   int click_count_;
   // Timestamp (in seconds) of the last event that was dispatched
   double last_event_timestamp_;

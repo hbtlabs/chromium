@@ -5,6 +5,10 @@
 // End-to-end SDCH tests.  Uses the embedded test server to return SDCH
 // results
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -16,6 +20,7 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
@@ -53,7 +58,7 @@
 namespace {
 
 typedef std::vector<net::test_server::HttpRequest> RequestVector;
-typedef std::map<std::string, std::string> HttpRequestHeaderMap;
+typedef net::test_server::HttpRequest::HeaderMap HttpRequestHeaderMap;
 
 // Credit Alfred, Lord Tennyson
 static const char kSampleData[] = "<html><body><pre>"
@@ -226,7 +231,7 @@ class SdchResponseHandler {
          it != callbacks.end(); ++it) {
       it->Run();
     }
-    return response.Pass();
+    return std::move(response);
   }
 
   void WaitAndGetRequestVector(int num_requests,
@@ -487,7 +492,7 @@ class SdchBrowserTest : public InProcessBrowserTest,
     run_loop.Run();
   }
 
-  uint16 test_server_port() { return test_server_.port(); }
+  uint16_t test_server_port() { return test_server_.port(); }
 
   void SetSdchCacheability(bool cache_sdch_response) {
     base::RunLoop run_loop;

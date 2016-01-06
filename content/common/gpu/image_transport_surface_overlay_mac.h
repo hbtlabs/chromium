@@ -32,7 +32,9 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
   // GLSurface implementation
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
@@ -50,7 +52,10 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
                        const gfx::RectF& contents_rect,
                        float opacity,
                        unsigned background_color,
-                       const gfx::SizeF& bounds_size,
+                       unsigned edge_aa_mask,
+                       const gfx::RectF& bounds_rect,
+                       bool is_clipped,
+                       const gfx::RectF& clip_rect,
                        const gfx::Transform& transform) override;
   bool IsSurfaceless() const override;
 

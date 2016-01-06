@@ -40,6 +40,8 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 
+#if ENABLE(WEB_AUDIO)
+
 namespace blink {
 
 // HRTFElevation contains all of the HRTFKernels (one left ear and one right ear per azimuth angle) for a particular elevation.
@@ -89,8 +91,8 @@ public:
 
 private:
     HRTFElevation(PassOwnPtr<HRTFKernelList> kernelListL, PassOwnPtr<HRTFKernelList> kernelListR, int elevation, float sampleRate)
-        : m_kernelListL(kernelListL)
-        , m_kernelListR(kernelListR)
+        : m_kernelListL(std::move(kernelListL))
+        , m_kernelListR(std::move(kernelListR))
         , m_elevationAngle(elevation)
         , m_sampleRate(sampleRate)
     {
@@ -103,5 +105,7 @@ private:
 };
 
 } // namespace blink
+
+#endif // ENABLE(WEB_AUDIO)
 
 #endif // HRTFElevation_h

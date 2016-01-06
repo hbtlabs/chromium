@@ -21,9 +21,8 @@
         'optimize': 'max',
       },
       'dependencies': [
-        'base_debugging_flags',
+        'base_debugging_flags#target',
         'base_static',
-        'allocator/allocator.gyp:allocator_extension_thunks',
         '../testing/gtest.gyp:gtest_prod',
         '../third_party/modp_b64/modp_b64.gyp:modp_b64',
         'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
@@ -208,7 +207,7 @@
           },
         }],
         ['OS != "win" and (OS != "ios" or _toolset == "host")', {
-            'dependencies': ['../third_party/libevent/libevent.gyp:libevent'],
+            'dependencies': ['third_party/libevent/libevent.gyp:libevent'],
         },],
         ['component=="shared_library"', {
           'conditions': [
@@ -473,6 +472,7 @@
         'feature_list_unittest.cc',
         'file_version_info_unittest.cc',
         'files/dir_reader_posix_unittest.cc',
+        'files/file_locking_unittest.cc',
         'files/file_path_unittest.cc',
         'files/file_path_watcher_unittest.cc',
         'files/file_proxy_unittest.cc',
@@ -527,6 +527,7 @@
         'memory/memory_pressure_monitor_chromeos_unittest.cc',
         'memory/memory_pressure_monitor_mac_unittest.cc',
         'memory/memory_pressure_monitor_win_unittest.cc',
+        'memory/ptr_util_unittest.cc',
         'memory/ref_counted_memory_unittest.cc',
         'memory/ref_counted_unittest.cc',
         'memory/scoped_ptr_unittest.cc',
@@ -700,6 +701,8 @@
         }],
         ['OS == "ios" and _toolset != "host"', {
           'sources/': [
+            # This test needs multiple processes.
+            ['exclude', '^files/file_locking_unittest\\.cc$'],
             # iOS does not support FilePathWatcher.
             ['exclude', '^files/file_path_watcher_unittest\\.cc$'],
             # Only test the iOS-meaningful portion of memory and process_utils.
@@ -806,7 +809,7 @@
           ],
         }, {  # OS != "win"
           'dependencies': [
-            '../third_party/libevent/libevent.gyp:libevent'
+            'third_party/libevent/libevent.gyp:libevent'
           ],
         }],
       ],  # conditions
@@ -1080,8 +1083,11 @@
     },
     {
       # GN version: //base/debug:debugging_flags
+      # Since this generates a file, it most only be referenced in the target
+      # toolchain or there will be multiple rules that generate the header.
+      # When referenced from a target that might be compiled in the host
+      # toolchain, always refer to 'base_debugging_flags#target'.
       'target_name': 'base_debugging_flags',
-      'toolsets': ['host', 'target'],
       'includes': [ '../build/buildflag_header.gypi' ],
       'variables': {
         'buildflag_header_path': 'base/debug/debugging_flags.h',
@@ -1145,9 +1151,8 @@
             'base_target': 1,
           },
           'dependencies': [
-            'base_debugging_flags',
+            'base_debugging_flags#target',
             'base_static_win64',
-            'allocator/allocator.gyp:allocator_extension_thunks_win64',
             '../third_party/modp_b64/modp_b64.gyp:modp_b64_win64',
             'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations_win64',
             'trace_event/etw_manifest/etw_manifest.gyp:etw_manifest',
@@ -1583,7 +1588,7 @@
           ],
           'variables': {
             'src_paths': [
-              '../base/test/android/junit/',
+              '../base/test/android/junit/src/org/chromium/base/test/shadows/ShadowMultiDex.java',
             ],
           },
           'includes': [ '../build/host_jar.gypi' ]
@@ -1602,6 +1607,7 @@
              'main_class': 'org.chromium.testing.local.JunitTestMain',
              'src_paths': [
                '../base/android/junit/',
+               '../base/test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java',
              ],
            },
           'includes': [ '../build/host_jar.gypi' ],

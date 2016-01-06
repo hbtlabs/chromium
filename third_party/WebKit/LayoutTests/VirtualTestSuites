@@ -58,13 +58,6 @@
              "--enable-prefer-compositing-to-lcd-text"]
   },
   {
-    "prefix": "threaded_animation_timelines",
-    "base": "fast/scroll-behavior",
-    "args": ["--enable-threaded-compositing",
-             "--enable-prefer-compositing-to-lcd-text",
-             "--enable-compositor-animation-timelines"]
-  },
-  {
     "prefix": "stable",
     "base": "webexposed",
     "args": ["--stable-release-mode"]
@@ -199,28 +192,5 @@
     "prefix": "spv2",
     "base": "paint",
     "args": ["--enable-slimming-paint-v2"]
-  },
-  {
-    "prefix": "syncpaint",
-    "base": "compositing/repaint",
-    "args": ["--enable-blink-features=SlimmingPaintSynchronizedPainting"],
-    "references_use_default_args": true
-  },
-  {
-    "prefix": "syncpaint",
-    "base": "fast/repaint",
-    "args": ["--enable-blink-features=SlimmingPaintSynchronizedPainting"],
-    "references_use_default_args": true
-  },
-  {
-    "prefix": "syncpaint",
-    "base": "paint",
-    "args": ["--enable-blink-features=SlimmingPaintSynchronizedPainting"],
-    "references_use_default_args": true
-  },
-  {
-    "prefix": "syncpaint",
-    "base": "inspector/tracing",
-    "args": ["--enable-blink-features=SlimmingPaintSynchronizedPainting"]
   }
 ]

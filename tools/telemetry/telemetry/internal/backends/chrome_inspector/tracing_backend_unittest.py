@@ -5,14 +5,14 @@
 import time
 import unittest
 
+from telemetry import decorators
 from telemetry.internal.backends.chrome_inspector import tracing_backend
 from telemetry.internal.backends.chrome_inspector.tracing_backend import _DevToolsStreamReader
 from telemetry.testing import fakes
 from telemetry.testing import simple_mock
 from telemetry.testing import tab_test_case
 from telemetry.timeline import model as model_module
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 
 
 class TracingBackendTest(tab_test_case.TabTestCase):
@@ -39,19 +39,20 @@ class TracingBackendTest(tab_test_case.TabTestCase):
     if not self._browser.supports_memory_dumping:
       self.skipTest('Browser does not support memory dumping, skipping test.')
 
+  @decorators.Disabled('win')  # crbug.com/570955
   def testDumpMemorySuccess(self):
     # Check that dumping memory before tracing starts raises an exception.
     self.assertRaises(Exception, self._browser.DumpMemory)
 
     # Start tracing with memory dumps enabled.
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    self._tracing_controller.Start(
-        options, tracing_category_filter.TracingCategoryFilter(
-            'disabled-by-default-memory-infra'))
+    config = tracing_config.TracingConfig()
+    config.tracing_category_filter.AddDisabledByDefault(
+        'disabled-by-default-memory-infra')
+    config.tracing_options.enable_chrome_trace = True
+    self._tracing_controller.Start(config)
 
     # Request several memory dumps in a row and test that they were all
-    # succesfully created with unique IDs.
+    # successfully created with unique IDs.
     expected_dump_ids = []
     for _ in xrange(self._REQUESTED_DUMP_COUNT):
       dump_id = self._browser.DumpMemory()
@@ -73,15 +74,15 @@ class TracingBackendTest(tab_test_case.TabTestCase):
     actual_dump_ids = [d.dump_id for d in model.IterGlobalMemoryDumps()]
     self.assertEqual(actual_dump_ids, expected_dump_ids)
 
+  @decorators.Disabled('win')  # crbug.com/570955
   def testDumpMemoryFailure(self):
     # Check that dumping memory before tracing starts raises an exception.
     self.assertRaises(Exception, self._browser.DumpMemory)
 
     # Start tracing with memory dumps disabled.
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    self._tracing_controller.Start(
-        options, tracing_category_filter.TracingCategoryFilter())
+    config = tracing_config.TracingConfig()
+    config.tracing_options.enable_chrome_trace = True
+    self._tracing_controller.Start(config)
 
     # Check that the method returns None if the dump was not successful.
     self.assertIsNone(self._browser.DumpMemory())
@@ -178,6 +179,7 @@ class DevToolsStreamPerformanceTest(unittest.TestCase):
 
     done = {'done': False}
     def mark_done(data):
+      del data  # unused
       done['done'] = True
 
     reader = _DevToolsStreamReader(self._inspector_socket, 'dummy')

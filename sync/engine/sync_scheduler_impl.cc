@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -233,7 +234,6 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
     SendInitialSnapshot();
   }
 
-  DCHECK(!session_context_->account_name().empty());
   DCHECK(syncer_.get());
 
   if (mode == CLEAR_SERVER_DATA_MODE) {
@@ -422,8 +422,8 @@ void SyncSchedulerImpl::ScheduleInvalidationNudge(
   SDVLOG_LOC(nudge_location, 2)
       << "Scheduling sync because we received invalidation for "
       << ModelTypeToString(model_type);
-  base::TimeDelta nudge_delay =
-      nudge_tracker_.RecordRemoteInvalidation(model_type, invalidation.Pass());
+  base::TimeDelta nudge_delay = nudge_tracker_.RecordRemoteInvalidation(
+      model_type, std::move(invalidation));
   ScheduleNudgeImpl(nudge_delay, nudge_location);
 }
 

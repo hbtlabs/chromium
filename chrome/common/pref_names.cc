@@ -4,7 +4,8 @@
 
 #include "chrome/common/pref_names.h"
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/common/pref_font_webkit_names.h"
 
 namespace prefs {
@@ -69,7 +70,7 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 const char kSessionExitType[] = "profile.exit_type";
 
 // An integer pref. Holds one of several values:
-// 0: (deprecated) open the homepage on startup.
+// 0: unused, previously indicated to open the homepage on startup
 // 1: restore the last session.
 // 2: this was used to indicate a specific session should be restored. It is
 //    no longer used, but saved to avoid conflict with old preferences.
@@ -77,12 +78,6 @@ const char kSessionExitType[] = "profile.exit_type";
 // 4: restore the URLs defined in kURLsToRestoreOnStartup.
 // 5: open the New Tab Page on startup.
 const char kRestoreOnStartup[] = "session.restore_on_startup";
-
-// A preference to keep track of whether we have already checked whether we
-// need to migrate the user from kRestoreOnStartup=0 to kRestoreOnStartup=4.
-// We only need to do this check once, on upgrade from m18 or lower to m19 or
-// higher.
-const char kRestoreOnStartupMigrated[] = "session.restore_on_startup_migrated";
 
 // The URLs to restore on startup or when the home button is pressed. The URLs
 // are only restored on startup if kRestoreOnStartup is 4.
@@ -337,6 +332,11 @@ const char kWebKitLoadsImagesAutomatically[] =
     "webkit.webprefs.loads_images_automatically";
 const char kWebKitPluginsEnabled[] = "webkit.webprefs.plugins_enabled";
 
+// Boolean that is true when Data Saver is enabled.
+// TODO(bengr): Migrate the preference string to "data_saver.enabled"
+// (crbug.com/564207).
+const char kDataSaverEnabled[] = "spdy_proxy.enabled";
+
 // Boolean that is true when SafeBrowsing is enabled.
 const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
 
@@ -418,6 +418,15 @@ const char kLastPolicyCheckTime[] = "policy.last_policy_check_time";
 // Prefix URL for the experimental Instant ZeroSuggest provider.
 const char kInstantUIZeroSuggestUrlPrefix[] =
     "instant_ui.zero_suggest_url_prefix";
+
+// A boolean pref set to true if prediction of network actions is allowed.
+// Actions include DNS prefetching, TCP and SSL preconnection, prerendering
+// of web pages, and resource prefetching.
+// NOTE: The "dns_prefetching.enabled" value is used so that historical user
+// preferences are not lost.
+// TODO(bnc): Remove kNetworkPredictionEnabled once kNetworkPredictionOptions
+// is functioning as per crbug.com/334602.
+const char kNetworkPredictionEnabled[] = "dns_prefetching.enabled";
 
 // A preference of enum chrome_browser_net::NetworkPredictionOptions shows
 // if prediction of network actions is allowed, depending on network type.
@@ -1545,11 +1554,6 @@ const char kWebAppCreateInQuickLaunchBar[] =
 // corresponding access token.
 const char kGeolocationAccessToken[] = "geolocation.access_token";
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
-// Boolean that controls the enabled-state of Geolocation in content.
-const char kGeolocationEnabled[] = "geolocation.enabled";
-#endif
-
 #if BUILDFLAG(ENABLE_GOOGLE_NOW)
 // Boolean that is true when Google services can use the user's location.
 const char kGoogleGeolocationAccessEnabled[] =
@@ -1665,12 +1669,6 @@ const char kHotwordAudioLoggingEnabled[] = "hotword.audio_logging_enabled";
 // It is used for comparison since the hotword voice search trigger must be
 // reinstalled to handle a new language.
 const char kHotwordPreviousLanguage[] = "hotword.previous_language";
-
-#if defined(OS_ANDROID)
-// Boolean that controls the global enabled-state of protected media identifier.
-const char kProtectedMediaIdentifierEnabled[] =
-    "protected_media_identifier.enabled";
-#endif
 
 #if defined(OS_CHROMEOS)
 // Dictionary for transient storage of settings that should go into device
@@ -2170,5 +2168,11 @@ const char kBackgroundTracingLastUpload[] = "background_tracing.last_upload";
 
 const char kAllowDinosaurEasterEgg[] =
     "allow_dinosaur_easter_egg";
+
+#if defined(OS_ANDROID)
+// Whether the update menu item was clicked. Used to facilitate logging whether
+// Chrome was updated after the menu item is clicked.
+const char kClickedUpdateMenuItem[] = "omaha.clicked_update_menu_item";
+#endif
 
 }  // namespace prefs

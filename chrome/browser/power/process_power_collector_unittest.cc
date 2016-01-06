@@ -4,6 +4,7 @@
 
 #include "chrome/browser/power/process_power_collector.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/apps/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
@@ -81,7 +82,7 @@ class BrowserProcessPowerTest : public BrowserWithTestWindowTest {
         process_id)
 #endif
                                                 );
-    return proc_handle.Pass();
+    return proc_handle;
   }
 
   scoped_ptr<ProcessPowerCollector> collector;
@@ -102,7 +103,7 @@ TEST_F(BrowserProcessPowerTest, OneSite) {
   EXPECT_EQ(1u, metrics_map->size());
 
   // Create fake process numbers.
-  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1).Pass());
+  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1));
 
   OriginPowerMap* origin_power_map =
       OriginPowerMapFactory::GetForBrowserContext(profile());
@@ -131,9 +132,9 @@ TEST_F(BrowserProcessPowerTest, MultipleSites) {
   AddTab(browser3.get(), url3);
 
   // Create fake process numbers.
-  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1).Pass());
-  GetProcess(browser2.get())->SetProcessHandle(MakeProcessHandle(2).Pass());
-  GetProcess(browser3.get())->SetProcessHandle(MakeProcessHandle(3).Pass());
+  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1));
+  GetProcess(browser2.get())->SetProcessHandle(MakeProcessHandle(2));
+  GetProcess(browser3.get())->SetProcessHandle(MakeProcessHandle(3));
 
   collector->UpdatePowerConsumptionForTesting();
   ProcessPowerCollector::ProcessMetricsMap* metrics_map =
@@ -177,9 +178,8 @@ TEST_F(BrowserProcessPowerTest, IncognitoDoesntRecordPowerUsage) {
   AddTab(incognito_browser.get(), hidden_url);
 
   // Create fake process numbers.
-  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1).Pass());
-  GetProcess(incognito_browser.get())
-      ->SetProcessHandle(MakeProcessHandle(2).Pass());
+  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1));
+  GetProcess(incognito_browser.get())->SetProcessHandle(MakeProcessHandle(2));
 
   EXPECT_DOUBLE_EQ(0, collector->UpdatePowerConsumptionForTesting());
   ProcessPowerCollector::ProcessMetricsMap* metrics_map =
@@ -217,8 +217,8 @@ TEST_F(BrowserProcessPowerTest, MultipleProfilesRecordSeparately) {
   AddTab(other_user.get(), hidden_url);
 
   // Create fake process numbers.
-  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1).Pass());
-  GetProcess(other_user.get())->SetProcessHandle(MakeProcessHandle(2).Pass());
+  GetProcess(browser())->SetProcessHandle(MakeProcessHandle(1));
+  GetProcess(other_user.get())->SetProcessHandle(MakeProcessHandle(2));
 
   EXPECT_DOUBLE_EQ(0, collector->UpdatePowerConsumptionForTesting());
   EXPECT_EQ(2u, collector->metrics_map_for_testing()->size());

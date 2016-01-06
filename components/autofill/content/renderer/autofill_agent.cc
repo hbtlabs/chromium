@@ -4,6 +4,8 @@
 
 #include "components/autofill/content/renderer/autofill_agent.h"
 
+#include <stddef.h>
+
 #include <tuple>
 
 #include "base/auto_reset.h"
@@ -17,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/page_click_tracker.h"
@@ -36,7 +39,6 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "net/cert/cert_status_flags.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
@@ -259,11 +261,25 @@ void AutofillAgent::DidChangeScrollOffset() {
 void AutofillAgent::FocusedNodeChanged(const WebNode& node) {
   HidePopup();
 
-  if (node.isNull() || !node.isElementNode())
+  if (node.isNull() || !node.isElementNode()) {
+    if (!last_interacted_form_.isNull()) {
+      // Focus moved away from the last interacted form to somewhere else on
+      // the page.
+      Send(new AutofillHostMsg_FocusNoLongerOnForm(routing_id()));
+    }
     return;
+  }
 
   WebElement web_element = node.toConst<WebElement>();
   const WebInputElement* element = toWebInputElement(&web_element);
+
+  if (!last_interacted_form_.isNull() &&
+      (!element || last_interacted_form_ != element->form())) {
+    // The focused element is not part of the last interacted form (could be
+    // in a different form).
+    Send(new AutofillHostMsg_FocusNoLongerOnForm(routing_id()));
+    return;
+  }
 
   if (!element || !element->isEnabled() || element->isReadOnly() ||
       !element->isTextField())
@@ -523,7 +539,7 @@ void AutofillAgent::OnFillForm(int query_id, const FormData& form) {
   if (!element_.form().isNull())
     last_interacted_form_ = element_.form();
 
-  Send(new AutofillHostMsg_DidFillAutofillFormData(routing_id(),
+  Send(new AutofillHostMsg_DidFillAutofillFormData(routing_id(), form,
                                                    base::TimeTicks::Now()));
 }
 
@@ -735,13 +751,12 @@ void AutofillAgent::QueryAutofillSuggestions(
                                        data_list_values,
                                        data_list_labels));
 
-  blink::WebRect bounding_box_in_window = element_.boundsInViewport();
-  render_frame()->GetRenderView()->convertViewportToWindow(
-      &bounding_box_in_window);
-
   Send(new AutofillHostMsg_QueryFormFieldAutofill(
-      routing_id(), autofill_query_id_, form, field,
-      gfx::RectF(bounding_box_in_window)));
+           routing_id(),
+           autofill_query_id_,
+           form,
+           field,
+           render_frame()->GetRenderView()->ElementBoundsInWindow(element_)));
 }
 
 void AutofillAgent::FillFieldWithValue(const base::string16& value,

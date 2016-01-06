@@ -44,6 +44,7 @@ source_set("app") {
   ]
   deps = [
     "//base",
+    "//third_party/kasko",
   ]
 
   deps += [ ":lib" ]
@@ -112,6 +113,13 @@ source_set("app_non_mac_win") {
 
   if (is_android) {
     defines += [ "CHROME_BUILD_ID=\"$android_chrome_build_id\"" ]
+  }
+
+  if (current_cpu == "x86" && is_clang) {
+    # Clang's -mstackrealign doesn't work well with
+    # linux_syscall_support.h hand written asm syscalls.
+    # See https://crbug.com/556393
+    cflags -= [ "-mstackrealign" ]
   }
 
   if (is_win) {

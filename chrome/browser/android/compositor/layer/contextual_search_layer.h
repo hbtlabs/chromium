@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_CONTEXTUAL_SEARCH_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_CONTEXTUAL_SEARCH_LAYER_H_
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/android/compositor/layer/layer.h"
 
@@ -48,6 +47,7 @@ class ContextualSearchLayer : public Layer {
                      int peek_promo_text_resource_id,
                      int search_provider_icon_sprite_bitmap_resource_id,
                      int search_provider_icon_sprite_metadata_resource_id,
+                     float dp_to_px,
                      content::ContentViewCore* content_view_core,
                      bool search_promo_visible,
                      float search_promo_height,

@@ -5,6 +5,8 @@
 #ifndef BLIMP_NET_BLIMP_MESSAGE_OUTPUT_BUFFER_H_
 #define BLIMP_NET_BLIMP_MESSAGE_OUTPUT_BUFFER_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <queue>
 #include <utility>
@@ -23,7 +25,7 @@ class BlimpConnection;
 // Messages are retained for redelivery until they are acknowledged by the
 // receiving end (via BlimpMessageCheckpointObserver).
 // Messages can be paired with callbacks that are invoked on successful
-// message acknowledgement.
+// message acknowledgment.
 // (Redelivery will be used in a future CL to implement Fast Recovery
 // of dropped connections.)
 class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
@@ -46,7 +48,7 @@ class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
                       const net::CompletionCallback& callback) override;
 
   // MessageCheckpointObserver implementation.
-  void OnMessageCheckpoint(int64 message_id) override;
+  void OnMessageCheckpoint(int64_t message_id) override;
 
   int GetBufferByteSizeForTest() const;
   int GetUnacknowledgedMessageCountForTest() const;
@@ -81,12 +83,12 @@ class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
   int current_buffer_size_bytes_ = 0;
 
   // The ID used by the last outgoing message.
-  int64 prev_message_id_ = 0;
+  int64_t prev_message_id_ = 0;
 
   // List of unsent messages.
   MessageBuffer write_buffer_;
 
-  // List of messages that are sent and awaiting acknoweldgement.
+  // List of messages that are sent and awaiting acknowledgment.
   // The messages in |ack_buffer_| are contiguous with the messages in
   // |write_buffer_|.
   MessageBuffer ack_buffer_;

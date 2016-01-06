@@ -4,8 +4,11 @@
 
 #include "media/mojo/services/media_type_converters.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
+#include "base/macros.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/cdm_config.h"
@@ -20,9 +23,27 @@ namespace media {
 
 namespace {
 
-void CompareBytes(uint8* original_data, uint8* result_data, size_t length) {
+void CompareBytes(uint8_t* original_data, uint8_t* result_data, size_t length) {
   EXPECT_GT(length, 0u);
   EXPECT_EQ(memcmp(original_data, result_data, length), 0);
+}
+
+// Compare the actual video frame bytes (|rows| rows of |row|bytes| data),
+// skipping any padding that may be in either frame.
+void CompareRowBytes(uint8_t* original_data,
+                     uint8_t* result_data,
+                     size_t rows,
+                     size_t row_bytes,
+                     size_t original_stride,
+                     size_t result_stride) {
+  DCHECK_GE(original_stride, row_bytes);
+  DCHECK_GE(result_stride, row_bytes);
+
+  for (size_t i = 0; i < rows; ++i) {
+    CompareBytes(original_data, result_data, row_bytes);
+    original_data += original_stride;
+    result_data += result_stride;
+  }
 }
 
 void CompareAudioBuffers(SampleFormat sample_format,
@@ -58,8 +79,9 @@ void CompareVideoPlane(size_t plane,
   EXPECT_EQ(original->stride(plane), result->stride(plane));
   EXPECT_EQ(original->row_bytes(plane), result->row_bytes(plane));
   EXPECT_EQ(original->rows(plane), result->rows(plane));
-  CompareBytes(original->data(plane), result->data(plane),
-               original->rows(plane) * original->row_bytes(plane));
+  CompareRowBytes(original->data(plane), result->data(plane),
+                  original->rows(plane), original->row_bytes(plane),
+                  original->stride(plane), result->stride(plane));
 }
 
 void CompareVideoFrames(const scoped_refptr<VideoFrame>& original,
@@ -86,15 +108,15 @@ void CompareVideoFrames(const scoped_refptr<VideoFrame>& original,
 }  // namespace
 
 TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
-  const uint8 kData[] = "hello, world";
-  const uint8 kSideData[] = "sideshow bob";
+  const uint8_t kData[] = "hello, world";
+  const uint8_t kSideData[] = "sideshow bob";
   const int kDataSize = arraysize(kData);
   const int kSideDataSize = arraysize(kSideData);
 
   // Original.
   scoped_refptr<DecoderBuffer> buffer(DecoderBuffer::CopyFrom(
-      reinterpret_cast<const uint8*>(&kData), kDataSize,
-      reinterpret_cast<const uint8*>(&kSideData), kSideDataSize));
+      reinterpret_cast<const uint8_t*>(&kData), kDataSize,
+      reinterpret_cast<const uint8_t*>(&kSideData), kSideDataSize));
   buffer->set_timestamp(base::TimeDelta::FromMilliseconds(123));
   buffer->set_duration(base::TimeDelta::FromMilliseconds(456));
   buffer->set_splice_timestamp(base::TimeDelta::FromMilliseconds(200));
@@ -136,12 +158,12 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EOS) {
 }
 
 TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_KeyFrame) {
-  const uint8 kData[] = "hello, world";
+  const uint8_t kData[] = "hello, world";
   const int kDataSize = arraysize(kData);
 
   // Original.
   scoped_refptr<DecoderBuffer> buffer(DecoderBuffer::CopyFrom(
-      reinterpret_cast<const uint8*>(&kData), kDataSize));
+      reinterpret_cast<const uint8_t*>(&kData), kDataSize));
   buffer->set_is_key_frame(true);
   EXPECT_TRUE(buffer->is_key_frame());
 
@@ -157,7 +179,7 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_KeyFrame) {
 }
 
 TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EncryptedBuffer) {
-  const uint8 kData[] = "hello, world";
+  const uint8_t kData[] = "hello, world";
   const int kDataSize = arraysize(kData);
   const char kKeyId[] = "00112233445566778899aabbccddeeff";
   const char kIv[] = "0123456789abcdef";
@@ -169,7 +191,7 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EncryptedBuffer) {
 
   // Original.
   scoped_refptr<DecoderBuffer> buffer(DecoderBuffer::CopyFrom(
-      reinterpret_cast<const uint8*>(&kData), kDataSize));
+      reinterpret_cast<const uint8_t*>(&kData), kDataSize));
   buffer->set_decrypt_config(
       make_scoped_ptr(new DecryptConfig(kKeyId, kIv, subsamples)));
 
@@ -261,7 +283,7 @@ TEST(MediaTypeConvertersTest, ConvertAudioBuffer_MONO) {
   // Original.
   const ChannelLayout kChannelLayout = CHANNEL_LAYOUT_MONO;
   const int kSampleRate = 48000;
-  scoped_refptr<AudioBuffer> buffer = MakeAudioBuffer<uint8>(
+  scoped_refptr<AudioBuffer> buffer = MakeAudioBuffer<uint8_t>(
       kSampleFormatU8, kChannelLayout,
       ChannelLayoutToChannelCount(kChannelLayout), kSampleRate, 1, 1,
       kSampleRate / 100, base::TimeDelta());

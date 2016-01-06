@@ -85,6 +85,11 @@ enum UTF8ConversionMode {
     StrictUTF8ConversionReplacingUnpairedSurrogatesWithFFFD
 };
 
+#define DISPATCH_CASE_OP(caseSensitivity, op, args)                     \
+    ((caseSensitivity == TextCaseSensitive) ? op args :                 \
+     (caseSensitivity == TextCaseASCIIInsensitive) ? op##IgnoringASCIICase args : \
+     op##IgnoringCase args)
+
 template<bool isSpecialCharacter(UChar), typename CharacterType>
 bool isAllSpecialCharacters(const CharacterType*, size_t);
 
@@ -231,16 +236,16 @@ public:
         { return m_impl ? m_impl->findIgnoringCase(str, start) : kNotFound; }
     size_t findIgnoringCase(const String& str, unsigned start = 0) const
         { return m_impl ? m_impl->findIgnoringCase(str.impl(), start) : kNotFound; }
-    size_t reverseFindIgnoringCase(const String& str, unsigned start = UINT_MAX) const
-        { return m_impl ? m_impl->reverseFindIgnoringCase(str.impl(), start) : kNotFound; }
 
-    // Wrappers for find & reverseFind adding dynamic sensitivity check.
+    // ASCII case insensitive string matching.
+    size_t findIgnoringASCIICase(const String& str, unsigned start = 0) const
+        { return m_impl ? m_impl->findIgnoringASCIICase(str.impl(), start) : kNotFound; }
+
+    // Wrappers for find adding dynamic sensitivity check.
     size_t find(const LChar* str, unsigned start, TextCaseSensitivity caseSensitivity) const
-        { return (caseSensitivity == TextCaseSensitive) ? find(str, start) : findIgnoringCase(str, start); }
+        { return DISPATCH_CASE_OP(caseSensitivity, find, (str, start)); }
     size_t find(const String& str, unsigned start, TextCaseSensitivity caseSensitivity) const
-        { return (caseSensitivity == TextCaseSensitive) ? find(str, start) : findIgnoringCase(str, start); }
-    size_t reverseFind(const String& str, unsigned start, TextCaseSensitivity caseSensitivity) const
-        { return (caseSensitivity == TextCaseSensitive) ? reverseFind(str, start) : reverseFindIgnoringCase(str, start); }
+        { return DISPATCH_CASE_OP(caseSensitivity, find, (str, start)); }
 
     Vector<UChar> charactersWithNullTermination() const;
     unsigned copyTo(UChar* buffer, unsigned pos, unsigned maxLength) const;
@@ -261,20 +266,20 @@ public:
     bool contains(const String& str, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const { return find(str, 0, caseSensitivity) != kNotFound; }
 
     bool startsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? m_impl->startsWith(s.impl(), caseSensitivity) : s.isEmpty(); }
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->startsWith, (s.impl())) : s.isEmpty(); }
     bool startsWith(UChar character) const
         { return m_impl ? m_impl->startsWith(character) : false; }
     template<unsigned matchLength>
     bool startsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? m_impl->startsWith<matchLength>(prefix, caseSensitivity) : !matchLength; }
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->startsWith, (prefix, matchLength - 1)) : !matchLength; }
 
     bool endsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? m_impl->endsWith(s.impl(), caseSensitivity) : s.isEmpty(); }
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->endsWith, (s.impl())) : s.isEmpty(); }
     bool endsWith(UChar character) const
         { return m_impl ? m_impl->endsWith(character) : false; }
     template<unsigned matchLength>
     bool endsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? m_impl->endsWith<matchLength>(prefix, caseSensitivity) : !matchLength; }
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->endsWith, (prefix, matchLength - 1)) : !matchLength; }
 
     void append(const String&);
     void append(LChar);
@@ -465,6 +470,8 @@ private:
 
     RefPtr<StringImpl> m_impl;
 };
+
+#undef DISPATCH_CASE_OP
 
 inline bool operator==(const String& a, const String& b) { return equal(a.impl(), b.impl()); }
 inline bool operator==(const String& a, const LChar* b) { return equal(a.impl(), b); }

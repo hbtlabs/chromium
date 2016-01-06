@@ -17,7 +17,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/svg/SVGTextLayoutEngine.h"
 
 #include "core/layout/svg/LayoutSVGInlineText.h"
@@ -110,6 +109,26 @@ void SVGTextLayoutEngine::updateRelativePositionAdjustmentsIfNeeded(float dx, fl
     m_dy = dy;
 }
 
+static void computeGlyphOverflow(SVGInlineTextBox* textBox, SVGTextFragment& textFragment)
+{
+    LineLayoutSVGInlineText textLineLayout = LineLayoutSVGInlineText(textBox->lineLayoutItem());
+    TextRun run = SVGTextMetrics::constructTextRun(textLineLayout, textFragment.characterOffset, textFragment.length, textLineLayout.styleRef().direction());
+
+    float scalingFactor = textLineLayout.scalingFactor();
+    ASSERT(scalingFactor);
+    const Font& scaledFont = textLineLayout.scaledFont();
+    FloatRect glyphOverflowBounds;
+
+    float width = scaledFont.width(run, nullptr, &glyphOverflowBounds);
+    float ascent = scaledFont.fontMetrics().floatAscent();
+    float descent = scaledFont.fontMetrics().floatDescent();
+    textFragment.glyphOverflow.setFromBounds(glyphOverflowBounds, ascent, descent, width);
+    textFragment.glyphOverflow.top /= scalingFactor;
+    textFragment.glyphOverflow.left /= scalingFactor;
+    textFragment.glyphOverflow.right /= scalingFactor;
+    textFragment.glyphOverflow.bottom /= scalingFactor;
+}
+
 void SVGTextLayoutEngine::recordTextFragment(SVGInlineTextBox* textBox)
 {
     ASSERT(!m_currentTextFragment.length);
@@ -138,6 +157,7 @@ void SVGTextLayoutEngine::recordTextFragment(SVGInlineTextBox* textBox)
         }
     }
 
+    computeGlyphOverflow(textBox, m_currentTextFragment);
     textBox->textFragments().append(m_currentTextFragment);
     m_currentTextFragment = SVGTextFragment();
 }
@@ -335,7 +355,7 @@ void SVGTextLayoutEngine::layoutTextOnLineOrPath(SVGInlineTextBox* textBox, Line
         return;
 
     // Find the start of the current text box in the metrics list.
-    m_visualMetricsIterator.advanceToTextStart(&textLineLayout, textBox->start());
+    m_visualMetricsIterator.advanceToTextStart(textLineLayout, textBox->start());
 
     const Font& font = style.font();
 

@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -156,8 +157,15 @@ void ChromeControllerClient::LaunchDateAndTimeSettings() {
 }
 
 void ChromeControllerClient::GoBack() {
-  DCHECK(interstitial_page_);
   interstitial_page_->DontProceed();
+}
+
+void ChromeControllerClient::Proceed() {
+  interstitial_page_->Proceed();
+}
+
+void ChromeControllerClient::Reload() {
+  web_contents_->GetController().Reload(true);
 }
 
 void ChromeControllerClient::OpenUrlInCurrentTab(const GURL& url) {

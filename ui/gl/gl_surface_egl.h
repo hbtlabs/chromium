@@ -13,7 +13,9 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/gl/gl_bindings.h"
@@ -80,7 +82,9 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
   EGLConfig GetConfig() override;
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool Recreate() override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
@@ -101,10 +105,15 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
   // Takes ownership of the VSyncProvider.
   virtual bool Initialize(scoped_ptr<VSyncProvider> sync_provider);
 
+  // Takes care of the platform dependant bits, of any, for creating the window.
+  virtual bool InitializeNativeWindow();
+
  protected:
   ~NativeViewGLSurfaceEGL() override;
 
   EGLNativeWindowType window_;
+  EGLConfig config_;
+  gfx::Size size_;
 
   void OnSetSwapInterval(int interval) override;
 
@@ -115,8 +124,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
 
   EGLSurface surface_;
   bool supports_post_sub_buffer_;
-  EGLConfig config_;
-  gfx::Size size_;
+  bool alpha_;
 
   scoped_ptr<VSyncProvider> vsync_provider_;
 
@@ -148,7 +156,9 @@ class GL_EXPORT PbufferGLSurfaceEGL : public GLSurfaceEGL {
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;
 
@@ -177,7 +187,9 @@ class GL_EXPORT SurfacelessEGL : public GLSurfaceEGL {
   bool IsSurfaceless() const override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;
 

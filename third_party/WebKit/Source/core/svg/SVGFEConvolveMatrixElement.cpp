@@ -17,7 +17,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/svg/SVGFEConvolveMatrixElement.h"
 
 #include "core/SVGNames.h"
@@ -50,7 +49,7 @@ public:
         return adoptRefWillBeNoop(new SVGAnimatedOrder(contextElement));
     }
 
-    void setBaseValueAsString(const String&, SVGParsingError&) override;
+    SVGParsingError setBaseValueAsString(const String&) override;
 
 protected:
     SVGAnimatedOrder(SVGElement* contextElement)
@@ -59,15 +58,16 @@ protected:
     }
 };
 
-void SVGAnimatedOrder::setBaseValueAsString(const String& value, SVGParsingError& parseError)
+SVGParsingError SVGAnimatedOrder::setBaseValueAsString(const String& value)
 {
-    SVGAnimatedIntegerOptionalInteger::setBaseValueAsString(value, parseError);
+    SVGParsingError parseStatus = SVGAnimatedIntegerOptionalInteger::setBaseValueAsString(value);
 
     ASSERT(contextElement());
-    if (parseError == NoError && (firstInteger()->baseValue()->value() < 1 || secondInteger()->baseValue()->value() < 1)) {
+    if (parseStatus == NoError && (firstInteger()->baseValue()->value() < 1 || secondInteger()->baseValue()->value() < 1)) {
         contextElement()->document().accessSVGExtensions().reportWarning(
             "feConvolveMatrix: problem parsing order=\"" + value + "\".");
     }
+    return parseStatus;
 }
 
 inline SVGFEConvolveMatrixElement::SVGFEConvolveMatrixElement(Document& document)

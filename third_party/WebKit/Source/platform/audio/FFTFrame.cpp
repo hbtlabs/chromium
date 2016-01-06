@@ -26,17 +26,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
-#if ENABLE(WEB_AUDIO)
-
 #include "platform/audio/FFTFrame.h"
 
+#if ENABLE(WEB_AUDIO)
 #include "platform/audio/VectorMath.h"
 #include "platform/Logging.h"
 #include "wtf/MathExtras.h"
 #include "wtf/OwnPtr.h"
-
 #include <complex>
 
 #ifndef NDEBUG

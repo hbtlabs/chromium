@@ -4,14 +4,18 @@
 
 #include "content/public/test/test_utils.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/notification_service.h"
@@ -66,7 +70,7 @@ class ScriptCallback {
   virtual ~ScriptCallback() { }
   void ResultCallback(const base::Value* result);
 
-  scoped_ptr<base::Value> result() { return result_.Pass(); }
+  scoped_ptr<base::Value> result() { return std::move(result_); }
 
  private:
   scoped_ptr<base::Value> result_;
@@ -188,7 +192,7 @@ scoped_ptr<base::Value> ExecuteScriptAndGetValue(
       base::Bind(&ScriptCallback::ResultCallback, base::Unretained(&observer)));
   base::MessageLoop* loop = base::MessageLoop::current();
   loop->Run();
-  return observer.result().Pass();
+  return observer.result();
 }
 
 bool AreAllSitesIsolatedForTesting() {

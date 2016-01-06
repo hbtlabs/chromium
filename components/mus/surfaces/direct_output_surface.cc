@@ -4,6 +4,8 @@
 
 #include "components/mus/surfaces/direct_output_surface.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
@@ -20,7 +22,7 @@ DirectOutputSurface::DirectOutputSurface(
 DirectOutputSurface::~DirectOutputSurface() {}
 
 void DirectOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
-  DCHECK(context_provider_.get());
+  DCHECK(context_provider_);
   DCHECK(frame->gl_frame_data);
   if (frame->gl_frame_data->sub_buffer_rect ==
       gfx::Rect(frame->gl_frame_data->size)) {

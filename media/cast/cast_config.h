@@ -5,9 +5,11 @@
 #ifndef MEDIA_CAST_CAST_CONFIG_H_
 #define MEDIA_CAST_CAST_CONFIG_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
@@ -60,10 +62,10 @@ struct AudioSenderConfig {
   ~AudioSenderConfig();
 
   // Identifier referring to the sender, used by the receiver.
-  uint32 ssrc;
+  uint32_t ssrc;
 
   // The receiver's SSRC identifier.
-  uint32 receiver_ssrc;
+  uint32_t receiver_ssrc;
 
   // The total amount of time between a frame's capture/recording on the sender
   // and its playback on the receiver (i.e., shown to a user).  This should be
@@ -73,6 +75,9 @@ struct AudioSenderConfig {
   // etc.).
   base::TimeDelta min_playout_delay;
   base::TimeDelta max_playout_delay;
+
+  // Starting playout delay when streaming animated content.
+  base::TimeDelta animated_playout_delay;
 
   // RTP payload type enum: Specifies the type/encoding of frame data.
   int rtp_payload_type;
@@ -95,10 +100,10 @@ struct VideoSenderConfig {
   ~VideoSenderConfig();
 
   // Identifier referring to the sender, used by the receiver.
-  uint32 ssrc;
+  uint32_t ssrc;
 
   // The receiver's SSRC identifier.
-  uint32 receiver_ssrc;
+  uint32_t receiver_ssrc;
 
   // The total amount of time between a frame's capture/recording on the sender
   // and its playback on the receiver (i.e., shown to a user).  This should be
@@ -108,6 +113,9 @@ struct VideoSenderConfig {
   // etc.).
   base::TimeDelta min_playout_delay;
   base::TimeDelta max_playout_delay;
+
+  // Starting playout delay when streaming animated content.
+  base::TimeDelta animated_playout_delay;
 
   // RTP payload type enum: Specifies the type/encoding of frame data.
   int rtp_payload_type;
@@ -120,6 +128,16 @@ struct VideoSenderConfig {
   int start_bitrate;
   int max_qp;
   int min_qp;
+
+  // The maximum |min_quantizer| set to the encoder when CPU is constrained.
+  // This is a trade-off between higher resolution with lower encoding quality
+  // and lower resolution with higher encoding quality. The set value indicates
+  // the maximum quantizer that the encoder might produce better quality video
+  // at this resolution than lowering resolution with similar CPU usage and
+  // smaller quantizer. The set value has to be between |min_qp| and |max_qp|.
+  // Suggested value range: [4, 30].
+  int max_cpu_saver_qp;
+
   int max_frame_rate;  // TODO(miu): Should be double, not int.
 
   // This field is used differently by various encoders. It defaults to 1.
@@ -148,10 +166,10 @@ struct FrameReceiverConfig {
   ~FrameReceiverConfig();
 
   // The receiver's SSRC identifier.
-  uint32 receiver_ssrc;
+  uint32_t receiver_ssrc;
 
   // The sender's SSRC identifier.
-  uint32 sender_ssrc;
+  uint32_t sender_ssrc;
 
   // The total amount of time between a frame's capture/recording on the sender
   // and its playback on the receiver (i.e., shown to a user).  This is fixed as

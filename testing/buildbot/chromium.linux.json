@@ -1,7 +1,7 @@
 {
   "Android GN": {
     "additional_compile_targets": [
-      "gn_all"
+      "all"
     ],
     "gtest_tests": [
       {
@@ -131,7 +131,7 @@
   },
   "Android GN (dbg)": {
     "additional_compile_targets": [
-      "gn_all"
+      "all"
     ]
   },
   "Android Tests": {
@@ -193,7 +193,8 @@
           "--enable-local-file-accesses",
           "--enable-cma-media-pipeline",
           "--ozone-platform=cast",
-          "--no-sandbox"
+          "--no-sandbox",
+          "--test-launcher-jobs=1"
         ],
         "test": "cast_shell_browser_test"
       },
@@ -300,6 +301,7 @@
   },
   "Linux Builder": {
     "additional_compile_targets": [
+      "battor_agent",
       "blimp",
       "mandoline:all",
       "mash:all",
@@ -460,6 +462,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gin_unittests"
       },
       {
         "swarming": {

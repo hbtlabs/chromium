@@ -6,6 +6,7 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -50,7 +51,7 @@ class PasswordsListViewControllerTest : public ManagePasswordsControllerTest {
   }
 
   void SetUpPendingState(const autofill::PasswordForm* form) {
-    ManagePasswordsControllerTest::SetUpPendingState();
+    ManagePasswordsControllerTest::SetUpSavePendingState(false);
     controller_.reset([[PasswordsListViewController alloc]
         initWithModel:GetModelAndCreateIfNull()
                 forms:std::vector<const autofill::PasswordForm*>(1, form)]);

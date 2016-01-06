@@ -5,7 +5,9 @@
 #include "components/certificate_transparency/log_proof_fetcher.h"
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "components/safe_json/testing_json_parser.h"
 #include "net/base/net_errors.h"
@@ -183,7 +185,7 @@ class LogProofFetcherTest : public ::testing::Test {
     handler_ = handler.get();
 
     net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
-        kLogSchema, kLogHost, handler.Pass());
+        kLogSchema, kLogHost, std::move(handler));
 
     fetcher_.reset(new LogProofFetcher(&context_));
   }

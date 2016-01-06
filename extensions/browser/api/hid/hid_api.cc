@@ -4,6 +4,8 @@
 
 #include "extensions/browser/api/hid/hid_api.h"
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -141,7 +143,7 @@ void HidGetUserSelectedDevicesFunction::OnDevicesChosen(
     const std::vector<scoped_refptr<HidDeviceInfo>>& devices) {
   HidDeviceManager* device_manager = HidDeviceManager::Get(browser_context());
   CHECK(device_manager);
-  Respond(OneArgument(device_manager->GetApiDevicesFromList(devices).Pass()));
+  Respond(OneArgument(device_manager->GetApiDevicesFromList(devices)));
 }
 
 HidConnectFunction::HidConnectFunction() : connection_manager_(nullptr) {

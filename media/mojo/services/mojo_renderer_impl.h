@@ -5,6 +5,8 @@
 #ifndef MEDIA_MOJO_SERVICES_MOJO_RENDERER_IMPL_H_
 #define MEDIA_MOJO_SERVICES_MOJO_RENDERER_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/renderer.h"
@@ -66,7 +68,7 @@ class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
 
   DemuxerStreamProvider* demuxer_stream_provider_;
   interfaces::RendererPtr remote_renderer_;
-  mojo::Binding<RendererClient> binding_;
+  scoped_ptr<mojo::Binding<RendererClient>> binding_;
 
   // Callbacks passed to Initialize() that we forward messages from
   // |remote_renderer_| through.

@@ -28,8 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "platform/Task.h"
 #include "platform/ThreadSafeFunctional.h"
 #include "platform/heap/Handle.h"
@@ -4568,10 +4566,16 @@ public:
     MixinA() : m_obj(IntWrapper::create(100)) { }
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
+        s_traceCount++;
         visitor->trace(m_obj);
     }
+
+    static int s_traceCount;
+
     Member<IntWrapper> m_obj;
 };
+
+int MixinA::s_traceCount = 0;
 
 class MixinB : public GarbageCollectedMixin {
 public:
@@ -4661,6 +4665,35 @@ TEST(HeapTest, DerivedMultipleMixins)
     }
     preciselyCollectGarbage();
     EXPECT_EQ(4, IntWrapper::s_destructorCalls);
+}
+
+class MixinInstanceWithoutTrace : public GarbageCollected<MixinInstanceWithoutTrace>, public MixinA {
+    USING_GARBAGE_COLLECTED_MIXIN(MixinInstanceWithoutTrace);
+public:
+    MixinInstanceWithoutTrace()
+    {
+    }
+};
+
+TEST(HeapTest, MixinInstanceWithoutTrace)
+{
+    // Verify that a mixin instance without any traceable
+    // references inherits the mixin's trace implementation.
+    clearOutOldGarbage();
+    MixinA::s_traceCount = 0;
+    MixinInstanceWithoutTrace* obj = new MixinInstanceWithoutTrace();
+    {
+        Persistent<MixinA> a = obj;
+        preciselyCollectGarbage();
+        EXPECT_EQ(1, MixinA::s_traceCount);
+    }
+    {
+        Persistent<MixinInstanceWithoutTrace> b = obj;
+        preciselyCollectGarbage();
+        EXPECT_EQ(2, MixinA::s_traceCount);
+    }
+    preciselyCollectGarbage();
+    EXPECT_EQ(2, MixinA::s_traceCount);
 }
 
 class GCParkingThreadTester {
@@ -5286,13 +5319,13 @@ TEST(HeapTest, IndirectStrongToWeak)
 
 static Mutex& mainThreadMutex()
 {
-    AtomicallyInitializedStaticReference(Mutex, mainMutex, new Mutex);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mainMutex, new Mutex);
     return mainMutex;
 }
 
 static ThreadCondition& mainThreadCondition()
 {
-    AtomicallyInitializedStaticReference(ThreadCondition, mainCondition, new ThreadCondition);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, mainCondition, new ThreadCondition);
     return mainCondition;
 }
 
@@ -5309,13 +5342,13 @@ static void wakeMainThread()
 
 static Mutex& workerThreadMutex()
 {
-    AtomicallyInitializedStaticReference(Mutex, workerMutex, new Mutex);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, workerMutex, new Mutex);
     return workerMutex;
 }
 
 static ThreadCondition& workerThreadCondition()
 {
-    AtomicallyInitializedStaticReference(ThreadCondition, workerCondition, new ThreadCondition);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, workerCondition, new ThreadCondition);
     return workerCondition;
 }
 
@@ -5610,7 +5643,7 @@ TEST(HeapTest, GarbageCollectionDuringMixinConstruction)
 
 static RecursiveMutex& recursiveMutex()
 {
-    AtomicallyInitializedStaticReference(RecursiveMutex, recursiveMutex, new RecursiveMutex);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(RecursiveMutex, recursiveMutex, new RecursiveMutex);
     return recursiveMutex;
 }
 

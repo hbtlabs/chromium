@@ -5,19 +5,25 @@
 #ifndef CONTENT_RENDERER_RENDER_FRAME_IMPL_H_
 #define CONTENT_RENDERER_RENDER_FRAME_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
+#include "base/macros.h"
+#include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process_handle.h"
+#include "build/build_config.h"
 #include "content/common/accessibility_mode_enums.h"
 #include "content/common/frame_message_enums.h"
+#include "content/common/mojo/service_registry_impl.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/javascript_message_type.h"
 #include "content/public/common/referrer.h"
@@ -25,21 +31,24 @@
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/renderer_webcookiejar_impl.h"
 #include "ipc/ipc_message.h"
+#include "ipc/ipc_platform_file.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "mojo/application/public/interfaces/service_provider.mojom.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
+#include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebFrameLoadType.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
+#include "third_party/WebKit/public/web/WebFrameSerializerClient.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
-#include "third_party/WebKit/public/web/WebPageSerializerClient.h"
 #include "third_party/WebKit/public/web/WebScriptExecutionCallback.h"
 #include "ui/gfx/range/range.h"
+#include "url/gurl.h"
 
 #if defined(ENABLE_PLUGINS)
 #include "content/renderer/pepper/plugin_power_saver_helper.h"
@@ -53,10 +62,10 @@
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #endif
 
-class GURL;
 class TransportDIB;
 struct FrameMsg_NewFrame_WidgetParams;
 struct FrameMsg_PostMessage_Params;
+struct FrameMsg_SerializeAsMHTML_Params;
 struct FrameMsg_TextTrackSettings_Params;
 
 namespace blink {
@@ -83,7 +92,9 @@ class Rect;
 namespace media {
 class CdmFactory;
 class MediaPermission;
+class MediaServiceProvider;
 class RendererWebMediaPlayerDelegate;
+class UrlIndex;
 class WebEncryptedMediaClientImpl;
 }
 
@@ -125,7 +136,6 @@ class RenderViewImpl;
 class RenderWidget;
 class RenderWidgetFullscreenPepper;
 class ScreenOrientationDispatcher;
-class ServiceRegistry;
 class UserMediaClientImpl;
 class WakeLockDispatcher;
 struct CommonNavigationParams;
@@ -141,7 +151,7 @@ class VRDispatcher;
 class CONTENT_EXPORT RenderFrameImpl
     : public RenderFrame,
       NON_EXPORTED_BASE(public blink::WebFrameClient),
-      NON_EXPORTED_BASE(public blink::WebPageSerializerClient) {
+      NON_EXPORTED_BASE(public blink::WebFrameSerializerClient) {
  public:
   // Creates a new RenderFrame as the main frame of |render_view|.
   static RenderFrameImpl* CreateMainFrame(
@@ -184,12 +194,12 @@ class CONTENT_EXPORT RenderFrameImpl
   // Used by content_layouttest_support to hook into the creation of
   // RenderFrameImpls.
   struct CreateParams {
-    CreateParams(RenderViewImpl* render_view, int32 routing_id)
+    CreateParams(RenderViewImpl* render_view, int32_t routing_id)
         : render_view(render_view), routing_id(routing_id) {}
     ~CreateParams() {}
 
     RenderViewImpl* render_view;
-    int32 routing_id;
+    int32_t routing_id;
   };
 
   using CreateRenderFrameImplFunction =
@@ -374,11 +384,10 @@ class CONTENT_EXPORT RenderFrameImpl
   void RegisterPeripheralPlugin(
       const url::Origin& content_origin,
       const base::Closure& unthrottle_callback) override;
-  bool ShouldThrottleContent(const url::Origin& main_frame_origin,
-                             const url::Origin& content_origin,
-                             int width,
-                             int height,
-                             bool* cross_origin_main_content) const override;
+  RenderFrame::PeripheralContentStatus GetPeripheralContentStatus(
+      const url::Origin& main_frame_origin,
+      const url::Origin& content_origin,
+      const gfx::Size& unobscured_size) const override;
   void WhitelistContentOrigin(const url::Origin& content_origin) override;
 #endif
   bool IsFTPDirectoryListing() override;
@@ -429,9 +438,10 @@ class CONTENT_EXPORT RenderFrameImpl
   void willClose(blink::WebFrame* frame) override;
   void didChangeName(blink::WebLocalFrame* frame,
                      const blink::WebString& name) override;
+  void didEnforceStrictMixedContentChecking() override;
   void didChangeSandboxFlags(blink::WebFrame* child_frame,
                              blink::WebSandboxFlags flags) override;
-  virtual void didChangeFrameOwnerProperties(
+  void didChangeFrameOwnerProperties(
       blink::WebFrame* child_frame,
       const blink::WebFrameOwnerProperties& frame_owner_properties) override;
   void didMatchCSS(
@@ -605,14 +615,20 @@ class CONTENT_EXPORT RenderFrameImpl
   blink::WebVRClient* webVRClient() override;
 #endif
 
-  // WebPageSerializerClient implementation:
+  // WebFrameSerializerClient implementation:
   void didSerializeDataForFrame(
       const blink::WebCString& data,
-      blink::WebPageSerializerClient::PageSerializationStatus status) override;
+      blink::WebFrameSerializerClient::FrameSerializationStatus status)
+      override;
 
   // Make this frame show an empty, unscriptable page.
   // TODO(nasko): Remove this method once swapped out state is no longer used.
   void NavigateToSwappedOutURL();
+
+  // Binds this render frame's service registry.
+  void BindServiceRegistry(
+      mojo::InterfaceRequest<mojo::ServiceProvider> services,
+      mojo::ServiceProviderPtr exposed_services);
 
   ManifestManager* manifest_manager();
 
@@ -629,6 +645,10 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Sends the current frame's navigation state to the browser.
   void SendUpdateState();
+
+  // Creates a MojoBindingsController to allow WebUI documents to communicate
+  // with the browser process.
+  void EnableMojoBindings();
 
  protected:
   explicit RenderFrameImpl(const CreateParams& params);
@@ -674,7 +694,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // Creates a new RenderFrame. |render_view| is the RenderView object that this
   // frame belongs to.
   // Callers *must* call |SetWebFrame| immediately after creation.
-  static RenderFrameImpl* Create(RenderViewImpl* render_view, int32 routing_id);
+  static RenderFrameImpl* Create(RenderViewImpl* render_view,
+                                 int32_t routing_id);
 
   // Functions to add and remove observers for this object.
   void AddObserver(RenderFrameObserver* observer);
@@ -698,6 +719,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnSwapOut(int proxy_routing_id,
                  bool is_loading,
                  const FrameReplicationState& replicated_frame_state);
+  void OnDeleteFrame();
   void OnStop();
   void OnShowContextMenu(const gfx::Point& location);
   void OnContextMenuClosed(const CustomContextMenuContext& custom_context);
@@ -731,7 +753,7 @@ class CONTENT_EXPORT RenderFrameImpl
                                                  int id,
                                                  bool notify_result,
                                                  int world_id);
-  void OnVisualStateRequest(uint64 key);
+  void OnVisualStateRequest(uint64_t key);
   void OnSetEditableSelectionOffsets(int start, int end);
   void OnSetCompositionFromExistingText(
       int start, int end,
@@ -746,6 +768,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags);
   void OnSetFrameOwnerProperties(
       const blink::WebFrameOwnerProperties& frame_owner_properties);
+  void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
+  void OnSetFocusedFrame();
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
   void OnPostMessageEvent(const FrameMsg_PostMessage_Params& params);
@@ -767,9 +791,8 @@ class CONTENT_EXPORT RenderFrameImpl
                           int error_code);
   void OnGetSavableResourceLinks();
   void OnGetSerializedHtmlWithLocalLinks(
-      std::vector<GURL> original_urls,
-      std::vector<base::FilePath> equivalent_local_paths,
-      base::FilePath local_directory_path);
+      const std::map<GURL, base::FilePath>& url_to_local_path);
+  void OnSerializeAsMHTML(const FrameMsg_SerializeAsMHTML_Params& params);
 
   // Requests that the browser process navigates to |url|. If
   // |is_history_navigation_in_new_child| is true, the browser process should
@@ -859,6 +882,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Loads a data url.
   void LoadDataURL(const CommonNavigationParams& params,
+                   const RequestNavigationParams& request_params,
                    blink::WebFrame* frame,
                    blink::WebFrameLoadType load_type);
 
@@ -930,6 +954,24 @@ class CONTENT_EXPORT RenderFrameImpl
   // main frame or not. It remains accurate during destruction, even when
   // |frame_| has been invalidated.
   bool is_main_frame_;
+
+  // When a frame is detached in response to a message from the browser process,
+  // this RenderFrame should not be sending notifications back to it. This
+  // boolean is used to indicate this case.
+  bool in_browser_initiated_detach_;
+
+  // Indicates whether the frame has been inserted into the frame tree yet or
+  // not.
+  //
+  // When a frame is created by the browser process, it is for a pending
+  // navigation. In this case, it is not immediately attached to the frame tree
+  // if there is a RenderFrameProxy for the same frame. It is inserted into the
+  // frame tree at the time the pending navigation commits.
+  // Frames added by the parent document are created from the renderer process
+  // and are immediately inserted in the frame tree.
+  // TODO(dcheng): Remove this once we have FrameTreeHandle and can use the
+  // Blink Web* layer to check for provisional frames.
+  bool in_frame_tree_;
 
   base::WeakPtr<RenderViewImpl> render_view_;
   int routing_id_;
@@ -1050,6 +1092,9 @@ class CONTENT_EXPORT RenderFrameImpl
   // The CDM factory attached to this frame, lazily initialized.
   scoped_ptr<media::CdmFactory> cdm_factory_;
 
+  // Media resource cache, lazily initialized.
+  linked_ptr<media::UrlIndex> url_index_;
+
 #if defined(VIDEO_HOLE)
   // Whether or not this RenderFrameImpl contains a media player. Used to
   // register as an observer for video-hole-specific events.
@@ -1072,11 +1117,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // initialized.
   PresentationDispatcher* presentation_dispatcher_;
 
-  scoped_ptr<ServiceRegistry> service_registry_;
-
-  // Used to vend WeakPtrs to our ServiceRegistry.
-  scoped_ptr<base::WeakPtrFactory<ServiceRegistry>>
-      service_registry_weak_factory_;
+  ServiceRegistryImpl service_registry_;
 
   // The shell proxy used to connect to Mojo applications.
   mojo::ShellPtr mojo_shell_;

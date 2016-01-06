@@ -4,9 +4,11 @@
 
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/base64.h"
@@ -15,6 +17,7 @@
 #include "base/compiler_specific.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -30,14 +33,11 @@
 #include "chrome/browser/devtools/device/port_forwarding_controller.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
 #include "chrome/browser/devtools/device/usb/usb_device_provider.h"
-#include "chrome/browser/devtools/device/webrtc/webrtc_device_provider.h"
 #include "chrome/browser/devtools/devtools_protocol.h"
 #include "chrome/browser/devtools/devtools_target_impl.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/remote_debugging_server.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -66,11 +66,6 @@ const int kAdbPollingIntervalMs = 1000;
 const char kPageReloadCommand[] = "Page.reload";
 
 const char kWebViewSocketPrefix[] = "webview_devtools_remote";
-
-bool IsWebRTCDeviceProviderEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableDevToolsExperiments);
-}
 
 bool BrowserIdFromString(const std::string& browser_id_str,
                          DevToolsAndroidBridge::BrowserId* browser_id) {
@@ -273,10 +268,6 @@ DevToolsAndroidBridge::Factory::Factory()
     : BrowserContextKeyedServiceFactory(
           "DevToolsAndroidBridge",
           BrowserContextDependencyManager::GetInstance()) {
-  if (IsWebRTCDeviceProviderEnabled()) {
-    DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
-    DependsOn(SigninManagerFactory::GetInstance());
-  }
 }
 
 DevToolsAndroidBridge::Factory::~Factory() {}
@@ -285,16 +276,7 @@ KeyedService* DevToolsAndroidBridge::Factory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
 
-  ProfileOAuth2TokenService* token_service = nullptr;
-  SigninManagerBase* signin_manager = nullptr;
-
-  if (IsWebRTCDeviceProviderEnabled()) {
-    token_service = ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
-    signin_manager = SigninManagerFactory::GetForProfile(profile);
-  }
-
-  return new DevToolsAndroidBridge(
-      profile, signin_manager, token_service);
+  return new DevToolsAndroidBridge(profile);
 }
 
 // AgentHostDelegate ----------------------------------------------------------
@@ -653,7 +635,7 @@ void DevToolsAndroidBridge::SendProtocolCommand(
   }
   new ProtocolCommand(
       device, browser_id.second, target_path,
-      DevToolsProtocol::SerializeCommand(1, method, params.Pass()),
+      DevToolsProtocol::SerializeCommand(1, method, std::move(params)),
       callback);
 }
 
@@ -729,12 +711,8 @@ DevToolsAndroidBridge::RemoteDevice::~RemoteDevice() {
 // DevToolsAndroidBridge ------------------------------------------------------
 
 DevToolsAndroidBridge::DevToolsAndroidBridge(
-    Profile* profile,
-    SigninManagerBase* signin_manager,
-    ProfileOAuth2TokenService* const token_service)
+    Profile* profile)
     : profile_(profile),
-      signin_manager_(signin_manager),
-      token_service_(token_service),
       device_manager_(AndroidDeviceManager::Create()),
       task_scheduler_(base::Bind(&DevToolsAndroidBridge::ScheduleTaskDefault)),
       port_forwarding_controller_(new PortForwardingController(profile, this)),
@@ -957,11 +935,6 @@ void DevToolsAndroidBridge::CreateDeviceProviders() {
   bool enabled;
   if (pref_value->GetAsBoolean(&enabled) && enabled) {
     device_providers.push_back(new UsbDeviceProvider(profile_));
-  }
-
-  if (IsWebRTCDeviceProviderEnabled()) {
-    device_providers.push_back(
-        new WebRTCDeviceProvider(profile_, signin_manager_, token_service_));
   }
 
   device_manager_->SetDeviceProviders(device_providers);

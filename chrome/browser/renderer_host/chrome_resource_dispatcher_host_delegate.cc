@@ -4,12 +4,15 @@
 
 #include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 
+#include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base64.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/component_updater/component_updater_resource_throttle.h"
@@ -37,7 +40,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/google/core/browser/google_util.h"
-#include "components/variations/net/variations_http_header_provider.h"
+#include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
@@ -159,7 +162,7 @@ prerender::PrerenderManager* GetPrerenderManager(int render_process_id,
 
 void UpdatePrerenderNetworkBytesCallback(int render_process_id,
                                          int render_view_id,
-                                         int64 bytes) {
+                                         int64_t bytes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::WebContents* web_contents =
@@ -179,7 +182,7 @@ void UpdatePrerenderNetworkBytesCallback(int render_process_id,
 
 #if defined(ENABLE_EXTENSIONS)
 void SendExecuteMimeTypeHandlerEvent(scoped_ptr<content::StreamInfo> stream,
-                                     int64 expected_content_size,
+                                     int64_t expected_content_size,
                                      int render_process_id,
                                      int render_frame_id,
                                      const std::string& extension_id,
@@ -208,8 +211,8 @@ void SendExecuteMimeTypeHandlerEvent(scoped_ptr<content::StreamInfo> stream,
   if (!streams_private)
     return;
   streams_private->ExecuteMimeTypeHandler(
-      extension_id, web_contents, stream.Pass(), view_id, expected_content_size,
-      embedded, render_process_id, render_frame_id);
+      extension_id, web_contents, std::move(stream), view_id,
+      expected_content_size, embedded, render_process_id, render_frame_id);
 }
 #endif  // !defined(ENABLE_EXTENSIONS)
 
@@ -285,11 +288,9 @@ ChromeResourceDispatcherHostDelegate::ChromeResourceDispatcherHostDelegate()
 #endif
       {
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
+      BrowserThread::IO, FROM_HERE,
       base::Bind(content::ServiceWorkerContext::AddExcludedHeadersForFetchEvent,
-                 variations::VariationsHttpHeaderProvider::GetInstance()
-                     ->GetVariationHeaderNames()));
+                 variations::GetVariationHeaderNames()));
 }
 
 ChromeResourceDispatcherHostDelegate::~ChromeResourceDispatcherHostDelegate() {
@@ -371,12 +372,10 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     net::HttpRequestHeaders headers;
     headers.CopyFrom(request->extra_request_headers());
     bool is_off_the_record = io_data->IsOffTheRecord();
-    variations::VariationsHttpHeaderProvider::GetInstance()->
-        AppendHeaders(request->url(),
-                      is_off_the_record,
-                      !is_off_the_record &&
-                          io_data->GetMetricsEnabledStateOnIOThread(),
-                      &headers);
+    variations::AppendVariationHeaders(
+        request->url(), is_off_the_record,
+        !is_off_the_record && io_data->GetMetricsEnabledStateOnIOThread(),
+        &headers);
     request->SetExtraRequestHeaders(headers);
   }
 
@@ -514,7 +513,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
           MaybeCreate(
               request, resource_type, io_data->data_reduction_proxy_io_data());
   if (data_reduction_proxy_throttle)
-    throttles->push_back(data_reduction_proxy_throttle.Pass());
+    throttles->push_back(std::move(data_reduction_proxy_throttle));
 #endif
 
 #if defined(ENABLE_SUPERVISED_USERS)

@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/media_stream_capture_indicator.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -95,7 +98,7 @@ TabRecordingIndicatorAnimation::Create() {
   scoped_ptr<TabRecordingIndicatorAnimation> animation(
       new TabRecordingIndicatorAnimation(parts, interval));
   animation->set_continuous(false);
-  return animation.Pass();
+  return animation;
 }
 
 }  // namespace
@@ -227,7 +230,7 @@ scoped_ptr<gfx::Animation> CreateTabMediaIndicatorFadeAnimation(
   scoped_ptr<gfx::MultiAnimation> animation(
       new gfx::MultiAnimation(parts, interval));
   animation->set_continuous(false);
-  return animation.Pass();
+  return std::move(animation);
 }
 
 base::string16 AssembleTabTooltipText(const base::string16& title,

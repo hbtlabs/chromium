@@ -4,12 +4,19 @@
 
 #include "ui/events/test/event_generator.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
+#include "build/build_config.h"
 #include "ui/events/event.h"
 #include "ui/events/event_source.h"
 #include "ui/events/event_utils.h"
@@ -42,7 +49,7 @@ class TestTickClock : public base::TickClock {
   }
 
  private:
-  int64 ticks_ = 1;
+  int64_t ticks_ = 1;
 
   DISALLOW_COPY_AND_ASSIGN(TestTickClock);
 };
@@ -553,7 +560,7 @@ void EventGenerator::Dispatch(ui::Event* event) {
 }
 
 void EventGenerator::SetTickClock(scoped_ptr<base::TickClock> tick_clock) {
-  tick_clock_ = tick_clock.Pass();
+  tick_clock_ = std::move(tick_clock);
 }
 
 base::TimeDelta EventGenerator::Now() {
@@ -576,7 +583,7 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
                                       int flags) {
 #if defined(OS_WIN)
   UINT key_press = WM_KEYDOWN;
-  uint16 character = ui::DomCodeToUsLayoutCharacter(
+  uint16_t character = ui::DomCodeToUsLayoutCharacter(
       ui::UsLayoutKeyboardCodeToDomCode(key_code), flags);
   if (is_press && character) {
     MSG native_event = { NULL, WM_KEYDOWN, key_code, 0 };
@@ -665,11 +672,18 @@ void EventGenerator::DoDispatchEvent(ui::Event* event, bool async) {
     }
     pending_events_.push_back(pending_event);
   } else {
-    ui::EventSource* event_source = delegate()->GetEventSource(current_target_);
-    ui::EventSourceTestApi event_source_test(event_source);
-    ui::EventDispatchDetails details =
-        event_source_test.SendEventToProcessor(event);
-    CHECK(!details.dispatcher_destroyed);
+    if (event->IsKeyEvent()) {
+      delegate()->DispatchKeyEventToIME(current_target_,
+                                        static_cast<ui::KeyEvent*>(event));
+    }
+    if (!event->handled()) {
+      ui::EventSource* event_source =
+          delegate()->GetEventSource(current_target_);
+      ui::EventSourceTestApi event_source_test(event_source);
+      ui::EventDispatchDetails details =
+          event_source_test.SendEventToProcessor(event);
+      CHECK(!details.dispatcher_destroyed);
+    }
   }
 }
 

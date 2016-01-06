@@ -22,9 +22,9 @@ void TestingShowAppListInstallDialogController(
     WindowedInstallDialogController** controller,
     ExtensionInstallPromptShowParams* show_params,
     ExtensionInstallPrompt::Delegate* delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt) {
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   *controller =
-      new WindowedInstallDialogController(show_params, delegate, prompt);
+      new WindowedInstallDialogController(show_params, delegate, prompt.Pass());
 }
 
 typedef InProcessBrowserTest WindowedInstallDialogControllerBrowserTest;
@@ -43,9 +43,8 @@ IN_PROC_BROWSER_TEST_F(WindowedInstallDialogControllerBrowserTest,
   chrome::MockExtensionInstallPromptDelegate delegate;
   scoped_refptr<extensions::Extension> extension =
       chrome::LoadInstallPromptExtension("permissions", "many-apis.json");
-  prompt->ConfirmInstall(
-      &delegate,
-      extension.get(),
+  prompt->ShowDialog(
+      &delegate, extension.get(), nullptr,
       base::Bind(&TestingShowAppListInstallDialogController, &controller));
 
   // The prompt needs to load the image, which happens on the blocking pool.

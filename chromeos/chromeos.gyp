@@ -258,6 +258,8 @@
       'network/device_state.h',
       'network/dhcp_proxy_script_fetcher_chromeos.cc',
       'network/dhcp_proxy_script_fetcher_chromeos.h',
+      'network/firewall_hole.cc',
+      'network/firewall_hole.h',
       'network/geolocation_handler.cc',
       'network/geolocation_handler.h',
       'network/host_resolver_impl_chromeos.cc',
@@ -268,8 +270,6 @@
       'network/managed_network_configuration_handler_impl.h',
       'network/managed_state.cc',
       'network/managed_state.h',
-      'network/firewall_hole.cc',
-      'network/firewall_hole.h',
       'network/network_activation_handler.cc',
       'network/network_activation_handler.h',
       'network/network_cert_migrator.cc',
@@ -386,6 +386,37 @@
       'tpm/tpm_token_loader.cc',
       'tpm/tpm_token_loader.h'
     ],
+    'chromeos_binder_sources': [
+      'binder/buffer_reader.cc',
+      'binder/buffer_reader.h',
+      'binder/command_broker.cc',
+      'binder/command_broker.h',
+      'binder/command_stream.cc',
+      'binder/command_stream.h',
+      'binder/constants.h',
+      'binder/driver.cc',
+      'binder/driver.h',
+      'binder/status.h',
+      'binder/transaction_data.h',
+      'binder/transaction_data_from_driver.cc',
+      'binder/transaction_data_from_driver.h',
+      'binder/transaction_data_reader.cc',
+      'binder/transaction_data_reader.h',
+      'binder/transaction_status.cc',
+      'binder/transaction_status.h',
+      'binder/util.cc',
+      'binder/util.h',
+      'binder/writable_transaction_data.cc',
+      'binder/writable_transaction_data.h',
+    ],
+    'chromeos_binder_test_sources': [
+      'binder/buffer_reader_unittest.cc',
+      'binder/command_broker_unittest.cc',
+      'binder/command_stream_unittest.cc',
+      'binder/driver_unittest.cc',
+      'binder/transaction_data_reader_unittest.cc',
+      'binder/writable_transaction_data_unittest.cc',
+    ],
     'chromeos_test_sources': [
       'app_mode/kiosk_oem_manifest_parser_unittest.cc',
       'attestation/attestation_flow_unittest.cc',
@@ -453,6 +484,7 @@
       'timezone/timezone_unittest.cc',
       'tpm/tpm_token_info_getter_unittest.cc',
     ],
+    'use_binder%': 0,
   },
   'includes': [
     'chromeos_tools.gypi'
@@ -490,6 +522,18 @@
         'CHROMEOS_IMPLEMENTATION',
       ],
       'sources': [ '<@(chromeos_sources)' ],
+      'conditions': [
+        ['use_binder == 1', {
+          'sources': [ '<@(chromeos_binder_sources)' ],
+          'conditions': [
+            ['target_arch == "arm" or target_arch == "ia32"', {
+              'defines': [
+                'BINDER_IPC_32BIT',
+              ],
+            }],
+          ],
+        }],
+      ],
     },
     {
       # GN version: //chromeos:test_support
@@ -620,6 +664,16 @@
           ],
           },
         ],
+        ['use_binder == 1', {
+          'sources': [ '<@(chromeos_binder_test_sources)' ],
+          'conditions': [
+            ['target_arch == "arm" or target_arch == "ia32"', {
+              'defines': [
+                'BINDER_IPC_32BIT',
+              ],
+            }],
+          ],
+        }],
       ],
     },
     {

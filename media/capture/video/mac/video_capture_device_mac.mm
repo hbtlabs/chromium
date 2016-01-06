@@ -7,12 +7,17 @@
 #include <IOKit/IOCFPlugIn.h>
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/usb/USBSpec.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <limits>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/mac/scoped_ioplugininterface.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -96,7 +101,7 @@ typedef struct IOUSBInterfaceDescriptor {
 } IOUSBInterfaceDescriptor;
 
 static void GetBestMatchSupportedResolution(gfx::Size* resolution) {
-  int min_diff = kint32max;
+  int min_diff = std::numeric_limits<int32_t>::max();
   const int desired_area = resolution->GetArea();
   for (size_t i = 0; i < arraysize(kWellSupportedResolutions); ++i) {
     const int area = kWellSupportedResolutions[i]->width *
@@ -462,7 +467,7 @@ bool VideoCaptureDeviceMac::Init(
   return true;
 }
 
-void VideoCaptureDeviceMac::ReceiveFrame(const uint8* video_frame,
+void VideoCaptureDeviceMac::ReceiveFrame(const uint8_t* video_frame,
                                          int video_frame_length,
                                          const VideoCaptureFormat& frame_format,
                                          int aspect_numerator,

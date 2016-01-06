@@ -5,12 +5,14 @@
 #ifndef CC_QUADS_RENDER_PASS_H_
 #define CC_QUADS_RENDER_PASS_H_
 
+#include <stddef.h>
+
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/list_container.h"
 #include "cc/quads/render_pass_id.h"
@@ -116,10 +118,6 @@ class CC_EXPORT RenderPass {
 
   QuadList quad_list;
   SharedQuadStateList shared_quad_state_list;
-
-  // This vector contains the complete set of SurfaceIds referenced by
-  // DrawQuads in quad_list.
-  std::vector<SurfaceId> referenced_surfaces;
 
  protected:
   explicit RenderPass(size_t num_layers);

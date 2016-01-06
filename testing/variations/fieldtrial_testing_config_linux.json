@@ -1,4 +1,9 @@
 {
+    "AsyncDNS": [
+        {
+            "group_name": "AsyncDNSA"
+        }
+    ],
     "AutofillClassifier": [
         {
             "group_name": "Enabled"
@@ -20,6 +25,14 @@
     "CaptivePortalInterstitial": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "ChromeDashboard": [
+        {
+            "group_name": "Enabled"
+        },
+        {
+            "group_name": "Default"
         }
     ],
     "ChromotingQUIC": [
@@ -58,6 +71,11 @@
     "MaterialDesignDownloads": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "PasswordBranding": [
+        {
+            "group_name": "SmartLockBrandingSavePromptOnly"
         }
     ],
     "QUIC": [
@@ -113,7 +131,28 @@
             "group_name": "Disabled"
         }
     ],
+    "SafeBrowsingUnverifiedDownloads": [
+        {
+            "group_name": "DisableByParameterExe",
+            "params": {
+                "blacklist": ".exe"
+            }
+        }
+    ],
+    "SafeBrowsingUpdateFrequency": [
+        {
+            "group_name": "UpdateTime15m",
+            "params": {
+                "NextUpdateIntervalInMinutes": "15"
+            }
+        }
+    ],
     "SdchPersistence": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "StrictSecureCookies": [
         {
             "group_name": "Enabled"
         }

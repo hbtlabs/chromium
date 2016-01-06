@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/message_center/views/message_center_view.h"
+
 #include <map>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -14,7 +18,6 @@
 #include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_types.h"
 #include "ui/message_center/views/message_center_controller.h"
-#include "ui/message_center/views/message_center_view.h"
 #include "ui/message_center/views/message_list_view.h"
 #include "ui/message_center/views/notification_view.h"
 
@@ -358,7 +361,7 @@ TEST_F(MessageCenterViewTest, SizeAfterUpdate) {
 
   int previous_height = GetMessageListView()->height();
 
-  UpdateNotification(kNotificationId2, notification.Pass());
+  UpdateNotification(kNotificationId2, std::move(notification));
 
   // Wait until the animation finishes if available.
   if (GetAnimator()->IsAnimating())
@@ -416,7 +419,7 @@ TEST_F(MessageCenterViewTest, PositionAfterUpdate) {
       gfx::Image(), base::UTF8ToUTF16("display source"), GURL(),
       NotifierId(NotifierId::APPLICATION, "extension_id"),
       message_center::RichNotificationData(), NULL));
-  UpdateNotification(kNotificationId2, notification.Pass());
+  UpdateNotification(kNotificationId2, std::move(notification));
 
   // Wait until the animation finishes if available.
   if (GetAnimator()->IsAnimating())

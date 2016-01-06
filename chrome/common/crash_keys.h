@@ -5,11 +5,15 @@
 #ifndef CHROME_COMMON_CRASH_KEYS_H_
 #define CHROME_COMMON_CRASH_KEYS_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/debug/crash_logging.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/crash/core/common/crash_keys.h"
 
 namespace base {
@@ -76,6 +80,10 @@ extern const char kGPUGLVersion[];
 #elif defined(OS_POSIX)
 extern const char kGPUVendor[];
 extern const char kGPURenderer[];
+#endif
+
+#if defined(OS_WIN)
+extern const char kHungAudioThreadDetails[];
 #endif
 
 // The user's printers, up to kPrinterInfoCount. Should be set with

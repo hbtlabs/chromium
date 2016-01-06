@@ -5,12 +5,14 @@
 #include "components/domain_reliability/context.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/rand_util.h"
 #include "base/values.h"
 #include "components/domain_reliability/dispatcher.h"
 #include "components/domain_reliability/uploader.h"
@@ -47,7 +49,7 @@ DomainReliabilityContext::DomainReliabilityContext(
     DomainReliabilityDispatcher* dispatcher,
     DomainReliabilityUploader* uploader,
     scoped_ptr<const DomainReliabilityConfig> config)
-    : config_(config.Pass()),
+    : config_(std::move(config)),
       time_(time),
       upload_reporter_string_(upload_reporter_string),
       scheduler_(time,
@@ -59,8 +61,7 @@ DomainReliabilityContext::DomainReliabilityContext(
       uploader_(uploader),
       uploading_beacons_size_(0),
       last_network_change_time_(last_network_change_time),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 DomainReliabilityContext::~DomainReliabilityContext() {
   ClearBeacons();
@@ -69,16 +70,17 @@ DomainReliabilityContext::~DomainReliabilityContext() {
 void DomainReliabilityContext::OnBeacon(
     scoped_ptr<DomainReliabilityBeacon> beacon) {
   bool success = (beacon->status == "ok");
-
-  bool reported = config().DecideIfShouldReportRequest(success);
-  UMA_HISTOGRAM_BOOLEAN("DomainReliability.BeaconReported", reported);
-  if (!reported) {
+  double sample_rate = config().GetSampleRate(success);
+  bool should_report = base::RandDouble() < sample_rate;
+  UMA_HISTOGRAM_BOOLEAN("DomainReliability.BeaconReported", should_report);
+  if (!should_report) {
     // If the beacon isn't queued to be reported, it definitely cannot evict
     // an older beacon. (This histogram is also logged below based on whether
     // an older beacon was actually evicted.)
     LogOnBeaconDidEvictHistogram(false);
     return;
   }
+  beacon->sample_rate = sample_rate;
 
   UMA_HISTOGRAM_SPARSE_SLOWLY("DomainReliability.ReportedBeaconError",
                               -beacon->chrome_error);
@@ -89,14 +91,16 @@ void DomainReliabilityContext::OnBeacon(
   }
   // TODO(ttuttle): Histogram HTTP response code?
 
+  // Allow beacons about reports, but don't schedule an upload for more than
+  // one layer of recursion, to avoid infinite report loops.
   if (beacon->upload_depth <= kMaxUploadDepthToSchedule)
     scheduler_.OnBeaconAdded();
   beacons_.push_back(beacon.release());
-  bool evicted = beacons_.size() > kMaxQueuedBeacons;
-  if (evicted)
+  bool should_evict = beacons_.size() > kMaxQueuedBeacons;
+  if (should_evict)
     RemoveOldestBeacon();
 
-  LogOnBeaconDidEvictHistogram(evicted);
+  LogOnBeaconDidEvictHistogram(should_evict);
 }
 
 void DomainReliabilityContext::ClearBeacons() {
@@ -212,7 +216,7 @@ scoped_ptr<const Value> DomainReliabilityContext::CreateReport(
   report_value->Set("entries", beacons_value.release());
 
   *max_upload_depth_out = max_upload_depth;
-  return report_value.Pass();
+  return std::move(report_value);
 }
 
 void DomainReliabilityContext::MarkUpload() {

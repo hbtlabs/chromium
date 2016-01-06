@@ -4,7 +4,9 @@
 
 #include "chrome/browser/chromeos/chrome_browser_main_chromeos.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/ash_switches.h"
@@ -15,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/linux_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,6 +33,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
+#include "chrome/browser/chromeos/arc/arc_settings_bridge_impl.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/dbus/chrome_console_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/chrome_display_power_service_provider_delegate.h"
@@ -109,6 +113,9 @@
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/tpm_token_loader.h"
+#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/settings/arc_settings_bridge.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/metrics/metrics_service.h"
@@ -144,8 +151,6 @@
 #include "chrome/browser/chromeos/events/system_key_event_listener.h"
 #include "chrome/browser/chromeos/events/xinput_hierarchy_changed_event_listener.h"
 #endif
-
-#include "components/arc/arc_bridge_service.h"
 
 namespace chromeos {
 
@@ -209,7 +214,7 @@ class DBusServices {
     service_providers.push_back(new ScreenLockServiceProvider);
     service_providers.push_back(new ConsoleServiceProvider(
         make_scoped_ptr(new ChromeConsoleServiceProviderDelegate)));
-    CrosDBusService::Initialize(service_providers.Pass());
+    CrosDBusService::Initialize(std::move(service_providers));
 
     // Initialize PowerDataCollector after DBusThreadManager is initialized.
     PowerDataCollector::Initialize();
@@ -389,12 +394,9 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   wake_on_wifi_manager_.reset(new WakeOnWifiManager());
 
-  arc_bridge_service_ = arc::ArcBridgeService::Create(
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::IO),
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::FILE));
-  arc_bridge_service_->DetectAvailability();
+  arc_service_manager_.reset(new arc::ArcServiceManager(
+      make_scoped_ptr(new arc::ArcSettingsBridgeImpl())));
+  arc_service_manager_->arc_bridge_service()->DetectAvailability();
 
   chromeos::ResourceReporter::GetInstance()->StartMonitoring();
 
@@ -573,7 +575,7 @@ void SetGuestLocale(Profile* const profile) {
   scoped_ptr<GuestLanguageSetCallbackData> data(
       new GuestLanguageSetCallbackData(profile));
   locale_util::SwitchLanguageCallback callback(base::Bind(
-      &GuestLanguageSetCallbackData::Callback, base::Passed(data.Pass())));
+      &GuestLanguageSetCallbackData::Callback, base::Passed(std::move(data))));
   const user_manager::User* const user =
       ProfileHelper::Get()->GetUserByProfile(profile);
   UserSessionManager::GetInstance()->RespectLocalePreference(
@@ -713,7 +715,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
-  arc_bridge_service_->Shutdown();
+  arc_service_manager_->arc_bridge_service()->Shutdown();
 
   // Destroy the application name notifier for Kiosk mode.
   KioskModeIdleAppNameNotification::Shutdown();

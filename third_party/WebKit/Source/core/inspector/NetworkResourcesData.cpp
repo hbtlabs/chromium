@@ -26,7 +26,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/NetworkResourcesData.h"
 
 #include "core/dom/DOMImplementation.h"
@@ -194,7 +193,7 @@ void NetworkResourcesData::responseReceived(const String& requestId, const Strin
         blobData->appendFile(filePath);
         AtomicString mimeType;
         if (response.isHTTP())
-            mimeType = extractMIMETypeFromMediaType(response.httpHeaderField("Content-Type"));
+            mimeType = extractMIMETypeFromMediaType(response.httpHeaderField(HTTPNames::Content_Type));
         if (mimeType.isEmpty())
             mimeType = response.mimeType();
         if (mimeType.isEmpty())

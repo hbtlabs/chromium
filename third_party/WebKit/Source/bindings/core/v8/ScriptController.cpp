@@ -30,7 +30,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "bindings/core/v8/ScriptController.h"
 
 #include "bindings/core/v8/BindingSecurity.h"
@@ -240,7 +239,7 @@ TextPosition ScriptController::eventHandlerPosition() const
 bool ScriptController::bindToWindowObject(LocalFrame* frame, const String& key, NPObject* object)
 {
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return false;
 
     ScriptState::Scope scope(scriptState);
@@ -252,18 +251,19 @@ bool ScriptController::bindToWindowObject(LocalFrame* frame, const String& key, 
 
 void ScriptController::enableEval()
 {
-    if (!m_windowProxyManager->mainWorldProxy()->isContextInitialized())
-        return;
     v8::HandleScope handleScope(isolate());
-    m_windowProxyManager->mainWorldProxy()->context()->AllowCodeGenerationFromStrings(true);
+    v8::Local<v8::Context> v8Context = m_windowProxyManager->mainWorldProxy()->contextIfInitialized();
+    if (v8Context.IsEmpty())
+        return;
+    v8Context->AllowCodeGenerationFromStrings(true);
 }
 
 void ScriptController::disableEval(const String& errorMessage)
 {
-    if (!m_windowProxyManager->mainWorldProxy()->isContextInitialized())
-        return;
     v8::HandleScope handleScope(isolate());
-    v8::Local<v8::Context> v8Context = m_windowProxyManager->mainWorldProxy()->context();
+    v8::Local<v8::Context> v8Context = m_windowProxyManager->mainWorldProxy()->contextIfInitialized();
+    if (v8Context.IsEmpty())
+        return;
     v8Context->AllowCodeGenerationFromStrings(false);
     v8Context->SetErrorMessageForCodeGenerationFromStrings(v8String(isolate(), errorMessage));
 }
@@ -349,7 +349,7 @@ static NPObject* createNoScriptObject()
 static NPObject* createScriptObject(LocalFrame* frame, v8::Isolate* isolate)
 {
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return createNoScriptObject();
 
     ScriptState::Scope scope(scriptState);
@@ -387,7 +387,7 @@ NPObject* ScriptController::createScriptObjectForPluginElement(HTMLPlugInElement
         return createNoScriptObject();
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame());
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return createNoScriptObject();
 
     ScriptState::Scope scope(scriptState);
@@ -413,9 +413,9 @@ void ScriptController::clearWindowProxy()
     Platform::current()->histogramCustomCounts("WebCore.ScriptController.clearWindowProxy", (currentTime() - start) * 1000, 0, 10000, 50);
 }
 
-void ScriptController::setCaptureCallStackForUncaughtExceptions(bool value)
+void ScriptController::setCaptureCallStackForUncaughtExceptions(v8::Isolate* isolate, bool value)
 {
-    v8::V8::SetCaptureStackTraceForUncaughtExceptions(value, ScriptCallStack::maxCallStackSizeToCapture, stackTraceOptions);
+    isolate->SetCaptureStackTraceForUncaughtExceptions(value, ScriptCallStack::maxCallStackSizeToCapture, stackTraceOptions);
 }
 
 void ScriptController::collectIsolatedContexts(Vector<std::pair<ScriptState*, SecurityOrigin*>>& result)
@@ -554,7 +554,7 @@ v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSou
     m_sourceURL = &sourceURL;
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame());
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return v8::Local<v8::Value>();
     v8::EscapableHandleScope handleScope(isolate());
     ScriptState::Scope scope(scriptState);

@@ -4,6 +4,8 @@
 
 #import "chrome/browser/app_controller_mac.h"
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -11,6 +13,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
@@ -1126,10 +1129,11 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
       break;
     case IDC_SHOW_SYNC_SETUP:
       if (Browser* browser = ActivateBrowser(lastProfile)) {
-        chrome::ShowBrowserSigninOrSettings(browser,
-                                            signin_metrics::SOURCE_MENU);
+        chrome::ShowBrowserSigninOrSettings(
+            browser, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       } else {
-        chrome::OpenSyncSetupWindow(lastProfile, signin_metrics::SOURCE_MENU);
+        chrome::OpenSyncSetupWindow(
+            lastProfile, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
       }
       break;
     case IDC_TASK_MANAGER:

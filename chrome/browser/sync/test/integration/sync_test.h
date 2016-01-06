@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/process/process.h"
@@ -275,6 +275,10 @@ class SyncTest : public InProcessBrowserTest {
   // before the Profile object is created.
   void SetPreexistingPreferencesFileContents(const std::string& contents);
 
+  // Helper to ProfileManager::CreateProfileAsync that creates a new profile
+  // used for UI Signin. Blocks until profile is created.
+  static Profile* MakeProfileForUISignin(base::FilePath profile_path);
+
   // GAIA account used by the test case.
   std::string username_;
 
@@ -291,10 +295,6 @@ class SyncTest : public InProcessBrowserTest {
   // Handles Profile creation for given index. Profile's path and type is
   // determined at runtime based on server type.
   void CreateProfile(int index);
-
-  // Helper to ProfileManager::CreateProfileAsync that creates a new profile
-  // used for UI Signin. Blocks until profile is created.
-  static Profile* MakeProfileForUISignin(base::FilePath profile_path);
 
   // Callback for MakeProfileForUISignin() method. It runs the quit_closure once
   // profile is created successfully.

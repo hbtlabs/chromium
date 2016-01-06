@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -13,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/messaging/incognito_connectability.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -62,17 +68,17 @@ class MessageSender : public content::NotificationObserver {
     event->SetString("data", data);
     scoped_ptr<base::ListValue> arguments(new base::ListValue());
     arguments->Append(event);
-    return arguments.Pass();
+    return arguments;
   }
 
   static scoped_ptr<Event> BuildEvent(scoped_ptr<base::ListValue> event_args,
                                       Profile* profile,
                                       GURL event_url) {
     scoped_ptr<Event> event(new Event(events::TEST_ON_MESSAGE, "test.onMessage",
-                                      event_args.Pass()));
+                                      std::move(event_args)));
     event->restrict_to_browser_context = profile;
     event->event_url = event_url;
-    return event.Pass();
+    return event;
   }
 
   void Observe(int type,
@@ -121,6 +127,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MessagingExternal) {
                     .AppendASCII("1.0")));
 
   ASSERT_TRUE(RunExtensionTest("messaging/connect_external")) << message_;
+}
+
+// Tests that a content script can exchange messages with a tab even if there is
+// no background page.
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MessagingNoBackground) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionSubtest("messaging/connect_nobackground",
+                                  "page_in_main_frame.html")) << message_;
 }
 
 // Tests that messages with event_urls are only passed to extensions with
@@ -467,10 +481,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest, NotInstalled) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
           .SetID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-          .SetManifest(DictionaryBuilder()
-                           .Set("name", "Fake extension")
-                           .Set("version", "1")
-                           .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Fake extension")
+                                     .Set("version", "1")
+                                     .Set("manifest_version", 2)))
           .Build();
 
   ui_test_utils::NavigateToURL(browser(), chromium_org_url());
@@ -981,7 +995,7 @@ class ExternallyConnectableMessagingWithTlsChannelIdTest :
                    base::Unretained(&request), request_context_getter));
     tls_channel_id_created_.Wait();
     // Create the expected value.
-    std::vector<uint8> spki_vector;
+    std::vector<uint8_t> spki_vector;
     if (!channel_id_key->ExportPublicKey(&spki_vector))
       return std::string();
     base::StringPiece spki(reinterpret_cast<char*>(spki_vector.data()),
@@ -1183,10 +1197,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
       ExtensionBuilder()
           // A bit scary that this works...
           .SetID("invalid")
-          .SetManifest(DictionaryBuilder()
-                           .Set("name", "Fake extension")
-                           .Set("version", "1")
-                           .Set("manifest_version", 2))
+          .SetManifest(std::move(DictionaryBuilder()
+                                     .Set("name", "Fake extension")
+                                     .Set("version", "1")
+                                     .Set("manifest_version", 2)))
           .Build();
 
   ui_test_utils::NavigateToURL(browser(), chromium_org_url());

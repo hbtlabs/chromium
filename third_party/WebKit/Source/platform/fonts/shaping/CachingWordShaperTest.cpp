@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/fonts/shaping/CachingWordShaper.h"
 
 #include "platform/fonts/FontCache.h"
@@ -180,6 +179,162 @@ TEST_F(CachingWordShaperTest, SubRunWithZeroGlyphs)
     shaper.selectionRect(&font, textRun, point, height, 0, 8);
 }
 
+TEST_F(CachingWordShaperTest, SegmentCJKByCharacter)
+{
+    const UChar str[] = {
+        0x56FD, 0x56FD, // CJK Unified Ideograph
+        'a', 'b',
+        0x56FD, // CJK Unified Ideograph
+        'x', 'y', 'z',
+        0x3042, // HIRAGANA LETTER A
+        0x56FD, // CJK Unified Ideograph
+        0x0
+    };
+    TextRun textRun(str, 10);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(3u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKAndCommon)
+{
+    const UChar str[] = {
+        'a', 'b',
+        0xFF08, // FULLWIDTH LEFT PARENTHESIS (script=common)
+        0x56FD, // CJK Unified Ideograph
+        0x56FD, // CJK Unified Ideograph
+        0x56FD, // CJK Unified Ideograph
+        0x3002, // IDEOGRAPHIC FULL STOP (script=common)
+        0x0
+    };
+    TextRun textRun(str, 7);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKAndInherit)
+{
+    const UChar str[] = {
+        0x304B, // HIRAGANA LETTER KA
+        0x304B, // HIRAGANA LETTER KA
+        0x3009, // COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK
+        0x304B, // HIRAGANA LETTER KA
+        0x0
+    };
+    TextRun textRun(str, 4);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKAndNonCJKCommon)
+{
+    const UChar str[] = {
+        0x56FD, // CJK Unified Ideograph
+        ' ',
+        0x0
+    };
+    TextRun textRun(str, 2);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKCommon)
+{
+    const UChar str[] = {
+        0xFF08, // FULLWIDTH LEFT PARENTHESIS (script=common)
+        0xFF08, // FULLWIDTH LEFT PARENTHESIS (script=common)
+        0xFF08, // FULLWIDTH LEFT PARENTHESIS (script=common)
+        0x0
+    };
+    TextRun textRun(str, 3);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(3u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKCommonAndNonCJK)
+{
+    const UChar str[] = {
+        0xFF08, // FULLWIDTH LEFT PARENTHESIS (script=common)
+        'a', 'b',
+        0x0
+    };
+    TextRun textRun(str, 3);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
 TEST_F(CachingWordShaperTest, TextOrientationFallbackShouldNotInFallbackList)
 {
     const UChar str[] = {
@@ -201,6 +356,25 @@ TEST_F(CachingWordShaperTest, TextOrientationFallbackShouldNotInFallbackList)
     HashSet<const SimpleFontData*> fallbackFonts;
     ASSERT_GT(shaper.width(&verticalMixedFont, textRun, &fallbackFonts, &glyphBounds), 0);
     EXPECT_EQ(0u, fallbackFonts.size());
+}
+
+TEST_F(CachingWordShaperTest, GlyphBoundsWithSpaces)
+{
+    CachingWordShaper shaper(cache.get());
+
+    TextRun periods(reinterpret_cast<const LChar*>(".........."), 10);
+    FloatRect periodsGlyphBounds;
+    float periodsWidth = shaper.width(&font, periods, nullptr, &periodsGlyphBounds);
+
+    TextRun periodsAndSpaces(reinterpret_cast<const LChar*>(". . . . . . . . . ."), 19);
+    FloatRect periodsAndSpacesGlyphBounds;
+    float periodsAndSpacesWidth = shaper.width(&font, periodsAndSpaces, nullptr, &periodsAndSpacesGlyphBounds);
+
+    // The total width of periods and spaces should be longer than the width of periods alone.
+    ASSERT_GT(periodsAndSpacesWidth, periodsWidth);
+
+    // The glyph bounds of periods and spaces should be longer than the glyph bounds of periods alone.
+    ASSERT_GT(periodsAndSpacesGlyphBounds.width(), periodsGlyphBounds.width());
 }
 
 } // namespace blink

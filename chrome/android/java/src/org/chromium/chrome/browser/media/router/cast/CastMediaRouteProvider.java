@@ -10,30 +10,34 @@ import android.support.v7.media.MediaRouteSelector;
 import android.support.v7.media.MediaRouter;
 import android.support.v7.media.MediaRouter.RouteInfo;
 
+import org.chromium.base.Log;
 import org.chromium.chrome.browser.media.router.ChromeMediaRouter;
 import org.chromium.chrome.browser.media.router.DiscoveryDelegate;
 import org.chromium.chrome.browser.media.router.MediaRoute;
 import org.chromium.chrome.browser.media.router.MediaRouteManager;
 import org.chromium.chrome.browser.media.router.MediaRouteProvider;
-import org.chromium.chrome.browser.media.router.RouteController;
-import org.chromium.chrome.browser.media.router.RouteDelegate;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
 /**
  * A {@link MediaRouteProvider} implementation for Cast devices and applications.
  */
-public class CastMediaRouteProvider
-        implements MediaRouteProvider, DiscoveryDelegate, RouteDelegate {
+public class CastMediaRouteProvider implements MediaRouteProvider, DiscoveryDelegate {
+
+    private static final String TAG = "MediaRouter";
 
     private static final String AUTO_JOIN_PRESENTATION_ID = "auto-join";
     private static final String PRESENTATION_ID_SESSION_ID_PREFIX = "cast-session_";
+    private static final String RECEIVER_ACTION_PRESENTATION_ID = "_receiver-action";
 
     private final Context mApplicationContext;
     private final MediaRouter mAndroidMediaRouter;
@@ -42,10 +46,10 @@ public class CastMediaRouteProvider
             new HashMap<String, DiscoveryCallback>();
     private final Map<String, MediaRoute> mRoutes = new HashMap<String, MediaRoute>();
     private ClientRecord mLastRemovedRouteRecord;
-    private final List<ClientRecord> mClientRecords = new ArrayList<ClientRecord>();
+    private final Map<String, ClientRecord> mClientRecords = new HashMap<String, ClientRecord>();
 
     // There can be only one Cast session at the same time on Android.
-    private SessionRecord mSession;
+    private CastSession mSession;
     private CreateRouteRequest mPendingCreateRouteRequest;
     private Handler mHandler = new Handler();
 
@@ -69,80 +73,6 @@ public class CastMediaRouteProvider
             MediaRouteManager manager = mRouteManager.get();
             if (manager != null) manager.onSinksReceived(mSourceId, mRouteProvider, mSinks);
         }
-    };
-
-    @Override
-    public void onSinksReceived(String sourceId, List<MediaSink> sinks) {
-        mHandler.post(new OnSinksReceivedRunnable(mManager, this, sourceId, sinks));
-    }
-
-    @Override
-    public void onRouteCreated(int requestId, MediaRoute route, RouteController routeController) {
-        String routeId = route.id;
-
-        MediaSource source = MediaSource.from(route.sourceId);
-        final String clientId = source.getClientId();
-        if (clientId != null && getClientRecordByClientId(clientId) == null) {
-            mClientRecords.add(new ClientRecord(
-                    routeId,
-                    clientId,
-                    source.getApplicationId(),
-                    source.getAutoJoinPolicy(),
-                    routeController.getOrigin(),
-                    routeController.getTabId()));
-        }
-
-        if (mSession == null) {
-            mSession = new SessionRecord(route.sinkId, (CastRouteController) routeController);
-        }
-        mSession.routeIds.add(routeId);
-
-        if (clientId != null && !mSession.clientIds.contains(clientId)) {
-            mSession.clientIds.add(clientId);
-        }
-
-        mRoutes.put(routeId, route);
-
-        mManager.onRouteCreated(routeId, route.sinkId, requestId, this, true);
-    }
-
-    @Override
-    public void onRouteRequestError(String message, int requestId) {
-        mManager.onRouteRequestError(message, requestId);
-    }
-
-    @Override
-    public void onRouteClosed(String routeId) {
-        mLastRemovedRouteRecord = getClientRecordByRouteId(routeId);
-        mClientRecords.remove(mLastRemovedRouteRecord);
-
-        mManager.onRouteClosed(routeId);
-        if (mSession != null) {
-            for (String sessionRouteId : mSession.routeIds) {
-                if (sessionRouteId.equals(routeId)) continue;
-
-                mManager.onRouteClosed(routeId);
-            }
-        }
-
-        mSession = null;
-
-        if (mPendingCreateRouteRequest != null) {
-            mPendingCreateRouteRequest.start(mApplicationContext);
-            mPendingCreateRouteRequest = null;
-        } else if (mAndroidMediaRouter != null) {
-            mAndroidMediaRouter.selectRoute(mAndroidMediaRouter.getDefaultRoute());
-        }
-    }
-
-    @Override
-    public void onMessageSentResult(boolean success, int callbackId) {
-        mManager.onMessageSentResult(success, callbackId);
-    }
-
-    @Override
-    public void onMessage(String routeId, String message) {
-        mManager.onMessage(routeId, message);
     }
 
     /**
@@ -158,6 +88,82 @@ public class CastMediaRouteProvider
         if (androidMediaRouter == null) return null;
 
         return new CastMediaRouteProvider(applicationContext, androidMediaRouter, manager);
+    }
+
+    public void onRouteCreated(
+            int requestId, MediaRoute route, CastSession session, String origin, int tabId) {
+        mSession = session;
+
+        addRoute(route, origin, tabId);
+        mManager.onRouteCreated(route.id, route.sinkId, requestId, this, true);
+    }
+
+    public void onRouteRequestError(String message, int requestId) {
+        mManager.onRouteRequestError(message, requestId);
+    }
+
+    public void onClientDisconnected(String clientId) {
+        ClientRecord client = mClientRecords.get(clientId);
+        assert client != null;
+
+        mRoutes.remove(client.routeId);
+        removeClient(client);
+
+        mManager.onRouteClosed(client.routeId);
+    }
+
+    public void onSessionStopAction() {
+        if (mSession == null) return;
+
+        for (String routeId : mRoutes.keySet()) closeRoute(routeId);
+    }
+
+    public void onSessionClosed() {
+        if (mSession == null) return;
+
+        if (mClientRecords.isEmpty()) {
+            mRoutes.clear();
+        } else {
+            mLastRemovedRouteRecord = mClientRecords.values().iterator().next();
+            for (ClientRecord client : mClientRecords.values()) {
+                mManager.onRouteClosed(client.routeId);
+
+                mRoutes.remove(client.routeId);
+            }
+            mClientRecords.clear();
+        }
+
+        mSession = null;
+
+        if (mPendingCreateRouteRequest != null) {
+            mPendingCreateRouteRequest.start(mApplicationContext);
+            mPendingCreateRouteRequest = null;
+        } else if (mAndroidMediaRouter != null) {
+            mAndroidMediaRouter.selectRoute(mAndroidMediaRouter.getDefaultRoute());
+        }
+    }
+
+    public void onMessageSentResult(boolean success, int callbackId) {
+        mManager.onMessageSentResult(success, callbackId);
+    }
+
+    public void onMessage(String clientId, String message) {
+        ClientRecord clientRecord = mClientRecords.get(clientId);
+        if (clientRecord == null
+                || clientRecord.clientId.endsWith(RECEIVER_ACTION_PRESENTATION_ID)) {
+            return;
+        }
+
+        mManager.onMessage(clientRecord.routeId, message);
+    }
+
+    public Set<String> getClients() {
+        return mClientRecords.keySet();
+    }
+
+    @Override
+    public void onSinksReceived(String sourceId, List<MediaSink> sinks) {
+        mHandler.post(new OnSinksReceivedRunnable(mManager, this, sourceId, sinks));
     }
 
     @Override
@@ -243,16 +249,23 @@ public class CastMediaRouteProvider
             return;
         }
 
+        if (source.getClientId() != null) {
+            String receiverActionClientId = source.getClientId() + RECEIVER_ACTION_PRESENTATION_ID;
+            ClientRecord clientRecord = mClientRecords.get(receiverActionClientId);
+            if (clientRecord != null) {
+                sendReceiverAction(clientRecord.routeId, sink, receiverActionClientId, "cast");
+                detachRoute(clientRecord.routeId);
+                mManager.onRouteClosed(clientRecord.routeId);
+            }
+        }
+
         CreateRouteRequest createRouteRequest = new CreateRouteRequest(
                 source, sink, presentationId, origin, tabId, nativeRequestId, this);
 
-        // TODO(avayvod): Implement ReceiverAction.CAST, https://crbug.com/561470.
-
         // Since we only have one session, close it before starting a new one.
-        if (mSession != null && !mSession.isStopping) {
+        if (mSession != null) {
             mPendingCreateRouteRequest = createRouteRequest;
-            mSession.isStopping = true;
-            mSession.session.close();
+            mSession.stopApplication();
             return;
         }
 
@@ -262,75 +275,77 @@ public class CastMediaRouteProvider
     @Override
     public void joinRoute(String sourceId, String presentationId, String origin, int tabId,
             int nativeRequestId) {
-        if (mSession == null) {
-            mManager.onRouteRequestError("No presentation", nativeRequestId);
-            return;
-        }
-
         MediaSource source = MediaSource.from(sourceId);
         if (source == null || source.getClientId() == null) {
             mManager.onRouteRequestError("Unsupported presentation URL", nativeRequestId);
             return;
         }
 
-        // TODO(avayvod): Implement _receiver-action route for ReceiverAction messages,
-        // https://crbug.com/561470.
+        // For the ReceiverAction presentation id there's no need to have a session or a route.
+        if (RECEIVER_ACTION_PRESENTATION_ID.equals(presentationId)) {
+            MediaRoute route = new MediaRoute("", sourceId, presentationId);
+            addRoute(route, origin, tabId);
+            mManager.onRouteCreated(route.id, route.sinkId, nativeRequestId, this, true);
+            return;
+        }
+
+        if (mSession == null) {
+            mManager.onRouteRequestError("No presentation", nativeRequestId);
+            return;
+        }
 
         if (!canJoinExistingSession(presentationId, origin, tabId, source)) {
             mManager.onRouteRequestError("No matching route", nativeRequestId);
             return;
         }
 
-        MediaRoute route = new MediaRoute(mSession.session.getSinkId(), sourceId, presentationId);
-        mRoutes.put(route.id, route);
-
-        this.onRouteCreated(nativeRequestId, route, mSession.session);
+        MediaRoute route = new MediaRoute(mSession.getSinkId(), sourceId, presentationId);
+        addRoute(route, origin, tabId);
+        mManager.onRouteCreated(route.id, route.sinkId, nativeRequestId, this, false);
     }
 
     @Override
     public void closeRoute(String routeId) {
         MediaRoute route = mRoutes.get(routeId);
 
-        if (route == null) {
-            onRouteClosed(routeId);
-            return;
-        }
+        if (route == null) return;
 
-        if (mSession == null || !mSession.routeIds.contains(routeId)) {
+        if (mSession == null) {
             mRoutes.remove(routeId);
-
-            onRouteClosed(routeId);
             return;
         }
 
-        // TODO(avayvod): Implement ReceiverAction.STOP, https://crbug.com/561470.
+        ClientRecord client = getClientRecordByRouteId(routeId);
+        if (client != null) {
+            MediaSink sink = MediaSink.fromSinkId(mSession.getSinkId(), mAndroidMediaRouter);
+            if (sink != null) sendReceiverAction(routeId, sink, client.clientId, "stop");
+        }
 
-        if (mSession.isStopping) return;
-
-        mSession.isStopping = true;
-        mSession.session.close();
+        mSession.stopApplication();
     }
 
     @Override
     public void detachRoute(String routeId) {
         mRoutes.remove(routeId);
-        if (mSession != null) mSession.routeIds.remove(routeId);
 
-        for (int i = mClientRecords.size() - 1; i >= 0; --i) {
-            ClientRecord client = mClientRecords.get(i);
-            if (client.routeId.equals(routeId)) mClientRecords.remove(i);
-            if (mSession != null) mSession.clientIds.remove(client.clientId);
-        }
+        removeClient(getClientRecordByRouteId(routeId));
     }
 
     @Override
     public void sendStringMessage(String routeId, String message, int nativeCallbackId) {
-        if (mSession == null || !mSession.routeIds.contains(routeId)) {
+        ClientRecord clientRecord = getClientRecordByRouteId(routeId);
+        if (clientRecord != null
+                && clientRecord.clientId.endsWith(RECEIVER_ACTION_PRESENTATION_ID)) {
+            mManager.onMessageSentResult(true, nativeCallbackId);
+            return;
+        }
+
+        if (mSession == null || !mRoutes.containsKey(routeId)) {
             mManager.onMessageSentResult(false, nativeCallbackId);
             return;
         }
 
-        mSession.session.sendStringMessage(message, nativeCallbackId);
+        mSession.sendStringMessage(message, nativeCallbackId);
     }
 
     @Override
@@ -351,13 +366,14 @@ public class CastMediaRouteProvider
 
     @Nullable
     private boolean canAutoJoin(MediaSource source, String origin, int tabId) {
-        MediaSource currentSource = MediaSource.from(mSession.session.getSourceId());
+        if (source.getAutoJoinPolicy().equals(MediaSource.AUTOJOIN_PAGE_SCOPED)) return false;
+
+        MediaSource currentSource = MediaSource.from(mSession.getSourceId());
         if (!currentSource.getApplicationId().equals(source.getApplicationId())) return false;
 
         ClientRecord client = null;
-        if (!mSession.clientIds.isEmpty()) {
-            String clientId = mSession.clientIds.iterator().next();
-            client = getClientRecordByClientId(clientId);
+        if (!mClientRecords.isEmpty()) {
+            client = mClientRecords.values().iterator().next();
         } else if (mLastRemovedRouteRecord != null) {
             client = mLastRemovedRouteRecord;
             return origin.equals(client.origin) && tabId == client.tabId;
@@ -365,9 +381,7 @@ public class CastMediaRouteProvider
 
         if (client == null) return false;
 
-        if (source.getAutoJoinPolicy().equals(MediaSource.AUTOJOIN_PAGE_SCOPED)) {
-            return false;
-        } else if (source.getAutoJoinPolicy().equals(MediaSource.AUTOJOIN_ORIGIN_SCOPED)) {
+        if (source.getAutoJoinPolicy().equals(MediaSource.AUTOJOIN_ORIGIN_SCOPED)) {
             return origin.equals(client.origin);
         } else if (source.getAutoJoinPolicy().equals(MediaSource.AUTOJOIN_TAB_AND_ORIGIN_SCOPED)) {
             return origin.equals(client.origin) && tabId == client.tabId;
@@ -383,29 +397,75 @@ public class CastMediaRouteProvider
         } else if (presentationId.startsWith(PRESENTATION_ID_SESSION_ID_PREFIX)) {
             String sessionId = presentationId.substring(PRESENTATION_ID_SESSION_ID_PREFIX.length());
 
-            if (mSession.session.getSessionId().equals(sessionId)) return true;
+            if (mSession.getSessionId().equals(sessionId)) return true;
         } else {
-            for (String routeId : mSession.routeIds) {
-                MediaRoute route = mRoutes.get(routeId);
-                if (route != null && route.presentationId.equals(presentationId)) return true;
+            for (MediaRoute route : mRoutes.values()) {
+                if (route.presentationId.equals(presentationId)) return true;
             }
         }
         return false;
     }
 
     @Nullable
-    private ClientRecord getClientRecordByClientId(String clientId) {
-        for (ClientRecord record : mClientRecords) {
-            if (record.clientId.equals(clientId)) return record;
+    private ClientRecord getClientRecordByRouteId(String routeId) {
+        for (ClientRecord record : mClientRecords.values()) {
+            if (record.routeId.equals(routeId)) return record;
         }
         return null;
     }
 
-    @Nullable
-    private ClientRecord getClientRecordByRouteId(String routeId) {
-        for (ClientRecord record : mClientRecords) {
-            if (record.routeId.equals(routeId)) return record;
+    private void addRoute(MediaRoute route, String origin, int tabId) {
+        mRoutes.put(route.id, route);
+
+        MediaSource source = MediaSource.from(route.sourceId);
+        final String clientId = source.getClientId();
+
+        if (clientId == null || mClientRecords.get(clientId) != null) return;
+
+        mClientRecords.put(clientId,
+                new ClientRecord(
+                        route.id,
+                        clientId,
+                        source.getApplicationId(),
+                        source.getAutoJoinPolicy(),
+                        origin,
+                        tabId));
+    }
+
+    private void sendReceiverAction(
+            String routeId, MediaSink sink, String clientId, String action) {
+        try {
+            JSONObject jsonReceiver = new JSONObject();
+            jsonReceiver.put("label", sink.getId());
+            jsonReceiver.put("friendlyName", sink.getName());
+            jsonReceiver.put("capabilities", CastSession.getCapabilities(sink.getDevice()));
+            jsonReceiver.put("volume", null);
+            jsonReceiver.put("isActiveInput", null);
+            jsonReceiver.put("displayStatus", null);
+            jsonReceiver.put("receiverType", "cast");
+
+            JSONObject jsonReceiverAction = new JSONObject();
+            jsonReceiverAction.put("receiver", jsonReceiver);
+            jsonReceiverAction.put("action", action);
+
+            JSONObject json = new JSONObject();
+            json.put("type", "receiver_action");
+            json.put("sequenceNumber", -1);
+            json.put("timeoutMillis", 0);
+            json.put("clientId", clientId);
+            json.put("message", jsonReceiverAction);
+
+            Log.d(TAG, "Sending receiver action to %s: %s", routeId, json.toString());
+            mManager.onMessage(routeId, json.toString());
+        } catch (JSONException e) {
+            Log.e(TAG, "Failed to send receiver action message", e);
         }
-        return null;
+    }
+
+    private void removeClient(@Nullable ClientRecord client) {
+        if (client == null) return;
+
+        mLastRemovedRouteRecord = client;
+        mClientRecords.remove(client.clientId);
     }
 }

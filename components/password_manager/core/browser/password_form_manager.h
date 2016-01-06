@@ -11,6 +11,7 @@
 
 #include "build/build_config.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -401,6 +402,10 @@ class PasswordFormManager : public PasswordStoreConsumer {
   // Create pending credentials from provisionally saved form and forms received
   // from password store.
   void CreatePendingCredentials();
+
+  // Create pending credentials from provisionally saved form when this form
+  // represents credentials that were not previosly saved.
+  void CreatePendingCredentialsForNewCredentials();
 
   // If |pending_credentials_.username_value| is not empty, iterates over all
   // forms from |best_matches_| and deletes from the password store all which

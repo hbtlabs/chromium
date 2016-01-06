@@ -36,6 +36,9 @@ import org.chromium.chrome.R;
  * layout algorithm to match.
  *
  * TODO(dfalcantara): Standardize all the possible control types.
+ * TODO(dfalcantara): The line spacing multiplier is applied to all lines in JB & KK, even if the
+ *                    TextView has only one line.  This throws off vertical alignment.  Find a
+ *                    solution that hopefully doesn't involve subclassing the TextView.
  */
 public final class InfoBarControlLayout extends ViewGroup {
 
@@ -92,22 +95,46 @@ public final class InfoBarControlLayout extends ViewGroup {
         int exactlyColumnWidthSpec = MeasureSpec.makeMeasureSpec(columnWidth, MeasureSpec.EXACTLY);
         int unspecifiedSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
 
-        // Measure all children, assuming they all have to fit within the width of the layout.
-        // Height is unconstrained.
+        // Figure out how many columns each child requires.
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             measureChild(child, atMostFullWidthSpec, unspecifiedSpec);
 
             if (child.getMeasuredWidth() <= columnWidth
                     && !getControlLayoutParams(child).mMustBeFullWidth) {
-                // Stretch out the control to take up a column width.
                 getControlLayoutParams(child).columnsRequired = 1;
-                measureChild(child, exactlyColumnWidthSpec, unspecifiedSpec);
             } else {
-                // Stretch out the control to take up the full width.
                 getControlLayoutParams(child).columnsRequired = 2;
-                measureChild(child, exactlyFullWidthSpec, unspecifiedSpec);
             }
+        }
+
+        // Pack all the children as tightly into rows as possible without changing their ordering.
+        // Stretch out column-width controls if either it is the last control or the next one is
+        // a full-width control.
+        for (int i = 0; i < getChildCount(); i++) {
+            ControlLayoutParams lp = getControlLayoutParams(getChildAt(i));
+
+            if (i == getChildCount() - 1) {
+                lp.columnsRequired = 2;
+            } else {
+                ControlLayoutParams nextLp = getControlLayoutParams(getChildAt(i + 1));
+                if (lp.columnsRequired + nextLp.columnsRequired > 2) {
+                    // This control is too big to place with the next child.
+                    lp.columnsRequired = 2;
+                } else {
+                    // This and the next control fit on the same line.  Skip placing the next child.
+                    i++;
+                }
+            }
+        }
+
+        // Measure all children, assuming they all have to fit within the width of the layout.
+        // Height is unconstrained.
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            ControlLayoutParams lp = getControlLayoutParams(child);
+            int spec = lp.columnsRequired == 1 ? exactlyColumnWidthSpec : exactlyFullWidthSpec;
+            measureChild(child, spec, unspecifiedSpec);
         }
 
         // Pack all the children as tightly into rows as possible without changing their ordering.
@@ -161,6 +188,43 @@ public final class InfoBarControlLayout extends ViewGroup {
     }
 
     /**
+     * Adds an icon with a descriptive message to the layout.
+     *
+     * -----------------------------------------------------
+     * | ICON | PRIMARY MESSAGE SECONDARY MESSAGE          |
+     * -----------------------------------------------------
+     * If an icon is not provided, the ImageView that would normally show it is hidden.
+     *
+     * @param iconResourceId   ID of the drawable to use for the icon.
+     * @param primaryMessage   Message to display for the toggle.
+     * @param secondaryMessage Additional descriptive text for the toggle.  May be null.
+     */
+    public View addIcon(
+            int iconResourceId, CharSequence primaryMessage, CharSequence secondaryMessage) {
+        LinearLayout layout = (LinearLayout) LayoutInflater.from(getContext()).inflate(
+                R.layout.infobar_control_icon_with_description, this, false);
+        addView(layout, new ControlLayoutParams());
+
+        ImageView iconView = (ImageView) layout.findViewById(R.id.control_icon);
+        iconView.setImageResource(iconResourceId);
+
+        // The primary message text is always displayed.
+        TextView primaryView = (TextView) layout.findViewById(R.id.control_message);
+        primaryView.setText(primaryMessage);
+
+        // The secondary message text is optional.
+        TextView secondaryView =
+                (TextView) layout.findViewById(R.id.control_secondary_message);
+        if (secondaryMessage == null) {
+            layout.removeView(secondaryView);
+        } else {
+            secondaryView.setText(secondaryMessage);
+        }
+
+        return layout;
+    }
+
+    /**
      * Creates a standard toggle switch and adds it to the layout.
      *
      * -------------------------------------------------
@@ -179,14 +243,14 @@ public final class InfoBarControlLayout extends ViewGroup {
                 R.layout.infobar_control_toggle, this, false);
         addView(switchLayout, new ControlLayoutParams());
 
-        ImageView iconView = (ImageView) switchLayout.findViewById(R.id.control_toggle_icon);
+        ImageView iconView = (ImageView) switchLayout.findViewById(R.id.control_icon);
         if (iconResourceId == 0) {
             switchLayout.removeView(iconView);
         } else {
             iconView.setImageResource(iconResourceId);
         }
 
-        TextView messageView = (TextView) switchLayout.findViewById(R.id.control_toggle_message);
+        TextView messageView = (TextView) switchLayout.findViewById(R.id.control_message);
         messageView.setText(toggleMessage);
 
         SwitchCompat switchView =

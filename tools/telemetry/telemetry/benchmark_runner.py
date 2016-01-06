@@ -7,8 +7,8 @@
 Handles benchmark configuration, but all the logic for
 actually running the benchmark is in Benchmark and PageRunner."""
 
+import argparse
 import hashlib
-import inspect
 import json
 import logging
 import os
@@ -93,9 +93,12 @@ class Help(command_line.OptparseCommand):
 
   usage = '[command]'
 
+  def __init__(self, commands):
+    self._all_commands = commands
+
   def Run(self, args):
     if len(args.positional_args) == 1:
-      commands = _MatchingCommands(args.positional_args[0])
+      commands = _MatchingCommands(args.positional_args[0], self._all_commands)
       if len(commands) == 1:
         command = commands[0]
         parser = command.CreateParser()
@@ -105,7 +108,7 @@ class Help(command_line.OptparseCommand):
 
     print >> sys.stderr, ('usage: %s [command] [<options>]' % _ScriptName())
     print >> sys.stderr, 'Available commands are:'
-    for command in _Commands():
+    for command in self._all_commands:
       print >> sys.stderr, '  %-10s %s' % (
           command.Name(), command.Description())
     print >> sys.stderr, ('"%s help <command>" to see usage information '
@@ -235,17 +238,8 @@ def _ScriptName():
   return os.path.basename(sys.argv[0])
 
 
-def _Commands():
-  """Generates a list of all classes in this file that subclass Command."""
-  for _, cls in inspect.getmembers(sys.modules[__name__]):
-    if not inspect.isclass(cls):
-      continue
-    if not issubclass(cls, command_line.Command):
-      continue
-    yield cls
-
-def _MatchingCommands(string):
-  return [command for command in _Commands()
+def _MatchingCommands(string, commands):
+  return [command for command in commands
          if command.Name().startswith(string)]
 
 @decorators.Cache
@@ -298,7 +292,7 @@ def _GetJsonBenchmarkList(possible_browser, possible_reference_browser,
   """Returns a list of all enabled benchmarks in a JSON format expected by
   buildbots.
 
-  JSON format (see build/android/pylib/perf/benchmark_runner.py):
+  JSON format:
   { "version": <int>,
     "steps": {
       <string>: {
@@ -324,20 +318,15 @@ def _GetJsonBenchmarkList(possible_browser, possible_reference_browser,
                 '-v', '--output-format=chartjson', '--upload-results',
                 base_name]
     perf_dashboard_id = base_name
-    # TODO(fmeawad): Currently we set the device affinity to a stable hash of
-    # the benchmark name. This somewhat evenly distributes benchmarks among the
-    # requested number of shards. However, it is far from optimal in terms of
-    # cycle time.  We should add a benchmark size decorator (e.g. small, medium,
-    # large) and let that inform sharding.
 
     # Based on the current timings, we shift the result of the hash function to
     # achieve better load balancing. Those shift values are to be revised when
-    # necessary. (See tools/build/scripts/tools/perf/chrome-perf-step-timings.py
-    # for more details)
+    # necessary. The shift value is calculated such that the total cycle time
+    # is minimized.
     hash_shift = {
-      2 : 47,
-      5 : 56,
-      8 : 50
+      2 : 47,  # for old desktop configurations with 2 slaves
+      5 : 56,  # for new desktop configurations with 5 slaves
+      21 : 43  # for Android 3 slaves 7 devices configurations
     }
     shift = hash_shift.get(num_shards, 0)
     base_name_hash = hashlib.sha1(base_name).hexdigest()
@@ -361,7 +350,7 @@ def _GetJsonBenchmarkList(possible_browser, possible_reference_browser,
   return json.dumps(output, indent=2, sort_keys=True)
 
 
-def main(environment):
+def main(environment, extra_commands=None):
   ps_util.EnableListingStrayProcessesUponExitHook()
 
   # Get the command name from the command line.
@@ -379,8 +368,12 @@ def main(environment):
     command_name = 'run'
     sys.argv[2] = '--help'
 
+  if extra_commands is None:
+    extra_commands = []
+  all_commands = [Help, List, Run] + extra_commands
+
   # Validate and interpret the command name.
-  commands = _MatchingCommands(command_name)
+  commands = _MatchingCommands(command_name, all_commands)
   if len(commands) > 1:
     print >> sys.stderr, ('"%s" is not a %s command. Did you mean one of these?'
                           % (command_name, _ScriptName()))
@@ -402,10 +395,23 @@ def main(environment):
   # Set the default chrome root variable.
   parser.set_defaults(chrome_root=environment.default_chrome_root)
 
-  options, args = parser.parse_args()
 
-  if commands:
-    args = args[1:]
-  options.positional_args = args
-  command.ProcessCommandLineArgs(parser, options, environment)
-  return command().Run(options)
+  if isinstance(parser, argparse.ArgumentParser):
+    commandline_args = sys.argv[1:]
+    options, args = parser.parse_known_args(commandline_args[1:])
+    command.ProcessCommandLineArgs(parser, options, args, environment)
+  else:
+    options, args = parser.parse_args()
+    if commands:
+      args = args[1:]
+    options.positional_args = args
+    command.ProcessCommandLineArgs(parser, options, environment)
+
+  if command == Help:
+    command_instance = command(all_commands)
+  else:
+    command_instance = command()
+  if isinstance(command_instance, command_line.OptparseCommand):
+    return command_instance.Run(options)
+  else:
+    return command_instance.Run(options, args)

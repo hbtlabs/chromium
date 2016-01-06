@@ -4,12 +4,12 @@
 
 #include "ui/gl/gl_surface_egl.h"
 
-#if defined(OS_ANDROID)
-#include <android/native_window_jni.h>
-#endif
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
@@ -26,10 +26,8 @@
 #include "ui/gl/scoped_make_current.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
-#if defined(USE_X11)
-extern "C" {
-#include <X11/Xlib.h>
-}
+#if defined(OS_ANDROID)
+#include <android/native_window_jni.h>
 #endif
 
 #if defined (USE_OZONE)
@@ -38,6 +36,11 @@ extern "C" {
 #endif
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
+extern "C" {
+#include <X11/Xlib.h>
+#define Status int
+}
+#include "ui/base/x/x11_util_internal.h"
 #include "ui/gfx/x/x11_switches.h"
 #endif
 
@@ -76,6 +79,11 @@ extern "C" {
 #define EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE 0x320E
 #endif /* EGL_ANGLE_platform_angle_opengl */
 
+#ifndef EGL_ANGLE_x11_visual
+#define EGL_ANGLE_x11_visual 1
+#define EGL_X11_VISUAL_ID_ANGLE 0x33A3
+#endif /* EGL_ANGLE_x11_visual */
+
 using ui::GetLastEGLErrorString;
 
 namespace gfx {
@@ -111,22 +119,22 @@ class EGLSyncControlVSyncProvider
   ~EGLSyncControlVSyncProvider() override {}
 
  protected:
-  bool GetSyncValues(int64* system_time,
-                     int64* media_stream_counter,
-                     int64* swap_buffer_counter) override {
-    uint64 u_system_time, u_media_stream_counter, u_swap_buffer_counter;
+  bool GetSyncValues(int64_t* system_time,
+                     int64_t* media_stream_counter,
+                     int64_t* swap_buffer_counter) override {
+    uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
     bool result = eglGetSyncValuesCHROMIUM(
         g_display, surface_, &u_system_time,
         &u_media_stream_counter, &u_swap_buffer_counter) == EGL_TRUE;
     if (result) {
-      *system_time = static_cast<int64>(u_system_time);
-      *media_stream_counter = static_cast<int64>(u_media_stream_counter);
-      *swap_buffer_counter = static_cast<int64>(u_swap_buffer_counter);
+      *system_time = static_cast<int64_t>(u_system_time);
+      *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
+      *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
     }
     return result;
   }
 
-  bool GetMscRate(int32* numerator, int32* denominator) override {
+  bool GetMscRate(int32_t* numerator, int32_t* denominator) override {
     return false;
   }
 
@@ -148,6 +156,13 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE);
   }
+
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+  Visual* visual;
+  ui::ChooseVisualForWindow(&visual, nullptr);
+  display_attribs.push_back(EGL_X11_VISUAL_ID_ANGLE);
+  display_attribs.push_back((EGLint)visual->visualid);
+#endif
 
   display_attribs.push_back(EGL_NONE);
 
@@ -472,10 +487,11 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay() {
 
 NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(EGLNativeWindowType window)
     : window_(window),
-      surface_(NULL),
-      supports_post_sub_buffer_(false),
       config_(NULL),
       size_(1, 1),
+      surface_(NULL),
+      supports_post_sub_buffer_(false),
+      alpha_(true),
       swap_interval_(1) {
 #if defined(OS_ANDROID)
   if (window)
@@ -501,6 +517,13 @@ bool NativeViewGLSurfaceEGL::Initialize(
 
   if (!GetDisplay()) {
     LOG(ERROR) << "Trying to create surface with invalid display.";
+    return false;
+  }
+
+  // We need to make sure that window_ is correctly initialized with all
+  // the platform-dependant quirks, if any, before creating the surface.
+  if (!InitializeNativeWindow()) {
+    LOG(ERROR) << "Error trying to initialize the native window.";
     return false;
   }
 
@@ -546,6 +569,10 @@ bool NativeViewGLSurfaceEGL::Initialize(
   return true;
 }
 
+bool NativeViewGLSurfaceEGL::InitializeNativeWindow() {
+  return true;
+}
+
 void NativeViewGLSurfaceEGL::Destroy() {
   if (surface_) {
     if (!eglDestroySurface(GetDisplay(), surface_)) {
@@ -557,80 +584,7 @@ void NativeViewGLSurfaceEGL::Destroy() {
 }
 
 EGLConfig NativeViewGLSurfaceEGL::GetConfig() {
-#if !defined(USE_X11)
   return g_config;
-#else
-  if (!config_) {
-    // Get a config compatible with the window
-    DCHECK(window_);
-    XWindowAttributes win_attribs;
-    if (!XGetWindowAttributes(GetNativeDisplay(), window_, &win_attribs)) {
-      return NULL;
-    }
-
-    // Try matching the window depth with an alpha channel,
-    // because we're worried the destination alpha width could
-    // constrain blending precision.
-    const int kBufferSizeOffset = 1;
-    const int kAlphaSizeOffset = 3;
-    EGLint config_attribs[] = {
-      EGL_BUFFER_SIZE, ~0,
-      EGL_ALPHA_SIZE, 8,
-      EGL_BLUE_SIZE, 8,
-      EGL_GREEN_SIZE, 8,
-      EGL_RED_SIZE, 8,
-      EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-      EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
-      EGL_NONE
-    };
-    config_attribs[kBufferSizeOffset] = win_attribs.depth;
-
-    EGLint num_configs;
-    if (!eglChooseConfig(g_display,
-                         config_attribs,
-                         &config_,
-                         1,
-                         &num_configs)) {
-      LOG(ERROR) << "eglChooseConfig failed with error "
-                 << GetLastEGLErrorString();
-      return NULL;
-    }
-
-    if (num_configs) {
-      EGLint config_depth;
-      if (!eglGetConfigAttrib(g_display,
-                              config_,
-                              EGL_BUFFER_SIZE,
-                              &config_depth)) {
-        LOG(ERROR) << "eglGetConfigAttrib failed with error "
-                   << GetLastEGLErrorString();
-        return NULL;
-      }
-
-      if (config_depth == win_attribs.depth) {
-        return config_;
-      }
-    }
-
-    // Try without an alpha channel.
-    config_attribs[kAlphaSizeOffset] = 0;
-    if (!eglChooseConfig(g_display,
-                         config_attribs,
-                         &config_,
-                         1,
-                         &num_configs)) {
-      LOG(ERROR) << "eglChooseConfig failed with error "
-                 << GetLastEGLErrorString();
-      return NULL;
-    }
-
-    if (num_configs == 0) {
-      LOG(ERROR) << "No suitable EGL configs found.";
-      return NULL;
-    }
-  }
-  return config_;
-#endif
 }
 
 bool NativeViewGLSurfaceEGL::IsOffscreen() {
@@ -704,10 +658,13 @@ gfx::Size NativeViewGLSurfaceEGL::GetSize() {
   return gfx::Size(width, height);
 }
 
-bool NativeViewGLSurfaceEGL::Resize(const gfx::Size& size, float scale_factor) {
-  if (size == GetSize())
+bool NativeViewGLSurfaceEGL::Resize(const gfx::Size& size,
+                                    float scale_factor,
+                                    bool has_alpha) {
+  if (size == GetSize() && has_alpha == alpha_)
     return true;
 
+  alpha_ = has_alpha;
   size_ = size;
 
   scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
@@ -894,7 +851,9 @@ gfx::Size PbufferGLSurfaceEGL::GetSize() {
   return size_;
 }
 
-bool PbufferGLSurfaceEGL::Resize(const gfx::Size& size, float scale_factor) {
+bool PbufferGLSurfaceEGL::Resize(const gfx::Size& size,
+                                 float scale_factor,
+                                 bool has_alpha) {
   if (size == size_)
     return true;
 
@@ -980,7 +939,9 @@ gfx::Size SurfacelessEGL::GetSize() {
   return size_;
 }
 
-bool SurfacelessEGL::Resize(const gfx::Size& size, float scale_factor) {
+bool SurfacelessEGL::Resize(const gfx::Size& size,
+                            float scale_factor,
+                            bool has_alpha) {
   size_ = size;
   return true;
 }

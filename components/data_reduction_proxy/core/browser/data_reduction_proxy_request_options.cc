@@ -16,13 +16,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_client_config_parser.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/data_reduction_proxy/core/common/version.h"
-#include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "crypto/random.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -73,29 +73,6 @@ bool DataReductionProxyRequestOptions::IsKeySetOnCommandLine() {
       *base::CommandLine::ForCurrentProcess();
   return command_line.HasSwitch(
       data_reduction_proxy::switches::kDataReductionProxyKey);
-}
-
-// static
-std::string DataReductionProxyRequestOptions::CreateLocalSessionKey(
-    const std::string& session,
-    const std::string& credentials) {
-  return base::StringPrintf("%s|%s", session.c_str(), credentials.c_str());
-}
-
-// static
-bool DataReductionProxyRequestOptions::ParseLocalSessionKey(
-    const std::string& session_key,
-    std::string* session,
-    std::string* credentials) {
-  std::vector<base::StringPiece> auth_values = base::SplitStringPiece(
-      session_key, "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  if (auth_values.size() == 2) {
-    auth_values[0].CopyToString(session);
-    auth_values[1].CopyToString(credentials);
-    return true;
-  }
-
-  return false;
 }
 
 DataReductionProxyRequestOptions::DataReductionProxyRequestOptions(
@@ -175,7 +152,7 @@ void DataReductionProxyRequestOptions::UpdateExperiments() {
 
 // static
 base::string16 DataReductionProxyRequestOptions::AuthHashForSalt(
-    int64 salt,
+    int64_t salt,
     const std::string& key) {
   std::string salted_key =
       base::StringPrintf("%lld%s%lld",
@@ -195,7 +172,6 @@ void DataReductionProxyRequestOptions::RandBytes(void* output,
 }
 
 void DataReductionProxyRequestOptions::MaybeAddRequestHeader(
-    net::URLRequest* request,
     const net::ProxyServer& proxy_server,
     net::HttpRequestHeaders* request_headers) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -203,7 +179,7 @@ void DataReductionProxyRequestOptions::MaybeAddRequestHeader(
     return;
   if (proxy_server.is_direct())
     return;
-  MaybeAddRequestHeaderImpl(request, proxy_server.host_port_pair(), false,
+  MaybeAddRequestHeaderImpl(proxy_server.host_port_pair(), false,
                             request_headers);
 }
 
@@ -211,11 +187,10 @@ void DataReductionProxyRequestOptions::MaybeAddProxyTunnelRequestHandler(
     const net::HostPortPair& proxy_server,
     net::HttpRequestHeaders* request_headers) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  MaybeAddRequestHeaderImpl(nullptr, proxy_server, true, request_headers);
+  MaybeAddRequestHeaderImpl(proxy_server, true, request_headers);
 }
 
 void DataReductionProxyRequestOptions::SetHeader(
-    const net::URLRequest* request,
     net::HttpRequestHeaders* headers) {
   base::Time now = Now();
   // Authorization credentials must be regenerated if they are expired.
@@ -238,10 +213,9 @@ void DataReductionProxyRequestOptions::ComputeCredentials(
     std::string* credentials) const {
   DCHECK(session);
   DCHECK(credentials);
-  int64 timestamp =
-      (now - base::Time::UnixEpoch()).InMilliseconds() / 1000;
+  int64_t timestamp = (now - base::Time::UnixEpoch()).InMilliseconds() / 1000;
 
-  int32 rand[3];
+  int32_t rand[3];
   RandBytes(rand, 3 * sizeof(rand[0]));
   *session = base::StringPrintf("%lld-%u-%u-%u",
                                 static_cast<long long>(timestamp),
@@ -267,31 +241,6 @@ void DataReductionProxyRequestOptions::SetKeyOnIO(const std::string& key) {
     key_ = key;
     UpdateCredentials();
   }
-}
-
-void DataReductionProxyRequestOptions::PopulateConfigResponse(
-    ClientConfig* config) const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  std::string session;
-  std::string credentials;
-  base::Time now = Now();
-  ComputeCredentials(now, &session, &credentials);
-  config->set_session_key(CreateLocalSessionKey(session, credentials));
-  config_parser::TimeDeltatoDuration(base::TimeDelta::FromHours(24),
-                                     config->mutable_refresh_duration());
-}
-
-void DataReductionProxyRequestOptions::SetCredentials(
-    const std::string& session,
-    const std::string& credentials) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  session_ = session;
-  credentials_ = credentials;
-  secure_session_.clear();
-  // Force skipping of credential regeneration. It should be handled by the
-  // caller.
-  use_assigned_credentials_ = true;
-  RegenerateRequestHeaderValue();
 }
 
 void DataReductionProxyRequestOptions::SetSecureSession(
@@ -336,7 +285,6 @@ const std::string& DataReductionProxyRequestOptions::GetSecureSession() const {
 }
 
 void DataReductionProxyRequestOptions::MaybeAddRequestHeaderImpl(
-    const net::URLRequest* request,
     const net::HostPortPair& proxy_server,
     bool expect_ssl,
     net::HttpRequestHeaders* request_headers) {
@@ -345,7 +293,7 @@ void DataReductionProxyRequestOptions::MaybeAddRequestHeaderImpl(
   if (data_reduction_proxy_config_->IsDataReductionProxy(proxy_server, NULL) &&
       data_reduction_proxy_config_->UsingHTTPTunnel(proxy_server) ==
           expect_ssl) {
-    SetHeader(request, request_headers);
+    SetHeader(request_headers);
   }
 }
 

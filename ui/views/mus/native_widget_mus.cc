@@ -4,6 +4,7 @@
 
 #include "ui/views/mus/native_widget_mus.h"
 
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
@@ -20,6 +21,7 @@
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/views/mus/platform_window_mus.h"
 #include "ui/views/mus/surface_context_factory.h"
+#include "ui/views/mus/window_manager_constants_converters.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -189,7 +191,20 @@ NativeWidgetMus::~NativeWidgetMus() {
 }
 
 void NativeWidgetMus::OnPlatformWindowClosed() {
-  GetWidget()->Close();
+  native_widget_delegate_->OnNativeWidgetDestroying();
+
+  window_tree_client_.reset();  // Uses |content_|.
+  capture_client_.reset();      // Uses |content_|.
+
+  window_tree_host_->RemoveObserver(this);
+  window_tree_host_.reset();
+
+  window_ = nullptr;
+  content_ = nullptr;
+
+  native_widget_delegate_->OnNativeWidgetDestroyed();
+  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
+    delete this;
 }
 
 void NativeWidgetMus::OnActivationChanged(bool active) {
@@ -227,6 +242,9 @@ void NativeWidgetMus::ConfigurePropertiesForNewWindow(
   if (!Widget::RequiresNonClientView(init_params.type))
     return;
 
+  (*properties)[mus::mojom::WindowManager::kWindowType_Property] =
+      mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
+          mojo::ConvertTo<mus::mojom::WindowType>(init_params.type));
   ConfigurePropertiesForNewWindowFromDelegate(init_params.delegate, properties);
 }
 
@@ -267,6 +285,7 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   }
   window_tree_host_.reset(
       new WindowTreeHostMus(shell_, this, window_, surface_type_));
+  window_tree_host_->AddObserver(this);
   window_tree_host_->InitHost();
   aura::Env::GetInstance()->set_context_factory(default_context_factory);
 
@@ -347,6 +366,12 @@ void NativeWidgetMus::ViewRemoved(View* view) {
   // NOTIMPLEMENTED();
 }
 
+// These methods are wrong in mojo. They're not usually used to associate
+// data with a window; they are used exclusively in chrome/ to unsafely pass
+// raw pointers around. I can only find two places where we do the "safe"
+// thing (and even that requires casting an integer to a void*). They can't be
+// used safely in a world where we separate things with mojo. They should be
+// removed; not ported.
 void NativeWidgetMus::SetNativeWindowProperty(const char* name, void* value) {
   // TODO(beng): push properties to mus::Window.
   // NOTIMPLEMENTED();
@@ -376,7 +401,7 @@ bool NativeWidgetMus::HasCapture() const {
 }
 
 ui::InputMethod* NativeWidgetMus::GetInputMethod() {
-  return window_tree_host_->GetInputMethod();
+  return window_tree_host_ ? window_tree_host_->GetInputMethod() : nullptr;
 }
 
 void NativeWidgetMus::CenterWindow(const gfx::Size& size) {
@@ -392,9 +417,9 @@ void NativeWidgetMus::GetWindowPlacement(
 }
 
 bool NativeWidgetMus::SetWindowTitle(const base::string16& title) {
-  // TODO(beng): push title to window manager.
-  // NOTIMPLEMENTED();
-  return false;
+  window_->SetSharedProperty<base::string16>(
+      mus::mojom::WindowManager::kWindowTitle_Property, title);
+  return true;
 }
 
 void NativeWidgetMus::SetWindowIcons(const gfx::ImageSkia& window_icon,
@@ -456,9 +481,7 @@ void NativeWidgetMus::Close() {
 }
 
 void NativeWidgetMus::CloseNow() {
-  // Note: Deleting |content_| triggers the |OnWindowDestroyed()| callback,
-  // which can delete |this|.
-  delete content_;
+  window_->Destroy();
 }
 
 void NativeWidgetMus::Show() {
@@ -585,7 +608,8 @@ void NativeWidgetMus::RunShellDrag(
 }
 
 void NativeWidgetMus::SchedulePaintInRect(const gfx::Rect& rect) {
-  content_->SchedulePaintInRect(rect);
+  if (content_)
+    content_->SchedulePaintInRect(rect);
 }
 
 void NativeWidgetMus::SetCursor(gfx::NativeCursor cursor) {
@@ -723,9 +747,7 @@ void NativeWidgetMus::OnWindowDestroying(aura::Window* window) {
 }
 
 void NativeWidgetMus::OnWindowDestroyed(aura::Window* window) {
-  native_widget_delegate_->OnNativeWidgetDestroyed();
-  if (ownership_ == Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET)
-    delete this;
+  // Cleanup happens in OnPlatformWindowClosed().
 }
 
 void NativeWidgetMus::OnWindowTargetVisibilityChanged(bool visible) {
@@ -786,6 +808,10 @@ void NativeWidgetMus::OnScrollEvent(ui::ScrollEvent* event) {
 
 void NativeWidgetMus::OnGestureEvent(ui::GestureEvent* event) {
   native_widget_delegate_->OnGestureEvent(event);
+}
+
+void NativeWidgetMus::OnHostCloseRequested(const aura::WindowTreeHost* host) {
+  GetWidget()->Close();
 }
 
 }  // namespace views

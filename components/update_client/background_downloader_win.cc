@@ -6,6 +6,7 @@
 
 #include <atlbase.h>
 #include <atlcom.h>
+#include <stddef.h>
 
 #include <stdint.h>
 #include <functional>
@@ -21,7 +22,6 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/win/scoped_co_mem.h"
 #include "components/update_client/utils.h"
-#include "ui/base/win/atl_module.h"
 #include "url/gurl.h"
 
 using base::win::ScopedCoMem;

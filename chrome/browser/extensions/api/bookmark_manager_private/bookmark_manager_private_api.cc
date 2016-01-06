@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/lazy_instance.h"
@@ -75,7 +78,7 @@ namespace {
 // This returns NULL in case of failure.
 const BookmarkNode* GetNodeFromString(BookmarkModel* model,
                                       const std::string& id_string) {
-  int64 id;
+  int64_t id;
   if (!base::StringToInt64(id_string, &id))
     return NULL;
   return bookmarks::GetBookmarkNodeByID(model, id);
@@ -166,7 +169,7 @@ CreateApiBookmarkNodeData(Profile* profile, const BookmarkNodeData& data) {
     for (size_t i = 0; i < data.size(); ++i)
       node_data->elements.push_back(CreateApiNodeDataElement(data.elements[i]));
   }
-  return node_data.Pass();
+  return node_data;
 }
 
 }  // namespace
@@ -189,7 +192,7 @@ void BookmarkManagerPrivateEventRouter::DispatchEvent(
     scoped_ptr<base::ListValue> event_args) {
   EventRouter::Get(browser_context_)
       ->BroadcastEvent(make_scoped_ptr(
-          new Event(histogram_value, event_name, event_args.Pass())));
+          new Event(histogram_value, event_name, std::move(event_args))));
 }
 
 void BookmarkManagerPrivateEventRouter::BookmarkModelChanged() {}
@@ -307,8 +310,9 @@ void BookmarkManagerPrivateDragEventRouter::DispatchEvent(
   if (!event_router)
     return;
 
-  scoped_ptr<Event> event(new Event(histogram_value, event_name, args.Pass()));
-  event_router->BroadcastEvent(event.Pass());
+  scoped_ptr<Event> event(
+      new Event(histogram_value, event_name, std::move(args)));
+  event_router->BroadcastEvent(std::move(event));
 }
 
 void BookmarkManagerPrivateDragEventRouter::OnDragEnter(
@@ -799,7 +803,7 @@ bool BookmarkManagerPrivateRemoveTreesFunction::RunOnReady() {
   BookmarkModel* model = GetBookmarkModel();
   bookmarks::ManagedBookmarkService* managed = GetManagedBookmarkService();
   bookmarks::ScopedGroupBookmarkActions group_deletes(model);
-  int64 id;
+  int64_t id;
   for (size_t i = 0; i < params->id_list.size(); ++i) {
     if (!GetBookmarkIdAsInt64(params->id_list[i], &id))
       return false;

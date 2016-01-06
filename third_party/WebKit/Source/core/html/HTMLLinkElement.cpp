@@ -22,7 +22,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/html/HTMLLinkElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
@@ -44,6 +43,7 @@
 #include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html/CrossOriginAttribute.h"
 #include "core/html/LinkManifest.h"
 #include "core/html/imports/LinkImport.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -52,6 +52,7 @@
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/style/StyleInheritedData.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "public/platform/Platform.h"
 #include "wtf/StdLibExtras.h"
 
 namespace blink {
@@ -121,8 +122,8 @@ static void parseSizes(const CharacterType* value, unsigned length, Vector<IntSi
 
 static LinkEventSender& linkLoadEventSender()
 {
-    DEFINE_STATIC_LOCAL(LinkEventSender, sharedLoadEventSender, (EventTypeNames::load));
-    return sharedLoadEventSender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<LinkEventSender>, sharedLoadEventSender, (LinkEventSender::create(EventTypeNames::load)));
+    return *sharedLoadEventSender;
 }
 
 void HTMLLinkElement::parseSizesAttribute(const AtomicString& value, Vector<IntSize>& iconSizes)
@@ -140,6 +141,7 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser
     : HTMLElement(linkTag, document)
     , m_linkLoader(this)
     , m_sizes(DOMSettableTokenList::create(this))
+    , m_relList(RelList::create(this))
     , m_createdByParser(createdByParser)
     , m_isInShadowTree(false)
 {
@@ -157,18 +159,19 @@ HTMLLinkElement::~HTMLLinkElement()
     m_link.clear();
     if (inDocument())
         document().styleEngine().removeStyleSheetCandidateNode(this);
-#endif
     linkLoadEventSender().cancelEvent(this);
+#endif
 }
 
 void HTMLLinkElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     if (name == relAttr) {
         m_relAttribute = LinkRelAttribute(value);
+        m_relList->setRelValues(value);
         process();
     } else if (name == hrefAttr) {
         // Log href attribute before logging resource fetching in process().
-        logEventIfIsolatedWorldAndInDocument("blinkSetAttribute", "link", hrefAttr.toString(), oldValue, value);
+        logUpdateAttributeIfIsolatedWorldAndInDocument("link", hrefAttr, oldValue, value);
         process();
     } else if (name == typeAttr) {
         m_type = value;
@@ -202,7 +205,7 @@ bool HTMLLinkElement::shouldLoadLink()
 
 bool HTMLLinkElement::loadLink(const String& type, const String& as, const KURL& url)
 {
-    return m_linkLoader.loadLink(m_relAttribute, fastGetAttribute(HTMLNames::crossoriginAttr), type, as, url, document(), NetworkHintsInterfaceImpl());
+    return m_linkLoader.loadLink(m_relAttribute, crossOriginAttributeValue(fastGetAttribute(HTMLNames::crossoriginAttr)), type, as, url, document(), NetworkHintsInterfaceImpl());
 }
 
 LinkResource* HTMLLinkElement::linkResourceToProcess()
@@ -261,7 +264,7 @@ void HTMLLinkElement::process()
 Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    logEventIfIsolatedWorldAndInDocument("blinkAddElement", "link", fastGetAttribute(relAttr), fastGetAttribute(hrefAttr));
+    logAddElementIfIsolatedWorldAndInDocument("link", relAttr, hrefAttr);
     if (!insertionPoint->inDocument())
         return InsertionDone;
 
@@ -452,6 +455,7 @@ DEFINE_TRACE(HTMLLinkElement)
     visitor->trace(m_link);
     visitor->trace(m_sizes);
     visitor->trace(m_linkLoader);
+    visitor->trace(m_relList);
     HTMLElement::trace(visitor);
     DOMSettableTokenListObserver::trace(visitor);
 }
@@ -527,8 +531,10 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
 
         m_loading = false;
         restoredSheet->checkLoaded();
+        Platform::current()->histogramEnumeration("Blink.RestoredCachedStyleSheet", true, 2);
         return;
     }
+    Platform::current()->histogramEnumeration("Blink.RestoredCachedStyleSheet", false, 2);
 
     RefPtrWillBeRawPtr<StyleSheetContents> styleSheet = StyleSheetContents::create(href, parserContext);
 
@@ -724,9 +730,9 @@ void LinkStyle::process()
 
         // Load stylesheets that are not needed for the layout immediately with low priority.
         FetchRequest request = builder.build(blocking);
-        AtomicString crossOriginMode = m_owner->fastGetAttribute(HTMLNames::crossoriginAttr);
-        if (!crossOriginMode.isNull()) {
-            request.setCrossOriginAccessControl(document().securityOrigin(), crossOriginMode);
+        CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(m_owner->fastGetAttribute(HTMLNames::crossoriginAttr));
+        if (crossOrigin != CrossOriginAttributeNotSet) {
+            request.setCrossOriginAccessControl(document().securityOrigin(), crossOrigin);
             setFetchFollowingCORS();
         }
         setResource(CSSStyleSheetResource::fetch(request, document().fetcher()));

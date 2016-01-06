@@ -19,8 +19,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGMarkerElement.h"
 
 #include "core/SVGNames.h"
@@ -120,7 +118,7 @@ void SVGMarkerElement::setOrientToAuto()
 {
     m_orientAngle->baseValue()->orientType()->setEnumValue(SVGMarkerOrientAuto);
     invalidateSVGAttributes();
-    svgAttributeChanged(SVGNames::orientAttr);
+    svgAttributeBaseValChanged(SVGNames::orientAttr);
 }
 
 void SVGMarkerElement::setOrientToAngle(PassRefPtrWillBeRawPtr<SVGAngleTearOff> angle)
@@ -129,7 +127,7 @@ void SVGMarkerElement::setOrientToAngle(PassRefPtrWillBeRawPtr<SVGAngleTearOff> 
     RefPtrWillBeRawPtr<SVGAngle> target = angle->target();
     m_orientAngle->baseValue()->newValueSpecifiedUnits(target->unitType(), target->valueInSpecifiedUnits());
     invalidateSVGAttributes();
-    svgAttributeChanged(SVGNames::orientAttr);
+    svgAttributeBaseValChanged(SVGNames::orientAttr);
 }
 
 LayoutObject* SVGMarkerElement::createLayoutObject(const ComputedStyle&)

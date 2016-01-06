@@ -4,6 +4,9 @@
 
 #include "sync/internal_api/public/shared_model_type_processor.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -76,14 +79,14 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   // Emulate updates from the server.
   // This harness has some functionality to help emulate server behavior.
   // See the definitions of these methods for more information.
-  void UpdateFromServer(int64 version_offset,
+  void UpdateFromServer(int64_t version_offset,
                         const std::string& tag,
                         const std::string& value);
-  void TombstoneFromServer(int64 version_offset, const std::string& tag);
+  void TombstoneFromServer(int64_t version_offset, const std::string& tag);
 
   // Emulate the receipt of pending updates from the server.
   // Pending updates are usually caused by a temporary decryption failure.
-  void PendingUpdateFromServer(int64 version_offset,
+  void PendingUpdateFromServer(int64_t version_offset,
                                const std::string& tag,
                                const std::string& value,
                                const std::string& key_name);
@@ -116,6 +119,9 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   // when receiving items.
   void SetServerEncryptionKey(const std::string& key_name);
 
+  MockCommitQueue* mock_queue();
+  SharedModelTypeProcessor* type_processor();
+
  private:
   static std::string GenerateTagHash(const std::string& tag);
   static sync_pb::EntitySpecifics GenerateSpecifics(const std::string& tag,
@@ -125,8 +131,8 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
       const std::string& value,
       const std::string& key_name);
 
-  int64 GetServerVersion(const std::string& tag);
-  void SetServerVersion(const std::string& tag, int64 version);
+  int64_t GetServerVersion(const std::string& tag);
+  void SetServerVersion(const std::string& tag, int64_t version);
 
   void StartDone(syncer::SyncError error,
                  scoped_ptr<ActivationContext> context);
@@ -197,16 +203,17 @@ void SharedModelTypeProcessorTest::StartDone(
   // Hand off ownership of |mock_queue_ptr_|, while keeping
   // an unsafe pointer to it.  This is why we can only connect once.
   DCHECK(mock_queue_ptr_);
-  context->type_processor->OnConnect(mock_queue_ptr_.Pass());
+  context->type_processor->OnConnect(std::move(mock_queue_ptr_));
   // The context's type processor is a proxy; run the task it posted.
   sync_loop_.RunUntilIdle();
 }
 
 void SharedModelTypeProcessorTest::WriteItem(const std::string& tag,
                                              const std::string& value) {
-  sync_pb::EntitySpecifics specifics = GenerateSpecifics(tag, value);
-  // Use the tag as non-unique name.
-  type_processor_->Put(tag, tag, specifics, nullptr);
+  scoped_ptr<EntityData> entity_data = make_scoped_ptr(new EntityData());
+  entity_data->specifics = GenerateSpecifics(tag, value);
+  entity_data->non_unique_name = tag;
+  type_processor_->Put(tag, std::move(entity_data), nullptr);
 }
 
 void SharedModelTypeProcessorTest::DeleteItem(const std::string& tag) {
@@ -221,7 +228,7 @@ void SharedModelTypeProcessorTest::OnInitialSyncDone() {
                                     empty_update_list);
 }
 
-void SharedModelTypeProcessorTest::UpdateFromServer(int64 version_offset,
+void SharedModelTypeProcessorTest::UpdateFromServer(int64_t version_offset,
                                                     const std::string& tag,
                                                     const std::string& value) {
   const std::string tag_hash = GenerateTagHash(tag);
@@ -235,7 +242,7 @@ void SharedModelTypeProcessorTest::UpdateFromServer(int64 version_offset,
 }
 
 void SharedModelTypeProcessorTest::PendingUpdateFromServer(
-    int64 version_offset,
+    int64_t version_offset,
     const std::string& tag,
     const std::string& value,
     const std::string& key_name) {
@@ -250,7 +257,7 @@ void SharedModelTypeProcessorTest::PendingUpdateFromServer(
                                     list);
 }
 
-void SharedModelTypeProcessorTest::TombstoneFromServer(int64 version_offset,
+void SharedModelTypeProcessorTest::TombstoneFromServer(int64_t version_offset,
                                                        const std::string& tag) {
   // Overwrite the existing server version if this is the new highest version.
   std::string tag_hash = GenerateTagHash(tag);
@@ -311,6 +318,14 @@ void SharedModelTypeProcessorTest::UpdateDesiredEncryptionKey(
 void SharedModelTypeProcessorTest::SetServerEncryptionKey(
     const std::string& key_name) {
   mock_queue_->SetServerEncryptionKey(key_name);
+}
+
+MockCommitQueue* SharedModelTypeProcessorTest::mock_queue() {
+  return mock_queue_;
+}
+
+SharedModelTypeProcessor* SharedModelTypeProcessorTest::type_processor() {
+  return type_processor_.get();
 }
 
 std::string SharedModelTypeProcessorTest::GenerateTagHash(
@@ -391,6 +406,52 @@ TEST_F(SharedModelTypeProcessorTest, CreateLocalItem) {
   EXPECT_FALSE(tag1_data.is_deleted());
   EXPECT_EQ("tag1", tag1_data.specifics.preference().name());
   EXPECT_EQ("value1", tag1_data.specifics.preference().value());
+}
+
+// The purpose of this test case is to test setting |client_tag_hash| and |id|
+// on the EntityData object as we pass it into the Put method of the processor.
+// TODO(skym): Update this test to verify that specifying a |client_tag_hash|
+// on update has no effect once crbug/561818 is completed.
+TEST_F(SharedModelTypeProcessorTest, CreateAndModifyWithOverrides) {
+  InitializeToReadyState();
+  EXPECT_EQ(0U, GetNumCommitRequestLists());
+
+  scoped_ptr<EntityData> entity_data = make_scoped_ptr(new EntityData());
+  entity_data->specifics.mutable_preference()->set_name("tag1");
+  entity_data->specifics.mutable_preference()->set_value("value1");
+
+  entity_data->non_unique_name = "tag1";
+  entity_data->client_tag_hash = "hash";
+  entity_data->id = "cid1";
+  type_processor()->Put("tag1", std::move(entity_data), nullptr);
+
+  // Don't access through tag because we forced a specific hash.
+  EXPECT_EQ(1U, GetNumCommitRequestLists());
+  ASSERT_TRUE(mock_queue()->HasCommitRequestForTagHash("hash"));
+  const EntityData& out_entity1 =
+      mock_queue()->GetLatestCommitRequestForTagHash("hash").entity.value();
+
+  EXPECT_EQ("hash", out_entity1.client_tag_hash);
+  EXPECT_EQ("cid1", out_entity1.id);
+  EXPECT_EQ("value1", out_entity1.specifics.preference().value());
+
+  entity_data.reset(new EntityData());
+  entity_data->specifics.mutable_preference()->set_name("tag2");
+  entity_data->specifics.mutable_preference()->set_value("value2");
+  entity_data->non_unique_name = "tag2";
+  entity_data->client_tag_hash = "hash";
+  entity_data->id = "cid2";
+  type_processor()->Put("tag2", std::move(entity_data), nullptr);
+
+  EXPECT_EQ(2U, GetNumCommitRequestLists());
+  ASSERT_TRUE(mock_queue()->HasCommitRequestForTagHash("hash"));
+  const EntityData& out_entity2 =
+      mock_queue()->GetLatestCommitRequestForTagHash("hash").entity.value();
+
+  // Should still see old cid1 value, override is not respected on update.
+  EXPECT_EQ("hash", out_entity2.client_tag_hash);
+  EXPECT_EQ("cid1", out_entity2.id);
+  EXPECT_EQ("value2", out_entity2.specifics.preference().value());
 }
 
 // Creates a new local item then modifies it.

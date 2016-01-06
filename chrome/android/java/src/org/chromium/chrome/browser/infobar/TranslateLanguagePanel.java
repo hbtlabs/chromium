@@ -6,23 +6,21 @@ package org.chromium.chrome.browser.infobar;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.util.TypedValue;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.FrameLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
 
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Language panel shown in the translate infobar.
@@ -92,8 +90,8 @@ public class TranslateLanguagePanel
     @Override
     public void onButtonClicked(boolean primary) {
         if (primary) {
-            mOptions.setSourceLanguage(mSessionOptions.sourceLanguageIndex());
-            mOptions.setTargetLanguage(mSessionOptions.targetLanguageIndex());
+            mOptions.setSourceLanguage(mSessionOptions.sourceLanguageCode());
+            mOptions.setTargetLanguage(mSessionOptions.targetLanguageCode());
         }
         mListener.onPanelClosed(ActionType.NONE);
     }
@@ -104,28 +102,21 @@ public class TranslateLanguagePanel
         mTargetAdapter = new LanguageArrayAdapter(context, R.layout.translate_spinner,
                 LANGUAGE_TYPE_TARGET);
 
-        // Determine how wide each spinner needs to be to avoid truncating its children.
-        mSourceAdapter.addAll(createSpinnerLanguages(-1));
-        mTargetAdapter.addAll(createSpinnerLanguages(-1));
-        mSourceAdapter.measureWidthRequiredForView();
-        mTargetAdapter.measureWidthRequiredForView();
-
         // Set up the spinners.
         mSourceSpinner.setOnItemSelectedListener(this);
         mTargetSpinner.setOnItemSelectedListener(this);
         mSourceSpinner.setAdapter(mSourceAdapter);
         mTargetSpinner.setAdapter(mTargetAdapter);
         reloadSpinners();
+        measureSpinnerMinWidths();
     }
 
     private void reloadSpinners() {
         mSourceAdapter.clear();
         mTargetAdapter.clear();
 
-        int sourceAvoidLanguage = mSessionOptions.targetLanguageIndex();
-        int targetAvoidLanguage = mSessionOptions.sourceLanguageIndex();
-        mSourceAdapter.addAll(createSpinnerLanguages(sourceAvoidLanguage));
-        mTargetAdapter.addAll(createSpinnerLanguages(targetAvoidLanguage));
+        mSourceAdapter.addAll(createSpinnerLanguages(mSessionOptions.targetLanguageCode()));
+        mTargetAdapter.addAll(createSpinnerLanguages(mSessionOptions.sourceLanguageCode()));
 
         int originalSourceSelection = mSourceSpinner.getSelectedItemPosition();
         int newSourceSelection = getSelectionPosition(LANGUAGE_TYPE_SOURCE);
@@ -141,14 +132,29 @@ public class TranslateLanguagePanel
     }
 
     private int getSelectionPosition(int languageType) {
-        int position = languageType == LANGUAGE_TYPE_SOURCE ? mSessionOptions.sourceLanguageIndex()
-                : mSessionOptions.targetLanguageIndex();
+        String position_code = languageType == LANGUAGE_TYPE_SOURCE
+                ? mSessionOptions.sourceLanguageCode()
+                : mSessionOptions.targetLanguageCode();
 
-        // Since the source and target languages cannot appear in both spinners, the index for the
-        // source language can be off by one if comes after the target language alphabetically (and
-        // vice versa).
-        int opposite = languageType == LANGUAGE_TYPE_SOURCE ? mSessionOptions.targetLanguageIndex()
-                : mSessionOptions.sourceLanguageIndex();
+        // Since the source and target languages cannot appear in both spinners,
+        // the index for the source language can be off by one if comes after the
+        // target language alphabetically (and vice versa).
+        String opposite_code = languageType == LANGUAGE_TYPE_SOURCE
+                ? mSessionOptions.targetLanguageCode()
+                : mSessionOptions.sourceLanguageCode();
+
+        int position = -1;
+        int opposite = -1;
+
+        for (int i = 0; i < mSessionOptions.allLanguages().size(); ++i) {
+            if (mSessionOptions.allLanguages().get(i).mLanguageCode.equals(position_code)) {
+                position = i;
+            }
+            if (mSessionOptions.allLanguages().get(i).mLanguageCode.equals(opposite_code)) {
+                opposite = i;
+            }
+            if (opposite > -1 && position > -1) break;
+        }
         if (opposite < position) position -= 1;
 
         return position;
@@ -157,13 +163,15 @@ public class TranslateLanguagePanel
     @Override
     public void onItemSelected(AdapterView<?> adapter, View view, int position, long id) {
         Spinner spinner = (Spinner) adapter;
-        int newId = ((SpinnerLanguageElement) spinner.getSelectedItem()).getLanguageId();
-        if (spinner == mSourceSpinner) {
-            mSessionOptions.setSourceLanguage(newId);
-        } else {
-            mSessionOptions.setTargetLanguage(newId);
+        String newCode = ((SpinnerLanguageElement) spinner.getSelectedItem()).getLanguageCode();
+        if (spinner == mSourceSpinner && !newCode.equals(mSessionOptions.sourceLanguageCode())) {
+            mSessionOptions.setSourceLanguage(newCode);
+            reloadSpinners();
         }
-        reloadSpinners();
+        if (spinner == mTargetSpinner && !newCode.equals(mSessionOptions.targetLanguageCode())) {
+            mSessionOptions.setTargetLanguage(newCode);
+            reloadSpinners();
+        }
     }
 
     @Override
@@ -172,17 +180,39 @@ public class TranslateLanguagePanel
 
     /**
      * Determines what languages will be shown in the Spinner.
-     * @param avoidLanguage Index of the language to avoid.  Use -1 to display all languages.
+     * @param avoidCode ISO code of the language to avoid displaying.
+     * Use "" to display all languages.
      */
-    private ArrayList<SpinnerLanguageElement> createSpinnerLanguages(int avoidLanguage) {
+    private ArrayList<SpinnerLanguageElement> createSpinnerLanguages(String avoidCode) {
         ArrayList<SpinnerLanguageElement> result = new ArrayList<SpinnerLanguageElement>();
-        List<String> languages = mSessionOptions.allLanguages();
-        for (int i = 0; i <  languages.size(); ++i) {
-            if (i != avoidLanguage) {
-                result.add(new SpinnerLanguageElement(languages.get(i), i));
+        for (TranslateOptions.TranslateLanguagePair language : mSessionOptions.allLanguages()) {
+            if (!language.mLanguageCode.equals(avoidCode)) {
+                result.add(new SpinnerLanguageElement(
+                        language.mLanguageRepresentation, language.mLanguageCode));
             }
         }
         return result;
+    }
+
+    /** Measures how wide the spinners need to be to avoid truncating text. */
+    private void measureSpinnerMinWidths() {
+        Context context = mSourceAdapter.getContext();
+        TextView textView = (TextView) mSourceAdapter.getView(0, null, null);
+        Paint textPaint = textView.getPaint();
+
+        float longestLanguageWidth = 0;
+        for (TranslateOptions.TranslateLanguagePair language : mSessionOptions.allLanguages()) {
+            float width = textPaint.measureText(language.mLanguageRepresentation);
+            longestLanguageWidth = Math.max(longestLanguageWidth, width);
+        }
+
+        float sourceTemplateWidth = textPaint.measureText(TextUtils.expandTemplate(
+                context.getString(R.string.translate_options_source_hint), "").toString());
+        float targetTemplateWidth = textPaint.measureText(TextUtils.expandTemplate(
+                context.getString(R.string.translate_options_target_hint), "").toString());
+
+        mSourceAdapter.mMinWidth = (int) Math.ceil(sourceTemplateWidth + longestLanguageWidth);
+        mTargetAdapter.mMinWidth = (int) Math.ceil(targetTemplateWidth + longestLanguageWidth);
     }
 
     /**
@@ -190,7 +220,7 @@ public class TranslateLanguagePanel
      */
     private static class LanguageArrayAdapter extends ArrayAdapter<SpinnerLanguageElement> {
         private final SpannableString mTextTemplate;
-        private int mMinimumWidth;
+        private int mMinWidth;
 
         public LanguageArrayAdapter(Context context, int textViewResourceId,
                 int languageType) {
@@ -206,46 +236,27 @@ public class TranslateLanguagePanel
                     new ForegroundColorSpan(Color.GRAY), 0, textTemplate.length(), 0);
         }
 
-        /** Measures how large the view needs to be to avoid truncating its children. */
-        public void measureWidthRequiredForView() {
-            mMinimumWidth = 0;
-
-            final int spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-
-            FrameLayout layout = new FrameLayout(getContext());
-            TextView estimator = (TextView) LayoutInflater.from(getContext()).inflate(
-                    R.layout.infobar_text, null);
-            layout.addView(estimator);
-            for (int i = 0; i < getCount(); ++i) {
-                estimator.setText(getStringForLanguage(i));
-                estimator.measure(spec, spec);
-                mMinimumWidth = Math.max(mMinimumWidth, estimator.getMeasuredWidth());
-            }
-        }
-
         @Override
         public View getDropDownView(int position, View convertView, ViewGroup parent) {
-            View result = super.getDropDownView(position, convertView, parent);
-            if (result instanceof TextView) {
-                ((TextView) result).setText(getItem(position).toString());
-            }
-            return result;
+            TextView view = (TextView) super.getDropDownView(position, convertView, parent);
+            view.setText(getItem(position).toString());
+            return view;
         }
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
             TextView result;
-            if (!(convertView instanceof TextView)) {
+            if (convertView instanceof TextView) {
+                result = (TextView) convertView;
+            } else {
                 result = new TextView(getContext());
                 result.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                         getContext().getResources().getDimension(R.dimen.infobar_text_size));
-            } else {
-                result = (TextView) convertView;
+                result.setEllipsize(TextUtils.TruncateAt.END);
+                result.setMaxLines(1);
+                result.setMinWidth(mMinWidth);
             }
-            result.setEllipsize(TextUtils.TruncateAt.END);
-            result.setMaxLines(1);
             result.setText(getStringForLanguage(position));
-            result.setMinWidth(mMinimumWidth);
             return result;
         }
 
@@ -263,15 +274,15 @@ public class TranslateLanguagePanel
      */
     private static class SpinnerLanguageElement {
         private final String mLanguageName;
-        private final int mLanguageId;
+        private final String mLanguageCode;
 
-        public SpinnerLanguageElement(String languageName, int languageId) {
+        public SpinnerLanguageElement(String languageName, String languageCode) {
             mLanguageName = languageName;
-            mLanguageId = languageId;
+            mLanguageCode = languageCode;
         }
 
-        public int getLanguageId() {
-            return mLanguageId;
+        public String getLanguageCode() {
+            return mLanguageCode;
         }
 
         /**

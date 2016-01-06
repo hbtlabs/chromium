@@ -42,11 +42,7 @@ WebUILoginDisplay::~WebUILoginDisplay() {
 // LoginDisplay implementation: ------------------------------------------------
 
 WebUILoginDisplay::WebUILoginDisplay(LoginDisplay::Delegate* delegate)
-    : LoginDisplay(delegate, gfx::Rect()),
-      show_guest_(false),
-      show_new_user_(false),
-      webui_handler_(NULL) {
-}
+    : LoginDisplay(delegate, gfx::Rect()) {}
 
 void WebUILoginDisplay::ClearAndEnablePassword() {
   if (webui_handler_)
@@ -232,13 +228,12 @@ void WebUILoginDisplay::MigrateUserData(const std::string& old_password) {
     delegate_->MigrateUserData(old_password);
 }
 
-void WebUILoginDisplay::LoadWallpaper(const std::string& username) {
-  WallpaperManager::Get()->SetUserWallpaperDelayed(username);
+void WebUILoginDisplay::LoadWallpaper(const AccountId& account_id) {
+  WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
 }
 
 void WebUILoginDisplay::LoadSigninWallpaper() {
-  WallpaperManager::Get()->SetDefaultWallpaperDelayed(
-      login::SignInAccountId().GetUserEmail());
+  WallpaperManager::Get()->SetDefaultWallpaperDelayed(login::SignInAccountId());
 }
 
 void WebUILoginDisplay::OnSigninScreenReady() {
@@ -326,10 +321,10 @@ void WebUILoginDisplay::OnUserActivity(const ui::Event* event) {
     delegate_->ResetPublicSessionAutoLoginTimer();
 }
 
-bool WebUILoginDisplay::IsUserWhitelisted(const std::string& user_id) {
+bool WebUILoginDisplay::IsUserWhitelisted(const AccountId& account_id) {
   DCHECK(delegate_);
   if (delegate_)
-    return delegate_->IsUserWhitelisted(user_id);
+    return delegate_->IsUserWhitelisted(account_id);
   return true;
 }
 

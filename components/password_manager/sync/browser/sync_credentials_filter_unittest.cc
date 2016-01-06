@@ -4,6 +4,9 @@
 
 #include "components/password_manager/sync/browser/sync_credentials_filter.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -41,7 +44,7 @@ class FakePasswordManagerClient : public StubPasswordManagerClient {
 bool IsFormFiltered(const CredentialsFilter* filter, const PasswordForm& form) {
   ScopedVector<PasswordForm> vector;
   vector.push_back(new PasswordForm(form));
-  vector = filter->FilterResults(vector.Pass());
+  vector = filter->FilterResults(std::move(vector));
   return vector.empty();
 }
 
@@ -255,7 +258,7 @@ TEST_F(CredentialsFilterTest, ShouldFilterOneForm) {
 
   FakeSigninAs("test1@gmail.com");
 
-  results = filter()->FilterResults(results.Pass());
+  results = filter()->FilterResults(std::move(results));
 
   ASSERT_EQ(1u, results.size());
   EXPECT_EQ(SimpleGaiaForm("test2@gmail.com"), *results[0]);

@@ -20,6 +20,7 @@
 #ifndef SVGTextFragment_h
 #define SVGTextFragment_h
 
+#include "core/layout/line/GlyphOverflow.h"
 #include "platform/transforms/AffineTransform.h"
 #include "wtf/Allocator.h"
 
@@ -45,19 +46,45 @@ struct SVGTextFragment {
         TransformIgnoringTextLength
     };
 
-    void buildFragmentTransform(AffineTransform& result, TransformType type = TransformRespectingTextLength) const
+    FloatRect boundingBox(float baseline) const
+    {
+        FloatRect fragmentRect(x, y - baseline, width, height);
+        if (!isTransformed())
+            return fragmentRect;
+        return buildNormalFragmentTransform().mapRect(fragmentRect);
+    }
+
+    FloatRect overflowBoundingBox(float baseline) const
+    {
+        FloatRect fragmentRect(
+            x - glyphOverflow.left,
+            y - baseline - glyphOverflow.top,
+            width + glyphOverflow.left + glyphOverflow.right,
+            height + glyphOverflow.top + glyphOverflow.bottom);
+        if (!isTransformed())
+            return fragmentRect;
+        return buildNormalFragmentTransform().mapRect(fragmentRect);
+    }
+
+    FloatQuad boundingQuad(float baseline) const
+    {
+        FloatQuad fragmentQuad(FloatRect(x, y - baseline, width, height));
+        if (!isTransformed())
+            return fragmentQuad;
+        return buildNormalFragmentTransform().mapQuad(fragmentQuad);
+    }
+
+    AffineTransform buildFragmentTransform(TransformType type = TransformRespectingTextLength) const
     {
         if (type == TransformIgnoringTextLength) {
-            result = transform;
+            AffineTransform result = transform;
             transformAroundOrigin(result);
-            return;
+            return result;
         }
-
-        if (isTextOnPath)
-            buildTransformForTextOnPath(result);
-        else
-            buildTransformForTextOnLine(result);
+        return buildNormalFragmentTransform();
     }
+
+    bool isTransformed() const { return affectedByTextLength() || !transform.isIdentity(); }
 
     // The first laid out character starts at LayoutSVGInlineText::characters() + characterOffset.
     unsigned characterOffset;
@@ -70,6 +97,8 @@ struct SVGTextFragment {
     float width;
     float height;
 
+    GlyphOverflow glyphOverflow;
+
     // Includes rotation/glyph-orientation-(horizontal|vertical) transforms, as well as orientation related shifts
     // (see SVGTextLayoutEngine, which builds this transformation).
     AffineTransform transform;
@@ -78,6 +107,15 @@ struct SVGTextFragment {
     AffineTransform lengthAdjustTransform;
 
 private:
+    AffineTransform buildNormalFragmentTransform() const
+    {
+        if (isTextOnPath)
+            return buildTransformForTextOnPath();
+        return buildTransformForTextOnLine();
+    }
+
+    bool affectedByTextLength() const { return lengthAdjustTransform.a() != 1 || lengthAdjustTransform.d() != 1; }
+
     void transformAroundOrigin(AffineTransform& result) const
     {
         // Returns (translate(x, y) * result) * translate(-x, -y).
@@ -86,25 +124,25 @@ private:
         result.translate(-x, -y);
     }
 
-    void buildTransformForTextOnPath(AffineTransform& result) const
+    AffineTransform buildTransformForTextOnPath() const
     {
         // For text-on-path layout, multiply the transform with the lengthAdjustTransform before orienting the resulting transform.
-        result = lengthAdjustTransform.isIdentity() ? transform : transform * lengthAdjustTransform;
+        AffineTransform result = !affectedByTextLength() ? transform : transform * lengthAdjustTransform;
         if (!result.isIdentity())
             transformAroundOrigin(result);
+        return result;
     }
 
-    void buildTransformForTextOnLine(AffineTransform& result) const
+    AffineTransform buildTransformForTextOnLine() const
     {
         // For text-on-line layout, orient the transform first, then multiply the lengthAdjustTransform with the oriented transform.
-        if (transform.isIdentity()) {
-            result = lengthAdjustTransform;
-            return;
-        }
+        if (transform.isIdentity())
+            return lengthAdjustTransform;
 
-        result = transform;
+        AffineTransform result = transform;
         transformAroundOrigin(result);
         result.preMultiply(lengthAdjustTransform);
+        return result;
     }
 };
 

@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
@@ -14,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/net/net_error_diagnostics_dialog.h"
@@ -28,6 +32,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/error_page/common/error_page_switches.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
@@ -164,6 +169,9 @@ void ExpectDisplayingNavigationCorrections(Browser* browser,
   // The diagnostics button isn't displayed when corrections were
   // retrieved from a remote server.
   EXPECT_FALSE(IsDisplayingDiagnosticsButton(browser));
+
+  // Close help box again, to return page to original state.
+  ToggleHelpBox(browser);
 }
 
 std::string GetShowSavedButtonLabel() {
@@ -174,8 +182,8 @@ void AddInterceptorForURL(
     const GURL& url,
     scoped_ptr<net::URLRequestInterceptor> handler) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-      url, handler.Pass());
+  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(url,
+                                                          std::move(handler));
 }
 
 // An interceptor that fails a configurable number of requests, then succeeds
@@ -304,7 +312,7 @@ void InstallMockInterceptors(
   chrome_browser_net::SetUrlRequestMocksEnabled(true);
 
   AddInterceptorForURL(google_util::LinkDoctorBaseURL(),
-                       link_doctor_interceptor.Pass());
+                       std::move(link_doctor_interceptor));
 
   // Add a mock for the search engine the error page will use.
   base::FilePath root_http;
@@ -329,8 +337,9 @@ class ErrorPageTest : public InProcessBrowserTest {
   // Navigates the active tab to a mock url created for the file at |file_path|.
   // Needed for StaleCacheStatus and StaleCacheStatusFailedCorrections tests.
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kShowSavedCopy,
-                                    switches::kEnableShowSavedCopyPrimary);
+    command_line->AppendSwitchASCII(
+        error_page::switches::kShowSavedCopy,
+        error_page::switches::kEnableShowSavedCopyPrimary);
   }
 
   // Navigates the active tab to a mock url created for the file at |path|.
@@ -536,7 +545,7 @@ void InterceptNetworkTransactions(net::URLRequestContextGetter* getter,
       new net::FailingHttpTransactionFactory(cache->GetSession(), error));
   // Throw away old version; since this is a a browser test, we don't
   // need to restore the old state.
-  cache->SetHttpNetworkTransactionFactoryForTesting(factory.Pass());
+  cache->SetHttpNetworkTransactionFactoryForTesting(std::move(factory));
 }
 
 // Test an error with a file URL, and make sure it doesn't have a
@@ -733,9 +742,56 @@ IN_PROC_BROWSER_TEST_F(ErrorPageTest, DNSError_DoReload) {
   nav_observer.Wait();
   ExpectDisplayingNavigationCorrections(browser(), net::ERR_NAME_NOT_RESOLVED);
 
-  // There should have two more requests to the correction service:  One for the
-  // new error page, and one for tracking purposes.  Have to make sure to wait
-  // for the tracking request, since the new error page does not depend on it.
+  // There should have been two more requests to the correction service:  One
+  // for the new error page, and one for tracking purposes.  Have to make sure
+  // to wait for the tracking request, since the new error page does not depend
+  // on it.
+  link_doctor_interceptor()->WaitForRequests(3);
+  EXPECT_EQ(3, link_doctor_interceptor()->num_requests());
+}
+
+// Test that the reload button on a DNS error page works after a same page
+// navigation on the error page.  Error pages don't seem to do this, but some
+// traces indicate this may actually happen.  This test may hang on regression.
+IN_PROC_BROWSER_TEST_F(ErrorPageTest,
+                       DNSError_DoReloadAfterSamePageNavigation) {
+  // The first navigation should fail, and the second one should be the error
+  // page.
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+       browser(), GetDnsErrorURL(), 2);
+  ExpectDisplayingNavigationCorrections(browser(), net::ERR_NAME_NOT_RESOLVED);
+  EXPECT_EQ(1, link_doctor_interceptor()->num_requests());
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Do a same page navigation.
+  content::TestNavigationObserver nav_observer1(web_contents, 1);
+  web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("document.location='#';"));
+  // The same page navigation counts as a single navigation as far as the
+  // TestNavigationObserver is concerned.
+  nav_observer1.Wait();
+  // Page being displayed should not change.
+  ExpectDisplayingNavigationCorrections(browser(), net::ERR_NAME_NOT_RESOLVED);
+  // No new requests should have been issued.
+  EXPECT_EQ(1, link_doctor_interceptor()->num_requests());
+
+  // Clicking the reload button should load the error page again, and there
+  // should be two commits, as before.
+  content::TestNavigationObserver nav_observer2(web_contents, 2);
+  // Can't use content::ExecuteScript because it waits for scripts to send
+  // notification that they've run, and scripts that trigger a navigation may
+  // not send that notification.
+  web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("document.getElementById('reload-button').click();"));
+  nav_observer2.Wait();
+  ExpectDisplayingNavigationCorrections(browser(), net::ERR_NAME_NOT_RESOLVED);
+
+  // There should have been two more requests to the correction service:  One
+  // for the new error page, and one for tracking purposes.  Have to make sure
+  // to wait for the tracking request, since the new error page does not depend
+  // on it.
   link_doctor_interceptor()->WaitForRequests(3);
   EXPECT_EQ(3, link_doctor_interceptor()->num_requests());
 }
@@ -1061,6 +1117,41 @@ IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, ManualReloadNotSuppressed) {
       base::ASCIIToUTF16("document.getElementById('reload-button').click();"));
   nav_observer.Wait();
   EXPECT_FALSE(IsDisplayingText(browser(), "error.page.auto.reload"));
+}
+
+// Make sure that a same page navigation does not cause issues with the
+// auto-reload timer.  Note that this test was added due to this case causing
+// a crash.  On regression, this test may hang due to a crashed renderer.
+IN_PROC_BROWSER_TEST_F(ErrorPageAutoReloadTest, IgnoresSamePageNavigation) {
+  GURL test_url("http://error.page.auto.reload");
+  InstallInterceptor(test_url, 2);
+
+  // Wait for the error page and first autoreload, which happens immediately.
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(), test_url, 2);
+
+  EXPECT_EQ(2, interceptor()->failures());
+  EXPECT_EQ(2, interceptor()->requests());
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationObserver observer(web_contents, 1);
+  web_contents->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("document.location='#';"));
+  // The same page navigation counts as a navigation as far as the
+  // TestNavigationObserver is concerned.
+  observer.Wait();
+
+  // No new requests should have been issued.
+  EXPECT_EQ(2, interceptor()->failures());
+  EXPECT_EQ(2, interceptor()->requests());
+
+  // Wait for the second auto reload, which succeeds.
+  content::TestNavigationObserver observer2(web_contents, 1);
+  observer2.Wait();
+
+  EXPECT_EQ(2, interceptor()->failures());
+  EXPECT_EQ(3, interceptor()->requests());
 }
 
 // Interceptor that fails all requests with net::ERR_ADDRESS_UNREACHABLE.

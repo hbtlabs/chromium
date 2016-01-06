@@ -5,10 +5,12 @@
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
 
 #include <math.h>
-
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
@@ -18,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
@@ -67,10 +70,10 @@ struct PersistentIncidentState {
 };
 
 // The amount of time the service will wait to collate incidents.
-const int64 kDefaultUploadDelayMs = 1000 * 60;  // one minute
+const int64_t kDefaultUploadDelayMs = 1000 * 60;  // one minute
 
 // The amount of time between running delayed analysis callbacks.
-const int64 kDefaultCallbackIntervalMs = 1000 * 20;
+const int64_t kDefaultCallbackIntervalMs = 1000 * 20;
 
 // Logs the type of incident in |incident_data| to a user metrics histogram.
 void LogIncidentDataType(IncidentDisposition disposition,
@@ -205,13 +208,13 @@ void IncidentReportingService::Receiver::AddIncidentForProfile(
     scoped_ptr<Incident> incident) {
   DCHECK(thread_runner_->BelongsToCurrentThread());
   DCHECK(profile);
-  AddIncidentOnMainThread(service_, profile, incident.Pass());
+  AddIncidentOnMainThread(service_, profile, std::move(incident));
 }
 
 void IncidentReportingService::Receiver::AddIncidentForProcess(
     scoped_ptr<Incident> incident) {
   if (thread_runner_->BelongsToCurrentThread()) {
-    AddIncidentOnMainThread(service_, nullptr, incident.Pass());
+    AddIncidentOnMainThread(service_, nullptr, std::move(incident));
   } else if (!thread_runner_->PostTask(
       FROM_HERE,
       base::Bind(&IncidentReportingService::Receiver::AddIncidentOnMainThread,
@@ -223,7 +226,7 @@ void IncidentReportingService::Receiver::AddIncidentForProcess(
 void IncidentReportingService::Receiver::ClearIncidentForProcess(
     scoped_ptr<Incident> incident) {
   if (thread_runner_->BelongsToCurrentThread()) {
-    ClearIncidentOnMainThread(service_, nullptr, incident.Pass());
+    ClearIncidentOnMainThread(service_, nullptr, std::move(incident));
   } else {
     thread_runner_->PostTask(
         FROM_HERE,
@@ -247,7 +250,7 @@ void IncidentReportingService::Receiver::AddIncidentOnMainThread(
     Profile* profile,
     scoped_ptr<Incident> incident) {
   if (service)
-    service->AddIncident(profile, incident.Pass());
+    service->AddIncident(profile, std::move(incident));
   else
     LogIncidentDataType(DISCARDED, *incident);
 }
@@ -258,7 +261,7 @@ void IncidentReportingService::Receiver::ClearIncidentOnMainThread(
       Profile* profile,
       scoped_ptr<Incident> incident) {
   if (service)
-    service->ClearIncident(profile, incident.Pass());
+    service->ClearIncident(profile, std::move(incident));
 }
 
 IncidentReportingService::ProfileContext::ProfileContext() : added(false) {
@@ -277,8 +280,7 @@ bool IncidentReportingService::ProfileContext::HasIncidents() const {
 
 IncidentReportingService::UploadContext::UploadContext(
     scoped_ptr<ClientIncidentReport> report)
-    : report(report.Pass()) {
-}
+    : report(std::move(report)) {}
 
 IncidentReportingService::UploadContext::~UploadContext() {
 }
@@ -500,9 +502,9 @@ void IncidentReportingService::OnProfileAdded(Profile* profile) {
 scoped_ptr<LastDownloadFinder> IncidentReportingService::CreateDownloadFinder(
     const LastDownloadFinder::LastDownloadCallback& callback) {
   return LastDownloadFinder::Create(
-             base::Bind(&DownloadMetadataManager::GetDownloadDetails,
-                        base::Unretained(&download_metadata_manager_)),
-             callback).Pass();
+      base::Bind(&DownloadMetadataManager::GetDownloadDetails,
+                 base::Unretained(&download_metadata_manager_)),
+      callback);
 }
 
 scoped_ptr<IncidentReportUploader> IncidentReportingService::StartReportUpload(
@@ -510,7 +512,7 @@ scoped_ptr<IncidentReportUploader> IncidentReportingService::StartReportUpload(
     const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
     const ClientIncidentReport& report) {
   return IncidentReportUploaderImpl::UploadReport(
-             callback, request_context_getter, report).Pass();
+      callback, request_context_getter, report);
 }
 
 bool IncidentReportingService::IsProcessingReport() const {
@@ -606,7 +608,7 @@ void IncidentReportingService::AddIncident(Profile* profile,
   }
 
   // Take ownership of the incident.
-  context->incidents.push_back(incident.Pass());
+  context->incidents.push_back(std::move(incident));
 
   // Remember when the first incident for this report arrived.
   if (first_incident_time_.is_null())
@@ -628,7 +630,7 @@ void IncidentReportingService::AddIncident(Profile* profile,
 void IncidentReportingService::ClearIncident(Profile* profile,
                                              scoped_ptr<Incident> incident) {
   ProfileContext* context = GetOrCreateProfileContext(profile);
-  context->incidents_to_clear.push_back(incident.Pass());
+  context->incidents_to_clear.push_back(std::move(incident));
   // Begin processing to handle cleared incidents following collation.
   BeginReportProcessing();
 }
@@ -831,7 +833,7 @@ void IncidentReportingService::ProcessIncidentsIfCollectionComplete() {
   }
 
   // Take ownership of the report and clear things for future reports.
-  scoped_ptr<ClientIncidentReport> report(report_.Pass());
+  scoped_ptr<ClientIncidentReport> report(std::move(report_));
   first_incident_time_ = base::Time();
   last_incident_time_ = base::TimeTicks();
 
@@ -859,11 +861,11 @@ void IncidentReportingService::ProcessIncidentsIfCollectionComplete() {
       ProfileContext* eligible_context = GetProfileContext(eligible_profile);
       // Move the incidents to the target context.
       for (auto& incident : null_context->incidents) {
-        eligible_context->incidents.push_back(incident.Pass());
+        eligible_context->incidents.push_back(std::move(incident));
       }
       null_context->incidents.clear();
       for (auto& incident : null_context->incidents_to_clear)
-        eligible_context->incidents_to_clear.push_back(incident.Pass());
+        eligible_context->incidents_to_clear.push_back(std::move(incident));
       null_context->incidents_to_clear.clear();
     } else {
       for (const auto& incident : null_context->incidents)
@@ -957,13 +959,13 @@ void IncidentReportingService::ProcessIncidentsIfCollectionComplete() {
   // Perform final synchronous collection tasks for the report.
   DoExtensionCollection(report->mutable_extension_data());
 
-  scoped_ptr<UploadContext> context(new UploadContext(report.Pass()));
+  scoped_ptr<UploadContext> context(new UploadContext(std::move(report)));
   context->profiles_to_state.swap(profiles_to_state);
   if (!database_manager_.get()) {
     // No database manager during testing. Take ownership of the context and
     // continue processing.
     UploadContext* temp_context = context.get();
-    uploads_.push_back(context.Pass());
+    uploads_.push_back(std::move(context));
     IncidentReportingService::OnKillSwitchResult(temp_context, false);
   } else {
     if (content::BrowserThread::PostTaskAndReplyWithResult(
@@ -974,7 +976,7 @@ void IncidentReportingService::ProcessIncidentsIfCollectionComplete() {
             base::Bind(&IncidentReportingService::OnKillSwitchResult,
                        weak_ptr_factory_.GetWeakPtr(),
                        context.get()))) {
-      uploads_.push_back(context.Pass());
+      uploads_.push_back(std::move(context));
     }  // else should not happen. Let the context be deleted automatically.
   }
 }
@@ -993,13 +995,10 @@ void IncidentReportingService::OnKillSwitchResult(UploadContext* context,
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!is_killswitch_on) {
     // Initiate the upload.
-    context->uploader =
-        StartReportUpload(
-            base::Bind(&IncidentReportingService::OnReportUploadResult,
-                       weak_ptr_factory_.GetWeakPtr(),
-                       context),
-            url_request_context_getter_,
-            *context->report).Pass();
+    context->uploader = StartReportUpload(
+        base::Bind(&IncidentReportingService::OnReportUploadResult,
+                   weak_ptr_factory_.GetWeakPtr(), context),
+        url_request_context_getter_, *context->report);
     if (!context->uploader) {
       OnReportUploadResult(context,
                            IncidentReportUploader::UPLOAD_INVALID_REQUEST,
@@ -1038,7 +1037,7 @@ void IncidentReportingService::OnReportUploadResult(
                            return value.get() == context;
                          });
   DCHECK(it != uploads_.end());
-  scoped_ptr<UploadContext> upload(it->Pass());
+  scoped_ptr<UploadContext> upload(std::move(*it));
   uploads_.erase(it);
 
   if (result == IncidentReportUploader::UPLOAD_SUCCESS)

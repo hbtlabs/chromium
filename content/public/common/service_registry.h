@@ -6,6 +6,7 @@
 #define CONTENT_PUBLIC_COMMON_SERVICE_REGISTRY_H_
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -32,33 +33,32 @@ class CONTENT_EXPORT ServiceRegistry {
   // service will override the factory. Existing connections to the service are
   // unaffected.
   template <typename Interface>
-  void AddService(
-      const base::Callback<void(mojo::InterfaceRequest<Interface>)> factory) {
-    Add(Interface::Name_,
-        base::Bind(&ServiceRegistry::ForwardToServiceFactory<Interface>,
-                   factory));
+  void AddService(const base::Callback<void(mojo::InterfaceRequest<Interface>)>
+                      service_factory) {
+    AddService(Interface::Name_,
+               base::Bind(&ServiceRegistry::ForwardToServiceFactory<Interface>,
+                          service_factory));
   }
+  virtual void AddService(
+      const std::string& service_name,
+      const base::Callback<void(mojo::ScopedMessagePipeHandle)>
+          service_factory) = 0;
 
   // Remove future access to the service implementing Interface. Existing
   // connections to the service are unaffected.
   template <typename Interface>
   void RemoveService() {
-    Remove(Interface::Name_);
+    RemoveService(Interface::Name_);
   }
+  virtual void RemoveService(const std::string& service_name) = 0;
 
   // Connect to an interface provided by the remote service provider.
   template <typename Interface>
-  void ConnectToRemoteService(mojo::InterfaceRequest<Interface> request) {
-    Connect(Interface::Name_, request.PassMessagePipe());
+  void ConnectToRemoteService(mojo::InterfaceRequest<Interface> ptr) {
+    ConnectToRemoteService(Interface::Name_, ptr.PassMessagePipe());
   }
-
-  virtual void Add(
-      const std::string& service_name,
-      const base::Callback<void(mojo::ScopedMessagePipeHandle)>
-          service_factory) = 0;
-  virtual void Remove(const std::string& service_name) = 0;
-  virtual void Connect(const base::StringPiece& name,
-                       mojo::ScopedMessagePipeHandle handle) = 0;
+  virtual void ConnectToRemoteService(const base::StringPiece& name,
+                                      mojo::ScopedMessagePipeHandle handle) = 0;
 
  private:
   template <typename Interface>
@@ -66,7 +66,7 @@ class CONTENT_EXPORT ServiceRegistry {
       const base::Callback<void(mojo::InterfaceRequest<Interface>)>
           service_factory,
       mojo::ScopedMessagePipeHandle handle) {
-    service_factory.Run(mojo::MakeRequest<Interface>(handle.Pass()));
+    service_factory.Run(mojo::MakeRequest<Interface>(std::move(handle)));
   }
 };
 

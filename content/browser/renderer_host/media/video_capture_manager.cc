@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -19,6 +20,7 @@
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/renderer_host/media/video_capture_controller.h"
@@ -36,6 +38,10 @@
 #if defined(USE_AURA)
 #include "content/browser/media/capture/desktop_capture_device_aura.h"
 #endif
+#endif
+
+#if defined(OS_MACOSX)
+#include "media/base/mac/avfoundation_glue.h"
 #endif
 
 namespace {
@@ -115,7 +121,7 @@ VideoCaptureManager::DeviceEntry::DeviceEntry(
     : serial_id(g_device_start_id++),
       stream_type(stream_type),
       id(id),
-      video_capture_controller_(controller.Pass()) {}
+      video_capture_controller_(std::move(controller)) {}
 
 VideoCaptureManager::DeviceEntry::~DeviceEntry() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -134,7 +140,7 @@ void VideoCaptureManager::DeviceEntry::SetVideoCaptureDevice(
 scoped_ptr<media::VideoCaptureDevice>
 VideoCaptureManager::DeviceEntry::ReleaseVideoCaptureDevice() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return video_capture_device_.Pass();
+  return std::move(video_capture_device_);
 }
 
 VideoCaptureController*
@@ -163,8 +169,7 @@ VideoCaptureManager::VideoCaptureManager(
     scoped_ptr<media::VideoCaptureDeviceFactory> factory)
     : listener_(NULL),
       new_capture_session_id_(1),
-      video_capture_device_factory_(factory.Pass()) {
-}
+      video_capture_device_factory_(std::move(factory)) {}
 
 VideoCaptureManager::~VideoCaptureManager() {
   DCHECK(devices_.empty());
@@ -191,6 +196,14 @@ void VideoCaptureManager::EnumerateDevices(MediaStreamType stream_type) {
   DVLOG(1) << "VideoCaptureManager::EnumerateDevices, type " << stream_type;
   DCHECK(listener_);
   DCHECK_EQ(stream_type, MEDIA_DEVICE_VIDEO_CAPTURE);
+
+#if defined(OS_MACOSX)
+  if (NeedToInitializeCaptureDeviceApi(stream_type)) {
+    InitializeCaptureDeviceApiOnUIThread(
+        base::Bind(&VideoCaptureManager::EnumerateDevices, this, stream_type));
+    return;
+  }
+#endif
 
   // Bind a callback to ConsolidateDevicesInfoOnDeviceThread() with an argument
   // for another callback to OnDevicesInfoEnumerated() to be run in the current
@@ -329,6 +342,14 @@ void VideoCaptureManager::HandleQueuedStartRequest() {
   DCHECK(entry_it != devices_.end());
   DeviceEntry* entry =  (*entry_it);
 
+#if defined(OS_MACOSX)
+  if (NeedToInitializeCaptureDeviceApi(entry->stream_type)) {
+    InitializeCaptureDeviceApiOnUIThread(
+        base::Bind(&VideoCaptureManager::HandleQueuedStartRequest, this));
+    return;
+  }
+#endif
+
   DVLOG(3) << "HandleQueuedStartRequest, Post start to device thread, device = "
            << entry->id << " start id = " << entry->serial_id;
 
@@ -424,7 +445,7 @@ void VideoCaptureManager::OnDeviceStarted(
     DCHECK(entry_it != devices_.end());
     DeviceEntry* entry = *entry_it;
     DCHECK(!entry->video_capture_device());
-    entry->SetVideoCaptureDevice(device.Pass());
+    entry->SetVideoCaptureDevice(std::move(device));
 
     if (entry->stream_type == MEDIA_DESKTOP_VIDEO_CAPTURE) {
       const media::VideoCaptureSessionId session_id =
@@ -453,8 +474,8 @@ VideoCaptureManager::DoStartDeviceCaptureOnDeviceThread(
     return nullptr;
   }
 
-  video_capture_device->AllocateAndStart(params, device_client.Pass());
-  return video_capture_device.Pass();
+  video_capture_device->AllocateAndStart(params, std::move(device_client));
+  return video_capture_device;
 }
 
 scoped_ptr<media::VideoCaptureDevice>
@@ -473,8 +494,8 @@ VideoCaptureManager::DoStartTabCaptureOnDeviceThread(
     return nullptr;
   }
 
-  video_capture_device->AllocateAndStart(params, device_client.Pass());
-  return video_capture_device.Pass();
+  video_capture_device->AllocateAndStart(params, std::move(device_client));
+  return video_capture_device;
 }
 
 scoped_ptr<media::VideoCaptureDevice>
@@ -502,8 +523,8 @@ VideoCaptureManager::DoStartDesktopCaptureOnDeviceThread(
     return nullptr;
   }
 
-  video_capture_device->AllocateAndStart(params, device_client.Pass());
-  return video_capture_device.Pass();
+  video_capture_device->AllocateAndStart(params, std::move(device_client));
+  return video_capture_device;
 }
 
 void VideoCaptureManager::StartCaptureForClient(
@@ -903,9 +924,8 @@ VideoCaptureManager::DeviceEntry* VideoCaptureManager::GetOrCreateDeviceEntry(
       kMaxNumberOfBuffersForTabCapture : kMaxNumberOfBuffers;
   scoped_ptr<VideoCaptureController> video_capture_controller(
       new VideoCaptureController(max_buffers));
-  DeviceEntry* new_device = new DeviceEntry(device_info.type,
-                                            device_info.id,
-                                            video_capture_controller.Pass());
+  DeviceEntry* new_device = new DeviceEntry(
+      device_info.type, device_info.id, std::move(video_capture_controller));
   devices_.push_back(new_device);
   return new_device;
 }
@@ -931,5 +951,31 @@ void VideoCaptureManager::SetDesktopCaptureWindowIdOnDeviceThread(
   VLOG(2) << "Screen capture notification window passed on device thread.";
 #endif
 }
+
+#if defined(OS_MACOSX)
+void VideoCaptureManager::OnDeviceLayerInitialized(
+    const base::Closure& and_then) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  capture_device_api_initialized_ = true;
+  and_then.Run();
+}
+
+bool VideoCaptureManager::NeedToInitializeCaptureDeviceApi(
+    MediaStreamType stream_type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return !capture_device_api_initialized_ &&
+         stream_type == MEDIA_DEVICE_VIDEO_CAPTURE;
+}
+
+void VideoCaptureManager::InitializeCaptureDeviceApiOnUIThread(
+    const base::Closure& and_then) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  BrowserThread::PostTaskAndReply(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&AVFoundationGlue::InitializeAVFoundation),
+      base::Bind(&VideoCaptureManager::OnDeviceLayerInitialized, this,
+                 and_then));
+}
+#endif
 
 }  // namespace content

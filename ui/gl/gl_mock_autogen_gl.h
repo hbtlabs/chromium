@@ -29,6 +29,14 @@ MOCK_METHOD4(
     BindFragDataLocationIndexed,
     void(GLuint program, GLuint colorNumber, GLuint index, const char* name));
 MOCK_METHOD2(BindFramebufferEXT, void(GLenum target, GLuint framebuffer));
+MOCK_METHOD7(BindImageTextureEXT,
+             void(GLuint index,
+                  GLuint texture,
+                  GLint level,
+                  GLboolean layered,
+                  GLint layer,
+                  GLenum access,
+                  GLint format));
 MOCK_METHOD2(BindRenderbufferEXT, void(GLenum target, GLuint renderbuffer));
 MOCK_METHOD2(BindSampler, void(GLuint unit, GLuint sampler));
 MOCK_METHOD2(BindTexture, void(GLenum target, GLuint texture));
@@ -169,6 +177,7 @@ MOCK_METHOD9(CopyTexSubImage3D,
                   GLint y,
                   GLsizei width,
                   GLsizei height));
+MOCK_METHOD1(CoverageModulationNV, void(GLenum components));
 MOCK_METHOD7(CoverFillPathInstancedNV,
              void(GLsizei numPaths,
                   GLenum pathNameType,
@@ -497,6 +506,7 @@ MOCK_METHOD4(MapBufferRange,
                    GLbitfield access));
 MOCK_METHOD2(MatrixLoadfEXT, void(GLenum matrixMode, const GLfloat* m));
 MOCK_METHOD1(MatrixLoadIdentityEXT, void(GLenum matrixMode));
+MOCK_METHOD1(MemoryBarrierEXT, void(GLbitfield barriers));
 MOCK_METHOD6(PathCommandsNV,
              void(GLuint path,
                   GLsizei numCommands,

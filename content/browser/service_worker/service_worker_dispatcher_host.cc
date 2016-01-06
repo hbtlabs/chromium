@@ -4,8 +4,10 @@
 
 #include "content/browser/service_worker/service_worker_dispatcher_host.h"
 
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -24,8 +26,8 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_util.h"
@@ -46,9 +48,8 @@ const char kUserDeniedPermissionMessage[] =
     "The user denied permission to use Service Worker.";
 const char kInvalidStateErrorMessage[] = "The object is in an invalid state.";
 
-const uint32 kFilteredMessageClasses[] = {
-  ServiceWorkerMsgStart,
-  EmbeddedWorkerMsgStart,
+const uint32_t kFilteredMessageClasses[] = {
+    ServiceWorkerMsgStart, EmbeddedWorkerMsgStart,
 };
 
 bool AllOriginsMatch(const GURL& url_a, const GURL& url_b, const GURL& url_c) {
@@ -249,7 +250,7 @@ void ServiceWorkerDispatcherHost::RegisterServiceWorkerRegistrationHandle(
 
 ServiceWorkerHandle* ServiceWorkerDispatcherHost::FindServiceWorkerHandle(
     int provider_id,
-    int64 version_id) {
+    int64_t version_id) {
   for (IDMap<ServiceWorkerHandle, IDMapOwnPointer>::iterator iter(&handles_);
        !iter.IsAtEnd(); iter.Advance()) {
     ServiceWorkerHandle* handle = iter.GetCurrentValue();
@@ -279,7 +280,7 @@ ServiceWorkerDispatcherHost::GetOrCreateRegistrationHandle(
       new ServiceWorkerRegistrationHandle(GetContext()->AsWeakPtr(),
                                           provider_host, registration));
   ServiceWorkerRegistrationHandle* new_handle_ptr = new_handle.get();
-  RegisterServiceWorkerRegistrationHandle(new_handle.Pass());
+  RegisterServiceWorkerRegistrationHandle(std::move(new_handle));
   return new_handle_ptr;
 }
 
@@ -367,10 +368,11 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
                  request_id));
 }
 
-void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(int thread_id,
-                                                        int request_id,
-                                                        int provider_id,
-                                                        int64 registration_id) {
+void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
+    int thread_id,
+    int request_id,
+    int provider_id,
+    int64_t registration_id) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnUpdateServiceWorker");
   if (!GetContext()) {
@@ -451,7 +453,7 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
     int thread_id,
     int request_id,
     int provider_id,
-    int64 registration_id) {
+    int64_t registration_id) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnUnregisterServiceWorker");
   if (!GetContext()) {
@@ -738,8 +740,7 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
   }
 
   scoped_ptr<ServiceWorkerProviderHost> provider_host;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation) &&
+  if (IsBrowserSideNavigationEnabled() &&
       ServiceWorkerUtils::IsBrowserAssignedProviderId(provider_id)) {
     // PlzNavigate
     // Retrieve the provider host previously created for navigation requests.
@@ -766,7 +767,7 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
             render_process_id_, route_id, provider_id, provider_type,
             GetContext()->AsWeakPtr(), this));
   }
-  GetContext()->AddProviderHost(provider_host.Pass());
+  GetContext()->AddProviderHost(std::move(provider_host));
 }
 
 void ServiceWorkerDispatcherHost::OnProviderDestroyed(int provider_id) {
@@ -782,8 +783,8 @@ void ServiceWorkerDispatcherHost::OnProviderDestroyed(int provider_id) {
   GetContext()->RemoveProviderHost(render_process_id_, provider_id);
 }
 
-void ServiceWorkerDispatcherHost::OnSetHostedVersionId(
-    int provider_id, int64 version_id) {
+void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
+                                                       int64_t version_id) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnSetHostedVersionId");
   if (!GetContext())
@@ -826,7 +827,7 @@ void ServiceWorkerDispatcherHost::OnSetHostedVersionId(
 
 ServiceWorkerRegistrationHandle*
 ServiceWorkerDispatcherHost::FindRegistrationHandle(int provider_id,
-                                                    int64 registration_id) {
+                                                    int64_t registration_id) {
   for (RegistrationHandleMap::iterator iter(&registration_handles_);
        !iter.IsAtEnd(); iter.Advance()) {
     ServiceWorkerRegistrationHandle* handle = iter.GetCurrentValue();
@@ -861,7 +862,7 @@ void ServiceWorkerDispatcherHost::RegistrationComplete(
     int request_id,
     ServiceWorkerStatusCode status,
     const std::string& status_message,
-    int64 registration_id) {
+    int64_t registration_id) {
   if (!GetContext())
     return;
 
@@ -899,7 +900,7 @@ void ServiceWorkerDispatcherHost::UpdateComplete(
     int request_id,
     ServiceWorkerStatusCode status,
     const std::string& status_message,
-    int64 registration_id) {
+    int64_t registration_id) {
   if (!GetContext())
     return;
 

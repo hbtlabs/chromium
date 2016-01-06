@@ -8,7 +8,6 @@
 #include <map>
 
 #include "base/macros.h"
-#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
@@ -16,8 +15,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "net/base/net_errors.h"
-
-class PageLoadMetricsObserverTest;
 
 namespace content {
 class NavigationHandle;
@@ -28,65 +25,17 @@ namespace IPC {
 class Message;
 }  // namespace IPC
 
-namespace rappor {
-class RapporService;
-}
-
 namespace page_load_metrics {
 
-// These constants are for keeping the tests in sync.
-const char kHistogramFirstLayout[] = "PageLoad.Timing2.NavigationToFirstLayout";
-const char kHistogramFirstTextPaint[] =
-    "PageLoad.Timing2.NavigationToFirstTextPaint";
-const char kHistogramDomContentLoaded[] =
-    "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired";
-const char kHistogramLoad[] = "PageLoad.Timing2.NavigationToLoadEventFired";
-const char kHistogramFirstPaint[] = "PageLoad.Timing2.NavigationToFirstPaint";
-const char kHistogramFirstImagePaint[] =
-    "PageLoad.Timing2.NavigationToFirstImagePaint";
-const char kHistogramFirstContentfulPaint[] =
-    "PageLoad.Timing2.NavigationToFirstContentfulPaint";
-const char kBackgroundHistogramFirstLayout[] =
-    "PageLoad.Timing2.NavigationToFirstLayout.Background";
-const char kBackgroundHistogramFirstTextPaint[] =
-    "PageLoad.Timing2.NavigationToFirstTextPaint.Background";
-const char kBackgroundHistogramDomContentLoaded[] =
-    "PageLoad.Timing2.NavigationToDOMContentLoadedEventFired.Background";
-const char kBackgroundHistogramLoad[] =
-    "PageLoad.Timing2.NavigationToLoadEventFired.Background";
-const char kBackgroundHistogramFirstPaint[] =
-    "PageLoad.Timing2.NavigationToFirstPaint.Background";
-const char kBackgroundHistogramFirstImagePaint[] =
-    "PageLoad.Timing2.NavigationToFirstImagePaint.Background.";
-const char kBackgroundHistogramFirstContentfulPaint[] =
-    "PageLoad.Timing2.NavigationToFirstContentfulPaint.Background";
+class PageLoadTracker;
 
-const char kHistogramFirstContentfulPaintHigh[] =
-    "PageLoad.Timing2.NavigationToFirstContentfulPaint.HighResolutionClock";
-const char kHistogramFirstContentfulPaintLow[] =
-    "PageLoad.Timing2.NavigationToFirstContentfulPaint.LowResolutionClock";
+namespace internal {
 
-const char kHistogramFirstBackground[] =
-    "PageLoad.Timing2.NavigationToFirstBackground";
-const char kHistogramFirstForeground[] =
-    "PageLoad.Timing2.NavigationToFirstForeground";
+extern const char kProvisionalEvents[];
+extern const char kBackgroundProvisionalEvents[];
+extern const char kErrorEvents[];
 
-const char kProvisionalEvents[] = "PageLoad.Events.Provisional";
-const char kCommittedEvents[] = "PageLoad.Events.Committed";
-const char kBackgroundProvisionalEvents[] =
-    "PageLoad.Events.Provisional.Background";
-const char kBackgroundCommittedEvents[] =
-    "PageLoad.Events.Committed.Background";
-
-const char kErrorEvents[] = "PageLoad.Events.InternalError";
-
-const char kRapporMetricsNameCoarseTiming[] =
-    "PageLoad.CoarseTiming.NavigationToFirstContentfulPaint";
-
-// NOTE: Some of these histograms are separated into a separate histogram
-// specified by the ".Background" suffix. For these events, we put them into the
-// background histogram if the web contents was ever in the background from
-// navigation start to the event in question.
+}  // namespace internal
 
 // ProvisionalLoadEvents count all main frame navigations before they commit.
 // The events in this enum are all disjoint, and summing them yields the total
@@ -117,33 +66,6 @@ enum ProvisionalLoadEvent {
   PROVISIONAL_LOAD_LAST_ENTRY
 };
 
-// CommittedLoadEvents are events that occur on committed loads that we track.
-// Note that we capture events only for committed loads that:
-//  - Are http/https.
-//  - Not same-page navigations.
-//  - Are not navigations to an error page.
-// We only know these things about a navigation post-commit.
-//
-// If you add elements to this enum, make sure you update the enum
-// value in histograms.xml. Only add elements to the end to prevent
-// inconsistencies between versions.
-enum CommittedLoadEvent {
-  // When a load that eventually commits started. Note we can't log this until
-  // commit time, but it represents when the actual page load started. Thus, we
-  // only separate this into .Background when a page load starts backgrounded.
-  COMMITTED_LOAD_STARTED,
-
-  // These two events are disjoint. Sum them to find the total number of
-  // committed loads that we end up tracking.
-  COMMITTED_LOAD_FAILED_BEFORE_FIRST_LAYOUT,
-  COMMITTED_LOAD_SUCCESSFUL_FIRST_LAYOUT,
-
-  // TODO(csharrison) once first paint metrics are in place, add new events.
-
-  // Add values before this final count.
-  COMMITTED_LOAD_LAST_ENTRY
-};
-
 // These errors are internal to the page_load_metrics subsystem and do not
 // reflect actual errors that occur during a page load.
 //
@@ -162,7 +84,7 @@ enum InternalErrorLoadEvent {
   // We received an IPC when we weren't tracking a committed load. This will
   // often happen if we get an IPC from a bad URL scheme (that is, the renderer
   // sent us an IPC from a navigation we don't care about).
-  ERR_IPC_WITH_NO_COMMITTED_LOAD,
+  ERR_IPC_WITH_NO_RELEVANT_LOAD,
 
   // Received a notification from a frame that has been navigated away from.
   ERR_IPC_FROM_WRONG_FRAME,
@@ -170,12 +92,18 @@ enum InternalErrorLoadEvent {
   // We received an IPC even through the last committed url from the browser
   // was not http/s. This can happen with the renderer sending IPCs for the
   // new tab page. This will often come paired with
-  // ERR_IPC_WITH_NO_COMMITTED_LOAD.
+  // ERR_IPC_WITH_NO_RELEVANT_LOAD.
   ERR_IPC_FROM_BAD_URL_SCHEME,
 
   // If we track a navigation, but the renderer sends us no IPCs. This could
   // occur if the browser filters loads less aggressively than the renderer.
   ERR_NO_IPCS_RECEIVED,
+
+  // Tracks frequency with which we record an abort time that occurred before
+  // navigation start. This is expected to happen in some cases (see comments in
+  // cc file for details). We use this error counter to understand how often it
+  // happens.
+  ERR_ABORT_BEFORE_NAVIGATION_START,
 
   // Add values before this final count.
   ERR_LAST_ENTRY
@@ -186,23 +114,21 @@ enum InternalErrorLoadEvent {
 class PageLoadMetricsEmbedderInterface {
  public:
   virtual ~PageLoadMetricsEmbedderInterface() {}
-  virtual rappor::RapporService* GetRapporService() = 0;
   virtual bool IsPrerendering(content::WebContents* web_contents) = 0;
+  virtual void RegisterObservers(PageLoadTracker* metrics) = 0;
 };
 
 // This class tracks a given page load, starting from navigation start /
-// provisional load, until a new navigation commits or the navigation fails. It
-// also records RAPPOR/UMA about the page load.
+// provisional load, until a new navigation commits or the navigation fails.
 // MetricsWebContentsObserver manages a set of provisional PageLoadTrackers, as
 // well as a committed PageLoadTracker.
 class PageLoadTracker {
  public:
-  // Caller must guarantee that the observers and embedder_interface pointers
-  // outlives this class.
+  // Caller must guarantee that the embedder_interface pointer outlives this
+  // class.
   PageLoadTracker(bool in_foreground,
                   PageLoadMetricsEmbedderInterface* embedder_interface,
-                  content::NavigationHandle* navigation_handle,
-                  base::ObserverList<PageLoadMetricsObserver, true>* observers);
+                  content::NavigationHandle* navigation_handle);
   ~PageLoadTracker();
   void Redirect(content::NavigationHandle* navigation_handle);
   void Commit(content::NavigationHandle* navigation_handle);
@@ -212,22 +138,46 @@ class PageLoadTracker {
   // Returns true if the timing was successfully updated.
   bool UpdateTiming(const PageLoadTiming& timing);
   void RecordProvisionalEvent(ProvisionalLoadEvent event);
-  void RecordCommittedEvent(CommittedLoadEvent event, bool backgrounded);
   bool HasBackgrounded();
+
+  void set_renderer_tracked(bool renderer_tracked);
+  bool renderer_tracked() { return renderer_tracked_; }
+
+  UserAbortType abort_type() const { return abort_type_; }
+  base::TimeTicks abort_time() const { return abort_time_; }
+
+  void AddObserver(scoped_ptr<PageLoadMetricsObserver> observer);
+
+  // If the user performs some abort-like action while we are tracking this page
+  // load, notify the tracker. Note that we may not classify this as an abort if
+  // we've already performed a first paint.
+  void NotifyAbort(UserAbortType abort_type, const base::TimeTicks& timestamp);
+  void UpdateAbort(UserAbortType abort_type, const base::TimeTicks& timestamp);
 
  private:
   PageLoadExtraInfo GetPageLoadMetricsInfo();
   // Only valid to call post-commit.
-  const GURL& GetCommittedURL();
+  const GURL& committed_url();
 
-  base::TimeDelta GetBackgroundDelta();
-  void RecordTimingHistograms();
-  void RecordRappor();
+  void RecordTimingHistograms(const PageLoadExtraInfo& info);
+  void UpdateAbortInternal(UserAbortType abort_type,
+                           const base::TimeTicks& timestamp);
 
-  bool has_commit_;
+  // Whether the renderer should be sending timing IPCs to this page load.
+  bool renderer_tracked_;
 
   // The navigation start in TimeTicks, not the wall time reported by Blink.
   const base::TimeTicks navigation_start_;
+
+  // URL and time this page load was committed. If this page load hasn't
+  // committed, |committed_url_| will be empty, and |commit_time_| will be zero.
+  GURL committed_url_;
+  base::TimeTicks commit_time_;
+
+  // Will be ABORT_NONE if we have not aborted this load yet. Otherwise will
+  // be the first abort action the user performed.
+  UserAbortType abort_type_;
+  base::TimeTicks abort_time_;
 
   // We record separate metrics for events that occur after a background,
   // because metrics like layout/paint are delayed artificially
@@ -237,13 +187,11 @@ class PageLoadTracker {
   bool started_in_foreground_;
 
   PageLoadTiming timing_;
-  GURL url_;
 
   // Interface to chrome features. Must outlive the class.
   PageLoadMetricsEmbedderInterface* const embedder_interface_;
 
-  // List of observers. This must outlive the class.
-  base::ObserverList<PageLoadMetricsObserver, true>* observers_;
+  std::vector<scoped_ptr<PageLoadMetricsObserver>> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(PageLoadTracker);
 };
@@ -252,12 +200,9 @@ class PageLoadTracker {
 // IPC messages received from a MetricsRenderFrameObserver.
 class MetricsWebContentsObserver
     : public content::WebContentsObserver,
-      public content::WebContentsUserData<MetricsWebContentsObserver>,
-      public PageLoadMetricsObservable {
+      public content::WebContentsUserData<MetricsWebContentsObserver> {
  public:
   // Note that the returned metrics is owned by the web contents.
-  // The caller must guarantee that the RapporService (if non-null) will
-  // outlive the WebContents.
   static MetricsWebContentsObserver* CreateForWebContents(
       content::WebContents* web_contents,
       scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
@@ -265,9 +210,6 @@ class MetricsWebContentsObserver
       content::WebContents* web_contents,
       scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   ~MetricsWebContentsObserver() override;
-
-  void AddObserver(PageLoadMetricsObserver* observer) override;
-  void RemoveObserver(PageLoadMetricsObserver* observer) override;
 
   // content::WebContentsObserver implementation:
   bool OnMessageReceived(const IPC::Message& message,
@@ -278,19 +220,28 @@ class MetricsWebContentsObserver
       content::NavigationHandle* navigation_handle) override;
   void DidRedirectNavigation(
       content::NavigationHandle* navigation_handle) override;
-
+  void NavigationStopped() override;
   void WasShown() override;
   void WasHidden() override;
-
   void RenderProcessGone(base::TerminationStatus status) override;
 
  private:
   friend class content::WebContentsUserData<MetricsWebContentsObserver>;
 
+  // Notify all loads, provisional and committed, that we performed an action
+  // that might abort them.
+  void NotifyAbortAllLoads(UserAbortType abort_type);
+  void NotifyAbortAllLoadsWithTimestamp(UserAbortType abort_type,
+                                        base::TimeTicks timestamp);
+
   void OnTimingUpdated(content::RenderFrameHost*, const PageLoadTiming& timing);
 
   // True if the web contents is currently in the foreground.
   bool in_foreground_;
+
+  // The PageLoadTrackers must be deleted before the |embedded_interface_|,
+  // because they hold a pointer to the |embedder_interface_|.
+  scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface_;
 
   // This map tracks all of the navigations ongoing that are not committed
   // yet. Once a navigation is committed, it moves from the map to
@@ -298,10 +249,15 @@ class MetricsWebContentsObserver
   // valid until commit time, when we remove it from the map.
   std::map<content::NavigationHandle*, scoped_ptr<PageLoadTracker>>
       provisional_loads_;
-  scoped_ptr<PageLoadTracker> committed_load_;
 
-  scoped_ptr<PageLoadMetricsEmbedderInterface> embedder_interface_;
-  base::ObserverList<PageLoadMetricsObserver, true> observers_;
+  // Tracks aborted provisional loads for a little bit longer than usual (one
+  // more navigation commit at the max), in order to better understand how the
+  // navigation failed. This is because most provisional loads are destroyed and
+  // vanish before we get signal about what caused the abort (new navigation,
+  // stop button, etc.).
+  std::vector<scoped_ptr<PageLoadTracker>> aborted_provisional_loads_;
+
+  scoped_ptr<PageLoadTracker> committed_load_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsWebContentsObserver);
 };

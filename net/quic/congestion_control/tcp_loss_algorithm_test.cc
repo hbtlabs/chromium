@@ -20,25 +20,22 @@ namespace test {
 namespace {
 
 // Default packet length.
-const uint32 kDefaultLength = 1000;
+const uint32_t kDefaultLength = 1000;
 
 class TcpLossAlgorithmTest : public ::testing::Test {
  protected:
   TcpLossAlgorithmTest() {
     rtt_stats_.UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
-                         QuicTime::Delta::Zero(),
-                         clock_.Now());
+                         QuicTime::Delta::Zero(), clock_.Now());
   }
 
-  ~TcpLossAlgorithmTest() override {
-    STLDeleteElements(&packets_);
-  }
+  ~TcpLossAlgorithmTest() override { STLDeleteElements(&packets_); }
 
   void SendDataPacket(QuicPacketNumber packet_number) {
     packets_.push_back(new QuicEncryptedPacket(nullptr, kDefaultLength));
-    SerializedPacket packet(
-        packet_number, PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
-        new RetransmittableFrames(ENCRYPTION_NONE), false, false);
+    SerializedPacket packet(kDefaultPathId, packet_number,
+                            PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
+                            new RetransmittableFrames(), false, false);
     unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
                                    1000, true);
   }
@@ -154,7 +151,7 @@ TEST_F(TcpLossAlgorithmTest, EarlyRetransmitAllPackets) {
   unacked_packets_.RemoveFromInFlight(kNumSentPackets);
   // This simulates a single ack following multiple missing packets with FACK.
   for (size_t i = 1; i < kNumSentPackets; ++i) {
-    unacked_packets_.NackPacket(i, static_cast<uint16>(kNumSentPackets - i));
+    unacked_packets_.NackPacket(i, static_cast<uint16_t>(kNumSentPackets - i));
   }
   QuicPacketNumber lost[] = {1, 2};
   VerifyLosses(kNumSentPackets, lost, arraysize(lost));

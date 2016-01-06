@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/BlockFlowPainter.h"
 
 #include "core/layout/FloatingObjects.h"
@@ -62,11 +61,11 @@ void BlockFlowPainter::paintSelection(const PaintInfo& paintInfo, const LayoutPo
 
     // Only create a DrawingRecorder and ClipScope if skipRecording is false. This logic is needed
     // because selectionGaps(...) needs to be called even when we do not record.
-    bool skipRecording = LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*paintInfo.context, m_layoutBlockFlow, DisplayItem::SelectionGap, paintOffset);
+    bool skipRecording = LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutBlockFlow, DisplayItem::SelectionGap, paintOffset);
     Optional<LayoutObjectDrawingRecorder> drawingRecorder;
     Optional<ClipScope> clipScope;
     if (!skipRecording) {
-        drawingRecorder.emplace(*paintInfo.context, m_layoutBlockFlow, DisplayItem::SelectionGap, FloatRect(bounds), paintOffset);
+        drawingRecorder.emplace(paintInfo.context, m_layoutBlockFlow, DisplayItem::SelectionGap, FloatRect(bounds), paintOffset);
         clipScope.emplace(paintInfo.context);
     }
 
@@ -80,7 +79,7 @@ void BlockFlowPainter::paintSelection(const PaintInfo& paintInfo, const LayoutPo
         if (!m_layoutBlockFlow.hasLayer()) {
             LayoutRect localBounds(gapRectsBounds);
             m_layoutBlockFlow.flipForWritingMode(localBounds);
-            gapRectsBounds = LayoutRect(m_layoutBlockFlow.localToContainerQuad(FloatRect(localBounds), layer->layoutObject()).enclosingBoundingBox());
+            gapRectsBounds = LayoutRect(m_layoutBlockFlow.localToAncestorQuad(FloatRect(localBounds), layer->layoutObject()).enclosingBoundingBox());
             if (layer->layoutObject()->hasOverflowClip())
                 gapRectsBounds.move(layer->layoutBox()->scrolledContentOffset());
         }

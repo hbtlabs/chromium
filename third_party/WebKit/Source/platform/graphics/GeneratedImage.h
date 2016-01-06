@@ -36,7 +36,6 @@ class PLATFORM_EXPORT GeneratedImage : public Image {
 public:
     bool currentFrameHasSingleSecurityOrigin() const override { return true; }
 
-    void setContainerSize(const IntSize& size) override { m_size = size; }
     bool usesContainerSize() const override { return true; }
     bool hasRelativeWidth() const override { return true; }
     bool hasRelativeHeight() const override { return true; }
@@ -50,7 +49,7 @@ public:
     PassRefPtr<SkImage> imageForCurrentFrame() override;
 
 protected:
-    void drawPattern(GraphicsContext*, const FloatRect&,
+    void drawPattern(GraphicsContext&, const FloatRect&,
         const FloatSize&, const FloatPoint&, SkXfermode::Mode,
         const FloatRect&, const FloatSize& repeatSpacing) final;
 
@@ -59,7 +58,7 @@ protected:
 
     GeneratedImage(const IntSize& size) : m_size(size) { }
 
-    virtual void drawTile(GraphicsContext*, const FloatRect&) = 0;
+    virtual void drawTile(GraphicsContext&, const FloatRect&) = 0;
 
     IntSize m_size;
 };

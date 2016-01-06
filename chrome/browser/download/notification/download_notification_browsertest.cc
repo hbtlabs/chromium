@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
@@ -272,12 +276,6 @@ class DownloadNotificationTestBase : public InProcessBrowserTest {
  public:
   ~DownloadNotificationTestBase() override {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // TODO(yoshiki): Remove this after the download notification launches.
-    command_line->AppendSwitchASCII(switches::kEnableDownloadNotification,
-                                    "enabled");
-  }
-
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -341,7 +339,7 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
     test_delegate->GetDownloadIdReceiverCallback().Run(
         content::DownloadItem::kInvalidId + 1);
     DownloadServiceFactory::GetForBrowserContext(profile)
-        ->SetDownloadManagerDelegateForTesting(test_delegate.Pass());
+        ->SetDownloadManagerDelegateForTesting(std::move(test_delegate));
 
     DownloadNotificationTestBase::SetUpOnMainThread();
   }
@@ -362,7 +360,8 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
     incognito_test_delegate.reset(
         new TestChromeDownloadManagerDelegate(incognito_profile));
     DownloadServiceFactory::GetForBrowserContext(incognito_profile)
-        ->SetDownloadManagerDelegateForTesting(incognito_test_delegate.Pass());
+        ->SetDownloadManagerDelegateForTesting(
+            std::move(incognito_test_delegate));
   }
 
   TestChromeDownloadManagerDelegate* GetIncognitoDownloadManagerDelegate()
@@ -674,7 +673,7 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, InterruptDownload) {
   // Installs observers before requesting.
   NotificationUpdateObserver
       download_notification_update_observer(notification_id());
-  content::DownloadTestObserverTerminal download_terminal_observer(
+  content::DownloadTestObserverInterrupted download_terminal_observer(
       GetDownloadManager(browser()),
       1u, /* wait_count */
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
@@ -728,7 +727,7 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest,
 
   // Installs observers before requesting the completion.
   NotificationAddObserver download_notification_add_observer;
-  content::DownloadTestObserverTerminal download_terminal_observer(
+  content::DownloadTestObserverInterrupted download_terminal_observer(
       download_manager,
       1u, /* wait_count */
       content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
@@ -1075,14 +1074,8 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest, IncognitoDownloadFile) {
   chrome::CloseWindow(incognito_browser());
 }
 
-// TODO(yoshiki): Disabled due to crbug.com/560329
-#if defined(OS_CHROMEOS)
-#define MAYBE_SimultaneousIncognitoAndNormalDownloads DISABLED_SimultaneousIncognitoAndNormalDownloads
-#else
-#define MAYBE_SimultaneousIncognitoAndNormalDownloads SimultaneousIncognitoAndNormalDownloads
-#endif
 IN_PROC_BROWSER_TEST_F(DownloadNotificationTest,
-                       MAYBE_SimultaneousIncognitoAndNormalDownloads) {
+                       SimultaneousIncognitoAndNormalDownloads) {
   PrepareIncognitoBrowser();
 
   GURL url_incognito(net::URLRequestSlowDownloadJob::kUnknownSizeUrl);
@@ -1127,8 +1120,10 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest,
   // Confirms the types of download notifications are correct.
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_PROGRESS,
             GetNotification(notification_id1)->type());
+  EXPECT_EQ(-1, GetNotification(notification_id1)->progress());
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_PROGRESS,
             GetNotification(notification_id2)->type());
+  EXPECT_LE(0, GetNotification(notification_id2)->progress());
 
   EXPECT_TRUE(download_incognito->GetBrowserContext()->IsOffTheRecord());
   EXPECT_FALSE(download_normal->GetBrowserContext()->IsOffTheRecord());
@@ -1148,10 +1143,8 @@ IN_PROC_BROWSER_TEST_F(DownloadNotificationTest,
   // Confirms the types of download notifications are correct.
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_BASE_FORMAT,
             GetNotification(notification_id1)->type());
-  EXPECT_EQ(-1, GetNotification(notification_id1)->progress());
   EXPECT_EQ(message_center::NOTIFICATION_TYPE_BASE_FORMAT,
             GetNotification(notification_id2)->type());
-  EXPECT_LE(0, GetNotification(notification_id1)->progress());
 
   chrome::CloseWindow(incognito_browser());
 }

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/layout/LayoutBlockFlow.h"
 
 #include "core/dom/AXObjectCache.h"
@@ -885,7 +884,7 @@ void LayoutBlockFlow::rebuildFloatsFromIntruding()
         }
     }
 
-    // Inline blocks are covered by the isReplaced() check in the avoidFloats method.
+    // Inline blocks are covered by the isAtomicInlineLevel() check in the avoidFloats method.
     if (avoidsFloats() || isDocumentElement() || isLayoutView() || isFloatingOrOutOfFlowPositioned() || isTableCell()) {
         if (m_floatingObjects) {
             m_floatingObjects->clear();
@@ -1723,10 +1722,11 @@ void LayoutBlockFlow::addOverflowFromFloats()
     }
 }
 
-void LayoutBlockFlow::computeOverflow(LayoutUnit oldClientAfterEdge)
+void LayoutBlockFlow::computeOverflow(LayoutUnit oldClientAfterEdge, bool recomputeFloats)
 {
-    LayoutBlock::computeOverflow(oldClientAfterEdge);
-    addOverflowFromFloats();
+    LayoutBlock::computeOverflow(oldClientAfterEdge, recomputeFloats);
+    if (recomputeFloats || createsNewFormattingContext() || hasSelfPaintingLayer())
+        addOverflowFromFloats();
 }
 
 RootInlineBox* LayoutBlockFlow::createAndAppendRootInlineBox()
@@ -1750,6 +1750,7 @@ void LayoutBlockFlow::removeFloatingObjectsFromDescendants()
     if (!containsFloats())
         return;
     removeFloatingObjects();
+    setChildNeedsLayout(MarkOnlyThis);
 
     // If our children are inline, then the only boxes which could contain floats are atomic inlines (e.g. inline-block, float etc.)
     // and these create formatting contexts, so can't pick up intruding floats from ancestors/siblings - making them safe to skip.
@@ -2659,7 +2660,7 @@ GapRects LayoutBlockFlow::selectionGapRectsForPaintInvalidation(const LayoutBoxM
         return GapRects();
 
     TransformState transformState(TransformState::ApplyTransformDirection, FloatPoint());
-    mapLocalToContainer(paintInvalidationContainer, transformState, ApplyContainerFlip | UseTransforms);
+    mapLocalToAncestor(paintInvalidationContainer, transformState, ApplyContainerFlip | UseTransforms);
     LayoutPoint offsetFromPaintInvalidationContainer = roundedLayoutPoint(transformState.mappedPoint());
 
     if (hasOverflowClip())
@@ -2808,7 +2809,7 @@ LayoutRect LayoutBlockFlow::blockSelectionGap(const LayoutBlock* rootBlock, cons
     LayoutRect gapRect = rootBlock->logicalRectToPhysicalRect(rootBlockPhysicalPosition, LayoutRect(logicalLeft, logicalTop, logicalWidth, logicalHeight));
     if (paintInfo) {
         IntRect selectionGapRect = alignSelectionRectToDevicePixels(gapRect);
-        paintInfo->context->fillRect(selectionGapRect, selectionBackgroundColor());
+        paintInfo->context.fillRect(selectionGapRect, selectionBackgroundColor());
     }
     return gapRect;
 }
@@ -2890,7 +2891,7 @@ LayoutRect LayoutBlockFlow::logicalLeftSelectionGap(const LayoutBlock* rootBlock
     LayoutRect gapRect = rootBlock->logicalRectToPhysicalRect(rootBlockPhysicalPosition, LayoutRect(rootBlockLogicalLeft, rootBlockLogicalTop, rootBlockLogicalWidth, logicalHeight));
     if (paintInfo) {
         IntRect selectionGapRect = alignSelectionRectToDevicePixels(gapRect);
-        paintInfo->context->fillRect(selectionGapRect, selObj->selectionBackgroundColor());
+        paintInfo->context.fillRect(selectionGapRect, selObj->selectionBackgroundColor());
     }
     return gapRect;
 }
@@ -2908,7 +2909,7 @@ LayoutRect LayoutBlockFlow::logicalRightSelectionGap(const LayoutBlock* rootBloc
     LayoutRect gapRect = rootBlock->logicalRectToPhysicalRect(rootBlockPhysicalPosition, LayoutRect(rootBlockLogicalLeft, rootBlockLogicalTop, rootBlockLogicalWidth, logicalHeight));
     if (paintInfo) {
         IntRect selectionGapRect = alignSelectionRectToDevicePixels(gapRect);
-        paintInfo->context->fillRect(selectionGapRect, selObj->selectionBackgroundColor());
+        paintInfo->context.fillRect(selectionGapRect, selObj->selectionBackgroundColor());
     }
     return gapRect;
 }

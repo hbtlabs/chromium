@@ -33,9 +33,7 @@ typedef QuicInMemoryCache::ServerPushInfo ServerPushInfo;
 
 class QuicInMemoryCacheTest : public ::testing::Test {
  protected:
-  QuicInMemoryCacheTest() {
-    QuicInMemoryCachePeer::ResetForTests();
-  }
+  QuicInMemoryCacheTest() { QuicInMemoryCachePeer::ResetForTests(); }
 
   ~QuicInMemoryCacheTest() override { QuicInMemoryCachePeer::ResetForTests(); }
 
@@ -47,8 +45,8 @@ class QuicInMemoryCacheTest : public ::testing::Test {
   string CacheDirectory() {
     base::FilePath path;
     PathService::Get(base::DIR_SOURCE_ROOT, &path);
-    path = path.AppendASCII("net").AppendASCII("data")
-        .AppendASCII("quic_in_memory_cache_data");
+    path = path.AppendASCII("net").AppendASCII("data").AppendASCII(
+        "quic_in_memory_cache_data");
     // The file path is known to be an ascii string.
     return path.MaybeAsASCII();
   }
@@ -74,6 +72,32 @@ TEST_F(QuicInMemoryCacheTest, AddSimpleResponseGetResponse) {
   ASSERT_TRUE(ContainsKey(response->headers(), ":status"));
   EXPECT_EQ("200", response->headers().find(":status")->second);
   EXPECT_EQ(response_body.size(), response->body().length());
+}
+
+TEST_F(QuicInMemoryCacheTest, AddResponse) {
+  const string kRequestHost = "www.foo.com";
+  const string kRequestPath = "/";
+  const string kResponseBody("hello response");
+
+  SpdyHeaderBlock response_headers;
+  response_headers[":version"] = "HTTP/1.1";
+  response_headers[":status"] = "200";
+  response_headers["content-length"] = IntToString(kResponseBody.size());
+
+  SpdyHeaderBlock response_trailers;
+  response_trailers["key-1"] = "value-1";
+  response_trailers["key-2"] = "value-2";
+  response_trailers["key-3"] = "value-3";
+
+  QuicInMemoryCache* cache = QuicInMemoryCache::GetInstance();
+  cache->AddResponse(kRequestHost, "/", response_headers, kResponseBody,
+                     response_trailers);
+
+  const QuicInMemoryCache::Response* response =
+      cache->GetResponse(kRequestHost, kRequestPath);
+  EXPECT_EQ(response->headers(), response_headers);
+  EXPECT_EQ(response->body(), kResponseBody);
+  EXPECT_EQ(response->trailers(), response_trailers);
 }
 
 TEST_F(QuicInMemoryCacheTest, ReadsCacheDir) {

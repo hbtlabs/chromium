@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/animation/SVGInterpolationType.h"
 
 #include "core/animation/InterpolationEnvironment.h"
@@ -11,6 +10,13 @@
 #include "core/svg/properties/SVGProperty.h"
 
 namespace blink {
+
+PassOwnPtr<InterpolationValue> SVGInterpolationType::maybeConvertNeutral(const UnderlyingValue&, ConversionCheckers&) const
+{
+    ASSERT_NOT_REACHED();
+    // This function must be overridden, unless maybeConvertSingle is overridden to no longer need it.
+    return nullptr;
+}
 
 PassOwnPtr<InterpolationValue> SVGInterpolationType::maybeConvertSingle(const PropertySpecificKeyframe& keyframe, const InterpolationEnvironment& environment, const UnderlyingValue& underlyingValue, ConversionCheckers& conversionCheckers) const
 {

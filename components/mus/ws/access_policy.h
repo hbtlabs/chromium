@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_MUS_WS_ACCESS_POLICY_H_
 #define COMPONENTS_MUS_WS_ACCESS_POLICY_H_
 
+#include <stdint.h>
+
 #include "components/mus/public/interfaces/mus_constants.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/ids.h"
@@ -61,6 +63,7 @@ class AccessPolicy {
       const ServerWindow* window,
       const ServerWindow** new_parent,
       const ServerWindow** old_parent) const = 0;
+  virtual bool CanSetWindowManagerInternal() const = 0;
 
   // Returns the window to supply to the client when focus changes to |focused|.
   virtual const ServerWindow* GetWindowForFocusChange(

@@ -24,7 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/testing/InternalSettings.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -75,6 +74,7 @@ InternalSettings::Backup::Backup(Settings* settings)
     , m_originalImageColorProfilesEnabled(RuntimeEnabledFeatures::imageColorProfilesEnabled())
     , m_originalImageAnimationPolicy(settings->imageAnimationPolicy())
     , m_originalScrollTopLeftInteropEnabled(RuntimeEnabledFeatures::scrollTopLeftInteropEnabled())
+    , m_originalCompositorWorkerEnabled(RuntimeEnabledFeatures::compositorWorkerEnabled())
 {
 }
 
@@ -99,6 +99,7 @@ void InternalSettings::Backup::restoreTo(Settings* settings)
     RuntimeEnabledFeatures::setImageColorProfilesEnabled(m_originalImageColorProfilesEnabled);
     settings->setImageAnimationPolicy(m_originalImageAnimationPolicy);
     RuntimeEnabledFeatures::setScrollTopLeftInteropEnabled(m_originalScrollTopLeftInteropEnabled);
+    RuntimeEnabledFeatures::setCompositorWorkerEnabled(m_originalCompositorWorkerEnabled);
 }
 
 #if ENABLE(OILPAN)
@@ -508,6 +509,12 @@ void InternalSettings::setPreloadLogging(bool enabled, ExceptionState& exception
 {
     InternalSettingsGuardForSettings();
     settings()->setLogPreload(enabled);
+}
+
+void InternalSettings::setCompositorWorkerEnabled(bool enabled, ExceptionState& exceptionState)
+{
+    InternalSettingsGuardForSettings();
+    RuntimeEnabledFeatures::setCompositorWorkerEnabled(enabled);
 }
 
 }

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "public/web/WebView.h"
 
 #include "bindings/core/v8/V8Document.h"
@@ -571,7 +570,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent)
     PaintLayer* rootLayer = view->layoutView()->layer();
     LayoutRect paintRect(0, 0, kWidth, kHeight);
     PaintLayerPaintingInfo paintingInfo(rootLayer, paintRect, GlobalPaintNormalPhase, LayoutSize());
-    PaintLayerPainter(*rootLayer).paintLayerContents(&pictureBuilder.context(), paintingInfo, PaintLayerPaintingCompositingAllPhases);
+    PaintLayerPainter(*rootLayer).paintLayerContents(pictureBuilder.context(), paintingInfo, PaintLayerPaintingCompositingAllPhases);
 
     pictureBuilder.endRecording()->playback(&canvas);
 
@@ -1637,6 +1636,39 @@ TEST_F(WebViewTest, BlinkCaretOnTypingAfterLongPress)
     EXPECT_FALSE(mainFrame->frame()->selection().isCaretBlinkingSuspended());
 }
 #endif
+
+TEST_F(WebViewTest, BlinkCaretOnClosingContextMenu)
+{
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL.c_str()), WebString::fromUTF8("form.html"));
+    WebView* webView = m_webViewHelper.initializeAndLoad(m_baseURL + "form.html", true);
+
+    webView->setInitialFocus(false);
+    runPendingTasks();
+
+    // We suspend caret blinking when pressing with mouse right button.
+    // Note that we do not send MouseUp event here since it will be consumed
+    // by the context menu once it shows up.
+    WebMouseEvent mouseEvent;
+    mouseEvent.button = WebMouseEvent::ButtonRight;
+    mouseEvent.x = 1;
+    mouseEvent.y = 1;
+    mouseEvent.clickCount = 1;
+    mouseEvent.type = WebInputEvent::MouseDown;
+    webView->handleInputEvent(mouseEvent);
+    runPendingTasks();
+
+    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webView->mainFrame());
+    EXPECT_TRUE(mainFrame->frame()->selection().isCaretBlinkingSuspended());
+
+    // Caret blinking is still suspended after showing context menu.
+    webView->showContextMenu();
+    EXPECT_TRUE(mainFrame->frame()->selection().isCaretBlinkingSuspended());
+
+    // Caret blinking will be resumed only after context menu is closed.
+    webView->didCloseContextMenu();
+
+    EXPECT_FALSE(mainFrame->frame()->selection().isCaretBlinkingSuspended());
+}
 
 TEST_F(WebViewTest, SelectionOnReadOnlyInput)
 {

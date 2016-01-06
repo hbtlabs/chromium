@@ -5,6 +5,8 @@
 #ifndef MASH_WM_LAYOUT_MANAGER_H_
 #define MASH_WM_LAYOUT_MANAGER_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "components/mus/public/cpp/window_observer.h"
 
@@ -24,9 +26,12 @@ class LayoutManager : public mus::WindowObserver {
  protected:
   explicit LayoutManager(mus::Window* owner);
 
+  void Uninstall();
+
   // Overridden from mus::WindowObserver:
   void OnTreeChanged(
       const mus::WindowObserver::TreeChangeParams& params) override;
+  void OnWindowDestroying(mus::Window* window) override;
   void OnWindowBoundsChanged(mus::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;

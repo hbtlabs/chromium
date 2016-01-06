@@ -4,6 +4,8 @@
 
 #include "chrome/browser/password_manager/password_store_factory.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/memory/scoped_ptr.h"
@@ -11,6 +13,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/rand_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
@@ -174,7 +177,7 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   // For now, we use PasswordStoreDefault. We might want to make a native
   // backend for PasswordStoreX (see below) in the future though.
   ps = new password_manager::PasswordStoreDefault(
-      main_thread_runner, db_thread_runner, login_db.Pass());
+      main_thread_runner, db_thread_runner, std::move(login_db));
 #elif defined(USE_X11)
   // On POSIX systems, we try to use the "native" password management system of
   // the desktop environment currently running, allowing GNOME Keyring in XFCE.
@@ -249,8 +252,8 @@ PasswordStoreFactory::BuildServiceInstanceFor(
         "more information about password storage options.";
   }
 
-  ps = new PasswordStoreX(main_thread_runner, db_thread_runner, login_db.Pass(),
-                          backend.release());
+  ps = new PasswordStoreX(main_thread_runner, db_thread_runner,
+                          std::move(login_db), backend.release());
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
   ps = new password_manager::PasswordStoreDefault(

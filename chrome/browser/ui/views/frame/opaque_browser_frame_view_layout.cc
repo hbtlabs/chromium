@@ -5,8 +5,9 @@
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -415,7 +416,7 @@ void OpaqueBrowserFrameViewLayout::LayoutNewStyleAvatar(views::View* host) {
   // the avatar button.
   if (!IsTitleBarCondensed()) {
     trailing_button_start_ -=
-        GetLayoutConstant(NEW_TAB_BUTTON_WIDTH) + kNewTabCaptionNormalSpacing;
+        GetLayoutSize(NEW_TAB_BUTTON).width() + kNewTabCaptionNormalSpacing;
   }
 
   new_avatar_button_->SetBounds(button_x, button_y, button_width,

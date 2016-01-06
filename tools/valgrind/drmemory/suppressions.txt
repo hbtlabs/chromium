@@ -236,7 +236,6 @@ WARNING
 name=AllocationRegister guard page access deliberate crash
 base.dll!base::trace_event::AllocationRegister::Insert
 *!base::trace_event::AllocationRegisterTest_OverflowDeathTest_Test::TestBody
-*!testing::internal::HandleExceptionsInMethodIfSupported<>
 
 ############################
 # Benign issues in Chromium
@@ -397,13 +396,11 @@ MSVCR100D.dll!operator new
 *!operator new
 *!operator new[]
 *!`anonymous namespace'::SecurityTest_NewOverflow_Test::TestBody
-*!testing::internal::HandleExceptionsInMethodIfSupported<>
 
 WARNING
 name=Security test (calloc overflow)
 *!`anonymous namespace'::CallocReturnsNull
 *!`anonymous namespace'::SecurityTest_CallocOverflow_Test::TestBody
-*!testing::internal::HandleExceptionsInMethodIfSupported<>
 
 GDI USAGE ERROR
 name=http://crbug.com/234484
@@ -425,8 +422,7 @@ skia.dll!HDCOffscreen::draw
 ...
 skia.dll!SkScalerContext::getImage
 skia.dll!SkGlyphCache::findImage
-skia.dll!D1G_RectClip
-skia.dll!SkDraw::draw*
+skia.dll!DrawOneGlyph::getImageData
 
 HANDLE LEAK
 name=http://crbug.com/346842
@@ -436,7 +432,7 @@ system call NtGdiCreateDIBSection
 *!SkScalerContext_GDI::generateImage
 *!SkScalerContext::getImage
 *!SkGlyphCache::findImage
-*!D1G*RectClip
+*!DrawOneGlyph::getImageData
 
 HANDLE LEAK
 name=http://crbug.com/346993
@@ -738,7 +734,6 @@ UNADDRESSABLE ACCESS
 name=bug_536803
 *!blink::SecurityOrigin::addSuborigin
 *!blink::SecurityOriginTest_Suborigins_Test::TestBody
-*!testing::internal::HandleExceptionsInMethodIfSupported<>
 
 HANDLE LEAK
 name=bug_555058_a
@@ -788,9 +783,35 @@ content.dll!content::BrowserThreadImpl::Run
 base.dll!base::Thread::ThreadMain
 base.dll!base::`anonymous namespace'::ThreadFunc
 
-UNADDRESSABLE ACCESS
-name=bug_563817
-base.dll!base::CommandLine::HasSwitch
-base.dll!base::CommandLine::HasSwitch
-mojo_system_impl.dll!mojo::edk::Init
-mojo_system_impl.dll!mojo::embedder::Init
+HANDLE LEAK
+name=bug_561803_a
+system call NtCreateNamedPipeFile
+*!CreateNamedPipeW
+*!mojo::edk::PlatformChannelPair::PlatformChannelPair
+...
+*!mojo::edk::ChildProcessLaunched
+*!mojo::embedder::ChildProcessLaunched
+*!content::*::OnProcessLaunched
+*!content::ChildProcessLauncher::Notify
+*!content::ChildProcessLauncher::DidLaunch
+*!base::internal::InvokeHelper<>::MakeItSo
+
+HANDLE LEAK
+name=bug_561803_b
+system call NtDuplicateObject
+*!DuplicateHandle
+*!DuplicateHandle
+*!mojo::edk::ChildBrokerHost::ChildBrokerHost
+*!mojo::edk::ChildProcessLaunched
+*!mojo::embedder::ChildProcessLaunched
+...
+*!content::ChildProcessLauncher::Notify
+*!content::ChildProcessLauncher::DidLaunch
+*!base::internal::InvokeHelper<>::MakeItSo
+
+GDI USAGE ERROR
+name=bug_573352
+system call NtGdiDeleteObjectApp
+GDI32.dll!...
+SHELL32.dll!...
+ui_base.dll!drag_utils::SetDragImageOnDataObject

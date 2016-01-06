@@ -22,6 +22,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ChromeDashboard": [
+        {
+            "group_name": "Enabled"
+        },
+        {
+            "group_name": "Default"
+        }
+    ],
     "ChromotingQUIC": [
         {
             "group_name": "Enabled"
@@ -48,6 +56,11 @@
     "MaterialDesignDownloads": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "PasswordBranding": [
+        {
+            "group_name": "SmartLockBrandingSavePromptOnly"
         }
     ],
     "QUIC": [
@@ -87,7 +100,20 @@
             "group_name": "DontShowAndDontSend"
         }
     ],
+    "SafeBrowsingUnverifiedDownloads": [
+        {
+            "group_name": "DisableByParameterExe",
+            "params": {
+                "blacklist": ".exe"
+            }
+        }
+    ],
     "SdchPersistence": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
+    "StrictSecureCookies": [
         {
             "group_name": "Enabled"
         }

@@ -19,18 +19,18 @@ function test()
     InspectorTest.runTestSuite([
         function testUISourceCode(next)
         {
-            var uiSourceCode = new WebInspector.UISourceCode(new MockProject(), "parentPath", "name", "originURL", WebInspector.resourceTypes.Script);
+            var uiSourceCode = new WebInspector.UISourceCode(new MockProject(), "originURL", WebInspector.resourceTypes.Script);
             function didRequestContent(callNumber, content)
             {
                 InspectorTest.addResult("Callback " + callNumber + " is invoked.");
-                InspectorTest.assertEquals("text/javascript", WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode));
+                InspectorTest.assertEquals("text/javascript", WebInspector.NetworkProject.uiSourceCodeMimeType(uiSourceCode));
                 InspectorTest.assertEquals("var x = 0;", content);
 
                 if (callNumber === 3) {
                     // Check that sourceCodeProvider.requestContent won't be called anymore.
                     uiSourceCode.requestContent(function(content)
                     {
-                        InspectorTest.assertEquals("text/javascript", WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode));
+                        InspectorTest.assertEquals("text/javascript", WebInspector.NetworkProject.uiSourceCodeMimeType(uiSourceCode));
                         InspectorTest.assertEquals("var x = 0;", content);
                         next();
                     });

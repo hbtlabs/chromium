@@ -5,6 +5,9 @@
 #include "remoting/client/jni/chromoting_jni_instance.h"
 
 #include <android/log.h>
+#include <stdint.h>
+
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -21,10 +24,10 @@
 #include "remoting/protocol/chromium_port_allocator.h"
 #include "remoting/protocol/chromium_socket_factory.h"
 #include "remoting/protocol/host_stub.h"
-#include "remoting/protocol/ice_transport_factory.h"
 #include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/network_settings.h"
 #include "remoting/protocol/performance_tracker.h"
+#include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/server_log_entry.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
@@ -85,7 +88,7 @@ ChromotingJniInstance::ChromotingJniInstance(ChromotingJniRuntime* jni_runtime,
   authenticator_.reset(new protocol::NegotiatingClientAuthenticator(
       pairing_id, pairing_secret, host_id_,
       base::Bind(&ChromotingJniInstance::FetchSecret, this),
-      token_fetcher.Pass(), auth_methods));
+      std::move(token_fetcher), auth_methods));
 
   // Post a task to start connection
   jni_runtime_->network_task_runner()->PostTask(
@@ -423,17 +426,17 @@ void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
       protocol::NetworkSettings::NAT_TRAVERSAL_FULL);
 
   // Use Chrome's network stack to allocate ports for peer-to-peer channels.
-  scoped_ptr<protocol::ChromiumPortAllocator> port_allocator(
-      protocol::ChromiumPortAllocator::Create(jni_runtime_->url_requester(),
-                                              network_settings));
+  scoped_ptr<protocol::ChromiumPortAllocatorFactory> port_allocator_factory(
+      new protocol::ChromiumPortAllocatorFactory(
+          jni_runtime_->url_requester()));
 
-  scoped_ptr<protocol::TransportFactory> transport_factory(
-      new protocol::IceTransportFactory(
-          signaling_.get(), port_allocator.Pass(), network_settings,
-          protocol::TransportRole::CLIENT));
+  scoped_refptr<protocol::TransportContext> transport_context =
+      new protocol::TransportContext(
+          signaling_.get(), std::move(port_allocator_factory), network_settings,
+          protocol::TransportRole::CLIENT);
 
-  client_->Start(signaling_.get(), authenticator_.Pass(),
-                 transport_factory.Pass(), host_jid_, capabilities_);
+  client_->Start(signaling_.get(), std::move(authenticator_), transport_context,
+                 host_jid_, capabilities_);
 }
 
 void ChromotingJniInstance::FetchSecret(

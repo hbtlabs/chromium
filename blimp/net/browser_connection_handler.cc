@@ -7,10 +7,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "blimp/net/blimp_connection.h"
+#include "blimp/net/blimp_message_checkpointer.h"
 #include "blimp/net/blimp_message_demultiplexer.h"
 #include "blimp/net/blimp_message_multiplexer.h"
 #include "blimp/net/blimp_message_output_buffer.h"
 #include "blimp/net/blimp_message_processor.h"
+#include "net/base/net_errors.h"
 
 namespace blimp {
 namespace {
@@ -24,7 +26,10 @@ const int kMaxBufferSizeBytes = 1 << 24;
 BrowserConnectionHandler::BrowserConnectionHandler()
     : demultiplexer_(new BlimpMessageDemultiplexer),
       output_buffer_(new BlimpMessageOutputBuffer(kMaxBufferSizeBytes)),
-      multiplexer_(new BlimpMessageMultiplexer(output_buffer_.get())) {}
+      multiplexer_(new BlimpMessageMultiplexer(output_buffer_.get())),
+      checkpointer_(new BlimpMessageCheckpointer(demultiplexer_.get(),
+                                                 output_buffer_.get(),
+                                                 output_buffer_.get())) {}
 
 BrowserConnectionHandler::~BrowserConnectionHandler() {}
 
@@ -37,28 +42,29 @@ scoped_ptr<BlimpMessageProcessor> BrowserConnectionHandler::RegisterFeature(
 
 void BrowserConnectionHandler::HandleConnection(
     scoped_ptr<BlimpConnection> connection) {
-  // Since there is only a single Client, assume a newer connection should
-  // replace an existing one.
-  DropCurrentConnection();
+  DCHECK(connection);
+  VLOG(1) << "HandleConnection " << connection;
+
+  if (connection_) {
+    DropCurrentConnection();
+  }
   connection_ = std::move(connection);
 
-  // Connect the incoming & outgoing message streams.
+  // Hook up message streams to the connection.
   connection_->SetIncomingMessageProcessor(demultiplexer_.get());
   output_buffer_->SetOutputProcessor(
       connection_->GetOutgoingMessageProcessor());
-}
-
-void BrowserConnectionHandler::DropCurrentConnection() {
-  if (!connection_)
-    return;
-  connection_->SetIncomingMessageProcessor(nullptr);
-  output_buffer_->SetOutputProcessor(nullptr);
-  connection_.reset();
+  connection_->AddConnectionErrorObserver(this);
 }
 
 void BrowserConnectionHandler::OnConnectionError(int error) {
-  LOG(WARNING) << "Connection error " << error;
   DropCurrentConnection();
+}
+
+void BrowserConnectionHandler::DropCurrentConnection() {
+  DCHECK(connection_);
+  output_buffer_->SetOutputProcessor(nullptr);
+  connection_.reset();
 }
 
 }  // namespace blimp

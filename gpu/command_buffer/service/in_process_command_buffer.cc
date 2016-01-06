@@ -4,6 +4,9 @@
 
 #include "gpu/command_buffer/service/in_process_command_buffer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <queue>
 #include <set>
 #include <utility>
@@ -237,7 +240,7 @@ void InProcessCommandBuffer::PumpCommands() {
   gpu_scheduler_->PutChanged();
 }
 
-bool InProcessCommandBuffer::GetBufferChanged(int32 transfer_buffer_id) {
+bool InProcessCommandBuffer::GetBufferChanged(int32_t transfer_buffer_id) {
   CheckSequencedThread();
   command_buffer_lock_.AssertAcquired();
   command_buffer_->SetGetBuffer(transfer_buffer_id);
@@ -249,7 +252,7 @@ bool InProcessCommandBuffer::Initialize(
     bool is_offscreen,
     gfx::AcceleratedWidget window,
     const gfx::Size& size,
-    const std::vector<int32>& attribs,
+    const std::vector<int32_t>& attribs,
     gfx::GpuPreference gpu_preference,
     const base::Closure& context_lost_callback,
     InProcessCommandBuffer* share_group,
@@ -343,7 +346,7 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
       new GpuScheduler(command_buffer.get(), decoder_.get(), decoder_.get()));
   command_buffer->SetGetBufferChangeCallback(base::Bind(
       &GpuScheduler::SetGetBuffer, base::Unretained(gpu_scheduler_.get())));
-  command_buffer_ = command_buffer.Pass();
+  command_buffer_ = std::move(command_buffer);
 
   decoder_->set_engine(gpu_scheduler_.get());
 
@@ -502,13 +505,13 @@ CommandBuffer::State InProcessCommandBuffer::GetLastState() {
   return last_state_;
 }
 
-int32 InProcessCommandBuffer::GetLastToken() {
+int32_t InProcessCommandBuffer::GetLastToken() {
   CheckSequencedThread();
   GetStateFast();
   return last_state_.token;
 }
 
-void InProcessCommandBuffer::FlushOnGpuThread(int32 put_offset,
+void InProcessCommandBuffer::FlushOnGpuThread(int32_t put_offset,
                                               uint32_t order_num) {
   CheckSequencedThread();
   ScopedEvent handle_flush(&flush_event_);
@@ -565,7 +568,7 @@ void InProcessCommandBuffer::ScheduleDelayedWorkOnGpuThread() {
       &InProcessCommandBuffer::PerformDelayedWork, gpu_thread_weak_ptr_));
 }
 
-void InProcessCommandBuffer::Flush(int32 put_offset) {
+void InProcessCommandBuffer::Flush(int32_t put_offset) {
   CheckSequencedThread();
   if (last_state_.error != gpu::error::kNoError)
     return;
@@ -586,18 +589,19 @@ void InProcessCommandBuffer::Flush(int32 put_offset) {
   flushed_fence_sync_release_ = next_fence_sync_release_ - 1;
 }
 
-void InProcessCommandBuffer::OrderingBarrier(int32 put_offset) {
+void InProcessCommandBuffer::OrderingBarrier(int32_t put_offset) {
   Flush(put_offset);
 }
 
-void InProcessCommandBuffer::WaitForTokenInRange(int32 start, int32 end) {
+void InProcessCommandBuffer::WaitForTokenInRange(int32_t start, int32_t end) {
   CheckSequencedThread();
   while (!InRange(start, end, GetLastToken()) &&
          last_state_.error == gpu::error::kNoError)
     flush_event_.Wait();
 }
 
-void InProcessCommandBuffer::WaitForGetOffsetInRange(int32 start, int32 end) {
+void InProcessCommandBuffer::WaitForGetOffsetInRange(int32_t start,
+                                                     int32_t end) {
   CheckSequencedThread();
 
   GetStateFast();
@@ -608,7 +612,7 @@ void InProcessCommandBuffer::WaitForGetOffsetInRange(int32 start, int32 end) {
   }
 }
 
-void InProcessCommandBuffer::SetGetBuffer(int32 shm_id) {
+void InProcessCommandBuffer::SetGetBuffer(int32_t shm_id) {
   CheckSequencedThread();
   if (last_state_.error != gpu::error::kNoError)
     return;
@@ -627,7 +631,7 @@ void InProcessCommandBuffer::SetGetBuffer(int32 shm_id) {
 }
 
 void InProcessCommandBuffer::SetGetBufferOnGpuThread(
-    int32 shm_id,
+    int32_t shm_id,
     base::WaitableEvent* completion) {
   base::AutoLock lock(command_buffer_lock_);
   command_buffer_->SetGetBuffer(shm_id);
@@ -635,14 +639,15 @@ void InProcessCommandBuffer::SetGetBufferOnGpuThread(
   completion->Signal();
 }
 
-scoped_refptr<Buffer> InProcessCommandBuffer::CreateTransferBuffer(size_t size,
-                                                                   int32* id) {
+scoped_refptr<Buffer> InProcessCommandBuffer::CreateTransferBuffer(
+    size_t size,
+    int32_t* id) {
   CheckSequencedThread();
   base::AutoLock lock(command_buffer_lock_);
   return command_buffer_->CreateTransferBuffer(size, id);
 }
 
-void InProcessCommandBuffer::DestroyTransferBuffer(int32 id) {
+void InProcessCommandBuffer::DestroyTransferBuffer(int32_t id) {
   CheckSequencedThread();
   base::Closure task =
       base::Bind(&InProcessCommandBuffer::DestroyTransferBufferOnGpuThread,
@@ -652,7 +657,7 @@ void InProcessCommandBuffer::DestroyTransferBuffer(int32 id) {
   QueueTask(task);
 }
 
-void InProcessCommandBuffer::DestroyTransferBufferOnGpuThread(int32 id) {
+void InProcessCommandBuffer::DestroyTransferBufferOnGpuThread(int32_t id) {
   base::AutoLock lock(command_buffer_lock_);
   command_buffer_->DestroyTransferBuffer(id);
 }
@@ -661,10 +666,10 @@ gpu::Capabilities InProcessCommandBuffer::GetCapabilities() {
   return capabilities_;
 }
 
-int32 InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
-                                          size_t width,
-                                          size_t height,
-                                          unsigned internalformat) {
+int32_t InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
+                                            size_t width,
+                                            size_t height,
+                                            unsigned internalformat) {
   CheckSequencedThread();
 
   DCHECK(gpu_memory_buffer_manager_);
@@ -672,7 +677,7 @@ int32 InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
       gpu_memory_buffer_manager_->GpuMemoryBufferFromClientBuffer(buffer);
   DCHECK(gpu_memory_buffer);
 
-  int32 new_id = next_image_id_.GetNext();
+  int32_t new_id = next_image_id_.GetNext();
 
   DCHECK(gpu::ImageFactory::IsGpuMemoryBufferFormatSupported(
       gpu_memory_buffer->GetFormat(), capabilities_));
@@ -706,7 +711,8 @@ int32 InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
 
   if (fence_sync) {
     flushed_fence_sync_release_ = fence_sync;
-    SyncToken sync_token(GetNamespaceID(), GetCommandBufferID(), fence_sync);
+    SyncToken sync_token(GetNamespaceID(), GetExtraCommandBufferData(),
+                         GetCommandBufferID(), fence_sync);
     sync_token.SetVerifyFlush();
     gpu_memory_buffer_manager_->SetDestructionSyncToken(gpu_memory_buffer,
                                                         sync_token);
@@ -716,11 +722,11 @@ int32 InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
 }
 
 void InProcessCommandBuffer::CreateImageOnGpuThread(
-    int32 id,
+    int32_t id,
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    uint32 internalformat,
+    uint32_t internalformat,
     uint32_t order_num,
     uint64_t fence_sync) {
   ScopedOrderNumberProcessor scoped_order_num(sync_point_order_data_.get(),
@@ -779,7 +785,7 @@ void InProcessCommandBuffer::CreateImageOnGpuThread(
   }
 }
 
-void InProcessCommandBuffer::DestroyImage(int32 id) {
+void InProcessCommandBuffer::DestroyImage(int32_t id) {
   CheckSequencedThread();
 
   QueueTask(base::Bind(&InProcessCommandBuffer::DestroyImageOnGpuThread,
@@ -787,7 +793,7 @@ void InProcessCommandBuffer::DestroyImage(int32 id) {
                        id));
 }
 
-void InProcessCommandBuffer::DestroyImageOnGpuThread(int32 id) {
+void InProcessCommandBuffer::DestroyImageOnGpuThread(int32_t id) {
   if (!decoder_)
     return;
 
@@ -801,7 +807,7 @@ void InProcessCommandBuffer::DestroyImageOnGpuThread(int32 id) {
   image_manager->RemoveImage(id);
 }
 
-int32 InProcessCommandBuffer::CreateGpuMemoryBufferImage(
+int32_t InProcessCommandBuffer::CreateGpuMemoryBufferImage(
     size_t width,
     size_t height,
     unsigned internalformat,
@@ -820,25 +826,25 @@ int32 InProcessCommandBuffer::CreateGpuMemoryBufferImage(
   return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
 }
 
-uint32 InProcessCommandBuffer::InsertSyncPoint() {
-  uint32 sync_point = service_->sync_point_manager()->GenerateSyncPoint();
+uint32_t InProcessCommandBuffer::InsertSyncPoint() {
+  uint32_t sync_point = service_->sync_point_manager()->GenerateSyncPoint();
   QueueTask(base::Bind(&InProcessCommandBuffer::RetireSyncPointOnGpuThread,
                        base::Unretained(this),
                        sync_point));
   return sync_point;
 }
 
-uint32 InProcessCommandBuffer::InsertFutureSyncPoint() {
+uint32_t InProcessCommandBuffer::InsertFutureSyncPoint() {
   return service_->sync_point_manager()->GenerateSyncPoint();
 }
 
-void InProcessCommandBuffer::RetireSyncPoint(uint32 sync_point) {
+void InProcessCommandBuffer::RetireSyncPoint(uint32_t sync_point) {
   QueueTask(base::Bind(&InProcessCommandBuffer::RetireSyncPointOnGpuThread,
                        base::Unretained(this),
                        sync_point));
 }
 
-void InProcessCommandBuffer::RetireSyncPointOnGpuThread(uint32 sync_point) {
+void InProcessCommandBuffer::RetireSyncPointOnGpuThread(uint32_t sync_point) {
   gles2::MailboxManager* mailbox_manager =
       decoder_->GetContextGroup()->mailbox_manager();
   if (mailbox_manager->UsesSync()) {
@@ -852,7 +858,8 @@ void InProcessCommandBuffer::RetireSyncPointOnGpuThread(uint32 sync_point) {
       // We can simply use the GPUIO namespace with 0 for the command buffer ID
       // (under normal circumstances 0 is  invalid so  will not be used) until
       // the old sync points are replaced.
-      SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, sync_point);
+      SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
+                           sync_point);
       mailbox_manager->PushTextureUpdates(sync_token);
     }
   }
@@ -873,7 +880,7 @@ bool InProcessCommandBuffer::WaitSyncPointOnGpuThread(unsigned sync_point) {
   // We can simply use the GPUIO namespace with 0 for the command buffer ID
   // (under normal circumstances 0 is  invalid so  will not be used) until
   // the old sync points are replaced.
-  SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, sync_point);
+  SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0, 0, sync_point);
   mailbox_manager->PullTextureUpdates(sync_token);
   return true;
 }
@@ -889,7 +896,8 @@ void InProcessCommandBuffer::FenceSyncReleaseOnGpuThread(uint64_t release) {
       make_current_success = MakeCurrent();
     }
     if (make_current_success) {
-      SyncToken sync_token(GetNamespaceID(), GetCommandBufferID(), release);
+      SyncToken sync_token(GetNamespaceID(), GetExtraCommandBufferData(),
+                           GetCommandBufferID(), release);
       mailbox_manager->PushTextureUpdates(sync_token);
     }
   }
@@ -922,7 +930,7 @@ bool InProcessCommandBuffer::WaitFenceSyncOnGpuThread(
 
   gles2::MailboxManager* mailbox_manager =
       decoder_->GetContextGroup()->mailbox_manager();
-  SyncToken sync_token(namespace_id, command_buffer_id, release);
+  SyncToken sync_token(namespace_id, 0, command_buffer_id, release);
   mailbox_manager->PullTextureUpdates(sync_token);
   return true;
 }
@@ -976,12 +984,20 @@ bool InProcessCommandBuffer::IsGpuChannelLost() {
   return false;
 }
 
+void InProcessCommandBuffer::EnsureWorkVisible() {
+  // This is only relevant for out-of-process command buffers.
+}
+
 CommandBufferNamespace InProcessCommandBuffer::GetNamespaceID() const {
   return CommandBufferNamespace::IN_PROCESS;
 }
 
 uint64_t InProcessCommandBuffer::GetCommandBufferID() const {
   return command_buffer_id_;
+}
+
+int32_t InProcessCommandBuffer::GetExtraCommandBufferData() const {
+  return 0;
 }
 
 uint64_t InProcessCommandBuffer::GenerateFenceSyncRelease() {
@@ -1014,8 +1030,8 @@ bool InProcessCommandBuffer::CanWaitUnverifiedSyncToken(
   return false;
 }
 
-uint32 InProcessCommandBuffer::CreateStreamTextureOnGpuThread(
-    uint32 client_texture_id) {
+uint32_t InProcessCommandBuffer::CreateStreamTextureOnGpuThread(
+    uint32_t client_texture_id) {
 #if defined(OS_ANDROID)
   return stream_texture_manager_->CreateStreamTexture(
       client_texture_id, decoder_->GetContextGroup()->texture_manager());
@@ -1071,20 +1087,20 @@ base::Closure InProcessCommandBuffer::WrapCallback(
 }
 
 #if defined(OS_ANDROID)
-scoped_refptr<gfx::SurfaceTexture>
-InProcessCommandBuffer::GetSurfaceTexture(uint32 stream_id) {
+scoped_refptr<gfx::SurfaceTexture> InProcessCommandBuffer::GetSurfaceTexture(
+    uint32_t stream_id) {
   DCHECK(stream_texture_manager_);
   return stream_texture_manager_->GetSurfaceTexture(stream_id);
 }
 
-uint32 InProcessCommandBuffer::CreateStreamTexture(uint32 texture_id) {
+uint32_t InProcessCommandBuffer::CreateStreamTexture(uint32_t texture_id) {
   base::WaitableEvent completion(true, false);
-  uint32 stream_id = 0;
-  base::Callback<uint32(void)> task =
+  uint32_t stream_id = 0;
+  base::Callback<uint32_t(void)> task =
       base::Bind(&InProcessCommandBuffer::CreateStreamTextureOnGpuThread,
                  base::Unretained(this), texture_id);
   QueueTask(
-      base::Bind(&RunTaskWithResult<uint32>, task, &stream_id, &completion));
+      base::Bind(&RunTaskWithResult<uint32_t>, task, &stream_id, &completion));
   completion.Wait();
   return stream_id;
 }

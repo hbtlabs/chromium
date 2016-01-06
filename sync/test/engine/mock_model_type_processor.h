@@ -5,6 +5,11 @@
 #ifndef SYNC_TEST_ENGINE_MOCK_MODEL_TYPE_PROCESSOR_H_
 #define SYNC_TEST_ENGINE_MOCK_MODEL_TYPE_PROCESSOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <map>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
@@ -84,7 +89,6 @@ class MockModelTypeProcessor : public ModelTypeProcessor {
   CommitResponseData GetCommitResponse(const std::string& tag_hash) const;
 
  private:
-
   // Process a received commit response.
   //
   // Implemented as an Impl method so we can defer its execution in some cases.
@@ -99,12 +103,12 @@ class MockModelTypeProcessor : public ModelTypeProcessor {
                             const UpdateResponseDataList& pending_updates);
 
   // Getter and setter for per-item sequence number tracking.
-  int64 GetCurrentSequenceNumber(const std::string& tag_hash) const;
-  int64 GetNextSequenceNumber(const std::string& tag_hash);
+  int64_t GetCurrentSequenceNumber(const std::string& tag_hash) const;
+  int64_t GetNextSequenceNumber(const std::string& tag_hash);
 
   // Getter and setter for per-item base version tracking.
-  int64 GetBaseVersion(const std::string& tag_hash) const;
-  void SetBaseVersion(const std::string& tag_hash, int64 version);
+  int64_t GetBaseVersion(const std::string& tag_hash) const;
+  void SetBaseVersion(const std::string& tag_hash, int64_t version);
 
   // Getters and setter for server-assigned ID values.
   bool HasServerAssignedId(const std::string& tag_hash) const;
@@ -129,13 +133,13 @@ class MockModelTypeProcessor : public ModelTypeProcessor {
   std::map<const std::string, UpdateResponseData> update_response_items_;
 
   // The per-item state maps.
-  std::map<const std::string, int64> sequence_numbers_;
-  std::map<const std::string, int64> base_versions_;
+  std::map<const std::string, int64_t> sequence_numbers_;
+  std::map<const std::string, int64_t> base_versions_;
   std::map<const std::string, std::string> assigned_ids_;
 
   DISALLOW_COPY_AND_ASSIGN(MockModelTypeProcessor);
 };
 
-}  // namespace syncer
+}  // namespace syncer_v2
 
 #endif  // SYNC_TEST_ENGINE_MOCK_MODEL_TYPE_PROCESSOR_H_

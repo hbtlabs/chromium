@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -435,7 +439,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementTest,
   notification_listener.Reset();
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, ExternalUrlUpdate) {
+// Temporarily disabled in official builds. See crbug.com/567497 for details.
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
+#define MAYBE_ExternalUrlUpdate DISABLED_ExternalUrlUpdate
+#else
+#define MAYBE_ExternalUrlUpdate ExternalUrlUpdate
+#endif  // defined(GOOGLE_CHROME_BUILD) && defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(ExtensionManagementTest, MAYBE_ExternalUrlUpdate) {
   ExtensionService* service = extensions::ExtensionSystem::Get(
       browser()->profile())->extension_service();
   const char kExtensionId[] = "ogjcoiohnmldgjemafoockdghcjciccf";

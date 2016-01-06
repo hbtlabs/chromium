@@ -5,6 +5,8 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_BINDING_STATE_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_BINDING_STATE_H_
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -37,6 +39,8 @@ class BindingState;
 template <typename Interface>
 class BindingState<Interface, false> {
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   explicit BindingState(Interface* impl) : impl_(impl) {
     stub_.set_sink(impl_);
   }
@@ -52,11 +56,14 @@ class BindingState<Interface, false> {
     filters.Append<internal::MessageHeaderValidator>();
     filters.Append<typename Interface::RequestValidator_>();
 
-    router_ = new internal::Router(handle.Pass(), filters.Pass(), waiter);
+    router_ =
+        new internal::Router(std::move(handle), std::move(filters), waiter);
     router_->set_incoming_receiver(&stub_);
     router_->set_connection_error_handler(
         [this]() { connection_error_handler_.Run(); });
   }
+
+  bool HasAssociatedInterfaces() const { return false; }
 
   void PauseIncomingMethodCallProcessing() {
     DCHECK(router_);
@@ -79,14 +86,15 @@ class BindingState<Interface, false> {
     DestroyRouter();
   }
 
-  InterfaceRequest<Interface> Unbind() {
-    InterfaceRequest<Interface> request =
-        MakeRequest<Interface>(router_->PassMessagePipe());
+  InterfaceRequest<GenericInterface> Unbind() {
+    InterfaceRequest<GenericInterface> request =
+        MakeRequest<GenericInterface>(router_->PassMessagePipe());
     DestroyRouter();
-    return request.Pass();
+    return std::move(request);
   }
 
   void set_connection_error_handler(const Closure& error_handler) {
+    DCHECK(is_bound());
     connection_error_handler_ = error_handler;
   }
 
@@ -111,6 +119,7 @@ class BindingState<Interface, false> {
     router_->set_connection_error_handler(Closure());
     delete router_;
     router_ = nullptr;
+    connection_error_handler_.reset();
   }
 
   internal::Router* router_ = nullptr;
@@ -126,6 +135,8 @@ class BindingState<Interface, false> {
 template <typename Interface>
 class BindingState<Interface, true> {
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   explicit BindingState(Interface* impl) : impl_(impl) {
     stub_.set_sink(impl_);
   }
@@ -138,7 +149,7 @@ class BindingState<Interface, true> {
   void Bind(ScopedMessagePipeHandle handle, const MojoAsyncWaiter* waiter) {
     DCHECK(!router_);
 
-    router_ = new internal::MultiplexRouter(false, handle.Pass(), waiter);
+    router_ = new internal::MultiplexRouter(false, std::move(handle), waiter);
     stub_.serialization_context()->router = router_;
 
     endpoint_client_.reset(new internal::InterfaceEndpointClient(
@@ -149,22 +160,44 @@ class BindingState<Interface, true> {
         [this]() { connection_error_handler_.Run(); });
   }
 
+  bool HasAssociatedInterfaces() const {
+    return router_ ? router_->HasAssociatedEndpoints() : false;
+  }
+
+  void PauseIncomingMethodCallProcessing() {
+    DCHECK(router_);
+    router_->PauseIncomingMethodCallProcessing();
+  }
+  void ResumeIncomingMethodCallProcessing() {
+    DCHECK(router_);
+    router_->ResumeIncomingMethodCallProcessing();
+  }
+
+  bool WaitForIncomingMethodCall(
+      MojoDeadline deadline = MOJO_DEADLINE_INDEFINITE) {
+    DCHECK(router_);
+    return router_->WaitForIncomingMessage(deadline);
+  }
+
   void Close() {
     DCHECK(router_);
     endpoint_client_.reset();
     router_->CloseMessagePipe();
     router_ = nullptr;
+    connection_error_handler_.reset();
   }
 
-  InterfaceRequest<Interface> Unbind() {
+  InterfaceRequest<GenericInterface> Unbind() {
     endpoint_client_.reset();
-    InterfaceRequest<Interface> request =
-        MakeRequest<Interface>(router_->PassMessagePipe());
+    InterfaceRequest<GenericInterface> request =
+        MakeRequest<GenericInterface>(router_->PassMessagePipe());
     router_ = nullptr;
+    connection_error_handler_.reset();
     return request.Pass();
   }
 
   void set_connection_error_handler(const Closure& error_handler) {
+    DCHECK(is_bound());
     connection_error_handler_ = error_handler;
   }
 
@@ -185,11 +218,6 @@ class BindingState<Interface, true> {
     DCHECK(is_bound());
     router_->EnableTestingMode();
   }
-
-  // Intentionally not defined:
-  // void PauseIncomingMethodCallProcessing();
-  // void ResumeIncomingMethodCallProcessing();
-  // bool WaitForIncomingMethodCall(MojoDeadline deadline);
 
  private:
   scoped_refptr<internal::MultiplexRouter> router_;

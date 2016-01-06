@@ -26,11 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
+#include "platform/audio/ReverbInputBuffer.h"
 
 #if ENABLE(WEB_AUDIO)
-
-#include "platform/audio/ReverbInputBuffer.h"
 
 namespace blink {
 

@@ -23,8 +23,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/layout/svg/LayoutSVGImage.h"
 
 #include "core/layout/HitTestResult.h"
@@ -58,7 +56,7 @@ LayoutSVGImage::~LayoutSVGImage()
 
 void LayoutSVGImage::willBeDestroyed()
 {
-    ImageQualityController::remove(this);
+    ImageQualityController::remove(*this);
     m_imageResource->shutdown();
     LayoutSVGModelObject::willBeDestroyed();
 }

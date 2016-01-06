@@ -4,6 +4,11 @@
 
 #include "sync/engine/non_blocking_type_commit_contribution.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <algorithm>
+
 #include "base/values.h"
 #include "sync/engine/model_type_worker.h"
 #include "sync/internal_api/public/non_blocking_sync_common.h"
@@ -14,7 +19,7 @@ namespace syncer_v2 {
 NonBlockingTypeCommitContribution::NonBlockingTypeCommitContribution(
     const sync_pb::DataTypeContext& context,
     const google::protobuf::RepeatedPtrField<sync_pb::SyncEntity>& entities,
-    const std::vector<int64>& sequence_numbers,
+    const std::vector<int64_t>& sequence_numbers,
     ModelTypeWorker* worker)
     : worker_(worker),
       context_(context),
@@ -116,4 +121,4 @@ size_t NonBlockingTypeCommitContribution::GetNumEntries() const {
   return sequence_numbers_.size();
 }
 
-}  // namespace syncer
+}  // namespace syncer_v2

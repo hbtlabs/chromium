@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 #include "platform/RuntimeEnabledFeatures.h"
@@ -162,7 +161,7 @@ SecurityOrigin::SecurityOrigin(const SecurityOrigin* other)
     : m_protocol(other->m_protocol.isolatedCopy())
     , m_host(other->m_host.isolatedCopy())
     , m_domain(other->m_domain.isolatedCopy())
-    , m_suboriginName(other->m_suboriginName)
+    , m_suboriginName(other->m_suboriginName.isolatedCopy())
     , m_port(other->m_port)
     , m_effectivePort(other->m_effectivePort)
     , m_isUnique(other->m_isUnique)
@@ -356,6 +355,15 @@ bool SecurityOrigin::canDisplay(const KURL& url) const
 
 bool SecurityOrigin::isPotentiallyTrustworthy(String& errorMessage) const
 {
+    if (isPotentiallyTrustworthy())
+        return true;
+
+    errorMessage = "Only secure origins are allowed (see: https://goo.gl/Y0ZkNV).";
+    return false;
+}
+
+bool SecurityOrigin::isPotentiallyTrustworthy() const
+{
     ASSERT(m_protocol != "data");
     if (SchemeRegistry::shouldTreatURLSchemeAsSecure(m_protocol) || isLocal() || isLocalhost())
         return true;
@@ -363,7 +371,6 @@ bool SecurityOrigin::isPotentiallyTrustworthy(String& errorMessage) const
     if (SecurityPolicy::isOriginWhiteListedTrustworthy(*this))
         return true;
 
-    errorMessage = "Only secure origins are allowed (see: https://goo.gl/Y0ZkNV).";
     return false;
 }
 
@@ -403,7 +410,7 @@ bool SecurityOrigin::isLocalhost() const
     // Test if m_host matches 127.0.0.1/8
     ASSERT(m_host.containsOnlyASCII());
     CString hostAscii = m_host.ascii();
-    Vector<uint8, 4> ipNumber;
+    Vector<uint8_t, 4> ipNumber;
     ipNumber.resize(4);
 
     int numComponents;

@@ -4,8 +4,24 @@
 
 #include "content/common/resource_messages.h"
 
+#include "base/debug/alias.h"
+#include "ipc/ipc_message.h"
 #include "net/base/load_timing_info.h"
 #include "net/http/http_response_headers.h"
+
+namespace content {
+// TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+void CheckContentsOfResourceMessage(const IPC::Message* message) {
+  if (message->type() == ResourceMsg_DataReceivedDebug::ID) {
+    ResourceMsg_DataReceivedDebug::Schema::Param arg;
+    bool success = ResourceMsg_DataReceivedDebug::Read(message, &arg);
+    CHECK(success);
+    int data_offset = base::get<1>(arg);
+    CHECK_LE(data_offset, 512 * 1024);
+    base::debug::Alias(&data_offset);
+  }
+}
+}
 
 namespace IPC {
 
@@ -93,7 +109,7 @@ bool ParamTraits<storage::DataElement>::Read(const Message* m,
       break;
     }
     case storage::DataElement::TYPE_BYTES_DESCRIPTION: {
-      uint64 length;
+      uint64_t length;
       if (!ReadParam(m, iter, &length))
         return false;
       r->SetToBytesDescription(length);
@@ -101,7 +117,7 @@ bool ParamTraits<storage::DataElement>::Read(const Message* m,
     }
     case storage::DataElement::TYPE_FILE: {
       base::FilePath file_path;
-      uint64 offset, length;
+      uint64_t offset, length;
       base::Time expected_modification_time;
       if (!ReadParam(m, iter, &file_path))
         return false;
@@ -117,7 +133,7 @@ bool ParamTraits<storage::DataElement>::Read(const Message* m,
     }
     case storage::DataElement::TYPE_FILE_FILESYSTEM: {
       GURL file_system_url;
-      uint64 offset, length;
+      uint64_t offset, length;
       base::Time expected_modification_time;
       if (!ReadParam(m, iter, &file_system_url))
         return false;
@@ -133,7 +149,7 @@ bool ParamTraits<storage::DataElement>::Read(const Message* m,
     }
     case storage::DataElement::TYPE_BLOB: {
       std::string blob_uuid;
-      uint64 offset, length;
+      uint64_t offset, length;
       if (!ReadParam(m, iter, &blob_uuid))
         return false;
       if (!ReadParam(m, iter, &offset))
@@ -310,7 +326,7 @@ bool ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Read(
   std::vector<storage::DataElement> elements;
   if (!ReadParam(m, iter, &elements))
     return false;
-  int64 identifier;
+  int64_t identifier;
   if (!ReadParam(m, iter, &identifier))
     return false;
   *r = new content::ResourceRequestBody;

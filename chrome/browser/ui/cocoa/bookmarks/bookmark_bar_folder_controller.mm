@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_controller.h"
 
+#include <stddef.h>
+
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -1746,8 +1748,8 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   return y;
 }
 
-- (ThemeService*)themeService {
-  return [parentController_ themeService];
+- (Profile*)profile {
+  return profile_;
 }
 
 - (void)childFolderWillShow:(id<BookmarkButtonControllerProtocol>)child {

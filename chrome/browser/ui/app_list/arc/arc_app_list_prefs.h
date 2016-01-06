@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_LIST_PREFS_H_
 #define CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_LIST_PREFS_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -16,6 +19,7 @@
 #include "base/observer_list.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/base/layout.h"
 
 class PrefService;
@@ -33,8 +37,8 @@ class PrefRegistrySyncable;
 // information is used to pre-create non-ready app items while ARC bridge
 // service is not ready to provide information about available ARC apps.
 class ArcAppListPrefs : public KeyedService,
-                        public arc::ArcBridgeService::Observer,
-                        public arc::ArcBridgeService::AppObserver {
+                        public arc::AppHost,
+                        public arc::ArcBridgeService::Observer {
  public:
   struct AppInfo {
     AppInfo(const std::string& name,
@@ -101,17 +105,20 @@ class ArcAppListPrefs : public KeyedService,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  // arc::ArcBridgeService::Observer
-  void OnStateChanged(arc::ArcBridgeService::State state) override;
-  void OnAppListRefreshed(const std::vector<arc::AppInfo>& apps) override;
-  void OnAppIcon(const std::string& package,
-                 const std::string& activity,
-                 arc::ScaleFactor scale_factor,
-                 const std::vector<uint8_t>& icon_png_data) override;
-
  private:
   // See the Create methods.
   ArcAppListPrefs(const base::FilePath& base_path, PrefService* prefs);
+
+  // arc::ArcBridgeService::Observer:
+  void OnStateChanged(arc::ArcBridgeService::State state) override;
+  void OnAppInstanceReady() override;
+
+  // arc::AppHost:
+  void OnAppListRefreshed(mojo::Array<arc::AppInfoPtr> apps) override;
+  void OnAppIcon(const mojo::String& package,
+                 const mojo::String& activity,
+                 arc::ScaleFactor scale_factor,
+                 mojo::Array<uint8_t> icon_png_data) override;
 
   void OnAppReady(const arc::AppInfo& app);
   void DisableAllApps();
@@ -120,7 +127,7 @@ class ArcAppListPrefs : public KeyedService,
   // directory.
   void InstallIcon(const std::string& app_id,
                    ui::ScaleFactor scale_factor,
-                   const std::vector<uint8>& contentPng);
+                   const std::vector<uint8_t>& contentPng);
   void OnIconInstalled(const std::string& app_id,
                        ui::ScaleFactor scale_factor,
                        bool install_succeed);
@@ -138,7 +145,9 @@ class ArcAppListPrefs : public KeyedService,
   // Keeps deferred icon load requests. Each app may contain several requests
   // for different scale factor. Scale factor is defined by specific bit
   // position.
-  std::map<std::string, uint32> request_icon_deferred_;
+  std::map<std::string, uint32_t> request_icon_deferred_;
+
+  mojo::Binding<arc::AppHost> binding_;
 
   base::WeakPtrFactory<ArcAppListPrefs> weak_ptr_factory_;
 

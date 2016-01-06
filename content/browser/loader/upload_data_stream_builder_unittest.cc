@@ -4,11 +4,14 @@
 
 #include "content/browser/loader/upload_data_stream_builder.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -41,10 +44,10 @@ TEST(UploadDataStreamBuilderTest, CreateUploadDataStream) {
     const std::string kBlobData = "blobdata";
     const char kData[] = "123";
     const base::FilePath::StringType kFilePath = FILE_PATH_LITERAL("abc");
-    const uint64 kFileOffset = 10U;
-    const uint64 kFileLength = 100U;
+    const uint64_t kFileOffset = 10U;
+    const uint64_t kFileLength = 100U;
     const base::Time kFileTime = base::Time::FromDoubleT(999);
-    const int64 kIdentifier = 12345;
+    const int64_t kIdentifier = 12345;
 
     BlobStorageContext context;
     BlobDataBuilder builder(kBlob);
@@ -145,6 +148,57 @@ TEST(UploadDataStreamBuilderTest,
     EXPECT_EQ(static_cast<int>(kZeroLength), read_callback.GetResult(result));
 
     base::DeleteFile(test_blob_path, false);
+  }
+  // Clean up for ASAN.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
+  base::MessageLoopForIO message_loop;
+  {
+    scoped_refptr<ResourceRequestBody> request_body = new ResourceRequestBody;
+
+    const std::string kBlob = "blobuuid";
+    const std::string kBlobData = "blobdata";
+    const int kBlobDataLength = 8;
+    const int64_t kIdentifier = 12345;
+
+    BlobStorageContext blob_storage_context;
+    BlobDataBuilder builder(kBlob);
+    builder.AppendData(kBlobData);
+    scoped_ptr<BlobDataHandle> handle =
+        blob_storage_context.AddFinishedBlob(&builder);
+    request_body->AppendBlob(kBlob);
+    request_body->set_identifier(kIdentifier);
+
+    scoped_ptr<net::UploadDataStream> upload(UploadDataStreamBuilder::Build(
+        request_body.get(), &blob_storage_context, nullptr,
+        base::ThreadTaskRunnerHandle::Get().get()));
+
+    net::TestCompletionCallback init_callback;
+    ASSERT_EQ(net::OK, upload->Init(init_callback.callback()));
+
+    // Read part of the data.
+    const int kBufferLength = 4;
+    scoped_refptr<net::IOBufferWithSize> buffer(
+        new net::IOBufferWithSize(kBufferLength));
+    net::TestCompletionCallback read_callback;
+    int result =
+        upload->Read(buffer.get(), buffer->size(), read_callback.callback());
+    EXPECT_EQ(kBufferLength, read_callback.GetResult(result));
+    EXPECT_EQ(0,
+              std::memcmp(kBlobData.c_str(), buffer->data(), buffer->size()));
+
+    // Reset.
+    ASSERT_EQ(net::OK, upload->Init(init_callback.callback()));
+
+    // Read all the data.
+    buffer = new net::IOBufferWithSize(kBlobDataLength);
+    result =
+        upload->Read(buffer.get(), buffer->size(), read_callback.callback());
+    EXPECT_EQ(kBlobDataLength, read_callback.GetResult(result));
+    EXPECT_EQ(0,
+              std::memcmp(kBlobData.c_str(), buffer->data(), buffer->size()));
   }
   // Clean up for ASAN.
   base::RunLoop().RunUntilIdle();

@@ -35,6 +35,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/ContentLayerDelegate.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "platform/graphics/GraphicsLayerDebugInfo.h"
 #include "platform/graphics/ImageOrientation.h"
@@ -58,8 +59,6 @@
 namespace blink {
 
 class FloatRect;
-class GraphicsContext;
-class GraphicsLayer;
 class GraphicsLayerFactory;
 class GraphicsLayerFactoryChromium;
 class Image;
@@ -75,7 +74,7 @@ typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 // GraphicsLayer is an abstraction for a rendering surface with backing store,
 // which may have associated transformation and animations.
 
-class PLATFORM_EXPORT GraphicsLayer : public GraphicsContextPainter, public WebCompositorAnimationDelegate, public WebLayerScrollClient, public cc::LayerClient {
+class PLATFORM_EXPORT GraphicsLayer : public WebCompositorAnimationDelegate, public WebLayerScrollClient, public cc::LayerClient, public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(GraphicsLayer); USING_FAST_MALLOC(GraphicsLayer);
 public:
     static PassOwnPtr<GraphicsLayer> create(GraphicsLayerFactory*, GraphicsLayerClient*);
@@ -193,7 +192,7 @@ public:
     // If |visualRect| is not nullptr, it contains all pixels within the GraphicsLayer which might be painted into by
     // the display item client, in coordinate space of the GraphicsLayer.
     // |visualRect| can be nullptr if we know it's unchanged and PaintController has cached the previous value.
-    void invalidateDisplayItemClient(const DisplayItemClientWrapper&, PaintInvalidationReason, const IntRect* visualRect);
+    void invalidateDisplayItemClient(const DisplayItemClient&, PaintInvalidationReason, const IntRect* visualRect);
 
     // Set that the position/size of the contents (image or video).
     void setContentsRect(const IntRect&);
@@ -204,6 +203,7 @@ public:
     bool addAnimation(PassOwnPtr<WebCompositorAnimation>);
     void pauseAnimation(int animationId, double /*timeOffset*/);
     void removeAnimation(int animationId);
+    void abortAnimation(int animationId);
 
     // Layer contents
     void setContentsToImage(Image*, RespectImageOrientationEnum = DoNotRespectImageOrientation);
@@ -242,9 +242,8 @@ public:
     static void registerContentsLayer(WebLayer*);
     static void unregisterContentsLayer(WebLayer*);
 
-    // GraphicsContextPainter implementation.
     IntRect interestRect();
-    void paint(GraphicsContext&, const IntRect* interestRect) override;
+    void paint(const IntRect* interestRect, GraphicsContext::DisabledMode = GraphicsContext::NothingDisabled);
 
     // WebCompositorAnimationDelegate implementation.
     void notifyAnimationStarted(double monotonicTime, int group) override;
@@ -256,19 +255,24 @@ public:
     // cc::LayerClient implementation.
     scoped_refptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(cc::Layer*) override;
 
-    PaintController* paintController() override;
+    PaintController& paintController();
 
     // Exposed for tests.
     WebLayer* contentsLayer() const { return m_contentsLayer; }
 
+    void setElementId(uint64_t);
+    void setCompositorMutableProperties(uint32_t);
+
     static void setDrawDebugRedFillForTesting(bool);
     ContentLayerDelegate* contentLayerDelegateForTesting() const { return m_contentLayerDelegate.get(); }
 
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
-    String debugName() const { return m_client->debugName(this); }
+    // DisplayItemClient methods
+    String debugName() const final { return m_client->debugName(this); }
+    IntRect visualRect() const override;
 
 protected:
     String debugName(cc::Layer*) const;
+    bool shouldFlattenTransform() const { return m_shouldFlattenTransform; }
 
     explicit GraphicsLayer(GraphicsLayerClient*);
     // GraphicsLayerFactoryChromium that wants to create a GraphicsLayer need to be friends.
@@ -276,8 +280,12 @@ protected:
     // for testing
     friend class CompositedLayerMappingTest;
     friend class FakeGraphicsLayerFactory;
+    friend class PaintControllerPaintTestBase;
 
 private:
+    // Returns true if PaintController::paintArtifact() changed and needs commit.
+    bool paintWithoutCommit(const IntRect* interestRect, GraphicsContext::DisabledMode = GraphicsContext::NothingDisabled);
+
     // Adds a child without calling updateChildList(), so that adding children
     // can be batched before updating.
     void addChildInternal(GraphicsLayer*);

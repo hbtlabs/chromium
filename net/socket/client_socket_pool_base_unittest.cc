@@ -5,7 +5,7 @@
 #include "net/socket/client_socket_pool_base.h"
 
 #include <stdint.h>
-
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -151,8 +152,8 @@ class MockClientSocket : public StreamSocket {
     was_used_to_convey_data_ = true;
     return len;
   }
-  int SetReceiveBufferSize(int32 size) override { return OK; }
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
   // StreamSocket implementation.
   int Connect(const CompletionCallback& callback) override {
@@ -531,7 +532,7 @@ class TestClientSocketPool : public ClientSocketPool {
   void ReleaseSocket(const std::string& group_name,
                      scoped_ptr<StreamSocket> socket,
                      int id) override {
-    base_.ReleaseSocket(group_name, socket.Pass(), id);
+    base_.ReleaseSocket(group_name, std::move(socket), id);
   }
 
   void FlushWithError(int error) override { base_.FlushWithError(error); }
@@ -2213,8 +2214,14 @@ TEST_F(ClientSocketPoolBaseTest, DisableCleanupTimerReuse) {
       entries, 1, NetLog::TYPE_SOCKET_POOL_REUSED_AN_EXISTING_SOCKET));
 }
 
+#if defined(OS_IOS)
+// TODO(droger): Enable this test (crbug.com/512595).
+#define MAYBE_DisableCleanupTimerNoReuse DISABLED_DisableCleanupTimerNoReuse
+#else
+#define MAYBE_DisableCleanupTimerNoReuse DisableCleanupTimerNoReuse
+#endif
 // Make sure we cleanup old unused sockets when the cleanup timer is disabled.
-TEST_F(ClientSocketPoolBaseTest, DisableCleanupTimerNoReuse) {
+TEST_F(ClientSocketPoolBaseTest, MAYBE_DisableCleanupTimerNoReuse) {
   // Disable cleanup timer.
   internal::ClientSocketPoolBaseHelper::set_cleanup_timer_enabled(false);
 

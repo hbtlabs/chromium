@@ -5,11 +5,13 @@
 #ifndef CONTENT_GPU_GPU_CHILD_THREAD_H_
 #define CONTENT_GPU_GPU_CHILD_THREAD_H_
 
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
@@ -19,6 +21,7 @@
 #include "content/common/gpu/gpu_channel_manager.h"
 #include "content/common/gpu/gpu_config.h"
 #include "content/common/gpu/x_util.h"
+#include "content/common/process_control.mojom.h"
 #include "gpu/config/gpu_info.h"
 #include "mojo/common/weak_binding_set.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -36,7 +39,6 @@ namespace content {
 class GpuMemoryBufferFactory;
 class GpuProcessControlImpl;
 class GpuWatchdogThread;
-class ProcessControl;
 
 // The main thread of the GPU child process. There will only ever be one of
 // these per process. It does process initialization and shutdown. It forwards
@@ -75,7 +77,7 @@ class GpuChildThread : public ChildThreadImpl {
   void OnFinalize();
   void OnCollectGraphicsInfo();
   void OnGetVideoMemoryUsageStats();
-  void OnSetVideoMemoryWindowCount(uint32 window_count);
+  void OnSetVideoMemoryWindowCount(uint32_t window_count);
 
   void OnClean();
   void OnCrash();

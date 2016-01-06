@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -46,8 +47,8 @@ struct ShortcutInfo {
   // and the launch url will be detected at start-up. In this case, |url|
   // is still used to generate the app id (windows app id, not chrome app id).
   std::string extension_id;
-  bool is_platform_app;
-  bool from_bookmark;
+  bool is_platform_app = false;
+  bool from_bookmark = false;
   base::string16 title;
   base::string16 description;
   base::FilePath extension_path;

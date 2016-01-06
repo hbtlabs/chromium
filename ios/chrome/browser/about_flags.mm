@@ -7,18 +7,21 @@
 
 #include "ios/chrome/browser/about_flags.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #import <UIKit/UIKit.h>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_info.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
-#include "components/enhanced_bookmarks/enhanced_bookmark_switches.h"
+#include "components/enhanced_bookmarks/enhanced_bookmark_switches_ios.h"
 #include "components/flags_ui/feature_entry.h"
 #include "components/flags_ui/feature_entry_macros.h"
 #include "components/flags_ui/flags_storage.h"
@@ -211,13 +214,21 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
   }
 #endif
 
+  // Populate command line flags from TabEviction.
+  NSString* tabEviction = [defaults stringForKey:@"TabEviction"];
+  if ([tabEviction isEqualToString:@"Enabled"]) {
+    command_line->AppendSwitch(switches::kEnableTabEviction);
+  } else if ([tabEviction isEqualToString:@"Disabled"]) {
+    command_line->AppendSwitch(switches::kDisableTabEviction);
+  }
+
   // Set the UA flag if UseMobileSafariUA is enabled.
   if ([defaults boolForKey:@"UseMobileSafariUA"]) {
     // Safari uses "Vesion/", followed by the OS version excluding bugfix, where
     // Chrome puts its product token.
-    int32 major = 0;
-    int32 minor = 0;
-    int32 bugfix = 0;
+    int32_t major = 0;
+    int32_t minor = 0;
+    int32_t bugfix = 0;
     base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &bugfix);
     std::string product = base::StringPrintf("Version/%d.%d", major, minor);
 

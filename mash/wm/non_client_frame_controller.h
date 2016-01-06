@@ -5,7 +5,10 @@
 #ifndef MASH_WM_NON_CLIENT_FRAME_CONTROLLER_H_
 #define MASH_WM_NON_CLIENT_FRAME_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
+#include "base/strings/string16.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -43,14 +46,18 @@ class NonClientFrameController : public views::WidgetDelegateView,
   // title bar.
   static int GetMaxTitleBarButtonWidth();
 
+  mus::Window* window() { return window_; }
+
  private:
   ~NonClientFrameController() override;
 
   // views::WidgetDelegateView:
+  base::string16 GetWindowTitle() const override;
   views::View* GetContentsView() override;
   bool CanResize() const override;
   bool CanMaximize() const override;
   bool CanMinimize() const override;
+  views::ClientView* CreateClientView(views::Widget* widget) override;
 
   // mus::WindowObserver:
   void OnWindowSharedPropertyChanged(

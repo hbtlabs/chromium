@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/SVGContainerPainter.h"
 
 #include "core/layout/svg/LayoutSVGContainer.h"
@@ -35,12 +34,12 @@ void SVGContainerPainter::paint(const PaintInfo& paintInfo)
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
     paintInfoBeforeFiltering.updateCullRect(m_layoutSVGContainer.localToParentTransform());
-    TransformRecorder transformRecorder(*paintInfoBeforeFiltering.context, m_layoutSVGContainer, m_layoutSVGContainer.localToParentTransform());
+    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGContainer, m_layoutSVGContainer.localToParentTransform());
     {
         Optional<FloatClipRecorder> clipRecorder;
         if (m_layoutSVGContainer.isSVGViewportContainer() && SVGLayoutSupport::isOverflowHidden(&m_layoutSVGContainer)) {
             FloatRect viewport = m_layoutSVGContainer.localToParentTransform().inverse().mapRect(toLayoutSVGViewportContainer(m_layoutSVGContainer).viewport());
-            clipRecorder.emplace(*paintInfoBeforeFiltering.context, m_layoutSVGContainer, paintInfoBeforeFiltering.phase, viewport);
+            clipRecorder.emplace(paintInfoBeforeFiltering.context, m_layoutSVGContainer, paintInfoBeforeFiltering.phase, viewport);
         }
 
         SVGPaintContext paintContext(m_layoutSVGContainer, paintInfoBeforeFiltering);

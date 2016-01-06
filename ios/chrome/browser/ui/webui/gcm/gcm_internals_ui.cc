@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "components/gcm_driver/gcm_client.h"
@@ -82,6 +83,9 @@ void GcmInternalsUIMessageHandler::RequestAllInfo(const base::ListValue* args) {
     return;
   }
 
+  gcm::GCMDriver::ClearActivityLogs clear_activity_logs =
+      clear_logs ? gcm::GCMDriver::CLEAR_LOGS : gcm::GCMDriver::KEEP_LOGS;
+
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromWebUIIOS(web_ui());
   gcm::GCMProfileService* profile_service =
@@ -93,7 +97,7 @@ void GcmInternalsUIMessageHandler::RequestAllInfo(const base::ListValue* args) {
     profile_service->driver()->GetGCMStatistics(
         base::Bind(&GcmInternalsUIMessageHandler::RequestGCMStatisticsFinished,
                    weak_ptr_factory_.GetWeakPtr()),
-        clear_logs);
+        clear_activity_logs);
   }
 }
 

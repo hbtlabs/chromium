@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "chrome/browser/password_manager/password_store_x.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
@@ -17,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/password_manager/password_store_x.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_change.h"
@@ -47,13 +49,6 @@ class MockPasswordStoreConsumer
   void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
     OnGetPasswordStoreResultsConstRef(results.get());
   }
-};
-
-class MockPasswordStoreObserver
-    : public password_manager::PasswordStore::Observer {
- public:
-  MOCK_METHOD1(OnLoginsChanged,
-               void(const password_manager::PasswordStoreChangeList& changes));
 };
 
 class FailingBackend : public PasswordStoreX::NativeBackend {
@@ -99,7 +94,7 @@ class FailingBackend : public PasswordStoreX::NativeBackend {
       trash.origin = GURL(base::StringPrintf("http://trash%zu.com", i));
       forms.push_back(new PasswordForm(trash));
     }
-    return forms.Pass();
+    return forms;
   }
 
   bool GetLogins(const PasswordForm& form,
@@ -257,7 +252,7 @@ void InitExpectedForms(bool autofillable,
         autofillable,
         false,
         static_cast<double>(i + 1)};
-    forms->push_back(CreatePasswordFormFromDataForTesting(data).Pass());
+    forms->push_back(CreatePasswordFormFromDataForTesting(data));
   }
 }
 
@@ -311,7 +306,7 @@ TEST_P(PasswordStoreXTest, Notifications) {
       new password_manager::LoginDatabase(test_login_db_file_path()));
   scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      login_db.Pass(), GetBackend()));
+      std::move(login_db), GetBackend()));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   password_manager::PasswordFormData form_data = {
@@ -324,7 +319,7 @@ TEST_P(PasswordStoreXTest, Notifications) {
   scoped_ptr<PasswordForm> form =
       CreatePasswordFormFromDataForTesting(form_data);
 
-  MockPasswordStoreObserver observer;
+  password_manager::MockPasswordStoreObserver observer;
   store->AddObserver(&observer);
 
   const PasswordStoreChange expected_add_changes[] = {
@@ -412,7 +407,7 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
   login_db.reset(new password_manager::LoginDatabase(login_db_file));
   scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      login_db.Pass(), GetBackend()));
+      std::move(login_db), GetBackend()));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   MockPasswordStoreConsumer consumer;

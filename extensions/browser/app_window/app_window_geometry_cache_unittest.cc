@@ -4,6 +4,10 @@
 
 #include "extensions/browser/app_window/app_window_geometry_cache.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/mock_pref_change_callback.h"
@@ -32,8 +36,8 @@ const char kWindowId2[] = "windowid2";
 // Create a very simple extension with id.
 scoped_refptr<Extension> CreateExtension(const std::string& id) {
   return ExtensionBuilder()
-      .SetManifest(DictionaryBuilder().Set("name", "test").Set(
-          "version", "0.1"))
+      .SetManifest(std::move(
+          DictionaryBuilder().Set("name", "test").Set("version", "0.1")))
       .SetID(id)
       .Build();
 }
@@ -88,7 +92,7 @@ void AppWindowGeometryCacheTest::SetUp() {
       new user_prefs::PrefRegistrySyncable;
   // Prefs should be registered before the PrefService is created.
   ExtensionPrefs::RegisterProfilePrefs(pref_registry);
-  pref_service_ = factory.Create(pref_registry).Pass();
+  pref_service_ = factory.Create(pref_registry);
 
   extension_prefs_.reset(ExtensionPrefs::Create(
       browser_context(), pref_service_.get(),
@@ -128,7 +132,7 @@ void AppWindowGeometryCacheTest::AddGeometryAndLoadExtension(
   value->SetInteger("screen_bounds_h", screen_bounds.height());
   value->SetInteger("state", state);
   dict->SetWithoutPathExpansion(window_id, value);
-  extension_prefs_->SetGeometryCache(extension_id, dict.Pass());
+  extension_prefs_->SetGeometryCache(extension_id, std::move(dict));
   LoadExtension(extension_id);
 }
 
@@ -159,8 +163,8 @@ std::string AppWindowGeometryCacheTest::AddExtensionWithPrefs(
       browser_context()->GetPath().AppendASCII("Extensions").AppendASCII(name);
   scoped_refptr<Extension> extension =
       ExtensionBuilder()
-          .SetManifest(
-               DictionaryBuilder().Set("name", "test").Set("version", "0.1"))
+          .SetManifest(std::move(
+              DictionaryBuilder().Set("name", "test").Set("version", "0.1")))
           .SetPath(path)
           .Build();
 

@@ -4,9 +4,11 @@
 
 #include "content/shell/renderer/layout_test/blink_test_runner.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <clocale>
 #include <cmath>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/command_line.h"
@@ -14,6 +16,7 @@
 #include "base/debug/debugger.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -23,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/plugins/renderer/plugin_placeholder.h"
 #include "components/test_runner/app_banner_client.h"
 #include "components/test_runner/gamepad_controller.h"
@@ -112,7 +116,7 @@ namespace {
 class InvokeTaskHelper : public blink::WebTaskRunner::Task {
  public:
   InvokeTaskHelper(scoped_ptr<test_runner::WebTask> task)
-      : task_(task.Pass()) {}
+      : task_(std::move(task)) {}
 
   // WebThread::Task implementation:
   void run() override { task_->run(); }
@@ -285,7 +289,7 @@ void BlinkTestRunner::SetEditCommand(const std::string& name,
 void BlinkTestRunner::SetGamepadProvider(
     test_runner::GamepadController* controller) {
   scoped_ptr<MockGamepadProvider> provider(new MockGamepadProvider(controller));
-  SetMockGamepadProvider(provider.Pass());
+  SetMockGamepadProvider(std::move(provider));
 }
 
 void BlinkTestRunner::SetDeviceLightData(const double data) {
@@ -441,7 +445,7 @@ std::string BlinkTestRunner::makeURLErrorDescription(const WebURLError& error) {
   }
 
   return base::StringPrintf("<NSError domain %s, code %d, failing URL \"%s\">",
-      domain.c_str(), code, error.unreachableURL.spec().data());
+      domain.c_str(), code, error.unreachableURL.string().utf8().data());
 }
 
 void BlinkTestRunner::UseUnfortunateSynchronousResizeMode(bool enable) {
@@ -513,6 +517,11 @@ void BlinkTestRunner::SimulateWebNotificationClick(const std::string& title,
 
 void BlinkTestRunner::SetDeviceScaleFactor(float factor) {
   content::SetDeviceScaleFactor(render_view(), factor);
+}
+
+void BlinkTestRunner::EnableUseZoomForDSF() {
+  base::CommandLine::ForCurrentProcess()->
+      AppendSwitch(switches::kEnableUseZoomForDSF);
 }
 
 void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
@@ -604,7 +613,7 @@ std::string BlinkTestRunner::PathToLocalResource(const std::string& resource) {
     result = result.substr(0, strlen("file:///")) +
              result.substr(strlen("file:////"));
   }
-  return RewriteLayoutTestsURL(result).spec();
+  return RewriteLayoutTestsURL(result).string().utf8();
 }
 
 void BlinkTestRunner::SetLocale(const std::string& locale) {

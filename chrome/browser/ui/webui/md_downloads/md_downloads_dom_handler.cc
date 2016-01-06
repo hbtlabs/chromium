@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <functional>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
@@ -136,6 +135,7 @@ void MdDownloadsDOMHandler::RegisterMessages() {
 void MdDownloadsDOMHandler::RenderViewReused(
     content::RenderViewHost* render_view_host) {
   list_tracker_.Stop();
+  list_tracker_.Reset();
 }
 
 void MdDownloadsDOMHandler::HandleGetDownloads(const base::ListValue* args) {
@@ -143,9 +143,9 @@ void MdDownloadsDOMHandler::HandleGetDownloads(const base::ListValue* args) {
 
   bool terms_changed = list_tracker_.SetSearchTerms(*args);
   if (terms_changed)
-    list_tracker_.CallClearAll();
+    list_tracker_.Reset();
 
-  list_tracker_.Start();
+  list_tracker_.StartAndSendChunk();
 }
 
 void MdDownloadsDOMHandler::HandleOpenFile(const base::ListValue* args) {
@@ -238,6 +238,12 @@ void MdDownloadsDOMHandler::HandleUndo(const base::ListValue* args) {
   const IdSet last_removed_ids = removals_.back();
   removals_.pop_back();
 
+  const bool undoing_clear_all = last_removed_ids.size() > 1;
+  if (undoing_clear_all) {
+    list_tracker_.Reset();
+    list_tracker_.Stop();
+  }
+
   for (auto id : last_removed_ids) {
     content::DownloadItem* download = GetDownloadById(id);
     if (!download)
@@ -251,6 +257,9 @@ void MdDownloadsDOMHandler::HandleUndo(const base::ListValue* args) {
 
     model.SetIsBeingRevived(false);
   }
+
+  if (undoing_clear_all)
+    list_tracker_.StartAndSendChunk();
 }
 
 void MdDownloadsDOMHandler::HandleCancel(const base::ListValue* args) {
@@ -268,7 +277,7 @@ void MdDownloadsDOMHandler::HandleClearAll(const base::ListValue* args) {
 
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_CLEAR_ALL);
 
-  list_tracker_.CallClearAll();
+  list_tracker_.Reset();
   list_tracker_.Stop();
 
   DownloadVector downloads;
@@ -278,7 +287,7 @@ void MdDownloadsDOMHandler::HandleClearAll(const base::ListValue* args) {
     GetOriginalNotifierManager()->GetAllDownloads(&downloads);
   RemoveDownloads(downloads);
 
-  list_tracker_.Start();
+  list_tracker_.StartAndSendChunk();
 }
 
 void MdDownloadsDOMHandler::RemoveDownloads(const DownloadVector& to_remove) {
@@ -379,16 +388,16 @@ content::DownloadItem* MdDownloadsDOMHandler::GetDownloadByValue(
     return nullptr;
   }
 
-  uint64 id;
+  uint64_t id;
   if (!base::StringToUint64(download_id, &id)) {
     NOTREACHED();
     return nullptr;
   }
 
-  return GetDownloadById(static_cast<uint32>(id));
+  return GetDownloadById(static_cast<uint32_t>(id));
 }
 
-content::DownloadItem* MdDownloadsDOMHandler::GetDownloadById(uint32 id) {
+content::DownloadItem* MdDownloadsDOMHandler::GetDownloadById(uint32_t id) {
   content::DownloadItem* item = NULL;
   if (GetMainNotifierManager())
     item = GetMainNotifierManager()->GetDownload(id);

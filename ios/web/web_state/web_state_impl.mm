@@ -4,6 +4,9 @@
 
 #include "ios/web/web_state/web_state_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/interstitials/web_interstitial_impl.h"
 #import "ios/web/navigation/crw_session_controller.h"
@@ -35,7 +38,8 @@ WebStateImpl::WebStateImpl(BrowserState* browser_state)
       web_controller_(nil),
       navigation_manager_(this, browser_state),
       interstitial_(nullptr),
-      cache_mode_(net::RequestTracker::CACHE_NORMAL) {
+      cache_mode_(net::RequestTracker::CACHE_NORMAL),
+      weak_factory_(this) {
   GlobalWebStateEventTracker::GetInstance()->OnWebStateCreated(this);
 }
 
@@ -471,6 +475,10 @@ int WebStateImpl::DownloadImage(
   return [[web_controller_ delegate] downloadImageAtUrl:url
                                           maxBitmapSize:max_bitmap_size
                                               callback:callback];
+}
+
+base::WeakPtr<WebState> WebStateImpl::AsWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 #pragma mark - WebState implementation

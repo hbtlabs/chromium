@@ -4,26 +4,45 @@
 
 #include "components/exo/wayland/server.h"
 
+#include <linux/input.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
 #include <xdg-shell-unstable-v5-server-protocol.h>
-
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
+#include "components/exo/keyboard.h"
+#include "components/exo/keyboard_delegate.h"
+#include "components/exo/pointer.h"
+#include "components/exo/pointer_delegate.h"
 #include "components/exo/shared_memory.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
+#include "components/exo/touch.h"
+#include "components/exo/touch_delegate.h"
 #include "third_party/skia/include/core/SkRegion.h"
+#include "ui/aura/window_property.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 
 #if defined(USE_OZONE)
 #include <wayland-drm-server-protocol.h>
 #endif
+
+#if defined(USE_XKBCOMMON)
+#include <xkbcommon/xkbcommon.h>
+#include "ui/events/keycodes/scoped_xkb.h"
+#endif
+
+DECLARE_WINDOW_PROPERTY_TYPE(wl_resource*);
 
 namespace exo {
 namespace wayland {
@@ -38,7 +57,7 @@ template <class T>
 scoped_ptr<T> TakeUserDataAs(wl_resource* resource) {
   scoped_ptr<T> user_data = make_scoped_ptr(GetUserDataAs<T>(resource));
   wl_resource_set_user_data(resource, nullptr);
-  return user_data.Pass();
+  return user_data;
 }
 
 template <class T>
@@ -53,6 +72,10 @@ void SetImplementation(wl_resource* resource,
   wl_resource_set_implementation(resource, implementation, user_data.release(),
                                  DestroyUserData<T>);
 }
+
+// A property key containing the surface resource that is associated with
+// window. If unset, no surface resource is associated with window.
+DEFINE_WINDOW_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 // wl_buffer_interface:
@@ -125,7 +148,7 @@ void surface_frame(wl_client* client,
   GetUserDataAs<Surface>(resource)
       ->RequestFrameCallback(cancelable_callback->callback());
 
-  SetImplementation(callback_resource, nullptr, cancelable_callback.Pass());
+  SetImplementation(callback_resource, nullptr, std::move(cancelable_callback));
 }
 
 void surface_set_opaque_region(wl_client* client,
@@ -216,7 +239,11 @@ void compositor_create_surface(wl_client* client,
     return;
   }
 
-  SetImplementation(surface_resource, &surface_implementation, surface.Pass());
+  // Set the surface resource property for type-checking downcast support.
+  surface->SetProperty(kSurfaceResourceKey, surface_resource);
+
+  SetImplementation(surface_resource, &surface_implementation,
+                    std::move(surface));
 }
 
 void compositor_create_region(wl_client* client,
@@ -231,7 +258,7 @@ void compositor_create_region(wl_client* client,
     return;
   }
 
-  SetImplementation(region_resource, &region_implementation, region.Pass());
+  SetImplementation(region_resource, &region_implementation, std::move(region));
 }
 
 const struct wl_compositor_interface compositor_implementation = {
@@ -313,7 +340,7 @@ void shm_pool_create_buffer(wl_client* client,
   buffer->set_release_callback(
       base::Bind(&wl_buffer_send_release, base::Unretained(buffer_resource)));
 
-  SetImplementation(buffer_resource, &buffer_implementation, buffer.Pass());
+  SetImplementation(buffer_resource, &buffer_implementation, std::move(buffer));
 }
 
 void shm_pool_destroy(wl_client* client, wl_resource* resource) {
@@ -351,7 +378,7 @@ void shm_create_pool(wl_client* client,
   }
 
   SetImplementation(shm_pool_resource, &shm_pool_implementation,
-                    shared_memory.Pass());
+                    std::move(shared_memory));
 }
 
 const struct wl_shm_interface shm_implementation = {shm_create_pool};
@@ -369,10 +396,11 @@ void bind_shm(wl_client* client, void* data, uint32_t version, uint32_t id) {
     wl_shm_send_format(resource, supported_format.shm_format);
 }
 
+#if defined(USE_OZONE)
+
 ////////////////////////////////////////////////////////////////////////////////
 // wl_drm_interface:
 
-#if defined(USE_OZONE)
 const struct drm_supported_format {
   uint32_t drm_format;
   gfx::BufferFormat buffer_format;
@@ -554,7 +582,7 @@ void subcompositor_get_subsurface(wl_client* client,
   }
 
   SetImplementation(subsurface_resource, &subsurface_implementation,
-                    subsurface.Pass());
+                    std::move(subsurface));
 }
 
 const struct wl_subcompositor_interface subcompositor_implementation = {
@@ -679,7 +707,7 @@ void shell_get_shell_surface(wl_client* client,
   }
 
   SetImplementation(shell_surface_resource, &shell_surface_implementation,
-                    shell_surface.Pass());
+                    std::move(shell_surface));
 }
 
 const struct wl_shell_interface shell_implementation = {
@@ -844,7 +872,7 @@ void xdg_shell_get_xdg_surface(wl_client* client,
   shell_surface->SetToplevel();
 
   SetImplementation(xdg_surface_resource, &xdg_surface_implementation,
-                    shell_surface.Pass());
+                    std::move(shell_surface));
 }
 
 void xdg_shell_get_xdg_popup(wl_client* client,
@@ -881,6 +909,491 @@ void bind_xdg_shell(wl_client* client,
                                  nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// wl_data_device_interface:
+
+void data_device_start_drag(wl_client* client,
+                            wl_resource* resource,
+                            wl_resource* source_resource,
+                            wl_resource* origin_resource,
+                            wl_resource* icon_resource,
+                            uint32_t serial) {
+  NOTIMPLEMENTED();
+}
+
+void data_device_set_selection(wl_client* client,
+                               wl_resource* resource,
+                               wl_resource* data_source,
+                               uint32_t serial) {
+  NOTIMPLEMENTED();
+}
+
+const struct wl_data_device_interface data_device_implementation = {
+    data_device_start_drag, data_device_set_selection};
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_data_device_manager_interface:
+
+void data_device_manager_create_data_source(wl_client* client,
+                                            wl_resource* resource,
+                                            uint32_t id) {
+  NOTIMPLEMENTED();
+}
+
+void data_device_manager_get_data_device(wl_client* client,
+                                         wl_resource* resource,
+                                         uint32_t id,
+                                         wl_resource* seat_resource) {
+  wl_resource* data_device_resource =
+      wl_resource_create(client, &wl_data_device_interface, 1, id);
+  if (!data_device_resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
+  wl_resource_set_implementation(data_device_resource,
+                                 &data_device_implementation, nullptr, nullptr);
+}
+
+const struct wl_data_device_manager_interface
+    data_device_manager_implementation = {
+        data_device_manager_create_data_source,
+        data_device_manager_get_data_device};
+
+void bind_data_device_manager(wl_client* client,
+                              void* data,
+                              uint32_t version,
+                              uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &wl_data_device_manager_interface, 1, id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
+  wl_resource_set_implementation(resource, &data_device_manager_implementation,
+                                 data, nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_pointer_interface:
+
+// Pointer delegate class that accepts events for surfaces owned by the same
+// client as a pointer resource.
+class WaylandPointerDelegate : public PointerDelegate {
+ public:
+  explicit WaylandPointerDelegate(wl_resource* pointer_resource)
+      : pointer_resource_(pointer_resource) {}
+
+  // Overridden from PointerDelegate:
+  void OnPointerDestroying(Pointer* pointer) override { delete this; }
+  bool CanAcceptPointerEventsForSurface(Surface* surface) const override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    // We can accept events for this surface if the client is the same as the
+    // pointer.
+    return surface_resource &&
+           wl_resource_get_client(surface_resource) == client();
+  }
+  void OnPointerEnter(Surface* surface,
+                      const gfx::Point& location,
+                      int button_flags) override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    DCHECK(surface_resource);
+    // Should we be sending button events to the client before the enter event
+    // if client's pressed button state is different from |button_flags|?
+    wl_pointer_send_enter(pointer_resource_, next_serial(), surface_resource,
+                          wl_fixed_from_int(location.x()),
+                          wl_fixed_from_int(location.y()));
+    wl_client_flush(client());
+  }
+  void OnPointerLeave(Surface* surface) override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    DCHECK(surface_resource);
+    wl_pointer_send_leave(pointer_resource_, next_serial(), surface_resource);
+    wl_client_flush(client());
+  }
+  void OnPointerMotion(base::TimeDelta time_stamp,
+                       const gfx::Point& location) override {
+    wl_pointer_send_motion(pointer_resource_, time_stamp.InMilliseconds(),
+                           wl_fixed_from_int(location.x()),
+                           wl_fixed_from_int(location.y()));
+    wl_client_flush(client());
+  }
+  void OnPointerButton(base::TimeDelta time_stamp,
+                       int button_flags,
+                       bool pressed) override {
+    struct {
+      ui::EventFlags flag;
+      uint32_t value;
+    } buttons[] = {
+        {ui::EF_LEFT_MOUSE_BUTTON, BTN_LEFT},
+        {ui::EF_RIGHT_MOUSE_BUTTON, BTN_RIGHT},
+        {ui::EF_MIDDLE_MOUSE_BUTTON, BTN_MIDDLE},
+        {ui::EF_FORWARD_MOUSE_BUTTON, BTN_FORWARD},
+        {ui::EF_BACK_MOUSE_BUTTON, BTN_BACK},
+    };
+    uint32_t serial = next_serial();
+    for (auto button : buttons) {
+      if (button_flags & button.flag) {
+        wl_pointer_send_button(pointer_resource_, serial,
+                               time_stamp.InMilliseconds(), button.value,
+                               pressed ? WL_POINTER_BUTTON_STATE_PRESSED
+                                       : WL_POINTER_BUTTON_STATE_RELEASED);
+      }
+    }
+    wl_client_flush(client());
+  }
+  void OnPointerWheel(base::TimeDelta time_stamp,
+                      const gfx::Vector2d& offset) override {
+    // Same as Weston, the reference compositor.
+    const double kAxisStepDistance = 10.0 / ui::MouseWheelEvent::kWheelDelta;
+
+    double x_value = offset.x() * kAxisStepDistance;
+    if (x_value) {
+      wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+                           WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+                           wl_fixed_from_double(-x_value));
+    }
+    double y_value = offset.y() * kAxisStepDistance;
+    if (y_value) {
+      wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+                           WL_POINTER_AXIS_VERTICAL_SCROLL,
+                           wl_fixed_from_double(-y_value));
+    }
+    wl_client_flush(client());
+  }
+
+ private:
+  // The client who own this pointer instance.
+  wl_client* client() const {
+    return wl_resource_get_client(pointer_resource_);
+  }
+
+  // Returns the next serial to use for pointer events.
+  uint32_t next_serial() const {
+    return wl_display_next_serial(wl_client_get_display(client()));
+  }
+
+  // The pointer resource associated with the pointer.
+  wl_resource* const pointer_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandPointerDelegate);
+};
+
+void pointer_set_cursor(wl_client* client,
+                        wl_resource* resource,
+                        uint32_t serial,
+                        wl_resource* surface_resource,
+                        int32_t hotspot_x,
+                        int32_t hotspot_y) {
+  NOTIMPLEMENTED();
+}
+
+void pointer_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct wl_pointer_interface pointer_implementation = {pointer_set_cursor,
+                                                            pointer_release};
+
+#if defined(USE_XKBCOMMON)
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_keyboard_interface:
+
+// Keyboard delegate class that accepts events for surfaces owned by the same
+// client as a keyboard resource.
+class WaylandKeyboardDelegate : public KeyboardDelegate {
+ public:
+  explicit WaylandKeyboardDelegate(wl_resource* keyboard_resource)
+      : keyboard_resource_(keyboard_resource),
+        xkb_context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)),
+        // TODO(reveman): Keep keymap synchronized with the keymap used by
+        // chromium and the host OS.
+        xkb_keymap_(xkb_keymap_new_from_names(xkb_context_.get(),
+                                              nullptr,
+                                              XKB_KEYMAP_COMPILE_NO_FLAGS)),
+        xkb_state_(xkb_state_new(xkb_keymap_.get())) {
+    scoped_ptr<char, base::FreeDeleter> keymap_string(
+        xkb_keymap_get_as_string(xkb_keymap_.get(), XKB_KEYMAP_FORMAT_TEXT_V1));
+    DCHECK(keymap_string.get());
+    size_t keymap_size = strlen(keymap_string.get()) + 1;
+    base::SharedMemory shared_keymap;
+    bool rv = shared_keymap.CreateAndMapAnonymous(keymap_size);
+    DCHECK(rv);
+    memcpy(shared_keymap.memory(), keymap_string.get(), keymap_size);
+    wl_keyboard_send_keymap(keyboard_resource_,
+                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
+                            shared_keymap.handle().fd, keymap_size);
+  }
+
+  // Overridden from KeyboardDelegate:
+  void OnKeyboardDestroying(Keyboard* keyboard) override { delete this; }
+  bool CanAcceptKeyboardEventsForSurface(Surface* surface) const override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    // We can accept events for this surface if the client is the same as the
+    // keyboard.
+    return surface_resource &&
+           wl_resource_get_client(surface_resource) == client();
+  }
+  void OnKeyboardEnter(Surface* surface,
+                       const std::vector<ui::DomCode>& pressed_keys) override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    DCHECK(surface_resource);
+    wl_array keys;
+    wl_array_init(&keys);
+    for (auto key : pressed_keys) {
+      uint32_t* value =
+          static_cast<uint32_t*>(wl_array_add(&keys, sizeof(uint32_t)));
+      DCHECK(value);
+      *value = DomCodeToKey(key);
+    }
+    wl_keyboard_send_enter(keyboard_resource_, next_serial(), surface_resource,
+                           &keys);
+    wl_array_release(&keys);
+    wl_client_flush(client());
+  }
+  void OnKeyboardLeave(Surface* surface) override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    DCHECK(surface_resource);
+    wl_keyboard_send_leave(keyboard_resource_, next_serial(), surface_resource);
+    wl_client_flush(client());
+  }
+  void OnKeyboardKey(base::TimeDelta time_stamp,
+                     ui::DomCode key,
+                     bool pressed) override {
+    wl_keyboard_send_key(keyboard_resource_, next_serial(),
+                         time_stamp.InMilliseconds(), DomCodeToKey(key),
+                         pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
+                                 : WL_KEYBOARD_KEY_STATE_RELEASED);
+    wl_client_flush(client());
+  }
+  void OnKeyboardModifiers(int modifier_flags) override {
+    xkb_state_update_mask(xkb_state_.get(),
+                          ModifierFlagsToXkbModifiers(modifier_flags), 0, 0, 0,
+                          0, 0);
+    wl_keyboard_send_modifiers(
+        keyboard_resource_, next_serial(),
+        xkb_state_serialize_mods(xkb_state_.get(), XKB_STATE_MODS_DEPRESSED),
+        xkb_state_serialize_mods(xkb_state_.get(), XKB_STATE_MODS_LOCKED),
+        xkb_state_serialize_mods(xkb_state_.get(), XKB_STATE_MODS_LATCHED),
+        xkb_state_serialize_layout(xkb_state_.get(),
+                                   XKB_STATE_LAYOUT_EFFECTIVE));
+    wl_client_flush(client());
+  }
+
+ private:
+  // Returns the corresponding key given a dom code.
+  uint32_t DomCodeToKey(ui::DomCode code) const {
+    // This assumes KeycodeConverter has been built with evdev/xkb codes.
+    xkb_keycode_t xkb_keycode = static_cast<xkb_keycode_t>(
+        ui::KeycodeConverter::DomCodeToNativeKeycode(code));
+
+    // Keycodes are offset by 8 in Xkb.
+    DCHECK_GE(xkb_keycode, 8u);
+    return xkb_keycode - 8;
+  }
+
+  // Returns a set of Xkb modififers given a set of modifier flags.
+  uint32_t ModifierFlagsToXkbModifiers(int modifier_flags) {
+    struct {
+      ui::EventFlags flag;
+      const char* xkb_name;
+    } modifiers[] = {
+        {ui::EF_SHIFT_DOWN, XKB_MOD_NAME_SHIFT},
+        {ui::EF_CAPS_LOCK_DOWN, XKB_MOD_NAME_CAPS},
+        {ui::EF_CONTROL_DOWN, XKB_MOD_NAME_CTRL},
+        {ui::EF_ALT_DOWN, XKB_MOD_NAME_ALT},
+        {ui::EF_NUM_LOCK_DOWN, XKB_MOD_NAME_NUM},
+        {ui::EF_MOD3_DOWN, "Mod3"},
+        {ui::EF_COMMAND_DOWN, XKB_MOD_NAME_LOGO},
+        {ui::EF_ALTGR_DOWN, "Mod5"},
+    };
+    uint32_t xkb_modifiers = 0;
+    for (auto modifier : modifiers) {
+      if (modifier_flags & modifier.flag) {
+        xkb_modifiers |=
+            1 << xkb_keymap_mod_get_index(xkb_keymap_.get(), modifier.xkb_name);
+      }
+    }
+    return xkb_modifiers;
+  }
+
+  // The client who own this keyboard instance.
+  wl_client* client() const {
+    return wl_resource_get_client(keyboard_resource_);
+  }
+
+  // Returns the next serial to use for keyboard events.
+  uint32_t next_serial() const {
+    return wl_display_next_serial(wl_client_get_display(client()));
+  }
+
+  // The keyboard resource associated with the keyboard.
+  wl_resource* const keyboard_resource_;
+
+  // The Xkb state used for the keyboard.
+  scoped_ptr<xkb_context, ui::XkbContextDeleter> xkb_context_;
+  scoped_ptr<xkb_keymap, ui::XkbKeymapDeleter> xkb_keymap_;
+  scoped_ptr<xkb_state, ui::XkbStateDeleter> xkb_state_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandKeyboardDelegate);
+};
+
+void keyboard_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct wl_keyboard_interface keyboard_implementation = {keyboard_release};
+
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_touch_interface:
+
+// Touch delegate class that accepts events for surfaces owned by the same
+// client as a touch resource.
+class WaylandTouchDelegate : public TouchDelegate {
+ public:
+  explicit WaylandTouchDelegate(wl_resource* touch_resource)
+      : touch_resource_(touch_resource) {}
+
+  // Overridden from TouchDelegate:
+  void OnTouchDestroying(Touch* touch) override { delete this; }
+  bool CanAcceptTouchEventsForSurface(Surface* surface) const override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    // We can accept events for this surface if the client is the same as the
+    // touch resource.
+    return surface_resource &&
+           wl_resource_get_client(surface_resource) == client();
+  }
+  void OnTouchDown(Surface* surface,
+                   base::TimeDelta time_stamp,
+                   int id,
+                   const gfx::Point& location) override {
+    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    DCHECK(surface_resource);
+    wl_touch_send_down(touch_resource_, next_serial(),
+                       time_stamp.InMilliseconds(), surface_resource, id,
+                       wl_fixed_from_int(location.x()),
+                       wl_fixed_from_int(location.y()));
+    wl_client_flush(client());
+  }
+  void OnTouchUp(base::TimeDelta time_stamp, int id) override {
+    wl_touch_send_up(touch_resource_, next_serial(),
+                     time_stamp.InMilliseconds(), id);
+    wl_client_flush(client());
+  }
+  void OnTouchMotion(base::TimeDelta time_stamp,
+                     int id,
+                     const gfx::Point& location) override {
+    wl_touch_send_motion(touch_resource_, time_stamp.InMilliseconds(), id,
+                         wl_fixed_from_int(location.x()),
+                         wl_fixed_from_int(location.y()));
+    wl_client_flush(client());
+  }
+  void OnTouchCancel() override {
+    wl_touch_send_cancel(touch_resource_);
+    wl_client_flush(client());
+  }
+
+ private:
+  // The client who own this touch instance.
+  wl_client* client() const { return wl_resource_get_client(touch_resource_); }
+
+  // Returns the next serial to use for keyboard events.
+  uint32_t next_serial() const {
+    return wl_display_next_serial(wl_client_get_display(client()));
+  }
+
+  // The touch resource associated with the touch.
+  wl_resource* const touch_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandTouchDelegate);
+};
+
+void touch_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct wl_touch_interface touch_implementation = {touch_release};
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_seat_interface:
+
+void seat_get_pointer(wl_client* client, wl_resource* resource, uint32_t id) {
+  wl_resource* pointer_resource = wl_resource_create(
+      client, &wl_pointer_interface, wl_resource_get_version(resource), id);
+  if (!pointer_resource) {
+    wl_resource_post_no_memory(resource);
+    return;
+  }
+
+  SetImplementation(pointer_resource, &pointer_implementation,
+                    make_scoped_ptr(new Pointer(
+                        new WaylandPointerDelegate(pointer_resource))));
+}
+
+void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
+#if defined(USE_XKBCOMMON)
+  uint32_t version = wl_resource_get_version(resource);
+  wl_resource* keyboard_resource =
+      wl_resource_create(client, &wl_keyboard_interface, version, id);
+  if (!keyboard_resource) {
+    wl_resource_post_no_memory(resource);
+    return;
+  }
+
+  SetImplementation(keyboard_resource, &keyboard_implementation,
+                    make_scoped_ptr(new Keyboard(
+                        new WaylandKeyboardDelegate(keyboard_resource))));
+
+  // TODO(reveman): Keep repeat info synchronized with chromium and the host OS.
+  if (version >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)
+    wl_keyboard_send_repeat_info(keyboard_resource, 40, 500);
+#else
+  NOTIMPLEMENTED();
+#endif
+}
+
+void seat_get_touch(wl_client* client, wl_resource* resource, uint32_t id) {
+  wl_resource* touch_resource = wl_resource_create(
+      client, &wl_touch_interface, wl_resource_get_version(resource), id);
+  if (!touch_resource) {
+    wl_resource_post_no_memory(resource);
+    return;
+  }
+
+  SetImplementation(
+      touch_resource, &touch_implementation,
+      make_scoped_ptr(new Touch(new WaylandTouchDelegate(touch_resource))));
+}
+
+const struct wl_seat_interface seat_implementation = {
+    seat_get_pointer, seat_get_keyboard, seat_get_touch};
+
+const uint32_t seat_version = 4;
+
+void bind_seat(wl_client* client, void* data, uint32_t version, uint32_t id) {
+  wl_resource* resource = wl_resource_create(
+      client, &wl_seat_interface, std::min(version, seat_version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
+  wl_resource_set_implementation(resource, &seat_implementation, data, nullptr);
+
+  if (version >= WL_SEAT_NAME_SINCE_VERSION)
+    wl_seat_send_name(resource, "default");
+
+  uint32_t capabilities = WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_TOUCH;
+#if defined(USE_XKBCOMMON)
+  capabilities |= WL_SEAT_CAPABILITY_KEYBOARD;
+#endif
+  wl_seat_send_capabilities(resource, capabilities);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -901,6 +1414,10 @@ Server::Server(Display* display)
                    bind_shell);
   wl_global_create(wl_display_.get(), &xdg_shell_interface, 1, display_,
                    bind_xdg_shell);
+  wl_global_create(wl_display_.get(), &wl_data_device_manager_interface, 1,
+                   display_, bind_data_device_manager);
+  wl_global_create(wl_display_.get(), &wl_seat_interface, seat_version,
+                   display_, bind_seat);
 }
 
 Server::~Server() {}

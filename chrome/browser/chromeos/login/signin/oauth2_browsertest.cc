@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
@@ -550,7 +552,7 @@ class FakeGoogle {
       return scoped_ptr<HttpResponse>();      // Request not understood.
     }
 
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // True if we have already served the test page.

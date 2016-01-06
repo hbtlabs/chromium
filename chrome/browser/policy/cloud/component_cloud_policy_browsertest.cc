@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -175,12 +176,11 @@ class ComponentCloudPolicyTest : public ExtensionBrowserTest {
         UserCloudPolicyManagerFactory::GetForBrowserContext(
             browser()->profile());
     ASSERT_TRUE(policy_manager);
-    policy_manager->Connect(
-        g_browser_process->local_state(),
-        g_browser_process->system_request_context(),
-        UserCloudPolicyManager::CreateCloudPolicyClient(
-            connector->device_management_service(),
-            g_browser_process->system_request_context()).Pass());
+    policy_manager->Connect(g_browser_process->local_state(),
+                            g_browser_process->system_request_context(),
+                            UserCloudPolicyManager::CreateCloudPolicyClient(
+                                connector->device_management_service(),
+                                g_browser_process->system_request_context()));
 #endif  // defined(OS_CHROMEOS)
 
     // Register the cloud policy client.

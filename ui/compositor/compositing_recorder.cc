@@ -13,17 +13,18 @@ namespace ui {
 
 CompositingRecorder::CompositingRecorder(const PaintContext& context,
                                          const gfx::Size& size_in_context,
-                                         uint8_t alpha)
+                                         uint8_t alpha,
+                                         bool lcd_text_requires_opaque_layer)
     : context_(context),
       bounds_in_layer_(context.ToLayerSpaceBounds(size_in_context)),
       saved_(alpha < 255) {
   if (!saved_)
     return;
 
-  auto* item = context_.list_->CreateAndAppendItem<cc::CompositingDisplayItem>(
-      bounds_in_layer_);
-  item->SetNew(alpha, SkXfermode::kSrcOver_Mode, nullptr /* no bounds */,
-               skia::RefPtr<SkColorFilter>());
+  context_.list_->CreateAndAppendItem<cc::CompositingDisplayItem>(
+      bounds_in_layer_, alpha, SkXfermode::kSrcOver_Mode,
+      nullptr /* no bounds */, skia::RefPtr<SkColorFilter>(),
+      lcd_text_requires_opaque_layer);
 }
 
 CompositingRecorder::~CompositingRecorder() {

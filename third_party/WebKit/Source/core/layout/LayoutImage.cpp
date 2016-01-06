@@ -25,7 +25,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutImage.h"
 
 #include "core/HTMLNames.h"
@@ -244,9 +243,11 @@ bool LayoutImage::foregroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect,
     ObjectFit objectFit = style()->objectFit();
     if (objectFit != ObjectFitFill && objectFit != ObjectFitCover)
         return false;
+    if (!m_imageResource->cachedImage())
+        return false;
     // Check for image with alpha.
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(this, *m_imageResource->cachedImage()));
-    return m_imageResource->cachedImage() && m_imageResource->cachedImage()->image()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
+    return m_imageResource->cachedImage()->image()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
 }
 
 bool LayoutImage::computeBackgroundIsKnownToBeObscured() const

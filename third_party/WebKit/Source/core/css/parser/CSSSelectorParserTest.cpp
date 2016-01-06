@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/parser/CSSSelectorParser.h"
 
 #include "core/css/CSSSelectorList.h"
@@ -129,8 +128,7 @@ TEST(CSSSelectorParserTest, ShadowDomPseudoInCompound)
         SCOPED_TRACE(testCases[i][0]);
         CSSTokenizer::Scope scope(testCases[i][0]);
         CSSParserTokenRange range = scope.tokenRange();
-        CSSSelectorList list;
-        CSSSelectorParser::parseSelector(range, CSSParserContext(HTMLStandardMode, nullptr), nullptr, list);
+        CSSSelectorList list = CSSSelectorParser::parseSelector(range, CSSParserContext(HTMLStandardMode, nullptr), nullptr);
         EXPECT_STREQ(testCases[i][1], list.selectorsText().ascii().data());
     }
 }

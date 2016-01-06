@@ -12,7 +12,7 @@
 
 #include "base/debug/leak_tracker.h"
 #include "base/logging.h"
-#include "base/memory/ref_counted.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
@@ -22,6 +22,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/load_states.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/base/request_priority.h"
@@ -303,8 +304,9 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   ReferrerPolicy referrer_policy() const { return referrer_policy_; }
   void set_referrer_policy(ReferrerPolicy referrer_policy);
 
-  // Sets the delegate of the request.  This value may be changed at any time,
-  // and it is permissible for it to be null.
+  // Sets the delegate of the request.  This is only to allow creating a request
+  // before creating its delegate.  |delegate| must be non-NULL and the request
+  // must not yet have a Delegate set.
   void set_delegate(Delegate* delegate);
 
   // Indicates that the request body should be sent using chunked transfer
@@ -462,6 +464,10 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // non-cached HTTP responses.
   void GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const;
 
+  // Gets the networkd error details of the most recent origin that the network
+  // stack makes the request to.
+  void PopulateNetErrorDetails(NetErrorDetails* details) const;
+
   // Gets the remote endpoint of the most recent socket that the network stack
   // used to make this request.
   //
@@ -516,10 +522,11 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const URLRequestStatus& status() const { return status_; }
 
   // Returns a globally unique identifier for this request.
-  uint64 identifier() const { return identifier_; }
+  uint64_t identifier() const { return identifier_; }
 
   // This method is called to start the request.  The delegate will receive
-  // a OnResponseStarted callback when the request is started.
+  // a OnResponseStarted callback when the request is started.  The request
+  // must have a delegate set before this method is called.
   void Start();
 
   // This method may be called at any time after Start() has been called to
@@ -603,7 +610,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const BoundNetLog& net_log() const { return net_log_; }
 
   // Returns the expected content size if available
-  int64 GetExpectedContentSize() const;
+  int64_t GetExpectedContentSize() const;
 
   // Returns the priority level for this request.
   RequestPriority priority() const { return priority_; }
@@ -617,23 +624,20 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // due to HSTS. If so, |redirect_url| is rewritten to the new HTTPS URL.
   bool GetHSTSRedirect(GURL* redirect_url) const;
 
-  // TODO(willchan): Undo this. Only temporarily public.
-  bool has_delegate() const { return delegate_ != NULL; }
-
   // NOTE(willchan): This is just temporary for debugging
   // http://crbug.com/90971.
   // Allows to setting debug info into the URLRequest.
   void set_stack_trace(const base::debug::StackTrace& stack_trace);
   const base::debug::StackTrace* stack_trace() const;
 
-  void set_received_response_content_length(int64 received_content_length) {
+  void set_received_response_content_length(int64_t received_content_length) {
     received_response_content_length_ = received_content_length;
   }
 
   // The number of bytes in the raw response body (before any decompression,
   // etc.). This is only available after the final Read completes. Not available
   // for FTP responses.
-  int64 received_response_content_length() const {
+  int64_t received_response_content_length() const {
     return received_response_content_length_;
   }
 
@@ -692,6 +696,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // paused).
   void BeforeRequestComplete(int error);
 
+  // TODO(mmenke):  Make this take a scoped_ptr.
   void StartJob(URLRequestJob* job);
 
   // Restarting involves replacing the current job with a new one such as what
@@ -721,9 +726,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // occurs.
   void NotifyResponseStarted();
 
-  // These functions delegate to |delegate_| and may only be used if
-  // |delegate_| is not NULL. See URLRequest::Delegate for the meaning
-  // of these functions.
+  // These functions delegate to |delegate_|.  See URLRequest::Delegate for the
+  // meaning of these functions.
   void NotifyAuthRequired(AuthChallengeInfo* auth_info);
   void NotifyAuthRequiredComplete(NetworkDelegate::AuthRequiredResponse result);
   void NotifyCertificateRequested(SSLCertRequestInfo* cert_request_info);
@@ -754,7 +758,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Tracks the time spent in various load states throughout this request.
   BoundNetLog net_log_;
 
-  scoped_refptr<URLRequestJob> job_;
+  scoped_ptr<URLRequestJob> job_;
   scoped_ptr<UploadDataStream> upload_data_stream_;
   // TODO(mmenke):  Make whether or not an upload is chunked transparent to the
   // URLRequest.
@@ -813,7 +817,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // needs to be done outside of the URLRequest anyway. Therefore, this
   // identifier should be deleted here. http://crbug.com/89321
   // A globally unique identifier for this request.
-  const uint64 identifier_;
+  const uint64_t identifier_;
 
   // True if this request is currently calling a delegate, or is blocked waiting
   // for the URL request or network delegate to resume it.
@@ -842,7 +846,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   AuthCredentials auth_credentials_;
   scoped_refptr<AuthChallengeInfo> auth_info_;
 
-  int64 received_response_content_length_;
+  int64_t received_response_content_length_;
 
   base::TimeTicks creation_time_;
 

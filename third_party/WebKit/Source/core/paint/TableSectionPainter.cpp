@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/TableSectionPainter.h"
 
 #include "core/layout/LayoutTable.h"
@@ -16,6 +15,7 @@
 #include "core/paint/PaintInfo.h"
 #include "core/paint/TableCellPainter.h"
 #include "core/paint/TableRowPainter.h"
+#include <algorithm>
 
 namespace blink {
 

@@ -8,6 +8,7 @@
 #ifndef CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_MACROS_H_
 #define CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_MACROS_H_
 
+#include "build/build_config.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/security_style.h"
@@ -133,6 +134,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(xslt_enabled)
   IPC_STRUCT_TRAITS_MEMBER(xss_auditor_enabled)
   IPC_STRUCT_TRAITS_MEMBER(dns_prefetching_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(data_saver_enabled)
   IPC_STRUCT_TRAITS_MEMBER(local_storage_enabled)
   IPC_STRUCT_TRAITS_MEMBER(databases_enabled)
   IPC_STRUCT_TRAITS_MEMBER(application_cache_enabled)

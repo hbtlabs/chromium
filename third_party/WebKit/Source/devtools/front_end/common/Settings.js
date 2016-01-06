@@ -399,7 +399,7 @@ WebInspector.VersionController = function()
 }
 
 WebInspector.VersionController._currentVersionName = "inspectorVersion";
-WebInspector.VersionController.currentVersion = 16;
+WebInspector.VersionController.currentVersion = 18;
 
 WebInspector.VersionController.prototype = {
     updateVersion: function()
@@ -666,6 +666,38 @@ WebInspector.VersionController.prototype = {
         for (var key of Object.keys(tabOrders))
             tabOrders[key] = (tabOrders[key] + 1) * 10;
         setting.set(tabOrders);
+    },
+
+    _updateVersionFrom16To17: function()
+    {
+        var setting = WebInspector.settings.createSetting("networkConditionsCustomProfiles", []);
+        var oldValue = setting.get();
+        var newValue = [];
+        if (Array.isArray(oldValue)) {
+            for (var preset of oldValue) {
+                if (typeof preset.title === "string" && typeof preset.value === "object" && typeof preset.value.throughput === "number" && typeof preset.value.latency === "number")
+                    newValue.push({title: preset.title, value: {download: preset.value.throughput, upload: preset.value.throughput, latency: preset.value.latency}});
+            }
+        }
+        setting.set(newValue);
+    },
+
+    _updateVersionFrom17To18: function()
+    {
+        var setting = WebInspector.settings.createLocalSetting("workspaceExcludedFolders", {});
+        var oldValue = setting.get();
+        var newValue = {};
+        for (var oldKey in oldValue) {
+            var newKey = oldKey.replace(/\\/g, "/");
+            if (!newKey.startsWith("file://")) {
+                if (newKey.startsWith("/"))
+                    newKey = "file://" + newKey;
+                else
+                    newKey = "file:///" + newKey;
+            }
+            newValue[newKey] = oldValue[oldKey];
+        }
+        setting.set(newValue);
     },
 
     _migrateSettingsFromLocalStorage: function()

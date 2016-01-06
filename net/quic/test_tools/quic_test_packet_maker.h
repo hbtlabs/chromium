@@ -7,6 +7,9 @@
 #ifndef NET_QUIC_TEST_TOOLS_QUIC_TEST_PACKET_MAKER_H_
 #define NET_QUIC_TEST_TOOLS_QUIC_TEST_PACKET_MAKER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/request_priority.h"
 #include "net/quic/quic_protocol.h"
@@ -40,6 +43,14 @@ class QuicTestPacketMaker {
       QuicPacketNumber largest_received,
       QuicPacketNumber least_unacked,
       bool send_feedback);
+  scoped_ptr<QuicEncryptedPacket> MakeAckAndConnectionClosePacket(
+      QuicPacketNumber num,
+      bool include_version,
+      QuicTime::Delta delta_time_largest_observed,
+      QuicPacketNumber largest_received,
+      QuicPacketNumber least_unacked,
+      QuicErrorCode quic_error,
+      std::string& quic_error_details);
   scoped_ptr<QuicEncryptedPacket> MakeConnectionClosePacket(
       QuicPacketNumber num);
   scoped_ptr<QuicEncryptedPacket> MakeAckPacket(
@@ -100,9 +111,8 @@ class QuicTestPacketMaker {
   SpdyHeaderBlock GetResponseHeaders(const std::string& status);
 
  private:
-  scoped_ptr<QuicEncryptedPacket> MakePacket(
-      const QuicPacketHeader& header,
-      const QuicFrame& frame);
+  scoped_ptr<QuicEncryptedPacket> MakePacket(const QuicPacketHeader& header,
+                                             const QuicFrame& frame);
 
   void InitializeHeader(QuicPacketNumber packet_number,
                         bool should_include_version);

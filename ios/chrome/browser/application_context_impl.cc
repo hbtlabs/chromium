@@ -15,6 +15,7 @@
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/time/default_tick_clock.h"
+#include "base/tracked_objects.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/gcm_driver/gcm_client_factory.h"
@@ -39,9 +40,11 @@
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/ios_chrome_io_thread.h"
 #include "ios/chrome/browser/metrics/ios_chrome_metrics_services_manager_client.h"
+#include "ios/chrome/browser/net/crl_set_fetcher.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
+#include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
 #include "ios/chrome/browser/web_resource/web_resource_util.h"
 #include "ios/chrome/common/channel_info.h"
@@ -54,11 +57,9 @@
 #include "net/url_request/url_request_context_getter.h"
 
 namespace {
-
 // Dummy flag because iOS does not support disabling background networking.
 extern const char kDummyDisableBackgroundNetworking[] =
     "dummy-disable-background-networking";
-
 }
 
 ApplicationContextImpl::ApplicationContextImpl(
@@ -83,12 +84,13 @@ ApplicationContextImpl::ApplicationContextImpl(
 
 ApplicationContextImpl::~ApplicationContextImpl() {
   DCHECK_EQ(this, GetApplicationContext());
+  tracked_objects::ThreadData::EnsureCleanupWasCalled(4);
   SetApplicationContext(nullptr);
 }
 
 // static
 void ApplicationContextImpl::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterStringPref(ios::prefs::kApplicationLocale, std::string());
+  registry->RegisterStringPref(prefs::kApplicationLocale, std::string());
   registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 false);
@@ -120,17 +122,18 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
 
 void ApplicationContextImpl::StartTearDown() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // We need to destroy the MetricsServicesManager and PromoResourceService
-  // before the IO thread gets destroyed, since their destructors can call the
-  // URLFetcher destructor, which does a PostDelayedTask operation on the IO
-  // thread. (The IO thread will handle that URLFetcher operation before going
-  // away.)
+  // We need to destroy the MetricsServicesManager, PromoResourceService and
+  // SafeBrowsing before the IO thread gets destroyed, since their destructors
+  // can call the URLFetcher destructor, which does a PostDelayedTask operation
+  // on the IO thread. (The IO thread will handle that URLFetcher operation
+  // before going away.)
+  if (safe_browsing_service_)
+    safe_browsing_service_->ShutDown();
+
   metrics_services_manager_.reset();
 
   // Need to clear browser states before the IO thread.
-  // TODO(crbug.com/560854): the ShutDown() method can be folded into the
-  // destructor once ApplicationContextImpl owns ChromeBrowserStateManager.
-  GetChromeBrowserStateManager()->ShutDown();
+  chrome_browser_state_manager_.reset();
 
   // PromoResourceService must be destroyed after the keyed services and before
   // the IO thread.
@@ -233,7 +236,12 @@ const std::string& ApplicationContextImpl::GetApplicationLocale() {
 ios::ChromeBrowserStateManager*
 ApplicationContextImpl::GetChromeBrowserStateManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return ios::GetChromeBrowserProvider()->GetChromeBrowserStateManager();
+  if (!chrome_browser_state_manager_) {
+    chrome_browser_state_manager_ =
+        ios::GetChromeBrowserProvider()->CreateChromeBrowserStateManager();
+    DCHECK(chrome_browser_state_manager_.get());
+  }
+  return chrome_browser_state_manager_.get();
 }
 
 metrics_services_manager::MetricsServicesManager*
@@ -309,6 +317,25 @@ ApplicationContextImpl::GetComponentUpdateService() {
             GetSystemURLRequestContext()));
   }
   return component_updater_.get();
+}
+
+CRLSetFetcher* ApplicationContextImpl::GetCRLSetFetcher() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!crl_set_fetcher_) {
+    crl_set_fetcher_ = new CRLSetFetcher;
+  }
+  return crl_set_fetcher_.get();
+}
+
+safe_browsing::SafeBrowsingService*
+ApplicationContextImpl::GetSafeBrowsingService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!safe_browsing_service_) {
+    safe_browsing_service_ =
+        safe_browsing::SafeBrowsingService::CreateSafeBrowsingService();
+    safe_browsing_service_->Initialize();
+  }
+  return safe_browsing_service_.get();
 }
 
 void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {

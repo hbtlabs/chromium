@@ -5,8 +5,10 @@
 #include "chrome/browser/apps/drive/drive_service_bridge.h"
 
 #include <string>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -125,7 +127,7 @@ scoped_ptr<DriveServiceBridge> DriveServiceBridge::Create(Profile* profile) {
   scoped_ptr<DriveServiceBridgeImpl> bridge(
       new DriveServiceBridgeImpl(profile));
   bridge->Initialize();
-  return bridge.Pass();
+  return std::move(bridge);
 }
 
 // static

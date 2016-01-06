@@ -49,6 +49,9 @@ class PLATFORM_EXPORT Scrollbar : public Widget, public ScrollbarThemeClient {
 public:
     static PassRefPtrWillBeRawPtr<Scrollbar> create(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize);
 
+    // Theme object ownership remains with the caller and it must outlive the scrollbar.
+    static PassRefPtrWillBeRawPtr<Scrollbar> createForTesting(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, ScrollbarTheme*);
+
     ~Scrollbar() override;
 
     // ScrollbarThemeClient implementation.
@@ -104,7 +107,7 @@ public:
     void setProportion(int visibleSize, int totalSize);
     void setPressedPos(int p) { m_pressedPos = p; }
 
-    void paint(GraphicsContext*, const CullRect&) const final;
+    void paint(GraphicsContext&, const CullRect&) const final;
 
     bool isOverlayScrollbar() const override;
     bool shouldParticipateInHitTesting();
@@ -125,7 +128,7 @@ public:
     void mouseUp(const PlatformMouseEvent&);
     void mouseDown(const PlatformMouseEvent&);
 
-    ScrollbarTheme* theme() const { return m_theme; }
+    ScrollbarTheme& theme() const { return m_theme; }
 
     IntRect convertToContainingWidget(const IntRect&) const override;
     IntRect convertFromContainingWidget(const IntRect&) const override;
@@ -135,22 +138,21 @@ public:
 
     void moveThumb(int pos, bool draggingDocument = false);
 
-    bool isAlphaLocked() const override { return m_isAlphaLocked; }
-    void setIsAlphaLocked(bool flag) override { m_isAlphaLocked = flag; }
-
     float elasticOverscroll() const override { return m_elasticOverscroll; }
     void setElasticOverscroll(float elasticOverscroll) override { m_elasticOverscroll = elasticOverscroll; }
 
-    bool trackNeedsRepaint() const override { return m_trackNeedsRepaint; }
-    void setTrackNeedsRepaint(bool trackNeedsRepaint) override { m_trackNeedsRepaint = trackNeedsRepaint; }
-    bool thumbNeedsRepaint() const override { return m_thumbNeedsRepaint; }
-    void setThumbNeedsRepaint(bool thumbNeedsRepaint) override { m_thumbNeedsRepaint = thumbNeedsRepaint; }
+    bool trackNeedsRepaint() const { return m_trackNeedsRepaint; }
+    void setTrackNeedsRepaint(bool trackNeedsRepaint) { m_trackNeedsRepaint = trackNeedsRepaint; }
+    bool thumbNeedsRepaint() const { return m_thumbNeedsRepaint; }
+    void setThumbNeedsRepaint(bool thumbNeedsRepaint) { m_thumbNeedsRepaint = thumbNeedsRepaint; }
 
     bool overlapsResizer() const { return m_overlapsResizer; }
     void setOverlapsResizer(bool overlapsResizer) { m_overlapsResizer = overlapsResizer; }
 
-    DisplayItemClient displayItemClient() const override { return toDisplayItemClient(this); }
-    String debugName() const override { return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar" : "VerticalScrollbar"; }
+    // DisplayItemClient methods.
+    String debugName() const final { return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar" : "VerticalScrollbar"; }
+    // TODO(chrishtr): fix this.
+    IntRect visualRect() const override { return IntRect(); }
 
     void setNeedsPaintInvalidation();
 
@@ -165,8 +167,6 @@ protected:
     Scrollbar(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, ScrollbarTheme* = 0);
 
     void updateThumb();
-    virtual void updateThumbPosition();
-    virtual void updateThumbProportion();
 
     void autoscrollTimerFired(Timer<Scrollbar>*);
     void startTimerIfNeeded(double delay);
@@ -178,7 +178,7 @@ protected:
     RawPtrWillBeMember<ScrollableArea> m_scrollableArea;
     ScrollbarOrientation m_orientation;
     ScrollbarControlSize m_controlSize;
-    ScrollbarTheme* m_theme;
+    ScrollbarTheme& m_theme;
 
     int m_visibleSize;
     int m_totalSize;
@@ -197,8 +197,6 @@ protected:
     Timer<Scrollbar> m_scrollTimer;
     bool m_overlapsResizer;
 
-    bool m_isAlphaLocked;
-
     float m_elasticOverscroll;
 
 private:
@@ -208,6 +206,9 @@ private:
     void invalidateRect(const IntRect&) override { setNeedsPaintInvalidation(); }
 
     float scrollableAreaCurrentPos() const;
+
+    void updateThumbPosition();
+    void updateThumbProportion();
 
     bool m_trackNeedsRepaint;
     bool m_thumbNeedsRepaint;

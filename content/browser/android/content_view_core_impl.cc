@@ -4,12 +4,15 @@
 
 #include "content/browser/android/content_view_core_impl.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -211,15 +214,15 @@ ContentViewCoreImpl::ContentViewCoreImpl(
       web_contents_(static_cast<WebContentsImpl*>(web_contents)),
       root_layer_(cc::SolidColorLayer::Create(Compositor::LayerSettings())),
       page_scale_(1),
-      view_android_(new ui::ViewAndroid(view_android_delegate, window_android)),
-      dpi_scale_(ui::GetScaleFactorForNativeView(view_android_.get())),
+      dpi_scale_(ui::GetScaleFactorForNativeView(this)),
       window_android_(window_android),
       device_orientation_(0),
       accessibility_enabled_(false) {
   CHECK(web_contents) <<
       "A ContentViewCoreImpl should be created with a valid WebContents.";
   DCHECK(window_android_);
-
+  DCHECK(view_android_delegate);
+  view_android_delegate_.Reset(AttachCurrentThread(), view_android_delegate);
   root_layer_->SetBackgroundColor(GetBackgroundColor(env, obj));
   gfx::Size physical_size(
       Java_ContentViewCore_getPhysicalBackingWidthPix(env, obj),
@@ -610,18 +613,18 @@ void ContentViewCoreImpl::OnSelectionEvent(ui::SelectionEventType event,
       selection_rect_pix.right(), selection_rect_pix.bottom());
 }
 
-void ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
+bool ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
   RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   if (!view)
-    return;
+    return false;
 
   view->OnShowingPastePopup(gfx::PointF(x_dip, y_dip));
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
-    return;
-  Java_ContentViewCore_showPastePopupWithFeedback(
+    return false;
+  return Java_ContentViewCore_showPastePopupWithFeedback(
       env, obj.obj(), static_cast<jint>(x_dip * dpi_scale()),
       static_cast<jint>(y_dip * dpi_scale()));
 }
@@ -798,8 +801,9 @@ void ContentViewCoreImpl::SelectBetweenCoordinates(const gfx::PointF& base,
   web_contents_->SelectRange(base_point, extent_point);
 }
 
-ui::ViewAndroid* ContentViewCoreImpl::GetViewAndroid() const {
-  return view_android_.get();
+ScopedJavaLocalRef<jobject> ContentViewCoreImpl::GetViewAndroidDelegate()
+    const {
+  return base::android::ScopedJavaLocalRef<jobject>(view_android_delegate_);
 }
 
 ui::WindowAndroid* ContentViewCoreImpl::GetWindowAndroid() const {
@@ -983,8 +987,10 @@ jboolean ContentViewCoreImpl::SendMouseWheelEvent(
   return true;
 }
 
-WebGestureEvent ContentViewCoreImpl::MakeGestureEvent(
-    WebInputEvent::Type type, int64 time_ms, float x, float y) const {
+WebGestureEvent ContentViewCoreImpl::MakeGestureEvent(WebInputEvent::Type type,
+                                                      int64_t time_ms,
+                                                      float x,
+                                                      float y) const {
   return WebGestureEventBuilder::Build(
       type, time_ms / 1000.0, x / dpi_scale(), y / dpi_scale());
 }
@@ -1357,7 +1363,7 @@ void ContentViewCoreImpl::SetAccessibilityEnabledInternal(bool enabled) {
 void ContentViewCoreImpl::SendOrientationChangeEventInternal() {
   RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
   if (rwhv)
-    rwhv->UpdateScreenInfo(GetViewAndroid());
+    rwhv->UpdateScreenInfo(this);
 
   static_cast<WebContentsImpl*>(web_contents())->
       screen_orientation_dispatcher_host()->OnOrientationChange();

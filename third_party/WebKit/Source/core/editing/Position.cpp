@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/Position.h"
 
 #include "core/dom/shadow/ElementShadow.h"
@@ -393,7 +392,7 @@ PositionInComposedTree toPositionInComposedTree(const Position& pos)
         Node* anchor = pos.anchorNode();
         if (anchor->offsetInCharacters())
             return PositionInComposedTree(anchor, pos.computeOffsetInContainerNode());
-        ASSERT(!isActiveInsertionPoint(*anchor));
+        ASSERT(!anchor->isSlotOrActiveInsertionPoint());
         int offset = pos.computeOffsetInContainerNode();
         Node* child = NodeTraversal::childAt(*anchor, offset);
         if (!child) {
@@ -402,7 +401,7 @@ PositionInComposedTree toPositionInComposedTree(const Position& pos)
             return PositionInComposedTree(anchor, PositionAnchorType::AfterChildren);
         }
         child->updateDistribution();
-        if (isActiveInsertionPoint(*child)) {
+        if (child->isSlotOrActiveInsertionPoint()) {
             if (anchor->isShadowRoot())
                 return PositionInComposedTree(anchor->shadowHost(), offset);
             return PositionInComposedTree(anchor, offset);

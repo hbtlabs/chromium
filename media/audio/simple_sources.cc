@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 // MSVC++ requires this to be set before any other includes to get M_PI.
 #define _USE_MATH_DEFINES
-#include <cmath>
 
 #include "media/audio/simple_sources.h"
 
+#include <stddef.h>
+
 #include <algorithm>
+#include <cmath>
 
 #include "base/files/file.h"
 #include "base/lazy_instance.h"
@@ -110,7 +112,8 @@ SineWaveAudioSource::~SineWaveAudioSource() {
 // The implementation could be more efficient if a lookup table is constructed
 // but it is efficient enough for our simple needs.
 int SineWaveAudioSource::OnMoreData(AudioBus* audio_bus,
-                                    uint32 total_bytes_delay) {
+                                    uint32_t total_bytes_delay,
+                                    uint32_t frames_skipped) {
   base::AutoLock auto_lock(time_lock_);
   callbacks_++;
 
@@ -193,7 +196,9 @@ void FileSource::LoadWavFile(const base::FilePath& path_to_wav_file) {
   file_audio_converter_->AddInput(this);
 }
 
-int FileSource::OnMoreData(AudioBus* audio_bus, uint32 total_bytes_delay) {
+int FileSource::OnMoreData(AudioBus* audio_bus,
+                           uint32_t total_bytes_delay,
+                           uint32_t frames_skipped) {
   // Load the file if we haven't already. This load needs to happen on the
   // audio thread, otherwise we'll run on the UI thread on Mac for instance.
   // This will massively delay the first OnMoreData, but we'll catch up.
@@ -228,7 +233,7 @@ void FileSource::OnError(AudioOutputStream* stream) {
 
 BeepingSource::BeepingSource(const AudioParameters& params)
     : buffer_size_(params.GetBytesPerBuffer()),
-      buffer_(new uint8[buffer_size_]),
+      buffer_(new uint8_t[buffer_size_]),
       params_(params),
       last_callback_time_(base::TimeTicks::Now()),
       beep_duration_in_buffers_(kBeepDurationMilliseconds *
@@ -236,13 +241,14 @@ BeepingSource::BeepingSource(const AudioParameters& params)
                                 params.frames_per_buffer() /
                                 1000),
       beep_generated_in_buffers_(0),
-      beep_period_in_frames_(params.sample_rate() / kBeepFrequency) {
-}
+      beep_period_in_frames_(params.sample_rate() / kBeepFrequency) {}
 
 BeepingSource::~BeepingSource() {
 }
 
-int BeepingSource::OnMoreData(AudioBus* audio_bus, uint32 total_bytes_delay) {
+int BeepingSource::OnMoreData(AudioBus* audio_bus,
+                              uint32_t total_bytes_delay,
+                              uint32_t frames_skipped) {
   // Accumulate the time from the last beep.
   interval_from_last_beep_ += base::TimeTicks::Now() - last_callback_time_;
 

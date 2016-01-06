@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "net/base/expiring_cache.h"
@@ -181,6 +182,20 @@ class NET_EXPORT TransportSecurityState
     std::map<std::string, PKPState>::const_iterator end_;
   };
 
+  // An ExpectCTState describes a site that expects valid Certificate
+  // Transparency information to be supplied on every connection to it.
+  class NET_EXPORT ExpectCTState {
+   public:
+    ExpectCTState();
+    ~ExpectCTState();
+
+    // The domain which matched during a search for this DomainState entry.
+    std::string domain;
+    // The URI to which reports should be sent if valid CT info is not
+    // provided.
+    GURL report_uri;
+  };
+
   // An interface for asynchronously sending HPKP violation reports.
   class NET_EXPORT ReportSender {
    public:
@@ -266,6 +281,11 @@ class NET_EXPORT TransportSecurityState
   bool GetStaticDomainState(const std::string& host,
                             STSState* sts_result,
                             PKPState* pkp_result) const;
+
+  // Returns true and updates |*expect_ct_result| iff there is a static
+  // (built-in) state for |host| with expect_ct=true.
+  bool GetStaticExpectCTState(const std::string& host,
+                              ExpectCTState* expect_ct_result) const;
 
   // Returns true and updates |*result| iff |host| has HSTS (respectively, HPKP)
   // state. If multiple HSTS (respectively, HPKP) entries match |host|,  the
@@ -401,6 +421,9 @@ class NET_EXPORT TransportSecurityState
 
   // True if static pins should be used.
   bool enable_static_pins_;
+
+  // True if static expect-CT state should be used.
+  bool enable_static_expect_ct_;
 
   // Keeps track of reports that have been sent recently for
   // rate-limiting.

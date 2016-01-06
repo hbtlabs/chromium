@@ -2,8 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
@@ -232,7 +237,7 @@ class FakeEncryptedMedia {
                            bool has_additional_usable_key,
                            CdmKeysInfo keys_info) {
     app_->OnSessionKeysChange(session_id, has_additional_usable_key,
-                              keys_info.Pass());
+                              std::move(keys_info));
   }
 
   void OnLegacySessionError(const std::string& session_id,
@@ -296,7 +301,7 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
             &KeyProvidingApp::OnResolve, base::Unretained(this), expected),
         base::Bind(
             &KeyProvidingApp::OnReject, base::Unretained(this), expected)));
-    return promise.Pass();
+    return promise;
   }
 
   scoped_ptr<NewSessionCdmPromise> CreateSessionPromise(
@@ -308,7 +313,7 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
                        expected),
             base::Bind(
                 &KeyProvidingApp::OnReject, base::Unretained(this), expected)));
-    return promise.Pass();
+    return promise;
   }
 
   void OnSessionMessage(const std::string& session_id,
@@ -488,7 +493,7 @@ class MockMediaSource {
 
   virtual ~MockMediaSource() {}
 
-  scoped_ptr<Demuxer> GetDemuxer() { return owned_chunk_demuxer_.Pass(); }
+  scoped_ptr<Demuxer> GetDemuxer() { return std::move(owned_chunk_demuxer_); }
 
   void set_encrypted_media_init_data_cb(
       const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
@@ -649,7 +654,7 @@ class PipelineIntegrationTestHost : public mojo::test::ApplicationTestBase,
     media_service_factory_->CreateRenderer(mojo::GetProxy(&mojo_renderer));
 
     return make_scoped_ptr(new MojoRendererImpl(message_loop_.task_runner(),
-                                                mojo_renderer.Pass()));
+                                                std::move(mojo_renderer)));
   }
 
  private:
@@ -675,7 +680,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     // Encrypted content not used, so this is never called.
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
 
-    demuxer_ = source->GetDemuxer().Pass();
+    demuxer_ = source->GetDemuxer();
     pipeline_->Start(
         demuxer_.get(), CreateRenderer(),
         base::Bind(&PipelineIntegrationTest::OnEnded, base::Unretained(this)),
@@ -722,7 +727,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     // never called.
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
 
-    demuxer_ = source->GetDemuxer().Pass();
+    demuxer_ = source->GetDemuxer();
 
     pipeline_->SetCdm(encrypted_media->GetCdmContext(),
                       base::Bind(&PipelineIntegrationTest::DecryptorAttached,
@@ -1252,7 +1257,7 @@ TEST_P(Mp3FastSeekIntegrationTest, FastSeekAccuracy_MP3) {
   //
   // Quick TOC design (not pretty!):
   // - All MP3 TOCs are 100 bytes
-  // - Each byte is read as a uint8; value between 0 - 255.
+  // - Each byte is read as a uint8_t; value between 0 - 255.
   // - The index into this array is the numerator in the ratio: index / 100.
   //   This fraction represents a playback time as a percentage of duration.
   // - The value at the given index is the numerator in the ratio: value / 256.
@@ -1707,6 +1712,38 @@ TEST_F(PipelineIntegrationTest, SeekWhilePlaying) {
 
   // Make sure seeking after reaching the end works as expected.
   ASSERT_TRUE(Seek(seek_time));
+  EXPECT_GE(pipeline_->GetMediaTime(), seek_time);
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest, SuspendWhilePaused) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm"));
+
+  base::TimeDelta duration(pipeline_->GetMediaDuration());
+  base::TimeDelta start_seek_time(duration / 4);
+  base::TimeDelta seek_time(duration * 3 / 4);
+
+  Play();
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(start_seek_time));
+  Pause();
+  ASSERT_TRUE(Suspend());
+  ASSERT_TRUE(Resume(seek_time));
+  EXPECT_GE(pipeline_->GetMediaTime(), seek_time);
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest, SuspendWhilePlaying) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm"));
+
+  base::TimeDelta duration(pipeline_->GetMediaDuration());
+  base::TimeDelta start_seek_time(duration / 4);
+  base::TimeDelta seek_time(duration * 3 / 4);
+
+  Play();
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(start_seek_time));
+  ASSERT_TRUE(Suspend());
+  ASSERT_TRUE(Resume(seek_time));
   EXPECT_GE(pipeline_->GetMediaTime(), seek_time);
   ASSERT_TRUE(WaitUntilOnEnded());
 }

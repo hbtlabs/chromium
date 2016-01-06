@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
@@ -198,7 +199,7 @@ class CastExtensionSession : public HostExtensionSession,
   rtc::scoped_refptr<CastCreateSessionDescriptionObserver>
       create_session_desc_observer_;
 
-  // Parameters passed to ChromiumPortAllocatorFactory on creation.
+  // Parameters passed to ChromiumPortAllocator on creation.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
   const protocol::NetworkSettings& network_settings_;
 

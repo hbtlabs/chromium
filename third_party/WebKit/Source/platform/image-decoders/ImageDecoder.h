@@ -255,7 +255,7 @@ public:
 
     static qcms_profile* qcmsOutputDeviceProfile()
     {
-        AtomicallyInitializedStaticReference(OutputDeviceProfile, outputDeviceProfile, new OutputDeviceProfile);
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(OutputDeviceProfile, outputDeviceProfile, new OutputDeviceProfile);
 
         return outputDeviceProfile.profile();
     }

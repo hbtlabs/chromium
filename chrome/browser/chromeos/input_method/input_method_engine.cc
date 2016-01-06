@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/input_method/input_method_engine.h"
 
+#include <utility>
+
 #undef FocusIn
 #undef FocusOut
 #undef RootWindow
@@ -48,7 +50,7 @@ const char kCandidateNotFound[] = "Candidate not found";
 
 // Notifies InputContextHandler that the composition is changed.
 void UpdateComposition(const ui::CompositionText& composition_text,
-                       uint32 cursor_pos,
+                       uint32_t cursor_pos,
                        bool is_visible) {
   ui::IMEInputContextHandlerInterface* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
@@ -120,7 +122,7 @@ std::string GetKeyFromEvent(const ui::KeyEvent& event) {
     default:
       break;
   }
-  uint16 ch = 0;
+  uint16_t ch = 0;
   // Ctrl+? cases, gets key value for Ctrl is not down.
   if (event.flags() & ui::EF_CONTROL_DOWN) {
     ui::KeyEvent event_no_ctrl(event.type(), event.key_code(),
@@ -173,7 +175,7 @@ void InputMethodEngine::Initialize(scoped_ptr<ui::IMEEngineObserver> observer,
   DCHECK(observer) << "Observer must not be null.";
 
   // TODO(komatsu): It is probably better to set observer out of Initialize.
-  observer_ = observer.Pass();
+  observer_ = std::move(observer);
   extension_id_ = extension_id;
   profile_ = profile;
 }
@@ -599,7 +601,7 @@ void InputMethodEngine::ProcessKeyEvent(const ui::KeyEvent& key_event,
   observer_->OnKeyEvent(active_component_id_, ext_event, callback);
 }
 
-void InputMethodEngine::CandidateClicked(uint32 index) {
+void InputMethodEngine::CandidateClicked(uint32_t index) {
   if (!CheckProfile())
     return;
   if (index > candidate_ids_.size()) {
@@ -612,9 +614,9 @@ void InputMethodEngine::CandidateClicked(uint32 index) {
 }
 
 void InputMethodEngine::SetSurroundingText(const std::string& text,
-                                           uint32 cursor_pos,
-                                           uint32 anchor_pos,
-                                           uint32 offset_pos) {
+                                           uint32_t cursor_pos,
+                                           uint32_t anchor_pos,
+                                           uint32_t offset_pos) {
   if (!CheckProfile())
     return;
   observer_->OnSurroundingTextChanged(

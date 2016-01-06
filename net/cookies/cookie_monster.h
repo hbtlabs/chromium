@@ -7,6 +7,9 @@
 #ifndef NET_COOKIES_COOKIE_MONSTER_H_
 #define NET_COOKIES_COOKIE_MONSTER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <map>
 #include <queue>
@@ -15,9 +18,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -364,9 +367,14 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // For CookieSource histogram enum.
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest, CookieSourceHistogram);
 
-  // For kSafeFromGlobalPurgeDays in CookieStore
-  FRIEND_TEST_ALL_PREFIXES(CookieMonsterSecureCookiesRequireSecureSchemeTest,
-                           EvictSecureCookies);
+  // For kSafeFromGlobalPurgeDays in CookieStore.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest, EvictSecureCookies);
+
+  // For CookieDeleteEquivalent histogram enum.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
+                           CookieDeleteEquivalentHistogramTest);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterStrictSecureTest,
+                           CookieDeleteEquivalentHistogramTest);
 
   // Internal reasons for deletion, used to populate informative histograms
   // and to provide a public cause for onCookieChange notifications.
@@ -440,6 +448,25 @@ class NET_EXPORT CookieMonster : public CookieStore {
     COOKIE_SOURCE_NONSECURE_COOKIE_CRYPTOGRAPHIC_SCHEME,
     COOKIE_SOURCE_NONSECURE_COOKIE_NONCRYPTOGRAPHIC_SCHEME,
     COOKIE_SOURCE_LAST_ENTRY
+  };
+
+  // Used to populate a histogram for cookie setting in the "delete equivalent"
+  // step. Measures total attempts to delete an equivalent cookie as well as if
+  // a cookie is found to delete, if a cookie is skipped because it is secure,
+  // and if it is skipped for being secure but would have been deleted
+  // otherwise. The last two are only possible if strict secure cookies is
+  // turned on and if an insecure origin attempts to a set a cookie where a
+  // cookie with the same name and secure attribute already exists.
+  //
+  // Enum for UMA. Do no reorder or remove entries. New entries must be place
+  // directly before COOKIE_DELETE_EQUIVALENT_LAST_ENTRY and histograms.xml must
+  // be updated accordingly.
+  enum CookieDeleteEquivalent {
+    COOKIE_DELETE_EQUIVALENT_ATTEMPT = 0,
+    COOKIE_DELETE_EQUIVALENT_FOUND,
+    COOKIE_DELETE_EQUIVALENT_SKIPPING_SECURE,
+    COOKIE_DELETE_EQUIVALENT_WOULD_HAVE_DELETED,
+    COOKIE_DELETE_EQUIVALENT_LAST_ENTRY
   };
 
   // The strategy for fetching cookies. Controlled by Finch experiment.
@@ -712,6 +739,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   base::HistogramBase* histogram_cookie_deletion_cause_;
   base::HistogramBase* histogram_cookie_type_;
   base::HistogramBase* histogram_cookie_source_scheme_;
+  base::HistogramBase* histogram_cookie_delete_equivalent_;
   base::HistogramBase* histogram_time_blocked_on_load_;
 
   CookieMap cookies_;
@@ -762,7 +790,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // avoid ever letting cookies with duplicate creation times into the store;
   // that way we don't have to worry about what sections of code are safe
   // to call while it's in that state.
-  std::set<int64> creation_times_;
+  std::set<int64_t> creation_times_;
 
   std::vector<std::string> cookieable_schemes_;
 

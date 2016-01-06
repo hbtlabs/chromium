@@ -4,6 +4,9 @@
 
 #include "mojo/public/cpp/bindings/lib/router.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "mojo/public/cpp/environment/logging.h"
 
 namespace mojo {
@@ -77,8 +80,10 @@ Router::Router(ScopedMessagePipeHandle message_pipe,
                FilterChain filters,
                const MojoAsyncWaiter* waiter)
     : thunk_(this),
-      filters_(filters.Pass()),
-      connector_(message_pipe.Pass(), Connector::SINGLE_THREADED_SEND, waiter),
+      filters_(std::move(filters)),
+      connector_(std::move(message_pipe),
+                 Connector::SINGLE_THREADED_SEND,
+                 waiter),
       weak_self_(this),
       incoming_receiver_(nullptr),
       next_request_id_(0),

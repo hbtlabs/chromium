@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/frame/RemoteDOMWindow.h"
 
 #include "bindings/core/v8/SerializedScriptValue.h"
@@ -208,11 +207,6 @@ DOMSelection* RemoteDOMWindow::getSelection()
 {
     ASSERT_NOT_REACHED();
     return 0;
-}
-
-void RemoteDOMWindow::focus(ExecutionContext* override)
-{
-    // FIXME: Implement.
 }
 
 void RemoteDOMWindow::blur()

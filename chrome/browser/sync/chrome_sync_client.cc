@@ -4,8 +4,12 @@
 
 #include "chrome/browser/sync/chrome_sync_client.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
@@ -182,6 +186,13 @@ ChromeSyncClient::~ChromeSyncClient() {
 
 void ChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  web_data_service_ = WebDataServiceFactory::GetAutofillWebDataForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS);
+  // TODO(crbug.com/558320) Is EXPLICIT_ACCESS appropriate here?
+  password_store_ = PasswordStoreFactory::GetForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS);
+
   // Component factory may already be set in tests.
   if (!GetSyncApiComponentFactory()) {
     const GURL sync_service_url = GetSyncServiceURL(
@@ -200,17 +211,14 @@ void ChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
             content::BrowserThread::UI),
         content::BrowserThread::GetMessageLoopProxyForThread(
             content::BrowserThread::DB),
-        token_service, url_request_context_getter));
+        token_service, url_request_context_getter, web_data_service_,
+        password_store_));
   }
   sync_service_ = sync_service;
-  web_data_service_ = GetWebDataService();
-  password_store_ = GetPasswordStore();
 }
 
 sync_driver::SyncService* ChromeSyncClient::GetSyncService() {
-  // TODO(zea): bring back this DCHECK after Typed URLs are converted to
-  // SyncableService.
-  // DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return sync_service_;
 }
 
@@ -241,13 +249,6 @@ autofill::PersonalDataManager* ChromeSyncClient::GetPersonalDataManager() {
   return autofill::PersonalDataManagerFactory::GetForProfile(profile_);
 }
 
-scoped_refptr<password_manager::PasswordStore>
-ChromeSyncClient::GetPasswordStore() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return PasswordStoreFactory::GetForProfile(
-      profile_, ServiceAccessType::EXPLICIT_ACCESS);
-}
-
 sync_driver::ClearBrowsingDataCallback
 ChromeSyncClient::GetClearBrowsingDataCallback() {
   return base::Bind(&ChromeSyncClient::ClearBrowsingData,
@@ -269,13 +270,6 @@ ChromeSyncClient::GetRegisterPlatformTypesCallback() {
       &ChromeSyncClient::RegisterDesktopDataTypes,
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
       weak_ptr_factory_.GetWeakPtr());
-}
-
-scoped_refptr<autofill::AutofillWebDataService>
-ChromeSyncClient::GetWebDataService() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return WebDataServiceFactory::GetAutofillWebDataForProfile(
-      profile_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
 BookmarkUndoService* ChromeSyncClient::GetBookmarkUndoServiceIfExists() {
@@ -361,6 +355,13 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       history::HistoryService* history = GetHistoryService();
       return history ? history->AsWeakPtr()
                      : base::WeakPtr<history::HistoryService>();
+    }
+    case syncer::TYPED_URLS: {
+      history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+          profile_, ServiceAccessType::EXPLICIT_ACCESS);
+      if (!history)
+        return base::WeakPtr<history::TypedUrlSyncableService>();
+      return history->GetTypedUrlSyncableService()->AsWeakPtr();
     }
 #if defined(ENABLE_SPELLCHECK)
     case syncer::DICTIONARY:
@@ -454,11 +455,9 @@ ChromeSyncClient::CreateModelWorkerForGroup(
           observer);
     }
     case syncer::GROUP_PASSWORD: {
-      scoped_refptr<password_manager::PasswordStore> password_store =
-          GetPasswordStore();
-      if (!password_store.get())
+      if (!password_store_.get())
         return nullptr;
-      return new PasswordModelWorker(password_store, observer);
+      return new PasswordModelWorker(password_store_, observer);
     }
     default:
       return nullptr;
@@ -491,7 +490,7 @@ void ChromeSyncClient::SetBrowsingDataRemoverObserverForTesting(
 
 void ChromeSyncClient::SetSyncApiComponentFactoryForTesting(
     scoped_ptr<sync_driver::SyncApiComponentFactory> component_factory) {
-  component_factory_ = component_factory.Pass();
+  component_factory_ = std::move(component_factory);
 }
 
 void ChromeSyncClient::RegisterDesktopDataTypes(

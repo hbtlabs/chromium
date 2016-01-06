@@ -5,9 +5,12 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_URL_REQUEST_JOB_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_URL_REQUEST_JOB_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -52,27 +55,51 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
       public StreamReadObserver,
       public StreamRegisterObserver {
  public:
-  // Callback that will be invoked before the request is restarted. The caller
-  // can use this opportunity to grab state from the ServiceWorkerURLRequestJob
-  // to determine how it should behave when the request is restarted.
-  using OnPrepareToRestartCallback =
-      base::Callback<void(base::TimeTicks service_worker_start_time,
-                          base::TimeTicks service_worker_ready_time)>;
+  class CONTENT_EXPORT Delegate {
+   public:
+    virtual ~Delegate() {}
 
-  // Called when the request has finished starting.
-  // Unlike URLRequestJob::NotifyComplete, called both on success and failure.
-  using OnStartCompletedCallback = base::Callback<void(
-      bool was_fetched_via_service_worker,
-      bool was_fallback_required,
-      const GURL& original_url_via_service_worker,
-      blink::WebServiceWorkerResponseType response_type_via_service_worker,
-      base::TimeTicks worker_start_time,
-      base::TimeTicks service_worker_ready_time)>;
+    // Will be invoked before the request is restarted. The caller
+    // can use this opportunity to grab state from the
+    // ServiceWorkerURLRequestJob to determine how it should behave when the
+    // request is restarted.
+    virtual void OnPrepareToRestart(
+        base::TimeTicks service_worker_start_time,
+        base::TimeTicks service_worker_ready_time) = 0;
+
+    // Called when the request has finished starting.
+    // Unlike URLRequestJob::NotifyComplete, called both on success and failure.
+    virtual void OnStartCompleted(
+        bool was_fetched_via_service_worker,
+        bool was_fallback_required,
+        const GURL& original_url_via_service_worker,
+        blink::WebServiceWorkerResponseType response_type_via_service_worker,
+        base::TimeTicks worker_start_time,
+        base::TimeTicks service_worker_ready_time) = 0;
+
+    // Returns the ServiceWorkerVersion fetch events for this request job should
+    // be dispatched to. If no appropriate worker can be determined, returns
+    // nullptr and sets |*result| to an appropriate error.
+    virtual ServiceWorkerVersion* GetServiceWorkerVersion(
+        ServiceWorkerMetrics::URLRequestJobResult* result) = 0;
+
+    // Called after dispatching the fetch event to determine if processing of
+    // the request should still continue, or if processing should be aborted.
+    // When false is returned, this sets |*result| to an appropriate error.
+    virtual bool RequestStillValid(
+        ServiceWorkerMetrics::URLRequestJobResult* result);
+
+    // Called to signal that loading failed, and that the resource being loaded
+    // was a main resource.
+    virtual void MainResourceLoadFailed() {}
+
+    // Returns the origin of the page/context which initiated this request.
+    virtual GURL GetRequestingOrigin() = 0;
+  };
 
   ServiceWorkerURLRequestJob(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate,
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
       const ResourceContext* resource_context,
       FetchRequestMode request_mode,
@@ -82,8 +109,9 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
       scoped_refptr<ResourceRequestBody> body,
-      const OnPrepareToRestartCallback& on_prepare_to_restart_callback,
-      const OnStartCompletedCallback& on_start_completed_callback);
+      Delegate* delegate);
+
+  ~ServiceWorkerURLRequestJob() override;
 
   // Sets the response type.
   void FallbackToNetwork();
@@ -133,9 +161,6 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   base::WeakPtr<ServiceWorkerURLRequestJob> GetWeakPtr();
 
- protected:
-  ~ServiceWorkerURLRequestJob() override;
-
  private:
   enum ResponseType {
     NOT_DETERMINED,
@@ -160,7 +185,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   // Creates BlobDataHandle of the request body from |body_|. This handle
   // |request_body_blob_data_handle_| will be deleted when
   // ServiceWorkerURLRequestJob is deleted.
-  bool CreateRequestBodyBlob(std::string* blob_uuid, uint64* blob_size);
+  bool CreateRequestBodyBlob(std::string* blob_uuid, uint64_t* blob_size);
 
   // For FORWARD_TO_SERVICE_WORKER case.
   void DidPrepareFetchEvent();
@@ -202,7 +227,8 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   // calls it.
   void OnStartCompleted() const;
 
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
+  // Not owned.
+  Delegate* delegate_;
 
   // Timing info to show on the popup in Devtools' Network tab.
   net::LoadTimingInfo load_timing_info_;
@@ -246,9 +272,6 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
 
   ResponseBodyType response_body_type_ = UNKNOWN;
   bool did_record_result_ = false;
-
-  const OnPrepareToRestartCallback on_prepare_to_restart_callback_;
-  const OnStartCompletedCallback on_start_completed_callback_;
 
   base::WeakPtrFactory<ServiceWorkerURLRequestJob> weak_factory_;
 

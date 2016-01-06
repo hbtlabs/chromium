@@ -7,9 +7,12 @@
 
 #include "components/omnibox/browser/omnibox_view.h"
 
+#include <utility>
+
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
@@ -175,8 +178,7 @@ OmniboxView::OmniboxView(OmniboxEditController* controller,
     : controller_(controller) {
   // |client| can be null in tests.
   if (client) {
-    model_.reset(
-        new OmniboxEditModel(this, controller, client.Pass()));
+    model_.reset(new OmniboxEditModel(this, controller, std::move(client)));
   }
 }
 

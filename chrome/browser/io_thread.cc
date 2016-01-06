@@ -4,6 +4,7 @@
 
 #include "chrome/browser/io_thread.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/base64.h"
@@ -15,6 +16,7 @@
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -54,6 +56,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "net/base/external_estimate_provider.h"
@@ -249,13 +252,13 @@ scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
   // rules on top of the real host resolver. This allows forwarding all requests
   // through a designated test server.
   if (!command_line.HasSwitch(switches::kHostResolverRules))
-    return global_host_resolver.Pass();
+    return global_host_resolver;
 
   scoped_ptr<net::MappedHostResolver> remapped_resolver(
-      new net::MappedHostResolver(global_host_resolver.Pass()));
+      new net::MappedHostResolver(std::move(global_host_resolver)));
   remapped_resolver->SetRulesFromString(
       command_line.GetSwitchValueASCII(switches::kHostResolverRules));
-  return remapped_resolver.Pass();
+  return std::move(remapped_resolver);
 }
 
 int GetSwitchValueAsInt(const base::CommandLine& command_line,
@@ -643,7 +646,7 @@ void IOThread::Init() {
   globals_->data_use_aggregator.reset(new data_usage::DataUseAggregator(
       scoped_ptr<data_usage::DataUseAnnotator>(
           new chrome_browser_data_usage::TabIdAnnotator()),
-      data_use_amortizer.Pass()));
+      std::move(data_use_amortizer)));
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.
@@ -671,7 +674,7 @@ void IOThread::Init() {
   tracked_objects::ScopedTracker tracking_profile4(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "466432 IOThread::InitAsync::CreateGlobalHostResolver"));
-  globals_->system_network_delegate = chrome_network_delegate.Pass();
+  globals_->system_network_delegate = std::move(chrome_network_delegate);
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 
   std::map<std::string, std::string> network_quality_estimator_params;
@@ -685,7 +688,7 @@ void IOThread::Init() {
 #endif
   // Pass ownership.
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
-      external_estimate_provider.Pass(), network_quality_estimator_params));
+      std::move(external_estimate_provider), network_quality_estimator_params));
 
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.
@@ -842,6 +845,8 @@ void IOThread::Init() {
           switches::kEnableUserAlternateProtocolPorts)) {
     globals_->enable_user_alternate_protocol_ports = true;
   }
+  globals_->enable_brotli.set(
+      base::FeatureList::IsEnabled(features::kBrotliEncoding));
   // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466432
   // is fixed.
   tracked_objects::ScopedTracker tracking_profile13(
@@ -1088,8 +1093,7 @@ void IOThread::CreateDefaultAuthHandlerFactory() {
 #endif
   globals_->http_auth_handler_factory =
       net::HttpAuthHandlerRegistryFactory::Create(
-          globals_->http_auth_preferences.get(), globals_->host_resolver.get())
-          .Pass();
+          globals_->http_auth_preferences.get(), globals_->host_resolver.get());
 }
 
 void IOThread::ClearHostCache() {
@@ -1137,6 +1141,8 @@ void IOThread::InitializeNetworkSessionParamsFromGlobals(
 
   globals.enable_npn.CopyToIfSet(&params->enable_npn);
 
+  globals.enable_brotli.CopyToIfSet(&params->enable_brotli);
+
   globals.enable_quic.CopyToIfSet(&params->enable_quic);
   globals.enable_quic_for_proxies.CopyToIfSet(&params->enable_quic_for_proxies);
   globals.quic_always_require_handshake_confirmation.CopyToIfSet(
@@ -1170,6 +1176,8 @@ void IOThread::InitializeNetworkSessionParamsFromGlobals(
       &params->quic_close_sessions_on_ip_change);
   globals.quic_idle_connection_timeout_seconds.CopyToIfSet(
       &params->quic_idle_connection_timeout_seconds);
+  globals.quic_disable_preconnect_if_0rtt.CopyToIfSet(
+      &params->quic_disable_preconnect_if_0rtt);
 
   globals.origin_to_force_quic_on.CopyToIfSet(
       &params->origin_to_force_quic_on);
@@ -1222,7 +1230,7 @@ void IOThread::InitSystemRequestContextOnIOThread() {
   globals_->system_proxy_service = ProxyServiceFactory::CreateProxyService(
       net_log_, globals_->proxy_script_fetcher_context.get(),
       globals_->system_network_delegate.get(),
-      system_proxy_config_service_.Pass(), command_line,
+      std::move(system_proxy_config_service_), command_line,
       quick_check_enabled_.GetValue());
 
   globals_->system_request_context.reset(
@@ -1307,6 +1315,8 @@ void IOThread::ConfigureQuicGlobals(
       globals->quic_idle_connection_timeout_seconds.set(
           idle_connection_timeout_seconds);
     }
+    globals->quic_disable_preconnect_if_0rtt.set(
+        ShouldQuicDisablePreConnectIfZeroRtt(quic_trial_params));
   }
 
   size_t max_packet_length = GetQuicMaxPacketLength(command_line,
@@ -1559,6 +1569,13 @@ int IOThread::GetQuicIdleConnectionTimeoutSeconds(
   return 0;
 }
 
+bool IOThread::ShouldQuicDisablePreConnectIfZeroRtt(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "disable_preconnect_if_0rtt"),
+      "true");
+}
+
 size_t IOThread::GetQuicMaxPacketLength(
     const base::CommandLine& command_line,
     const VariationParameters& quic_trial_params) {
@@ -1727,7 +1744,8 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
       make_scoped_ptr(new net::FtpProtocolHandler(
           globals->proxy_script_fetcher_ftp_transaction_factory.get())));
 #endif
-  globals->proxy_script_fetcher_url_request_job_factory = job_factory.Pass();
+  globals->proxy_script_fetcher_url_request_job_factory =
+      std::move(job_factory);
 
   context->set_job_factory(
       globals->proxy_script_fetcher_url_request_job_factory.get());

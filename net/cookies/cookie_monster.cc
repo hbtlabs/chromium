@@ -48,11 +48,11 @@
 #include <functional>
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
@@ -1164,8 +1164,6 @@ bool CookieMonster::SetCookieWithDetails(const GURL& url,
   CookieOptions options;
   options.set_include_httponly();
   options.set_include_first_party_only();
-  if (enforce_prefixes)
-    options.set_enforce_prefixes();
   if (enforce_strict_secure)
     options.set_enforce_strict_secure();
   return SetCanonicalCookie(&cc, creation_time, options);
@@ -1575,7 +1573,7 @@ void CookieMonster::StoreLoadedCookies(
 
   for (std::vector<CanonicalCookie*>::const_iterator it = cookies.begin();
        it != cookies.end(); ++it) {
-    int64 cookie_creation_time = (*it)->CreationDate().ToInternalValue();
+    int64_t cookie_creation_time = (*it)->CreationDate().ToInternalValue();
 
     if (creation_times_.insert(cookie_creation_time).second) {
       CookieMap::iterator inserted =
@@ -1811,6 +1809,9 @@ bool CookieMonster::DeleteAnyEquivalentCookie(const std::string& key,
   bool found_equivalent_cookie = false;
   bool skipped_httponly = false;
   bool skipped_secure_cookie = false;
+
+  histogram_cookie_delete_equivalent_->Add(COOKIE_DELETE_EQUIVALENT_ATTEMPT);
+
   for (CookieMapItPair its = cookies_.equal_range(key);
        its.first != its.second;) {
     CookieMap::iterator curit = its.first;
@@ -1827,10 +1828,19 @@ bool CookieMonster::DeleteAnyEquivalentCookie(const std::string& key,
     if (enforce_strict_secure && !ecc.Source().SchemeIsCryptographic() &&
         ecc.IsEquivalentForSecureCookieMatching(*cc) && cc->IsSecure()) {
       skipped_secure_cookie = true;
-      // TODO(jww): We need to add metrics here before we add this as a Finch
-      // experiment, as our current Cookie.CookieSourceScheme and related
-      // metrics make very different assumptions from what this now means.
-      found_equivalent_cookie = true;
+      histogram_cookie_delete_equivalent_->Add(
+          COOKIE_DELETE_EQUIVALENT_SKIPPING_SECURE);
+      // If the cookie is equivalent to the new cookie and wouldn't have been
+      // skipped for being HTTP-only, record that it is a skipped secure cookie
+      // that would have been deleted otherwise.
+      if (ecc.IsEquivalent(*cc)) {
+        found_equivalent_cookie = true;
+
+        if (!skip_httponly || !cc->IsHttpOnly()) {
+          histogram_cookie_delete_equivalent_->Add(
+              COOKIE_DELETE_EQUIVALENT_WOULD_HAVE_DELETED);
+        }
+      }
     } else if (ecc.IsEquivalent(*cc)) {
       // We should never have more than one equivalent cookie, since they should
       // overwrite each other, unless secure cookies require secure scheme is
@@ -1841,6 +1851,8 @@ bool CookieMonster::DeleteAnyEquivalentCookie(const std::string& key,
       if (skip_httponly && cc->IsHttpOnly()) {
         skipped_httponly = true;
       } else {
+        histogram_cookie_delete_equivalent_->Add(
+            COOKIE_DELETE_EQUIVALENT_FOUND);
         InternalDeleteCookie(curit, true, already_expired
                                               ? DELETE_COOKIE_EXPIRED_OVERWRITE
                                               : DELETE_COOKIE_OVERWRITE);
@@ -2385,6 +2397,11 @@ void CookieMonster::InitializeHistograms() {
   histogram_cookie_source_scheme_ = base::LinearHistogram::FactoryGet(
       "Cookie.CookieSourceScheme", 1, COOKIE_SOURCE_LAST_ENTRY - 1,
       COOKIE_SOURCE_LAST_ENTRY, base::Histogram::kUmaTargetedHistogramFlag);
+  histogram_cookie_delete_equivalent_ = base::LinearHistogram::FactoryGet(
+      "Cookie.CookieDeleteEquivalent", 1,
+      COOKIE_DELETE_EQUIVALENT_LAST_ENTRY - 1,
+      COOKIE_DELETE_EQUIVALENT_LAST_ENTRY,
+      base::Histogram::kUmaTargetedHistogramFlag);
 
   // From UMA_HISTOGRAM_{CUSTOM_,}TIMES
   histogram_time_blocked_on_load_ = base::Histogram::FactoryTimeGet(

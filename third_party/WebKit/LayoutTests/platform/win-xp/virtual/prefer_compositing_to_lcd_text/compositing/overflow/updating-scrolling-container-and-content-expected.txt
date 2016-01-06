@@ -9,6 +9,7 @@
         {
           "position": [8, 108],
           "bounds": [200, 200],
+          "shouldFlattenTransform": false,
           "drawsContent": true,
           "repaintRects": [
             [0, 190, 74, 19],
@@ -25,13 +26,41 @@
             [0, -30, 74, 19],
             [0, -50, 74, 19]
           ],
+          "paintInvalidationClients": [
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'",
+            "LayoutText #text",
+            "InlineTextBox 'CONTENT'"
+          ],
           "children": [
             {
               "bounds": [185, 185],
+              "shouldFlattenTransform": false,
               "children": [
                 {
                   "bounds": [185, 260],
-                  "shouldFlattenTransform": false,
                   "drawsContent": true,
                   "repaintRects": [
                     [0, 240, 74, 19],

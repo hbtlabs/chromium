@@ -38,10 +38,9 @@ _TEST_DATA_DIR = os.path.join(chrome_paths.GetTestData(), 'chromedriver')
 
 if util.IsLinux():
   sys.path.insert(0, os.path.join(chrome_paths.GetSrc(), 'build', 'android'))
+  from devil.android import device_utils
+  from devil.android import forwarder
   from pylib import constants
-  from pylib import forwarder
-  from pylib import valgrind_tools
-  from pylib.device import device_utils
 
 
 _NEGATIVE_FILTER = [
@@ -54,16 +53,20 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testEmulateNetworkConditionsSpeed',
     # crbug.com/469947
     'ChromeDriverTest.testTouchPinch',
+    'ChromeDriverTest.testReturningAFunctionInJavascript',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1302
+    'ChromeDriverTest.testShadowDomStaleReference',
 ]
 _VERSION_SPECIFIC_FILTER['44'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=1202
     'ChromeDownloadDirTest.testFileDownloadWithGet',
+
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -166,6 +169,10 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverTest.testGetWindowHandles',
         'ChromeDriverTest.testSwitchToWindow',
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1295
+        # TODO(gmanikpure): re-enable this test when we stop supporting
+        # WebView on KitKat.
+        'ChromeDriverTest.testGetUrlOnInvalidUrl',
     ]
 )
 
@@ -1190,6 +1197,14 @@ class ChromeDriverTest(ChromeDriverBaseTest):
       else:
         self.fail('unexpected cookie: %s' % json.dumps(cookie))
 
+  def testGetUrlOnInvalidUrl(self):
+    # Make sure we don't return 'data:text/html,chromewebdata' (see
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272). RFC 6761
+    # requires domain registrars to keep 'invalid.' unregistered (see
+    # https://tools.ietf.org/html/rfc6761#section-6.4).
+    self._driver.Load('http://invalid./')
+    self.assertEquals('http://invalid./', self._driver.GetCurrentUrl())
+
 
 class ChromeDriverAndroidTest(ChromeDriverBaseTest):
   """End to end tests for Android-specific tests."""
@@ -1374,6 +1389,22 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTest):
     driver.SwitchToWindow(new_window_handle)
     body_element = driver.FindElement('tag name', 'body')
     self.assertEqual('It works!', body_element.GetText())
+
+  def testDontExecuteScriptsInContentScriptContext(self):
+    # This test extension has a content script which runs in all frames (see
+    # https://developer.chrome.com/extensions/content_scripts) which causes each
+    # frame on the page to be associated with multiple JS execution contexts.
+    # Make sure that ExecuteScript operates on the page's context, rather than
+    # the extension's content script's one.
+    extension_path = os.path.join(_TEST_DATA_DIR, 'all_frames')
+    driver = self.CreateDriver(
+        chrome_switches=['load-extension=%s' % extension_path])
+    driver.Load(
+        ChromeDriverTest._http_server.GetUrl() + '/chromedriver/container.html')
+    driver.SwitchToMainFrame()
+    self.assertEqual('one', driver.ExecuteScript("return window['global_var']"))
+    driver.SwitchToFrame('iframe')
+    self.assertEqual('two', driver.ExecuteScript("return window['iframe_var']"))
 
 
 class ChromeLogPathCapabilityTest(ChromeDriverBaseTest):

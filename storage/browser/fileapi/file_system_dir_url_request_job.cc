@@ -4,6 +4,8 @@
 
 #include "storage/browser/fileapi/file_system_dir_url_request_job.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -100,8 +102,8 @@ void FileSystemDirURLRequestJob::StartAsync() {
     return;
   }
   file_system_context_->operation_runner()->ReadDirectory(
-      url_,
-      base::Bind(&FileSystemDirURLRequestJob::DidReadDirectory, this));
+      url_, base::Bind(&FileSystemDirURLRequestJob::DidReadDirectory,
+                       weak_factory_.GetWeakPtr()));
 }
 
 void FileSystemDirURLRequestJob::DidAttemptAutoMount(base::File::Error result) {
@@ -159,7 +161,8 @@ void FileSystemDirURLRequestJob::GetMetadata(size_t index) {
   file_system_context_->operation_runner()->GetMetadata(
       url, FileSystemOperation::GET_METADATA_FIELD_SIZE |
                FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
-      base::Bind(&FileSystemDirURLRequestJob::DidGetMetadata, this, index));
+      base::Bind(&FileSystemDirURLRequestJob::DidGetMetadata,
+                 weak_factory_.GetWeakPtr(), index));
 }
 
 void FileSystemDirURLRequestJob::DidGetMetadata(

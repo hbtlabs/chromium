@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_ANDROID_TAB_ANDROID_H_
 
 #include <jni.h>
+#include <stdint.h>
 
 #include "base/android/jni_weak_ref.h"
 #include "base/callback_forward.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/search/instant_service_observer.h"
@@ -48,10 +50,6 @@ class WebContents;
 
 namespace infobars {
 class InfoBar;
-}
-
-namespace offline_pages {
-struct OfflinePageItem;
 }
 
 namespace prerender {
@@ -263,8 +261,6 @@ class TabAndroid : public CoreTabHelperDelegate,
   prerender::PrerenderManager* GetPrerenderManager() const;
 
   int64_t GetBookmarkIdHelper(bool only_editable) const;
-
-  const offline_pages::OfflinePageItem* GetOfflinePage(const GURL& url) const;
 
   JavaObjectWeakGlobalRef weak_java_tab_;
 

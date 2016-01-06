@@ -4,12 +4,13 @@
 
 #include "net/base/layered_network_delegate.h"
 
+#include <utility>
+
 namespace net {
 
 LayeredNetworkDelegate::LayeredNetworkDelegate(
     scoped_ptr<NetworkDelegate> nested_network_delegate)
-    : nested_network_delegate_(nested_network_delegate.Pass()) {
-}
+    : nested_network_delegate_(std::move(nested_network_delegate)) {}
 
 LayeredNetworkDelegate::~LayeredNetworkDelegate() {
 }
@@ -256,8 +257,15 @@ bool LayeredNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
   return nested_network_delegate_->AreExperimentalCookieFeaturesEnabled();
 }
 
+bool LayeredNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
+  OnAreStrictSecureCookiesEnabledInternal();
+  return nested_network_delegate_->AreStrictSecureCookiesEnabled();
+}
+
 void LayeredNetworkDelegate::OnAreExperimentalCookieFeaturesEnabledInternal()
     const {}
+
+void LayeredNetworkDelegate::OnAreStrictSecureCookiesEnabledInternal() const {}
 
 bool LayeredNetworkDelegate::
     OnCancelURLRequestWithPolicyViolatingReferrerHeader(

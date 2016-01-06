@@ -5,6 +5,7 @@
 #include "net/spdy/spdy_stream.h"
 
 #include <limits>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
@@ -33,7 +34,7 @@ scoped_ptr<base::Value> NetLogSpdyStreamErrorCallback(
   dict->SetInteger("stream_id", static_cast<int>(stream_id));
   dict->SetInteger("status", status);
   dict->SetString("description", *description);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 scoped_ptr<base::Value> NetLogSpdyStreamWindowUpdateCallback(
@@ -45,7 +46,7 @@ scoped_ptr<base::Value> NetLogSpdyStreamWindowUpdateCallback(
   dict->SetInteger("stream_id", stream_id);
   dict->SetInteger("delta", delta);
   dict->SetInteger("window_size", window_size);
-  return dict.Pass();
+  return std::move(dict);
 }
 
 bool ContainsUppercaseAscii(const std::string& str) {
@@ -186,7 +187,7 @@ void SpdyStream::PushedStreamReplay() {
     bool eof = (buffer == NULL);
 
     CHECK(delegate_);
-    delegate_->OnDataReceived(buffer.Pass());
+    delegate_->OnDataReceived(std::move(buffer));
 
     // OnDataReceived() may have closed |this|.
     if (!weak_this)
@@ -213,7 +214,7 @@ scoped_ptr<SpdyFrame> SpdyStream::ProduceSynStreamFrame() {
   scoped_ptr<SpdyFrame> frame(session_->CreateSynStream(
       stream_id_, priority_, flags, *request_headers_));
   send_time_ = base::TimeTicks::Now();
-  return frame.Pass();
+  return frame;
 }
 
 void SpdyStream::DetachDelegate() {
@@ -460,6 +461,12 @@ int SpdyStream::OnAdditionalResponseHeadersReceived(
     delegate_->OnTrailers(additional_response_headers);
     return OK;
   }
+  if (type_ == SPDY_BIDIRECTIONAL_STREAM) {
+    DCHECK_EQ(RESPONSE_HEADERS_ARE_COMPLETE, response_headers_status_);
+    response_headers_status_ = TRAILERS_RECEIVED;
+    delegate_->OnTrailers(additional_response_headers);
+    return OK;
+  }
   if (type_ == SPDY_PUSH_STREAM &&
       response_headers_status_ == RESPONSE_HEADERS_ARE_COMPLETE) {
     session_->ResetStream(
@@ -501,8 +508,10 @@ void SpdyStream::OnDataReceived(scoped_ptr<SpdyBuffer> buffer) {
   }
 
   if (response_headers_status_ == TRAILERS_RECEIVED && buffer) {
-    // TRAILERS_RECEIVED is only used in SPDY_REQUEST_RESPONSE_STREAM.
-    DCHECK_EQ(type_, SPDY_REQUEST_RESPONSE_STREAM);
+    // TRAILERS_RECEIVED is only used in SPDY_REQUEST_RESPONSE_STREAM and
+    // SPDY_BIDIRECTIONAL_STREAM.
+    DCHECK(type_ == SPDY_REQUEST_RESPONSE_STREAM ||
+           type_ == SPDY_BIDIRECTIONAL_STREAM);
     session_->ResetStream(stream_id_, RST_STREAM_PROTOCOL_ERROR,
                           "Data received after trailers");
     return;
@@ -549,7 +558,7 @@ void SpdyStream::OnDataReceived(scoped_ptr<SpdyBuffer> buffer) {
   recv_last_byte_time_ = base::TimeTicks::Now();
 
   // May close |this|.
-  delegate_->OnDataReceived(buffer.Pass());
+  delegate_->OnDataReceived(std::move(buffer));
 }
 
 void SpdyStream::OnPaddingConsumed(size_t len) {
@@ -700,7 +709,7 @@ int SpdyStream::SendRequestHeaders(scoped_ptr<SpdyHeaderBlock> request_headers,
   CHECK(!request_headers_);
   CHECK(!pending_send_data_.get());
   CHECK_EQ(io_state_, STATE_IDLE);
-  request_headers_ = request_headers.Pass();
+  request_headers_ = std::move(request_headers);
   pending_send_status_ = send_status;
   session_->EnqueueStreamWrite(
       GetWeakPtr(), SYN_STREAM,
@@ -874,7 +883,7 @@ void SpdyStream::QueueNextDataFrame() {
   session_->EnqueueStreamWrite(
       GetWeakPtr(), DATA,
       scoped_ptr<SpdyBufferProducer>(
-          new SimpleBufferProducer(data_buffer.Pass())));
+          new SimpleBufferProducer(std::move(data_buffer))));
 }
 
 int SpdyStream::MergeWithResponseHeaders(

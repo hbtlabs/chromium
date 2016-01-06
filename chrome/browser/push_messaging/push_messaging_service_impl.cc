@@ -14,6 +14,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
+#include "chrome/browser/push_messaging/push_messaging_service_observer.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/chrome_switches.h"
@@ -121,6 +123,7 @@ PushMessagingServiceImpl::PushMessagingServiceImpl(Profile* profile)
 #if defined(ENABLE_NOTIFICATIONS)
       notification_manager_(profile),
 #endif
+      push_messaging_service_observer_(PushMessagingServiceObserver::Create()),
       weak_factory_(this) {
   DCHECK(profile);
   HostContentSettingsMapFactory::GetForProfile(profile_)->AddObserver(this);
@@ -238,17 +241,16 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
 void PushMessagingServiceImpl::DeliverMessageCallback(
     const std::string& app_id,
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const gcm::IncomingMessage& message,
     const base::Closure& message_handled_closure,
     content::PushDeliveryStatus status) {
-  // Remove a single in-flight delivery for |app_id|. This has to be done using
-  // an iterator rather than by value, as the latter removes all entries.
-  DCHECK(in_flight_message_deliveries_.find(app_id) !=
-         in_flight_message_deliveries_.end());
+  DCHECK_GE(in_flight_message_deliveries_.count(app_id), 1u);
 
-  in_flight_message_deliveries_.erase(
-      in_flight_message_deliveries_.find(app_id));
+  // TODO(mvanouwerkerk): Use ScopedClosureRunner for this.
+  base::Closure completion_closure =
+      base::Bind(&PushMessagingServiceImpl::DidHandleMessage,
+                 weak_factory_.GetWeakPtr(), app_id, message_handled_closure);
 
   // TODO(mvanouwerkerk): Show a warning in the developer console of the
   // Service Worker corresponding to app_id (and/or on an internals page).
@@ -261,33 +263,48 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
     case content::PUSH_DELIVERY_STATUS_SUCCESS:
     case content::PUSH_DELIVERY_STATUS_EVENT_WAITUNTIL_REJECTED:
 #if defined(ENABLE_NOTIFICATIONS)
-      // Only enforce the user visible requirements after the entire queue of
-      // incoming messages for |app_id| has been flushed.
-      if (!in_flight_message_deliveries_.count(app_id)) {
+      // Only enforce the user visible requirements if this is currently running
+      // as the delivery callback for the last in-flight message.
+      if (in_flight_message_deliveries_.count(app_id) == 1) {
         notification_manager_.EnforceUserVisibleOnlyRequirements(
             requesting_origin, service_worker_registration_id,
-            message_handled_closure);
+            completion_closure);
       } else {
-        message_handled_closure.Run();
+        completion_closure.Run();
       }
 #else
-      message_handled_closure.Run();
+      completion_closure.Run();
 #endif
       break;
     case content::PUSH_DELIVERY_STATUS_INVALID_MESSAGE:
     case content::PUSH_DELIVERY_STATUS_SERVICE_WORKER_ERROR:
-      message_handled_closure.Run();
+      completion_closure.Run();
       break;
     case content::PUSH_DELIVERY_STATUS_UNKNOWN_APP_ID:
     case content::PUSH_DELIVERY_STATUS_PERMISSION_DENIED:
     case content::PUSH_DELIVERY_STATUS_NO_SERVICE_WORKER:
-      Unsubscribe(
-          app_id, message.sender_id,
-          base::Bind(&UnregisterCallbackToClosure, message_handled_closure));
+      Unsubscribe(app_id, message.sender_id,
+                  base::Bind(&UnregisterCallbackToClosure, completion_closure));
       break;
   }
 
   RecordDeliveryStatus(status);
+}
+
+void PushMessagingServiceImpl::DidHandleMessage(
+    const std::string& app_id,
+    const base::Closure& message_handled_closure) {
+  auto in_flight_iterator = in_flight_message_deliveries_.find(app_id);
+  DCHECK(in_flight_iterator != in_flight_message_deliveries_.end());
+
+  // Remove a single in-flight delivery for |app_id|. This has to be done using
+  // an iterator rather than by value, as the latter removes all entries.
+  in_flight_message_deliveries_.erase(in_flight_iterator);
+
+  message_handled_closure.Run();
+
+  if (push_messaging_service_observer_)
+    push_messaging_service_observer_->OnMessageHandled();
 }
 
 void PushMessagingServiceImpl::SetMessageCallbackForTesting(
@@ -295,7 +312,7 @@ void PushMessagingServiceImpl::SetMessageCallbackForTesting(
   message_callback_for_testing_ = callback;
 }
 
-// Other gcm::GCMAppHandler methods -------------------------------------------
+// Other gcm::GCMAppHandler methods --------------------------------------------
 
 void PushMessagingServiceImpl::OnMessagesDeleted(const std::string& app_id) {
   // TODO(mvanouwerkerk): Fire push error event on the Service Worker
@@ -324,7 +341,7 @@ GURL PushMessagingServiceImpl::GetPushEndpoint() {
 
 void PushMessagingServiceImpl::SubscribeFromDocument(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     int renderer_id,
     int render_frame_id,
@@ -368,7 +385,7 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
 
 void PushMessagingServiceImpl::SubscribeFromWorker(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     bool user_visible,
     const content::PushMessagingService::RegisterCallback& register_callback) {
@@ -448,18 +465,18 @@ void PushMessagingServiceImpl::DidSubscribe(
     case gcm::GCMClient::SUCCESS:
       // Do not get a certificate if message payloads have not been enabled.
       if (!AreMessagePayloadsEnabled()) {
-        DidSubscribeWithPublicKey(app_identifier, callback, subscription_id,
-                                  std::string() /* public_key */,
-                                  std::string() /* auth_secret */);
+        DidSubscribeWithEncryptionInfo(
+            app_identifier, callback, subscription_id,
+            std::string() /* p256dh */, std::string() /* auth_secret */);
         return;
       }
 
       // Make sure that this subscription has associated encryption keys prior
       // to returning it to the developer - they'll need this information in
       // order to send payloads to the user.
-      GetGCMDriver()->GetPublicKey(
+      GetGCMDriver()->GetEncryptionInfo(
           app_identifier.app_id(),
-          base::Bind(&PushMessagingServiceImpl::DidSubscribeWithPublicKey,
+          base::Bind(&PushMessagingServiceImpl::DidSubscribeWithEncryptionInfo,
                      weak_factory_.GetWeakPtr(), app_identifier, callback,
                      subscription_id));
 
@@ -480,13 +497,13 @@ void PushMessagingServiceImpl::DidSubscribe(
   SubscribeEndWithError(callback, status);
 }
 
-void PushMessagingServiceImpl::DidSubscribeWithPublicKey(
+void PushMessagingServiceImpl::DidSubscribeWithEncryptionInfo(
     const PushMessagingAppIdentifier& app_identifier,
     const content::PushMessagingService::RegisterCallback& callback,
     const std::string& subscription_id,
-    const std::string& public_key,
+    const std::string& p256dh,
     const std::string& auth_secret) {
-  if (!public_key.size() && AreMessagePayloadsEnabled()) {
+  if (!p256dh.size() && AreMessagePayloadsEnabled()) {
     SubscribeEndWithError(
         callback, content::PUSH_REGISTRATION_STATUS_PUBLIC_KEY_UNAVAILABLE);
     return;
@@ -497,7 +514,7 @@ void PushMessagingServiceImpl::DidSubscribeWithPublicKey(
   IncreasePushSubscriptionCount(1, false /* is_pending */);
 
   SubscribeEnd(callback, subscription_id,
-               std::vector<uint8_t>(public_key.begin(), public_key.end()),
+               std::vector<uint8_t>(p256dh.begin(), p256dh.end()),
                std::vector<uint8_t>(auth_secret.begin(), auth_secret.end()),
                content::PUSH_REGISTRATION_STATUS_SUCCESS_FROM_PUSH_SERVICE);
 }
@@ -521,16 +538,15 @@ void PushMessagingServiceImpl::DidRequestPermission(
                                       app_identifier, register_callback));
 }
 
-// GetPublicEncryptionKey methods ----------------------------------------------
+// GetEncryptionInfo methods ---------------------------------------------------
 
-void PushMessagingServiceImpl::GetPublicEncryptionKey(
+void PushMessagingServiceImpl::GetEncryptionInfo(
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const PushMessagingService::PublicKeyCallback& callback) {
+    const PushMessagingService::EncryptionInfoCallback& callback) {
   // An empty public key will be returned if payloads are not enabled.
   if (!AreMessagePayloadsEnabled()) {
-    callback.Run(true /* success */,
-                 std::vector<uint8_t>() /* public_key */,
+    callback.Run(true /* success */, std::vector<uint8_t>() /* p256dh */,
                  std::vector<uint8_t>() /* auth */);
     return;
   }
@@ -541,21 +557,20 @@ void PushMessagingServiceImpl::GetPublicEncryptionKey(
 
   DCHECK(!app_identifier.is_null());
 
-  GetGCMDriver()->GetPublicKey(
+  GetGCMDriver()->GetEncryptionInfo(
       app_identifier.app_id(),
-      base::Bind(&PushMessagingServiceImpl::DidGetPublicKey,
+      base::Bind(&PushMessagingServiceImpl::DidGetEncryptionInfo,
                  weak_factory_.GetWeakPtr(), callback));
 }
 
-void PushMessagingServiceImpl::DidGetPublicKey(
-    const PushMessagingService::PublicKeyCallback& callback,
-    const std::string& public_key,
+void PushMessagingServiceImpl::DidGetEncryptionInfo(
+    const PushMessagingService::EncryptionInfoCallback& callback,
+    const std::string& p256dh,
     const std::string& auth_secret) const {
   // I/O errors might prevent the GCM Driver from retrieving a key-pair.
-  const bool success = !!public_key.size();
+  const bool success = !!p256dh.size();
 
-  callback.Run(success,
-               std::vector<uint8_t>(public_key.begin(), public_key.end()),
+  callback.Run(success, std::vector<uint8_t>(p256dh.begin(), p256dh.end()),
                std::vector<uint8_t>(auth_secret.begin(), auth_secret.end()));
 }
 
@@ -563,7 +578,7 @@ void PushMessagingServiceImpl::DidGetPublicKey(
 
 void PushMessagingServiceImpl::Unsubscribe(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     const content::PushMessagingService::UnregisterCallback& callback) {
   PushMessagingAppIdentifier app_identifier =

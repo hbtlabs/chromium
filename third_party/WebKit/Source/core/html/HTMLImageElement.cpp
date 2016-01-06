@@ -20,7 +20,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/html/HTMLImageElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
@@ -48,6 +47,7 @@
 #include "core/layout/LayoutImage.h"
 #include "core/page/Page.h"
 #include "core/style/ContentData.h"
+#include "core/svg/graphics/SVGImageForContainer.h"
 #include "platform/ContentType.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/MIMETypeRegistry.h"
@@ -604,14 +604,21 @@ PassRefPtr<Image> HTMLImageElement::getSourceImageForCanvas(SourceImageStatus* s
         return nullptr;
     }
 
-    RefPtr<Image> sourceImage = cachedImage()->image();
-
-    // We need to synthesize a container size if a layoutObject is not available to provide one.
-    if (!layoutObject() && sourceImage->usesContainerSize())
-        sourceImage->setContainerSize(sourceImage->size());
+    RefPtr<Image> sourceImage;
+    if (cachedImage()->image()->isSVGImage()) {
+        sourceImage = SVGImageForContainer::create(toSVGImage(cachedImage()->image()),
+            cachedImage()->image()->size(), 1, document().completeURL(imageSourceURL()));
+    } else {
+        sourceImage = cachedImage()->image();
+    }
 
     *status = NormalSourceImageStatus;
     return sourceImage->imageForDefaultFrame();
+}
+
+bool HTMLImageElement::isSVGSource() const
+{
+    return cachedImage() && cachedImage()->image()->isSVGImage();
 }
 
 bool HTMLImageElement::wouldTaintOrigin(SecurityOrigin* destinationSecurityOrigin) const

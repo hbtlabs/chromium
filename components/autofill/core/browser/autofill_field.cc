@@ -4,6 +4,8 @@
 
 #include "components/autofill/core/browser/autofill_field.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
 #include "base/logging.h"
@@ -201,6 +203,22 @@ bool FillExpirationMonthSelectControl(const base::string16& value,
   if (!StringToInt(value, &index) || index <= 0 || index > 12)
     return false;
 
+  if (field->option_values.size() == 12) {
+    // The select only contains the months.
+    // If the first value of the select is 0, decrement the value of the index
+    // so January is associated with 0 instead of 1.
+    int first_value;
+    if (StringToInt(field->option_values[0], &first_value) && first_value == 0)
+      --index;
+  } else if (field->option_values.size() == 13) {
+    // The select uses the first value as a placeholder.
+    // If the first value of the select is 1, increment the value of the index
+    // to skip the placeholder value (January = 2).
+    int first_value;
+    if (StringToInt(field->option_values[0], &first_value) && first_value == 1)
+      ++index;
+  }
+
   for (const base::string16& option_value : field->option_values) {
     int converted_value = 0;
     if (CreditCard::ConvertMonth(option_value, app_locale, &converted_value) &&
@@ -312,18 +330,22 @@ bool FillSelectControl(const AutofillType& type,
   if (value.empty())
     return false;
 
-  // First, search for exact matches.
+  ServerFieldType storable_type = type.GetStorableType();
+
+  // Credit card expiration month is checked first since an exact match on value
+  // may not be correct.
+  if (storable_type == CREDIT_CARD_EXP_MONTH)
+    return FillExpirationMonthSelectControl(value, app_locale, field);
+
+  // Search for exact matches.
   if (SetSelectControlValue(value, field))
     return true;
 
   // If that fails, try specific fallbacks based on the field type.
-  ServerFieldType storable_type = type.GetStorableType();
   if (storable_type == ADDRESS_HOME_STATE) {
     return FillStateSelectControl(value, field);
   } else if (storable_type == ADDRESS_HOME_COUNTRY) {
     return FillCountrySelectControl(value, app_locale, field);
-  } else if (storable_type == CREDIT_CARD_EXP_MONTH) {
-    return FillExpirationMonthSelectControl(value, app_locale, field);
   } else if (storable_type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
              storable_type == CREDIT_CARD_EXP_4_DIGIT_YEAR) {
     return FillYearSelectControl(value, field);
@@ -383,10 +405,9 @@ std::string Hash32Bit(const std::string& str) {
   std::string hash_bin = base::SHA1HashString(str);
   DCHECK_EQ(base::kSHA1Length, hash_bin.length());
 
-  uint32 hash32 = ((hash_bin[0] & 0xFF) << 24) |
-                  ((hash_bin[1] & 0xFF) << 16) |
-                  ((hash_bin[2] & 0xFF) << 8) |
-                   (hash_bin[3] & 0xFF);
+  uint32_t hash32 = ((hash_bin[0] & 0xFF) << 24) |
+                    ((hash_bin[1] & 0xFF) << 16) | ((hash_bin[2] & 0xFF) << 8) |
+                    (hash_bin[3] & 0xFF);
 
   return base::UintToString(hash32);
 }

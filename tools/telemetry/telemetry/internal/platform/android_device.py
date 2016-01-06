@@ -7,13 +7,14 @@ import re
 import subprocess
 
 from telemetry.core import util
+from telemetry.internal.platform import cros_device
 from telemetry.internal.platform import device
 from telemetry.internal.platform.profiler import monsoon
 
 from devil.android import device_blacklist
 from devil.android import device_errors
 from devil.android import device_utils
-from pylib import constants
+from devil.android.sdk import adb_wrapper
 
 
 class AndroidDevice(device.Device):
@@ -127,14 +128,31 @@ def GetDevice(finder_options):
   return devices[0]
 
 
-def CanDiscoverDevices():
-  """Returns true if devices are discoverable via adb."""
-  if os.name != 'posix':
+def _HasValidAdb():
+  """Returns true if adb is present.
+
+  Note that this currently will return True even if the adb that's present
+  cannot run on this system.
+  """
+  if os.name != 'posix' or cros_device.IsRunningOnCrOS():
     return False
 
-  adb_path = constants.GetAdbPath()
+  try:
+    adb_path = adb_wrapper.AdbWrapper.GetAdbPath()
+  except device_errors.NoAdbError:
+    return False
+
   if os.path.isabs(adb_path) and not os.path.exists(adb_path):
     return False
+
+  return True
+
+
+def CanDiscoverDevices():
+  """Returns true if devices are discoverable via adb."""
+  if not _HasValidAdb():
+    return False
+
   try:
     with open(os.devnull, 'w') as devnull:
       adb_process = subprocess.Popen(
@@ -150,24 +168,32 @@ def CanDiscoverDevices():
   except OSError:
     pass
   try:
+    adb_path = adb_wrapper.AdbWrapper.GetAdbPath()
     os.environ['PATH'] = os.pathsep.join(
         [os.path.dirname(adb_path), os.environ['PATH']])
     device_utils.DeviceUtils.HealthyDevices(None)
     return True
   except (device_errors.CommandFailedError, device_errors.CommandTimeoutError,
-          OSError):
+          device_errors.NoAdbError, OSError):
     return False
 
 
 def FindAllAvailableDevices(options):
   """Returns a list of available devices.
   """
-  if options.android_blacklist_file:
-    blacklist = device_blacklist.Blacklist(options.android_blacklist_file)
-  else:
-    blacklist = None
+  devices = []
+  try:
+    if CanDiscoverDevices():
+      blacklist = None
+      if options.android_blacklist_file:
+        blacklist = device_blacklist.Blacklist(options.android_blacklist_file)
+      devices = AndroidDevice.GetAllConnectedDevices(blacklist)
+  finally:
+    if not devices and _HasValidAdb():
+      try:
+        adb_wrapper.AdbWrapper.KillServer()
+      except device_errors.NoAdbError as e:
+        logging.warning(
+            'adb reported as present, but NoAdbError thrown: %s', str(e))
 
-  if not CanDiscoverDevices():
-    return []
-  else:
-    return AndroidDevice.GetAllConnectedDevices(blacklist)
+  return devices

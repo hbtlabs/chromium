@@ -46,6 +46,8 @@ WebInspector.IsolatedFileSystem = function(manager, path, domFileSystem)
     this._nonConfigurableExcludedFolders = new Set();
 }
 
+WebInspector.IsolatedFileSystem.ImageExtensions = new Set(["jpeg", "jpg", "svg", "gif", "webp", "png", "ico", "tiff", "tif", "bmp"]);
+
 /**
  * @constructor
  * @param {!WebInspector.IsolatedFileSystemManager} manager
@@ -105,8 +107,27 @@ WebInspector.IsolatedFileSystem.errorMessage = function(error)
  */
 WebInspector.IsolatedFileSystem.normalizePath = function(fileSystemPath)
 {
-    if (WebInspector.isWin())
-        return fileSystemPath.replace(/\\/g, "/");
+    fileSystemPath = fileSystemPath.replace(/\\/g, "/");
+    if (!fileSystemPath.startsWith("file://")) {
+        if (fileSystemPath.startsWith("/"))
+            fileSystemPath = "file://" + fileSystemPath;
+        else
+            fileSystemPath = "file:///" + fileSystemPath;
+    }
+    return fileSystemPath;
+}
+
+/**
+ * @param {string} fileSystemPath
+ * @return {string}
+ */
+WebInspector.IsolatedFileSystem.denormalizePath = function(fileSystemPath)
+{
+    fileSystemPath = fileSystemPath.substring("file://".length);
+    if (WebInspector.isWin()) {
+        fileSystemPath = fileSystemPath.replace(/\//g, "\\");
+        fileSystemPath = fileSystemPath.substring(1);
+    }
     return fileSystemPath;
 }
 
@@ -117,17 +138,6 @@ WebInspector.IsolatedFileSystem.prototype = {
     path: function()
     {
         return this._path;
-    },
-
-    /**
-     * @return {string}
-     */
-    normalizedPath: function()
-    {
-        if (this._normalizedPath)
-            return this._normalizedPath;
-        this._normalizedPath = WebInspector.IsolatedFileSystem.normalizePath(this._path);
-        return this._normalizedPath;
     },
 
     /**
@@ -305,7 +315,10 @@ WebInspector.IsolatedFileSystem.prototype = {
         {
             var reader = new FileReader();
             reader.onloadend = readerLoadEnd;
-            reader.readAsText(file);
+            if (WebInspector.IsolatedFileSystem.ImageExtensions.has(WebInspector.TextUtils.extension(path)))
+                reader.readAsDataURL(file);
+            else
+                reader.readAsText(file);
         }
 
         /**

@@ -7,6 +7,8 @@
 
 #include "mojo/application/public/cpp/application_delegate.h"
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "mojo/application/public/cpp/interface_factory.h"
 #include "mojo/application/public/interfaces/application_manager.mojom.h"
@@ -38,6 +40,9 @@ class ShellApplicationDelegate
   void CreateInstanceForHandle(ScopedHandle channel,
                                const String& url,
                                CapabilityFilterPtr filter) override;
+  void RegisterProcessWithBroker(uint32_t pid, ScopedHandle pipe) override;
+  void AddListener(
+      mojom::ApplicationManagerListenerPtr listener) override;
 
   mojo::shell::ApplicationManager* manager_;
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/media_galleries/fileapi/device_media_async_file_util.h"
@@ -72,8 +74,8 @@ void OnPreferencesInit(
 }
 
 void AttemptAutoMountOnUIThread(
-    int32 process_id,
-    int32 routing_id,
+    int32_t process_id,
+    int32_t routing_id,
     const std::string& storage_domain,
     const std::string& mount_point,
     const base::Callback<void(base::File::Error result)>& callback) {
@@ -325,8 +327,8 @@ storage::FileSystemOperation* MediaFileSystemBackend::CreateFileSystemOperation(
   scoped_ptr<storage::FileSystemOperationContext> operation_context(
       new storage::FileSystemOperationContext(context,
                                               media_task_runner_.get()));
-  return storage::FileSystemOperation::Create(
-      url, context, operation_context.Pass());
+  return storage::FileSystemOperation::Create(url, context,
+                                              std::move(operation_context));
 }
 
 bool MediaFileSystemBackend::SupportsStreaming(
@@ -352,8 +354,8 @@ bool MediaFileSystemBackend::HasInplaceCopyImplementation(
 scoped_ptr<storage::FileStreamReader>
 MediaFileSystemBackend::CreateFileStreamReader(
     const FileSystemURL& url,
-    int64 offset,
-    int64 max_bytes_to_read,
+    int64_t offset,
+    int64_t max_bytes_to_read,
     const base::Time& expected_modification_time,
     FileSystemContext* context) const {
   if (url.type() == storage::kFileSystemTypeDeviceMedia) {
@@ -362,7 +364,7 @@ MediaFileSystemBackend::CreateFileStreamReader(
         device_media_async_file_util_->GetFileStreamReader(
             url, offset, expected_modification_time, context);
     DCHECK(reader);
-    return reader.Pass();
+    return reader;
   }
 
   return scoped_ptr<storage::FileStreamReader>(
@@ -376,7 +378,7 @@ MediaFileSystemBackend::CreateFileStreamReader(
 scoped_ptr<storage::FileStreamWriter>
 MediaFileSystemBackend::CreateFileStreamWriter(
     const FileSystemURL& url,
-    int64 offset,
+    int64_t offset,
     FileSystemContext* context) const {
   return scoped_ptr<storage::FileStreamWriter>(
       storage::FileStreamWriter::CreateForLocalFile(

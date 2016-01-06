@@ -6,11 +6,13 @@
 #define MEDIA_BASE_ANDROID_MEDIA_DRM_BRIDGE_H_
 
 #include <jni.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/android/provision_fetcher.h"
@@ -37,7 +39,7 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
  public:
   // TODO(ddorwin): These are specific to Widevine. http://crbug.com/459400
   enum SecurityLevel {
-    SECURITY_LEVEL_NONE = 0,
+    SECURITY_LEVEL_DEFAULT = 0,
     SECURITY_LEVEL_1 = 1,
     SECURITY_LEVEL_3 = 3,
   };
@@ -73,11 +75,12 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // are not handled by Chrome explicitly.
   static std::vector<std::string> GetPlatformKeySystemNames();
 
-  // Returns a MediaDrmBridge instance if |key_system| is supported, or a NULL
-  // pointer otherwise.
-  // TODO(xhwang): Is it okay not to update session expiration info?
+  // Returns a MediaDrmBridge instance if |key_system| and |security_level| are
+  // supported, and nullptr otherwise. The default security level will be used
+  // if |security_level| is SECURITY_LEVEL_DEFAULT.
   static scoped_refptr<MediaDrmBridge> Create(
       const std::string& key_system,
+      SecurityLevel security_level,
       const CreateFetcherCB& create_fetcher_cb,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
@@ -85,11 +88,11 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
       const SessionKeysChangeCB& session_keys_change_cb,
       const SessionExpirationUpdateCB& session_expiration_update_cb);
 
-  // Returns a MediaDrmBridge instance if |key_system| is supported, or a NULL
-  // otherwise. No session callbacks are provided. This is used when we need to
-  // use MediaDrmBridge without creating any sessions.
+  // Same as Create() except that no session callbacks are provided. This is
+  // used when we need to use MediaDrmBridge without creating any sessions.
   static scoped_refptr<MediaDrmBridge> CreateWithoutSessionSupport(
       const std::string& key_system,
+      SecurityLevel security_level,
       const CreateFetcherCB& create_fetcher_cb);
 
   // MediaKeys implementation.
@@ -123,15 +126,6 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
                      const base::Closure& cdm_unset_cb) override;
   void UnregisterPlayer(int registration_id) override;
 
-  // Returns true if |security_level| is successfully set, or false otherwise.
-  // Call this function right after Create() and before any other calls.
-  // Note:
-  // - If this function is not called, the default security level of the device
-  //   will be used.
-  // - It's recommended to call this function only once on a MediaDrmBridge
-  //   object. Calling this function multiples times may cause errors.
-  bool SetSecurityLevel(SecurityLevel security_level);
-
   // Helper function to determine whether a protected surface is needed for the
   // video playback.
   bool IsProtectedSurfaceRequired();
@@ -145,9 +139,11 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
                                  const std::string& session_id);
   void RejectPromise(uint32_t promise_id, const std::string& error_message);
 
-  // Returns a MediaCrypto object if it's already created. Returns a null object
-  // otherwise.
-  base::android::ScopedJavaLocalRef<jobject> GetMediaCrypto();
+  // Returns a MediaCrypto object. Can only be called after |j_media_crypto_|
+  // is set.
+  // TODO(xhwang): This is only used by MediaSourcePlayer et al. Remove this
+  // method when MediaSourcePlayer is deprecated.
+  jobject GetMediaCrypto();
 
   // Registers a callback which will be called when MediaCrypto is ready.
   // Can be called on any thread. Only one callback should be registered.
@@ -162,7 +158,8 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // Called by Java after a MediaCrypto object is created.
   void OnMediaCryptoReady(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& j_media_drm);
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      const base::android::JavaParamRef<jobject>& j_media_crypto);
 
   // Called by Java when we need to send a provisioning request,
   void OnStartProvisioning(
@@ -245,7 +242,11 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // For DeleteSoon() in DeleteOnCorrectThread().
   friend class base::DeleteHelper<MediaDrmBridge>;
 
-  MediaDrmBridge(const std::vector<uint8>& scheme_uuid,
+  // Constructs a MediaDrmBridge for |scheme_uuid| and |security_level|. The
+  // default security level will be used if |security_level| is
+  // SECURITY_LEVEL_DEFAULT.
+  MediaDrmBridge(const std::vector<uint8_t>& scheme_uuid,
+                 SecurityLevel security_level,
                  const CreateFetcherCB& create_fetcher_cb,
                  const SessionMessageCB& session_message_cb,
                  const SessionClosedCB& session_closed_cb,
@@ -260,9 +261,11 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // Get the security level of the media.
   SecurityLevel GetSecurityLevel();
 
-  // A helper method that calculates the |media_crypto_ready_cb_| arguments and
-  // run this callback.
-  void NotifyMediaCryptoReady(const MediaCryptoReadyCB& cb);
+  // A helper method to create a JavaObjectPtr.
+  JavaObjectPtr CreateJavaObjectPtr(jobject object);
+
+  // A helper method that is called when MediaCrypto is ready.
+  void NotifyMediaCryptoReady(JavaObjectPtr j_media_crypto);
 
   // Sends HTTP provisioning request to a provisioning server.
   void SendProvisioningRequest(const std::string& default_url,
@@ -272,10 +275,19 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   void ProcessProvisionResponse(bool success, const std::string& response);
 
   // UUID of the key system.
-  std::vector<uint8> scheme_uuid_;
+  std::vector<uint8_t> scheme_uuid_;
 
   // Java MediaDrm instance.
   base::android::ScopedJavaGlobalRef<jobject> j_media_drm_;
+
+  // Java MediaCrypto instance. Possible values are:
+  // !j_media_crypto_:
+  //   MediaCrypto creation has not been notified via NotifyMediaCryptoReady().
+  // !j_media_crypto_->is_null():
+  //   MediaCrypto creation succeeded and it has been notified.
+  // j_media_crypto_->is_null():
+  //   MediaCrypto creation failed and it has been notified.
+  JavaObjectPtr j_media_crypto_;
 
   // The callback to create a ProvisionFetcher.
   CreateFetcherCB create_fetcher_cb_;

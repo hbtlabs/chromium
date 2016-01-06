@@ -4,9 +4,12 @@
 
 #include "chrome/browser/media/media_stream_capture_indicator.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -415,7 +418,7 @@ void MediaStreamCaptureIndicator::UpdateNotificationUserInterface() {
   // The icon will take the ownership of the passed context menu.
   MaybeCreateStatusTrayIcon(audio, video);
   if (status_icon_) {
-    status_icon_->SetContextMenu(menu.Pass());
+    status_icon_->SetContextMenu(std::move(menu));
   }
 }
 

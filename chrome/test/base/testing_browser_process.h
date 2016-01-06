@@ -10,8 +10,11 @@
 #ifndef CHROME_TEST_BASE_TESTING_BROWSER_PROCESS_H_
 #define CHROME_TEST_BASE_TESTING_BROWSER_PROCESS_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
@@ -89,7 +92,7 @@ class TestingBrowserProcess : public BrowserProcess {
   void CreateDevToolsHttpProtocolHandler(
       chrome::HostDesktopType host_desktop_type,
       const std::string& ip,
-      uint16 port) override;
+      uint16_t port) override;
   unsigned int AddRefModule() override;
   unsigned int ReleaseModule() override;
   bool IsShuttingDown() override;
@@ -136,6 +139,7 @@ class TestingBrowserProcess : public BrowserProcess {
   void SetSystemRequestContext(net::URLRequestContextGetter* context_getter);
   void SetNotificationUIManager(
       scoped_ptr<NotificationUIManager> notification_ui_manager);
+  void SetRapporService(rappor::RapporService* rappor_service);
   void ShutdownBrowserPolicyConnector();
 
  private:
@@ -177,6 +181,7 @@ class TestingBrowserProcess : public BrowserProcess {
   PrefService* local_state_;
   IOThread* io_thread_;
   net::URLRequestContextGetter* system_request_context_;
+  rappor::RapporService* rappor_service_;
 
   scoped_ptr<BrowserProcessPlatformPart> platform_part_;
 

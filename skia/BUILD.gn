@@ -278,6 +278,9 @@ config("skia_library_config") {
 component("skia") {
   sources = [
     # Chrome sources.
+    "config/SkUserConfig.h",
+    "config/sk_ref_cnt_ext_debug.h",
+    "config/sk_ref_cnt_ext_release.h",
     "ext/SkDiscardableMemory_chrome.cc",
     "ext/SkMemory_new_handler.cpp",
     "ext/analysis_canvas.cc",
@@ -334,8 +337,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkBitmapHasher.cpp",
     "//third_party/skia/src/utils/SkBoundaryPatch.cpp",
     "//third_party/skia/src/utils/SkCamera.cpp",
-    "//third_party/skia/src/utils/SkCubicInterval.cpp",
-    "//third_party/skia/src/utils/SkCullPoints.cpp",
     "//third_party/skia/src/utils/SkDumpCanvas.cpp",
     "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
     "//third_party/skia/src/utils/SkInterpolator.cpp",
@@ -443,6 +444,7 @@ component("skia") {
 
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
+    ":skia_config",
     ":skia_library_config",
     "//build/config/compiler:no_chromium_code",
   ]
@@ -623,6 +625,8 @@ source_set("skia_opts") {
     } else {
       sources = gypi_skia_opts.none_sourcees
     }
+  } else if (current_cpu == "arm64") {
+    sources = gypi_skia_opts.arm64_sources
   } else if (current_cpu == "mipsel") {
     cflags += [ "-fomit-frame-pointer" ]
 
@@ -631,6 +635,9 @@ source_set("skia_opts") {
     } else {
       sources = gypi_skia_opts.none_sources
     }
+  } else if (current_cpu == "mips64el") {
+    cflags += [ "-fomit-frame-pointer" ]
+    sources = gypi_skia_opts.none_sources
   } else {
     assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
   }

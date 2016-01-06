@@ -8,7 +8,6 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.StrictMode;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.text.TextUtils;
@@ -265,16 +264,7 @@ public class ExternalNavigationHandler {
             return OverrideUrlLoadingResult.NO_OVERRIDE;
         }
 
-        boolean canResolveActivity = false;
-        // Temporarily allowing disk access while fixing. TODO: http://crbug.com/527415
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-        StrictMode.allowThreadDiskWrites();
-        try {
-            canResolveActivity = mDelegate.canResolveActivity(intent);
-        } finally {
-            StrictMode.setThreadPolicy(oldPolicy);
-        }
-
+        boolean canResolveActivity = mDelegate.queryIntentActivities(intent).size() > 0;
         // check whether the intent can be resolved. If not, we will see
         // whether we can download it from the Market.
         if (!canResolveActivity) {
@@ -333,7 +323,7 @@ public class ExternalNavigationHandler {
         if (!isExternalProtocol) {
             if (!mDelegate.isSpecializedHandlerAvailable(intent)) {
                 return OverrideUrlLoadingResult.NO_OVERRIDE;
-            } else if (params.getReferrerUrl() != null && isLink) {
+            } else if (params.getReferrerUrl() != null && (isLink || isFormSubmit)) {
                 // Current URL has at least one specialized handler available. For navigations
                 // within the same host, keep the navigation inside the browser unless the set of
                 // available apps to handle the new navigation is different. http://crbug.com/463138
@@ -349,11 +339,6 @@ public class ExternalNavigationHandler {
 
                 if (currentUri != null && previousUri != null
                         && TextUtils.equals(currentUri.getHost(), previousUri.getHost())) {
-
-                    if (isFormSubmit && !isRedirectFromFormSubmit) {
-                        return OverrideUrlLoadingResult.NO_OVERRIDE;
-                    }
-
                     Intent previousIntent;
                     try {
                         previousIntent = Intent.parseUri(
@@ -442,7 +427,8 @@ public class ExternalNavigationHandler {
         if (url.startsWith(SCHEME_WTAI_MC)) return true;
         try {
             Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
-            return intent.getPackage() != null || mDelegate.canResolveActivity(intent);
+            return intent.getPackage() != null
+                    || mDelegate.queryIntentActivities(intent).size() > 0;
         } catch (Exception ex) {
             // Ignore the error.
             Log.w(TAG, "Bad URI " + url, ex);

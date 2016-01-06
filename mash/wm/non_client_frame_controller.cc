@@ -4,7 +4,13 @@
 
 #include "mash/wm/non_client_frame_controller.h"
 
+#include <stdint.h>
+
+#include "base/macros.h"
+#include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
+#include "components/mus/public/cpp/window_property.h"
+#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mash/wm/frame/frame_border_hit_test_controller.h"
 #include "mash/wm/frame/move_event_handler.h"
@@ -40,12 +46,6 @@ class ContentWindowLayoutManager : public aura::LayoutManager {
     OnWindowResized();
   }
   ~ContentWindowLayoutManager() override {}
-
-  void SetShadow(Shadow* shadow) {
-    shadow_ = shadow;
-    if (shadow_)
-      shadow_->SetContentBounds(child_bounds());
-  }
 
  private:
   // Bounds for child windows.
@@ -95,10 +95,6 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
                         window,
                         mus::mojom::SURFACE_TYPE_UNDERLAY) {}
   ~WmNativeWidgetMus() override {
-    if (move_event_handler_) {
-      GetNativeView()->GetHost()->window()->RemovePreTargetHandler(
-          move_event_handler_.get());
-    }
   }
 
   // NativeWidgetMus:
@@ -107,18 +103,16 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
         static_cast<views::internal::NativeWidgetPrivate*>(this)->GetWidget();
     NonClientFrameViewMash* frame_view =
         new NonClientFrameViewMash(widget, window());
-    aura::Window* root_window = GetNativeView()->GetHost()->window();
     move_event_handler_.reset(new MoveEventHandler(window(), GetNativeView()));
-    root_window->AddPreTargetHandler(move_event_handler_.get());
     return frame_view;
   }
   void InitNativeWidget(const views::Widget::InitParams& params) override {
     views::NativeWidgetMus::InitNativeWidget(params);
     aura::WindowTreeHost* window_tree_host = GetNativeView()->GetHost();
-    // TODO(sky): shadow should be determined by window type.
+    // TODO(sky): shadow should be determined by window type and shadow type.
     shadow_.reset(new Shadow);
     shadow_->Init(Shadow::STYLE_INACTIVE);
-    SetShadow(window(), shadow_.get());
+    shadow_->Install(window());
     ContentWindowLayoutManager* layout_manager = new ContentWindowLayoutManager(
         window_tree_host->window(), ShadowStyle::NORMAL, shadow_.get());
     window_tree_host->window()->SetLayoutManager(layout_manager);
@@ -145,6 +139,30 @@ class WmNativeWidgetMus : public views::NativeWidgetMus {
   DISALLOW_COPY_AND_ASSIGN(WmNativeWidgetMus);
 };
 
+class ClientViewMus : public views::ClientView {
+ public:
+  ClientViewMus(views::Widget* widget,
+                views::View* contents_view,
+                NonClientFrameController* frame_controller)
+      : views::ClientView(widget, contents_view),
+        frame_controller_(frame_controller) {}
+  ~ClientViewMus() override {}
+
+  // views::ClientView:
+  bool CanClose() override {
+    if (!frame_controller_->window())
+      return true;
+
+    frame_controller_->window()->RequestClose();
+    return false;
+  }
+
+ private:
+  NonClientFrameController* frame_controller_;
+
+  DISALLOW_COPY_AND_ASSIGN(ClientViewMus);
+};
+
 }  // namespace
 
 NonClientFrameController::NonClientFrameController(
@@ -157,10 +175,12 @@ NonClientFrameController::NonClientFrameController(
   window_->AddObserver(this);
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
+  // We initiate focus at the mus level, not at the views level.
+  params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.delegate = this;
   params.native_widget = new WmNativeWidgetMus(widget_, shell, window);
   widget_->Init(params);
-  widget_->Show();
+  widget_->ShowInactive();
 
   const int shadow_inset =
       Shadow::GetInteriorInsetForStyle(Shadow::STYLE_ACTIVE);
@@ -185,6 +205,16 @@ NonClientFrameController::~NonClientFrameController() {
     window_->RemoveObserver(this);
 }
 
+base::string16 NonClientFrameController::GetWindowTitle() const {
+  if (!window_->HasSharedProperty(
+          mus::mojom::WindowManager::kWindowTitle_Property)) {
+    return base::string16();
+  }
+
+  return window_->GetSharedProperty<base::string16>(
+      mus::mojom::WindowManager::kWindowTitle_Property);
+}
+
 views::View* NonClientFrameController::GetContentsView() {
   return this;
 }
@@ -207,6 +237,11 @@ bool NonClientFrameController::CanMinimize() const {
           mus::mojom::RESIZE_BEHAVIOR_CAN_MINIMIZE) != 0;
 }
 
+views::ClientView* NonClientFrameController::CreateClientView(
+    views::Widget* widget) {
+  return new ClientViewMus(widget, GetContentsView(), this);
+}
+
 void NonClientFrameController::OnWindowSharedPropertyChanged(
     mus::Window* window,
     const std::string& name,
@@ -214,6 +249,8 @@ void NonClientFrameController::OnWindowSharedPropertyChanged(
     const std::vector<uint8_t>* new_data) {
   if (name == mus::mojom::WindowManager::kResizeBehavior_Property)
     widget_->OnSizeConstraintsChanged();
+  else if (name == mus::mojom::WindowManager::kWindowTitle_Property)
+    widget_->UpdateWindowTitle();
 }
 
 void NonClientFrameController::OnWindowDestroyed(mus::Window* window) {

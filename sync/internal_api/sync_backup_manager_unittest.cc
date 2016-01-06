@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/sync_backup_manager.h"
 
+#include <string>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "sync/internal_api/public/read_node.h"
@@ -37,7 +39,7 @@ class SyncBackupManagerTest : public syncer::SyncManager::Observer,
                void(const sessions::SyncSessionSnapshot&));
   MOCK_METHOD1(OnConnectionStatusChange, void(ConnectionStatus));
   MOCK_METHOD1(OnActionableError, void(const SyncProtocolError&));
-  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));;
+  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));
   MOCK_METHOD1(OnProtocolEvent, void(const ProtocolEvent&));
   MOCK_METHOD4(OnInitializationComplete,
                void(const WeakHandle<JsBackend>&,
@@ -64,7 +66,7 @@ class SyncBackupManagerTest : public syncer::SyncManager::Observer,
     args.database_location = temp_dir_.path();
     args.event_handler = MakeWeakHandle(base::WeakPtr<JsEventHandler>());
     args.service_url = GURL("https://example.com/");
-    args.post_factory = scoped_ptr<HttpPostProviderFactory>().Pass();
+    args.post_factory = scoped_ptr<HttpPostProviderFactory>();
     args.internal_components_factory.reset(new TestInternalComponentsFactory(
         InternalComponentsFactory::Switches(), storage_option,
         &storage_used_));

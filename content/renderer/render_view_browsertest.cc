@@ -2,16 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_network_provider.h"
 #include "content/common/frame_messages.h"
@@ -22,6 +27,7 @@
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
@@ -77,6 +83,8 @@
 #if defined(USE_OZONE)
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #endif
+
+#include "url/url_constants.h"
 
 using blink::WebFrame;
 using blink::WebInputEvent;
@@ -386,17 +394,15 @@ class RenderViewImplBlinkSettingsTest : public RenderViewImplTest {
 
 class RenderViewImplScaleFactorTest : public RenderViewImplBlinkSettingsTest {
  public:
-  void DoSetUp() override {
-    RenderViewImplBlinkSettingsTest::DoSetUp();
-
+  void SetDeviceScaleFactor(float dsf) {
     ViewMsg_Resize_Params params;
-    params.screen_info.deviceScaleFactor = 2.f;
+    params.screen_info.deviceScaleFactor = dsf;
     params.new_size = gfx::Size(100, 100);
     params.physical_backing_size = gfx::Size(200, 200);
     params.visible_viewport_size = params.new_size;
     params.needs_resize_ack = false;
     view()->OnResize(params);
-    ASSERT_EQ(2.f, view()->device_scale_factor_);
+    ASSERT_EQ(dsf, view()->device_scale_factor_);
   }
 };
 
@@ -442,7 +448,7 @@ TEST_F(RenderViewImplTest, SaveImageFromDataURL) {
   ProcessPendingMessages();
   render_thread_->sink().ClearMessages();
 
-  const std::string large_data_url(1024 * 1024 * 10 - 1, 'd');
+  const std::string large_data_url(1024 * 1024 * 20 - 1, 'd');
 
   view()->saveImageFromDataURL(WebString::fromUTF8(large_data_url));
   ProcessPendingMessages();
@@ -458,7 +464,7 @@ TEST_F(RenderViewImplTest, SaveImageFromDataURL) {
   ProcessPendingMessages();
   render_thread_->sink().ClearMessages();
 
-  const std::string exceeded_data_url(1024 * 1024 * 10 + 1, 'd');
+  const std::string exceeded_data_url(1024 * 1024 * 20 + 1, 'd');
 
   view()->saveImageFromDataURL(WebString::fromUTF8(exceeded_data_url));
   ProcessPendingMessages();
@@ -542,6 +548,34 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   EXPECT_EQ(0, memcmp(raw_data, element.data.data(), length));
 }
 
+#if defined(OS_ANDROID)
+TEST_F(RenderViewImplTest, OnNavigationLoadDataWithBaseURL) {
+  CommonNavigationParams common_params;
+  common_params.url = GURL("data:text/html,");
+  common_params.navigation_type = FrameMsg_Navigate_Type::NORMAL;
+  common_params.transition = ui::PAGE_TRANSITION_TYPED;
+  common_params.base_url_for_data_url = GURL("about:blank");
+  common_params.history_url_for_data_url = GURL("about:blank");
+  RequestNavigationParams request_params;
+  request_params.data_url_as_string =
+      "data:text/html,<html><head><title>Data page</title></head></html>";
+
+  frame()->Navigate(common_params, StartNavigationParams(),
+                    request_params);
+  const IPC::Message* frame_title_msg = nullptr;
+  do {
+    ProcessPendingMessages();
+    frame_title_msg = render_thread_->sink().GetUniqueMessageMatching(
+        FrameHostMsg_UpdateTitle::ID);
+  } while (!frame_title_msg);
+
+  // Check post data sent to browser matches.
+  FrameHostMsg_UpdateTitle::Param title_params;
+  EXPECT_TRUE(FrameHostMsg_UpdateTitle::Read(frame_title_msg, &title_params));
+  EXPECT_EQ(base::ASCIIToUTF16("Data page"), base::get<0>(title_params));
+}
+#endif
+
 TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
   WebUITestWebUIControllerFactory factory;
   WebUIControllerFactory::RegisterFactory(&factory);
@@ -556,8 +590,7 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicy) {
   policy_info.defaultPolicy = blink::WebNavigationPolicyCurrentTab;
   blink::WebNavigationPolicy policy = frame()->decidePolicyForNavigation(
           policy_info);
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (!IsBrowserSideNavigationEnabled()) {
     EXPECT_EQ(blink::WebNavigationPolicyCurrentTab, policy);
   } else {
     // If this is a renderer-initiated navigation that just begun, it should
@@ -847,6 +880,63 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
   EXPECT_TRUE(web_frame->lastChild()->securityOrigin().isUnique());
 }
 
+// Test for https://crbug.com/568676, where a parent detaches a remote child
+// while the browser navigates it to the parent's site in parallel, with the
+// detach happening after the provisional RenderFrame is created but before
+// FrameMsg_Navigate is received.  This is a variant of
+// https://crbug.com/526304.
+TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
+  // This test should only run with --site-per-process.
+  if (!AreAllSitesIsolatedForTesting())
+    return;
+
+  LoadHTML("Hello <iframe src='data:text/html,frame 1'></iframe>");
+  WebFrame* web_frame = frame()->GetWebFrame();
+  TestRenderFrame* child_frame = static_cast<TestRenderFrame*>(
+      RenderFrame::FromWebFrame(web_frame->firstChild()));
+
+  // Swap the child frame out.
+  child_frame->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  EXPECT_TRUE(web_frame->firstChild()->isWebRemoteFrame());
+
+  // Do the first step of a remote-to-local transition for the child proxy,
+  // which is to create a provisional local frame.
+  int routing_id = kProxyRoutingId + 1;
+  FrameMsg_NewFrame_WidgetParams widget_params;
+  widget_params.routing_id = MSG_ROUTING_NONE;
+  widget_params.hidden = false;
+  RenderFrameImpl::CreateFrame(routing_id, kProxyRoutingId, MSG_ROUTING_NONE,
+                               frame()->GetRoutingID(), MSG_ROUTING_NONE,
+                               content::FrameReplicationState(), nullptr,
+                               widget_params, blink::WebFrameOwnerProperties());
+  TestRenderFrame* provisional_frame =
+      static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
+  EXPECT_TRUE(provisional_frame);
+
+  // Detach the child frame (current remote) in the main frame.
+  ExecuteJavaScriptForTests(
+      "document.body.removeChild(document.querySelector('iframe'));");
+  RenderFrameProxy* child_proxy =
+      RenderFrameProxy::FromRoutingID(kProxyRoutingId);
+  EXPECT_FALSE(child_proxy);
+
+  // Attempt to start a navigation on the RenderFrame that was created to
+  // replace the now-detached RenderFrameProxy.   This shouldn't crash and
+  // should abort the navigation, since the frame no longer exists.
+  CommonNavigationParams common_params;
+  common_params.navigation_type = FrameMsg_Navigate_Type::NORMAL;
+  common_params.url = GURL(url::kAboutBlankURL);
+  provisional_frame->Navigate(common_params, StartNavigationParams(),
+                              RequestNavigationParams());
+  ProcessPendingMessages();
+
+  // Check that there was no DidCommitProvisionalLoad.
+  const IPC::Message* frame_navigate_msg =
+      render_thread_->sink().GetUniqueMessageMatching(
+          FrameHostMsg_DidCommitProvisionalLoad::ID);
+  EXPECT_FALSE(frame_navigate_msg);
+}
+
 // Verify that DidFlushPaint doesn't crash if called after a RenderView is
 // swapped out. See https://crbug.com/513552.
 TEST_F(RenderViewImplTest, PaintAfterSwapOut) {
@@ -869,6 +959,30 @@ TEST_F(RenderViewImplTest, PaintAfterSwapOut) {
 
   new_view->Close();
   new_view->Release();
+}
+
+// Verify that the renderer process doesn't crash when device scale factor
+// changes after a cross-process navigation has commited.
+// See https://crbug.com/571603.
+TEST_F(RenderViewImplTest, SetZoomLevelAfterCrossProcessNavigation) {
+  // This test should only run with out-of-process iframes enabled.
+  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
+    return;
+
+  // The bug reproduces if zoom is used for devices scale factor.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableUseZoomForDSF);
+
+  LoadHTML("Hello world!");
+
+  // Swap the main frame out after which it should become a WebRemoteFrame.
+  TestRenderFrame* main_frame =
+      static_cast<TestRenderFrame*>(view()->GetMainRenderFrame());
+  main_frame->SwapOut(kProxyRoutingId, true, content::FrameReplicationState());
+  EXPECT_TRUE(view()->webview()->mainFrame()->isWebRemoteFrame());
+
+  // This should not cause a crash.
+  view()->OnDeviceScaleFactorChanged();
 }
 
 // Test that we get the correct UpdateState message when we go back twice
@@ -1041,8 +1155,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
 
     // Update the IME status and verify if our IME backend sends an IPC message
     // to activate IMEs.
-    view()->UpdateTextInputState(
-        RenderWidget::NO_SHOW_IME, RenderWidget::FROM_NON_IME);
+    view()->UpdateTextInputState(ShowIme::HIDE_IME, ChangeSource::FROM_NON_IME);
     const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
     EXPECT_TRUE(msg != NULL);
     EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
@@ -1063,8 +1176,7 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
 
     // Update the IME status and verify if our IME backend sends an IPC message
     // to de-activate IMEs.
-    view()->UpdateTextInputState(
-          RenderWidget::NO_SHOW_IME, RenderWidget::FROM_NON_IME);
+    view()->UpdateTextInputState(ShowIme::HIDE_IME, ChangeSource::FROM_NON_IME);
     msg = render_thread_->sink().GetMessageAt(0);
     EXPECT_TRUE(msg != NULL);
     EXPECT_EQ(ViewHostMsg_TextInputStateChanged::ID, msg->type());
@@ -1087,8 +1199,8 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
 
       // Update the IME status and verify if our IME backend sends an IPC
       // message to activate IMEs.
-      view()->UpdateTextInputState(
-          RenderWidget::NO_SHOW_IME, RenderWidget::FROM_NON_IME);
+      view()->UpdateTextInputState(ShowIme::HIDE_IME,
+                                   ChangeSource::FROM_NON_IME);
       ProcessPendingMessages();
       const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
       EXPECT_TRUE(msg != NULL);
@@ -1223,8 +1335,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
 
     // Update the status of our IME back-end.
     // TODO(hbono): we should verify messages to be sent from the back-end.
-    view()->UpdateTextInputState(
-        RenderWidget::NO_SHOW_IME, RenderWidget::FROM_NON_IME);
+    view()->UpdateTextInputState(ShowIme::HIDE_IME, ChangeSource::FROM_NON_IME);
     ProcessPendingMessages();
     render_thread_->sink().ClearMessages();
 
@@ -1828,6 +1939,7 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   view()->OnImeSetComposition(ascii_composition, empty_underline, 0, 0);
   view()->GetCompositionCharacterBounds(&bounds);
   ASSERT_EQ(ascii_composition.size(), bounds.size());
+
   for (size_t i = 0; i < bounds.size(); ++i)
     EXPECT_LT(0, bounds[i].width());
   view()->OnImeConfirmComposition(
@@ -2014,7 +2126,7 @@ TEST_F(RenderViewImplTest, MessageOrderInDidChangeSelection) {
   view()->set_send_content_state_immediately(true);
   LoadHTML("<textarea id=\"test\"></textarea>");
 
-  view()->handling_input_event_ = true;
+  view()->SetHandlingInputEventForTesting(true);
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
   bool is_input_type_called = false;
@@ -2023,7 +2135,7 @@ TEST_F(RenderViewImplTest, MessageOrderInDidChangeSelection) {
   size_t last_selection = 0;
 
   for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const uint32 type = render_thread_->sink().GetMessageAt(i)->type();
+    const uint32_t type = render_thread_->sink().GetMessageAt(i)->type();
     if (type == ViewHostMsg_TextInputStateChanged::ID) {
       is_input_type_called = true;
       last_input_type = i;
@@ -2491,6 +2603,7 @@ TEST_F(RenderViewImplBlinkSettingsTest, Negative) {
 
 TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithoutZoomForDSF) {
   DoSetUp();
+  SetDeviceScaleFactor(2.f);
   blink::WebRect rect(20, 10, 200, 100);
   view()->convertViewportToWindow(&rect);
   EXPECT_EQ(20, rect.x);
@@ -2503,14 +2616,112 @@ TEST_F(RenderViewImplScaleFactorTest, ConverViewportToWindowWithZoomForDSF) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableUseZoomForDSF);
   DoSetUp();
+  SetDeviceScaleFactor(1.f);
+  {
+    blink::WebRect rect(20, 10, 200, 100);
+    view()->convertViewportToWindow(&rect);
+    EXPECT_EQ(20, rect.x);
+    EXPECT_EQ(10, rect.y);
+    EXPECT_EQ(200, rect.width);
+    EXPECT_EQ(100, rect.height);
+  }
 
-  blink::WebRect rect(20, 10, 200, 100);
-  view()->convertViewportToWindow(&rect);
-  EXPECT_EQ(10, rect.x);
-  EXPECT_EQ(5, rect.y);
-  EXPECT_EQ(100, rect.width);
-  EXPECT_EQ(50, rect.height);
+  SetDeviceScaleFactor(2.f);
+  {
+    blink::WebRect rect(20, 10, 200, 100);
+    view()->convertViewportToWindow(&rect);
+    EXPECT_EQ(10, rect.x);
+    EXPECT_EQ(5, rect.y);
+    EXPECT_EQ(100, rect.width);
+    EXPECT_EQ(50, rect.height);
+  }
 }
+
+#if defined(OS_MACOSX) || defined(USE_AURA)
+TEST_F(RenderViewImplScaleFactorTest, GetCompositionCharacterBoundsTest) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableUseZoomForDSF);
+  DoSetUp();
+  SetDeviceScaleFactor(1.f);
+#if defined(OS_WIN)
+  // http://crbug.com/508747
+  if (base::win::GetVersion() >= base::win::VERSION_WIN10)
+    return;
+#endif
+
+  LoadHTML("<textarea id=\"test\"></textarea>");
+  ExecuteJavaScriptForTests("document.getElementById('test').focus();");
+
+  const base::string16 empty_string;
+  const std::vector<blink::WebCompositionUnderline> empty_underline;
+  std::vector<gfx::Rect> bounds_at_1x;
+  view()->OnSetFocus(true);
+
+  // ASCII composition
+  const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
+  view()->OnImeSetComposition(ascii_composition, empty_underline, 0, 0);
+  view()->GetCompositionCharacterBounds(&bounds_at_1x);
+  ASSERT_EQ(ascii_composition.size(), bounds_at_1x.size());
+
+  SetDeviceScaleFactor(2.f);
+  std::vector<gfx::Rect> bounds_at_2x;
+  view()->GetCompositionCharacterBounds(&bounds_at_2x);
+  ASSERT_EQ(bounds_at_1x.size(), bounds_at_2x.size());
+  for (size_t i = 0; i < bounds_at_1x.size(); i++) {
+    const gfx::Rect& b1 = bounds_at_1x[i];
+    const gfx::Rect& b2 = bounds_at_2x[i];
+    gfx::Vector2d origin_diff = b1.origin() - b2.origin();
+
+    // The bounds may not be exactly same because the font metrics are different
+    // at 1x and 2x. Just make sure that the difference is small.
+    EXPECT_LT(origin_diff.x(), 2);
+    EXPECT_LT(origin_diff.y(), 2);
+    EXPECT_LT(std::abs(b1.width() - b2.width()), 3);
+    EXPECT_LT(std::abs(b1.height() - b2.height()), 2);
+  }
+}
+#endif
+
+#if !defined(OS_ANDROID)
+// No extensions/autoresize on Android.
+namespace {
+
+// Don't use text as it text will change the size in DIP at different
+// scale factor.
+const char kAutoResizeTestPage[] =
+    "<div style='width=20px; height=20px'></div>";
+
+}  // namespace
+
+TEST_F(RenderViewImplScaleFactorTest, AutoResizeWithZoomForDSF) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableUseZoomForDSF);
+  DoSetUp();
+  view()->EnableAutoResizeForTesting(gfx::Size(5, 5), gfx::Size(1000, 1000));
+  LoadHTML(kAutoResizeTestPage);
+  gfx::Size size_at_1x = view()->size();
+  ASSERT_FALSE(size_at_1x.IsEmpty());
+
+  SetDeviceScaleFactor(2.f);
+  LoadHTML(kAutoResizeTestPage);
+  gfx::Size size_at_2x = view()->size();
+  EXPECT_EQ(size_at_1x, size_at_2x);
+}
+
+TEST_F(RenderViewImplScaleFactorTest, AutoResizeWithoutZoomForDSF) {
+  DoSetUp();
+  view()->EnableAutoResizeForTesting(gfx::Size(5, 5), gfx::Size(1000, 1000));
+  LoadHTML(kAutoResizeTestPage);
+  gfx::Size size_at_1x = view()->size();
+  ASSERT_FALSE(size_at_1x.IsEmpty());
+
+  SetDeviceScaleFactor(2.f);
+  LoadHTML(kAutoResizeTestPage);
+  gfx::Size size_at_2x = view()->size();
+  EXPECT_EQ(size_at_1x, size_at_2x);
+}
+
+#endif
 
 TEST_F(DevToolsAgentTest, DevToolsResumeOnClose) {
   Attach();

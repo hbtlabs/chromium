@@ -27,7 +27,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "config.h"
 #include "modules/serviceworkers/ServiceWorkerContainer.h"
 
 #include "bindings/core/v8/ScriptPromise.h"
@@ -210,7 +209,7 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
     String errorMessage;
     // Restrict to secure origins: https://w3c.github.io/webappsec/specs/powerfulfeatures/#settings-privileged
     if (!executionContext->isSecureContext(errorMessage)) {
-        resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        resolver->reject(DOMException::create(SecurityError, errorMessage));
         return promise;
     }
 
@@ -278,7 +277,7 @@ ScriptPromise ServiceWorkerContainer::getRegistration(ScriptState* scriptState, 
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     String errorMessage;
     if (!executionContext->isSecureContext(errorMessage)) {
-        resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        resolver->reject(DOMException::create(SecurityError, errorMessage));
         return promise;
     }
 
@@ -314,7 +313,7 @@ ScriptPromise ServiceWorkerContainer::getRegistrations(ScriptState* scriptState)
     RefPtr<SecurityOrigin> documentOrigin = executionContext->securityOrigin();
     String errorMessage;
     if (!executionContext->isSecureContext(errorMessage)) {
-        resolver->reject(DOMException::create(NotSupportedError, errorMessage));
+        resolver->reject(DOMException::create(SecurityError, errorMessage));
         return promise;
     }
 

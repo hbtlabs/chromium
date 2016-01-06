@@ -4,8 +4,11 @@
 
 #include "components/exo/surface.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/resources/single_release_callback.h"
@@ -13,14 +16,21 @@
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_property.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
+DECLARE_WINDOW_PROPERTY_TYPE(exo::Surface*);
+
 namespace exo {
 namespace {
+
+// A property key containing the surface that is associated with
+// window. If unset, no surface is associated with window.
+DEFINE_WINDOW_PROPERTY_KEY(Surface*, kSurfaceKey, nullptr);
 
 // Helper function that returns an iterator to the first entry in |list|
 // with |key|.
@@ -90,6 +100,7 @@ Surface::Surface()
   SetType(ui::wm::WINDOW_TYPE_CONTROL);
   SetName("ExoSurface");
   Init(ui::LAYER_SOLID_COLOR);
+  SetProperty(kSurfaceKey, this);
   set_owned_by_parent(false);
 }
 
@@ -108,6 +119,11 @@ Surface::~Surface() {
                                  frame_callbacks_);
   for (const auto& frame_callback : active_frame_callbacks_)
     frame_callback.Run(base::TimeTicks());
+}
+
+// static
+Surface* Surface::AsSurface(aura::Window* window) {
+  return window->GetProperty(kSurfaceKey);
 }
 
 void Surface::Attach(Buffer* buffer) {
@@ -255,7 +271,7 @@ void Surface::CommitSurfaceHierarchy() {
     if (texture_mailbox_release_callback) {
       // Update layer with the new contents.
       layer()->SetTextureMailbox(texture_mailbox,
-                                 texture_mailbox_release_callback.Pass(),
+                                 std::move(texture_mailbox_release_callback),
                                  texture_mailbox.size_in_pixels());
       layer()->SetTextureFlipped(false);
       layer()->SetBounds(gfx::Rect(layer()->bounds().origin(),
@@ -388,7 +404,7 @@ void Surface::OnCompositingEnded(ui::Compositor* compositor) {
       current_buffer_->ProduceTextureMailbox(&texture_mailbox);
   if (texture_mailbox_release_callback) {
     layer()->SetTextureMailbox(texture_mailbox,
-                               texture_mailbox_release_callback.Pass(),
+                               std::move(texture_mailbox_release_callback),
                                texture_mailbox.size_in_pixels());
     layer()->SetTextureFlipped(false);
     layer()->SchedulePaint(gfx::Rect(texture_mailbox.size_in_pixels()));

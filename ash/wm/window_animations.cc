@@ -5,8 +5,8 @@
 #include "ash/wm/window_animations.h"
 
 #include <math.h>
-
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "ash/screen_util.h"
@@ -62,8 +62,8 @@ const float kWindowAnimation_ShowOpacity = 1.f;
 const float kLayerScaleAboveSize = 1.1f;
 const float kLayerScaleBelowSize = .9f;
 
-int64 Round64(float f) {
-  return static_cast<int64>(f + 0.5f);
+int64_t Round64(float f) {
+  return static_cast<int64_t>(f + 0.5f);
 }
 
 base::TimeDelta GetCrossFadeDuration(aura::Window* window,
@@ -271,8 +271,7 @@ class CrossFadeObserver : public ui::CompositorObserver,
   // Takes ownership of |layer| and its child layers.
   CrossFadeObserver(aura::Window* window,
                     scoped_ptr<ui::LayerTreeOwner> layer_owner)
-      : window_(window),
-        layer_owner_(layer_owner.Pass()) {
+      : window_(window), layer_owner_(std::move(layer_owner)) {
     window_->AddObserver(this);
     layer_owner_->root()->GetCompositor()->AddObserver(this);
   }
@@ -342,7 +341,8 @@ base::TimeDelta CrossFadeAnimation(
     ui::ScopedLayerAnimationSettings settings(old_layer->GetAnimator());
 
     // Animation observer owns the old layer and deletes itself.
-    settings.AddObserver(new CrossFadeObserver(window, old_layer_owner.Pass()));
+    settings.AddObserver(
+        new CrossFadeObserver(window, std::move(old_layer_owner)));
     settings.SetTransitionDuration(duration);
     settings.SetTweenType(tween_type);
     gfx::Transform out_transform;

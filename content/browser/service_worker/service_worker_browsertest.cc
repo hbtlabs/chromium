@@ -2,13 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -181,7 +187,7 @@ class WorkerActivatedObserver
     RunOnIOThread(base::Bind(&WorkerActivatedObserver::InitOnIOThread, this));
   }
   // ServiceWorkerContextObserver overrides.
-  void OnVersionStateChanged(int64 version_id,
+  void OnVersionStateChanged(int64_t version_id,
                              ServiceWorkerVersion::Status) override {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     const ServiceWorkerVersion* version = context_->GetLiveVersion(version_id);
@@ -208,15 +214,14 @@ class WorkerActivatedObserver
 scoped_ptr<net::test_server::HttpResponse> VerifyServiceWorkerHeaderInRequest(
     const net::test_server::HttpRequest& request) {
   EXPECT_EQ(request.relative_url, "/service_worker/generated_sw.js");
-  std::map<std::string, std::string>::const_iterator it =
-      request.headers.find("Service-Worker");
+  auto it = request.headers.find("Service-Worker");
   EXPECT_TRUE(it != request.headers.end());
   EXPECT_EQ("script", it->second);
 
   scoped_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse());
   http_response->set_content_type("text/javascript");
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 // The ImportsBustMemcache test requires that the imported script
@@ -257,12 +262,12 @@ void CreateLongLivedResourceInterceptors(
   interceptor.reset(new LongLivedResourceInterceptor(
       "importScripts('long_lived_import.js');"));
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-      worker_url, interceptor.Pass());
+      worker_url, std::move(interceptor));
 
   interceptor.reset(new LongLivedResourceInterceptor(
       "// the imported script does nothing"));
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-      import_url, interceptor.Pass());
+      import_url, std::move(interceptor));
 }
 
 void CountScriptResources(
@@ -450,7 +455,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_TRUE(prepare_result);
     *result = fetch_result.result;
     *response = fetch_result.response;
-    *blob_data_handle = fetch_result.blob_data_handle.Pass();
+    *blob_data_handle = std::move(fetch_result.blob_data_handle);
     ASSERT_EQ(SERVICE_WORKER_OK, fetch_result.status);
   }
 
@@ -470,6 +475,10 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
         pattern,
         wrapper()->context()->storage()->NewRegistrationId(),
         wrapper()->context()->AsWeakPtr());
+    // Set the update check time to avoid triggering updates in the middle of
+    // tests.
+    registration_->set_last_update_check(base::Time::Now());
+
     version_ = new ServiceWorkerVersion(
         registration_.get(),
         embedded_test_server()->GetURL(worker_url),
@@ -499,7 +508,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
         embedded_test_server()->GetURL("/service_worker/host"));
     host->AssociateRegistration(registration_.get(),
                                 false /* notify_controllerchange */);
-    wrapper()->context()->AddProviderHost(host.Pass());
+    wrapper()->context()->AddProviderHost(std::move(host));
   }
 
   void AddWaitingWorkerOnIOThread(const std::string& worker_url) {
@@ -538,7 +547,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_EQ(expected_status, status);
   }
 
-  void StoreRegistration(int64 version_id,
+  void StoreRegistration(int64_t version_id,
                          ServiceWorkerStatusCode expected_status) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
@@ -554,7 +563,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
                              this, status));
   }
 
-  void FindRegistrationForId(int64 id,
+  void FindRegistrationForId(int64_t id,
                              const GURL& origin,
                              ServiceWorkerStatusCode expected_status) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
@@ -570,7 +579,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
 
   void FindRegistrationForIdOnIOThread(const base::Closure& done,
                                        ServiceWorkerStatusCode* result,
-                                       int64 id,
+                                       int64_t id,
                                        const GURL& origin) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     wrapper()->context()->storage()->FindRegistrationForId(
@@ -585,7 +594,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
         registration_.get(), version_.get(), status);
   }
 
-  void RemoveLiveRegistrationOnIOThread(int64 id) {
+  void RemoveLiveRegistrationOnIOThread(int64_t id) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     wrapper()->context()->RemoveLiveRegistration(id);
   }
@@ -606,7 +615,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
 
   void StoreOnIOThread(const base::Closure& done,
                        ServiceWorkerStatusCode* result,
-                       int64 version_id) {
+                       int64_t version_id) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     ServiceWorkerVersion* version =
         wrapper()->context()->GetLiveVersion(version_id);
@@ -1086,7 +1095,7 @@ class ServiceWorkerBlackBoxBrowserTest : public ServiceWorkerBrowserTest {
   void FindRegistrationOnIO(const GURL& document_url,
                             ServiceWorkerStatusCode* status,
                             const base::Closure& continuation) {
-    wrapper()->FindRegistrationForDocument(
+    wrapper()->FindReadyRegistrationForDocument(
         document_url,
         base::Bind(&ServiceWorkerBlackBoxBrowserTest::FindRegistrationOnIO2,
                    this, status, continuation));

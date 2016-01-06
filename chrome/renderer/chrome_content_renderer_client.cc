@@ -4,9 +4,12 @@
 
 #include "chrome/renderer/chrome_content_renderer_client.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics_action.h"
@@ -14,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_paths.h"
@@ -57,6 +61,7 @@
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/contextual_search/renderer/overlay_js_render_frame_observer.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
@@ -123,6 +128,7 @@
 
 #if defined(ENABLE_PLUGINS)
 #include "chrome/renderer/plugins/chrome_plugin_placeholder.h"
+#include "chrome/renderer/plugins/power_saver_info.h"
 #endif
 
 #if defined(ENABLE_PRINTING)
@@ -256,60 +262,6 @@ bool SpellCheckReplacer::Visit(content::RenderView* render_view) {
   DCHECK(provider);
   provider->set_spellcheck(spellcheck_);
   return true;
-}
-#endif
-
-#if defined(ENABLE_PLUGINS)
-// Presence of the poster param within plugin object tags.
-// These numeric values are used in UMA logs; do not change them.
-enum PosterParamPresence {
-  POSTER_PRESENCE_NO_PARAM_PPS_DISABLED = 0,
-  POSTER_PRESENCE_NO_PARAM_PPS_ENABLED = 1,
-  POSTER_PRESENCE_PARAM_EXISTS_PPS_DISABLED = 2,
-  POSTER_PRESENCE_PARAM_EXISTS_PPS_ENABLED = 3,
-  POSTER_PRESENCE_NUM_ITEMS
-};
-
-const char kPluginPowerSaverPosterParamPresenceHistogram[] =
-    "Plugin.PowerSaver.PosterParamPresence";
-
-void RecordPosterParamPresence(PosterParamPresence presence) {
-  UMA_HISTOGRAM_ENUMERATION(kPluginPowerSaverPosterParamPresenceHistogram,
-                            presence, POSTER_PRESENCE_NUM_ITEMS);
-}
-
-void TrackPosterParamPresence(const blink::WebPluginParams& params,
-                              bool power_saver_enabled) {
-  DCHECK_EQ(params.attributeNames.size(), params.attributeValues.size());
-
-  for (size_t i = 0; i < params.attributeNames.size(); ++i) {
-    if (params.attributeNames[i].utf8() == "poster") {
-      if (power_saver_enabled)
-        RecordPosterParamPresence(POSTER_PRESENCE_PARAM_EXISTS_PPS_ENABLED);
-      else
-        RecordPosterParamPresence(POSTER_PRESENCE_PARAM_EXISTS_PPS_DISABLED);
-
-      return;
-    }
-  }
-
-  if (power_saver_enabled)
-    RecordPosterParamPresence(POSTER_PRESENCE_NO_PARAM_PPS_ENABLED);
-  else
-    RecordPosterParamPresence(POSTER_PRESENCE_NO_PARAM_PPS_DISABLED);
-}
-
-std::string GetPluginInstancePosterAttribute(
-    const blink::WebPluginParams& params) {
-  DCHECK_EQ(params.attributeNames.size(), params.attributeValues.size());
-
-  for (size_t i = 0; i < params.attributeNames.size(); ++i) {
-    if (params.attributeNames[i].utf8() == "poster" &&
-        !params.attributeValues[i].isEmpty()) {
-      return params.attributeValues[i].utf8();
-    }
-  }
-  return std::string();
 }
 #endif
 
@@ -535,6 +487,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
   // DistillabilityDriver in the browser process.
   new dom_distiller::DistillabilityAgent(render_frame);
 
+  // Set up a mojo service to test if this page is a contextual search page.
+  new contextual_search::OverlayJsRenderFrameObserver(render_frame);
+
   PasswordAutofillAgent* password_autofill_agent =
       new PasswordAutofillAgent(render_frame);
   PasswordGenerationAgent* password_generation_agent =
@@ -724,14 +679,13 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
     }
 #endif
 
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    auto create_blocked_plugin =
-        [&render_frame, &frame, &params, &info, &identifier, &group_name](
-            int template_id, const base::string16& message) {
-          return ChromePluginPlaceholder::CreateBlockedPlugin(
-              render_frame, frame, params, info, identifier, group_name,
-              template_id, message, PlaceholderPosterInfo());
-        };
+    auto create_blocked_plugin = [&render_frame, &frame, &params, &info,
+                                  &identifier, &group_name](
+        int template_id, const base::string16& message) {
+      return ChromePluginPlaceholder::CreateBlockedPlugin(
+          render_frame, frame, params, info, identifier, group_name,
+          template_id, message, PowerSaverInfo());
+    };
     switch (status) {
       case ChromeViewHostMsg_GetPluginInfo_Status::kNotFound: {
         NOTREACHED();
@@ -750,7 +704,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
           bool is_nacl_unrestricted = false;
           if (is_nacl_mime_type) {
             is_nacl_unrestricted =
-                command_line->HasSwitch(switches::kEnableNaCl);
+                base::CommandLine::ForCurrentProcess()->HasSwitch(
+                    switches::kEnableNaCl);
           } else if (is_pnacl_mime_type) {
             is_nacl_unrestricted = true;
           }
@@ -806,54 +761,28 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         bool is_prerendering =
             prerender::PrerenderHelper::IsPrerendering(render_frame);
 
-        bool is_flash = info.name == ASCIIToUTF16(content::kFlashPluginName);
-
-        std::string override_for_testing = command_line->GetSwitchValueASCII(
-            switches::kOverridePluginPowerSaverForTesting);
-
-        // This feature has only been tested throughly with Flash thus far.
-        // It is also enabled for the Power Saver test plugin for browser tests.
-        bool can_throttle_plugin_type =
-            is_flash || override_for_testing == "ignore-list";
-
         bool power_saver_setting_on =
             status ==
             ChromeViewHostMsg_GetPluginInfo_Status::kPlayImportantContent;
-
-        bool power_saver_enabled =
-            override_for_testing == "always" ||
-            (power_saver_setting_on && can_throttle_plugin_type);
-        bool blocked_for_background_tab =
-            power_saver_enabled && render_frame->IsHidden();
-
-        PlaceholderPosterInfo poster_info;
-        if (power_saver_enabled) {
-          poster_info.poster_attribute =
-              GetPluginInstancePosterAttribute(params);
-          poster_info.base_url = frame->document().url();
-        }
-
-        if (is_flash)
-          TrackPosterParamPresence(params, power_saver_enabled);
-
-        if (blocked_for_background_tab || is_prerendering ||
-            !poster_info.poster_attribute.empty()) {
+        PowerSaverInfo power_saver_info =
+            PowerSaverInfo::Get(render_frame, power_saver_setting_on, params,
+                                info, frame->document().url());
+        if (power_saver_info.blocked_for_background_tab || is_prerendering ||
+            !power_saver_info.poster_attribute.empty()) {
           placeholder = ChromePluginPlaceholder::CreateBlockedPlugin(
               render_frame, frame, params, info, identifier, group_name,
-              poster_info.poster_attribute.empty() ? IDR_BLOCKED_PLUGIN_HTML
-                                                   : IDR_PLUGIN_POSTER_HTML,
+              power_saver_info.poster_attribute.empty()
+                  ? IDR_BLOCKED_PLUGIN_HTML
+                  : IDR_PLUGIN_POSTER_HTML,
               l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED, group_name),
-              poster_info);
-          placeholder->set_blocked_for_background_tab(
-              blocked_for_background_tab);
+              power_saver_info);
           placeholder->set_blocked_for_prerendering(is_prerendering);
-          placeholder->set_power_saver_enabled(power_saver_enabled);
           placeholder->AllowLoading();
           break;
         }
 
         scoped_ptr<content::PluginInstanceThrottler> throttler;
-        if (power_saver_enabled) {
+        if (power_saver_info.power_saver_enabled) {
           throttler = PluginInstanceThrottler::Create();
           // PluginPreroller manages its own lifetime.
           new PluginPreroller(
@@ -863,7 +792,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         }
 
         return render_frame->CreatePlugin(frame, info, params,
-                                          throttler.Pass());
+                                          std::move(throttler));
       }
       case ChromeViewHostMsg_GetPluginInfo_Status::kNPAPINotSupported: {
         RenderThread::Get()->RecordAction(

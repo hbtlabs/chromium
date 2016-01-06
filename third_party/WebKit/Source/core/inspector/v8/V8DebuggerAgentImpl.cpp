@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/inspector/v8/V8DebuggerAgentImpl.h"
 
 #include "bindings/core/v8/ScriptCallStackFactory.h"
@@ -181,7 +180,7 @@ void V8DebuggerAgentImpl::enable()
     // debugger().addListener may result in reporting all parsed scripts to
     // the agent so it should already be in enabled state by then.
     m_enabled = true;
-    debugger().addListener(m_contextGroupId, this);
+    debugger().addAgent(m_contextGroupId, this);
     // FIXME(WK44513): breakpoints activated flag should be synchronized between all front-ends
     debugger().setBreakpointsActivated(true);
 }
@@ -214,7 +213,7 @@ void V8DebuggerAgentImpl::disable(ErrorString*)
     m_state->setBoolean(DebuggerAgentState::promiseTrackerEnabled, false);
     m_state->setBoolean(DebuggerAgentState::promiseTrackerCaptureStacks, false);
 
-    debugger().removeListener(m_contextGroupId);
+    debugger().removeAgent(m_contextGroupId);
     m_pausedScriptState = nullptr;
     m_currentCallStack.Reset();
     m_scripts.clear();
@@ -528,37 +527,37 @@ bool V8DebuggerAgentImpl::isCallFrameWithUnknownScriptOrBlackboxed(PassRefPtr<Ja
     return isBlackboxed;
 }
 
-V8DebuggerListener::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipExceptionPause()
+V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipExceptionPause()
 {
     if (m_steppingFromFramework)
-        return V8DebuggerListener::NoSkip;
+        return RequestNoSkip;
     if (isTopCallFrameBlackboxed())
-        return V8DebuggerListener::Continue;
-    return V8DebuggerListener::NoSkip;
+        return RequestContinue;
+    return RequestNoSkip;
 }
 
-V8DebuggerListener::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipStepPause()
+V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipStepPause()
 {
     if (m_steppingFromFramework)
-        return V8DebuggerListener::NoSkip;
+        return RequestNoSkip;
 
     if (m_skipNextDebuggerStepOut) {
         m_skipNextDebuggerStepOut = false;
         if (m_scheduledDebuggerStep == StepOut)
-            return V8DebuggerListener::StepOut;
+            return RequestStepOut;
     }
 
     if (!isTopCallFrameBlackboxed())
-        return V8DebuggerListener::NoSkip;
+        return RequestNoSkip;
 
     if (m_skippedStepFrameCount >= maxSkipStepFrameCount)
-        return V8DebuggerListener::StepOut;
+        return RequestStepOut;
 
     if (!m_skippedStepFrameCount)
         m_recursionLevelForStepFrame = 1;
 
     ++m_skippedStepFrameCount;
-    return V8DebuggerListener::StepFrame;
+    return RequestStepFrame;
 }
 
 PassRefPtr<TypeBuilder::Debugger::Location> V8DebuggerAgentImpl::resolveBreakpoint(const String& breakpointId, const String& scriptId, const ScriptBreakpoint& breakpoint, BreakpointSource source)
@@ -570,7 +569,7 @@ PassRefPtr<TypeBuilder::Debugger::Location> V8DebuggerAgentImpl::resolveBreakpoi
     ScriptsMap::iterator scriptIterator = m_scripts.find(scriptId);
     if (scriptIterator == m_scripts.end())
         return nullptr;
-    Script& script = scriptIterator->value;
+    V8DebuggerScript& script = scriptIterator->value;
     if (breakpoint.lineNumber < script.startLine() || script.endLine() < breakpoint.lineNumber)
         return nullptr;
 
@@ -922,7 +921,7 @@ void V8DebuggerAgentImpl::compileScript(ErrorString* errorString, const String& 
 {
     if (!checkEnabled(errorString))
         return;
-    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForId(executionContextId);
+    InjectedScript injectedScript = m_injectedScriptManager->findInjectedScript(executionContextId);
     if (injectedScript.isEmpty() || !injectedScript.scriptState()->contextIsValid()) {
         *errorString = "Inspected frame has gone";
         return;
@@ -953,7 +952,7 @@ void V8DebuggerAgentImpl::runScript(ErrorString* errorString, const ScriptId& sc
 {
     if (!checkEnabled(errorString))
         return;
-    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForId(executionContextId);
+    InjectedScript injectedScript = m_injectedScriptManager->findInjectedScript(executionContextId);
     if (injectedScript.isEmpty()) {
         *errorString = "Inspected frame has gone";
         return;
@@ -1441,44 +1440,41 @@ PassRefPtrWillBeRawPtr<ScriptAsyncCallStack> V8DebuggerAgentImpl::currentAsyncSt
     return result.release();
 }
 
-String V8DebuggerAgentImpl::sourceMapURLForScript(const Script& script, CompileResult compileResult)
+String V8DebuggerAgentImpl::sourceMapURLForScript(const V8DebuggerScript& script, bool success)
 {
-    bool hasSyntaxError = compileResult != CompileSuccess;
-    if (!hasSyntaxError)
+    if (success)
         return script.sourceMappingURL();
     return ContentSearchUtils::findSourceMapURL(script.source(), ContentSearchUtils::JavaScriptMagicComment);
 }
 
-// V8DebuggerListener functions
-
-void V8DebuggerAgentImpl::didParseSource(const ParsedScript& parsedScript)
+void V8DebuggerAgentImpl::didParseSource(const V8DebuggerParsedScript& parsedScript)
 {
-    Script script = parsedScript.script;
+    V8DebuggerScript script = parsedScript.script;
 
-    bool hasSyntaxError = parsedScript.compileResult != CompileSuccess;
-    if (hasSyntaxError)
+    if (!parsedScript.success)
         script.setSourceURL(ContentSearchUtils::findSourceURL(script.source(), ContentSearchUtils::JavaScriptMagicComment));
 
+    int executionContextId = script.executionContextId();
     bool isContentScript = script.isContentScript();
     bool isInternalScript = script.isInternalScript();
     bool isLiveEdit = script.isLiveEdit();
     bool hasSourceURL = script.hasSourceURL();
     String scriptURL = script.sourceURL();
-    String sourceMapURL = sourceMapURLForScript(script, parsedScript.compileResult);
+    String sourceMapURL = sourceMapURLForScript(script, parsedScript.success);
 
     const String* sourceMapURLParam = sourceMapURL.isNull() ? nullptr : &sourceMapURL;
     const bool* isContentScriptParam = isContentScript ? &isContentScript : nullptr;
     const bool* isInternalScriptParam = isInternalScript ? &isInternalScript : nullptr;
     const bool* isLiveEditParam = isLiveEdit ? &isLiveEdit : nullptr;
     const bool* hasSourceURLParam = hasSourceURL ? &hasSourceURL : nullptr;
-    if (!hasSyntaxError)
-        m_frontend->scriptParsed(parsedScript.scriptId, scriptURL, script.startLine(), script.startColumn(), script.endLine(), script.endColumn(), isContentScriptParam, isInternalScriptParam, isLiveEditParam, sourceMapURLParam, hasSourceURLParam);
+    if (parsedScript.success)
+        m_frontend->scriptParsed(parsedScript.scriptId, scriptURL, script.startLine(), script.startColumn(), script.endLine(), script.endColumn(), executionContextId, isContentScriptParam, isInternalScriptParam, isLiveEditParam, sourceMapURLParam, hasSourceURLParam);
     else
-        m_frontend->scriptFailedToParse(parsedScript.scriptId, scriptURL, script.startLine(), script.startColumn(), script.endLine(), script.endColumn(), isContentScriptParam, isInternalScriptParam, sourceMapURLParam, hasSourceURLParam);
+        m_frontend->scriptFailedToParse(parsedScript.scriptId, scriptURL, script.startLine(), script.startColumn(), script.endLine(), script.endColumn(), executionContextId, isContentScriptParam, isInternalScriptParam, sourceMapURLParam, hasSourceURLParam);
 
     m_scripts.set(parsedScript.scriptId, script);
 
-    if (scriptURL.isEmpty() || hasSyntaxError)
+    if (scriptURL.isEmpty() || !parsedScript.success)
         return;
 
     RefPtr<JSONObject> breakpointsCookie = m_state->getObject(DebuggerAgentState::javaScriptBreakpoints);
@@ -1500,33 +1496,33 @@ void V8DebuggerAgentImpl::didParseSource(const ParsedScript& parsedScript)
     }
 }
 
-V8DebuggerListener::SkipPauseRequest V8DebuggerAgentImpl::didPause(v8::Local<v8::Context> context, v8::Local<v8::Object> callFrames, v8::Local<v8::Value> v8exception, const Vector<String>& hitBreakpoints, bool isPromiseRejection)
+V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::didPause(v8::Local<v8::Context> context, v8::Local<v8::Object> callFrames, v8::Local<v8::Value> v8exception, const Vector<String>& hitBreakpoints, bool isPromiseRejection)
 {
     ScriptState* scriptState = ScriptState::from(context);
     if (!scriptState->contextIsValid())
-        return V8DebuggerListener::Continue;
+        return RequestContinue;
 
     ScriptValue exception(scriptState, v8exception);
 
-    V8DebuggerListener::SkipPauseRequest result;
+    V8DebuggerAgentImpl::SkipPauseRequest result;
     if (m_skipAllPauses)
-        result = V8DebuggerListener::Continue;
+        result = RequestContinue;
     else if (!hitBreakpoints.isEmpty())
-        result = V8DebuggerListener::NoSkip; // Don't skip explicit breakpoints even if set in frameworks.
+        result = RequestNoSkip; // Don't skip explicit breakpoints even if set in frameworks.
     else if (!exception.isEmpty())
         result = shouldSkipExceptionPause();
     else if (m_scheduledDebuggerStep != NoStep || m_javaScriptPauseScheduled || m_pausingOnNativeEvent)
         result = shouldSkipStepPause();
     else
-        result = V8DebuggerListener::NoSkip;
+        result = RequestNoSkip;
 
     m_skipNextDebuggerStepOut = false;
-    if (result != V8DebuggerListener::NoSkip)
+    if (result != RequestNoSkip)
         return result;
 
     // Skip pauses inside V8 internal scripts and on syntax errors.
     if (callFrames.IsEmpty())
-        return V8DebuggerListener::Continue;
+        return RequestContinue;
 
     ASSERT(scriptState);
     ASSERT(!m_pausedScriptState);

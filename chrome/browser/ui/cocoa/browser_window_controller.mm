@@ -184,6 +184,17 @@ using content::Referrer;
 using content::RenderWidgetHostView;
 using content::WebContents;
 
+namespace {
+
+void SetUpBrowserWindowCommandHandler(NSWindow* window) {
+  // Make the window handle browser window commands.
+  [base::mac::ObjCCastStrict<ChromeEventProcessingWindow>(window)
+      setCommandHandler:[[[BrowserWindowCommandHandler alloc] init]
+                            autorelease]];
+}
+
+}  // namespace
+
 @interface NSWindow (NSPrivateApis)
 // Note: These functions are private, use -[NSObject respondsToSelector:]
 // before calling them.
@@ -227,10 +238,7 @@ using content::WebContents;
     browser_.reset(browser);
     ownsBrowser_ = ownIt;
     NSWindow* window = [self window];
-    // Make the window handle browser window commands.
-    [base::mac::ObjCCastStrict<ChromeEventProcessingWindow>(window)
-        setCommandHandler:[[[BrowserWindowCommandHandler alloc] init]
-                              autorelease]];
+    SetUpBrowserWindowCommandHandler(window);
 
     // Make the content view for the window have a layer. This will make all
     // sub-views have layers. This is necessary to ensure correct layer
@@ -376,12 +384,12 @@ using content::WebContents;
 
     [self layoutSubviews];
 
-    // For a popup window, |desiredContentRect| contains the desired height of
-    // the content, not of the whole window.  Now that all the views are laid
-    // out, measure the current content area size and grow if needed.  The
-    // window has not been placed onscreen yet, so this extra resize will not
-    // cause visible jank.
-    if (browser_->is_type_popup()) {
+    // For non-trusted, non-app popup windows, |desiredContentRect| contains the
+    // desired height of the content, not of the whole window.  Now that all the
+    // views are laid out, measure the current content area size and grow if
+    // needed. The window has not been placed onscreen yet, so this extra resize
+    // will not cause visible jank.
+    if (chrome::SavedBoundsAreContentBounds(browser_.get())) {
       CGFloat deltaH = desiredContentRect.height() -
                        NSHeight([[self tabContentArea] frame]);
       // Do not shrink the window, as that may break minimum size invariants.
@@ -1448,8 +1456,10 @@ using content::WebContents;
 }
 
 - (NSWindow*)createFullscreenWindow {
-  return [[[FullscreenWindow alloc] initForScreen:[[self window] screen]]
-           autorelease];
+  NSWindow* window = [[[FullscreenWindow alloc]
+      initForScreen:[[self window] screen]] autorelease];
+  SetUpBrowserWindowCommandHandler(window);
+  return window;
 }
 
 - (NSInteger)numberOfTabs {
@@ -1546,8 +1556,8 @@ using content::WebContents;
   }];
 }
 
-- (ui::ThemeProvider*)themeProvider {
-  return ThemeServiceFactory::GetForProfile(browser_->profile());
+- (const ui::ThemeProvider*)themeProvider {
+  return &ThemeService::GetThemeProviderForProfile(browser_->profile());
 }
 
 - (ThemedWindowStyle)themedWindowStyle {

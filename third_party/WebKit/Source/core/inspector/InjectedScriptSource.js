@@ -170,6 +170,8 @@ function isArrayLike(obj)
         return false;
     try {
         if (typeof obj.splice === "function") {
+            if (!InjectedScriptHost.suppressWarningsAndCallFunction(Object.prototype.hasOwnProperty, obj, ["length"]))
+                return false;
             var len = obj.length;
             return typeof len === "number" && isUInt32(len);
         }
@@ -562,6 +564,7 @@ InjectedScript.prototype = {
                             continue;
                         if ("get" in descriptor && "set" in descriptor && name != "__proto__" && InjectedScriptHost.isDOMWrapper(object) && !doesAttributeHaveObservableSideEffectOnGet(object, name)) {
                             descriptor.value = InjectedScriptHost.suppressWarningsAndCallFunction(function(attribute) { return this[attribute]; }, object, [name]);
+                            descriptor.isOwn = true;
                             delete descriptor.get;
                             delete descriptor.set;
                         }

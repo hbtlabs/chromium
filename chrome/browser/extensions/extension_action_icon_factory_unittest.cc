@@ -4,11 +4,15 @@
 
 #include "chrome/browser/extensions/extension_action_icon_factory.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -263,7 +267,7 @@ TEST_F(ExtensionActionIconFactoryTest, DefaultIcon) {
   scoped_ptr<ExtensionIconSet> default_icon_set(new ExtensionIconSet());
   default_icon_set->Add(19, "icon.png");
 
-  browser_action->SetDefaultIconForTest(default_icon_set.Pass());
+  browser_action->SetDefaultIconForTest(std::move(default_icon_set));
   ASSERT_TRUE(browser_action->default_icon());
 
   ExtensionActionIconFactory icon_factory(

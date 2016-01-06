@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/frame/RemoteFrame.h"
 
 #include "bindings/core/v8/WindowProxy.h"
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/dom/RemoteSecurityContext.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/RemoteDOMWindow.h"
 #include "core/frame/RemoteFrameClient.h"
 #include "core/frame/RemoteFrameView.h"
@@ -96,6 +96,11 @@ void RemoteFrame::detach(FrameDetachType type)
     detachChildren();
     if (!client())
         return;
+
+    // Clean up the frame's view if needed. A remote frame only has a view if
+    // the parent is a local frame.
+    if (m_view)
+        m_view->dispose();
     client()->willBeDetached();
     m_windowProxyManager->clearForClose();
     setView(nullptr);
@@ -185,6 +190,11 @@ void RemoteFrame::setRemotePlatformLayer(WebLayer* layer)
 
     ASSERT(owner());
     toHTMLFrameOwnerElement(owner())->setNeedsCompositingUpdate();
+}
+
+void RemoteFrame::advanceFocus(WebFocusType type, LocalFrame* source)
+{
+    remoteFrameClient()->advanceFocus(type, source);
 }
 
 } // namespace blink

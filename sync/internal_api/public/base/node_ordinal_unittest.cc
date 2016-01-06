@@ -8,8 +8,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <limits>
+#include <vector>
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace syncer {
@@ -100,7 +103,7 @@ TEST(NodeOrdinalTest, PositionToOrdinalToPosition) {
 template <typename T, typename LessThan = std::less<T> >
 class IndexedLessThan {
  public:
-  IndexedLessThan(const T* values) : values_(values) {}
+  explicit IndexedLessThan(const T* values) : values_(values) {}
 
   bool operator()(int i1, int i2) {
     return less_than_(values_[i1], values_[i2]);

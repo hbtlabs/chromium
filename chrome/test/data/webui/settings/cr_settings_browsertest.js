@@ -28,6 +28,7 @@ CrSettingsBrowserTest.prototype = {
 
   /** @override */
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    '../fake_chrome_event.js',
     'fake_settings_private.js',
     'checkbox_tests.js',
     'dropdown_menu_tests.js',
@@ -35,6 +36,8 @@ CrSettingsBrowserTest.prototype = {
     'prefs_test_cases.js',
     'prefs_tests.js',
     'reset_page_test.js',
+    'site_details_tests.js',
+    'site_details_permission_tests.js',
     'site_list_tests.js',
     'site_settings_category_tests.js',
   ]),
@@ -57,6 +60,8 @@ TEST_F('CrSettingsBrowserTest', 'MAYBE_CrSettingsTest', function() {
   settings_dropdown_menu.registerTests();
   settings_prefUtil.registerTests();
   settings_prefs.registerTests();
+  site_details.registerTests();
+  site_details_permission.registerTests();
   site_list.registerTests();
   site_settings_category.registerTests();
 
@@ -66,6 +71,7 @@ TEST_F('CrSettingsBrowserTest', 'MAYBE_CrSettingsTest', function() {
 
 
 TEST_F('CrSettingsBrowserTest', 'ResetPage', function() {
-  settings_reset_page.registerTests();
+  settings_reset_page.registerDialogTests();
+  settings_reset_page.registerBannerTests();
   mocha.run();
 });

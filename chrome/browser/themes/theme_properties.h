@@ -8,7 +8,8 @@
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_utils.h"
 
@@ -26,6 +27,9 @@ class ThemeProperties {
   enum OverwritableByUserThemeProperty {
     COLOR_FRAME,
     COLOR_FRAME_INACTIVE,
+    // Instead of using the INCOGNITO variants directly, most code should
+    // use the original color ID in an incognito-aware context (such as
+    // GetDefaultColor).
     COLOR_FRAME_INCOGNITO,
     COLOR_FRAME_INCOGNITO_INACTIVE,
     COLOR_TOOLBAR,
@@ -85,6 +89,10 @@ class ThemeProperties {
     COLOR_TOOLBAR_BUTTON_ICON,
     // The color of a disabled toolbar button's icon.
     COLOR_TOOLBAR_BUTTON_ICON_INACTIVE,
+
+    // Colors used for the detached (NTP) bookmark bar.
+    COLOR_DETACHED_BOOKMARK_BAR_BACKGROUND,
+    COLOR_DETACHED_BOOKMARK_BAR_SEPARATOR,
 
     // The throbber colors for tabs or anything on a toolbar (currently, only
     // the download shelf). If you're adding a throbber elsewhere, such as in
@@ -148,11 +156,11 @@ class ThemeProperties {
 
   // Returns the default tint for the given tint |id| TINT_* enum value.
   // Returns an HSL value of {-1, -1, -1} if |id| is invalid.
-  static color_utils::HSL GetDefaultTint(int id);
+  static color_utils::HSL GetDefaultTint(int id, bool otr);
 
   // Returns the default color for the given color |id| COLOR_* enum value.
   // Returns gfx::kPlaceholderColor if |id| is invalid.
-  static SkColor GetDefaultColor(int id);
+  static SkColor GetDefaultColor(int id, bool otr);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ThemeProperties);

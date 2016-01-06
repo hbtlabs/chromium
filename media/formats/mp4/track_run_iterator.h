@@ -5,10 +5,12 @@
 #ifndef MEDIA_FORMATS_MP4_TRACK_RUN_ITERATOR_H_
 #define MEDIA_FORMATS_MP4_TRACK_RUN_ITERATOR_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"

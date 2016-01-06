@@ -14,6 +14,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.bottombar.readermode.ReaderModePanel;
 import org.chromium.chrome.browser.infobar.InfoBar;
@@ -24,6 +25,7 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.chrome.browser.widget.findinpage.FindToolbarObserver;
 import org.chromium.components.dom_distiller.content.DistillablePageUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -34,6 +36,7 @@ import org.chromium.ui.base.PageTransition;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manages UI effects for reader mode including hiding and showing the
@@ -82,6 +85,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     private final int mHeaderBackgroundColor;
     private boolean mIsFullscreenModeEntered;
     private boolean mIsInfobarContainerShown;
+    private boolean mIsFindToolbarShowing;
 
     public ReaderModeManager(TabModelSelector selector, ChromeActivity activity) {
         super(selector);
@@ -106,11 +110,30 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         }
         mTabStatusMap.clear();
 
-        DomDistillerUIUtils.destroy();
+        DomDistillerUIUtils.destroy(this);
 
         mChromeActivity = null;
         mReaderModePanel = null;
         mTabModelSelector = null;
+    }
+
+    /**
+     * @return A FindToolbarObserver capable of hiding the Reader Mode panel.
+     */
+    public FindToolbarObserver getFindToolbarObserver() {
+        return new FindToolbarObserver() {
+            @Override
+            public void onFindToolbarShown() {
+                mIsFindToolbarShowing = true;
+                closeReaderPanel(StateChangeReason.UNKNOWN, true);
+            }
+
+            @Override
+            public void onFindToolbarHidden() {
+                mIsFindToolbarShowing = false;
+                requestReaderPanelShow(StateChangeReason.UNKNOWN);
+            }
+        };
     }
 
     // TabModelSelectorTabObserver:
@@ -276,15 +299,12 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     @Override
     public void onCloseButtonPressed() {
-        int currentTabId = mTabModelSelector.getCurrentTabId();
-        if (currentTabId == Tab.INVALID_TAB_ID) return;
-
-        if (!mTabStatusMap.containsKey(currentTabId)) return;
-        ReaderModeTabInfo tabInfo = mTabStatusMap.get(currentTabId);
-        tabInfo.setIsDismissed(true);
-        if (tabInfo.getWebContentsObserver() != null) {
-            tabInfo.getWebContentsObserver().destroy();
-        }
+        if (mReaderModePanel == null) return;
+        RecordHistogram.recordBooleanHistogram("DomDistiller.BarCloseButtonUsage",
+                mReaderModePanel.getPanelState() == PanelState.EXPANDED
+                || mReaderModePanel.getPanelState() == PanelState.MAXIMIZED);
+        // TODO(mdjones): If it is decided that Reader Mode cannot be permanently dismissed for a
+        // tab, remove that remaining logic from this class.
     }
 
     @Override
@@ -295,14 +315,16 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         return tab.getWebContents();
     }
 
-    /**
-     * This is a proxy method for those with access to the ReaderModeManagerDelegate to close the
-     * panel.
-     */
     @Override
-    public void closePanel(StateChangeReason reason, boolean animate) {
+    public void closeReaderPanel(StateChangeReason reason, boolean animate) {
         if (mReaderModePanel == null) return;
         mReaderModePanel.closePanel(reason, animate);
+    }
+
+    @Override
+    public void recordTimeSpentInReader(long timeMs) {
+        RecordHistogram.recordLongTimesHistogram("DomDistiller.Time.ViewingReaderModePanel",
+                timeMs, TimeUnit.MILLISECONDS);
     }
 
     protected WebContentsObserver createWebContentsObserver(WebContents webContents) {
@@ -372,21 +394,11 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 || mTabStatusMap.get(currentTabId).getStatus() != POSSIBLE
                 || mTabStatusMap.get(currentTabId).isDismissed()
                 || mIsInfobarContainerShown
+                || mIsFindToolbarShowing
                 || mIsFullscreenModeEntered) {
             return;
         }
         mReaderModePanel.requestPanelShow(reason);
-    }
-
-    /**
-     * A wrapper for the close method of the Reader Mode panel that checks for null and can be
-     * overridden for testing.
-     * @param reason The reason the panel is closing.
-     * @param animate True if the panel should animate closed.
-     */
-    protected void closeReaderPanel(StateChangeReason reason, boolean animate) {
-        if (mReaderModePanel == null) return;
-        mReaderModePanel.closePanel(reason, animate);
     }
 
     /**

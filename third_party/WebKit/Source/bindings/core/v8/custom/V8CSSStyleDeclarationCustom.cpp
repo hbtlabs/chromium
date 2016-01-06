@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "bindings/core/v8/V8CSSStyleDeclaration.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -48,6 +47,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringConcatenate.h"
+#include <algorithm>
 
 using namespace WTF;
 
@@ -96,7 +96,7 @@ static CSSPropertyID parseCSSPropertyID(v8::Isolate* isolate, const String& prop
         i += 3;
         // getComputedStyle(elem).cssX is a non-standard behaviour
         // Measure this behaviour as CSSXGetComputedStyleQueries.
-        UseCounter::countIfNotPrivateScript(isolate, callingExecutionContext(isolate), UseCounter::CSSXGetComputedStyleQueries);
+        UseCounter::countDeprecationIfNotPrivateScript(isolate, callingExecutionContext(isolate), UseCounter::CSSXGetComputedStyleQueries);
     } else if (hasCSSPropertyNamePrefix(propertyName, "webkit"))
         builder.append('-');
     else if (isASCIIUpper(propertyName[0]))

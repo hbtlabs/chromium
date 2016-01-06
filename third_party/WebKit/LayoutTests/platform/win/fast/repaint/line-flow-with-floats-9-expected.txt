@@ -22,8 +22,8 @@
         [14, 404, 355, 36],
         [14, 404, 354, 36],
         [14, 242, 406, 126],
-        [13, 494, 408, 90],
-        [13, 476, 408, 90],
+        [13, 494, 407, 90],
+        [13, 476, 407, 90],
         [13, 242, 407, 126],
         [8, 572, 418, 18],
         [8, 569, 418, 21],
@@ -114,6 +114,7 @@
         "LayoutView #document",
         "LayoutBlockFlow HTML",
         "LayoutBlockFlow P",
+        "RootInlineBox",
         "LayoutBlockFlow (floating) SPAN id='yellowFloat'",
         "LayoutText #text",
         "InlineTextBox 'begin again, it was very provoking to find that the'",
@@ -155,8 +156,8 @@
         "InlineTextBox 'me? They\u2019re dreadfully fond of beheading people'",
         "InlineTextBox 'here; the great\n'",
         "InlineTextBox 'wonder is, that there\u2018s any one left alive!\u2019'",
-        "VerticalScrollbar",
-        "LayoutView #document"
+        "LayoutView #document",
+        "VerticalScrollbar"
       ]
     }
   ]

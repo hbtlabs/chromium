@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
 
 #include "bindings/core/v8/V8GCController.h"
@@ -30,7 +29,7 @@ class CompositorWorkerSharedState {
 public:
     static CompositorWorkerSharedState& instance()
     {
-        AtomicallyInitializedStaticReference(CompositorWorkerSharedState, compositorWorkerSharedState, (new CompositorWorkerSharedState()));
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CompositorWorkerSharedState, compositorWorkerSharedState, (new CompositorWorkerSharedState()));
         return compositorWorkerSharedState;
     }
 
@@ -113,7 +112,7 @@ public:
         if (m_workerCount > 1)
             return;
 
-        v8::V8::TerminateExecution(m_isolate);
+        m_isolate->TerminateExecution();
     }
 
     bool hasThreadForTest()

@@ -26,7 +26,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/css/resolver/StyleResolver.h"
 
 #include "core/CSSPropertyNames.h"
@@ -126,9 +125,9 @@ static StylePropertySet* rightToLeftDeclaration()
     return rightToLeftDecl;
 }
 
-static void collectScopedResolversForHostedShadowTrees(const Element* element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
+static void collectScopedResolversForHostedShadowTrees(const Element& element, WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8>& resolvers)
 {
-    ElementShadow* shadow = element->shadow();
+    ElementShadow* shadow = element.shadow();
     if (!shadow)
         return;
 
@@ -146,16 +145,15 @@ StyleResolver::StyleResolver(Document& document)
     , m_viewportStyleResolver(ViewportStyleResolver::create(&document))
     , m_needCollectFeatures(false)
     , m_printMediaType(false)
-    , m_styleResourceLoader(&document)
     , m_styleSharingDepth(0)
     , m_accessCount(0)
 {
     FrameView* view = document.view();
     if (view) {
-        m_medium = adoptPtr(new MediaQueryEvaluator(&view->frame()));
+        m_medium = adoptPtrWillBeNoop(new MediaQueryEvaluator(&view->frame()));
         m_printMediaType = equalIgnoringCase(view->mediaType(), MediaTypeNames::print);
     } else {
-        m_medium = adoptPtr(new MediaQueryEvaluator("all"));
+        m_medium = adoptPtrWillBeNoop(new MediaQueryEvaluator("all"));
     }
 
     initWatchedSelectorRules();
@@ -347,16 +345,6 @@ void StyleResolver::clearStyleSharingList()
     m_styleSharingLists.resize(0);
 }
 
-void StyleResolver::pushParentElement(Element& parent)
-{
-    m_selectorFilter.pushParent(parent);
-}
-
-void StyleResolver::popParentElement(Element& parent)
-{
-    m_selectorFilter.popParent(parent);
-}
-
 static inline ScopedStyleResolver* scopedResolverFor(const Element& element)
 {
     // Ideally, returning element->treeScope().scopedStyleResolver() should be
@@ -385,7 +373,7 @@ static inline ScopedStyleResolver* scopedResolverFor(const Element& element)
     return treeScope->scopedStyleResolver();
 }
 
-void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& collector)
+void StyleResolver::matchAuthorRules(const Element& element, ElementRuleCollector& collector)
 {
     collector.clearMatchedRules();
 
@@ -398,7 +386,7 @@ void StyleResolver::matchAuthorRules(Element* element, ElementRuleCollector& col
         resolversInShadowTree.at(j)->collectMatchingShadowHostRules(collector, ++cascadeOrder);
 
     // Apply normal rules from element scope.
-    if (ScopedStyleResolver* resolver = scopedResolverFor(*element))
+    if (ScopedStyleResolver* resolver = scopedResolverFor(element))
         resolver->collectMatchingAuthorRules(collector, ++cascadeOrder);
 
     // Apply /deep/ and ::shadow rules from outer scopes, and ::content from inner.
@@ -456,7 +444,7 @@ void StyleResolver::matchAllRules(StyleResolverState& state, ElementRuleCollecto
         }
     }
 
-    matchAuthorRules(state.element(), collector);
+    matchAuthorRules(*state.element(), collector);
 
     if (state.element()->isStyledElement()) {
         if (state.element()->inlineStyle()) {
@@ -497,7 +485,7 @@ static bool shouldCheckScope(const Element& element, const Node& scopingNode, bo
     return scopingNode.treeScope().scopedStyleResolver()->hasDeepOrShadowSelector();
 }
 
-void StyleResolver::collectTreeBoundaryCrossingRules(Element* element, ElementRuleCollector& collector)
+void StyleResolver::collectTreeBoundaryCrossingRules(const Element& element, ElementRuleCollector& collector)
 {
     if (m_treeBoundaryCrossingScopes.isEmpty())
         return;
@@ -510,8 +498,8 @@ void StyleResolver::collectTreeBoundaryCrossingRules(Element* element, ElementRu
     for (const auto& scopingNode : m_treeBoundaryCrossingScopes) {
         // Skip rule collection for element when tree boundary crossing rules of scopingNode's
         // scope can never apply to it.
-        bool isInnerTreeScope = element->treeScope().isInclusiveAncestorOf(scopingNode->treeScope());
-        if (!shouldCheckScope(*element, *scopingNode, isInnerTreeScope))
+        bool isInnerTreeScope = element.treeScope().isInclusiveAncestorOf(scopingNode->treeScope());
+        if (!shouldCheckScope(element, *scopingNode, isInnerTreeScope))
             continue;
 
         CascadeOrder cascadeOrder = isInnerTreeScope ? innerCascadeOrder : outerCascadeOrder;
@@ -554,7 +542,7 @@ void StyleResolver::adjustComputedStyle(StyleResolverState& state, Element* elem
 // Start loading resources referenced by this style.
 void StyleResolver::loadPendingResources(StyleResolverState& state)
 {
-    m_styleResourceLoader.loadPendingResources(state.style(), state.elementStyleResources());
+    state.elementStyleResources().loadPendingResources(state.style());
     document().styleEngine().fontSelector()->fontLoader()->loadPendingFonts();
 }
 
@@ -796,7 +784,7 @@ bool StyleResolver::pseudoStyleForElementInternal(Element& element, const Pseudo
         collector.setPseudoStyleRequest(pseudoStyleRequest);
 
         matchUARules(collector);
-        matchAuthorRules(state.element(), collector);
+        matchAuthorRules(*state.element(), collector);
         collector.finishAddingAuthorRulesForTreeScope();
 
         if (!collector.matchedResult().hasMatchedProperties())
@@ -919,7 +907,7 @@ PassRefPtrWillBeRawPtr<StyleRuleList> StyleResolver::styleRulesForElement(Elemen
     StyleResolverState state(document(), element);
     ElementRuleCollector collector(state.elementContext(), m_selectorFilter, state.style());
     collector.setMode(SelectorChecker::CollectingStyleRules);
-    collectPseudoRulesForElement(element, collector, NOPSEUDO, rulesToInclude);
+    collectPseudoRulesForElement(*element, collector, NOPSEUDO, rulesToInclude);
     return collector.matchedStyleRuleList();
 }
 
@@ -929,7 +917,7 @@ PassRefPtrWillBeRawPtr<CSSRuleList> StyleResolver::pseudoCSSRulesForElement(Elem
     StyleResolverState state(document(), element);
     ElementRuleCollector collector(state.elementContext(), m_selectorFilter, state.style());
     collector.setMode(SelectorChecker::CollectingCSSRules);
-    collectPseudoRulesForElement(element, collector, pseudoId, rulesToInclude);
+    collectPseudoRulesForElement(*element, collector, pseudoId, rulesToInclude);
     return collector.matchedCSSRuleList();
 }
 
@@ -938,7 +926,7 @@ PassRefPtrWillBeRawPtr<CSSRuleList> StyleResolver::cssRulesForElement(Element* e
     return pseudoCSSRulesForElement(element, NOPSEUDO, rulesToInclude);
 }
 
-void StyleResolver::collectPseudoRulesForElement(Element* element, ElementRuleCollector& collector, PseudoId pseudoId, unsigned rulesToInclude)
+void StyleResolver::collectPseudoRulesForElement(const Element& element, ElementRuleCollector& collector, PseudoId pseudoId, unsigned rulesToInclude)
 {
     collector.setPseudoStyleRequest(PseudoStyleRequest(pseudoId));
 
@@ -1001,7 +989,7 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, const Ele
 StyleRuleKeyframes* StyleResolver::findKeyframesRule(const Element* element, const AtomicString& animationName)
 {
     WillBeHeapVector<RawPtrWillBeMember<ScopedStyleResolver>, 8> resolvers;
-    collectScopedResolversForHostedShadowTrees(element, resolvers);
+    collectScopedResolversForHostedShadowTrees(*element, resolvers);
     if (ScopedStyleResolver* scopedResolver = element->treeScope().scopedStyleResolver())
         resolvers.append(scopedResolver);
 
@@ -1550,6 +1538,7 @@ DEFINE_TRACE(StyleResolver)
 {
 #if ENABLE(OILPAN)
     visitor->trace(m_matchedPropertiesCache);
+    visitor->trace(m_medium);
     visitor->trace(m_viewportDependentMediaQueryResults);
     visitor->trace(m_selectorFilter);
     visitor->trace(m_viewportStyleResolver);
@@ -1558,7 +1547,6 @@ DEFINE_TRACE(StyleResolver)
     visitor->trace(m_uncommonAttributeRuleSet);
     visitor->trace(m_watchedSelectorsRules);
     visitor->trace(m_treeBoundaryCrossingScopes);
-    visitor->trace(m_styleResourceLoader);
     visitor->trace(m_styleSharingLists);
     visitor->trace(m_pendingStyleSheets);
     visitor->trace(m_document);

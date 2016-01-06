@@ -231,11 +231,6 @@ touchEditingEnabled initial=false
 useSolidColorScrollbars initial=false
 pinchOverlayScrollbarThickness type=int, initial=0
 
-# Experiment to invert the scroll order of the layout and visual viewports
-# in some circumstances. Namely, during a pinch-zoom gesture and browser
-# generated scrolls like "scroll into view".
-invertViewportScrollOrder initial=false
-
 # Experiment to have all APIs reflect the layout viewport.
 # crbug.com/489206 tracks the experiment.
 inertVisualViewport initial=true
@@ -274,6 +269,8 @@ viewportEnabled initial=false, invalidate=ViewportDescription
 viewportMetaEnabled initial=false
 
 dnsPrefetchingEnabled initial=false, invalidate=DNSPrefetching
+
+dataSaverEnabled initial=false
 
 # FIXME: This is a temporary flag and should be removed
 # when squashing is ready. (crbug.com/261605)
@@ -376,6 +373,10 @@ fetchIncreaseAsyncScriptPriority initial=false
 # of "layout-blocking" resources and provide a boost to resources that are needed
 # as soon as possible for something currently on the screen.
 fetchIncreasePriorities initial=false
+
+# Whether to disallow network fetches for parser blocking scripts in the main
+# frame inserted via document.write.
+disallowFetchForDocWrittenScriptsInMainFrame initial=false
 
 # The autoplay gesture override experiment is described in crbug.com/487345 .
 autoplayExperimentMode type=String, initial="off"

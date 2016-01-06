@@ -4,9 +4,12 @@
 
 #include "gpu/blink/webgraphicscontext3d_impl.h"
 
+#include <stdint.h>
+
 #include "base/atomicops.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
@@ -222,6 +225,16 @@ bool WebGraphicsContext3DImpl::insertSyncPoint(WGC3Dbyte* sync_token) {
   memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   return true;
 }
+
+DELEGATE_TO_GL_R(insertFenceSyncCHROMIUM, InsertFenceSyncCHROMIUM, WGC3Duint64)
+
+bool WebGraphicsContext3DImpl::genSyncTokenCHROMIUM(WGC3Duint64 fenceSync,
+                                                    WGC3Dbyte* syncToken) {
+  gl_->GenSyncTokenCHROMIUM(fenceSync, syncToken);
+  return true;
+}
+
+DELEGATE_TO_GL_1(waitSyncTokenCHROMIUM, WaitSyncTokenCHROMIUM, const WGC3Dbyte*)
 
 void WebGraphicsContext3DImpl::reshapeWithScaleFactor(int width,
                                                       int height,
@@ -900,8 +913,6 @@ void WebGraphicsContext3DImpl::shallowFinishCHROMIUM() {
   flush_id_ = GenFlushID();
   gl_->ShallowFinishCHROMIUM();
 }
-
-DELEGATE_TO_GL_1(waitSyncToken, WaitSyncTokenCHROMIUM, const WGC3Dbyte*)
 
 void WebGraphicsContext3DImpl::loseContextCHROMIUM(
     WGC3Denum current, WGC3Denum other) {

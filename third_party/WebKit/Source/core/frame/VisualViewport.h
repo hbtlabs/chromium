@@ -186,6 +186,7 @@ public:
     IntRect scrollableAreaBoundingBox() const override;
     bool userInputScrollable(ScrollbarOrientation) const override { return true; }
     bool shouldPlaceVerticalScrollbarOnLeft() const override { return false; }
+    bool scrollAnimatorEnabled() const override;
     void scrollControlWasSetNeedsPaintInvalidation() override { }
     void setScrollOffset(const IntPoint&, ScrollType) override;
     void setScrollOffset(const DoublePoint&, ScrollType) override;
@@ -193,6 +194,7 @@ public:
     GraphicsLayer* layerForScrolling() const override;
     GraphicsLayer* layerForHorizontalScrollbar() const override;
     GraphicsLayer* layerForVerticalScrollbar() const override;
+    Widget* widget() override;
 
     // Used for gathering data on user pinch-zoom statistics.
     void userDidChangeScale();

@@ -4,6 +4,8 @@
 
 #include "content/browser/frame_host/frame_tree.h"
 
+#include <stddef.h>
+
 #include <queue>
 #include <utility>
 
@@ -194,7 +196,7 @@ void FrameTree::ForEach(
   }
 }
 
-RenderFrameHostImpl* FrameTree::AddFrame(
+bool FrameTree::AddFrame(
     FrameTreeNode* parent,
     int process_id,
     int new_routing_id,
@@ -202,23 +204,28 @@ RenderFrameHostImpl* FrameTree::AddFrame(
     const std::string& frame_name,
     blink::WebSandboxFlags sandbox_flags,
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
+  CHECK_NE(new_routing_id, MSG_ROUTING_NONE);
+
   // A child frame always starts with an initial empty document, which means
   // it is in the same SiteInstance as the parent frame. Ensure that the process
   // which requested a child frame to be added is the same as the process of the
   // parent node.
-  // We return nullptr if this is not the case, which can happen in a race if an
-  // old RFH sends a CreateChildFrame message as we're swapping to a new RFH.
   if (parent->current_frame_host()->GetProcess()->GetID() != process_id)
-    return nullptr;
+    return false;
 
-  scoped_ptr<FrameTreeNode> node(new FrameTreeNode(
-      this, parent->navigator(), render_frame_delegate_, render_view_delegate_,
-      render_widget_delegate_, manager_delegate_, scope, frame_name,
-      sandbox_flags, frame_owner_properties));
-  FrameTreeNode* node_ptr = node.get();
   // AddChild is what creates the RenderFrameHost.
-  parent->AddChild(node.Pass(), process_id, new_routing_id);
-  return node_ptr->current_frame_host();
+  FrameTreeNode* added_node = parent->AddChild(
+      make_scoped_ptr(new FrameTreeNode(
+          this, parent->navigator(), render_frame_delegate_,
+          render_view_delegate_, render_widget_delegate_, manager_delegate_,
+          scope, frame_name, sandbox_flags, frame_owner_properties)),
+      process_id, new_routing_id);
+
+  // Now that the new node is part of the FrameTree and has a RenderFrameHost,
+  // we can announce the creation of the initial RenderFrame which already
+  // exists in the renderer process.
+  added_node->current_frame_host()->SetRenderFrameCreated(true);
+  return true;
 }
 
 void FrameTree::RemoveFrame(FrameTreeNode* child) {
@@ -268,23 +275,39 @@ FrameTreeNode* FrameTree::GetFocusedFrame() {
   return FindByID(focused_frame_tree_node_id_);
 }
 
-void FrameTree::SetFocusedFrame(FrameTreeNode* node) {
+void FrameTree::SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {
+  if (node == GetFocusedFrame())
+    return;
+
   std::set<SiteInstance*> frame_tree_site_instances;
   ForEach(base::Bind(&CollectSiteInstances, &frame_tree_site_instances));
+
+  SiteInstance* current_instance =
+      node->current_frame_host()->GetSiteInstance();
 
   // Update the focused frame in all other SiteInstances.  If focus changes to
   // a cross-process frame, this allows the old focused frame's renderer
   // process to clear focus from that frame and fire blur events.  It also
   // ensures that the latest focused frame is available in all renderers to
   // compute document.activeElement.
+  //
+  // We do not notify the |source| SiteInstance because it already knows the
+  // new focused frame (since it initiated the focus change), and we notify the
+  // new focused frame's SiteInstance (if it differs from |source|) separately
+  // below.
   for (const auto& instance : frame_tree_site_instances) {
-    if (instance != node->current_frame_host()->GetSiteInstance()) {
+    if (instance != source && instance != current_instance) {
       DCHECK(SiteIsolationPolicy::AreCrossProcessFramesPossible());
       RenderFrameProxyHost* proxy =
           node->render_manager()->GetRenderFrameProxyHost(instance);
       proxy->SetFocusedFrame();
     }
   }
+
+  // If |node| was focused from a cross-process frame (i.e., via
+  // window.focus()), tell its RenderFrame that it should focus.
+  if (current_instance != source)
+    node->current_frame_host()->SetFocusedFrame();
 
   focused_frame_tree_node_id_ = node->frame_tree_node_id();
   node->DidFocus();
@@ -295,11 +318,12 @@ void FrameTree::SetFrameRemoveListener(
   on_frame_removed_ = on_frame_removed;
 }
 
-RenderViewHostImpl* FrameTree::CreateRenderViewHost(SiteInstance* site_instance,
-                                                    int32 routing_id,
-                                                    int32 main_frame_routing_id,
-                                                    bool swapped_out,
-                                                    bool hidden) {
+RenderViewHostImpl* FrameTree::CreateRenderViewHost(
+    SiteInstance* site_instance,
+    int32_t routing_id,
+    int32_t main_frame_routing_id,
+    bool swapped_out,
+    bool hidden) {
   RenderViewHostMap::iterator iter =
       render_view_host_map_.find(site_instance->GetId());
   if (iter != render_view_host_map_.end()) {
@@ -346,7 +370,7 @@ void FrameTree::AddRenderViewHostRef(RenderViewHostImpl* render_view_host) {
 
 void FrameTree::ReleaseRenderViewHostRef(RenderViewHostImpl* render_view_host) {
   SiteInstance* site_instance = render_view_host->GetSiteInstance();
-  int32 site_instance_id = site_instance->GetId();
+  int32_t site_instance_id = site_instance->GetId();
   RenderViewHostMap::iterator iter =
       render_view_host_map_.find(site_instance_id);
   if (iter != render_view_host_map_.end() && iter->second == render_view_host) {
@@ -355,7 +379,7 @@ void FrameTree::ReleaseRenderViewHostRef(RenderViewHostImpl* render_view_host) {
     CHECK_GT(iter->second->ref_count(), 0);
     iter->second->decrement_ref_count();
     if (iter->second->ref_count() == 0) {
-      iter->second->Shutdown();
+      iter->second->ShutdownAndDestroy();
       render_view_host_map_.erase(iter);
     }
   } else {
@@ -376,7 +400,7 @@ void FrameTree::ReleaseRenderViewHostRef(RenderViewHostImpl* render_view_host) {
       CHECK_GT(render_view_host->ref_count(), 0);
       render_view_host->decrement_ref_count();
       if (render_view_host->ref_count() == 0) {
-        render_view_host->Shutdown();
+        render_view_host->ShutdownAndDestroy();
         render_view_host_pending_shutdown_map_.erase(multi_iter);
       }
       break;

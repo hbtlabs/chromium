@@ -11,6 +11,7 @@
 #include "base/compiler_specific.h"
 #include "base/file_version_info.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
@@ -68,7 +69,7 @@ class URLRequestHttpJob::HttpFilterContext : public FilterContext {
   base::Time GetRequestTime() const override;
   bool IsCachedContent() const override;
   SdchManager::DictionarySet* SdchDictionariesAdvertised() const override;
-  int64 GetByteReadCount() const override;
+  int64_t GetByteReadCount() const override;
   int GetResponseCode() const override;
   const URLRequestContext* GetURLRequestContext() const override;
   void RecordPacketStats(StatisticSelector statistic) const override;
@@ -117,7 +118,7 @@ URLRequestHttpJob::HttpFilterContext::SdchDictionariesAdvertised() const {
   return job_->dictionaries_advertised_.get();
 }
 
-int64 URLRequestHttpJob::HttpFilterContext::GetByteReadCount() const {
+int64_t URLRequestHttpJob::HttpFilterContext::GetByteReadCount() const {
   return job_->prefilter_bytes_read();
 }
 
@@ -483,6 +484,17 @@ void URLRequestHttpJob::StartTransactionInternal() {
   // If we already have a transaction, then we should restart the transaction
   // with auth provided by auth_credentials_.
 
+  bool invalid_header_values_in_rfc7230 = false;
+  for (HttpRequestHeaders::Iterator it(request_info_.extra_headers);
+       it.GetNext();) {
+    if (!HttpUtil::IsValidHeaderValueRFC7230(it.value())) {
+      invalid_header_values_in_rfc7230 = true;
+      break;
+    }
+  }
+  UMA_HISTOGRAM_BOOLEAN("Net.HttpRequest.ContainsInvalidHeaderValuesInRFC7230",
+                        invalid_header_values_in_rfc7230);
+
   int rv;
 
   if (network_delegate()) {
@@ -591,30 +603,37 @@ void URLRequestHttpJob::AddExtraHeaders() {
       }
     }
 
+    // Advertise "br" encoding only if transferred data is opaque to proxy.
+    bool advertise_brotli = false;
+    const HttpNetworkSession::Params* network_session_params =
+        request()->context()->GetNetworkSessionParams();
+    if (network_session_params && network_session_params->enable_brotli)
+      advertise_brotli = request()->url().SchemeIsCryptographic();
+
     // Supply Accept-Encoding headers first so that it is more likely that they
     // will be in the first transmitted packet. This can sometimes make it
     // easier to filter and analyze the streams to assure that a proxy has not
     // damaged these headers. Some proxies deliberately corrupt Accept-Encoding
     // headers.
-    if (!advertise_sdch) {
-      // Tell the server what compression formats we support (other than SDCH).
+    std::string advertised_encodings = "gzip, deflate";
+    if (advertise_sdch)
+      advertised_encodings += ", sdch";
+    if (advertise_brotli)
+      advertised_encodings += ", br";
+    // Tell the server what compression formats are supported.
+    request_info_.extra_headers.SetHeader(HttpRequestHeaders::kAcceptEncoding,
+                                          advertised_encodings);
+
+    if (dictionaries_advertised_) {
       request_info_.extra_headers.SetHeader(
-          HttpRequestHeaders::kAcceptEncoding, "gzip, deflate");
-    } else {
-      // Include SDCH in acceptable list.
-      request_info_.extra_headers.SetHeader(
-          HttpRequestHeaders::kAcceptEncoding, "gzip, deflate, sdch");
-      if (dictionaries_advertised_) {
-        request_info_.extra_headers.SetHeader(
-            kAvailDictionaryHeader,
-            dictionaries_advertised_->GetDictionaryClientHashList());
-        // Since we're tagging this transaction as advertising a dictionary,
-        // we'll definitely employ an SDCH filter (or tentative sdch filter)
-        // when we get a response. When done, we'll record histograms via
-        // SDCH_DECODE or SDCH_PASSTHROUGH. Hence we need to record packet
-        // arrival times.
-        packet_timing_enabled_ = true;
-      }
+          kAvailDictionaryHeader,
+          dictionaries_advertised_->GetDictionaryClientHashList());
+      // Since we're tagging this transaction as advertising a dictionary,
+      // we'll definitely employ an SDCH filter (or tentative sdch filter)
+      // when we get a response. When done, we'll record histograms via
+      // SDCH_DECODE or SDCH_PASSTHROUGH. Hence we need to record packet
+      // arrival times.
+      packet_timing_enabled_ = true;
     }
   }
 
@@ -746,9 +765,10 @@ void URLRequestHttpJob::SaveNextCookie() {
     CookieOptions options;
     options.set_include_httponly();
     options.set_server_time(response_date_);
+
     if (network_delegate() &&
-        network_delegate()->AreExperimentalCookieFeaturesEnabled()) {
-      options.set_enforce_prefixes();
+        network_delegate()->AreStrictSecureCookiesEnabled()) {
+      options.set_enforce_strict_secure();
     }
 
     CookieStore::SetCookiesCallback callback(base::Bind(
@@ -926,6 +946,23 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       SetProxyServer(transaction_->GetResponseInfo()->proxy_server);
     }
     scoped_refptr<HttpResponseHeaders> headers = GetResponseHeaders();
+
+    if (headers) {
+      void* iter = NULL;
+      std::string name;
+      std::string value;
+      bool invalid_header_values_in_rfc7230 = false;
+      while (headers->EnumerateHeaderLines(&iter, &name, &value)) {
+        if (!HttpUtil::IsValidHeaderValueRFC7230(value)) {
+          invalid_header_values_in_rfc7230 = true;
+          break;
+        }
+      }
+      UMA_HISTOGRAM_BOOLEAN(
+          "Net.HttpResponse.ContainsInvalidHeaderValuesInRFC7230",
+          invalid_header_values_in_rfc7230);
+    }
+
     if (network_delegate()) {
       // Note that |this| may not be deleted until
       // |on_headers_received_callback_| or
@@ -1118,6 +1155,13 @@ int URLRequestHttpJob::GetResponseCode() const {
     return -1;
 
   return GetResponseHeaders()->response_code();
+}
+
+void URLRequestHttpJob::PopulateNetErrorDetails(
+    NetErrorDetails* details) const {
+  if (!transaction_)
+    return;
+  return transaction_->PopulateNetErrorDetails(details);
 }
 
 Filter* URLRequestHttpJob::SetupFilter() const {
@@ -1315,7 +1359,8 @@ bool URLRequestHttpJob::ShouldFixMismatchedContentLength(int rv) const {
   if (rv == ERR_CONTENT_LENGTH_MISMATCH ||
       rv == ERR_INCOMPLETE_CHUNKED_ENCODING) {
     if (request_ && request_->response_headers()) {
-      int64 expected_length = request_->response_headers()->GetContentLength();
+      int64_t expected_length =
+          request_->response_headers()->GetContentLength();
       VLOG(1) << __FUNCTION__ << "() "
               << "\"" << request_->url().spec() << "\""
               << " content-length = " << expected_length
@@ -1363,7 +1408,7 @@ bool URLRequestHttpJob::GetFullRequestHeaders(
   return transaction_->GetFullRequestHeaders(headers);
 }
 
-int64 URLRequestHttpJob::GetTotalReceivedBytes() const {
+int64_t URLRequestHttpJob::GetTotalReceivedBytes() const {
   int64_t total_received_bytes =
       total_received_bytes_from_previous_transactions_;
   if (transaction_)

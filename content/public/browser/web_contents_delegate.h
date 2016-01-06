@@ -5,12 +5,14 @@
 #ifndef CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_DELEGATE_H_
 #define CONTENT_PUBLIC_BROWSER_WEB_CONTENTS_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
@@ -83,6 +85,11 @@ class CONTENT_EXPORT WebContentsDelegate {
   // opened immediately.
   virtual WebContents* OpenURLFromTab(WebContents* source,
                                       const OpenURLParams& params);
+
+  // Allows the delegate to optionally cancel navigations that attempt to
+  // transfer to a different process between the start of the network load and
+  // commit.  Defaults to true.
+  virtual bool ShouldTransferNavigation();
 
   // Called to inform the delegate that the WebContents's navigation state
   // changed. The |changed_flags| indicates the parts of the navigation state
@@ -185,9 +192,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // handled the message. If false is returned the default logging mechanism
   // will be used for the message.
   virtual bool AddMessageToConsole(WebContents* source,
-                                   int32 level,
+                                   int32_t level,
                                    const base::string16& message,
-                                   int32 line_no,
+                                   int32_t line_no,
                                    const base::string16& source_id);
 
   // Tells us that we've finished firing this tab's beforeunload event.

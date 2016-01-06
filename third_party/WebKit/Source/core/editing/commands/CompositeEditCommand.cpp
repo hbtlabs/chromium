@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -73,6 +72,7 @@
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/line/InlineTextBox.h"
+#include <algorithm>
 
 namespace blink {
 

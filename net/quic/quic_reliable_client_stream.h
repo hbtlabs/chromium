@@ -7,6 +7,9 @@
 #ifndef NET_QUIC_QUIC_RELIABLE_CLIENT_STREAM_H_
 #define NET_QUIC_QUIC_RELIABLE_CLIENT_STREAM_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_request_info.h"
@@ -65,7 +68,7 @@ class NET_EXPORT_PRIVATE QuicReliableClientStream : public QuicSpdyStream {
 
   // While the server's set_priority shouldn't be called externally, the creator
   // of client-side streams should be able to set the priority.
-  using QuicSpdyStream::set_priority;
+  using QuicSpdyStream::SetPriority;
 
   int WriteStreamData(base::StringPiece data,
                       bool fin,

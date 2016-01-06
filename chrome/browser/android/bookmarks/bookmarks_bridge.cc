@@ -4,6 +4,9 @@
 
 #include "chrome/browser/android/bookmarks/bookmarks_bridge.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/containers/stack_container.h"
@@ -23,7 +26,6 @@
 #include "components/bookmarks/common/android/bookmark_type.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
-#include "components/enhanced_bookmarks/enhanced_bookmark_features.h"
 #include "components/query_parser/query_parser.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/undo/bookmark_undo_service.h"
@@ -86,7 +88,7 @@ scoped_ptr<icu::Collator> GetICUCollator() {
   if (U_FAILURE(error))
     collator_.reset(NULL);
 
-  return collator_.Pass();
+  return collator_;
 }
 
 }  // namespace
@@ -139,12 +141,6 @@ static jlong Init(JNIEnv* env,
                   const JavaParamRef<jobject>& j_profile) {
   BookmarksBridge* delegate = new BookmarksBridge(env, obj, j_profile);
   return reinterpret_cast<intptr_t>(delegate);
-}
-
-static jboolean IsEnhancedBookmarksFeatureEnabled(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
-  return enhanced_bookmarks::IsEnhancedBookmarksEnabled();
 }
 
 jboolean BookmarksBridge::IsEditBookmarksEnabled(
@@ -589,7 +585,7 @@ jboolean BookmarksBridge::IsFolderVisible(JNIEnv* env,
                                           jint type) {
   if (type == BookmarkType::BOOKMARK_TYPE_NORMAL) {
     const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
-        bookmark_model_, static_cast<int64>(id));
+        bookmark_model_, static_cast<int64_t>(id));
     return node->IsVisible();
   } else if (type == BookmarkType::BOOKMARK_TYPE_PARTNER) {
     const BookmarkNode* node = partner_bookmarks_shim_->GetNodeByID(
@@ -793,8 +789,7 @@ base::string16 BookmarksBridge::GetTitle(const BookmarkNode* node) const {
   if (partner_bookmarks_shim_->IsPartnerBookmark(node))
     return partner_bookmarks_shim_->GetTitle(node);
 
-  if (node == bookmark_model_->bookmark_bar_node()
-      && enhanced_bookmarks::IsEnhancedBookmarksEnabled()) {
+  if (node == bookmark_model_->bookmark_bar_node()) {
     return l10n_util::GetStringUTF16(IDS_ENHANCED_BOOKMARK_BAR_FOLDER_NAME);
   }
 
@@ -806,7 +801,7 @@ ScopedJavaLocalRef<jobject> BookmarksBridge::CreateJavaBookmark(
   JNIEnv* env = AttachCurrentThread();
 
   const BookmarkNode* parent = GetParentNode(node);
-  int64 parent_id = parent ? parent->id() : -1;
+  int64_t parent_id = parent ? parent->id() : -1;
 
   std::string url;
   if (node->is_url())
@@ -837,11 +832,10 @@ void BookmarksBridge::ExtractBookmarkNodeInformation(const BookmarkNode* node,
 const BookmarkNode* BookmarksBridge::GetNodeByID(long node_id, int type) {
   const BookmarkNode* node;
   if (type == BookmarkType::BOOKMARK_TYPE_PARTNER) {
-    node = partner_bookmarks_shim_->GetNodeByID(
-        static_cast<int64>(node_id));
+    node = partner_bookmarks_shim_->GetNodeByID(static_cast<int64_t>(node_id));
   } else {
     node = bookmarks::GetBookmarkNodeByID(bookmark_model_,
-                                          static_cast<int64>(node_id));
+                                          static_cast<int64_t>(node_id));
   }
   return node;
 }

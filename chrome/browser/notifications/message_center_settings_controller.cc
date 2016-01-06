@@ -5,12 +5,14 @@
 #include "chrome/browser/notifications/message_center_settings_controller.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/i18n/string_compare.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -408,8 +410,9 @@ void MessageCenterSettingsController::OnNotifierAdvancedSettingsRequested(
 
   scoped_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::NOTIFICATIONS_ON_SHOW_SETTINGS,
-      extensions::api::notifications::OnShowSettings::kEventName, args.Pass()));
-  event_router->DispatchEventToExtension(extension_id, event.Pass());
+      extensions::api::notifications::OnShowSettings::kEventName,
+      std::move(args)));
+  event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void MessageCenterSettingsController::OnFaviconLoaded(
@@ -492,7 +495,7 @@ void MessageCenterSettingsController::CreateNotifierGroupForGuestLogin() {
                                                0,
                                                profile));
 
-  notifier_groups_.push_back(group.Pass());
+  notifier_groups_.push_back(std::move(group));
 
   FOR_EACH_OBSERVER(message_center::NotifierSettingsObserver,
                     observers_,
@@ -535,7 +538,7 @@ void MessageCenterSettingsController::RebuildNotifierGroups(bool notify) {
       continue;
 #endif
 
-    notifier_groups_.push_back(group.Pass());
+    notifier_groups_.push_back(std::move(group));
   }
 
 #if defined(OS_CHROMEOS)

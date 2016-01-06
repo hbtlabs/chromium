@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "bindings/core/v8/ScriptValueSerializer.h"
 
 #include "bindings/core/v8/V8ArrayBuffer.h"
@@ -209,7 +208,7 @@ void SerializedScriptValueWriter::writeCompositorProxy(const CompositorProxy& co
 {
     append(CompositorProxyTag);
     doWriteUint64(compositorProxy.elementId());
-    doWriteUint32(compositorProxy.bitfieldsSupported());
+    doWriteUint32(compositorProxy.compositorMutableProperties());
 }
 
 void SerializedScriptValueWriter::writeFile(const File& file)

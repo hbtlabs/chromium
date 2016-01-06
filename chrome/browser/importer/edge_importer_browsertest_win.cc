@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -252,10 +255,10 @@ IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterLegacyFallback) {
   importer::SourceProfile source_profile;
   source_profile.importer_type = importer::TYPE_EDGE;
   base::FilePath source_path = temp_dir_.path().AppendASCII("edge_profile");
-  ASSERT_NE(base::WriteFile(
+  ASSERT_NE(-1,
+            base::WriteFile(
                 source_path.AppendASCII("Favorites\\Google.url:favicon:$DATA"),
-                kDummyFaviconImageData, sizeof(kDummyFaviconImageData)),
-            -1);
+                kDummyFaviconImageData, sizeof(kDummyFaviconImageData)));
   source_profile.source_path = source_path;
 
   host->StartImportSettings(source_profile, browser()->profile(),

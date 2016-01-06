@@ -5,6 +5,7 @@
 #ifndef MEDIA_CDM_PPAPI_CDM_FILE_IO_TEST_H_
 #define MEDIA_CDM_PPAPI_CDM_FILE_IO_TEST_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <list>
@@ -14,6 +15,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "media/cdm/api/content_decryption_module.h"
 
 namespace media {

@@ -5,6 +5,7 @@
 #include "components/mus/ws/display_manager.h"
 
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/delegated_frame_data.h"
 #include "cc/quads/render_pass.h"
@@ -87,15 +88,16 @@ void DrawWindowTree(cc::RenderPass* pass,
                    combined_opacity, referenced_window_ids);
   }
 
+  if (!window->surface_manager() || !window->surface_manager()->ShouldDraw())
+    return;
+
   // If an ancestor has already referenced this window, then we do not need
   // to create a SurfaceDrawQuad for it.
   const bool draw_default_surface =
       default_surface && (referenced_window_ids->count(window->id()) == 0);
 
   ServerWindowSurface* underlay_surface =
-      window->surface_manager()
-          ? window->surface_manager()->GetUnderlaySurface()
-          : nullptr;
+      window->surface_manager()->GetUnderlaySurface();
   if (!draw_default_surface && !underlay_surface)
     return;
 
@@ -269,8 +271,8 @@ void DefaultDisplayManager::Draw() {
   frame_pending_ = true;
   if (top_level_display_client_) {
     top_level_display_client_->SubmitCompositorFrame(
-        frame.Pass(), base::Bind(&DefaultDisplayManager::DidDraw,
-                                 weak_factory_.GetWeakPtr()));
+        std::move(frame), base::Bind(&DefaultDisplayManager::DidDraw,
+                                     weak_factory_.GetWeakPtr()));
   }
   dirty_rect_ = gfx::Rect();
 }
@@ -324,11 +326,11 @@ DefaultDisplayManager::GenerateCompositorFrame() {
 
   scoped_ptr<cc::DelegatedFrameData> frame_data(new cc::DelegatedFrameData);
   frame_data->device_scale_factor = metrics_.device_pixel_ratio;
-  frame_data->render_pass_list.push_back(render_pass.Pass());
+  frame_data->render_pass_list.push_back(std::move(render_pass));
 
   scoped_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
-  frame->delegated_frame_data = frame_data.Pass();
-  return frame.Pass();
+  frame->delegated_frame_data = std::move(frame_data);
+  return frame;
 }
 
 void DefaultDisplayManager::OnBoundsChanged(const gfx::Rect& new_bounds) {
@@ -341,8 +343,7 @@ void DefaultDisplayManager::OnDamageRect(const gfx::Rect& damaged_region) {
 }
 
 void DefaultDisplayManager::DispatchEvent(ui::Event* event) {
-  mojom::EventPtr mojo_event(mojom::Event::From(*event));
-  delegate_->OnEvent(mojo_event.Pass());
+  delegate_->OnEvent(*event);
 
   switch (event->type()) {
     case ui::ET_MOUSE_PRESSED:
@@ -374,17 +375,10 @@ void DefaultDisplayManager::DispatchEvent(ui::Event* event) {
     ui::KeyEvent char_event(key_press_event->GetCharacter(),
                             key_press_event->key_code(),
                             key_press_event->flags());
-
     DCHECK_EQ(key_press_event->GetCharacter(), char_event.GetCharacter());
     DCHECK_EQ(key_press_event->key_code(), char_event.key_code());
     DCHECK_EQ(key_press_event->flags(), char_event.flags());
-
-    char_event.SetExtendedKeyEventData(
-        make_scoped_ptr(new mojo::MojoExtendedKeyEventData(
-            key_press_event->GetLocatedWindowsKeyboardCode(),
-            key_press_event->GetText(), key_press_event->GetUnmodifiedText())));
-
-    delegate_->OnEvent(mojom::Event::From(char_event));
+    delegate_->OnEvent(char_event);
   }
 #endif
 }

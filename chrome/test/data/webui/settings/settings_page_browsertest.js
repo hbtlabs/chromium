@@ -24,13 +24,17 @@ SettingsPageBrowserTest.prototype = {
   browsePreload: 'chrome://md-settings/',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    '../fake_chrome_event.js',
+    'fake_settings_private.js',
+  ]),
 
   /** @override */
   runAccessibilityChecks: false,
 
   /** @override */
   setUp: function() {
+    PolymerTest.prototype.setUp.call(this);
     suiteSetup(function() {
       return CrSettingsPrefs.initialized;
     });
@@ -38,14 +42,14 @@ SettingsPageBrowserTest.prototype = {
 
   /**
    * @param {string} type The settings page type, e.g. 'advanced' or 'basic'.
-   * @return {Node} The DOM node for the page.
+   * @return {!PolymerElement} The PolymerElement for the page.
    */
   getPage: function(type) {
     var settings = document.querySelector('cr-settings');
     assertTrue(!!settings);
-    var settingsUi = settings.shadowRoot.querySelector('settings-ui');
+    var settingsUi = settings.$$('settings-ui');
     assertTrue(!!settingsUi);
-    var settingsMain = settingsUi.shadowRoot.querySelector('settings-main');
+    var settingsMain = settingsUi.$$('settings-main');
     assertTrue(!!settingsMain);
     var pages = settingsMain.$.pageContainer;
     assertTrue(!!pages);
@@ -56,21 +60,19 @@ SettingsPageBrowserTest.prototype = {
   },
 
   /**
-   * @param {Node} page The DOM node for the settings page containing |section|.
+   * @param {!PolymerElement} page The PolymerElement for the page containing
+   *     |section|.
    * @param {string} section The settings page section, e.g. 'appearance'.
-   * @return {Node} The DOM node for the section.
+   * @return {Node|undefined} The DOM node for the section.
    */
   getSection: function(page, section) {
     var sections = page.shadowRoot.querySelectorAll('settings-section');
     assertTrue(!!sections);
-    var len = sections.length;
-    assertGT(len, 0);
-    for (var i = 0; i < len; ++i) {
+    for (var i = 0; i < sections.length; ++i) {
       var s = sections[i];
       if (s.section == section)
         return s;
     }
-    assertNotReached('Section not found: ' + section + ' in ' + page);
     return undefined;
   },
 };

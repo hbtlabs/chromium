@@ -5,16 +5,18 @@
 #ifndef CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_VERSION_H_
 #define CONTENT_BROWSER_SERVICE_WORKER_SERVICE_WORKER_VERSION_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -127,14 +129,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
     virtual ~Listener() {}
   };
 
-  ServiceWorkerVersion(
-      ServiceWorkerRegistration* registration,
-      const GURL& script_url,
-      int64 version_id,
-      base::WeakPtr<ServiceWorkerContextCore> context);
+  ServiceWorkerVersion(ServiceWorkerRegistration* registration,
+                       const GURL& script_url,
+                       int64_t version_id,
+                       base::WeakPtr<ServiceWorkerContextCore> context);
 
-  int64 version_id() const { return version_id_; }
-  int64 registration_id() const { return registration_id_; }
+  int64_t version_id() const { return version_id_; }
+  int64_t registration_id() const { return registration_id_; }
   const GURL& script_url() const { return script_url_; }
   const GURL& scope() const { return scope_; }
   RunningStatus running_status() const {
@@ -214,11 +215,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Sends sync event to the associated embedded worker and asynchronously calls
   // |callback| when it errors out or it gets a response from the worker to
-  // notify completion.
+  // notify completion. |max_duration| is how long the event is allowed to run
+  // for before it times out.
   //
   // This must be called when the status() is ACTIVATED.
   void DispatchSyncEvent(BackgroundSyncRegistrationHandle::HandleId handle_id,
                          BackgroundSyncEventLastChance last_chance,
+                         base::TimeDelta max_duration,
                          const StatusCallback& callback);
 
   // Sends notificationclick event to the associated embedded worker and
@@ -283,6 +286,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Returns if it has controllee.
   bool HasControllee() const { return !controllee_map_.empty(); }
+  std::map<std::string, ServiceWorkerProviderHost*> controllee_map() {
+    return controllee_map_;
+  }
+
+  base::WeakPtr<ServiceWorkerContextCore> context() const { return context_; }
 
   // Adds and removes |request_job| as a dependent job not to stop the
   // ServiceWorker while |request_job| is reading the stream of the fetch event
@@ -340,9 +348,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerMetrics;
-  friend class ServiceWorkerURLRequestJobTest;
+  friend class ServiceWorkerReadFromCacheJobTest;
   friend class ServiceWorkerStallInStoppingTest;
+  friend class ServiceWorkerURLRequestJobTest;
   friend class ServiceWorkerVersionBrowserTest;
+  friend class ServiceWorkerVersionTest;
 
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
@@ -361,17 +371,16 @@ class CONTENT_EXPORT ServiceWorkerVersion
                            TimeoutStartingWorker);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionBrowserTest,
                            TimeoutWorkerInEvent);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StayAliveAfterPush);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenStart);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenRestart);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
                            RegisterForeignFetchScopes);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestCustomizedTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerWaitForeverInFetchTest,
+                           MixedRequestTimeouts);
 
   class Metrics;
   class PingController;
-
-  typedef ServiceWorkerVersion self;
-  using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
 
   // Used for UMA; add new entries to the end, before NUM_REQUEST_TYPES.
   enum RequestType {
@@ -387,11 +396,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
   };
 
   struct RequestInfo {
-    RequestInfo(int id, RequestType type, const base::TimeTicks& time);
+    RequestInfo(int id, RequestType type, const base::TimeTicks& expiration);
     ~RequestInfo();
+    bool operator>(const RequestInfo& other) const;
     int id;
     RequestType type;
-    base::TimeTicks time;
+    base::TimeTicks expiration;
   };
 
   template <typename CallbackType>
@@ -402,6 +412,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
     CallbackType callback;
     base::TimeTicks start_time;
   };
+
+  typedef ServiceWorkerVersion self;
+  using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
+  using RequestInfoPriorityQueue =
+      std::priority_queue<RequestInfo,
+                          std::vector<RequestInfo>,
+                          std::greater<RequestInfo>>;
 
   // The timeout timer interval.
   static const int kTimeoutTimerDelaySeconds;
@@ -469,17 +486,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
                                          const mojo::String& name,
                                          const mojo::String& data);
   void OnOpenWindow(int request_id, GURL url);
-  void DidOpenWindow(int request_id,
-                     int render_process_id,
-                     int render_frame_id);
   void OnOpenWindowFinished(int request_id,
+                            ServiceWorkerStatusCode status,
                             const std::string& client_uuid,
                             const ServiceWorkerClientInfo& client_info);
 
   void OnSetCachedMetadata(const GURL& url, const std::vector<char>& data);
-  void OnSetCachedMetadataFinished(int64 callback_id, int result);
+  void OnSetCachedMetadataFinished(int64_t callback_id, int result);
   void OnClearCachedMetadata(const GURL& url);
-  void OnClearCachedMetadataFinished(int64 callback_id, int result);
+  void OnClearCachedMetadataFinished(int64_t callback_id, int result);
 
   void OnPostMessageToClient(
       const std::string& client_uuid,
@@ -489,10 +504,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnNavigateClient(int request_id,
                         const std::string& client_uuid,
                         const GURL& url);
-  void DidNavigateClient(int request_id,
-                         int render_process_id,
-                         int render_frame_id);
   void OnNavigateClientFinished(int request_id,
+                                ServiceWorkerStatusCode status,
                                 const std::string& client_uuid,
                                 const ServiceWorkerClientInfo& client);
   void OnSkipWaiting(int request_id);
@@ -513,14 +526,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void DidSkipWaiting(int request_id);
 
-  void GetWindowClients(int request_id,
-                        const ServiceWorkerClientQueryOptions& options);
-  void DidGetWindowClients(int request_id,
-                           const ServiceWorkerClientQueryOptions& options,
-                           scoped_ptr<ServiceWorkerClients> clients);
-  void GetNonWindowClients(int request_id,
-                           const ServiceWorkerClientQueryOptions& options,
-                           ServiceWorkerClients* clients);
   void OnGetClientsFinished(int request_id, ServiceWorkerClients* clients);
 
   // The timeout timer periodically calls OnTimeoutTimer, which stops the worker
@@ -552,8 +557,16 @@ class CONTENT_EXPORT ServiceWorkerVersion
       IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
       RequestType request_type);
 
+  template <typename CallbackType>
+  int AddRequestWithExpiration(
+      const CallbackType& callback,
+      IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
+      RequestType request_type,
+      base::TimeTicks expiration);
+
   bool MaybeTimeOutRequest(const RequestInfo& info);
-  void SetAllRequestTimes(const base::TimeTicks& ticks);
+  bool ShouldStopIfRequestTimesOut(const RequestInfo& info);
+  void SetAllRequestExpirations(const base::TimeTicks& expiration);
 
   // Returns the reason the embedded worker failed to start, using information
   // inaccessible to EmbeddedWorkerInstance. Returns |default_code| if it can't
@@ -582,8 +595,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // event ended).
   void OnBeginEvent();
 
-  const int64 version_id_;
-  const int64 registration_id_;
+  const int64_t version_id_;
+  const int64_t registration_id_;
   const GURL script_url_;
   const GURL scope_;
   std::vector<GURL> foreign_fetch_scopes_;
@@ -633,10 +646,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   base::TimeTicks stale_time_;
 
   // New requests are added to |requests_| along with their entry in a callback
-  // map. The timeout timer periodically checks |requests_| for entries that
-  // should time out or have already been fulfilled (i.e., removed from the
-  // callback map).
-  std::queue<RequestInfo> requests_;
+  // map. Requests are sorted by their expiration time (soonest to expire on top
+  // of the priority queue). The timeout timer periodically checks |requests_|
+  // for entries that should time out or have already been fulfilled (i.e.,
+  // removed from the callback map).
+  RequestInfoPriorityQueue requests_;
 
   bool skip_waiting_ = false;
   bool skip_recording_startup_time_ = false;

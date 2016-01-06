@@ -17,6 +17,7 @@ goog.require('LiveRegions');
 goog.require('NextEarcons');
 goog.require('Output');
 goog.require('Output.EventType');
+goog.require('constants');
 goog.require('cursors.Cursor');
 goog.require('cvox.BrailleKeyCommand');
 goog.require('cvox.ChromeVoxEditableTextBase');
@@ -27,7 +28,7 @@ goog.require('cvox.NavBraille');
 
 goog.scope(function() {
 var AutomationNode = chrome.automation.AutomationNode;
-var Dir = AutomationUtil.Dir;
+var Dir = constants.Dir;
 var EventType = chrome.automation.EventType;
 var RoleType = chrome.automation.RoleType;
 
@@ -168,8 +169,7 @@ Background.prototype = {
       } else {
         // When in compat mode, if the focus is within the desktop tree proper,
         // then do not disable content scripts.
-        if (this.currentRange_ &&
-            this.currentRange_.start.node.root.role == RoleType.desktop)
+        if (this.currentRange_ && !this.currentRange_.isWebRange())
           return;
 
         this.disableClassicChromeVox_();
@@ -188,17 +188,24 @@ Background.prototype = {
   },
 
   /**
+   * Mode refreshes takes into account both |url| and the current ChromeVox
+   *    range. The latter gets used to decide if the user is or isn't in web
+   *    content. The focused state also needs to be set for this info to be
+   *    reliable.
    * @override
    */
   refreshMode: function(url) {
     var mode = this.mode_;
     if (mode != ChromeVoxMode.FORCE_NEXT) {
-      if (this.isWhitelistedForNext_(url))
+      if (this.isWhitelistedForNext_(url)) {
         mode = ChromeVoxMode.NEXT;
-      else if (this.isBlacklistedForClassic_(url))
+      } else if (this.isBlacklistedForClassic_(url) || (this.currentRange_ &&
+          !this.currentRange_.isWebRange() &&
+          this.currentRange_.start.node.state.focused)) {
         mode = ChromeVoxMode.COMPAT;
-      else
+      } else {
         mode = ChromeVoxMode.CLASSIC;
+      }
     }
 
     this.setMode(mode);
@@ -439,9 +446,8 @@ Background.prototype = {
       case 'toggleChromeVoxVersion':
         var newMode;
         if (this.mode_ == ChromeVoxMode.FORCE_NEXT) {
-          var inViews =
-              this.currentRange_.start.node.root.role == RoleType.desktop;
-          newMode = inViews ? ChromeVoxMode.COMPAT : ChromeVoxMode.CLASSIC;
+          var inWeb = current.isWebRange();
+          newMode = inWeb ? ChromeVoxMode.CLASSIC : ChromeVoxMode.COMPAT;
         } else {
           newMode = ChromeVoxMode.FORCE_NEXT;
         }
@@ -453,6 +459,11 @@ Background.prototype = {
         // Leaving unlocalized as 'next' isn't an official name.
         cvox.ChromeVox.tts.speak(isClassic ?
             'classic' : 'next', cvox.QueueMode.FLUSH, {doNotInterrupt: true});
+        break;
+      case 'toggleStickyMode':
+        cvox.ChromeVoxBackground.setPref('sticky',
+                                         !cvox.ChromeVox.isStickyPrefOn,
+                                         true);
         break;
       default:
         return true;
@@ -485,6 +496,7 @@ Background.prototype = {
 
       new Output().withSpeechAndBraille(
               this.currentRange_, prevRange, Output.EventType.NAVIGATE)
+          .withQueueMode(cvox.QueueMode.FLUSH)
           .go();
     }
 
@@ -497,6 +509,7 @@ Background.prototype = {
    * @return {boolean} True if the default action should be performed.
    */
   onKeyDown: function(evt) {
+    evt.stickyMode = cvox.ChromeVox.isStickyModeOn() && cvox.ChromeVox.isActive;
     if (this.mode_ != ChromeVoxMode.CLASSIC &&
         !cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
       evt.preventDefault();
@@ -572,7 +585,7 @@ Background.prototype = {
    * @private
    */
   isBlacklistedForClassic_: function(url) {
-    return url === '' || this.classicBlacklistRegExp_.test(url);
+    return this.classicBlacklistRegExp_.test(url);
   },
 
   /**

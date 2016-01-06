@@ -5,20 +5,24 @@
 #ifndef CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_CLIENT_H_
 #define CONTENT_RENDERER_SERVICE_WORKER_SERVICE_WORKER_CONTEXT_CLIENT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "content/child/webmessageportchannel_impl.h"
-#include "content/common/routed_service_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/service_worker_event_status.mojom.h"
 #include "ipc/ipc_listener.h"
+#include "mojo/application/public/interfaces/service_provider.mojom.h"
 #include "third_party/WebKit/public/platform/WebGeofencingEventType.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
@@ -68,7 +72,7 @@ class ServiceWorkerContextClient
 
   // Called on the main thread.
   ServiceWorkerContextClient(int embedded_worker_id,
-                             int64 service_worker_version_id,
+                             int64_t service_worker_version_id,
                              const GURL& service_worker_scope,
                              const GURL& script_url,
                              int worker_devtools_agent_route_id);
@@ -82,8 +86,8 @@ class ServiceWorkerContextClient
   // ServiceRegistry to connect to services before this method is called are
   // queued up and will resolve after this method is called.
   void BindServiceRegistry(
-      mojo::InterfaceRequest<RoutedServiceProvider> services,
-      RoutedServiceProviderPtr exposed_services);
+      mojo::InterfaceRequest<mojo::ServiceProvider> services,
+      mojo::ServiceProviderPtr exposed_services);
 
   // WebServiceWorkerContextClient overrides.
   blink::WebURL scope() const override;
@@ -222,7 +226,7 @@ class ServiceWorkerContextClient
   base::WeakPtr<ServiceWorkerContextClient> GetWeakPtr();
 
   const int embedded_worker_id_;
-  const int64 service_worker_version_id_;
+  const int64_t service_worker_version_id_;
   const GURL service_worker_scope_;
   const GURL script_url_;
   const int worker_devtools_agent_route_id_;
@@ -234,11 +238,6 @@ class ServiceWorkerContextClient
 
   // Not owned; this object is destroyed when proxy_ becomes invalid.
   blink::WebServiceWorkerContextProxy* proxy_;
-
-  // Used for incoming messages from the browser for which an outgoing response
-  // back to the browser is expected, the id must be sent back with the
-  // response.
-  int current_request_id_;
 
   // Initialized on the worker thread in workerContextStarted and
   // destructed on the worker thread in willDestroyWorkerContext.

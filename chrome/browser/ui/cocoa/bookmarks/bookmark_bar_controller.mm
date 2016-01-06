@@ -4,6 +4,8 @@
 
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
 
+#include <stddef.h>
+
 #include "base/mac/bundle_locations.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram.h"
@@ -1112,7 +1114,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 }
 
 - (IBAction)openBookmarkMenuItem:(id)sender {
-  int64 tag = [self nodeIdFromMenuTag:[sender tag]];
+  int64_t tag = [self nodeIdFromMenuTag:[sender tag]];
   const BookmarkNode* node =
       bookmarks::GetBookmarkNodeByID(bookmarkModel_, tag);
   WindowOpenDisposition disposition =
@@ -1198,7 +1200,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
   // the hierarchy.  If that second part is now true, set the color.
   // (If not we'll set the color on the 1st themeChanged:
   // notification.)
-  ui::ThemeProvider* themeProvider = [[[self view] window] themeProvider];
+  const ui::ThemeProvider* themeProvider = [[[self view] window] themeProvider];
   if (themeProvider) {
     NSColor* color =
         themeProvider->GetNSColor(ThemeProperties::COLOR_BOOKMARK_TEXT);
@@ -1898,12 +1900,12 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 }
 
 // Given a NSMenuItem tag, return the appropriate bookmark node id.
-- (int64)nodeIdFromMenuTag:(int32)tag {
+- (int64_t)nodeIdFromMenuTag:(int32_t)tag {
   return menuTagMap_[tag];
 }
 
 // Create and return a new tag for the given node id.
-- (int32)menuTagFromNodeId:(int64)menuid {
+- (int32_t)menuTagFromNodeId:(int64_t)menuid {
   int tag = seedId_++;
   menuTagMap_[tag] = menuid;
   return tag;
@@ -1915,7 +1917,7 @@ void RecordAppLaunch(Profile* profile, GURL url) {
 // because our trigger is an [NSView viewWillMoveToWindow:], which the
 // controller doesn't normally know about.  Otherwise we don't have
 // access to the theme before we know what window we will be on.
-- (void)updateTheme:(ui::ThemeProvider*)themeProvider {
+- (void)updateTheme:(const ui::ThemeProvider*)themeProvider {
   if (!themeProvider)
     return;
   NSColor* color =
@@ -2456,8 +2458,8 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   return NSHeight([[browserController tabContentArea] frame]);
 }
 
-- (ThemeService*)themeService {
-  return ThemeServiceFactory::GetForProfile(browser_->profile());
+- (Profile*)profile {
+  return browser_->profile();
 }
 
 #pragma mark BookmarkButtonDelegate Protocol

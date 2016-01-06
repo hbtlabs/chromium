@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/PageRuntimeAgent.h"
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
@@ -90,7 +89,6 @@ void PageRuntimeAgent::disable(ErrorString* errorString)
 {
     if (!m_enabled)
         return;
-    m_scriptStateToId.clear();
     InspectorRuntimeAgent::disable(errorString);
 }
 
@@ -118,18 +116,14 @@ void PageRuntimeAgent::didCreateScriptContext(LocalFrame* frame, ScriptState* sc
 
 void PageRuntimeAgent::willReleaseScriptContext(LocalFrame* frame, ScriptState* scriptState)
 {
-    injectedScriptManager()->discardInjectedScriptFor(scriptState);
-    ScriptStateToId::iterator it = m_scriptStateToId.find(scriptState);
-    if (it == m_scriptStateToId.end())
-        return;
-    int id = it->value;
-    m_scriptStateToId.remove(scriptState);
-    frontend()->executionContextDestroyed(id);
+    reportExecutionContextDestroyed(scriptState);
 }
 
 ScriptState* PageRuntimeAgent::defaultScriptState()
 {
-    return ScriptState::forMainWorld(m_inspectedFrames->root());
+    ScriptState* scriptState = ScriptState::forMainWorld(m_inspectedFrames->root());
+    ASSERT(scriptState);
+    return scriptState;
 }
 
 void PageRuntimeAgent::muteConsole()
@@ -152,8 +146,10 @@ void PageRuntimeAgent::reportExecutionContextCreation()
 
         // Ensure execution context is created.
         // If initializeMainWorld returns true, then is registered by didCreateScriptContext
-        if (!frame->script().initializeMainWorld())
-            reportExecutionContext(ScriptState::forMainWorld(frame), true, "", frameId);
+        if (!frame->script().initializeMainWorld()) {
+            ScriptState* scriptState = ScriptState::forMainWorld(frame);
+            reportExecutionContext(scriptState, true, "", frameId);
+        }
         frame->script().collectIsolatedContexts(isolatedContexts);
         if (isolatedContexts.isEmpty())
             continue;
@@ -167,12 +163,10 @@ void PageRuntimeAgent::reportExecutionContextCreation()
 
 void PageRuntimeAgent::reportExecutionContext(ScriptState* scriptState, bool isPageContext, const String& origin, const String& frameId)
 {
-    int executionContextId = injectedScriptManager()->injectedScriptIdFor(scriptState);
-    m_scriptStateToId.set(scriptState, executionContextId);
     DOMWrapperWorld& world = scriptState->world();
     String humanReadableName = world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "";
     String type = isPageContext ? "" : "Extension";
-    InspectorRuntimeAgent::addExecutionContextToFrontend(executionContextId, type, origin, humanReadableName, frameId);
+    InspectorRuntimeAgent::reportExecutionContextCreated(scriptState, type, origin, humanReadableName, frameId);
 }
 
 } // namespace blink

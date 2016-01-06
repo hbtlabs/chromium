@@ -4,9 +4,10 @@
 
 #include "sync/sessions/nudge_tracker.h"
 
+#include <stddef.h>
+
 #include <utility>
 
-#include "base/basictypes.h"
 #include "sync/internal_api/public/engine/polling_constants.h"
 #include "sync/protocol/sync.pb.h"
 
@@ -25,22 +26,22 @@ const int kSyncSchedulerDelayMilliseconds = 250;
 base::TimeDelta GetDefaultDelayForType(ModelType model_type,
                                        base::TimeDelta minimum_delay) {
   switch (model_type) {
-   case AUTOFILL:
+    case AUTOFILL:
      // Accompany types rely on nudges from other types, and hence have long
      // nudge delays.
      return base::TimeDelta::FromSeconds(kDefaultShortPollIntervalSeconds);
-   case BOOKMARKS:
-   case PREFERENCES:
+    case BOOKMARKS:
+    case PREFERENCES:
      // Types with sometimes automatic changes get longer delays to allow more
      // coalescing.
      return base::TimeDelta::FromMilliseconds(kSlowNudgeDelayMilliseconds);
-   case SESSIONS:
-   case FAVICON_IMAGES:
-   case FAVICON_TRACKING:
+    case SESSIONS:
+    case FAVICON_IMAGES:
+    case FAVICON_TRACKING:
      // Types with navigation triggered changes get longer delays to allow more
      // coalescing.
      return base::TimeDelta::FromSeconds(kDefaultSessionsCommitDelaySeconds);
-   default:
+    default:
      return minimum_delay;
   }
 }
@@ -161,7 +162,7 @@ base::TimeDelta NudgeTracker::RecordRemoteInvalidation(
   // Forward the invalidations to the proper recipient.
   TypeTrackerMap::const_iterator tracker_it = type_trackers_.find(type);
   DCHECK(tracker_it != type_trackers_.end());
-  tracker_it->second->RecordRemoteInvalidation(invalidation.Pass());
+  tracker_it->second->RecordRemoteInvalidation(std::move(invalidation));
   return remote_invalidation_nudge_delay_;
 }
 

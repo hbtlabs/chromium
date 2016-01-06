@@ -5,9 +5,9 @@
 #include "extensions/browser/api/management/management_api.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
@@ -18,6 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/management/management_api_constants.h"
@@ -243,13 +244,7 @@ scoped_ptr<management::ExtensionInfo> CreateExtensionInfo(
         GetAvailableLaunchTypes(extension, delegate)));
   }
 
-  return info.Pass();
-}
-
-bool ShouldNotBeVisible(const Extension* extension,
-                        content::BrowserContext* context) {
-  return (extension->ShouldNotBeVisible() ||
-          ExtensionPrefs::Get(context)->IsEphemeralApp(extension->id()));
+  return info;
 }
 
 void AddExtensionInfo(const ExtensionSet& extensions,
@@ -259,7 +254,7 @@ void AddExtensionInfo(const ExtensionSet& extensions,
        iter != extensions.end(); ++iter) {
     const Extension& extension = *iter->get();
 
-    if (ShouldNotBeVisible(&extension, context))
+    if (extension.ShouldNotBeVisible())
       continue;  // Skip built-in extensions/apps.
 
     extension_list->push_back(make_linked_ptr<management::ExtensionInfo>(
@@ -434,7 +429,7 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
 
   const Extension* extension =
       registry->GetExtensionById(extension_id_, ExtensionRegistry::EVERYTHING);
-  if (!extension || ShouldNotBeVisible(extension, browser_context()))
+  if (!extension || extension->ShouldNotBeVisible())
     return RespondNow(Error(keys::kNoExtensionError, extension_id_));
 
   bool enabled = params->enabled;
@@ -523,8 +518,7 @@ ExtensionFunction::ResponseAction ManagementUninstallFunctionBase::Uninstall(
       extensions::ExtensionRegistry::Get(browser_context())
           ->GetExtensionById(target_extension_id_,
                              ExtensionRegistry::EVERYTHING);
-  if (!target_extension ||
-      ShouldNotBeVisible(target_extension, browser_context())) {
+  if (!target_extension || target_extension->ShouldNotBeVisible()) {
     return RespondNow(Error(keys::kNoExtensionError, target_extension_id_));
   }
 
@@ -867,7 +861,7 @@ void ManagementEventRouter::BroadcastEvent(
     const Extension* extension,
     events::HistogramValue histogram_value,
     const char* event_name) {
-  if (ShouldNotBeVisible(extension, browser_context_))
+  if (extension->ShouldNotBeVisible())
     return;  // Don't dispatch events for built-in extenions.
   scoped_ptr<base::ListValue> args(new base::ListValue());
   if (event_name == management::OnUninstalled::kEventName) {
@@ -880,7 +874,7 @@ void ManagementEventRouter::BroadcastEvent(
 
   EventRouter::Get(browser_context_)
       ->BroadcastEvent(scoped_ptr<Event>(
-          new Event(histogram_value, event_name, args.Pass())));
+          new Event(histogram_value, event_name, std::move(args))));
 }
 
 ManagementAPI::ManagementAPI(content::BrowserContext* context)

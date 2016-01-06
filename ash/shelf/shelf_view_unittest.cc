@@ -30,7 +30,6 @@
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shelf_item_delegate.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -334,7 +333,7 @@ class ShelfViewTest : public AshTestBase {
  protected:
   void CreateAndSetShelfItemDelegateForID(ShelfID id) {
     scoped_ptr<ShelfItemDelegate> delegate(new TestShelfItemDelegate(NULL));
-    item_manager_->SetShelfItemDelegate(id, delegate.Pass());
+    item_manager_->SetShelfItemDelegate(id, std::move(delegate));
   }
 
   ShelfID AddBrowserShortcut() {
@@ -1242,8 +1241,7 @@ TEST_F(ShelfViewTest, ClickingTwiceActivatesOnce) {
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
   item_manager_->SetShelfItemDelegate(
-      browser_shelf_id,
-      scoped_ptr<ShelfItemDelegate>(selection_tracker).Pass());
+      browser_shelf_id, scoped_ptr<ShelfItemDelegate>(selection_tracker));
 
   // A single click selects the item.
   SimulateClick(browser_index_);
@@ -1268,8 +1266,7 @@ TEST_F(ShelfViewTest, ClickAndMoveSlightly) {
   // the shelf item gets selected.
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
   item_manager_->SetShelfItemDelegate(
-      shelf_id,
-      scoped_ptr<ShelfItemDelegate>(selection_tracker).Pass());
+      shelf_id, scoped_ptr<ShelfItemDelegate>(selection_tracker));
 
   gfx::Vector2d press_offset(5, 30);
   gfx::Point press_location = gfx::Point() + press_offset;
@@ -1875,8 +1872,7 @@ TEST_F(ShelfViewTest,
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
   item_manager_->SetShelfItemDelegate(
-      browser_shelf_id,
-      scoped_ptr<ShelfItemDelegate>(selection_tracker).Pass());
+      browser_shelf_id, scoped_ptr<ShelfItemDelegate>(selection_tracker));
 
   SimulateClick(browser_index_);
   EXPECT_EQ(1,
@@ -1893,8 +1889,7 @@ TEST_F(ShelfViewTest, Launcher_TaskUserActionsRecordedWhenItemSelected) {
   selection_tracker->set_item_selected_action(
       ShelfItemDelegate::kNewWindowCreated);
   item_manager_->SetShelfItemDelegate(
-      browser_shelf_id,
-      scoped_ptr<ShelfItemDelegate>(selection_tracker).Pass());
+      browser_shelf_id, scoped_ptr<ShelfItemDelegate>(selection_tracker));
 
   SimulateClick(browser_index_);
   EXPECT_EQ(1, user_action_tester.GetActionCount("Launcher_LaunchTask"));
@@ -1909,8 +1904,7 @@ TEST_F(ShelfViewTest,
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
   item_manager_->SetShelfItemDelegate(
-      browser_shelf_id,
-      scoped_ptr<ShelfItemDelegate>(selection_tracker).Pass());
+      browser_shelf_id, scoped_ptr<ShelfItemDelegate>(selection_tracker));
 
   selection_tracker->set_item_selected_action(
       ShelfItemDelegate::kExistingWindowMinimized);

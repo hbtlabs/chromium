@@ -189,12 +189,31 @@ std::string ChromeClassTester::GetNamespace(const Decl* record) {
 
 bool ChromeClassTester::InImplementationFile(SourceLocation record_location) {
   std::string filename;
-  if (!GetFilename(record_location, &filename))
-    return false;
 
-  if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
-      ends_with(filename, ".mm")) {
-    return true;
+  if (options_.follow_macro_expansion) {
+    // If |record_location| is a macro, check the whole chain of expansions.
+    const SourceManager& source_manager = instance_.getSourceManager();
+    while (true) {
+      if (GetFilename(record_location, &filename)) {
+        if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
+            ends_with(filename, ".mm")) {
+          return true;
+        }
+      }
+      if (!record_location.isMacroID()) {
+        break;
+      }
+      record_location =
+          source_manager.getImmediateExpansionRange(record_location).first;
+    }
+  } else {
+    if (!GetFilename(record_location, &filename))
+      return false;
+
+    if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
+        ends_with(filename, ".mm")) {
+      return true;
+    }
   }
 
   return false;
@@ -204,20 +223,18 @@ void ChromeClassTester::BuildBannedLists() {
   banned_namespaces_.emplace("std");
   banned_namespaces_.emplace("__gnu_cxx");
 
-  if (!options_.enforce_overriding_blink) {
-    banned_namespaces_.emplace("blink");
-    banned_namespaces_.emplace("WTF");
-  }
-
   if (options_.enforce_in_thirdparty_webkit) {
     allowed_directories_.emplace("/third_party/WebKit/");
+  }
+
+  if (!options_.enforce_in_pdf) {
+    banned_directories_.emplace("/pdf/");
   }
 
   banned_directories_.emplace("/third_party/");
   banned_directories_.emplace("/native_client/");
   banned_directories_.emplace("/breakpad/");
   banned_directories_.emplace("/courgette/");
-  banned_directories_.emplace("/pdf/");
   banned_directories_.emplace("/ppapi/");
   banned_directories_.emplace("/usr/include/");
   banned_directories_.emplace("/usr/lib/");

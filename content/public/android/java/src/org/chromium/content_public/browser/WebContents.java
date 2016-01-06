@@ -8,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Parcelable;
 
+import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 
 /**
@@ -321,6 +322,24 @@ public interface WebContents extends Parcelable {
      * @param observer The observer to remove.
      */
     void removeObserver(WebContentsObserver observer);
+
+    /**
+     * @return The list of observers.
+     */
+    @VisibleForTesting
+    ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting();
+
+    /**
+     * Called when context menu gets opened.
+     */
+    void onContextMenuOpened();
+
+    /**
+     * Called when context menu gets closed. Note that closing context menu that is
+     * not triggered by WebContents will still call this. However, it will have no effect
+     * if onContextMenuOpened() isn't called in advance.
+     */
+    void onContextMenuClosed();
 
     /**
      * @return The character encoding for the current visible page.

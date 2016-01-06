@@ -4,6 +4,7 @@
 
 #include "media/mojo/services/mojo_media_client.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/android/android_cdm_factory.h"
 #include "media/base/bind_to_current_loop.h"
@@ -13,10 +14,8 @@
 #include "mojo/application/public/cpp/connect.h"
 
 namespace media {
-namespace internal {
 
 namespace {
-
 scoped_ptr<ProvisionFetcher> CreateProvisionFetcher(
     mojo::ServiceProvider* service_provider) {
   interfaces::ProvisionFetcherPtr provision_fetcher_ptr;
@@ -25,12 +24,11 @@ scoped_ptr<ProvisionFetcher> CreateProvisionFetcher(
       new MojoProvisionFetcher(std::move(provision_fetcher_ptr)));
 }
 
-}  // namespace (anonymous)
-
-class AndroidMojoMediaClient : public PlatformMojoMediaClient {
+class AndroidMojoMediaClient : public MojoMediaClient {
  public:
   AndroidMojoMediaClient() {}
 
+  // MojoMediaClient overrides.
   scoped_ptr<CdmFactory> CreateCdmFactory(
       mojo::ServiceProvider* service_provider) override {
     return make_scoped_ptr(new AndroidCdmFactory(
@@ -40,10 +38,10 @@ class AndroidMojoMediaClient : public PlatformMojoMediaClient {
  private:
   DISALLOW_COPY_AND_ASSIGN(AndroidMojoMediaClient);
 };
+}  // namespace (anonymous)
 
-scoped_ptr<PlatformMojoMediaClient> CreatePlatformMojoMediaClient() {
+scoped_ptr<MojoMediaClient> MojoMediaClient::Create() {
   return make_scoped_ptr(new AndroidMojoMediaClient());
 }
 
-}  // namespace internal
 }  // namespace media

@@ -16,13 +16,13 @@ from telemetry.core import util
 from telemetry.internal import forwarders
 from telemetry.internal.platform import android_device
 
-try:
-  from pylib import forwarder
-except ImportError:
-  forwarder = None
-
 from devil.android import device_errors
 from devil.android import device_utils
+
+try:
+  from devil.android import forwarder
+except ImportError:
+  forwarder = None
 
 
 class AndroidForwarderFactory(forwarders.ForwarderFactory):
@@ -307,7 +307,7 @@ class AndroidRndisConfigurator(object):
       logging.info('HoRNDIS kext loaded successfully.')
       return
     logging.info('Installing HoRNDIS...')
-    pkg_path = binary_manager.FetchPath('HoRNDIS-rel5.pkg', arch_name, 'mac')
+    pkg_path = binary_manager.FetchPath('horndis', arch_name, 'mac')
     subprocess.check_call(
         ['/usr/bin/sudo', 'installer', '-pkg', pkg_path, '-target', '/'])
 

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/file_system_provider/notification_manager.h"
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/app_icon_loader_impl.h"
@@ -137,7 +138,7 @@ NotificationManager::CreateNotification() {
           new ProviderNotificationDelegate(this)));
 
   notification->SetSystemPriority();
-  return notification.Pass();
+  return notification;
 }
 
 void NotificationManager::OnNotificationResult(NotificationResult result) {

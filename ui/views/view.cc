@@ -8,14 +8,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/cursor/cursor.h"
@@ -475,7 +478,7 @@ scoped_ptr<ui::Layer> View::RecreateLayer() {
   Widget* widget = GetWidget();
   if (widget)
     widget->UpdateRootLayers();
-  return old_layer.Pass();
+  return old_layer;
 }
 
 // RTL positioning -------------------------------------------------------------
@@ -848,7 +851,9 @@ void View::set_background(Background* b) {
   background_.reset(b);
 }
 
-void View::SetBorder(scoped_ptr<Border> b) { border_ = b.Pass(); }
+void View::SetBorder(scoped_ptr<Border> b) {
+  border_ = std::move(b);
+}
 
 const ui::ThemeProvider* View::GetThemeProvider() const {
   const Widget* widget = GetWidget();
@@ -1057,9 +1062,9 @@ const ui::InputMethod* View::GetInputMethod() const {
 
 scoped_ptr<ViewTargeter>
 View::SetEventTargeter(scoped_ptr<ViewTargeter> targeter) {
-  scoped_ptr<ViewTargeter> old_targeter = targeter_.Pass();
-  targeter_ = targeter.Pass();
-  return old_targeter.Pass();
+  scoped_ptr<ViewTargeter> old_targeter = std::move(targeter_);
+  targeter_ = std::move(targeter);
+  return old_targeter;
 }
 
 ViewTargeter* View::GetEffectiveViewTargeter() const {

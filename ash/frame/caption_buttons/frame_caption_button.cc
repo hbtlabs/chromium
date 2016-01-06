@@ -23,6 +23,13 @@ const float kFadeOutRatio = 0.5f;
 // The alpha to draw inactive icons with.
 const float kInactiveIconAlpha = 0.2f;
 
+// The colors and alpha values used for the button background hovered and
+// pressed states.
+// TODO(tdanderson|estade): Request these colors from ThemeProvider.
+const int kHoveredAlpha = 0x14;
+const SkColor kHoveredPressedColor = SK_ColorBLACK;
+const int kPressedAlpha = 0x24;
+
 }  // namespace
 
 // static
@@ -35,8 +42,6 @@ FrameCaptionButton::FrameCaptionButton(views::ButtonListener* listener,
       paint_as_active_(false),
       alpha_(255),
       icon_image_id_(-1),
-      hovered_background_image_id_(-1),
-      pressed_background_image_id_(-1),
       swap_images_animation_(new gfx::SlideAnimation(this)) {
   swap_images_animation_->Reset(1);
 
@@ -48,18 +53,14 @@ FrameCaptionButton::FrameCaptionButton(views::ButtonListener* listener,
 FrameCaptionButton::~FrameCaptionButton() {
 }
 
-void FrameCaptionButton::SetImages(CaptionButtonIcon icon,
-                                   Animate animate,
-                                   int icon_image_id,
-                                   int hovered_background_image_id,
-                                   int pressed_background_image_id) {
-  // The early return is dependant on |animate| because callers use SetImages()
+void FrameCaptionButton::SetImage(CaptionButtonIcon icon,
+                                  Animate animate,
+                                  int icon_image_id) {
+  // The early return is dependant on |animate| because callers use SetImage()
   // with ANIMATE_NO to progress the crossfade animation to the end.
   if (icon == icon_ &&
       (animate == ANIMATE_YES || !swap_images_animation_->is_animating()) &&
-      icon_image_id == icon_image_id_ &&
-      hovered_background_image_id == hovered_background_image_id_ &&
-      pressed_background_image_id == pressed_background_image_id_) {
+      icon_image_id == icon_image_id_) {
     return;
   }
 
@@ -68,15 +69,9 @@ void FrameCaptionButton::SetImages(CaptionButtonIcon icon,
 
   icon_ = icon;
   icon_image_id_ = icon_image_id;
-  hovered_background_image_id_ = hovered_background_image_id;
-  pressed_background_image_id_ = pressed_background_image_id;
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   icon_image_ = *rb.GetImageSkiaNamed(icon_image_id);
-  hovered_background_image_ = *rb.GetImageSkiaNamed(
-      hovered_background_image_id);
-  pressed_background_image_ = *rb.GetImageSkiaNamed(
-      pressed_background_image_id);
 
   if (animate == ANIMATE_YES) {
     swap_images_animation_->Reset(0);
@@ -101,8 +96,7 @@ void FrameCaptionButton::SetAlpha(int alpha) {
 }
 
 gfx::Size FrameCaptionButton::GetPreferredSize() const {
-  return hovered_background_image_.isNull() ?
-      gfx::Size() : hovered_background_image_.size();
+  return size_;
 }
 
 const char* FrameCaptionButton::GetClassName() const {
@@ -110,15 +104,16 @@ const char* FrameCaptionButton::GetClassName() const {
 }
 
 void FrameCaptionButton::OnPaint(gfx::Canvas* canvas) {
-  if (hover_animation_->is_animating() || state() == STATE_HOVERED) {
-    int hovered_background_alpha = hover_animation_->is_animating() ?
-        hover_animation_->CurrentValueBetween(0, 255) : 255;
-    SkPaint paint;
-    paint.setAlpha(hovered_background_alpha);
-    canvas->DrawImageInt(hovered_background_image_, 0, 0, paint);
-  } else if (state() == STATE_PRESSED) {
-    canvas->DrawImageInt(pressed_background_image_, 0, 0);
-  }
+  SkAlpha bg_alpha = SK_AlphaTRANSPARENT;
+  if (hover_animation().is_animating())
+    bg_alpha = hover_animation().CurrentValueBetween(0, kHoveredAlpha);
+  else if (state() == STATE_HOVERED)
+    bg_alpha = kHoveredAlpha;
+  else if (state() == STATE_PRESSED)
+    bg_alpha = kPressedAlpha;
+
+  if (bg_alpha != SK_AlphaTRANSPARENT)
+    canvas->DrawColor(SkColorSetA(kHoveredPressedColor, bg_alpha));
 
   int icon_alpha = swap_images_animation_->CurrentValueBetween(0, 255);
   int crossfade_icon_alpha = 0;
@@ -173,9 +168,9 @@ void FrameCaptionButton::PaintCentered(gfx::Canvas* canvas,
   if (!paint_as_active_) {
     // Paint icons as active when they are hovered over or pressed.
     double inactive_alpha = kInactiveIconAlpha;
-    if (hover_animation_->is_animating()) {
+    if (hover_animation().is_animating()) {
       inactive_alpha =
-          hover_animation_->CurrentValueBetween(inactive_alpha, 1.0f);
+          hover_animation().CurrentValueBetween(inactive_alpha, 1.0f);
     } else if (state() == STATE_PRESSED || state() == STATE_HOVERED) {
       inactive_alpha = 1.0f;
     }

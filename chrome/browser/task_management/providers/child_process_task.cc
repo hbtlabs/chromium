@@ -4,6 +4,8 @@
 
 #include "chrome/browser/task_management/providers/child_process_task.h"
 
+#include <utility>
+
 #include "base/i18n/rtl.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -127,7 +129,7 @@ void ConnectResourceReporterOnIOThread(
   if (!registry)
     return;
 
-  registry->ConnectToRemoteService(resource_reporter.Pass());
+  registry->ConnectToRemoteService(std::move(resource_reporter));
 }
 
 // Creates the Mojo service wrapper that will be used to sample the V8 memory
@@ -146,7 +148,7 @@ ProcessResourceUsage* CreateProcessResourcesSampler(
                  unique_child_process_id,
                  base::Passed(&usage_reporter)));
 
-  return new ProcessResourceUsage(service.Pass());
+  return new ProcessResourceUsage(std::move(service));
 }
 
 bool UsesV8Memory(int process_type) {
@@ -165,7 +167,7 @@ bool UsesV8Memory(int process_type) {
 
 ChildProcessTask::ChildProcessTask(const content::ChildProcessData& data)
     : Task(GetLocalizedTitle(data.name, data.process_type),
-           base::UTF16ToASCII(data.name),
+           base::UTF16ToUTF8(data.name),
            GetDefaultIcon(),
            data.handle),
       process_resources_sampler_(CreateProcessResourcesSampler(data.id)),
@@ -180,7 +182,7 @@ ChildProcessTask::~ChildProcessTask() {
 }
 
 void ChildProcessTask::Refresh(const base::TimeDelta& update_interval,
-                               int64 refresh_flags) {
+                               int64_t refresh_flags) {
   Task::Refresh(update_interval, refresh_flags);
 
   if ((refresh_flags & REFRESH_TYPE_V8_MEMORY) == 0)
@@ -195,9 +197,9 @@ void ChildProcessTask::Refresh(const base::TimeDelta& update_interval,
   // potentially having valid values).
   process_resources_sampler_->Refresh(base::Closure());
 
-  v8_memory_allocated_ = base::saturated_cast<int64>(
+  v8_memory_allocated_ = base::saturated_cast<int64_t>(
       process_resources_sampler_->GetV8MemoryAllocated());
-  v8_memory_used_ = base::saturated_cast<int64>(
+  v8_memory_used_ = base::saturated_cast<int64_t>(
       process_resources_sampler_->GetV8MemoryUsed());
 }
 
@@ -232,11 +234,11 @@ bool ChildProcessTask::ReportsV8Memory() const {
   return uses_v8_memory_ && process_resources_sampler_->ReportsV8MemoryStats();
 }
 
-int64 ChildProcessTask::GetV8MemoryAllocated() const {
+int64_t ChildProcessTask::GetV8MemoryAllocated() const {
   return v8_memory_allocated_;
 }
 
-int64 ChildProcessTask::GetV8MemoryUsed() const {
+int64_t ChildProcessTask::GetV8MemoryUsed() const {
   return v8_memory_used_;
 }
 

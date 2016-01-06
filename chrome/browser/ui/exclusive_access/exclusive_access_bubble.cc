@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -177,15 +178,15 @@ base::string16 ExclusiveAccessBubble::GetCurrentAllowButtonText() const {
   return exclusive_access_bubble::GetAllowButtonTextForType(bubble_type_, url_);
 }
 
-base::string16 ExclusiveAccessBubble::GetInstructionText() const {
+base::string16 ExclusiveAccessBubble::GetInstructionText(
+    const base::string16& accelerator) const {
   if (!ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled()) {
-    return l10n_util::GetStringFUTF16(
-        IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_SENTENCE,
-        l10n_util::GetStringUTF16(IDS_APP_ESC_KEY));
+    return l10n_util::GetStringFUTF16(IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_SENTENCE,
+                                      accelerator);
   }
 
-  return l10n_util::GetStringFUTF16(IDS_FULLSCREEN_PRESS_ESC_TO_EXIT,
-                                    l10n_util::GetStringUTF16(IDS_APP_ESC_KEY));
+  return exclusive_access_bubble::GetInstructionTextForType(bubble_type_,
+                                                            accelerator);
 }
 
 void ExclusiveAccessBubble::ShowAndStartTimers() {

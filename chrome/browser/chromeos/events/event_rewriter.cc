@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/events/event_rewriter.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "ash/sticky_keys/sticky_keys_controller.h"
@@ -111,6 +113,11 @@ const struct ModifierRemapping {
      input_method::kEscapeKey,
      nullptr,
      {ui::EF_NONE, ui::DomCode::ESCAPE, ui::DomKey::ESCAPE, ui::VKEY_ESCAPE}},
+    {ui::EF_NONE,
+     input_method::kBackspaceKey,
+     nullptr,
+     {ui::EF_NONE, ui::DomCode::BACKSPACE, ui::DomKey::BACKSPACE,
+      ui::VKEY_BACK}},
     {ui::EF_NONE,
      input_method::kNumModifierKeys,
      prefs::kLanguageRemapDiamondKeyTo,

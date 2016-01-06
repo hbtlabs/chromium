@@ -4,21 +4,27 @@
 
 #include "chrome/browser/ui/webui/options/reset_profile_settings_handler.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/profile_resetter/brandcode_config_fetcher.h"
 #include "chrome/browser/profile_resetter/brandcoded_default_settings.h"
+#include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -148,6 +154,12 @@ void ResetProfileSettingsHandler::OnResetProfileSettingsDone(
       std::string report = SerializeSettingsReport(*setting_snapshot_,
                                                    difference);
       SendSettingsFeedback(report, profile);
+
+      // Send the same report as a protobuf to a different endpoint.
+      scoped_ptr<reset_report::ChromeResetReport> report_proto =
+          SerializeSettingsReportToProto(*setting_snapshot_, difference);
+      if (report_proto)
+        SendSettingsFeedbackProto(*report_proto, profile);
     }
   }
   setting_snapshot_.reset();
@@ -202,11 +214,9 @@ void ResetProfileSettingsHandler::ResetProfile(bool send_settings) {
   if (!default_settings)
     default_settings.reset(new BrandcodedDefaultSettings);
   resetter_->Reset(
-      ProfileResetter::ALL,
-      default_settings.Pass(),
+      ProfileResetter::ALL, std::move(default_settings),
       base::Bind(&ResetProfileSettingsHandler::OnResetProfileSettingsDone,
-                 AsWeakPtr(),
-                 send_settings));
+                 AsWeakPtr(), send_settings));
   content::RecordAction(base::UserMetricsAction("ResetProfile"));
   UMA_HISTOGRAM_BOOLEAN("ProfileReset.SendFeedback", send_settings);
 }

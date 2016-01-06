@@ -85,14 +85,24 @@ void QuicInMemoryCache::AddResponse(StringPiece host,
                                     StringPiece path,
                                     const SpdyHeaderBlock& response_headers,
                                     StringPiece response_body) {
-  AddResponseImpl(host, path, REGULAR_RESPONSE, response_headers,
-                  response_body);
+  AddResponseImpl(host, path, REGULAR_RESPONSE, response_headers, response_body,
+                  SpdyHeaderBlock());
+}
+
+void QuicInMemoryCache::AddResponse(StringPiece host,
+                                    StringPiece path,
+                                    const SpdyHeaderBlock& response_headers,
+                                    StringPiece response_body,
+                                    const SpdyHeaderBlock& response_trailers) {
+  AddResponseImpl(host, path, REGULAR_RESPONSE, response_headers, response_body,
+                  response_trailers);
 }
 
 void QuicInMemoryCache::AddSpecialResponse(StringPiece host,
                                            StringPiece path,
                                            SpecialResponseType response_type) {
-  AddResponseImpl(host, path, response_type, SpdyHeaderBlock(), "");
+  AddResponseImpl(host, path, response_type, SpdyHeaderBlock(), "",
+                  SpdyHeaderBlock());
 }
 
 QuicInMemoryCache::QuicInMemoryCache() {}
@@ -110,9 +120,7 @@ void QuicInMemoryCache::InitializeFromDirectory(const string& cache_directory) {
   VLOG(1) << "Attempting to initialize QuicInMemoryCache from directory: "
           << cache_directory;
   FilePath directory(FilePath::FromUTF8Unsafe(cache_directory));
-  base::FileEnumerator file_list(directory,
-                                 true,
-                                 base::FileEnumerator::FILES);
+  base::FileEnumerator file_list(directory, true, base::FileEnumerator::FILES);
 
   for (FilePath file_iter = file_list.Next(); !file_iter.empty();
        file_iter = file_list.Next()) {
@@ -131,8 +139,8 @@ void QuicInMemoryCache::InitializeFromDirectory(const string& cache_directory) {
     string file_contents;
     base::ReadFileToString(file_iter, &file_contents);
     int file_len = static_cast<int>(file_contents.length());
-    int headers_end = HttpUtil::LocateEndOfHeaders(file_contents.data(),
-                                                   file_len);
+    int headers_end =
+        HttpUtil::LocateEndOfHeaders(file_contents.data(), file_len);
     if (headers_end < 1) {
       LOG(DFATAL) << "Headers invalid or empty, ignoring: " << file;
       continue;
@@ -187,11 +195,14 @@ QuicInMemoryCache::~QuicInMemoryCache() {
   STLDeleteValues(&responses_);
 }
 
-void QuicInMemoryCache::AddResponseImpl(StringPiece host,
-                                        StringPiece path,
-                                        SpecialResponseType response_type,
-                                        const SpdyHeaderBlock& response_headers,
-                                        StringPiece response_body) {
+void QuicInMemoryCache::AddResponseImpl(
+    StringPiece host,
+    StringPiece path,
+    SpecialResponseType response_type,
+    const SpdyHeaderBlock& response_headers,
+    StringPiece response_body,
+    const SpdyHeaderBlock& response_trailers) {
+  DCHECK(!host.empty()) << "Host must be populated, e.g. \"www.google.com\"";
   string key = GetKey(host, path);
   if (ContainsKey(responses_, key)) {
     LOG(DFATAL) << "Response for '" << key << "' already exists!";
@@ -201,6 +212,7 @@ void QuicInMemoryCache::AddResponseImpl(StringPiece host,
   new_response->set_response_type(response_type);
   new_response->set_headers(response_headers);
   new_response->set_body(response_body);
+  new_response->set_trailers(response_trailers);
   responses_[key] = new_response;
 }
 

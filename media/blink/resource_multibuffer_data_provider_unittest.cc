@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/blink/resource_multibuffer_data_provider.h"
+
+#include <stdint.h>
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
 #include "media/base/seekable_buffer.h"
 #include "media/blink/mock_webframeclient.h"
 #include "media/blink/mock_weburlloader.h"
-#include "media/blink/resource_multibuffer_data_provider.h"
 #include "media/blink/url_index.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
@@ -91,7 +95,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
     scoped_ptr<ResourceMultiBufferDataProvider> loader(
         new ResourceMultiBufferDataProvider(url_data_.get(), first_position_));
     loader_ = loader.get();
-    url_data_->multibuffer()->AddProvider(loader.Pass());
+    url_data_->multibuffer()->AddProvider(std::move(loader));
 
     // |test_loader_| will be used when Start() is called.
     url_loader_ = new NiceMock<MockWebURLLoader>();
@@ -106,7 +110,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
     loader_->Start();
   }
 
-  void FullResponse(int64 instance_size, bool ok = true) {
+  void FullResponse(int64_t instance_size, bool ok = true) {
     WebURLResponse response(gurl_);
     response.setHTTPHeaderField(
         WebString::fromUTF8("Content-Length"),
@@ -122,15 +126,15 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
     EXPECT_FALSE(url_data_->range_supported());
   }
 
-  void PartialResponse(int64 first_position,
-                       int64 last_position,
-                       int64 instance_size) {
+  void PartialResponse(int64_t first_position,
+                       int64_t last_position,
+                       int64_t instance_size) {
     PartialResponse(first_position, last_position, instance_size, false, true);
   }
 
-  void PartialResponse(int64 first_position,
-                       int64 last_position,
-                       int64 instance_size,
+  void PartialResponse(int64_t first_position,
+                       int64_t last_position,
+                       int64_t instance_size,
                        bool chunked,
                        bool accept_ranges) {
     WebURLResponse response(gurl_);
@@ -142,7 +146,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
                                first_position, last_position, instance_size)));
 
     // HTTP 1.1 doesn't permit Content-Length with Transfer-Encoding: chunked.
-    int64 content_length = -1;
+    int64_t content_length = -1;
     if (chunked) {
       response.setHTTPHeaderField(WebString::fromUTF8("Transfer-Encoding"),
                                   WebString::fromUTF8("chunked"));
@@ -199,7 +203,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
   }
 
   // Verifies that data in buffer[0...size] is equal to data_[pos...pos+size].
-  void VerifyBuffer(uint8* buffer, int pos, int size) {
+  void VerifyBuffer(uint8_t* buffer, int pos, int size) {
     EXPECT_EQ(0, memcmp(buffer, data_ + pos, size));
   }
 
@@ -212,7 +216,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
  protected:
   GURL gurl_;
-  int64 first_position_;
+  int64_t first_position_;
 
   scoped_ptr<UrlIndex> url_index_;
   scoped_refptr<UrlData> url_data_;
@@ -227,7 +231,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
   base::MessageLoop message_loop_;
 
-  uint8 data_[kDataSize];
+  uint8_t data_[kDataSize];
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ResourceMultiBufferDataProviderTest);

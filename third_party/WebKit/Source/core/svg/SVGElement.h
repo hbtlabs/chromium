@@ -83,6 +83,9 @@ public:
 
     // Records the SVG element as having a Web Animation on an SVG attribute that needs applying.
     void setWebAnimationsPending();
+    void applyActiveWebAnimations();
+
+    void ensureAttributeAnimValUpdated();
 
     void setWebAnimatedAttribute(const QualifiedName& attribute, PassRefPtrWillBeRawPtr<SVGPropertyBase>);
     void clearWebAnimatedAttributes();
@@ -103,8 +106,9 @@ public:
     virtual bool isValid() const { return true; }
 
     virtual void svgAttributeChanged(const QualifiedName&);
+    void svgAttributeBaseValChanged(const QualifiedName&);
 
-    PassRefPtrWillBeRawPtr<SVGAnimatedPropertyBase> propertyFromAttribute(const QualifiedName& attributeName);
+    SVGAnimatedPropertyBase* propertyFromAttribute(const QualifiedName& attributeName) const;
     static AnimatedPropertyType animatedPropertyTypeForCSSAttribute(const QualifiedName& attributeName);
 
     void sendSVGLoadEventToSelfAndAncestorChainIfPossible();

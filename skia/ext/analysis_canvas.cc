@@ -254,16 +254,6 @@ void AnalysisCanvas::onDrawImageRect(const SkImage*,
   ++draw_op_count_;
 }
 
-void AnalysisCanvas::onDrawSprite(const SkBitmap& bitmap,
-                                  int left,
-                                  int top,
-                                  const SkPaint* paint) {
-  TRACE_EVENT0("disabled-by-default-skia", "AnalysisCanvas::onDrawSprite");
-  is_solid_color_ = false;
-  is_transparent_ = false;
-  ++draw_op_count_;
-}
-
 void AnalysisCanvas::onDrawText(const void* text,
                                 size_t len,
                                 SkScalar x,
@@ -443,10 +433,9 @@ void AnalysisCanvas::willSave() {
   INHERITED::willSave();
 }
 
-SkCanvas::SaveLayerStrategy AnalysisCanvas::willSaveLayer(
-    const SkRect* bounds,
-    const SkPaint* paint,
-    SkCanvas::SaveFlags flags) {
+SkCanvas::SaveLayerStrategy AnalysisCanvas::getSaveLayerStrategy(
+    const SaveLayerRec& rec) {
+  const SkPaint* paint = rec.fPaint;
 
   ++saved_stack_size_;
 
@@ -458,7 +447,7 @@ SkCanvas::SaveLayerStrategy AnalysisCanvas::willSaveLayer(
   // layer, then we can conservatively say that the canvas will not be of
   // solid color.
   if ((paint && !IsSolidColorPaint(*paint)) ||
-      (bounds && !bounds->contains(canvas_bounds))) {
+      (rec.fBounds && !rec.fBounds->contains(canvas_bounds))) {
     if (force_not_solid_stack_level_ == kNoLayer) {
       force_not_solid_stack_level_ = saved_stack_size_;
       SetForceNotSolid(true);
@@ -478,7 +467,7 @@ SkCanvas::SaveLayerStrategy AnalysisCanvas::willSaveLayer(
     }
   }
 
-  INHERITED::willSaveLayer(bounds, paint, flags);
+  INHERITED::getSaveLayerStrategy(rec);
   // Actually saving a layer here could cause a new bitmap to be created
   // and real rendering to occur.
   return kNoLayer_SaveLayerStrategy;

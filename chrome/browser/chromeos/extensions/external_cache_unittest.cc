@@ -7,10 +7,12 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/values.h"
@@ -169,7 +171,7 @@ TEST_F(ExternalCacheTest, Basic) {
   CreateExtensionFile(cache_dir, kTestExtensionId3, "3");
   prefs->Set(kTestExtensionId4, CreateEntryWithUpdateUrl(false));
 
-  external_cache.UpdateExtensionsList(prefs.Pass());
+  external_cache.UpdateExtensionsList(std::move(prefs));
   WaitForCompletion();
 
   ASSERT_TRUE(provided_prefs());
@@ -288,7 +290,7 @@ TEST_F(ExternalCacheTest, PreserveInstalled) {
 
   AddInstalledExtension(kTestExtensionId1, "1");
 
-  external_cache.UpdateExtensionsList(prefs.Pass());
+  external_cache.UpdateExtensionsList(std::move(prefs));
   WaitForCompletion();
 
   ASSERT_TRUE(provided_prefs());

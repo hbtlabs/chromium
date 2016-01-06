@@ -5,9 +5,10 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 
 #include <ctype.h>
-
+#include <stddef.h>
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/bind.h"
@@ -17,6 +18,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
@@ -28,6 +30,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
@@ -421,7 +424,7 @@ scoped_ptr<base::DictionaryValue> GetLocalPrinterCapabilitiesOnFileThread(
     return scoped_ptr<base::DictionaryValue>();
   }
 
-  return description.Pass();
+  return description;
 }
 
 void EnumeratePrintersOnFileThread(base::ListValue* printers) {
@@ -870,7 +873,7 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
     print_preview_distiller_.reset(new PrintPreviewDistiller(
         initiator, base::Bind(&PrintPreviewUI::OnPrintPreviewFailed,
                               print_preview_ui()->GetWeakPtr()),
-        settings.Pass()));
+        std::move(settings)));
   } else {
     RenderViewHost* rvh = initiator->GetRenderViewHost();
     rvh->Send(new PrintMsg_PrintPreview(rvh->GetRoutingID(), *settings));
@@ -1222,7 +1225,10 @@ void PrintPreviewHandler::GetNumberFormatAndMeasurementSystem(
   UErrorCode errorCode = U_ZERO_ERROR;
   const char* locale = g_browser_process->GetApplicationLocale().c_str();
   UMeasurementSystem system = ulocdata_getMeasurementSystem(locale, &errorCode);
-  if (errorCode > U_ZERO_ERROR || system == UMS_LIMIT)
+  // On error, assume the units are SI.
+  // Since the only measurement units print preview's WebUI cares about are
+  // those for measuring distance, assume anything non-US is SI.
+  if (errorCode > U_ZERO_ERROR || system != UMS_US)
     system = UMS_SI;
 
   // Getting the number formatting based on the locale and writing to
@@ -1570,7 +1576,7 @@ void PrintPreviewHandler::LocalPrinterCacheFlushed() {
 
 void PrintPreviewHandler::PrivetCapabilitiesUpdateClient(
     scoped_ptr<local_discovery::PrivetHTTPClient> http_client) {
-  if (!PrivetUpdateClient(http_client.Pass()))
+  if (!PrivetUpdateClient(std::move(http_client)))
     return;
 
   privet_capabilities_operation_ =
@@ -1590,8 +1596,8 @@ bool PrintPreviewHandler::PrivetUpdateClient(
 
   privet_local_print_operation_.reset();
   privet_capabilities_operation_.reset();
-  privet_http_client_ =
-      local_discovery::PrivetV1HTTPClient::CreateDefault(http_client.Pass());
+  privet_http_client_ = local_discovery::PrivetV1HTTPClient::CreateDefault(
+      std::move(http_client));
 
   privet_http_resolution_.reset();
 
@@ -1603,7 +1609,7 @@ void PrintPreviewHandler::PrivetLocalPrintUpdateClient(
     std::string capabilities,
     gfx::Size page_size,
     scoped_ptr<local_discovery::PrivetHTTPClient> http_client) {
-  if (!PrivetUpdateClient(http_client.Pass()))
+  if (!PrivetUpdateClient(std::move(http_client)))
     return;
 
   StartPrivetLocalPrint(print_ticket, capabilities, page_size);

@@ -2,15 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "media/capture/video/fake_video_capture_device.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_capture_types.h"
-#include "media/capture/video/fake_video_capture_device.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_device.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,7 +38,7 @@ class MockBuffer : public VideoCaptureDevice::Client::Buffer {
   MockBuffer(int buffer_id, size_t mapped_size)
       : id_(buffer_id),
         mapped_size_(mapped_size),
-        data_(new uint8[mapped_size]) {}
+        data_(new uint8_t[mapped_size]) {}
   ~MockBuffer() override { delete[] data_; }
 
   int id() const override { return id_; }
@@ -49,7 +55,7 @@ class MockBuffer : public VideoCaptureDevice::Client::Buffer {
  private:
   const int id_;
   const size_t mapped_size_;
-  uint8* const data_;
+  uint8_t* const data_;
 };
 
 class MockClient : public VideoCaptureDevice::Client {
@@ -62,16 +68,16 @@ class MockClient : public VideoCaptureDevice::Client {
       : frame_cb_(frame_cb) {}
 
   // Client virtual methods for capturing using Device Buffers.
-  void OnIncomingCapturedData(const uint8* data,
+  void OnIncomingCapturedData(const uint8_t* data,
                               int length,
                               const VideoCaptureFormat& format,
                               int rotation,
                               const base::TimeTicks& timestamp) {
     frame_cb_.Run(format);
   }
-  void OnIncomingCapturedYuvData(const uint8* y_data,
-                                 const uint8* u_data,
-                                 const uint8* v_data,
+  void OnIncomingCapturedYuvData(const uint8_t* y_data,
+                                 const uint8_t* u_data,
+                                 const uint8_t* v_data,
                                  size_t y_stride,
                                  size_t u_stride,
                                  size_t v_stride,
@@ -208,7 +214,7 @@ TEST_P(FakeVideoCaptureDeviceTest, CaptureUsing) {
   VideoCaptureParams capture_params;
   capture_params.requested_format.frame_size.SetSize(640, 480);
   capture_params.requested_format.frame_rate = testing::get<2>(GetParam());
-  device->AllocateAndStart(capture_params, client_.Pass());
+  device->AllocateAndStart(capture_params, std::move(client_));
 
   WaitForCapturedFrame();
   EXPECT_EQ(last_format().frame_size.width(), 640);
@@ -268,7 +274,7 @@ TEST_P(FakeVideoCaptureDeviceCommandLineTest, FrameRate) {
     VideoCaptureParams capture_params;
     capture_params.requested_format.frame_size.SetSize(1280, 720);
     capture_params.requested_format.frame_rate = GetParam().fps;
-    device->AllocateAndStart(capture_params, client_.Pass());
+    device->AllocateAndStart(capture_params, std::move(client_));
 
     WaitForCapturedFrame();
     EXPECT_EQ(last_format().frame_size.width(), 1280);

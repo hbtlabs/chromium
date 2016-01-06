@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/WebViewImpl.h"
 
 #include "core/CSSValueKeywords.h"
@@ -323,6 +322,69 @@ private:
     WebColor m_color;
 };
 
+#if OS(ANDROID)
+// Array used to convert canonical encoding method name to index to be
+// uploaded to UMA for the experiment on text encoding auto detection.
+// The listed order should be in sync with the enum definition 'EncodingMethod'
+// in tools/metrics/histograms/histograms.xml.
+static const char* kEncodingNames[] = {
+    "UNKNOWN",
+    "Big5",
+    "EUC-JP",
+    "EUC-KR",
+    "GBK",
+    "IBM866",
+    "ISO-2022-JP",
+    "ISO-8859-10",
+    "ISO-8859-13",
+    "ISO-8859-14",
+    "ISO-8859-15",
+    "ISO-8859-16",
+    "ISO-8859-2",
+    "ISO-8859-3",
+    "ISO-8859-4",
+    "ISO-8859-5",
+    "ISO-8859-6",
+    "ISO-8859-7",
+    "ISO-8859-8",
+    "ISO-8859-8-I",
+    "KOI8-R",
+    "KOI8-U",
+    "Shift_JIS",
+    "UTF-16LE",
+    "UTF-8",
+    "gb18030",
+    "macintosh",
+    "windows-1250",
+    "windows-1251",
+    "windows-1252",
+    "windows-1253",
+    "windows-1254",
+    "windows-1255",
+    "windows-1256",
+    "windows-1257",
+    "windows-1258",
+    "windows-874"
+};
+
+// Returns the index of the entry in the array that matches
+// the given encoding method.
+static int encodingToUmaId(const WTF::TextEncoding& encoding)
+{
+    const char* encodingName = encoding.name();
+    for (size_t i = 0; i < WTF_ARRAY_LENGTH(kEncodingNames); ++i) {
+        if (!strcasecmp(kEncodingNames[i], encodingName))
+            return i;
+    }
+    return 0;
+}
+
+static bool isInternalURL(const KURL& url)
+{
+    const String& protocol = url.protocol();
+    return protocol == "chrome" || protocol == "chrome-native" || protocol == "swappedout";
+}
+#endif
 } // namespace
 
 // WebView ----------------------------------------------------------------
@@ -349,9 +411,9 @@ void WebView::updateVisitedLinkState(unsigned long long linkHash)
     Page::visitedStateChanged(linkHash);
 }
 
-void WebView::resetVisitedLinkState()
+void WebView::resetVisitedLinkState(bool invalidateVisitedLinkHashes)
 {
-    Page::allVisitedStateChanged();
+    Page::allVisitedStateChanged(invalidateVisitedLinkHashes);
 }
 
 void WebView::willEnterModalLoop()
@@ -452,7 +514,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     pageClients.dragClient = &m_dragClientImpl;
     pageClients.spellCheckerClient = &m_spellCheckerClientImpl;
 
-    m_page = adoptPtrWillBeNoop(new Page(pageClients));
+    m_page = Page::createOrdinary(pageClients);
     MediaKeysController::provideMediaKeysTo(*m_page, &m_mediaKeysClientImpl);
     provideSpeechRecognitionTo(*m_page, SpeechRecognitionClientProxy::create(client ? client->speechRecognizer() : nullptr));
     provideContextFeaturesTo(*m_page, ContextFeaturesClientImpl::create());
@@ -463,10 +525,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     provideWorkerGlobalScopeProxyProviderTo(*m_page, WorkerGlobalScopeProxyProviderImpl::create());
     StorageNamespaceController::provideStorageNamespaceTo(*m_page, &m_storageClientImpl);
 
-    m_page->makeOrdinary();
-
     if (m_client) {
-        setDeviceScaleFactor(m_client->screenInfo().deviceScaleFactor);
         setVisibilityState(m_client->visibilityState(), true);
     }
 
@@ -482,6 +541,11 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
 WebViewImpl::~WebViewImpl()
 {
     ASSERT(!m_page);
+
+    // Each highlight uses m_owningWebViewImpl->m_linkHighlightsTimeline
+    // in destructor. m_linkHighlightsTimeline might be destroyed earlier
+    // than m_linkHighlights.
+    ASSERT(m_linkHighlights.isEmpty());
 }
 
 WebDevToolsAgentImpl* WebViewImpl::mainFrameDevToolsAgentImpl()
@@ -1382,9 +1446,6 @@ void WebViewImpl::enableTapHighlights(WillBeHeapVector<RawPtrWillBeMember<Node>>
     // don't get a new target to highlight.
     m_linkHighlights.clear();
 
-    // LinkHighlight reads out layout and compositing state, so we need to make sure that's all up to date.
-    updateAllLifecyclePhases();
-
     for (size_t i = 0; i < highlightNodes.size(); ++i) {
         Node* node = highlightNodes[i];
 
@@ -1400,6 +1461,8 @@ void WebViewImpl::enableTapHighlights(WillBeHeapVector<RawPtrWillBeMember<Node>>
 
         m_linkHighlights.append(LinkHighlightImpl::create(node, this));
     }
+
+    updateAllLifecyclePhases();
 }
 
 void WebViewImpl::animateDoubleTapZoom(const IntPoint& pointInRootFrame)
@@ -1669,6 +1732,11 @@ void WebViewImpl::closePagePopup(PagePopup* popup)
     if (m_pagePopup.get() != popupImpl)
         return;
     m_pagePopup->closePopup();
+    cleanupPagePopup();
+}
+
+void WebViewImpl::cleanupPagePopup()
+{
     m_pagePopup = nullptr;
     disablePopupMouseWheelEventListener();
 }
@@ -1681,6 +1749,15 @@ void WebViewImpl::cancelPagePopup()
 
 void WebViewImpl::enablePopupMouseWheelEventListener()
 {
+    // TODO(kenrb): Popup coordination for out-of-process iframes needs to be
+    // added. Because of the early return here (and also the one in
+    // ScrollingCoordinator::updateHaveWheelEventHandlers) a select element
+    // popup can remain visible even when the element underneath it is
+    // scrolled to a new position. This is part of a larger set of issues with
+    // popups.
+    // See https://crbug.com/566130
+    if (!mainFrameImpl() || !mainFrameImpl()->frame()->isLocalFrame())
+        return;
     ASSERT(!m_popupMouseWheelEventListener);
     Document* document = mainFrameImpl()->frame()->document();
     ASSERT(document);
@@ -1692,6 +1769,10 @@ void WebViewImpl::enablePopupMouseWheelEventListener()
 
 void WebViewImpl::disablePopupMouseWheelEventListener()
 {
+    // TODO(kenrb): Concerns the same as in enablePopupMouseWheelEventListener.
+    // See https://crbug.com/566130
+    if (!mainFrameImpl() || !mainFrameImpl()->frame()->isLocalFrame())
+        return;
     ASSERT(m_popupMouseWheelEventListener);
     Document* document = mainFrameImpl()->frame()->document();
     ASSERT(document);
@@ -1918,17 +1999,23 @@ void WebViewImpl::updateAllLifecyclePhases()
     if (!mainFrameImpl())
         return;
 
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
-        PageWidgetDelegate::updateLifecycleToCompositingCleanPlusScrolling(*m_page, *mainFrameImpl()->frame());
-    else
-        PageWidgetDelegate::updateAllLifecyclePhases(*m_page, *mainFrameImpl()->frame());
-
     updateLayerTreeBackgroundColor();
 
-    // TODO(wangxianzhu): Refactor overlay and link highlights updating and painting to make clearer
-    // dependency between web/ and core/ in synchronized painting mode.
-    if (InspectorOverlay* overlay = inspectorOverlay())
-        overlay->layout();
+    PageWidgetDelegate::updateAllLifecyclePhases(*m_page, *mainFrameImpl()->frame());
+
+    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled()) {
+        if (InspectorOverlay* overlay = inspectorOverlay()) {
+            overlay->updateAllLifecyclePhases();
+            // TODO(chrishtr): integrate paint into the overlay's lifecycle.
+            if (overlay->pageOverlay() && overlay->pageOverlay()->graphicsLayer())
+                overlay->pageOverlay()->graphicsLayer()->paint(nullptr);
+        }
+        if (m_pageColorOverlay)
+            m_pageColorOverlay->graphicsLayer()->paint(nullptr);
+    }
+
+    // TODO(chrishtr): link highlights don't currently paint themselves, it's still driven by cc.
+    // Fix this.
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->updateGeometry();
 
@@ -1952,10 +2039,6 @@ void WebViewImpl::updateAllLifecyclePhases()
             client()->didMeaningfulLayout(WebMeaningfulLayout::FinishedLoading);
         }
     }
-
-    // TODO(wangxianzhu): Avoid traversing frame tree for phases (style, layout, etc.) that we are sure no need to update.
-    if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled())
-        PageWidgetDelegate::updateAllLifecyclePhases(*m_page, *mainFrameImpl()->frame());
 }
 
 void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
@@ -2189,6 +2272,12 @@ void WebViewImpl::mouseCaptureLost()
 
 void WebViewImpl::setFocus(bool enable)
 {
+    // On Windows, unnecessary setFocus(false) is called if a popup is shown and
+    // the hotdog menu is clicked.
+    // TODO(tkent): This should be fixed in Chromium.
+    if (!enable && m_pagePopup)
+        return;
+
     m_page->focusController().setFocused(enable);
     if (enable) {
         m_page->focusController().setActive(true);
@@ -2679,6 +2768,8 @@ void WebViewImpl::setTextDirection(WebTextDirection direction)
 
 bool WebViewImpl::isAcceleratedCompositingActive() const
 {
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        return m_paintArtifactCompositor.webLayer();
     return m_rootLayer;
 }
 
@@ -2693,7 +2784,11 @@ void WebViewImpl::willCloseLayerTreeView()
     if (m_layerTreeView)
         page()->willCloseLayerTreeView(*m_layerTreeView);
 
-    setRootGraphicsLayer(nullptr);
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        detachPaintArtifactCompositor();
+    else
+        setRootGraphicsLayer(nullptr);
+
     m_layerTreeView = nullptr;
 }
 
@@ -2814,7 +2909,11 @@ void WebViewImpl::setFocusedFrame(WebFrame* frame)
 
 void WebViewImpl::focusDocumentView(WebFrame* frame)
 {
-    page()->focusController().focusDocumentView(frame->toImplBase()->frame());
+    // This is currently only used when replicating focus changes for
+    // cross-process frames, and |notifyEmbedder| is disabled to avoid sending
+    // duplicate frameFocused updates from FocusController to the browser
+    // process, which already knows the latest focused frame.
+    page()->focusController().focusDocumentView(frame->toImplBase()->frame(), false /* notifyEmbedder */);
 }
 
 void WebViewImpl::setInitialFocus(bool reverse)
@@ -2968,6 +3067,13 @@ void WebViewImpl::advanceFocus(bool reverse)
     page()->focusController().advanceFocus(reverse ? WebFocusTypeBackward : WebFocusTypeForward);
 }
 
+void WebViewImpl::advanceFocusAcrossFrames(WebFocusType type, WebRemoteFrame* from, WebLocalFrame* to)
+{
+    // TODO(alexmos): Pass in proper with sourceCapabilities.
+    page()->focusController().advanceFocusAcrossFrames(
+        type, toWebRemoteFrameImpl(from)->frame(), toWebLocalFrameImpl(to)->frame());
+}
+
 double WebViewImpl::zoomLevel()
 {
     return m_zoomLevel;
@@ -2981,6 +3087,11 @@ double WebViewImpl::setZoomLevel(double zoomLevel)
         m_zoomLevel = m_maximumZoomLevel;
     else
         m_zoomLevel = zoomLevel;
+
+    // TODO(nasko): Setting zoom level needs to be refactored to support
+    // out-of-process iframes. See https://crbug.com/528407.
+    if (mainFrame()->isWebRemoteFrame())
+        return m_zoomLevel;
 
     LocalFrame* frame = mainFrameImpl()->frame();
     if (!WebLocalFrameImpl::pluginContainerFromFrame(frame)) {
@@ -3771,6 +3882,13 @@ void WebViewImpl::showContextMenu()
     }
 }
 
+void WebViewImpl::didCloseContextMenu()
+{
+    LocalFrame* frame = m_page->focusController().focusedFrame();
+    if (frame)
+        frame->selection().setCaretBlinkingSuspended(false);
+}
+
 void WebViewImpl::extractSmartClipData(WebRect rectInViewport, WebString& clipText, WebString& clipHtml, WebRect& clipRectInViewport)
 {
     LocalFrame* localFrame = toLocalFrame(focusedCoreFrame());
@@ -3827,8 +3945,6 @@ bool WebViewImpl::isTransparent() const
 
 void WebViewImpl::setBaseBackgroundColor(WebColor color)
 {
-    updateAllLifecyclePhases();
-
     if (m_baseBackgroundColor == color)
         return;
 
@@ -3837,7 +3953,7 @@ void WebViewImpl::setBaseBackgroundColor(WebColor color)
     if (m_page->mainFrame() && m_page->mainFrame()->isLocalFrame())
         m_page->deprecatedLocalMainFrame()->view()->setBaseBackgroundColor(color);
 
-    updateLayerTreeBackgroundColor();
+    updateAllLifecyclePhases();
 }
 
 void WebViewImpl::setIsActive(bool active)
@@ -3930,6 +4046,18 @@ void WebViewImpl::didFinishDocumentLoad(WebLocalFrameImpl* webframe)
     if (webframe != mainFrameImpl())
         return;
     resumeTreeViewCommitsIfRenderingReady();
+#if OS(ANDROID)
+    if (!isInternalURL(webframe->frame()->document()->baseURL()) && page()->settings().usesEncodingDetector()) {
+        const Document& document = *webframe->frame()->document();
+
+        // "AutodetectEncoding.Attempted" is of boolean type - either 0 or 1. Use 2 for the boundary value.
+        Platform::current()->histogramEnumeration("AutodetectEncoding.Attempted", document.attemptedToDetermineEncodingFromContentSniffing(), 2);
+        if (document.encodingWasDetectedFromContentSniffing()) {
+            int encodingId = encodingToUmaId(document.encoding());
+            Platform::current()->histogramEnumeration("AutodetectEncoding.Detected", encodingId, WTF_ARRAY_LENGTH(kEncodingNames) + 1);
+        }
+    }
+#endif
 }
 
 void WebViewImpl::didRemoveAllPendingStylesheet(WebLocalFrameImpl* webframe)
@@ -4142,6 +4270,10 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
 {
     if (!m_layerTreeView)
         return;
+
+    // In SPv2, we attach layers via PaintArtifactCompositor, rather than
+    // supplying a root GraphicsLayer from PaintLayerCompositor.
+    ASSERT(!RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
     VisualViewport& visualViewport = page()->frameHost().visualViewport();
     visualViewport.attachToLayerTree(layer, graphicsLayerFactory());
@@ -4468,6 +4600,38 @@ void WebViewImpl::updatePageOverlays()
         if (inspectorPageOverlay)
             inspectorPageOverlay->update();
     }
+}
+
+void WebViewImpl::attachPaintArtifactCompositor()
+{
+    if (!m_layerTreeView)
+        return;
+
+    // Otherwise, PaintLayerCompositor is expected to supply a root
+    // GraphicsLayer via setRootGraphicsLayer.
+    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+
+    // TODO(jbroman): This should probably have hookups for overlays, visual
+    // viewport, etc.
+
+    m_paintArtifactCompositor.initializeIfNeeded();
+    WebLayer* rootLayer = m_paintArtifactCompositor.webLayer();
+    ASSERT(rootLayer);
+    m_layerTreeView->setRootLayer(*rootLayer);
+
+    // TODO(jbroman): This is cargo-culted from setRootGraphicsLayer. Is it
+    // necessary?
+    bool visible = page()->visibilityState() == PageVisibilityStateVisible;
+    m_layerTreeView->setVisible(visible);
+}
+
+void WebViewImpl::detachPaintArtifactCompositor()
+{
+    if (!m_layerTreeView)
+        return;
+
+    m_layerTreeView->setDeferCommits(true);
+    m_layerTreeView->clearRootLayer();
 }
 
 } // namespace blink

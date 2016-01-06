@@ -78,6 +78,7 @@
 #include "platform/text/UnicodeBidi.h"
 #include "platform/transforms/TransformOperations.h"
 #include "wtf/Forward.h"
+#include "wtf/LeakAnnotations.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/StdLibExtras.h"
@@ -351,6 +352,7 @@ private:
     static PassRefPtr<ComputedStyle> createInitialStyle();
     static inline ComputedStyle* initialStyle()
     {
+        LEAK_SANITIZER_DISABLED_SCOPE;
         DEFINE_STATIC_REF(ComputedStyle, s_initialStyle, (ComputedStyle::createInitialStyle()));
         return s_initialStyle;
     }
@@ -824,6 +826,7 @@ public:
     bool hasVisualOverflowingEffect() const { return boxShadow() || hasBorderImageOutsets() || hasOutline(); }
 
     Containment contain() const { return static_cast<Containment>(rareNonInheritedData->m_contain); }
+    bool containsPaint() const { return rareNonInheritedData->m_contain & ContainsPaint; }
 
     EBoxSizing boxSizing() const { return m_box->boxSizing(); }
     EUserModify userModify() const { return static_cast<EUserModify>(rareInheritedData->userModify); }
@@ -1495,6 +1498,7 @@ public:
     float strokeMiterLimit() const { return svgStyle().strokeMiterLimit(); }
     void setStrokeMiterLimit(float f) { accessSVGStyle().setStrokeMiterLimit(f); }
 
+    void setD(PassRefPtrWillBeRawPtr<CSSPathValue> d) { accessSVGStyle().setD(d); }
     void setCx(const Length& cx) { accessSVGStyle().setCx(cx); }
     void setCy(const Length& cy) { accessSVGStyle().setCy(cy); }
     void setX(const Length& x) { accessSVGStyle().setX(x); }
@@ -1721,7 +1725,7 @@ public:
     static unsigned short initialColumnCount() { return 1; }
     static ColumnFill initialColumnFill() { return ColumnFillBalance; }
     static ColumnSpan initialColumnSpan() { return ColumnSpanNone; }
-    static const TransformOperations& initialTransform() { DEFINE_STATIC_LOCAL(TransformOperations, ops, ()); return ops; }
+    static EmptyTransformOperations initialTransform() { return EmptyTransformOperations(); }
     static PassRefPtr<TranslateTransformOperation> initialTranslate() { return TranslateTransformOperation::create(Length(0, Fixed), Length(0, Fixed), 0, TransformOperation::Translate3D); }
     static PassRefPtr<RotateTransformOperation> initialRotate() { return RotateTransformOperation::create(0, 0, 1, 0, TransformOperation::Rotate3D); }
     static PassRefPtr<ScaleTransformOperation> initialScale() { return ScaleTransformOperation::create(1, 1, 1, TransformOperation::Scale3D); }

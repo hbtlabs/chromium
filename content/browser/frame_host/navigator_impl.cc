@@ -4,7 +4,8 @@
 
 #include "content/browser/frame_host/navigator_impl.h"
 
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -35,11 +36,11 @@
 #include "content/public/browser/stream_handle.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/common/url_utils.h"
 #include "net/base/net_errors.h"
 
 namespace content {
@@ -71,13 +72,6 @@ FrameMsg_Navigate_Type::Value GetNavigationType(
   }
 
   return FrameMsg_Navigate_Type::NORMAL;
-}
-
-RenderFrameHostManager* GetRenderManager(RenderFrameHostImpl* rfh) {
-  if (SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return rfh->frame_tree_node()->render_manager();
-
-  return rfh->frame_tree_node()->frame_tree()->root()->render_manager();
 }
 
 }  // namespace
@@ -139,11 +133,8 @@ void NavigatorImpl::DidStartProvisionalLoad(
                                        is_error_page, is_iframe_srcdoc);
   }
 
-  if (is_error_page ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (is_error_page || IsBrowserSideNavigationEnabled())
     return;
-  }
 
   if (render_frame_host->navigation_handle()) {
     if (render_frame_host->navigation_handle()->is_transferring()) {
@@ -281,8 +272,8 @@ bool NavigatorImpl::NavigateToEntry(
 
   // The renderer will reject IPC messages with URLs longer than
   // this limit, so don't attempt to navigate with a longer URL.
-  if (dest_url.spec().size() > GetMaxURLChars()) {
-    LOG(WARNING) << "Refusing to load URL as it exceeds " << GetMaxURLChars()
+  if (dest_url.spec().size() > kMaxURLChars) {
+    LOG(WARNING) << "Refusing to load URL as it exceeds " << kMaxURLChars
                  << " characters.";
     return false;
   }
@@ -292,17 +283,37 @@ bool NavigatorImpl::NavigateToEntry(
   // "Open link in new tab"). We need to keep it above RFHM::Navigate() call to
   // capture the time needed for the RenderFrameHost initialization.
   base::TimeTicks navigation_start = base::TimeTicks::Now();
-
-  RenderFrameHostManager* manager = frame_tree_node->render_manager();
+  TRACE_EVENT_INSTANT_WITH_TIMESTAMP0(
+      "navigation", "NavigationTiming navigationStart",
+      TRACE_EVENT_SCOPE_GLOBAL, navigation_start.ToInternalValue());
 
   // PlzNavigate: the RenderFrameHosts are no longer asked to navigate.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     navigation_data_.reset(new NavigationMetricsData(navigation_start, dest_url,
                                                      entry.restore_type()));
     RequestNavigation(frame_tree_node, dest_url, dest_referrer, frame_entry,
                       entry, reload_type, is_same_document_history_load,
                       navigation_start);
+    if (frame_tree_node->IsMainFrame() &&
+        frame_tree_node->navigation_request()) {
+      // TODO(carlosk): extend these traces to support subframes and
+      // non-PlzNavigate navigations.
+      // For these traces below we're using the navigation handle as the async
+      // trace id, |navigation_start| as the timestamp and reporting the
+      // FrameTreeNode id as a parameter. For navigations where no network
+      // request is made (data URLs, JavaScript URLs, etc) there is no handle
+      // and so no tracing is done.
+      TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP1(
+          "navigation", "Navigation timeToNetworkStack",
+          frame_tree_node->navigation_request()->navigation_handle(),
+          navigation_start.ToInternalValue(),
+          "FrameTreeNode id", frame_tree_node->frame_tree_node_id());
+      TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP1(
+          "navigation", "Navigation timeToCommit",
+          frame_tree_node->navigation_request()->navigation_handle(),
+          navigation_start.ToInternalValue(),
+          "FrameTreeNode id", frame_tree_node->frame_tree_node_id());
+    }
 
     // Notify observers about navigation if this is for the pending entry.
     if (delegate_ && is_pending_entry)
@@ -312,7 +323,7 @@ bool NavigatorImpl::NavigateToEntry(
   }
 
   RenderFrameHostImpl* dest_render_frame_host =
-      manager->Navigate(dest_url, frame_entry, entry);
+      frame_tree_node->render_manager()->Navigate(dest_url, frame_entry, entry);
   if (!dest_render_frame_host)
     return false;  // Unable to create the desired RenderFrameHost.
 
@@ -461,6 +472,9 @@ void NavigatorImpl::DidNavigate(
   // created via ViewMsg_New and FrameMsg_NewFrameProxy.
   render_frame_host->frame_tree_node()->SetCurrentOrigin(params.origin);
 
+  render_frame_host->frame_tree_node()->SetEnforceStrictMixedContentChecking(
+      params.should_enforce_strict_mixed_content_checking);
+
   // When using --site-per-process, we notify the RFHM for all navigations,
   // not just main frame navigations.
   if (oopifs_possible) {
@@ -499,6 +513,12 @@ void NavigatorImpl::DidNavigate(
 
   // Keep track of each frame's URL in its FrameTreeNode.
   render_frame_host->frame_tree_node()->SetCurrentURL(params.url);
+
+  if (did_navigate && render_frame_host->frame_tree_node()->IsMainFrame() &&
+      IsBrowserSideNavigationEnabled()) {
+    TRACE_EVENT_ASYNC_END0("navigation", "Navigation timeToCommit",
+                           render_frame_host->navigation_handle());
+  }
 
   // Send notification about committed provisional loads. This notification is
   // different from the NAV_ENTRY_COMMITTED notification which doesn't include
@@ -567,45 +587,27 @@ void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
                                    WindowOpenDisposition disposition,
                                    bool should_replace_current_entry,
                                    bool user_gesture) {
-  SiteInstance* current_site_instance =
-      GetRenderManager(render_frame_host)->current_frame_host()->
-          GetSiteInstance();
+  // This call only makes sense for subframes if OOPIFs are possible.
+  DCHECK(!render_frame_host->GetParent() ||
+         SiteIsolationPolicy::AreCrossProcessFramesPossible());
+
   // If this came from a swapped out RenderFrameHost, we only allow the request
   // if we are still in the same BrowsingInstance.
   // TODO(creis): Move this to RenderFrameProxyHost::OpenURL.
+  SiteInstance* current_site_instance = render_frame_host->frame_tree_node()
+                                            ->current_frame_host()
+                                            ->GetSiteInstance();
   if (render_frame_host->is_swapped_out() &&
       !render_frame_host->GetSiteInstance()->IsRelatedSiteInstance(
           current_site_instance)) {
     return;
   }
 
-  // Delegate to RequestTransferURL because this is just the generic
-  // case where |old_request_id| is empty.
   // TODO(creis): Pass the redirect_chain into this method to support client
   // redirects.  http://crbug.com/311721.
   std::vector<GURL> redirect_chain;
-  RequestTransferURL(render_frame_host, url, source_site_instance,
-                     redirect_chain, referrer, ui::PAGE_TRANSITION_LINK,
-                     disposition, GlobalRequestID(),
-                     should_replace_current_entry, user_gesture);
-}
 
-void NavigatorImpl::RequestTransferURL(
-    RenderFrameHostImpl* render_frame_host,
-    const GURL& url,
-    SiteInstance* source_site_instance,
-    const std::vector<GURL>& redirect_chain,
-    const Referrer& referrer,
-    ui::PageTransition page_transition,
-    WindowOpenDisposition disposition,
-    const GlobalRequestID& transferred_global_request_id,
-    bool should_replace_current_entry,
-    bool user_gesture) {
   GURL dest_url(url);
-  RenderFrameHostImpl* current_render_frame_host =
-      GetRenderManager(render_frame_host)->current_frame_host();
-  SiteInstance* current_site_instance =
-      current_render_frame_host->GetSiteInstance();
   if (!GetContentClient()->browser()->ShouldAllowOpenURL(
           current_site_instance, url)) {
     dest_url = GURL(url::kAboutBlankURL);
@@ -622,25 +624,26 @@ void NavigatorImpl::RequestTransferURL(
         render_frame_host->frame_tree_node()->frame_tree_node_id();
   }
 
-  OpenURLParams params(
-      dest_url, referrer, frame_tree_node_id, disposition, page_transition,
-      true /* is_renderer_initiated */);
+  OpenURLParams params(dest_url, referrer, frame_tree_node_id, disposition,
+                       ui::PAGE_TRANSITION_LINK,
+                       true /* is_renderer_initiated */);
   params.source_site_instance = source_site_instance;
   if (redirect_chain.size() > 0)
     params.redirect_chain = redirect_chain;
-  params.transferred_global_request_id = transferred_global_request_id;
+  // TODO(creis): Remove transferred_global_request_id from OpenURLParams.
+  // See https://crbug.com/495161.
+  params.transferred_global_request_id = GlobalRequestID();
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = user_gesture;
 
-  if (current_render_frame_host->web_ui()) {
+  if (render_frame_host->web_ui()) {
     // Web UI pages sometimes want to override the page transition type for
     // link clicks (e.g., so the new tab page can specify AUTO_BOOKMARK for
     // automatically generated suggestions).  We don't override other types
     // like TYPED because they have different implications (e.g., autocomplete).
     if (ui::PageTransitionCoreTypeIs(
         params.transition, ui::PAGE_TRANSITION_LINK))
-      params.transition =
-          current_render_frame_host->web_ui()->GetLinkTransitionType();
+      params.transition = render_frame_host->web_ui()->GetLinkTransitionType();
 
     // Note also that we hide the referrer for Web UI pages. We don't really
     // want web sites to see a referrer of "chrome://blah" (and some
@@ -656,11 +659,71 @@ void NavigatorImpl::RequestTransferURL(
     delegate_->RequestOpenURL(render_frame_host, params);
 }
 
+void NavigatorImpl::RequestTransferURL(
+    RenderFrameHostImpl* render_frame_host,
+    const GURL& url,
+    const std::vector<GURL>& redirect_chain,
+    const Referrer& referrer,
+    ui::PageTransition page_transition,
+    const GlobalRequestID& transferred_global_request_id,
+    bool should_replace_current_entry) {
+  // This call only makes sense for subframes if OOPIFs are possible.
+  DCHECK(!render_frame_host->GetParent() ||
+         SiteIsolationPolicy::AreCrossProcessFramesPossible());
+
+  // Allow the delegate to cancel the transfer.
+  if (!delegate_->ShouldTransferNavigation())
+    return;
+
+  GURL dest_url(url);
+  Referrer referrer_to_use(referrer);
+  FrameTreeNode* node = render_frame_host->frame_tree_node();
+  SiteInstance* current_site_instance = render_frame_host->GetSiteInstance();
+  if (!GetContentClient()->browser()->ShouldAllowOpenURL(current_site_instance,
+                                                         url)) {
+    dest_url = GURL(url::kAboutBlankURL);
+  }
+
+  // TODO(creis): Determine if this transfer started as a browser-initiated
+  // navigation.  See https://crbug.com/495161.
+  bool is_renderer_initiated = true;
+  if (render_frame_host->web_ui()) {
+    // Web UI pages sometimes want to override the page transition type for
+    // link clicks (e.g., so the new tab page can specify AUTO_BOOKMARK for
+    // automatically generated suggestions).  We don't override other types
+    // like TYPED because they have different implications (e.g., autocomplete).
+    if (ui::PageTransitionCoreTypeIs(page_transition, ui::PAGE_TRANSITION_LINK))
+      page_transition = render_frame_host->web_ui()->GetLinkTransitionType();
+
+    // Note also that we hide the referrer for Web UI pages. We don't really
+    // want web sites to see a referrer of "chrome://blah" (and some
+    // chrome: URLs might have search terms or other stuff we don't want to
+    // send to the site), so we send no referrer.
+    referrer_to_use = Referrer();
+
+    // Navigations in Web UI pages count as browser-initiated navigations.
+    is_renderer_initiated = false;
+  }
+
+  NavigationController::LoadURLParams load_url_params(dest_url);
+  // The source_site_instance only matters for navigations via RenderFrameProxy,
+  // which go through RequestOpenURL.
+  load_url_params.source_site_instance = nullptr;
+  load_url_params.transition_type = page_transition;
+  load_url_params.frame_tree_node_id = node->frame_tree_node_id();
+  load_url_params.referrer = referrer_to_use;
+  load_url_params.redirect_chain = redirect_chain;
+  load_url_params.is_renderer_initiated = is_renderer_initiated;
+  load_url_params.transferred_global_request_id = transferred_global_request_id;
+  load_url_params.should_replace_current_entry = should_replace_current_entry;
+
+  controller_->LoadURLWithParams(load_url_params);
+}
+
 // PlzNavigate
 void NavigatorImpl::OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
                                       bool proceed) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   DCHECK(frame_tree_node);
 
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
@@ -689,8 +752,7 @@ void NavigatorImpl::OnBeginNavigation(
   // TODO(clamy): the url sent by the renderer should be validated with
   // FilterURL.
   // This is a renderer-initiated navigation.
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   DCHECK(frame_tree_node);
 
   NavigationRequest* ongoing_navigation_request =
@@ -737,8 +799,7 @@ void NavigatorImpl::OnBeginNavigation(
 void NavigatorImpl::CommitNavigation(FrameTreeNode* frame_tree_node,
                                      ResourceResponse* response,
                                      scoped_ptr<StreamHandle> body) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
 
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
   DCHECK(navigation_request);
@@ -777,18 +838,16 @@ void NavigatorImpl::CommitNavigation(FrameTreeNode* frame_tree_node,
   navigation_request->TransferNavigationHandleOwnership(render_frame_host);
   render_frame_host->navigation_handle()->ReadyToCommitNavigation(
       render_frame_host, response ? response->head.headers : nullptr);
-  render_frame_host->CommitNavigation(response, body.Pass(),
+  render_frame_host->CommitNavigation(response, std::move(body),
                                       navigation_request->common_params(),
                                       navigation_request->request_params());
-
 }
 
 // PlzNavigate
 void NavigatorImpl::FailedNavigation(FrameTreeNode* frame_tree_node,
                                      bool has_stale_copy_in_cache,
                                      int error_code) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
 
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
   DCHECK(navigation_request);
@@ -816,8 +875,7 @@ void NavigatorImpl::FailedNavigation(FrameTreeNode* frame_tree_node,
 
 // PlzNavigate
 void NavigatorImpl::CancelNavigation(FrameTreeNode* frame_tree_node) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   frame_tree_node->ResetNavigationRequest(false);
   if (frame_tree_node->IsMainFrame())
     navigation_data_.reset();
@@ -871,8 +929,7 @@ void NavigatorImpl::RequestNavigation(
     NavigationController::ReloadType reload_type,
     bool is_same_document_history_load,
     base::TimeTicks navigation_start) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   DCHECK(frame_tree_node);
 
   // This value must be set here because creating a NavigationRequest might
@@ -984,7 +1041,7 @@ void NavigatorImpl::DidStartMainFrameNavigation(
       entry->set_should_replace_entry(pending_entry->should_replace_entry());
       entry->SetRedirectChain(pending_entry->GetRedirectChain());
     }
-    controller_->SetPendingEntry(entry.Pass());
+    controller_->SetPendingEntry(std::move(entry));
     if (delegate_)
       delegate_->NotifyChangedNavigationState(content::INVALIDATE_TYPE_URL);
   }

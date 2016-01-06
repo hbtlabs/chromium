@@ -5,14 +5,16 @@
 #ifndef BASE_LOGGING_H_
 #define BASE_LOGGING_H_
 
+#include <stddef.h>
+
 #include <cassert>
-#include <string>
 #include <cstring>
 #include <sstream>
+#include <string>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/debug/debugger.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 
 //
@@ -238,6 +240,9 @@ BASE_EXPORT void SetMinLogLevel(int level);
 // Gets the current log level.
 BASE_EXPORT int GetMinLogLevel();
 
+// Used by LOG_IS_ON to lazy-evaluate stream arguments.
+BASE_EXPORT bool ShouldCreateLogMessage(int severity);
+
 // Gets the VLOG default verbosity level.
 BASE_EXPORT int GetVlogVerbosity();
 
@@ -340,7 +345,7 @@ const LogSeverity LOG_0 = LOG_ERROR;
 // LOG_IS_ON(DFATAL) always holds in debug mode. In particular, CHECK()s will
 // always fire if they fail.
 #define LOG_IS_ON(severity) \
-  ((::logging::LOG_ ## severity) >= ::logging::GetMinLogLevel())
+  (::logging::ShouldCreateLogMessage(::logging::LOG_##severity))
 
 // We can't do any caching tricks with VLOG_IS_ON() like the
 // google-glog version since it requires GCC extensions.  This means

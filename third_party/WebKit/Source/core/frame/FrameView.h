@@ -38,6 +38,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/Scrollbar.h"
@@ -126,7 +127,7 @@ public:
     bool needsLayout() const;
     void setNeedsLayout();
 
-    void setNeedsUpdateWidgetPositions() { m_needsUpdateWidgetPositions = true; }
+    void setNeedsUpdateWidgetGeometries() { m_needsUpdateWidgetGeometries = true; }
 
     // Methods for getting/setting the size Blink should use to layout the contents.
     // NOTE: Scrollbar exclusion is based on the FrameView's scrollbars. To exclude
@@ -214,7 +215,7 @@ public:
     void addPart(LayoutPart*);
     void removePart(LayoutPart*);
 
-    void updateWidgetPositions();
+    void updateWidgetGeometries();
 
     void addPartToUpdate(LayoutEmbeddedObject&);
 
@@ -238,6 +239,8 @@ public:
     // Computes only the style and layout lifecycle stages.
     // After calling this method, all frames will be in a lifecycle state >= LayoutClean (unless throttling is allowed).
     void updateLifecycleToLayoutClean();
+
+    void scheduleVisualUpdateForPaintInvalidationIfNeeded();
 
     bool invalidateViewportConstrainedObjects();
 
@@ -323,7 +326,7 @@ public:
     bool isActive() const override;
 
     // Override scrollbar notifications to update the AXObject cache.
-    void didAddScrollbar(Scrollbar*, ScrollbarOrientation) override;
+    void didAddScrollbar(Scrollbar&, ScrollbarOrientation) override;
 
     // FIXME: This should probably be renamed as the 'inSubtreeLayout' parameter
     // passed around the FrameView layout methods can be true while this returns
@@ -364,6 +367,7 @@ public:
     bool isScrollCornerVisible() const override;
     bool userInputScrollable(ScrollbarOrientation) const override;
     bool shouldPlaceVerticalScrollbarOnLeft() const override;
+    Widget* widget() override;
 
     LayoutRect scrollIntoView(
         const LayoutRect& rectInContent,
@@ -489,7 +493,6 @@ public:
     void windowResizerRectChanged();
 
     // For platforms that need to hit test scrollbars from within the engine's event handlers (like Win32).
-    Scrollbar* scrollbarAtRootFramePoint(const IntPoint&);
     Scrollbar* scrollbarAtFramePoint(const IntPoint&);
 
     IntPoint convertChildToSelf(const Widget* child, const IntPoint& point) const override
@@ -511,9 +514,9 @@ public:
     }
 
     // Widget override. Handles painting of the contents of the view as well as the scrollbars.
-    void paint(GraphicsContext*, const CullRect&) const override;
-    void paint(GraphicsContext*, const GlobalPaintFlags, const CullRect&) const;
-    void paintContents(GraphicsContext*, const GlobalPaintFlags, const IntRect& damageRect) const;
+    void paint(GraphicsContext&, const CullRect&) const override;
+    void paint(GraphicsContext&, const GlobalPaintFlags, const CullRect&) const;
+    void paintContents(GraphicsContext&, const GlobalPaintFlags, const IntRect& damageRect) const;
 
     // Widget overrides to ensure that our children's visibility status is kept up to date when we get shown and hidden.
     void show() override;
@@ -524,10 +527,10 @@ public:
     bool scrollbarCornerPresent() const;
     IntRect scrollCornerRect() const override;
 
-    IntRect convertFromScrollbarToContainingWidget(const Scrollbar*, const IntRect&) const override;
-    IntRect convertFromContainingWidgetToScrollbar(const Scrollbar*, const IntRect&) const override;
-    IntPoint convertFromScrollbarToContainingWidget(const Scrollbar*, const IntPoint&) const override;
-    IntPoint convertFromContainingWidgetToScrollbar(const Scrollbar*, const IntPoint&) const override;
+    IntRect convertFromScrollbarToContainingWidget(const Scrollbar&, const IntRect&) const override;
+    IntRect convertFromContainingWidgetToScrollbar(const Scrollbar&, const IntRect&) const override;
+    IntPoint convertFromScrollbarToContainingWidget(const Scrollbar&, const IntPoint&) const override;
+    IntPoint convertFromContainingWidgetToScrollbar(const Scrollbar&, const IntPoint&) const override;
 
     bool isFrameView() const override { return true; }
 
@@ -575,6 +578,9 @@ public:
     void setScrollTranslation(PassRefPtr<TransformPaintPropertyNode> scrollTranslation) { m_scrollTranslation = scrollTranslation; }
     const TransformPaintPropertyNode* scrollTranslation() const { return m_scrollTranslation.get(); }
 
+    void setContentClip(PassRefPtr<ClipPaintPropertyNode> contentClip) { m_contentClip = contentClip; }
+    const ClipPaintPropertyNode* contentClip() const { return m_contentClip.get(); }
+
     // TODO(ojan): Merge this with IntersectionObserver once it lands.
     IntRect computeVisibleArea();
 
@@ -601,7 +607,7 @@ protected:
     };
     void computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool& newHasVerticalScrollbar, const IntSize& docSize, ComputeScrollbarExistenceOption = FirstPass) const;
     void updateScrollbarGeometry();
-    IntRect adjustScrollbarRectForResizer(const IntRect&, Scrollbar*);
+    IntRect adjustScrollbarRectForResizer(const IntRect&, Scrollbar&);
 
     // Called to update the scrollbars to accurately reflect the state of the view.
     void updateScrollbars(const DoubleSize& desiredOffset);
@@ -639,6 +645,8 @@ private:
     void synchronizedPaint();
     void synchronizedPaintRecursively(GraphicsLayer*);
 
+    void pushPaintArtifactToCompositor();
+
     void reset();
     void init();
 
@@ -670,7 +678,7 @@ private:
     IntPoint convertToContainingWidget(const IntPoint&) const override;
     IntPoint convertFromContainingWidget(const IntPoint&) const override;
 
-    void updateWidgetPositionsIfNeeded();
+    void updateWidgetGeometriesIfNeeded();
 
     bool wasViewportResized();
     void sendResizeEventIfNeeded();
@@ -828,7 +836,7 @@ private:
 
     float m_topControlsViewportAdjustment;
 
-    bool m_needsUpdateWidgetPositions;
+    bool m_needsUpdateWidgetGeometries;
     bool m_needsUpdateViewportIntersection;
     bool m_needsUpdateViewportIntersectionInSubtree;
 
@@ -881,9 +889,15 @@ private:
     // Paint properties for SPv2 Only.
     // The hierarchy of transform subtree created by a FrameView.
     // [ preTranslation ]               The offset from Widget::frameRect. Establishes viewport.
-    //     +---[ scrollTranslation ]    Frame scrolling. This is going away in favor of Settings::rootLayerScrolls.
+    //     +---[ scrollTranslation ]    Frame scrolling.
+    //                                  TODO(trchen): This is going away in favor of Settings::rootLayerScrolls.
     RefPtr<TransformPaintPropertyNode> m_preTranslation;
     RefPtr<TransformPaintPropertyNode> m_scrollTranslation;
+    // The content clip clips the document (= LayoutView) but not the scrollbars.
+    // TODO(trchen): Going away in favor of Settings::rootLayerScrolls too.
+    RefPtr<ClipPaintPropertyNode> m_contentClip;
+
+    bool m_isUpdatingAllLifecyclePhases;
 };
 
 inline void FrameView::incrementVisuallyNonEmptyCharacterCount(unsigned count)

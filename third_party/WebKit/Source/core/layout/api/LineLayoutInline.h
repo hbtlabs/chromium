@@ -87,6 +87,21 @@ public:
         return toInline()->firstLineBoxIncludingCulling();
     }
 
+    LineBoxList* lineBoxes()
+    {
+        return toInline()->lineBoxes();
+    }
+
+    bool hitTestCulledInline(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset)
+    {
+        return toInline()->hitTestCulledInline(result, locationInContainer, accumulatedOffset);
+    }
+
+    LayoutBoxModelObject* continuation() const
+    {
+        return toInline()->continuation();
+    }
+
 protected:
     LayoutInline* toInline()
     {

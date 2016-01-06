@@ -4,8 +4,11 @@
 
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_controller.h"
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/ui/browser.h"
@@ -161,7 +164,7 @@ const CGFloat kBrowserActionBubbleYOffset = 3.0;
 // Returns the associated ToolbarController.
 - (ToolbarController*)toolbarController;
 
-// Creates a message bubble anchored to the given |anchorAction|, or the wrench
+// Creates a message bubble anchored to the given |anchorAction|, or the app
 // menu if no |anchorAction| is null.
 - (ToolbarActionsBarBubbleMac*)createMessageBubble:
     (scoped_ptr<ToolbarActionsBarBubbleDelegate>)delegate
@@ -438,7 +441,7 @@ void ToolbarActionsBarBridge::ShowExtensionMessageBubble(
   NSView* referenceButton = button;
   if ([button superview] != containerView_ || isOverflow_) {
     referenceButton = toolbarActionsBar_->platform_settings().chevron_enabled ?
-         chevronMenuButton_.get() : [[self toolbarController] wrenchButton];
+         chevronMenuButton_.get() : [[self toolbarController] appMenuButton];
     bounds = [referenceButton bounds];
   } else {
     bounds = [button convertRect:[button frameAfterAnimation]
@@ -940,7 +943,7 @@ void ToolbarActionsBarBridge::ShowExtensionMessageBubble(
 
 - (void)updateChevronPositionInFrame:(NSRect)frame {
   CGFloat xPos = NSWidth(frame) - kChevronWidth -
-      toolbarActionsBar_->platform_settings().right_padding;
+      toolbarActionsBar_->platform_settings().item_spacing;
   NSRect buttonFrame = NSMakeRect(xPos,
                                   0,
                                   kChevronWidth,
@@ -1023,7 +1026,7 @@ void ToolbarActionsBarBridge::ShowExtensionMessageBubble(
     anchorToSelf:(BOOL)anchorToSelf {
   DCHECK_GE([buttons_ count], 0u);
   NSView* anchorView =
-      anchorToSelf ? containerView_ : [[self toolbarController] wrenchButton];
+      anchorToSelf ? containerView_ : [[self toolbarController] appMenuButton];
   NSPoint anchor = [self popupPointForView:anchorView
                                 withBounds:[anchorView bounds]];
 

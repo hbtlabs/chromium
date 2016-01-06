@@ -8,7 +8,7 @@ function test()
 {
     function dumpNavigator(sourcesNavigatorView)
     {
-        InspectorTest.dumpNavigatorView(sourcesNavigatorView, "sources", "  ");
+        InspectorTest.dumpNavigatorView(sourcesNavigatorView);
     }
 
     function createNavigatorView()
@@ -33,19 +33,20 @@ function test()
     function createMockWorkspace()
     {
         InspectorTest.createWorkspaceWithTarget(true);
-        InspectorTest.testDebuggerProject = new WebInspector.ContentProviderBasedProject(InspectorTest.testWorkspace, "", WebInspector.projectTypes.Debugger, "debugger:", "");
+        InspectorTest.testDebuggerProject = new WebInspector.ContentProviderBasedProject(InspectorTest.testWorkspace, "", WebInspector.projectTypes.Debugger, "");
         return InspectorTest.testWorkspace;
     }
 
     function addNetworkFile(workspace, url)
     {
-        return InspectorTest.testNetworkProject.addFileForURL(url, createContentProvider(url));
+        return InspectorTest.testNetworkProject.addFileForURL(url, createContentProvider(url), InspectorTest.mainFrame());
     }
 
     function addDebuggerFile(workspace, url)
     {
-        var path = InspectorTest.testDebuggerProject.addContentProvider("", url, url, createContentProvider(url));
-        return InspectorTest.testWorkspace.uiSourceCode("debugger:", path)
+        var uiSourceCode = InspectorTest.testDebuggerProject.createUISourceCode(url, WebInspector.resourceTypes.Script);
+        InspectorTest.testDebuggerProject.addUISourceCodeWithProvider(uiSourceCode, createContentProvider(url));
+        return InspectorTest.testWorkspace.uiSourceCode("debugger:", uiSourceCode.path());
     }
 
     InspectorTest.runTestSuite([

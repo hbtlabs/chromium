@@ -10,6 +10,7 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
@@ -115,11 +116,7 @@ public final class PrefServiceBridge {
         if (currentVersion < 1) {
             nativeMigrateJavascriptPreference();
         }
-        // Step 2 intentionally skipped.
-        if (currentVersion < 3) {
-            nativeMigrateLocationPreference();
-            nativeMigrateProtectedMediaPreference();
-        }
+        // Steps 2,3 intentionally skipped.
         if (currentVersion < 4) {
             // For a brief period (M44 Beta), it was possible for users to disable images via Site
             // Settings. Now that this option has been removed, ensure that users are not stuck with
@@ -207,16 +204,16 @@ public final class PrefServiceBridge {
      */
     @CalledByNative
     public static String getAndroidPermissionForContentSetting(int contentSettingType) {
-        switch(contentSettingType) {
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION:
-                return android.Manifest.permission.ACCESS_FINE_LOCATION;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-                return android.Manifest.permission.RECORD_AUDIO;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-                return android.Manifest.permission.CAMERA;
-            default:
-                return null;
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION) {
+            return android.Manifest.permission.ACCESS_FINE_LOCATION;
         }
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
+            return android.Manifest.permission.RECORD_AUDIO;
+        }
+        if (contentSettingType == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
+            return android.Manifest.permission.CAMERA;
+        }
+        return null;
     }
 
     public boolean isAcceptCookiesEnabled() {
@@ -508,6 +505,30 @@ public final class PrefServiceBridge {
      */
     public boolean isSafeBrowsingManaged() {
         return nativeGetSafeBrowsingManaged();
+    }
+
+    /**
+     * @return whether there is a user set value for kNetworkPredictionEnabled.  This should only be
+     * used for preference migration.
+     */
+    public boolean networkPredictionEnabledHasUserSetting() {
+        return nativeNetworkPredictionEnabledHasUserSetting();
+    }
+
+    /**
+     * @return whether there is a user set value for kNetworkPredictionOptions.  This should only be
+     * used for preference migration.
+     */
+    public boolean networkPredictionOptionsHasUserSetting() {
+        return nativeNetworkPredictionOptionsHasUserSetting();
+    }
+
+    /**
+     * @return the user set value for kNetworkPredictionEnabled. This should only be used for
+     * preference migration.
+     */
+    public boolean getNetworkPredictionEnabledUserPrefValue() {
+        return nativeGetNetworkPredictionEnabledUserPrefValue();
     }
 
     /**
@@ -822,10 +843,10 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * @return whether ForceGoogleSafeSearch is set
+     * @return whether SafeSites for supervised users is enabled.
      */
-    public boolean isForceGoogleSafeSearch() {
-        return nativeGetForceGoogleSafeSearch();
+    public boolean isSupervisedUserSafeSitesEnabled() {
+        return nativeGetSupervisedUserSafeSitesEnabled();
     }
 
     /**
@@ -888,6 +909,26 @@ public final class PrefServiceBridge {
         return nativeHasSetMetricsReporting();
     }
 
+    /**
+     * @param clicked Whether the update menu item was clicked. The preference is stored to
+     *                facilitate logging whether Chrome was updated after a click on the menu item.
+     */
+    public void setClickedUpdateMenuItem(boolean clicked) {
+        nativeSetClickedUpdateMenuItem(clicked);
+    }
+
+    /**
+     * @return Whether the update menu item was clicked.
+     */
+    public boolean getClickedUpdateMenuItem() {
+        return nativeGetClickedUpdateMenuItem();
+    }
+
+    @VisibleForTesting
+    public void setSupervisedUserId(String supervisedUserId) {
+        nativeSetSupervisedUserId(supervisedUserId);
+    }
+
     private native boolean nativeGetAcceptCookiesEnabled();
     private native boolean nativeGetAcceptCookiesManaged();
     private native boolean nativeGetBlockThirdPartyCookiesEnabled();
@@ -923,13 +964,11 @@ public final class PrefServiceBridge {
     private native boolean nativeGetIncognitoModeManaged();
     private native boolean nativeGetPrintingEnabled();
     private native boolean nativeGetPrintingManaged();
-    private native boolean nativeGetForceGoogleSafeSearch();
+    private native boolean nativeGetSupervisedUserSafeSitesEnabled();
     private native void nativeSetTranslateEnabled(boolean enabled);
     private native void nativeSetAutoDetectEncodingEnabled(boolean enabled);
     private native void nativeResetTranslateDefaults();
     private native void nativeMigrateJavascriptPreference();
-    private native void nativeMigrateLocationPreference();
-    private native void nativeMigrateProtectedMediaPreference();
     private native void nativeSetJavaScriptAllowed(String pattern, int setting);
     private native void nativeClearBrowsingData(boolean history, boolean cache,
             boolean cookiesAndSiteData, boolean passwords, boolean formData);
@@ -963,6 +1002,9 @@ public final class PrefServiceBridge {
     private native void nativeSetSafeBrowsingEnabled(boolean enabled);
     private native boolean nativeGetSafeBrowsingManaged();
     private native boolean nativeGetNetworkPredictionManaged();
+    private native boolean nativeNetworkPredictionEnabledHasUserSetting();
+    private native boolean nativeNetworkPredictionOptionsHasUserSetting();
+    private native boolean nativeGetNetworkPredictionEnabledUserPrefValue();
     private native int nativeGetNetworkPredictionOptions();
     private native void nativeSetNetworkPredictionOptions(int option);
     private native void nativeSetResolveNavigationErrorEnabled(boolean enabled);
@@ -979,4 +1021,7 @@ public final class PrefServiceBridge {
     private native boolean nativeGetMetricsReportingEnabled();
     private native void nativeSetMetricsReportingEnabled(boolean enabled);
     private native boolean nativeHasSetMetricsReporting();
+    private native void nativeSetClickedUpdateMenuItem(boolean clicked);
+    private native boolean nativeGetClickedUpdateMenuItem();
+    private native void nativeSetSupervisedUserId(String supervisedUserId);
 }

@@ -5,8 +5,6 @@
 #ifndef UI_GL_GL_BINDINGS_H_
 #define UI_GL_GL_BINDINGS_H_
 
-#include <string>
-
 // Includes the platform independent and platform dependent GL headers.
 // Only include this in cc files. It pulls in system headers, including
 // the X11 headers on linux, which define all kinds of macros that are
@@ -16,6 +14,9 @@
 #include <GL/glext.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <stdint.h>
+
+#include <string>
 
 #include "base/logging.h"
 #include "base/threading/thread_local.h"
@@ -72,9 +73,6 @@
 
 #define GL_UNPACK_COLORSPACE_CONVERSION_CHROMIUM         0x9243
 #define GL_BIND_GENERATES_RESOURCE_CHROMIUM              0x9244
-
-// GL_ANGLE_pack_reverse_row_order
-#define GL_PACK_REVERSE_ROW_ORDER_ANGLE                  0x93A4
 
 // GL_ANGLE_texture_usage
 #define GL_TEXTURE_USAGE_ANGLE                           0x93A2
@@ -273,6 +271,11 @@
 #define GL_SAMPLE_ALPHA_TO_ONE_EXT 0x809F
 #endif /* GL_EXT_multisample_compatibility */
 
+#ifndef GL_CHROMIUM_framebuffer_mixed_samples
+#define GL_CHROMIUM_framebuffer_mixed_samples 1
+#define GL_COVERAGE_MODULATION_CHROMIUM 0x9332
+#endif /* GL_CHROMIUM_framebuffer_mixed_samples */
+
 #ifndef GL_KHR_blend_equation_advanced
 #define GL_KHR_blend_equation_advanced 1
 #define GL_COLORBURN_KHR                  0x929A
@@ -364,7 +367,7 @@ typedef struct osmesa_context *OSMesaContext;
 typedef void (*OSMESAproc)();
 
 // Forward declare EGL types.
-typedef uint64 EGLuint64CHROMIUM;
+typedef uint64_t EGLuint64CHROMIUM;
 
 #include "gl_bindings_autogen_gl.h"
 #include "gl_bindings_autogen_osmesa.h"

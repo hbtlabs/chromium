@@ -61,7 +61,7 @@ WebInspector.CompilerScriptMapping = function(debuggerModel, workspace, networkM
     this._stubUISourceCodes = new Map();
 
     this._stubProjectID = "compiler-script-project";
-    this._stubProject = new WebInspector.ContentProviderBasedProject(this._workspace, this._stubProjectID, WebInspector.projectTypes.Service, "", "");
+    this._stubProject = new WebInspector.ContentProviderBasedProject(this._workspace, this._stubProjectID, WebInspector.projectTypes.Service, "");
     debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
 }
 
@@ -101,7 +101,7 @@ WebInspector.CompilerScriptMapping.prototype = {
         var entry = sourceMap.findEntry(lineNumber, columnNumber);
         if (!entry || !entry.sourceURL)
             return null;
-        var uiSourceCode = this._networkMapping.uiSourceCodeForURL(/** @type {string} */ (entry.sourceURL), this._target);
+        var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(/** @type {string} */ (entry.sourceURL), rawLocation.script());
         if (!uiSourceCode)
             return null;
         return uiSourceCode.uiLocation(/** @type {number} */ (entry.sourceLineNumber), /** @type {number} */ (entry.sourceColumnNumber));
@@ -162,11 +162,7 @@ WebInspector.CompilerScriptMapping.prototype = {
     _processScript: function(script)
     {
         // Create stub UISourceCode for the time source mapping is being loaded.
-        var url = script.sourceURL;
-        var splitURL = WebInspector.ParsedURL.splitURLIntoPathComponents(url);
-        var parentPath = splitURL.slice(1, -1).join("/");
-        var name = splitURL.peekLast() || "";
-        var stubUISourceCode = this._stubProject.addContentProvider(parentPath, name, url, new WebInspector.StaticContentProvider(WebInspector.resourceTypes.Script, "\n\n\n\n\n// Please wait a bit.\n// Compiled script is not shown while source map is being loaded!", url));
+        var stubUISourceCode = this._stubProject.addContentProvider(script.sourceURL, new WebInspector.StaticContentProvider(WebInspector.resourceTypes.Script, "\n\n\n\n\n// Please wait a bit.\n// Compiled script is not shown while source map is being loaded!", script.sourceURL));
         this._stubUISourceCodes.set(script.scriptId, stubUISourceCode);
 
         this._debuggerWorkspaceBinding.pushSourceMapping(script, this);
@@ -204,11 +200,11 @@ WebInspector.CompilerScriptMapping.prototype = {
             if (this._sourceMapForURL.get(sourceURL))
                 continue;
             this._sourceMapForURL.set(sourceURL, sourceMap);
-            if (!this._networkMapping.hasMappingForURL(sourceURL) && !this._networkMapping.uiSourceCodeForURL(sourceURL, script.target())) {
+            if (!this._networkMapping.hasMappingForURL(sourceURL) && !this._networkMapping.uiSourceCodeForScriptURL(sourceURL, script)) {
                 var contentProvider = sourceMap.sourceContentProvider(sourceURL, WebInspector.resourceTypes.SourceMapScript);
-                this._networkProject.addFileForURL(sourceURL, contentProvider, script.isContentScript());
+                this._networkProject.addFileForURL(sourceURL, contentProvider, WebInspector.ResourceTreeFrame.fromScript(script), script.isContentScript());
             }
-            var uiSourceCode = this._networkMapping.uiSourceCodeForURL(sourceURL, this._target);
+            var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(sourceURL, script);
             if (uiSourceCode) {
                 this._bindUISourceCode(uiSourceCode);
             } else {
@@ -342,18 +338,23 @@ WebInspector.CompilerScriptMapping.prototype = {
     _debuggerReset: function()
     {
         /**
-         * @param {string} sourceURL
+         * @param {!WebInspector.SourceMap} sourceMap
          * @this {WebInspector.CompilerScriptMapping}
          */
-        function unbindUISourceCodeForURL(sourceURL)
+        function unbindSourceMapSources(sourceMap)
         {
-            var uiSourceCode = this._networkMapping.uiSourceCodeForURL(sourceURL, this._target);
-            if (!uiSourceCode)
+            var script = this._scriptForSourceMap.get(sourceMap);
+            if (!script)
                 return;
-            this._unbindUISourceCode(uiSourceCode);
+            var sourceURLs = sourceMap.sources();
+            for (var i = 0; i < sourceURLs.length; ++i) {
+                var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(sourceURLs[i], script);
+                if (uiSourceCode)
+                    this._unbindUISourceCode(uiSourceCode);
+            }
         }
 
-        this._sourceMapForURL.keysArray().forEach(unbindUISourceCodeForURL.bind(this));
+        this._sourceMapForURL.valuesArray().forEach(unbindSourceMapSources.bind(this));
 
         this._sourceMapForSourceMapURL = {};
         this._pendingSourceMapLoadingCallbacks = {};

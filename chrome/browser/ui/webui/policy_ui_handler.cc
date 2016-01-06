@@ -17,6 +17,7 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
@@ -189,7 +190,7 @@ scoped_ptr<base::Value> CopyAndConvert(const base::Value* value) {
     }
   }
 
-  return copy.Pass();
+  return copy;
 }
 
 }  // namespace

@@ -61,6 +61,7 @@ namespace blink {
 
 class WebAudioBus;
 class WebBlobRegistry;
+class WebCanvasCaptureHandler;
 class WebClipboard;
 class WebCompositorSupport;
 class WebConvertableToTraceFormat;
@@ -82,6 +83,7 @@ class WebMIDIAccessorClient;
 class WebMediaRecorderHandler;
 class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
+class WebMediaStreamTrack;
 class WebMemoryDumpProvider;
 class WebMessagePortChannel;
 class WebMimeRegistry;
@@ -318,7 +320,7 @@ public:
     virtual WebString userAgent() { return WebString(); }
 
     // A suggestion to cache this metadata in association with this URL.
-    virtual void cacheMetadata(const WebURL&, int64 responseTime, const char* data, size_t dataSize) { }
+    virtual void cacheMetadata(const WebURL&, int64_t responseTime, const char* data, size_t dataSize) { }
 
     // Returns the decoded data url if url had a supported mimetype and parsing was successful.
     virtual WebData parseDataURL(const WebURL&, WebString& mimetype, WebString& charset) { return WebData(); }
@@ -644,6 +646,8 @@ public:
     // May return null if WebRTC functionality is not avaliable or out of resources.
     virtual WebMediaStreamCenter* createMediaStreamCenter(WebMediaStreamCenterClient*) { return nullptr; }
 
+    // Creates an WebCanvasCaptureHandler to capture Canvas output.
+    virtual WebCanvasCaptureHandler* createCanvasCaptureHandler(const WebSize&, double, WebMediaStreamTrack*) { return nullptr; }
     // WebWorker ----------------------------------------------------------
 
     virtual void didStartWorkerRunLoop() { }

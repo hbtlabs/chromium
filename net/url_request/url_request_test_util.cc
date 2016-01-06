@@ -4,6 +4,8 @@
 
 #include "net/url_request/url_request_test_util.h"
 
+#include <utility>
+
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -22,6 +24,7 @@
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/static_http_user_agent_settings.h"
+#include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -142,7 +145,7 @@ TestURLRequestContextGetter::TestURLRequestContextGetter(
 TestURLRequestContextGetter::TestURLRequestContextGetter(
     const scoped_refptr<base::SingleThreadTaskRunner>& network_task_runner,
     scoped_ptr<TestURLRequestContext> context)
-    : network_task_runner_(network_task_runner), context_(context.Pass()) {
+    : network_task_runner_(network_task_runner), context_(std::move(context)) {
   DCHECK(network_task_runner_.get());
 }
 
@@ -626,6 +629,10 @@ bool TestNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
   return experimental_cookie_features_enabled_;
 }
 
+bool TestNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
+  return experimental_cookie_features_enabled_;
+}
+
 bool TestNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
     const URLRequest& request,
     const GURL& target_url,
@@ -633,19 +640,18 @@ bool TestNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
   return cancel_request_with_policy_violating_referrer_;
 }
 
-TestJobInterceptor::TestJobInterceptor() : main_intercept_job_(NULL) {
-}
+TestJobInterceptor::TestJobInterceptor() {}
+
+TestJobInterceptor::~TestJobInterceptor() {}
 
 URLRequestJob* TestJobInterceptor::MaybeCreateJob(
     URLRequest* request,
     NetworkDelegate* network_delegate) const {
-  URLRequestJob* job = main_intercept_job_;
-  main_intercept_job_ = NULL;
-  return job;
+  return main_intercept_job_.release();
 }
 
-void TestJobInterceptor::set_main_intercept_job(URLRequestJob* job) {
-  main_intercept_job_ = job;
+void TestJobInterceptor::set_main_intercept_job(scoped_ptr<URLRequestJob> job) {
+  main_intercept_job_ = std::move(job);
 }
 
 }  // namespace net

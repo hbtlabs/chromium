@@ -5,6 +5,7 @@
 #ifndef MEDIA_CAST_NET_CAST_TRANSPORT_DEFINES_H_
 #define MEDIA_CAST_NET_CAST_TRANSPORT_DEFINES_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <map>
@@ -12,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 
@@ -41,10 +42,10 @@ const uint16_t kRtcpCastLastPacket = 0xfffe;
 
 const size_t kMaxIpPacketSize = 1500;
 
-// Each uint16 represents one packet id within a cast frame.
+// Each uint16_t represents one packet id within a cast frame.
 // Can also contain kRtcpCastAllPacketsLost and kRtcpCastLastPacket.
 using PacketIdSet = std::set<uint16_t>;
-// Each uint8 represents one cast frame.
+// Each uint8_t represents one cast frame.
 using MissingFramesAndPacketsMap = std::map<uint8_t, PacketIdSet>;
 
 using Packet = std::vector<uint8_t>;
@@ -60,8 +61,8 @@ class FrameIdWrapHelper {
   explicit FrameIdWrapHelper(uint32_t start_frame_id)
       : largest_frame_id_seen_(start_frame_id) {}
 
-  uint32 MapTo32bitsFrameId(const uint8 over_the_wire_frame_id) {
-    uint32 ret = (largest_frame_id_seen_ & ~0xff) | over_the_wire_frame_id;
+  uint32_t MapTo32bitsFrameId(const uint8_t over_the_wire_frame_id) {
+    uint32_t ret = (largest_frame_id_seen_ & ~0xff) | over_the_wire_frame_id;
     // Add 1000 to both sides to avoid underflows.
     if (1000 + ret - largest_frame_id_seen_ > 1000 + 127) {
       ret -= 0x100;
@@ -77,7 +78,7 @@ class FrameIdWrapHelper {
  private:
   friend class FrameIdWrapHelperTest;
 
-  uint32 largest_frame_id_seen_;
+  uint32_t largest_frame_id_seen_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameIdWrapHelper);
 };

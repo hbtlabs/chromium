@@ -5,6 +5,8 @@
 #ifndef MEDIA_TEST_PIPELINE_INTEGRATION_TEST_BASE_H_
 #define MEDIA_TEST_PIPELINE_INTEGRATION_TEST_BASE_H_
 
+#include <stdint.h>
+
 #include "base/md5.h"
 #include "base/message_loop/message_loop.h"
 #include "media/audio/clockless_audio_sink.h"
@@ -79,6 +81,8 @@ class PipelineIntegrationTestBase {
   void Play();
   void Pause();
   bool Seek(base::TimeDelta seek_time);
+  bool Suspend();
+  bool Resume(base::TimeDelta seek_time);
   void Stop();
   bool WaitUntilCurrentTimeIsAfter(const base::TimeDelta& wait_time);
 
@@ -120,7 +124,7 @@ class PipelineIntegrationTestBase {
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
-                                       const std::vector<uint8>& init_data);
+                                       const std::vector<uint8_t>& init_data);
   void set_encrypted_media_init_data_cb(
       const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
     encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;

@@ -55,6 +55,14 @@ public class ProfileSyncService {
         }
     }
 
+    /**
+     * Provider for the Android master sync flag.
+     */
+    interface MasterSyncEnabledProvider {
+        // Returns whether master sync is enabled.
+        public boolean isMasterSyncEnabled();
+    }
+
     private static final String TAG = "ProfileSyncService";
 
     private static final int[] ALL_SELECTABLE_TYPES = new int[] {
@@ -78,6 +86,11 @@ public class ProfileSyncService {
      * {@link init()}.
      */
     private long mNativeProfileSyncServiceAndroid;
+
+    /**
+     * An object that knows whether Android's master sync setting is enabled.
+     */
+    private MasterSyncEnabledProvider mMasterSyncEnabledProvider;
 
     /**
      * Retrieves or creates the ProfileSyncService singleton instance. Returns null if sync is
@@ -228,15 +241,6 @@ public class ProfileSyncService {
      */
     public boolean isBackendInitialized() {
         return nativeIsBackendInitialized(mNativeProfileSyncServiceAndroid);
-    }
-
-    /**
-     * Checks if the first sync setup is currently in progress.
-     *
-     * @return true if first sync setup is in progress
-     */
-    public boolean isFirstSetupInProgress() {
-        return nativeIsFirstSetupInProgress(mNativeProfileSyncServiceAndroid);
     }
 
     /**
@@ -478,6 +482,30 @@ public class ProfileSyncService {
     }
 
     /**
+     * Set the MasterSyncEnabledProvider for ProfileSyncService.
+     *
+     * This method is intentionally package-scope and should only be called once.
+     */
+    void setMasterSyncEnabledProvider(MasterSyncEnabledProvider masterSyncEnabledProvider) {
+        ThreadUtils.assertOnUiThread();
+        assert mMasterSyncEnabledProvider == null;
+        mMasterSyncEnabledProvider = masterSyncEnabledProvider;
+    }
+
+    /**
+     * Returns whether Android's master sync setting is enabled.
+     */
+    @CalledByNative
+    public boolean isMasterSyncEnabled() {
+        ThreadUtils.assertOnUiThread();
+        // TODO(maxbogue): ensure that this method is never called before
+        // setMasterSyncEnabledProvider() and change the line below to an assert.
+        // See http://crbug.com/570569
+        if (mMasterSyncEnabledProvider == null) return true;
+        return mMasterSyncEnabledProvider.isMasterSyncEnabled();
+    }
+
+    /**
      * Invokes the onResult method of the callback from native code.
      */
     @CalledByNative
@@ -504,7 +532,6 @@ public class ProfileSyncService {
     private native String nativeQuerySyncStatusSummary(long nativeProfileSyncServiceAndroid);
     private native int nativeGetAuthError(long nativeProfileSyncServiceAndroid);
     private native boolean nativeIsBackendInitialized(long nativeProfileSyncServiceAndroid);
-    private native boolean nativeIsFirstSetupInProgress(long nativeProfileSyncServiceAndroid);
     private native boolean nativeIsEncryptEverythingAllowed(long nativeProfileSyncServiceAndroid);
     private native boolean nativeIsEncryptEverythingEnabled(long nativeProfileSyncServiceAndroid);
     private native void nativeEnableEncryptEverything(long nativeProfileSyncServiceAndroid);

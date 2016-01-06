@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/forms/ColorInputType.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -206,6 +205,7 @@ void ColorInputType::didChooseColor(const Color& color)
 {
     if (element().isDisabledFormControl() || color == valueAsColor())
         return;
+    EventQueueScope scope;
     element().setValueFromRenderer(color.serialized());
     element().updateView();
     if (!LayoutTheme::theme().isModalColorChooser())

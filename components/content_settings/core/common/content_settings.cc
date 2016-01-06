@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 
 ContentSetting IntToContentSetting(int content_setting) {
   return ((content_setting < 0) ||
@@ -33,7 +34,6 @@ ContentSettingsType kHistogramOrder[] = {
     CONTENT_SETTINGS_TYPE_FULLSCREEN,
     CONTENT_SETTINGS_TYPE_MOUSELOCK,
     CONTENT_SETTINGS_TYPE_MIXEDSCRIPT,
-    CONTENT_SETTINGS_TYPE_MEDIASTREAM,
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
     CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS,

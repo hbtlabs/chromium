@@ -10,6 +10,7 @@
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/accessibility/invert_bubble_prefs.h"
 #include "chrome/browser/browser_process_impl.h"
@@ -111,14 +112,14 @@
 #include "chrome/browser/apps/shortcut_manager.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
+#include "chrome/browser/extensions/api/copresence/copresence_api.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/webui/extensions/extension_settings_handler.h"
 #include "extensions/browser/extension_prefs.h"
-#include "chrome/browser/extensions/api/copresence/copresence_api.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #endif  // defined(ENABLE_EXTENSIONS)
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
@@ -242,6 +243,9 @@ const char kURLsToRestoreOnStartupOld[] = "session.urls_to_restore_on_startup";
 const char kRestoreStartupURLsMigrationTime[] =
   "session.startup_urls_migration_time";
 
+// Deprecated 12/2015.
+const char kRestoreOnStartupMigrated[] = "session.restore_on_startup_migrated";
+
 }  // namespace
 
 namespace chrome {
@@ -302,14 +306,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   BackgroundModeManager::RegisterPrefs(registry);
 #endif
 
-  // TODO(bshe): Use !defined(ANDROID_JAVA_UI) once
-  // codereview.chromium.org/1459793002 landed.
-#if !defined(OS_ANDROID) || defined(USE_AURA)
-  RegisterBrowserPrefs(registry);
-#endif
-
 #if !defined(OS_ANDROID)
   ChromeTracingDelegate::RegisterPrefs(registry);
+  RegisterBrowserPrefs(registry);
   StartupBrowserCreator::RegisterLocalStatePrefs(registry);
   // The native GCM is used on Android instead.
   gcm::GCMChannelStatusSyncer::RegisterPrefs(registry);
@@ -490,9 +489,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   signin::RegisterProfilePrefs(registry);
 #endif
 
-  // TODO(bshe): Revisit this once it is more clear on what should we do with
-  // default apps on Aura Android. See crbug.com/564738
-#if (!defined(OS_ANDROID) || defined(USE_AURA)) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   default_apps::RegisterProfilePrefs(registry);
 #endif
 
@@ -542,6 +539,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   registry->RegisterListPref(kURLsToRestoreOnStartupOld);
   registry->RegisterInt64Pref(kRestoreStartupURLsMigrationTime, 0);
+  registry->RegisterBooleanPref(kRestoreOnStartupMigrated, false);
 }
 
 void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -593,6 +591,9 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   // Added 12/1015.
   profile_prefs->ClearPref(kURLsToRestoreOnStartupOld);
   profile_prefs->ClearPref(kRestoreStartupURLsMigrationTime);
+
+  // Added 12/2015.
+  profile_prefs->ClearPref(kRestoreOnStartupMigrated);
 }
 
 }  // namespace chrome

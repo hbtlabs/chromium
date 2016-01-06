@@ -4,8 +4,10 @@
 
 #include <libdrm/drm_fourcc.h>
 #include <linux/videodev2.h>
+#include <string.h>
 
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 #include "content/common/gpu/media/generic_v4l2_device.h"
 #if defined(ARCH_CPU_ARMEL)
 #include "content/common/gpu/media/tegra_v4l2_device.h"
@@ -39,7 +41,7 @@ scoped_refptr<V4L2Device> V4L2Device::Create(Type type) {
 
 // static
 media::VideoPixelFormat V4L2Device::V4L2PixFmtToVideoPixelFormat(
-    uint32 pix_fmt) {
+    uint32_t pix_fmt) {
   switch (pix_fmt) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV12M:
@@ -62,7 +64,7 @@ media::VideoPixelFormat V4L2Device::V4L2PixFmtToVideoPixelFormat(
 }
 
 // static
-uint32 V4L2Device::VideoPixelFormatToV4L2PixFmt(
+uint32_t V4L2Device::VideoPixelFormatToV4L2PixFmt(
     media::VideoPixelFormat format) {
   switch (format) {
     case media::PIXEL_FORMAT_NV12:
@@ -78,7 +80,7 @@ uint32 V4L2Device::VideoPixelFormatToV4L2PixFmt(
 }
 
 // static
-uint32 V4L2Device::VideoCodecProfileToV4L2PixFmt(
+uint32_t V4L2Device::VideoCodecProfileToV4L2PixFmt(
     media::VideoCodecProfile profile,
     bool slice_based) {
   if (profile >= media::H264PROFILE_MIN &&

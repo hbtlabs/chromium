@@ -7,6 +7,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "chrome/browser/speech/tts_platform.h"
 #include "chrome/common/features.h"
 
@@ -26,10 +27,17 @@ class TtsPlatformImplAndroid : public TtsPlatformImpl {
   void GetVoices(std::vector<VoiceData>* out_voices) override;
 
   // Methods called from Java via JNI.
-  void VoicesChanged(JNIEnv* env, jobject obj);
-  void OnEndEvent(JNIEnv* env, jobject obj, jint utterance_id);
-  void OnErrorEvent(JNIEnv* env, jobject obj, jint utterance_id);
-  void OnStartEvent(JNIEnv* env, jobject obj, jint utterance_id);
+  void VoicesChanged(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj);
+  void OnEndEvent(JNIEnv* env,
+                  const base::android::JavaParamRef<jobject>& obj,
+                  jint utterance_id);
+  void OnErrorEvent(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj,
+                    jint utterance_id);
+  void OnStartEvent(JNIEnv* env,
+                    const base::android::JavaParamRef<jobject>& obj,
+                    jint utterance_id);
 
   // Static functions.
   static TtsPlatformImplAndroid* GetInstance();

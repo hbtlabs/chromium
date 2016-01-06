@@ -4,6 +4,7 @@
 
 #include "mojo/public/cpp/bindings/lib/fixed_buffer.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <algorithm>
@@ -37,6 +38,8 @@ void* FixedBuffer::Allocate(size_t delta) {
 
   return result;
 }
+
+PickleBuffer* FixedBuffer::AsPickleBuffer() { return nullptr; }
 
 FixedBufferForTesting::FixedBufferForTesting(size_t size) {
   size_ = internal::Align(size);

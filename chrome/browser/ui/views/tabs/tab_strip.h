@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -57,10 +58,6 @@ class TabStrip : public views::View,
                  public views::ViewTargeterDelegate,
                  public TabController {
  public:
-  // The vertical offset of the tab strip button. This offset applies only to
-  // restored windows.
-  static const int kNewTabButtonVerticalOffset;
-
   explicit TabStrip(TabStripController* controller);
   ~TabStrip() override;
 

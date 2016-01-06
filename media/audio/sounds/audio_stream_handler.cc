@@ -4,10 +4,13 @@
 
 #include "media/audio/sounds/audio_stream_handler.h"
 
+#include <stdint.h>
 #include <string>
+#include <utility>
 
 #include "base/cancelable_callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -42,7 +45,7 @@ class AudioStreamHandler::AudioStreamContainer
         stream_(NULL),
         cursor_(0),
         delayed_stop_posted_(false),
-        wav_audio_(wav_audio.Pass()) {
+        wav_audio_(std::move(wav_audio)) {
     DCHECK(wav_audio_);
   }
 
@@ -106,7 +109,9 @@ class AudioStreamHandler::AudioStreamContainer
  private:
   // AudioOutputStream::AudioSourceCallback overrides:
   // Following methods could be called from *ANY* thread.
-  int OnMoreData(AudioBus* dest, uint32 /* total_bytes_delay */) override {
+  int OnMoreData(AudioBus* dest,
+                 uint32_t /* total_bytes_delay */,
+                 uint32_t /* frames_skipped */) override {
     base::AutoLock al(state_lock_);
     size_t bytes_written = 0;
 
@@ -183,7 +188,7 @@ AudioStreamHandler::AudioStreamHandler(const base::StringPiece& wav_data) {
 
   // Store the duration of the WAV data then pass the handler to |stream_|.
   duration_ = wav_audio->GetDuration();
-  stream_.reset(new AudioStreamContainer(wav_audio.Pass()));
+  stream_.reset(new AudioStreamContainer(std::move(wav_audio)));
 }
 
 AudioStreamHandler::~AudioStreamHandler() {

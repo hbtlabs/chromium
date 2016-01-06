@@ -4,6 +4,9 @@
 
 #include "chrome/browser/signin/easy_unlock_service_regular.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -13,6 +16,7 @@
 #include "base/sys_info.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
@@ -99,7 +103,7 @@ EasyUnlockServiceRegular::GetProximityAuthPrefManager() {
 
 void EasyUnlockServiceRegular::LoadRemoteDevices() {
   if (device_manager_->unlock_keys().empty()) {
-    OnRemoteDeviceChanged(nullptr);
+    SetProximityAuthDevices(GetAccountId(), proximity_auth::RemoteDeviceList());
     return;
   }
 
@@ -114,10 +118,8 @@ void EasyUnlockServiceRegular::LoadRemoteDevices() {
 }
 
 void EasyUnlockServiceRegular::OnRemoteDevicesLoaded(
-    const std::vector<proximity_auth::RemoteDevice>& remote_devices) {
-  // TODO(tengs): We only support unlocking with one remote device at the
-  // moment. We need to revisit once multiple devices are supported.
-  OnRemoteDeviceChanged(&remote_devices[0]);
+    const proximity_auth::RemoteDeviceList& remote_devices) {
+  SetProximityAuthDevices(GetAccountId(), remote_devices);
 
 #if defined(OS_CHROMEOS)
   // We need to store a copy of |remote devices_| in the TPM, so it can be
@@ -143,7 +145,7 @@ void EasyUnlockServiceRegular::OnRemoteDevicesLoaded(
     dict->SetString("permitRecord.id", b64_public_key);
     dict->SetString("permitRecord.type", "license");
     dict->SetString("permitRecord.data", b64_public_key);
-    device_list->Append(dict.Pass());
+    device_list->Append(std::move(dict));
   }
 
   // TODO(tengs): Rename this function after the easy_unlock app is replaced.
@@ -155,7 +157,7 @@ EasyUnlockService::Type EasyUnlockServiceRegular::GetType() const {
   return EasyUnlockService::TYPE_REGULAR;
 }
 
-std::string EasyUnlockServiceRegular::GetUserEmail() const {
+AccountId EasyUnlockServiceRegular::GetAccountId() const {
   const SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfileIfExists(profile());
   // |profile| has to be a signed-in profile with SigninManager already
@@ -163,7 +165,9 @@ std::string EasyUnlockServiceRegular::GetUserEmail() const {
   DCHECK(signin_manager);
   const std::string user_email =
       signin_manager->GetAuthenticatedAccountInfo().email;
-  return user_email.empty() ? user_email : gaia::CanonicalizeEmail(user_email);
+  return user_email.empty()
+             ? EmptyAccountId()
+             : AccountId::FromUserEmail(gaia::CanonicalizeEmail(user_email));
 }
 
 void EasyUnlockServiceRegular::LaunchSetup() {
@@ -214,7 +218,7 @@ void EasyUnlockServiceRegular::SetHardlockAfterKeyOperation(
     EasyUnlockScreenlockStateHandler::HardlockState state_on_success,
     bool success) {
   if (success)
-    SetHardlockStateForUser(GetUserEmail(), state_on_success);
+    SetHardlockStateForUser(GetAccountId(), state_on_success);
 
   // Even if the refresh keys operation suceeded, we still fetch and check the
   // cryptohome keys against the keys in local preferences as a sanity check.
@@ -371,13 +375,13 @@ std::string EasyUnlockServiceRegular::GetWrappedSecret() const {
 }
 
 void EasyUnlockServiceRegular::RecordEasySignInOutcome(
-    const std::string& user_id,
+    const AccountId& account_id,
     bool success) const {
   NOTREACHED();
 }
 
 void EasyUnlockServiceRegular::RecordPasswordLoginEvent(
-    const std::string& user_id) const {
+    const AccountId& account_id) const {
   NOTREACHED();
 }
 
@@ -396,9 +400,9 @@ void EasyUnlockServiceRegular::StartAutoPairing(
   scoped_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::EASY_UNLOCK_PRIVATE_ON_START_AUTO_PAIRING,
       extensions::api::easy_unlock_private::OnStartAutoPairing::kEventName,
-      args.Pass()));
+      std::move(args)));
   extensions::EventRouter::Get(profile())->DispatchEventWithLazyListener(
-       extension_misc::kEasyUnlockAppId, event.Pass());
+      extension_misc::kEasyUnlockAppId, std::move(event));
 }
 
 void EasyUnlockServiceRegular::SetAutoPairingResult(
@@ -545,7 +549,7 @@ void EasyUnlockServiceRegular::OnScreenDidUnlock(
 }
 
 void EasyUnlockServiceRegular::OnFocusedUserChanged(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   // Nothing to do.
 }
 
@@ -591,8 +595,8 @@ void EasyUnlockServiceRegular::SyncProfilePrefsToLocalState() {
 
   DictionaryPrefUpdate update(local_state,
                               prefs::kEasyUnlockLocalStateUserPrefs);
-  std::string user_email = GetUserEmail();
-  update->SetWithoutPathExpansion(user_email, user_prefs_dict.Pass());
+  update->SetWithoutPathExpansion(GetAccountId().GetUserEmail(),
+                                  std::move(user_prefs_dict));
 }
 
 cryptauth::GcmDeviceInfo EasyUnlockServiceRegular::GetGcmDeviceInfo() {
@@ -619,7 +623,8 @@ cryptauth::GcmDeviceInfo EasyUnlockServiceRegular::GetGcmDeviceInfo() {
 
   ash::DisplayManager* display_manager =
       ash::Shell::GetInstance()->display_manager();
-  int64 primary_display_id = display_manager->GetPrimaryDisplayCandidate().id();
+  int64_t primary_display_id =
+      display_manager->GetPrimaryDisplayCandidate().id();
   ash::DisplayInfo display_info =
       display_manager->GetDisplayInfo(primary_display_id);
   gfx::Rect bounds = display_info.bounds_in_native();

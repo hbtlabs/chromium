@@ -5,6 +5,7 @@
 #include "content/browser/compositor/gpu_process_transport_factory.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -14,6 +15,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "cc/base/histograms.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface.h"
@@ -174,7 +176,7 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
       (command_line->HasSwitch(switches::kEnableHardwareOverlays) ||
        command_line->HasSwitch(switches::kOzoneTestSingleOverlaySupport))) {
     validator.reset(new BrowserCompositorOverlayCandidateValidatorOzone(
-        widget, overlay_candidates.Pass()));
+        widget, std::move(overlay_candidates)));
   }
 #elif defined(OS_MACOSX)
   // Overlays are only supported through the remote layer API.
@@ -185,7 +187,7 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
   validator.reset(new BrowserCompositorOverlayCandidateValidatorAndroid());
 #endif
 
-  return validator.Pass();
+  return validator;
 }
 
 static bool ShouldCreateGpuOutputSurface(ui::Compositor* compositor) {
@@ -350,7 +352,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 #endif
       surface = make_scoped_ptr(new GpuBrowserCompositorOutputSurface(
           context_provider, shared_worker_context_provider_,
-          compositor->vsync_manager(), validator.Pass()));
+          compositor->vsync_manager(), std::move(validator)));
     }
   }
 
@@ -362,7 +364,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
     data->reflector->OnSourceSurfaceReady(data->surface);
 
   if (!UseSurfacesEnabled()) {
-    compositor->SetOutputSurface(surface.Pass());
+    compositor->SetOutputSurface(std::move(surface));
     return;
   }
 
@@ -373,7 +375,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   cc::SurfaceManager* manager = surface_manager_.get();
   scoped_ptr<cc::OnscreenDisplayClient> display_client(
       new cc::OnscreenDisplayClient(
-          surface.Pass(), manager, HostSharedBitmapManager::current(),
+          std::move(surface), manager, HostSharedBitmapManager::current(),
           BrowserGpuMemoryBufferManager::current(),
           compositor->GetRendererSettings(), compositor->task_runner()));
 
@@ -384,8 +386,8 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   display_client->set_surface_output_surface(output_surface.get());
   output_surface->set_display_client(display_client.get());
   display_client->display()->Resize(compositor->size());
-  data->display_client = display_client.Pass();
-  compositor->SetOutputSurface(output_surface.Pass());
+  data->display_client = std::move(display_client);
+  compositor->SetOutputSurface(std::move(output_surface));
 }
 
 scoped_ptr<ui::Reflector> GpuProcessTransportFactory::CreateReflector(
@@ -399,7 +401,7 @@ scoped_ptr<ui::Reflector> GpuProcessTransportFactory::CreateReflector(
   source_data->reflector = reflector.get();
   if (BrowserCompositorOutputSurface* source_surface = source_data->surface)
     reflector->OnSourceSurfaceReady(source_surface);
-  return reflector.Pass();
+  return std::move(reflector);
 }
 
 void GpuProcessTransportFactory::RemoveReflector(ui::Reflector* reflector) {
@@ -431,7 +433,7 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
     // GLHelper created in this case would be lost/leaked if we just reset()
     // on the |gl_helper_| variable directly. So instead we call reset() on a
     // local scoped_ptr.
-    scoped_ptr<GLHelper> helper = gl_helper_.Pass();
+    scoped_ptr<GLHelper> helper = std::move(gl_helper_);
 
     // If there are any observer left at this point, make sure they clean up
     // before we destroy the GLHelper.
@@ -446,7 +448,7 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
 
 bool GpuProcessTransportFactory::DoesCreateTestContexts() { return false; }
 
-uint32 GpuProcessTransportFactory::GetImageTextureTarget(
+uint32_t GpuProcessTransportFactory::GetImageTextureTarget(
     gfx::BufferFormat format,
     gfx::BufferUsage usage) {
   return BrowserGpuMemoryBufferManager::GetImageTextureTarget(format, usage);
@@ -631,7 +633,7 @@ GpuProcessTransportFactory::CreateContextCommon(
           lose_context_when_out_of_memory,
           WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(),
           NULL));
-  return context.Pass();
+  return context;
 }
 
 void GpuProcessTransportFactory::OnLostMainThreadSharedContextInsideCallback() {
@@ -652,7 +654,7 @@ void GpuProcessTransportFactory::OnLostMainThreadSharedContext() {
       shared_main_thread_contexts_;
   shared_main_thread_contexts_  = NULL;
 
-  scoped_ptr<GLHelper> lost_gl_helper = gl_helper_.Pass();
+  scoped_ptr<GLHelper> lost_gl_helper = std::move(gl_helper_);
 
   FOR_EACH_OBSERVER(ImageTransportFactoryObserver,
                     observer_list_,

@@ -46,14 +46,21 @@ public interface ReaderModeManagerDelegate {
     WebContents getBasePageWebContents();
 
     /**
-     * Close the Reader Mode panel.
+     * Close the Reader Mode panel. This method wrap's the ReaderModePanel's close function and
+     * checks for null.
      * @param reason The reason the panel is being closed.
      * @param animate If the panel should animate as it closes.
      */
-    void closePanel(StateChangeReason reason, boolean animate);
+    void closeReaderPanel(StateChangeReason reason, boolean animate);
 
     /**
      * @return The ChromeActivity that owns the manager.
      */
     ChromeActivity getChromeActivity();
+
+    /**
+     * Record the amount of time that a user spent in the Reader Mode panel.
+     * @param timeInMs The amount of time spent in ms.
+     */
+    void recordTimeSpentInReader(long timeInMs);
 }

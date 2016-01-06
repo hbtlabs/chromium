@@ -264,7 +264,7 @@ public:
 
     bool hasLegacyViewportTag() const { return m_legacyViewportDescription.isLegacyViewportType(); }
 
-    String outgoingReferrer();
+    String outgoingReferrer() const;
     String outgoingOrigin() const;
 
     void setDoctype(PassRefPtrWillBeRawPtr<DocumentType>);
@@ -327,8 +327,6 @@ public:
     void setXMLVersion(const String&, ExceptionState&);
     void setXMLStandalone(bool, ExceptionState&);
     void setHasXMLDeclaration(bool hasXMLDeclaration) { m_hasXMLDeclaration = hasXMLDeclaration ? 1 : 0; }
-
-    KURL baseURI() const final;
 
     String origin() const { return securityOrigin()->toString(); }
     String suborigin() const { return securityOrigin()->suboriginName(); }
@@ -422,8 +420,8 @@ public:
 
     PassRefPtrWillBeRawPtr<Range> createRange();
 
-    PassRefPtrWillBeRawPtr<NodeIterator> createNodeIterator(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter>, ExceptionState&);
-    PassRefPtrWillBeRawPtr<TreeWalker> createTreeWalker(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter>, ExceptionState&);
+    PassRefPtrWillBeRawPtr<NodeIterator> createNodeIterator(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter>);
+    PassRefPtrWillBeRawPtr<TreeWalker> createTreeWalker(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter>);
 
     // Special support for editing
     PassRefPtrWillBeRawPtr<Text> createEditingTextNode(const String&);
@@ -518,8 +516,19 @@ public:
     const AtomicString& baseTarget() const { return m_baseTarget; }
     void processBaseElement();
 
+    // Creates URL based on passed relative url and this documents base URL.
+    // Depending on base URL value it is possible that parent document
+    // base URL will be used instead. Uses completeURLWithOverride internally.
     KURL completeURL(const String&) const;
+    // Creates URL based on passed relative url and passed base URL override.
+    // Depending on baseURLOverride value it is possible that parent document
+    // base URL will be used instead of it. See baseURLForOverride function
+    // for details.
     KURL completeURLWithOverride(const String&, const KURL& baseURLOverride) const;
+    // Determines which base URL should be used given specified override.
+    // If override is empty or is about:blank url and parent document exists
+    // base URL of parent will be returned, passed base URL override otherwise.
+    const KURL& baseURLForOverride(const KURL& baseURLOverride) const;
 
     String userAgent() const final;
     void disableEval(const String& errorMessage) final;
@@ -1002,6 +1011,9 @@ public:
 
     void updateStyleInvalidationIfNeeded();
 
+    bool attemptedToDetermineEncodingFromContentSniffing() const;
+    bool encodingWasDetectedFromContentSniffing() const;
+
     DECLARE_VIRTUAL_TRACE();
 
     bool hasSVGFilterElementsRequiringLayerUpdate() const { return m_layerUpdateSVGFilterElements.size(); }
@@ -1021,6 +1033,7 @@ public:
     NthIndexCache* nthIndexCache() const { return m_nthIndexCache; }
 
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;
+    bool isSecureContext(const SecureContextCheck = StandardSecureContextCheck) const override;
 
     ClientHintsPreferences& clientHintsPreferences() { return m_clientHintsPreferences; }
 
@@ -1044,6 +1057,8 @@ public:
 
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
+
+    void enforceStrictMixedContentChecking();
 
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
@@ -1105,6 +1120,7 @@ private:
     bool childTypeAllowed(NodeType) const final;
     PassRefPtrWillBeRawPtr<Node> cloneNode(bool deep) final;
     void cloneDataFromDocument(const Document&);
+    bool isSecureContextImpl(String* errorMessage, const SecureContextCheck priviligeContextCheck) const;
 
 #if !ENABLE(OILPAN)
     void refExecutionContext() final { ref(); }
@@ -1124,11 +1140,6 @@ private:
 
     void loadEventDelayTimerFired(Timer<Document>*);
     void pluginLoadingTimerFired(Timer<Document>*);
-
-    // Note that dispatching a window load event may cause the LocalDOMWindow to be detached from
-    // the LocalFrame, so callers should take a reference to the LocalDOMWindow (which owns us) to
-    // prevent the Document from getting blown away from underneath them.
-    void dispatchWindowLoadEvent();
 
     void addListenerType(ListenerType listenerType) { m_listenerTypes |= listenerType; }
     void addMutationEventListenerTypeIfEnabled(ListenerType);

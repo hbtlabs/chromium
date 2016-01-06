@@ -7,19 +7,20 @@
 #include <algorithm>
 
 #include "base/profiler/scoped_tracker.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_frame_mus.h"
 #include "chrome/browser/ui/views/frame/browser_header_painter_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/web_app_left_header_view_ash.h"
-#include "chrome/browser/ui/views/layout_constants.h"
 #include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
@@ -587,8 +588,7 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
     // Draw the content/toolbar separator.
     toolbar_bounds.Inset(kClientEdgeThickness, 0);
     BrowserView::Paint1pxHorizontalLine(
-        canvas, ThemeProperties::GetDefaultColor(
-                    ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
+        canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
         toolbar_bounds, true);
   } else {
     // Gross hack: We split the toolbar images into two pieces, since sometimes
@@ -639,15 +639,14 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
         gfx::Rect(x + kClientEdgeThickness,
                   toolbar_bounds.bottom() - kClientEdgeThickness,
                   w - (2 * kClientEdgeThickness), kClientEdgeThickness),
-        ThemeProperties::GetDefaultColor(
-            ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
   }
 }
 
 void BrowserNonClientFrameViewMus::PaintContentEdge(gfx::Canvas* canvas) {
   DCHECK(!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle());
   const int bottom = frame_values().normal_insets.bottom();
-  canvas->FillRect(gfx::Rect(0, bottom, width(), kClientEdgeThickness),
-                   ThemeProperties::GetDefaultColor(
-                       ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+  canvas->FillRect(
+      gfx::Rect(0, bottom, width(), kClientEdgeThickness),
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
 }

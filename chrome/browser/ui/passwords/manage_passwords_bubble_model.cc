@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -58,7 +60,7 @@ ScopedVector<const autofill::PasswordForm> DeepCopyForms(
                  [](const autofill::PasswordForm* form) {
     return new autofill::PasswordForm(*form);
   });
-  return result.Pass();
+  return result;
 }
 
 password_bubble_experiment::SmartLockBranding GetSmartLockBrandingState(
@@ -396,12 +398,17 @@ bool ManagePasswordsBubbleModel::ShouldShowAutoSigninWarmWelcome() const {
 
 void ManagePasswordsBubbleModel::UpdatePendingStateTitle() {
   title_brand_link_range_ = gfx::Range();
+  PasswordTittleType type =
+      state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE
+      ? PasswordTittleType::UPDATE_PASSWORD
+      : (pending_password_.federation_url.is_empty()
+             ? PasswordTittleType::SAVE_PASSWORD
+             : PasswordTittleType::SAVE_ACCOUNT);
   GetSavePasswordDialogTitleTextAndLinkRange(
       web_contents()->GetVisibleURL(), origin(),
       GetSmartLockBrandingState(GetProfile()) !=
           password_bubble_experiment::SmartLockBranding::NONE,
-      state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE, &title_,
-      &title_brand_link_range_);
+      type, &title_, &title_brand_link_range_);
 }
 
 void ManagePasswordsBubbleModel::UpdateManageStateTitle() {

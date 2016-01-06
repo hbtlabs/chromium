@@ -27,13 +27,10 @@ check_targets = [
   "//chrome/common/*",
   "//chrome/installer/*",
   "//chrome/third_party/mozilla_security_manager/*",
+  "//chrome/utility/*",
   "//chromecast/*",
-
-  # TODO(brettw): Fix http://crbug.com/460828 and uncomment the following
-  # line.
-  #"//chrome_elf/*",
-  #"//cloud_print/*",
-
+  "//chrome_elf/*",
+  "//cloud_print/*",
   "//components/*",
 
   #"//content/*",  # A whole lot of errors.
@@ -46,7 +43,7 @@ check_targets = [
   "//device/*",
 
   #"//extensions/*",  # Lots of errors.
-  #"//gin/*",  # Easy.
+  "//gin/*",
   "//google_apis/*",
   "//google_update/*",
 
@@ -68,6 +65,7 @@ check_targets = [
 
   #"//pdf/*",  # Medium-hard.
   #"//ppapi/*",  # Lots of errors.
+  "//ppapi/examples/*",
   "//printing/*",
 
   #"//remoting/*",  # Medium-hard.
@@ -84,7 +82,40 @@ check_targets = [
   "//third_party/WebKit/Source/*",
   "//tools/*",
 
-  #"//ui/*",  # Just a few problems.
+  #"//ui/*",  # Work left on Chromeos w/ use_ozone. Some parts of UI that work:
+  "//ui/accessibility/*",
+  "//ui/android/*",
+  "//ui/app_list/*",
+  "//ui/aura/*",
+  "//ui/aura_extra/*",
+  "//ui/base/*",
+  "//ui/chromeos/*",
+  "//ui/compositor/*",
+  "//ui/display/*",
+  "//ui/events:events",  # Specifically avoid //ui/events/ozone
+  "//ui/events:events_base",
+  "//ui/events:events_unittests",
+  "//ui/file_manager/*",
+  "//ui/gfx/*",
+  "//ui/gl/*",
+  "//ui/keyboard/*",
+  "//ui/login/*",
+  "//ui/message_center/*",
+  "//ui/metro_viewer/*",
+  "//ui/mojo/*",
+  "//ui/native_theme/*",
+  "//ui/platform_window/*",
+  "//ui/resources/*",
+  "//ui/shell_dialogs/*",
+  "//ui/snapshot/*",
+  "//ui/strings/*",
+  "//ui/surface/*",
+  "//ui/touch_selection/*",
+  "//ui/views/*",
+  "//ui/views_content_client/*",
+  "//ui/web_dialogs/*",
+  "//ui/webui/*",
+  "//ui/wm/*",
   "//url/*",
   "//v8/*",
   "//win8/*",
@@ -174,6 +205,7 @@ exec_script_whitelist = [
   "//third_party/harfbuzz-ng/BUILD.gn",
   "//third_party/libaddressinput/BUILD.gn",
   "//third_party/opus/BUILD.gn",
+  "//third_party/openh264/BUILD.gn",
   "//third_party/WebKit/Source/bindings/bindings.gni",
   "//third_party/WebKit/Source/bindings/scripts/scripts.gni",
   "//third_party/WebKit/Source/config.gni",

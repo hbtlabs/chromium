@@ -36,6 +36,9 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/ThreadingPrimitives.h"
+#include "wtf/build_config.h"
+
+#if ENABLE(WEB_AUDIO)
 
 namespace blink {
 
@@ -44,7 +47,7 @@ class WebAudioSourceProvider;
 class MediaStreamWebAudioSource : public AudioSourceProvider {
     WTF_MAKE_NONCOPYABLE(MediaStreamWebAudioSource);
 public:
-    static PassOwnPtr<MediaStreamWebAudioSource> create(PassOwnPtr<WebAudioSourceProvider> provider) { return adoptPtr(new MediaStreamWebAudioSource(provider)); }
+    static PassOwnPtr<MediaStreamWebAudioSource> create(PassOwnPtr<WebAudioSourceProvider> provider) { return adoptPtr(new MediaStreamWebAudioSource(std::move(provider))); }
 
     ~MediaStreamWebAudioSource() override;
 
@@ -58,5 +61,7 @@ private:
 };
 
 } // namespace blink
+
+#endif // ENABLE(WEB_AUDIO)
 
 #endif // MediaStreamWebAudioSource_h

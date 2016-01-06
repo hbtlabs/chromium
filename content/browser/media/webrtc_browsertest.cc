@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
@@ -150,8 +151,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
 
 // This test makes a call between pc1 and pc2 where a video only stream is sent
 // from pc1 to pc2. The stream sent from pc1 to pc2 is cloned from the stream
-// received on pc2 to test that cloning of remote video tracks works as
-// intended and is sent back to pc1.
+// received on pc2 to test that cloning of remote video and audio tracks works
+// as intended and is sent back to pc1.
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanForwardRemoteStream) {
 #if defined (OS_ANDROID)
   // This test fails on Nexus 5 devices.
@@ -161,7 +162,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanForwardRemoteStream) {
       switches::kDisableWebRtcHWDecoding);
 #endif
   MakeTypicalPeerConnectionCall(
-      "callAndForwardRemoteStream({video: true, audio: false});");
+      "callAndForwardRemoteStream({video: true, audio: true});");
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,

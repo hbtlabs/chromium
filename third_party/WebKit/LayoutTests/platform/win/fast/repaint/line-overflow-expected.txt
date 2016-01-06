@@ -6,8 +6,8 @@
       "contentsOpaque": true,
       "drawsContent": true,
       "repaintRects": [
-        [114, 114, 38, 18],
-        [114, 84, 38, 48],
+        [115, 114, 37, 18],
+        [115, 84, 37, 48],
         [37, 132, 37, 18],
         [37, 132, 37, 18],
         [8, 132, 192, 71],
@@ -33,6 +33,7 @@
         "RootInlineBox",
         "LayoutBlockFlow BODY",
         "LayoutBlockFlow DIV",
+        "RootInlineBox",
         "LayoutInline SPAN id='t'",
         "InlineFlowBox",
         "LayoutText #text",

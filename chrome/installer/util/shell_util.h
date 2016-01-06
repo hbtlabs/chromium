@@ -10,20 +10,24 @@
 #define CHROME_INSTALLER_UTIL_SHELL_UTIL_H_
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <map>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "chrome/installer/util/work_item_list.h"
 
 class BrowserDistribution;
+class RegistryEntry;
 
 namespace base {
 class CancellationFlag;
@@ -208,7 +212,7 @@ class ShellUtil {
     // be used to create/update the shortcut, others will be ignored on update
     // and possibly replaced by default values on create (see individual
     // property setters above for details on default values).
-    uint32 options;
+    uint32_t options;
   };
 
   // Relative path of the URL Protocol registry entry (prefixed with '\').
@@ -614,7 +618,7 @@ class ShellUtil {
   // Note: This method does not suffix the output with '=' signs as technically
   // required by the base32 standard for inputs that aren't a multiple of 5
   // bytes.
-  static base::string16 ByteArrayToBase32(const uint8* bytes, size_t size);
+  static base::string16 ByteArrayToBase32(const uint8_t* bytes, size_t size);
 
   // Associates a set of file extensions with a particular application in the
   // Windows registry, for the current user only. If an extension has no
@@ -647,6 +651,11 @@ class ShellUtil {
   // application, as given to AddFileAssociations. All information associated
   // with this name will be deleted.
   static bool DeleteFileAssociations(const base::string16& prog_id);
+
+  // This method converts all the RegistryEntries from the given list to
+  // Set/CreateRegWorkItems and runs them using WorkItemList.
+  static bool AddRegistryEntries(HKEY root,
+                                 const ScopedVector<RegistryEntry>& entries);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShellUtil);

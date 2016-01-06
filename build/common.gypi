@@ -233,6 +233,13 @@
             'toolkit_views%': 0,
           }],
 
+          # Chromecast builds on x86 Linux should default to desktop builds.
+          ['chromecast==1 and OS=="linux" and (target_arch=="ia32" or target_arch=="x64")', {
+            'is_cast_desktop_build%': 1,
+          }, {
+            'is_cast_desktop_build%': 0,
+          }],
+
           # Enable HiDPI on Mac OS, Windows and Linux (including Chrome OS).
           ['OS=="mac" or OS=="win" or OS=="linux"', {
             'enable_hidpi%': 1,
@@ -322,6 +329,7 @@
       # Copy conditionally-set variables out one scope.
       'chromeos%': '<(chromeos)',
       'chromecast%': '<(chromecast)',
+      'is_cast_desktop_build%': '<(is_cast_desktop_build)',
       'host_arch%': '<(host_arch)',
       'target_arch%': '<(target_arch)',
       'target_subarch%': '<(target_subarch)',
@@ -596,6 +604,9 @@
 
       # Enables used resource whitelist generation; disabled by default.
       'enable_resource_whitelist_generation%': 0,
+
+      # Enables BidrectionalSteam; disabled by default.
+      'enable_bidirectional_stream': 0,
 
       # Enable FILE support by default.
       'disable_file_support%': 0,
@@ -1096,6 +1107,9 @@
       # do a developer build.
       'android_app_version_name%': 'Developer Build',
       'android_app_version_code%': 1,
+
+      # Use the internal version of the framework to build Android WebView.
+      'use_webview_internal_framework%': 0,
     },
 
     # Copy conditionally-set variables out one scope.
@@ -1134,6 +1148,7 @@
     'linux_fpic%': '<(linux_fpic)',
     'chromeos%': '<(chromeos)',
     'chromecast%': '<(chromecast)',
+    'is_cast_desktop_build%': '<(is_cast_desktop_build)',
     'enable_viewport%': '<(enable_viewport)',
     'enable_hidpi%': '<(enable_hidpi)',
     'enable_topchrome_md%': '<(enable_topchrome_md)',
@@ -1217,6 +1232,7 @@
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
     'disable_file_support%': '<(disable_file_support)',
     'disable_ftp_support%': '<(disable_ftp_support)',
+    'enable_bidirectional_stream%': '<(enable_bidirectional_stream)',
     'enable_task_manager%': '<(enable_task_manager)',
     'sas_dll_path%': '<(sas_dll_path)',
     'wix_path%': '<(wix_path)',
@@ -1250,6 +1266,7 @@
     'mac_views_browser%': '<(mac_views_browser)',
     'android_app_version_name%': '<(android_app_version_name)',
     'android_app_version_code%': '<(android_app_version_code)',
+    'use_webview_internal_framework%': '<(use_webview_internal_framework)',
     'enable_webvr%': '<(enable_webvr)',
 
     # Turns on compiler optimizations in V8 in Debug build.
@@ -1869,8 +1886,6 @@
       }],
       ['chromecast==1', {
         'enable_mpeg2ts_stream_parser%': 1,
-        'ffmpeg_branding%': 'ChromeOS',
-        'ozone_platform_ozonex%': 1,
         'use_custom_freetype%': 0,
         'use_playready%': 0,
         'conditions': [
@@ -1878,6 +1893,11 @@
             'arm_arch%': '',
             'arm_tune%': 'cortex-a9',
             'arm_thumb%': 1,
+          }],
+          # TODO(dalecurtis): What audio codecs does Chromecast want here?  Sort
+          # out and add configs if necessary.  http://crbug.com/570754
+          ['OS!="android"', {
+            'ffmpeg_branding%': 'ChromeOS',
           }],
         ],
       }],
@@ -2132,9 +2152,6 @@
           '-t', 'ios',
           '--no-output-all-resource-defines',
         ],
-        # iOS uses a whitelist to filter resources.
-        'grit_whitelist%': '<(DEPTH)/build/ios/grit_whitelist.txt',
-
         # Enable host builds when generating with ninja-ios.
         'conditions': [
           ['"<(GENERATOR)"=="ninja"', {
@@ -2227,7 +2244,7 @@
               'clang_dynlib_flags%': '',
             }],
           ],
-          'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates ',
+          'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates',
         },
         # If you change these, also change build/config/clang/BUILD.gn.
         'clang_chrome_plugins_flags%':
@@ -2299,7 +2316,6 @@
         'release_valgrind_build': 1,
         'werror': '',
         'component': 'static_library',
-        'use_system_zlib': 0,
       }],
 
       # Build tweaks for DrMemory.
@@ -2386,10 +2402,18 @@
               ['disable_display==0', {
                 # Enable the Cast ozone platform on all A/V Cast builds.
                 'ozone_platform_cast%': 1,
+
+                # For desktop Chromecast builds, override the default "headless"
+                # platform with --ozone-platform=egltest
+                # TODO(slan|halliwell): Make the default platform "cast" on
+                # desktop too.
                 'conditions': [
-                  ['OS=="linux" and target_arch!="arm"', {
+                  ['is_cast_desktop_build==1', {
                     'ozone_platform_egltest%': 1,
                     'ozone_platform_ozonex%': 1,
+                  }, {
+                    # On device builds, enable "cast" as the default platform.
+                    'ozone_platform%': 'cast',
                   }],
                 ],
               }],
@@ -2741,9 +2765,6 @@
       }],
       ['image_loader_extension==1', {
         'defines': ['IMAGE_LOADER_EXTENSION=1'],
-      }],
-      ['profiling==1', {
-        'defines': ['ENABLE_PROFILING=1'],
       }],
       ['enable_webrtc==1', {
         'defines': ['ENABLE_WEBRTC=1'],
@@ -3119,39 +3140,22 @@
         },
         'conditions': [
           [ 'os_posix==1 and OS!="mac" and OS!="ios"', {
-            # We don't want to get warnings from third-party code,
-            # so remove any existing warning-enabling flags like -Wall.
-            'cflags!': [
-              '-Wall',
-              '-Wextra',
-            ],
+            # Remove -Wextra for third-party code.
+            'cflags!': [ '-Wextra' ],
             'cflags_cc': [
               # Don't warn about hash_map in third-party code.
               '-Wno-deprecated',
             ],
-            'cflags': [
-              # Don't warn about printf format problems.
-              # This is off by default in gcc but on in Ubuntu's gcc(!).
-              '-Wno-format',
-            ],
-            'cflags_cc!': [
-              # Necessary because llvm.org/PR10448 is WONTFIX (crbug.com/90453).
-              '-Wsign-compare',
-            ]
+          }],
+          [ 'os_posix==1 and clang!=1 and OS!="mac" and OS!="ios"', {
+            # When we don't control the compiler, don't use -Wall for
+            # third-party code either.
+            'cflags!': [ '-Wall' ],
           }],
           # TODO: Fix all warnings on chromeos too.
           [ 'os_posix==1 and OS!="mac" and OS!="ios" and (clang!=1 or chromeos==1)', {
             'cflags!': [
               '-Werror',
-            ],
-          }],
-          [ 'os_posix==1 and os_bsd!=1 and OS!="mac" and OS!="android"', {
-            'cflags': [
-              # Don't warn about ignoring the return value from e.g. close().
-              # This is off by default in some gccs but on by default in others.
-              # BSD systems do not support this option, since they are usually
-              # using gcc 4.2.1, which does not have this flag yet.
-              '-Wno-unused-result',
             ],
           }],
           [ 'OS=="win"', {
@@ -3162,6 +3166,7 @@
               '_SCL_SECURE_NO_DEPRECATE',
             ],
             'msvs_disabled_warnings': [
+              # forcing value to bool 'true' or 'false' (performance warning)
               4800,
             ],
             'msvs_settings': {
@@ -3188,7 +3193,7 @@
 
           [ 'OS=="mac" or OS=="ios"', {
             'xcode_settings': {
-              'WARNING_CFLAGS!': ['-Wall', '-Wextra'],
+              'WARNING_CFLAGS!': ['-Wextra'],
             },
             'conditions': [
               ['buildtype=="Official"', {
@@ -3200,10 +3205,6 @@
           }],
           [ 'OS=="ios"', {
             'xcode_settings': {
-              # TODO(ios): Fix remaining warnings in third-party code, then
-              # remove this; the Mac cleanup didn't get everything that's
-              # flagged in an iOS build.
-              'GCC_TREAT_WARNINGS_AS_ERRORS': 'NO',
               'RUN_CLANG_STATIC_ANALYZER': 'NO',
               # Several internal ios directories generate numerous warnings for
               # -Wobjc-missing-property-synthesis.
@@ -3420,6 +3421,16 @@
             'PreprocessorDefinitions': ['_DEBUG'],
           },
         },
+        'variables': {
+          'clang_warning_flags': [
+            # Allow comparing the address of references and 'this' against 0
+            # in debug builds. Technically, these can never be null in
+            # well-defined C/C++ and Clang can optimize such checks away in
+            # release builds, but they may be used in asserts in debug builds.
+            '-Wno-undefined-bool-conversion',
+            '-Wno-tautological-undefined-compare',
+          ],
+        },
         'conditions': [
           ['OS=="linux" or OS=="android"', {
             'target_conditions': [
@@ -3441,30 +3452,6 @@
               'OTHER_CFLAGS': [
                 '-fstack-protector-all',  # Implies -fstack-protector
               ],
-            },
-          }],
-          ['clang==1', {
-            'cflags': [
-              # Allow comparing the address of references and 'this' against 0
-              # in debug builds. Technically, these can never be null in
-              # well-defined C/C++ and Clang can optimize such checks away in
-              # release builds, but they may be used in asserts in debug builds.
-              '-Wno-undefined-bool-conversion',
-              '-Wno-tautological-undefined-compare',
-            ],
-            'xcode_settings': {
-              'OTHER_CFLAGS': [
-                '-Wno-undefined-bool-conversion',
-                '-Wno-tautological-undefined-compare',
-              ],
-            },
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'AdditionalOptions': [
-                  '-Wno-undefined-bool-conversion',
-                  '-Wno-tautological-undefined-compare',
-                ],
-              },
             },
           }],
         ],
@@ -3599,6 +3586,11 @@
               'NS_BLOCK_ASSERTIONS=1',
             ],
           }],
+          # Force disable blink assertions on Cast device builds (overriding DCHECK_ALWAYS_ON)
+          # Only defined for Release builds (NDEBUG), otherwise blink won't compile.
+          ['chromecast==1 and OS=="linux" and is_cast_desktop_build==0', {
+            'defines': ['ENABLE_ASSERT=0'],
+          }],
         ],
       },
       #
@@ -3701,6 +3693,10 @@
         'variables': {
           'werror%': '-Werror',
           'libraries_for_target%': '',
+          'conditions' : [
+            # Enable -Wextra for chromium_code when we control the compiler.
+            ['clang==1', { 'wextra': '-Wextra' }, { 'wextra': '-Wno-extra' }],
+          ],
         },
         'defines': [
           '_FILE_OFFSET_BITS=64',
@@ -3710,6 +3706,7 @@
           '-pthread',
           '-fno-strict-aliasing',  # See http://crbug.com/32204
           '-Wall',
+          '<(wextra)',
           # Don't warn about unused function params.  We use those everywhere.
           '-Wno-unused-parameter',
           # Don't warn about the "struct foo f = {0};" initialization pattern.
@@ -3726,9 +3723,6 @@
           # Make inline functions have hidden visiblity by default.
           # Surprisingly, not covered by -fvisibility=hidden.
           '-fvisibility-inlines-hidden',
-          # GCC turns on -Wsign-compare for C++ under -Wall, but clang doesn't,
-          # so we specify it explicitly.  (llvm.org/PR10448, crbug.com/90453)
-          '-Wsign-compare',
         ],
         'ldflags': [
           '-pthread', '-Wl,-z,noexecstack',
@@ -4140,7 +4134,7 @@
                       '-g',
                     ],
                     'ldflags': [
-                      # We want to statically link libstdc++/libgcc_s.
+                      # We want to statically link libstdc++/libgcc.
                       '-static-libstdc++',
                       '-static-libgcc',
                     ],
@@ -4151,6 +4145,34 @@
                       # '-mcpu=cortex-a9'). Remove these flags explicitly.
                       '-march=armv7-a',
                       '-mtune=cortex-a8',
+                    ],
+                    'target_conditions': [
+                      [ '_type=="executable" and OS!="android"', {
+                        # Statically link whole libstdc++ and libgcc in
+                        # executables to ensure only one copy at runtime.
+                        'ldflags': [
+                          # Note executables also get -static-stdlibc++/libgcc.
+                          # Despite including libstdc++/libgcc archives, we
+                          # still need to specify static linking for them in
+                          # order to prevent the executable from having a
+                          # dynamic dependency on them.
+
+                          # Export stdlibc++ and libgcc symbols to force shlibs
+                          # to refer to these symbols from the executable.
+                          '-Wl,--export-dynamic',
+
+                          '-lm', # stdlibc++ requires math.h
+
+                          # In case we redefined stdlibc++ symbols
+                          # (e.g. tc_malloc)
+                          '-Wl,--allow-multiple-definition',
+
+                          '-Wl,--whole-archive',
+                          '-l:libstdc++.a',
+                          '-l:libgcc.a',
+                          '-Wl,--no-whole-archive',
+                        ],
+                      }]
                     ],
                   }],
                 ],
@@ -4229,9 +4251,15 @@
                       # Clang does not support the following options.
                       '-finline-limit=64',
                     ],
-                    'cflags': [
-                      # TODO(gordanac) Enable integrated-as.
-                      '-no-integrated-as',
+                    # TODO(gordanac) Enable integrated-as.
+                    'cflags': [ '-fno-integrated-as' ],
+                    'conditions': [
+                      ['OS=="android"', {
+                        'cflags': [
+                          # Else /usr/bin/as gets picked up.
+                          '-B<(android_toolchain)',
+                        ],
+                      }],
                     ],
                   }],
                   ['clang==1 and OS=="android"', {
@@ -4548,13 +4576,9 @@
                   '-fsanitize=memory',
                   '-fsanitize-memory-track-origins=<(msan_track_origins)',
                   '-fsanitize-blacklist=<(msan_blacklist)',
-                  # TODO(eugenis): Remove when msan migrates to new ABI (crbug.com/560589).
-                  '-fPIC',
                 ],
                 'ldflags': [
                   '-fsanitize=memory',
-                  # TODO(eugenis): Remove when msan migrates to new ABI (crbug.com/560589).
-                  '-pie',
                 ],
                 'defines': [
                   'MEMORY_SANITIZER',
@@ -5045,7 +5069,6 @@
           'USE_HEADERMAP': 'NO',
           'WARNING_CFLAGS': [
             '-Wall',
-            '-Wendif-labels',
             '-Wextra',
             # Don't warn about unused function parameters.
             '-Wno-unused-parameter',
@@ -5632,7 +5655,7 @@
             # it's enabled. This will generally only be true for system-level
             # installed Express users.
             'msvs_disabled_warnings': [
-              4702,
+              4702, # unreachable code
             ],
           }],
         ],
@@ -5703,7 +5726,6 @@
           4100, # Unreferenced formal parameter
           4121, # Alignment of a member was sensitive to packing
           4244, # Conversion from 'type1' to 'type2', possible loss of data
-          4481, # Nonstandard extension used: override specifier 'keyword'
           4505, # Unreferenced local function has been removed
           4510, # Default constructor could not be generated
           4512, # Assignment operator could not be generated
@@ -5716,6 +5738,10 @@
           # should work through these at some point -- they may be removed from
           # the RTM release in the /W4 set.
           4456, 4457, 4458, 4459,
+
+          # TODO(brucedawson): http://crbug.com/554200 4312 is a VS
+          # 2015 64-bit warning for integer to larger pointer
+          4312,
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -5800,6 +5826,13 @@
             ['clang==1', {
               'VCCLCompilerTool': {
                 'AdditionalOptions': [
+                  # Don't warn about unused function parameters.
+                  # (This is also used on other platforms.)
+                  '-Wno-unused-parameter',
+                  # Don't warn about the "struct foo f = {0};" initialization
+                  # pattern.
+                  '-Wno-missing-field-initializers',
+
                   # Many files use intrinsics without including this header.
                   # TODO(hans): Fix those files, or move this to sub-GYPs.
                   '/FIIntrin.h',
@@ -5809,10 +5842,6 @@
                   '-Wno-microsoft-enum-value',  # http://crbug.com/505296
                   '-Wno-unknown-pragmas',  # http://crbug.com/505314
                   '-Wno-microsoft-cast',  # http://crbug.com/550065
-                  # Disable unused-value (crbug.com/505318) except
-                  # -Wunused-result.
-                  '-Wno-unused-value',
-                  '-Wunused-result',
                 ],
               },
             }],
@@ -6317,6 +6346,7 @@
       # configured SDK to show properly in the Xcode UI, SDKROOT must be set
       # here at the project level.
       ['OS=="mac"', {
+        'ARCHS': [ 'x86_64' ],
         'conditions': [
           ['mac_sdk_path==""', {
             'SDKROOT': 'macosx<(mac_sdk)',  # -isysroot
@@ -6326,6 +6356,8 @@
         ],
       }],
       ['OS=="ios"', {
+        # Target both iPhone and iPad.
+        'TARGETED_DEVICE_FAMILY': '1,2',
         'conditions': [
           ['ios_sdk_path==""', {
             'conditions': [
@@ -6338,23 +6370,6 @@
             ],
           }, {
             'SDKROOT': '<(ios_sdk_path)',  # -isysroot
-          }],
-        ],
-      }],
-      ['OS=="ios"', {
-        # Target both iPhone and iPad.
-        'TARGETED_DEVICE_FAMILY': '1,2',
-      }, {  # OS!="ios"
-        'conditions': [
-          ['target_arch=="x64"', {
-            'ARCHS': [
-              'x86_64'
-            ],
-          }],
-          ['target_arch=="ia32"', {
-            'ARCHS': [
-              'i386'
-            ],
           }],
         ],
       }],

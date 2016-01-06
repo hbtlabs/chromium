@@ -4,8 +4,11 @@
 
 #include "chrome/browser/chromeos/file_system_provider/operations/get_metadata.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "chrome/common/extensions/api/file_system_provider.h"
 #include "chrome/common/extensions/api/file_system_provider_internal.h"
@@ -38,7 +41,8 @@ bool ConvertRequestValueToFileInfo(scoped_ptr<RequestValue> value,
     output->is_directory.reset(new bool(*params->metadata.is_directory));
 
   if (fields & ProvidedFileSystemInterface::METADATA_FIELD_SIZE)
-    output->size.reset(new int64(static_cast<int64>(*params->metadata.size)));
+    output->size.reset(
+        new int64_t(static_cast<int64_t>(*params->metadata.size)));
 
   if (fields & ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME) {
     std::string input_modification_time;
@@ -174,7 +178,7 @@ void GetMetadata::OnSuccess(int /* request_id */,
                             bool has_more) {
   scoped_ptr<EntryMetadata> metadata(new EntryMetadata);
   const bool convert_result = ConvertRequestValueToFileInfo(
-      result.Pass(), fields_,
+      std::move(result), fields_,
       entry_path_.AsUTF8Unsafe() == FILE_PATH_LITERAL("/"), metadata.get());
 
   if (!convert_result) {
@@ -184,7 +188,7 @@ void GetMetadata::OnSuccess(int /* request_id */,
     return;
   }
 
-  callback_.Run(metadata.Pass(), base::File::FILE_OK);
+  callback_.Run(std::move(metadata), base::File::FILE_OK);
 }
 
 void GetMetadata::OnError(int /* request_id */,

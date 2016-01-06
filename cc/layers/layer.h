@@ -5,11 +5,15 @@
 #ifndef CC_LAYERS_LAYER_H_
 #define CC_LAYERS_LAYER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "cc/animation/layer_animation_controller.h"
@@ -351,6 +355,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
   virtual bool DrawsContent() const;
 
   // This methods typically need to be overwritten by derived classes.
+  // TODO(chrishtr): Blink no longer resizes anything during paint. We can
+  // remove this.
   virtual void SavePaintProperties();
   // Returns true iff anything was updated that needs to be committed.
   virtual bool Update();
@@ -411,6 +417,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
   void PauseAnimation(int animation_id, double time_offset);
   void RemoveAnimation(int animation_id);
   void RemoveAnimation(int animation_id, Animation::TargetProperty property);
+  void AbortAnimation(int animation_id);
   LayerAnimationController* layer_animation_controller() const {
     return layer_animation_controller_.get();
   }
@@ -519,6 +526,10 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
   const gfx::Rect& clip_rect() const { return clip_rect_; }
   void set_clip_rect(const gfx::Rect& rect) { clip_rect_ = rect; }
 
+  // This should only be called during BeginMainFrame since it does not trigger
+  // a Commit. This is called right after property tree being built and should
+  // not trigger property tree rebuild.
+  void SetHasRenderSurface(bool has_render_surface);
   bool has_render_surface() const {
     return has_render_surface_;
   }
@@ -542,12 +553,24 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
     return num_layer_or_descendants_with_copy_request_;
   }
 
+  void SetElementId(uint64_t id);
+  uint64_t element_id() const { return element_id_; }
+
+  void SetMutableProperties(uint32_t properties);
+  uint32_t mutable_properties() const { return mutable_properties_; }
+
   void set_visited(bool visited);
   bool visited();
   void set_layer_or_descendant_is_drawn(bool layer_or_descendant_is_drawn);
   bool layer_or_descendant_is_drawn();
   void set_sorted_for_recursion(bool sorted_for_recursion);
   bool sorted_for_recursion();
+  void set_is_hidden_from_property_trees(bool is_hidden) {
+    if (is_hidden == is_hidden_from_property_trees_)
+      return;
+    is_hidden_from_property_trees_ = is_hidden;
+    SetNeedsPushProperties();
+  }
 
   // LayerAnimationValueProvider implementation.
   gfx::ScrollOffset ScrollOffsetForAnimation() const override;
@@ -611,7 +634,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
   // |needs_push_properties_| or |num_dependents_need_push_properties_| as they
   // are dealt with at a higher level. This is only called if
   // |needs_push_properties_| is set. For descendants of Layer, implementations
-  // must first call their parent class.
+  // must first call their parent class. This method is not marked as const
+  // as some implementations need reset member fields, similarly to
+  // PushPropertiesTo().
   virtual void LayerSpecificPropertiesToProto(proto::LayerProperties* proto);
 
   // Deserialize all the necessary properties from proto::LayerProperties into
@@ -657,13 +682,11 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
 
  private:
   friend class base::RefCounted<Layer>;
+  friend class LayerSerializationTest;
   friend class LayerTreeHostCommon;
+
   void SetParent(Layer* layer);
   bool DescendantIsFixedToContainerLayer() const;
-
-  // This should only be called during BeginMainFrame since it does not
-  // trigger a Commit.
-  void SetHasRenderSurface(bool has_render_surface);
 
   // This should only be called from RemoveFromParent().
   void RemoveChildOrDependent(Layer* child);
@@ -707,6 +730,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
   int clip_tree_index_;
   int property_tree_sequence_number_;
   int num_layer_or_descendants_with_copy_request_;
+  uint64_t element_id_;
+  uint32_t mutable_properties_;
   gfx::Vector2dF offset_to_transform_parent_;
   bool should_flatten_transform_from_property_tree_ : 1;
   bool should_scroll_on_main_thread_ : 1;
@@ -775,6 +800,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer>,
 
   std::vector<FrameTimingRequest> frame_timing_requests_;
   bool frame_timing_requests_dirty_;
+  bool is_hidden_from_property_trees_;
 
   DISALLOW_COPY_AND_ASSIGN(Layer);
 };

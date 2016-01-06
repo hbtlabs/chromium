@@ -47,7 +47,7 @@ ModelTypeProcessorProxy::~ModelTypeProcessorProxy() {}
 void ModelTypeProcessorProxy::OnConnect(scoped_ptr<CommitQueue> worker) {
   processor_task_runner_->PostTask(
       FROM_HERE, base::Bind(&ModelTypeProcessor::OnConnect, processor_,
-                            base::Passed(worker.Pass())));
+                            base::Passed(std::move(worker))));
 }
 
 void ModelTypeProcessorProxy::OnCommitCompleted(
@@ -100,7 +100,7 @@ void SharedModelTypeProcessor::Start(StartCallback callback) {
       new ModelTypeProcessorProxy(weak_ptr_factory_for_sync_.GetWeakPtr(),
                                   base::ThreadTaskRunnerHandle::Get()));
 
-  callback.Run(syncer::SyncError(), activation_context.Pass());
+  callback.Run(syncer::SyncError(), std::move(activation_context));
 }
 
 bool SharedModelTypeProcessor::IsEnabled() const {
@@ -143,22 +143,29 @@ void SharedModelTypeProcessor::OnConnect(scoped_ptr<CommitQueue> worker) {
   DVLOG(1) << "Successfully connected " << ModelTypeToString(type_);
 
   is_connected_ = true;
-  worker_ = worker.Pass();
+  worker_ = std::move(worker);
 
   FlushPendingCommitRequests();
 }
 
 void SharedModelTypeProcessor::Put(const std::string& client_tag,
-                                   const std::string& non_unique_name,
-                                   const sync_pb::EntitySpecifics& specifics,
+                                   scoped_ptr<EntityData> entity_data,
                                    MetadataChangeList* metadata_change_list) {
-  // TODO(skym): Update for new approach. Different objects, different caching,
-  // different loopups, metadata_change_list, etc.
+  // TODO(skym): Add metadata to persist to MetadataChangeList, crbug/569636.
 
-  DCHECK_EQ(type_, syncer::GetModelTypeFromSpecifics(specifics));
+  DCHECK(entity_data.get());
+  DCHECK(!entity_data->is_deleted());
+  DCHECK(!entity_data->non_unique_name.empty());
+  DCHECK_EQ(type_, syncer::GetModelTypeFromSpecifics(entity_data->specifics));
 
+  // If the service specified an overriding hash, use that, otherwise generate
+  // one from the tag. TODO(skym): This behavior should be delayed, once
+  // crbug/561818 is fixed we will only perform this logic in the create case.
   const std::string client_tag_hash(
-      syncer::syncable::GenerateSyncableHash(type_, client_tag));
+      entity_data->client_tag_hash.empty()
+          ? syncer::syncable::GenerateSyncableHash(type_, client_tag)
+          : entity_data->client_tag_hash);
+
   base::Time now = base::Time::Now();
 
   ModelTypeEntity* entity = nullptr;
@@ -166,28 +173,30 @@ void SharedModelTypeProcessor::Put(const std::string& client_tag,
   // client_tag_hash.
   EntityMap::const_iterator it = entities_.find(client_tag_hash);
   if (it == entities_.end()) {
-    scoped_ptr<ModelTypeEntity> scoped_entity =
-        ModelTypeEntity::CreateNew(client_tag, client_tag_hash, "", now);
+    // The service is creating a new entity.
+    scoped_ptr<ModelTypeEntity> scoped_entity = ModelTypeEntity::CreateNew(
+        client_tag, client_tag_hash, entity_data->id, now);
     entity = scoped_entity.get();
     entities_.insert(
         std::make_pair(client_tag_hash, std::move(scoped_entity)));
   } else {
+    // The service is updating an existing entity.
     entity = it->second.get();
   }
 
-  entity->MakeLocalChange(non_unique_name, specifics, now);
+  entity->MakeLocalChange(std::move(entity_data), now);
   FlushPendingCommitRequests();
 }
 
 void SharedModelTypeProcessor::Delete(
     const std::string& client_key,
     MetadataChangeList* metadata_change_list) {
-  // TODO(skym): Update for new approach. Different caching, different lookup,
-  // metadata changes.
+  // TODO(skym): Add metadata to persist to MetadataChangeList, crbug/569636.
 
   const std::string client_tag_hash(
       syncer::syncable::GenerateSyncableHash(type_, client_key));
 
+  // TODO(skym): crbug/561818: Search by client_tag rather than client_tag_hash.
   EntityMap::const_iterator it = entities_.find(client_tag_hash);
   if (it == entities_.end()) {
     // That's unusual, but not necessarily a bad thing.

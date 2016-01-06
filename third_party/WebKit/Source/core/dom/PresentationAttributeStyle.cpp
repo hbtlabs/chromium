@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/dom/PresentationAttributeStyle.h"
 
 #include "core/css/StylePropertySet.h"
@@ -39,6 +38,7 @@
 #include "wtf/HashFunctions.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/CString.h"
+#include <algorithm>
 
 namespace blink {
 

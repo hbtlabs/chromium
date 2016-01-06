@@ -4,13 +4,16 @@
 
 #include "media/base/key_systems.h"
 
+#include <stddef.h>
 
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/base/key_system_info.h"
 #include "media/base/key_systems_support_uma.h"
 #include "media/base/media_client.h"
@@ -188,11 +191,10 @@ class KeySystemsImpl : public KeySystems {
   std::string GetPepperType(const std::string& concrete_key_system) const;
 #endif
 
-  void AddContainerMask(const std::string& container, uint32 mask);
-  void AddCodecMask(
-      EmeMediaType media_type,
-      const std::string& codec,
-      uint32 mask);
+  void AddContainerMask(const std::string& container, uint32_t mask);
+  void AddCodecMask(EmeMediaType media_type,
+                    const std::string& codec,
+                    uint32_t mask);
 
   // Implementation of KeySystems interface.
   bool IsSupportedKeySystem(const std::string& key_system) const override;
@@ -636,18 +638,16 @@ std::string KeySystemsImpl::GetPepperType(
 }
 #endif
 
-void KeySystemsImpl::AddContainerMask(
-    const std::string& container,
-    uint32 mask) {
+void KeySystemsImpl::AddContainerMask(const std::string& container,
+                                      uint32_t mask) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!container_to_codec_mask_map_.count(container));
   container_to_codec_mask_map_[container] = static_cast<EmeCodec>(mask);
 }
 
-void KeySystemsImpl::AddCodecMask(
-    EmeMediaType media_type,
-    const std::string& codec,
-    uint32 mask) {
+void KeySystemsImpl::AddCodecMask(EmeMediaType media_type,
+                                  const std::string& codec,
+                                  uint32_t mask) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!codec_string_map_.count(codec));
   codec_string_map_[codec] = static_cast<EmeCodec>(mask);
@@ -925,14 +925,14 @@ std::string GetPepperType(const std::string& concrete_key_system) {
 // "media" where "UNIT_TEST" is not defined. So we need to specify
 // "MEDIA_EXPORT" here again so that they are visible to tests.
 
-MEDIA_EXPORT void AddContainerMask(const std::string& container, uint32 mask) {
+MEDIA_EXPORT void AddContainerMask(const std::string& container,
+                                   uint32_t mask) {
   KeySystemsImpl::GetInstance()->AddContainerMask(container, mask);
 }
 
-MEDIA_EXPORT void AddCodecMask(
-    EmeMediaType media_type,
-    const std::string& codec,
-    uint32 mask) {
+MEDIA_EXPORT void AddCodecMask(EmeMediaType media_type,
+                               const std::string& codec,
+                               uint32_t mask) {
   KeySystemsImpl::GetInstance()->AddCodecMask(media_type, codec, mask);
 }
 

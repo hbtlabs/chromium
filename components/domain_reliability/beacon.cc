@@ -4,6 +4,8 @@
 
 #include "components/domain_reliability/beacon.h"
 
+#include <utility>
+
 #include "base/values.h"
 #include "components/domain_reliability/util.h"
 #include "net/base/net_errors.h"
@@ -26,6 +28,8 @@ scoped_ptr<Value> DomainReliabilityBeacon::ToValue(
   GURL sanitized_url = SanitizeURLForReport(url, collector_url, path_prefixes);
   beacon_value->SetString("url", sanitized_url.spec());
   beacon_value->SetString("status", status);
+  if (!quic_error.empty())
+    beacon_value->SetString("quic_error", quic_error);
   if (chrome_error != net::OK) {
     DictionaryValue* failure_value = new DictionaryValue();
     failure_value->SetString("custom_error",
@@ -35,6 +39,8 @@ scoped_ptr<Value> DomainReliabilityBeacon::ToValue(
   beacon_value->SetString("server_ip", server_ip);
   beacon_value->SetBoolean("was_proxied", was_proxied);
   beacon_value->SetString("protocol", protocol);
+  if (details.quic_broken)
+    beacon_value->SetBoolean("quic_broken", details.quic_broken);
   if (http_response_code >= 0)
     beacon_value->SetInteger("http_response_code", http_response_code);
   beacon_value->SetInteger("request_elapsed_ms", elapsed.InMilliseconds());
@@ -42,7 +48,8 @@ scoped_ptr<Value> DomainReliabilityBeacon::ToValue(
   beacon_value->SetInteger("request_age_ms", request_age.InMilliseconds());
   bool network_changed = last_network_change_time > start_time;
   beacon_value->SetBoolean("network_changed", network_changed);
-  return beacon_value.Pass();
+  beacon_value->SetDouble("sample_rate", sample_rate);
+  return std::move(beacon_value);
 }
 
 }  // namespace domain_reliability

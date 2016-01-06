@@ -6,7 +6,8 @@
 
 #include <algorithm>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "content/public/common/url_constants.h"
 #include "url/url_util.h"
@@ -251,8 +252,6 @@ const char kChromeUIUberFrameHost[] = "uber-frame";
 const char kChromeUIUberHost[] = "chrome";
 const char kChromeUIUserActionsHost[] = "user-actions";
 const char kChromeUIVersionHost[] = "version";
-const char kChromeUIWebRTCDeviceProviderHost[] =
-    "webrtc-device-provider";
 const char kChromeUIWorkersHost[] = "workers";
 
 const char kChromeUIThemePath[] = "theme";
@@ -346,6 +345,7 @@ const char kImportDataSubPage[] = "importData";
 const char kLanguageOptionsSubPage[] = "languages";
 const char kManageProfileSubPage[] = "manageProfile";
 const char kPasswordManagerSubPage[] = "passwords";
+const char kPowerOptionsSubPage[] = "power-overlay";
 const char kResetProfileSettingsSubPage[] = "resetProfileSettings";
 const char kSearchEnginesSubPage[] = "searchEngines";
 const char kSearchSubPage[] = "search";
@@ -602,6 +602,7 @@ const char* const kChromeHostURLs[] = {
   kChromeUIDeviceLogHost,
   kChromeUIDNSHost,
   kChromeUIFlagsHost,
+  kChromeUIGCMInternalsHost,
   kChromeUIHistoryHost,
   kChromeUIInvalidationsHost,
   kChromeUILocalStateHost,
@@ -641,7 +642,6 @@ const char* const kChromeHostURLs[] = {
   kChromeUIBookmarksHost,
   kChromeUIDownloadsHost,
   kChromeUIFlashHost,
-  kChromeUIGCMInternalsHost,
   kChromeUIHelpHost,
   kChromeUIInspectHost,
   kChromeUIPluginsHost,
@@ -745,6 +745,11 @@ const char kLanguageSettingsLearnMoreUrl[] =
     "https://support.google.com/chromebook/answer/1059490";
 #else
     "https://support.google.com/chrome/topic/1678461";
+#endif
+
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
+const char kLinuxWheezyPreciseDeprecationURL[] =
+    "https://support.google.com/chrome/answer/95346";
 #endif
 
 #if defined(OS_MACOSX)

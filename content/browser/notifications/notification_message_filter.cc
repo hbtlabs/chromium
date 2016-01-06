@@ -4,6 +4,8 @@
 
 #include "content/browser/notifications/notification_message_filter.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/notifications/page_notification_delegate.h"
@@ -126,7 +128,7 @@ void NotificationMessageFilter::OnShowPlatformNotification(
   base::Closure close_closure;
   service->DisplayNotification(browser_context_, origin, icon,
                                SanitizeNotificationData(notification_data),
-                               delegate.Pass(), &close_closure);
+                               std::move(delegate), &close_closure);
 
   if (!close_closure.is_null())
     close_closures_[notification_id] = close_closure;
@@ -134,7 +136,7 @@ void NotificationMessageFilter::OnShowPlatformNotification(
 
 void NotificationMessageFilter::OnShowPersistentNotification(
     int request_id,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const GURL& origin,
     const SkBitmap& icon,
     const PlatformNotificationData& notification_data) {

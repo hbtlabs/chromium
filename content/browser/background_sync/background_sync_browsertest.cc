@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
@@ -79,7 +82,7 @@ void OneShotPendingDidGetSWRegistration(
     ServiceWorkerStatusCode status,
     const scoped_refptr<ServiceWorkerRegistration>& registration) {
   ASSERT_EQ(SERVICE_WORKER_OK, status);
-  int64 service_worker_id = registration->id();
+  int64_t service_worker_id = registration->id();
   BackgroundSyncManager* sync_manager = sync_context->background_sync_manager();
   sync_manager->GetRegistration(
       service_worker_id, tag, SYNC_ONE_SHOT,
@@ -92,7 +95,7 @@ void OneShotPendingOnIOThread(
     const std::string& tag,
     const GURL& url,
     const base::Callback<void(bool)>& callback) {
-  sw_context->FindRegistrationForDocument(
+  sw_context->FindReadyRegistrationForDocument(
       url, base::Bind(&OneShotPendingDidGetSWRegistration, sync_context, tag,
                       callback));
 }
@@ -102,7 +105,7 @@ void SetMaxSyncAttemptsOnIOThread(
     int max_sync_attempts) {
   BackgroundSyncManager* background_sync_manager =
       sync_context->background_sync_manager();
-  background_sync_manager->set_max_sync_attempts(max_sync_attempts);
+  background_sync_manager->SetMaxSyncAttemptsForTesting(max_sync_attempts);
 }
 
 }  // namespace
@@ -244,9 +247,10 @@ void BackgroundSyncBrowserTest::ClearStoragePartitionData() {
   // for service workers, for all origins, for an unbounded time range.
   StoragePartition* storage = GetStorage();
 
-  uint32 storage_partition_mask =
+  uint32_t storage_partition_mask =
       StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS;
-  uint32 quota_storage_mask = StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL;
+  uint32_t quota_storage_mask =
+      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL;
   const GURL& delete_origin = GURL();
   const base::Time delete_begin = base::Time();
   base::Time delete_end = base::Time::Max();
@@ -355,9 +359,17 @@ bool BackgroundSyncBrowserTest::RejectDelayedOneShot() {
   return script_result == BuildExpectedResult("delay", "rejecting");
 }
 
-IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, OneShotFires) {
+IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, OneShotFiresControlled) {
   EXPECT_TRUE(RegisterServiceWorker());
   EXPECT_TRUE(LoadTestPage(kDefaultTestURL));  // Control the page.
+
+  EXPECT_TRUE(RegisterOneShot("foo"));
+  EXPECT_TRUE(PopConsole("foo fired"));
+  EXPECT_FALSE(GetRegistrationOneShot("foo"));
+}
+
+IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, OneShotFiresUncontrolled) {
+  EXPECT_TRUE(RegisterServiceWorker());
 
   EXPECT_TRUE(RegisterOneShot("foo"));
   EXPECT_TRUE(PopConsole("foo fired"));
@@ -446,7 +458,6 @@ IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, Incognito) {
 
   EXPECT_TRUE(LoadTestPage(kDefaultTestURL));
   EXPECT_TRUE(RegisterServiceWorker());
-  EXPECT_TRUE(LoadTestPage(kDefaultTestURL));  // Control the page.
 
   EXPECT_FALSE(GetRegistrationOneShot("normal"));
 

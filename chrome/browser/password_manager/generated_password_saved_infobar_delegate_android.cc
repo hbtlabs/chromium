@@ -4,7 +4,7 @@
 
 #include "chrome/browser/password_manager/generated_password_saved_infobar_delegate_android.h"
 
-#include <cstddef>
+#include <stddef.h>
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/chrome_application.h"
@@ -63,6 +63,11 @@ GeneratedPasswordSavedInfoBarDelegateAndroid::
 infobars::InfoBarDelegate::Type
 GeneratedPasswordSavedInfoBarDelegateAndroid::GetInfoBarType() const {
   return PAGE_ACTION_TYPE;
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+GeneratedPasswordSavedInfoBarDelegateAndroid::GetIdentifier() const {
+  return GENERATED_PASSWORD_SAVED_INFOBAR_DELEGATE_ANDROID;
 }
 
 int GeneratedPasswordSavedInfoBarDelegateAndroid::GetIconId() const {

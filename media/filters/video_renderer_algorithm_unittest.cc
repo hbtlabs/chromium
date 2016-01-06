@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cmath>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/timestamp_constants.h"
@@ -1139,7 +1143,8 @@ TEST_F(VideoRendererAlgorithmTest, RemoveExpiredFramesCadence) {
   EXPECT_EQ(0u, algorithm_.EffectiveFramesQueued());
 }
 
-TEST_F(VideoRendererAlgorithmTest, CadenceBasedTest) {
+// TODO(crbug.com/570032): Test disabled for being flaky.
+TEST_F(VideoRendererAlgorithmTest, DISABLED_CadenceBasedTest) {
   // Common display rates.
   const double kDisplayRates[] = {
       NTSC(24),

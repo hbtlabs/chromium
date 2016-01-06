@@ -4,6 +4,8 @@
 
 #include "cc/trees/occlusion_tracker.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "cc/base/math_util.h"
@@ -163,11 +165,6 @@ void OcclusionTracker::EnterRenderTarget(const LayerImpl* new_target) {
           gfx::Rect(), old_target_to_new_target_transform));
 }
 
-static bool LayerIsHidden(const LayerImpl* layer) {
-  return layer->hide_layer_and_subtree() ||
-         (layer->parent() && LayerIsHidden(layer->parent()));
-}
-
 void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // Make sure we know about the target surface.
   EnterRenderTarget(finished_target);
@@ -177,7 +174,7 @@ void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // Readbacks always happen on render targets so we only need to check
   // for readbacks here.
   bool target_is_only_for_copy_request =
-      finished_target->HasCopyRequest() && LayerIsHidden(finished_target);
+      finished_target->HasCopyRequest() && finished_target->LayerIsHidden();
 
   // If the occlusion within the surface can not be applied to things outside of
   // the surface's subtree, then clear the occlusion here so it won't be used.

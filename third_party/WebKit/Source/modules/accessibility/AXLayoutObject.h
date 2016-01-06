@@ -56,13 +56,11 @@ public:
     // Public, overridden from AXObject.
     LayoutObject* layoutObject() const final { return m_layoutObject; }
     LayoutRect elementRect() const override;
-
-    void setLayoutObject(LayoutObject*);
     LayoutBoxModelObject* layoutBoxModelObject() const;
-    Document* topDocument() const;
     bool shouldNotifyActiveDescendant() const;
     ScrollableArea* getScrollableAreaIfScrollable() const final;
     AccessibilityRole determineAccessibilityRole() override;
+    AccessibilityRole nativeAccessibilityRoleIgnoringAria() const override;
     void checkCachedElementRect() const;
     void updateCachedElementRect() const;
 
@@ -167,7 +165,7 @@ protected:
 
     // Low-level accessibility tree exploration, only for use within the accessibility module.
     AXObject* rawFirstChild() const override;
-    AXObject* rawFirstSibling() const override;
+    AXObject* rawNextSibling() const override;
     void addChildren() override;
     bool canHaveChildren() const override;
     void updateChildrenIfNecessary() override;
@@ -199,7 +197,6 @@ protected:
 
 private:
     AXObject* treeAncestorDisallowingChild() const;
-    bool nodeIsTextControl(const Node*) const;
     bool isTabItemSelected() const;
     bool isValidSelectionBound(const AXObject*) const;
     AXObject* accessibilityImageMapHitTest(HTMLAreaElement*, const IntPoint&) const;

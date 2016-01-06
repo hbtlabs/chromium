@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_VIEW_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/prefs/pref_member.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/ssl/security_state_model.h"
@@ -31,7 +34,6 @@ class ActionBoxButtonView;
 class CommandUpdater;
 class ContentSettingBubbleModelDelegate;
 class ContentSettingImageView;
-class EVBubbleView;
 class ExtensionAction;
 class GURL;
 class InstantController;
@@ -403,11 +405,9 @@ class LocationBarView : public LocationBar,
   // Object used to paint the border. Not used for material design.
   scoped_ptr<views::Painter> border_painter_;
 
-  // An icon to the left of the edit field.
+  // An icon to the left of the edit field: the HTTPS lock, blank page icon,
+  // search icon, EV HTTPS bubble, etc.
   LocationIconView* location_icon_view_;
-
-  // A bubble displayed for EV HTTPS sites.
-  EVBubbleView* ev_bubble_view_;
 
   // A view to show inline autocompletion when an IME is active.  In this case,
   // we shouldn't change the text or selection inside the OmniboxView itself,

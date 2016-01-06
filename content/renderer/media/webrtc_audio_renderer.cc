@@ -4,11 +4,15 @@
 
 #include "content/renderer/media/webrtc_audio_renderer.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "content/renderer/media/audio_device_factory.h"
+#include "content/renderer/media/media_stream_audio_track.h"
 #include "content/renderer/media/media_stream_dispatcher.h"
 #include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
@@ -417,7 +421,8 @@ media::OutputDeviceStatus WebRtcAudioRenderer::GetDeviceStatus() {
 }
 
 int WebRtcAudioRenderer::Render(media::AudioBus* audio_bus,
-                                int audio_delay_milliseconds) {
+                                uint32_t audio_delay_milliseconds,
+                                uint32_t frames_skipped) {
   DCHECK(audio_renderer_thread_checker_.CalledOnValidThread());
   base::AutoLock auto_lock(lock_);
   if (!source_)
@@ -426,7 +431,8 @@ int WebRtcAudioRenderer::Render(media::AudioBus* audio_bus,
   DVLOG(2) << "WebRtcAudioRenderer::Render()";
   DVLOG(2) << "audio_delay_milliseconds: " << audio_delay_milliseconds;
 
-  audio_delay_milliseconds_ = audio_delay_milliseconds;
+  DCHECK_LE(audio_delay_milliseconds, static_cast<uint32_t>(INT_MAX));
+  audio_delay_milliseconds_ = static_cast<int>(audio_delay_milliseconds);
 
   if (audio_fifo_)
     audio_fifo_->Consume(audio_bus, audio_bus->frames());
@@ -554,7 +560,7 @@ void WebRtcAudioRenderer::OnPlayStateChanged(
   media_stream.audioTracks(web_tracks);
 
   for (const blink::WebMediaStreamTrack& web_track : web_tracks) {
-    MediaStreamTrack* track = MediaStreamTrack::GetTrack(web_track);
+    MediaStreamAudioTrack* track = MediaStreamAudioTrack::GetTrack(web_track);
     // WebRtcAudioRenderer can only render audio tracks received from a remote
     // peer. Since the actual MediaStream is mutable from JavaScript, we need
     // to make sure |web_track| is actually a remote track.
@@ -648,7 +654,7 @@ void WebRtcAudioRenderer::PrepareSink() {
     sink_params_ = new_sink_params;
     fifo_delay_milliseconds_ = new_fifo_delay_milliseconds;
     if (new_audio_fifo.get())
-      audio_fifo_ = new_audio_fifo.Pass();
+      audio_fifo_ = std::move(new_audio_fifo);
   }
 
   sink_->Initialize(new_sink_params, this);

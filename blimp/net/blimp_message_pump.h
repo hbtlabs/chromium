@@ -31,8 +31,11 @@ class BLIMP_NET_EXPORT BlimpMessagePump {
 
   ~BlimpMessagePump();
 
-  // Sets the processor which will take BlimpMessages. Can only be set once.
+  // Sets the processor which will take BlimpMessages.
   // Caller retains the ownership of |processor|.
+  // The processor can be unset by passing a null pointer when no reads are
+  // inflight, ie. after |processor_|->ProcessMessage() is called, but before
+  // ProcessMessage() invokes its completion callback.
   void SetMessageProcessor(BlimpMessageProcessor* processor);
 
   void set_error_observer(ConnectionErrorObserver* observer) {
@@ -47,12 +50,18 @@ class BLIMP_NET_EXPORT BlimpMessagePump {
   void OnReadPacketComplete(int result);
 
   // Callback when |processor_| finishes processing a BlimpMessage.
+  // Any values other than net::OK indicate that |processor_| has encountered an
+  // error that should be handled. Currently all errors will cause the
+  // connection to be dropped; in the future we will need to add more
+  // sophisticated error handling logic here.
+  // TODO(kmarshall): Improve error handling.
   void OnProcessMessageComplete(int result);
 
   PacketReader* reader_;
-  ConnectionErrorObserver* error_observer_;
-  BlimpMessageProcessor* processor_;
+  ConnectionErrorObserver* error_observer_ = nullptr;
+  BlimpMessageProcessor* processor_ = nullptr;
   scoped_refptr<net::GrowableIOBuffer> buffer_;
+  bool read_inflight_ = false;
 
   // Cancelled in the event that the connection is destroyed (along with
   // |this|) while a inflight callback is held by |processor_|.

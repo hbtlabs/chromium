@@ -7,22 +7,23 @@
 
 #include "build/build_config.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#include <ws2tcpip.h>
-#elif defined(OS_POSIX)
-#include <sys/types.h>
+#if defined(OS_POSIX)
 #include <sys/socket.h>
+#include <sys/types.h>
+#elif defined(OS_WIN)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #endif
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
-#include "base/strings/utf_offset_string_conversions.h"
-#include "net/base/escape.h"
-#include "net/base/network_change_notifier.h"
+#include "base/strings/string_piece.h"
+#include "net/base/net_export.h"
 
 class GURL;
 
@@ -32,16 +33,11 @@ class Time;
 
 namespace url {
 struct CanonHostInfo;
-struct Parsed;
 }
 
 namespace net {
 
 class AddressList;
-
-// This is a "forward declaration" to avoid including ip_address_number.h
-// Keep this in sync.
-typedef std::vector<unsigned char> IPAddressNumber;
 
 #if defined(OS_WIN)
 // Bluetooth address size. Windows Bluetooth is supported via winsock.
@@ -73,7 +69,7 @@ NET_EXPORT std::string GetHostAndPort(const GURL& url);
 
 // Returns a host[:port] string for the given URL, where the port is omitted
 // if it is the default for the URL's scheme.
-NET_EXPORT_PRIVATE std::string GetHostAndOptionalPort(const GURL& url);
+NET_EXPORT std::string GetHostAndOptionalPort(const GURL& url);
 
 // Returns true if |hostname| contains a non-registerable or non-assignable
 // domain name (eg: a gTLD that has not been assigned by IANA) or an IP address
@@ -91,24 +87,6 @@ struct SockaddrStorage {
   socklen_t addr_len;
   struct sockaddr* const addr;
 };
-
-// Extracts the IP address and port portions of a sockaddr. |port| is optional,
-// and will not be filled in if NULL.
-bool GetIPAddressFromSockAddr(const struct sockaddr* sock_addr,
-                              socklen_t sock_addr_len,
-                              const unsigned char** address,
-                              size_t* address_len,
-                              uint16_t* port);
-
-// Same as IPAddressToString() but for a sockaddr. This output will not include
-// the IPv6 scope ID.
-NET_EXPORT std::string NetAddressToString(const struct sockaddr* sa,
-                                          socklen_t sock_addr_len);
-
-// Same as IPAddressToStringWithPort() but for a sockaddr. This output will not
-// include the IPv6 scope ID.
-NET_EXPORT std::string NetAddressToStringWithPort(const struct sockaddr* sa,
-                                                  socklen_t sock_addr_len);
 
 // Returns the hostname of the current system. Returns empty string on failure.
 NET_EXPORT std::string GetHostName();
@@ -161,25 +139,10 @@ NET_EXPORT std::string GetDirectoryListingEntry(const base::string16& name,
                                                 int64_t size,
                                                 base::Time modified);
 
-// Set socket to non-blocking mode
-NET_EXPORT int SetNonBlocking(int fd);
-
 // Strip the portions of |url| that aren't core to the network request.
 //   - user name / password
 //   - reference section
-NET_EXPORT_PRIVATE GURL SimplifyUrlForRequest(const GURL& url);
-
-// Returns true if it can determine that only loopback addresses are configured.
-// i.e. if only 127.0.0.1 and ::1 are routable.
-// Also returns false if it cannot determine this.
-bool HaveOnlyLoopbackAddresses();
-
-// Retuns the port field of the |sockaddr|.
-const uint16_t* GetPortFieldFromSockaddr(const struct sockaddr* address,
-                                         socklen_t address_len);
-// Returns the value of port in |sockaddr| (in host byte ordering).
-NET_EXPORT_PRIVATE int GetPortFromSockaddr(const struct sockaddr* address,
-                                           socklen_t address_len);
+NET_EXPORT GURL SimplifyUrlForRequest(const GURL& url);
 
 // Resolves a local hostname (such as "localhost" or "localhost6") into
 // IP endpoints with the given port. Returns true if |host| is a local
@@ -196,7 +159,7 @@ NET_EXPORT_PRIVATE bool ResolveLocalHostname(base::StringPiece host,
 // Note that this function does not check for IP addresses other than
 // the above, although other IP addresses may point to the local
 // machine.
-NET_EXPORT_PRIVATE bool IsLocalhost(base::StringPiece host);
+NET_EXPORT bool IsLocalhost(base::StringPiece host);
 
 // Returns true if the url's host is a Google server. This should only be used
 // for histograms and shouldn't be used to affect behavior.

@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cstring>
 
 #include "base/bind.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media.h"
@@ -136,10 +140,8 @@ TEST_F(FFmpegCommonTest, OpusAudioDecoderConfig) {
 }
 
 TEST_F(FFmpegCommonTest, TimeBaseConversions) {
-  const int64 test_data[][5] = {
-    {1, 2, 1, 500000, 1 },
-    {1, 3, 1, 333333, 1 },
-    {1, 3, 2, 666667, 2 },
+  const int64_t test_data[][5] = {
+      {1, 2, 1, 500000, 1}, {1, 3, 1, 333333, 1}, {1, 3, 2, 666667, 2},
   };
 
   for (size_t i = 0; i < arraysize(test_data); ++i) {

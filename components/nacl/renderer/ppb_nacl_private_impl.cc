@@ -4,8 +4,11 @@
 
 #include "components/nacl/renderer/ppb_nacl_private_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <numeric>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -18,11 +21,13 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/nacl/common/nacl_host_messages.h"
 #include "components/nacl/common/nacl_messages.h"
 #include "components/nacl/common/nacl_nonsfi_util.h"
@@ -384,6 +389,16 @@ NaClAppProcessType PP_ToNaClAppProcessType(
   return static_cast<NaClAppProcessType>(pp_process_type);
 }
 
+// A dummy IPC::Listener object with a no-op message handler.  We use
+// this with an IPC::SyncChannel where we only send synchronous
+// messages and don't need to handle any messages other than sync
+// replies.
+class NoOpListener : public IPC::Listener {
+ public:
+  bool OnMessageReceived(const IPC::Message& message) override { return false; }
+  void OnChannelError() override {}
+};
+
 // Launch NaCl's sel_ldr process.
 void LaunchSelLdr(PP_Instance instance,
                   PP_Bool main_service_runtime,
@@ -392,6 +407,8 @@ void LaunchSelLdr(PP_Instance instance,
                   PP_Bool uses_nonsfi_mode,
                   PP_NaClAppProcessType pp_process_type,
                   void* imc_handle,
+                  scoped_ptr<IPC::SyncChannel>* translator_channel,
+                  base::ProcessId* process_id,
                   PP_CompletionCallback callback) {
   CHECK(ppapi::PpapiGlobals::Get()->GetMainThreadMessageLoop()->
             BelongsToCurrentThread());
@@ -511,8 +528,24 @@ void LaunchSelLdr(PP_Instance instance,
 
   // Don't save instance_info if channel handle is invalid.
   if (IsValidChannelHandle(instance_info.channel_handle)) {
-    NaClPluginInstance* nacl_plugin_instance = GetNaClPluginInstance(instance);
-    nacl_plugin_instance->instance_info.reset(new InstanceInfo(instance_info));
+    if (process_type == kPNaClTranslatorProcessType) {
+      // Return an IPC channel which allows communicating with a PNaCl
+      // translator process.
+      *translator_channel = IPC::SyncChannel::Create(
+          instance_info.channel_handle,
+          IPC::Channel::MODE_CLIENT,
+          new NoOpListener,
+          content::RenderThread::Get()->GetIOMessageLoopProxy(),
+          true,
+          content::RenderThread::Get()->GetShutdownEvent());
+      *process_id = launch_result.plugin_pid;
+    } else {
+      // Save the channel handle for when StartPpapiProxy() is called.
+      NaClPluginInstance* nacl_plugin_instance =
+          GetNaClPluginInstance(instance);
+      nacl_plugin_instance->instance_info.reset(
+          new InstanceInfo(instance_info));
+    }
   }
 
   *(static_cast<NaClHandle*>(imc_handle)) =
@@ -532,7 +565,7 @@ void LaunchSelLdr(PP_Instance instance,
             launch_result.trusted_ipc_channel_handle,
             content::RenderThread::Get()->GetShutdownEvent(),
             is_helper_nexe));
-    load_manager->set_trusted_plugin_channel(trusted_plugin_channel.Pass());
+    load_manager->set_trusted_plugin_channel(std::move(trusted_plugin_channel));
   } else {
     PostPPCompletionCallback(callback, PP_ERROR_FAILED);
     return;
@@ -544,10 +577,10 @@ void LaunchSelLdr(PP_Instance instance,
         new ManifestServiceChannel(
             launch_result.manifest_service_ipc_channel_handle,
             base::Bind(&PostPPCompletionCallback, callback),
-            manifest_service_proxy.Pass(),
+            std::move(manifest_service_proxy),
             content::RenderThread::Get()->GetShutdownEvent()));
     load_manager->set_manifest_service_channel(
-        manifest_service_channel.Pass());
+        std::move(manifest_service_channel));
   }
 }
 
@@ -570,7 +603,7 @@ PP_Bool StartPpapiProxy(PP_Instance instance) {
     return PP_FALSE;
   }
   scoped_ptr<InstanceInfo> instance_info =
-      nacl_plugin_instance->instance_info.Pass();
+      std::move(nacl_plugin_instance->instance_info);
 
   PP_ExternalPluginResult result = plugin_instance->SwitchToOutOfProcessProxy(
       base::FilePath().AppendASCII(instance_info->url.spec()),
@@ -858,7 +891,7 @@ void InstanceCreated(PP_Instance instance) {
   InstanceMap& map = g_instance_map.Get();
   CHECK(map.find(instance) == map.end()); // Sanity check.
   scoped_ptr<NaClPluginInstance> new_instance(new NaClPluginInstance(instance));
-  map.add(instance, new_instance.Pass());
+  map.add(instance, std::move(new_instance));
 }
 
 void InstanceDestroyed(PP_Instance instance) {
@@ -1001,10 +1034,9 @@ void DownloadManifestToBuffer(PP_Instance instance,
 
   // ManifestDownloader deletes itself after invoking the callback.
   ManifestDownloader* manifest_downloader = new ManifestDownloader(
-      url_loader.Pass(),
-      load_manager->is_installed(),
-      base::Bind(DownloadManifestToBufferCompletion,
-                 instance, callback, base::Time::Now()));
+      std::move(url_loader), load_manager->is_installed(),
+      base::Bind(DownloadManifestToBufferCompletion, instance, callback,
+                 base::Time::Now()));
   manifest_downloader->Load(request);
 }
 
@@ -1343,8 +1375,7 @@ void DownloadNexe(PP_Instance instance,
 
   // FileDownloader deletes itself after invoking DownloadNexeCompletion.
   FileDownloader* file_downloader = new FileDownloader(
-      url_loader.Pass(),
-      target_file.Pass(),
+      std::move(url_loader), std::move(target_file),
       base::Bind(&DownloadNexeCompletion, request, out_file_info),
       base::Bind(&ProgressEventRateLimiter::ReportProgress,
                  base::Owned(tracker), std::string(url)));
@@ -1492,12 +1523,11 @@ void DownloadFile(PP_Instance instance,
   ProgressEventRateLimiter* tracker = new ProgressEventRateLimiter(instance);
 
   // FileDownloader deletes itself after invoking DownloadNexeCompletion.
-  FileDownloader* file_downloader = new FileDownloader(
-      url_loader.Pass(),
-      target_file.Pass(),
-      base::Bind(&DownloadFileCompletion, callback),
-      base::Bind(&ProgressEventRateLimiter::ReportProgress,
-                 base::Owned(tracker), std::string(url)));
+  FileDownloader* file_downloader =
+      new FileDownloader(std::move(url_loader), std::move(target_file),
+                         base::Bind(&DownloadFileCompletion, callback),
+                         base::Bind(&ProgressEventRateLimiter::ReportProgress,
+                                    base::Owned(tracker), std::string(url)));
   file_downloader->Load(url_request);
 }
 
@@ -1540,7 +1570,7 @@ class PexeDownloader : public blink::WebURLLoaderClient {
                  const PPP_PexeStreamHandler* stream_handler,
                  void* stream_handler_user_data)
       : instance_(instance),
-        url_loader_(url_loader.Pass()),
+        url_loader_(std::move(url_loader)),
         pexe_url_(pexe_url),
         pexe_opt_level_(pexe_opt_level),
         use_subzero_(use_subzero),
@@ -1681,7 +1711,7 @@ void StreamPexe(PP_Instance instance,
   scoped_ptr<blink::WebURLLoader> url_loader(
       CreateWebURLLoader(document, gurl));
   PexeDownloader* downloader =
-      new PexeDownloader(instance, url_loader.Pass(), pexe_url, opt_level,
+      new PexeDownloader(instance, std::move(url_loader), pexe_url, opt_level,
                          PP_ToBool(use_subzero), handler, handler_user_data);
 
   blink::WebURLRequest url_request = CreateWebURLRequest(document, gurl);

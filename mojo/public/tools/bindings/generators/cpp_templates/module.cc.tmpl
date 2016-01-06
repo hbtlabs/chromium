@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+{%- if variant -%}
+{%-   set variant_path = "%s-%s"|format(module.path, variant) -%}
+{%- else -%}
+{%-   set variant_path = module.path -%}
+{%- endif %}
+
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-private-field"
@@ -12,9 +18,11 @@
 #pragma warning(disable:4756)
 #endif
 
-#include "{{module.path}}.h"
+#include "{{variant_path}}.h"
 
 #include <math.h>
+#include <stdint.h>
+#include <utility>
 
 #include "base/trace_event/trace_event.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
@@ -23,6 +31,7 @@
 #include "mojo/public/cpp/bindings/lib/map_data_internal.h"
 #include "mojo/public/cpp/bindings/lib/map_serialization.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
+#include "mojo/public/cpp/bindings/lib/native_serialization.h"
 #include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
@@ -34,6 +43,9 @@
 {%- for namespace in namespaces_as_array %}
 namespace {{namespace}} {
 {%- endfor %}
+{%- if variant %}
+namespace {{variant}} {
+{%- endif %}
 
 {#--- Constants #}
 {%- for constant in module.constants %}
@@ -121,6 +133,9 @@ MOJO_STATIC_CONST_MEMBER_DEFINITION const {{constant.kind|cpp_pod_type}} {{struc
 {%-   include "union_serialization_definition.tmpl" %}
 {%- endfor %}
 
+{%- if variant %}
+}  // namespace {{variant}}
+{%- endif %}
 {%- for namespace in namespaces_as_array|reverse %}
 }  // namespace {{namespace}}
 {%- endfor %}

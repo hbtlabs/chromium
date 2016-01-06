@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/media_stream_center.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/command_line.h"
@@ -41,7 +43,11 @@ void CreateNativeAudioMediaStreamTrack(
   DCHECK(!track.extraData());
   blink::WebMediaStreamSource source = track.source();
   DCHECK_EQ(source.type(), blink::WebMediaStreamSource::TypeAudio);
-  factory->CreateLocalAudioTrack(track);
+  if (source.remote()) {
+    factory->CreateRemoteAudioTrack(track);
+  } else {
+    factory->CreateLocalAudioTrack(track);
+  }
 }
 
 void CreateNativeVideoMediaStreamTrack(
@@ -126,18 +132,17 @@ MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack(
   DVLOG(1) << "MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack";
   MediaStreamTrack* media_stream_track =
       static_cast<MediaStreamTrack*>(track.extraData());
-  // Only local audio track is supported now.
-  // TODO(xians): Support remote audio track.
-  if (!media_stream_track || !media_stream_track->is_local_track()) {
-    NOTIMPLEMENTED();
-    return NULL;
+  if (!media_stream_track) {
+    DLOG(ERROR) << "Native track missing for webaudio source.";
+    return nullptr;
   }
 
   blink::WebMediaStreamSource source = track.source();
   DCHECK_EQ(source.type(), blink::WebMediaStreamSource::TypeAudio);
-  WebRtcLocalAudioSourceProvider* source_provider =
-      new WebRtcLocalAudioSourceProvider(track);
-  return source_provider;
+
+  // TODO(tommi): Rename WebRtcLocalAudioSourceProvider to
+  // WebRtcAudioSourceProvider since it's not specific to local.
+  return new WebRtcLocalAudioSourceProvider(track);
 }
 
 void MediaStreamCenter::didStopLocalMediaStream(

@@ -5,12 +5,16 @@
 #ifndef COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_PREFS_H_
 #define COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_PREFS_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "url/gurl.h"
 
 class PrefService;
@@ -132,7 +136,7 @@ class TranslatePrefs {
   void ResetDenialState();
 
   // Gets the language list of the language settings.
-  void GetLanguageList(std::vector<std::string>* languages);
+  void GetLanguageList(std::vector<std::string>* languages) const;
 
   // Updates the language list of the language settings.
   void UpdateLanguageList(const std::vector<std::string>& languages);

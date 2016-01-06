@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
@@ -66,9 +70,9 @@ class AccessibilityWinBrowserTest : public ContentBrowserTest {
   static HRESULT QueryIAccessible2(IAccessible* accessible,
                                    IAccessible2** accessible2);
   static void FindNodeInAccessibilityTree(IAccessible* node,
-                                          int32 expected_role,
+                                          int32_t expected_role,
                                           const std::wstring& expected_name,
-                                          int32 depth,
+                                          int32_t depth,
                                           bool* found);
   static void CheckTextAtOffset(
       base::win::ScopedComPtr<IAccessibleText>& element,
@@ -126,7 +130,7 @@ void AccessibilityWinBrowserTest::SetUpInputField(
   base::win::ScopedComPtr<IAccessible> document(GetRendererAccessible());
   std::vector<base::win::ScopedVariant> document_children =
       GetAllAccessibleChildren(document.get());
-  ASSERT_EQ(1, document_children.size());
+  ASSERT_EQ(1u, document_children.size());
 
   base::win::ScopedComPtr<IAccessible2> form;
   HRESULT hr = QueryIAccessible2(GetAccessibleFromVariant(
@@ -134,7 +138,7 @@ void AccessibilityWinBrowserTest::SetUpInputField(
   ASSERT_EQ(S_OK, hr);
   std::vector<base::win::ScopedVariant> form_children =
       GetAllAccessibleChildren(form.get());
-  ASSERT_EQ(2, form_children.size());
+  ASSERT_EQ(2u, form_children.size());
 
   // Find the input text field.
   base::win::ScopedComPtr<IAccessible2> input;
@@ -178,7 +182,7 @@ void AccessibilityWinBrowserTest::SetUpTextareaField(
   base::win::ScopedComPtr<IAccessible> document(GetRendererAccessible());
   std::vector<base::win::ScopedVariant> document_children =
       GetAllAccessibleChildren(document.get());
-  ASSERT_EQ(1, document_children.size());
+  ASSERT_EQ(1u, document_children.size());
 
   base::win::ScopedComPtr<IAccessible2> section;
   HRESULT hr = QueryIAccessible2(GetAccessibleFromVariant(
@@ -186,7 +190,7 @@ void AccessibilityWinBrowserTest::SetUpTextareaField(
   ASSERT_EQ(S_OK, hr);
   std::vector<base::win::ScopedVariant> section_children =
       GetAllAccessibleChildren(section.get());
-  ASSERT_EQ(1, section_children.size());
+  ASSERT_EQ(1u, section_children.size());
 
   // Find the textarea text field.
   base::win::ScopedComPtr<IAccessible2> textarea;
@@ -260,9 +264,9 @@ HRESULT AccessibilityWinBrowserTest::QueryIAccessible2(
 // and name.
 void AccessibilityWinBrowserTest::FindNodeInAccessibilityTree(
     IAccessible* node,
-    int32 expected_role,
+    int32_t expected_role,
     const std::wstring& expected_name,
-    int32 depth,
+    int32_t depth,
     bool* found) {
   base::win::ScopedBstr name_bstr;
   base::win::ScopedVariant childid_self(CHILDID_SELF);
@@ -358,15 +362,15 @@ class AccessibilityWinBrowserTest::AccessibleChecker {
   // This constructor can be used if the IA2 role will be the same as the MSAA
   // role.
   AccessibleChecker(const std::wstring& expected_name,
-                    int32 expected_role,
+                    int32_t expected_role,
                     const std::wstring& expected_value);
   AccessibleChecker(const std::wstring& expected_name,
-                    int32 expected_role,
-                    int32 expected_ia2_role,
+                    int32_t expected_role,
+                    int32_t expected_ia2_role,
                     const std::wstring& expected_value);
   AccessibleChecker(const std::wstring& expected_name,
                     const std::wstring& expected_role,
-                    int32 expected_ia2_role,
+                    int32_t expected_ia2_role,
                     const std::wstring& expected_value);
 
   // Append an AccessibleChecker that verifies accessibility information for
@@ -402,7 +406,7 @@ class AccessibilityWinBrowserTest::AccessibleChecker {
   base::win::ScopedVariant role_;
 
   // Expected IAccessible2 role. Checked against IAccessible2::role.
-  int32 ia2_role_;
+  int32_t ia2_role_;
 
   // Expected accessible value. Checked against IAccessible::get_accValue.
   std::wstring value_;
@@ -417,38 +421,35 @@ class AccessibilityWinBrowserTest::AccessibleChecker {
 
 AccessibilityWinBrowserTest::AccessibleChecker::AccessibleChecker(
     const std::wstring& expected_name,
-    int32 expected_role,
+    int32_t expected_role,
     const std::wstring& expected_value)
     : name_(expected_name),
       role_(expected_role),
       ia2_role_(expected_role),
       value_(expected_value),
-      state_(-1) {
-}
+      state_(-1) {}
 
 AccessibilityWinBrowserTest::AccessibleChecker::AccessibleChecker(
     const std::wstring& expected_name,
-    int32 expected_role,
-    int32 expected_ia2_role,
+    int32_t expected_role,
+    int32_t expected_ia2_role,
     const std::wstring& expected_value)
     : name_(expected_name),
       role_(expected_role),
       ia2_role_(expected_ia2_role),
       value_(expected_value),
-      state_(-1) {
-}
+      state_(-1) {}
 
 AccessibilityWinBrowserTest::AccessibleChecker::AccessibleChecker(
     const std::wstring& expected_name,
     const std::wstring& expected_role,
-    int32 expected_ia2_role,
+    int32_t expected_ia2_role,
     const std::wstring& expected_value)
     : name_(expected_name),
       role_(expected_role.c_str()),
       ia2_role_(expected_ia2_role),
       value_(expected_value),
-      state_(-1) {
-}
+      state_(-1) {}
 
 void AccessibilityWinBrowserTest::AccessibleChecker::AppendExpectedChild(
     AccessibleChecker* expected_child) {
@@ -905,7 +906,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       &unique_id, &node_type);
   ASSERT_EQ(S_OK, hr);
   EXPECT_EQ(NODETYPE_DOCUMENT, node_type);
-  EXPECT_EQ(1, num_children);
+  EXPECT_EQ(1u, num_children);
   node_name.Reset();
   node_value.Reset();
 
@@ -919,7 +920,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   ASSERT_EQ(S_OK, hr);
   EXPECT_EQ(L"body", std::wstring(node_name, node_name.Length()));
   EXPECT_EQ(NODETYPE_ELEMENT, node_type);
-  EXPECT_EQ(1, num_children);
+  EXPECT_EQ(1u, num_children);
   node_name.Reset();
   node_value.Reset();
 
@@ -933,7 +934,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   ASSERT_EQ(S_OK, hr);
   EXPECT_EQ(L"input", std::wstring(node_name, node_name.Length()));
   EXPECT_EQ(NODETYPE_ELEMENT, node_type);
-  EXPECT_EQ(0, num_children);
+  EXPECT_EQ(0u, num_children);
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestRoleGroup) {

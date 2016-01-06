@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <iterator>
 #include <string>
@@ -11,14 +13,17 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/ui/host_desktop.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/stacked_tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
@@ -31,11 +36,16 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
 #include "grit/theme_resources.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/effects/SkBlurMaskFilter.h"
+#include "third_party/skia/include/effects/SkLayerDrawLooper.h"
+#include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/default_theme_provider.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/list_selection_model.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/compositing_recorder.h"
 #include "ui/compositor/paint_recorder.h"
@@ -72,8 +82,6 @@ using base::UserMetricsAction;
 using ui::DropTargetEvent;
 
 namespace {
-
-const int kNewTabButtonHeight = 18;
 
 const int kTabStripAnimationVSlop = 40;
 
@@ -113,17 +121,42 @@ const int kPinnedToNonPinnedOffset = 2;
 const int kPinnedToNonPinnedOffset = 3;
 #endif
 
-// Returns the size of the new tab button, not including any bounds extension to
-// enlarge the clickable area.
-gfx::Size GetNewTabButtonSize() {
-  return gfx::Size(GetLayoutConstant(NEW_TAB_BUTTON_WIDTH),
-                   kNewTabButtonHeight);
+// Returns the offset from the top of the tabstrip at which the new tab button's
+// visible region begins.
+int GetNewTabButtonTopOffset() {
+  // The vertical distance between the bottom of the new tab button and the
+  // bottom of the tabstrip.
+  const int kNewTabButtonBottomOffset = 4;
+  return Tab::GetMinimumInactiveSize().height() - kNewTabButtonBottomOffset -
+      GetLayoutSize(NEW_TAB_BUTTON).height();
 }
 
 // Returns the width needed for the new tab button (and padding).
 int GetNewTabButtonWidth() {
-  return GetLayoutConstant(NEW_TAB_BUTTON_WIDTH) -
+  return GetLayoutSize(NEW_TAB_BUTTON).width() -
       GetLayoutConstant(TABSTRIP_NEW_TAB_BUTTON_OVERLAP);
+}
+
+skia::RefPtr<SkDrawLooper> CreateShadowDrawLooper(SkAlpha alpha) {
+  SkLayerDrawLooper::Builder looper_builder;
+  looper_builder.addLayer();
+
+  SkLayerDrawLooper::LayerInfo layer_info;
+  layer_info.fPaintBits |= SkLayerDrawLooper::kMaskFilter_Bit;
+  layer_info.fPaintBits |= SkLayerDrawLooper::kColorFilter_Bit;
+  layer_info.fColorMode = SkXfermode::kDst_Mode;
+  layer_info.fOffset.set(0, 1);
+  skia::RefPtr<SkMaskFilter> blur_mask =
+      skia::AdoptRef(SkBlurMaskFilter::Create(
+          kNormal_SkBlurStyle, 0.5, SkBlurMaskFilter::kHighQuality_BlurFlag));
+  skia::RefPtr<SkColorFilter> color_filter =
+      skia::AdoptRef(SkColorFilter::CreateModeFilter(
+          SkColorSetA(SK_ColorBLACK, alpha), SkXfermode::kSrcIn_Mode));
+  SkPaint* layer_paint = looper_builder.addLayer(layer_info);
+  layer_paint->setMaskFilter(blur_mask.get());
+  layer_paint->setColorFilter(color_filter.get());
+
+  return skia::AdoptRef(looper_builder.detachLooper());
 }
 
 // Animation delegate used for any automatic tab movement.  Hides the tab if it
@@ -267,11 +300,21 @@ class NewTabButton : public views::ImageButton,
   // views::MaskedTargeterDelegate:
   bool GetHitTestMask(gfx::Path* mask) const override;
 
+  // Computes a path corresponding to the button's outer border for a given
+  // |scale| and stores it in |path|.  |button_y| is used as the y-coordinate
+  // for the top of the button.  If |extend_to_top| is true, the path is
+  // extended vertically to y = 0.  The caller uses this for Fitts' Law purposes
+  // in maximized/fullscreen mode.
+  void GetBorderPath(float button_y,
+                     float scale,
+                     bool extend_to_top,
+                     SkPath* path) const;
+
   // Paints the fill region of the button into |canvas|, according to the
-  // supplied values from GetImage().
+  // supplied values from GetImage() and the given |fill| path.
   void PaintFill(bool pressed,
-                 double hover_value,
                  float scale,
+                 const SkPath& fill,
                  gfx::Canvas* canvas) const;
 
   // Tab strip that contains this button.
@@ -330,41 +373,87 @@ void NewTabButton::OnGestureEvent(ui::GestureEvent* event) {
 
 void NewTabButton::OnPaint(gfx::Canvas* canvas) {
   gfx::ScopedCanvas scoped_canvas(canvas);
-  canvas->Translate(gfx::Vector2d(0, height() - kNewTabButtonHeight));
+  const int visible_height = GetLayoutSize(NEW_TAB_BUTTON).height();
+  canvas->Translate(gfx::Vector2d(0, height() - visible_height));
 
   const bool pressed = state() == views::CustomButton::STATE_PRESSED;
-  double hover_value =
-      (state() == views::CustomButton::STATE_HOVERED) ? 1 : 0;
-  if (hover_animation_->is_animating())
-    hover_value = hover_animation_->GetCurrentValue();
   const float scale = canvas->image_scale();
 
-  // Fill.
-  gfx::ImageSkia* mask =
-      GetThemeProvider()->GetImageSkiaNamed(IDR_NEWTAB_BUTTON_MASK);
-  // The canvas and mask have to use the same scale factor.
-  const float fill_canvas_scale = mask->HasRepresentation(scale) ?
-      scale : ui::GetScaleForScaleFactor(ui::SCALE_FACTOR_100P);
-  gfx::Canvas fill_canvas(GetNewTabButtonSize(), fill_canvas_scale, false);
-  PaintFill(pressed, hover_value, fill_canvas_scale, &fill_canvas);
-  gfx::ImageSkia image(fill_canvas.ExtractImageRep());
-  canvas->DrawImageInt(
-      gfx::ImageSkiaOperations::CreateMaskedImage(image, *mask), 0, 0);
+  SkPath fill;
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // Fill.
+    const float fill_bottom = (visible_height - 2) * scale;
+    const float diag_height = fill_bottom - 3.5 * scale;
+    const float diag_width = diag_height * Tab::GetInverseDiagonalSlope();
+    fill.moveTo(diag_width + 4 * scale, fill_bottom);
+    fill.rCubicTo(-0.75 * scale, 0, -1.625 * scale, -0.5 * scale, -2 * scale,
+                  -1.5 * scale);
+    fill.rLineTo(-diag_width, -diag_height);
+    fill.rCubicTo(0, -0.5 * scale, 0.25 * scale, -scale, scale, -scale);
+    fill.lineTo((width() - 4) * scale - diag_width, scale);
+    fill.rCubicTo(0.75 * scale, 0, 1.625 * scale, 0.5 * scale, 2 * scale,
+                  1.5 * scale);
+    fill.rLineTo(diag_width, diag_height);
+    fill.rCubicTo(0, 0.5 * scale, -0.25 * scale, scale, -scale, scale);
+    fill.close();
+    PaintFill(pressed, scale, fill, canvas);
 
-  // Stroke.  Draw the button border with a slight alpha.
-  static const SkAlpha kGlassFrameOverlayAlpha = 178;
-  static const SkAlpha kOpaqueFrameOverlayAlpha = 230;
-  const SkAlpha alpha = GetWidget()->ShouldWindowContentsBeTransparent() ?
-      kGlassFrameOverlayAlpha : kOpaqueFrameOverlayAlpha;
-  const int overlay_id = pressed ? IDR_NEWTAB_BUTTON_P : IDR_NEWTAB_BUTTON;
-  canvas->DrawImageInt(*GetThemeProvider()->GetImageSkiaNamed(overlay_id), 0, 0,
-                       alpha);
+    // Stroke.
+    gfx::ScopedCanvas scoped_canvas(canvas);
+    canvas->UndoDeviceScaleFactor();
+    SkPath stroke;
+    GetBorderPath(0, scale, false, &stroke);
+    // We want to draw a drop shadow either inside or outside the stroke,
+    // depending on whether we're pressed; so, either clip out what's outside
+    // the stroke, or clip out the fill inside it.
+    if (pressed)
+      canvas->ClipPath(stroke, true);
+    Op(stroke, fill, kDifference_SkPathOp, &stroke);
+    if (!pressed)
+      canvas->sk_canvas()->clipPath(fill, SkRegion::kDifference_Op, true);
+    // Now draw the stroke and shadow; the stroke will always be visible, while
+    // the shadow will be affected by the clip we set above.
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    skia::RefPtr<SkDrawLooper> stroke_looper = CreateShadowDrawLooper(0x8C);
+    paint.setLooper(stroke_looper.get());
+    paint.setColor(SkColorSetA(SK_ColorBLACK, pressed ? 0x38 : 0x27));
+    canvas->DrawPath(stroke, paint);
+  } else {
+    // Fill.
+    gfx::ImageSkia* mask =
+        GetThemeProvider()->GetImageSkiaNamed(IDR_NEWTAB_BUTTON_MASK);
+    // The canvas and mask have to use the same scale factor.
+    const float fill_canvas_scale = mask->HasRepresentation(scale) ?
+        scale : ui::GetScaleForScaleFactor(ui::SCALE_FACTOR_100P);
+    gfx::Canvas fill_canvas(GetLayoutSize(NEW_TAB_BUTTON), fill_canvas_scale,
+                            false);
+    PaintFill(pressed, fill_canvas_scale, fill, &fill_canvas);
+    gfx::ImageSkia image(fill_canvas.ExtractImageRep());
+    canvas->DrawImageInt(
+        gfx::ImageSkiaOperations::CreateMaskedImage(image, *mask), 0, 0);
+
+    // Stroke.  Draw the button border with a slight alpha.
+    static const SkAlpha kGlassFrameOverlayAlpha = 178;
+    static const SkAlpha kOpaqueFrameOverlayAlpha = 230;
+    const SkAlpha alpha = GetWidget()->ShouldWindowContentsBeTransparent() ?
+        kGlassFrameOverlayAlpha : kOpaqueFrameOverlayAlpha;
+    const int overlay_id = pressed ? IDR_NEWTAB_BUTTON_P : IDR_NEWTAB_BUTTON;
+    canvas->DrawImageInt(*GetThemeProvider()->GetImageSkiaNamed(overlay_id), 0,
+                         0, alpha);
+  }
 }
 
 bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
   DCHECK(mask);
 
-  if (tab_strip_->SizeTabButtonToTopOfTabStrip()) {
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    SkPath border;
+    const float scale = GetWidget()->GetCompositor()->device_scale_factor();
+    GetBorderPath(GetNewTabButtonTopOffset() * scale, scale,
+                  tab_strip_->SizeTabButtonToTopOfTabStrip(), &border);
+    mask->addPath(border, SkMatrix::MakeScale(1 / scale));
+  } else if (tab_strip_->SizeTabButtonToTopOfTabStrip()) {
     // When the button is sized to the top of the tab strip, we want the hit
     // test mask to be defined as the complete (rectangular) bounds of the
     // button.
@@ -373,7 +462,7 @@ bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
     mask->addRect(RectToSkRect(button_bounds));
   } else {
     SkScalar w = SkIntToScalar(width());
-    SkScalar v_offset = SkIntToScalar(TabStrip::kNewTabButtonVerticalOffset);
+    SkScalar v_offset = SkIntToScalar(GetNewTabButtonTopOffset());
 
     // These values are defined by the shape of the new tab image. Should that
     // image ever change, these values will need to be updated. They're so
@@ -393,56 +482,136 @@ bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
   return true;
 }
 
+void NewTabButton::GetBorderPath(float button_y,
+                                 float scale,
+                                 bool extend_to_top,
+                                 SkPath* path) const {
+  const float inverse_slope = Tab::GetInverseDiagonalSlope();
+  const float fill_bottom =
+      (GetLayoutSize(NEW_TAB_BUTTON).height() - 2) * scale;
+  const float stroke_bottom = button_y + fill_bottom + 1;
+  const float diag_height = fill_bottom - 3.5 * scale;
+  const float diag_width = diag_height * inverse_slope;
+  path->moveTo(diag_width + 4 * scale - 1, stroke_bottom);
+  path->rCubicTo(-0.75 * scale, 0, -1.625 * scale, -0.5 * scale, -2 * scale,
+                 -1.5 * scale);
+  path->rLineTo(-diag_width, -diag_height);
+  if (extend_to_top) {
+    // Create the vertical extension by extending the side diagonals at the
+    // upper left and lower right corners until they reach the top and bottom of
+    // the border, respectively (in other words, "un-round-off" those corners
+    // and turn them into sharp points).  Then extend upward from the corner
+    // points to the top of the bounds.
+    const float dy = scale + 2;
+    const float dx = inverse_slope * dy;
+    path->rLineTo(-dx, -dy);
+    path->rLineTo(0, -button_y - scale + 1);
+    path->lineTo((width() - 2) * scale + 1 + dx, 0);
+    path->rLineTo(0, stroke_bottom);
+  } else {
+    path->rCubicTo(-0.5 * scale, -1.125 * scale, 0.5 * scale, -scale - 2, scale,
+                   -scale - 2);
+    path->lineTo((width() - 4) * scale - diag_width + 1, scale - 1);
+    path->rCubicTo(0.75 * scale, 0, 1.625 * scale, 0.5 * scale, 2 * scale,
+                   1.5 * scale);
+    path->rLineTo(diag_width, diag_height);
+    path->rCubicTo(0.5 * scale, 1.125 * scale, -0.5 * scale, scale + 2, -scale,
+                   scale + 2);
+  }
+  path->close();
+}
+
 void NewTabButton::PaintFill(bool pressed,
-                             double hover_value,
                              float scale,
+                             const SkPath& fill,
                              gfx::Canvas* canvas) const {
   bool custom_image;
   const int bg_id = tab_strip_->GetBackgroundResourceId(&custom_image);
 
-  // Draw the fill background image.
-  const gfx::Size size(GetNewTabButtonSize());
-  const ui::ThemeProvider* theme_provider = GetThemeProvider();
-  gfx::ImageSkia* background = theme_provider->GetImageSkiaNamed(bg_id);
-  // For custom tab backgrounds the background starts at the top of the tab
-  // strip. Otherwise the background starts at the top of the frame.
-  const int offset_y = theme_provider->HasCustomImage(bg_id) ?
-      -GetLayoutConstant(TAB_TOP_EXCLUSION_HEIGHT) : background_offset_.y();
+  gfx::ScopedCanvas scoped_canvas(canvas);
 
-  // The new tab background is mirrored in RTL mode, but the theme background
-  // should never be mirrored. Mirror it here to compensate.
-  float x_scale = 1.0f;
-  int x = GetMirroredX() + background_offset_.x();
-  if (base::i18n::IsRTL()) {
-    x_scale = -1.0f;
-    // Offset by |width| such that the same region is painted as if there was
-    // no flip.
-    x += size.width();
+  const bool md = ui::MaterialDesignController::IsModeMaterial();
+  if (md) {
+    canvas->UndoDeviceScaleFactor();
+
+    // For unpressed buttons, draw the fill and its shadow.
+    if (!pressed) {
+      gfx::ScopedCanvas scoped_canvas(canvas);
+
+      // For custom themes, clip out the fill path itself so only the shadow
+      // around it is drawn.  We'll draw the fill image below.
+      if (custom_image)
+        canvas->sk_canvas()->clipPath(fill, SkRegion::kDifference_Op, true);
+
+      SkPaint paint;
+      paint.setAntiAlias(true);
+      skia::RefPtr<SkDrawLooper> looper = CreateShadowDrawLooper(0x26);
+      paint.setLooper(looper.get());
+      paint.setColor(Tab::kInactiveTabColor);
+      canvas->DrawPath(fill, paint);
+    }
+
+    // Clip to just the fill region for any theme drawing and hover/pressed
+    // state overlay drawing below.  In non-MD mode, this is done on the caller
+    // side using image masking operations.
+    canvas->ClipPath(fill, true);
+    canvas->sk_canvas()->scale(scale, scale);
   }
-  canvas->TileImageInt(*background, x,
-                       TabStrip::kNewTabButtonVerticalOffset + offset_y,
-                       x_scale, 1.0f, 0, 0, size.width(), size.height());
 
-  // Adjust the alpha of the fill to match that of inactive tabs (except for
-  // pressed buttons, which get a different value).
-  static const SkAlpha kPressedAlpha = 145;
-  const SkAlpha alpha =
-      pressed ? kPressedAlpha : tab_strip_->GetInactiveAlpha(true);
-  if (alpha != 255) {
-    SkPaint paint;
-    paint.setAlpha(alpha);
-    paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-    paint.setStyle(SkPaint::kFill_Style);
-    canvas->DrawRect(gfx::Rect(size), paint);
+  // Draw the fill background image.
+  const gfx::Size size(GetLayoutSize(NEW_TAB_BUTTON));
+  if (custom_image || !md) {
+    const ui::ThemeProvider* theme_provider = GetThemeProvider();
+    gfx::ImageSkia* background = theme_provider->GetImageSkiaNamed(bg_id);
+    // For custom tab backgrounds the background starts at the top of the tab
+    // strip. Otherwise the background starts at the top of the frame.
+    const int offset_y = theme_provider->HasCustomImage(bg_id) ?
+        -GetLayoutConstant(TAB_TOP_EXCLUSION_HEIGHT) : background_offset_.y();
+
+    // The new tab background is mirrored in RTL mode, but the theme background
+    // should never be mirrored. Mirror it here to compensate.
+    float x_scale = 1.0f;
+    int x = GetMirroredX() + background_offset_.x();
+    if (base::i18n::IsRTL()) {
+      x_scale = -1.0f;
+      // Offset by |width| such that the same region is painted as if there was
+      // no flip.
+      x += size.width();
+    }
+    canvas->TileImageInt(*background, x, GetNewTabButtonTopOffset() + offset_y,
+                         x_scale, 1.0f, 0, 0, size.width(), size.height());
+
+    // For non-MD, adjust the alpha of the fill to match that of inactive tabs
+    // (except for pressed buttons, which get a different value).  For MD, we do
+    // this with an opacity recorder in TabStrip::PaintChildren() so the fill
+    // and stroke are both affected, to better match how tabs are handled, but
+    // in non-MD, the button stroke is already lighter than the tab stroke, and
+    // using the opacity recorder washes it out too much.
+    static const SkAlpha kPressedAlpha = 145;
+    const SkAlpha alpha =
+        pressed ? kPressedAlpha : tab_strip_->GetInactiveAlpha(true);
+    if (alpha != 255 && !md) {
+      SkPaint paint;
+      paint.setAlpha(alpha);
+      paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
+      paint.setStyle(SkPaint::kFill_Style);
+      canvas->DrawRect(gfx::Rect(size), paint);
+    }
   }
 
   // White highlight on hover.
-  if (hover_value) {
-    const int alpha =
-        gfx::Tween::LinearIntValueBetween(hover_value, 0x00, 0x40);
-    canvas->FillRect(GetLocalBounds(),
-                     SkColorSetA(SK_ColorWHITE, static_cast<SkAlpha>(alpha)));
-  }
+  const SkAlpha alpha = static_cast<SkAlpha>(
+      hover_animation().CurrentValueBetween(0x00, md ? 0x4D : 0x40));
+  if (alpha != SK_AlphaTRANSPARENT)
+    canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorWHITE, alpha));
+
+  // For MD, most states' opacities are adjusted using an opacity recorder in
+  // TabStrip::PaintChildren(), but the pressed state is excluded there and
+  // instead rendered using a dark overlay here.  This produces a different
+  // effect than for non-MD, and avoiding the use of the opacity recorder keeps
+  // the stroke more visible in this state.
+  if (md && pressed)
+    canvas->FillRect(GetLocalBounds(), SkColorSetA(SK_ColorBLACK, 0x14));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -492,9 +661,6 @@ void TabStrip::RemoveTabDelegate::AnimationCanceled(
 
 ///////////////////////////////////////////////////////////////////////////////
 // TabStrip, public:
-
-// static
-const int TabStrip::kNewTabButtonVerticalOffset = 7;
 
 TabStrip::TabStrip(TabStripController* controller)
     : controller_(controller),
@@ -927,7 +1093,7 @@ SkAlpha TabStrip::GetInactiveAlpha(bool for_new_tab_button) const {
   static const SkAlpha kInactiveTabAlphaAsh = 230;
   static const SkAlpha kInactiveTabAlphaGlass = 200;
   static const SkAlpha kInactiveTabAlphaOpaque = 255;
-  static const float kMultiSelectionMultiplier = 0.75;
+  static const double kMultiSelectionMultiplier = 0.6;
 
   const chrome::HostDesktopType host_desktop_type =
       chrome::GetHostDesktopTypeForNativeView(GetWidget()->GetNativeView());
@@ -1270,13 +1436,11 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
   Tabs selected_tabs;
 
   {
-    const chrome::HostDesktopType host_desktop_type =
-        chrome::GetHostDesktopTypeForNativeView(GetWidget()->GetNativeView());
-    const uint8_t inactive_tab_alpha =
-        (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH) ?
-            GetInactiveAlpha(false) : 255;
+    // We pass false for |lcd_text_requires_opaque_layer| so that background
+    // tab titles will get LCD AA.  These are rendered opaquely on an opaque tab
+    // background before the layer is composited, so this is safe.
     ui::CompositingRecorder opacity_recorder(context, size(),
-                                             inactive_tab_alpha);
+                                             GetInactiveAlpha(false), false);
 
     PaintClosingTabs(tab_count(), context);
 
@@ -1319,28 +1483,6 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     }
   }
 
-  if (GetWidget()->ShouldWindowContentsBeTransparent()) {
-    ui::PaintRecorder recorder(context, size());
-    // Make sure non-active tabs are somewhat transparent.
-    SkPaint paint;
-    // If there are multiple tabs selected, fade non-selected tabs more to make
-    // the selected tabs more noticable.
-    uint8_t alpha = GetInactiveAlpha(false);
-    paint.setColor(SkColorSetA(SK_ColorWHITE, alpha));
-    paint.setXfermodeMode(SkXfermode::kDstIn_Mode);
-    paint.setStyle(SkPaint::kFill_Style);
-
-    gfx::Rect bounds(GetLocalBounds());
-    // The tab graphics include some shadows at the top, plus a 1 pixel top
-    // stroke.  Exclude this region when trying to make tabs transparent as it's
-    // transparent enough already, and drawing in this region can overlap the
-    // avatar button, leading to visual artifacts.  Also exclude the toolbar
-    // overlap region at the bottom.
-    gfx::Insets tab_insets(GetLayoutInsets(TAB));
-    bounds.Inset(0, tab_insets.top(), 0, tab_insets.bottom());
-    recorder.canvas()->DrawRect(bounds, paint);
-  }
-
   // Now selected but not active. We don't want these dimmed if using native
   // frame, so they're painted after initial pass.
   for (size_t i = 0; i < selected_tabs.size(); ++i)
@@ -1351,7 +1493,18 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     active_tab->Paint(context);
 
   // Paint the New Tab button.
-  newtab_button_->Paint(context);
+  const bool md = ui::MaterialDesignController::IsModeMaterial();
+  if (md && (newtab_button_->state() != views::CustomButton::STATE_PRESSED)) {
+    // Match the inactive tab opacity for non-pressed states.  See comments in
+    // NewTabButton::PaintFill() for why we don't do this for the pressed state.
+    // This call doesn't need to set |lcd_text_requires_opaque_layer| to false
+    // because no text will be drawn.
+    ui::CompositingRecorder opacity_recorder(context, size(),
+                                             GetInactiveAlpha(true), true);
+    newtab_button_->Paint(context);
+  } else {
+    newtab_button_->Paint(context);
+  }
 
   // And the dragged tabs.
   for (size_t i = 0; i < tabs_dragging.size(); ++i)
@@ -1360,6 +1513,18 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
   // If the active tab is being dragged, it goes last.
   if (active_tab && is_dragging)
     active_tab->Paint(context);
+
+  if (md) {
+    ui::PaintRecorder recorder(context, size());
+    gfx::Canvas* canvas = recorder.canvas();
+    if (active_tab) {
+      canvas->sk_canvas()->clipRect(
+          gfx::RectToSkRect(active_tab->GetMirroredBounds()),
+          SkRegion::kDifference_Op);
+    }
+    BrowserView::Paint1pxHorizontalLine(
+        canvas, SkColorSetA(SK_ColorBLACK, 0x40), GetLocalBounds(), true);
+  }
 }
 
 const char* TabStrip::GetClassName() const {
@@ -1508,8 +1673,8 @@ void TabStrip::Init() {
   // So we get enter/exit on children to switch stacked layout on and off.
   set_notify_enter_exit_on_child(true);
 
-  newtab_button_bounds_.set_size(GetNewTabButtonSize());
-  newtab_button_bounds_.Inset(0, 0, 0, -kNewTabButtonVerticalOffset);
+  newtab_button_bounds_.set_size(GetLayoutSize(NEW_TAB_BUTTON));
+  newtab_button_bounds_.Inset(0, 0, 0, -GetNewTabButtonTopOffset());
   newtab_button_ = new NewTabButton(this, this);
   newtab_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));

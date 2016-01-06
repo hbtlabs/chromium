@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
@@ -91,7 +92,7 @@ class LoginDisplay {
     virtual void ResetPublicSessionAutoLoginTimer() = 0;
 
     // Returns true if user is allowed to log in by domain policy.
-    virtual bool IsUserWhitelisted(const std::string& user_id) = 0;
+    virtual bool IsUserWhitelisted(const AccountId& account_id) = 0;
 
    protected:
     virtual ~Delegate();

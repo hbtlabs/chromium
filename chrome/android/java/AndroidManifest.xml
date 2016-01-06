@@ -402,6 +402,15 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.physicalweb.ListUrlsActivity"
             android:label="@string/physical_web_list_urls_activity_title"
             android:theme="@style/PhysicalWebNearbyUrlsListStyle"
+            android:autoRemoveFromRecents="true"
+            android:exported="false">
+        </activity>
+
+        <!-- Opt-in activity for Physical Web -->
+        <activity android:name="org.chromium.chrome.browser.physicalweb.PhysicalWebOptInActivity"
+            android:label="@string/physical_web_list_urls_activity_title"
+            android:theme="@style/PhysicalWebOptInStyle"
+            android:autoRemoveFromRecents="true"
             android:exported="false">
         </activity>
 
@@ -422,6 +431,12 @@ by a child template that "extends" this file.
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <provider android:name="org.chromium.chrome.browser.superviseduser.SupervisedUserContentProvider"
+            android:authorities="{{ manifest_package }}.SupervisedUserProvider"
+            android:permission="android.permission.INTERNET"
+            android:exported="true">
+        </provider>
+
         <!-- Sync adapter for browser invalidation. -->
         <service android:name="org.chromium.chrome.browser.invalidation.ChromeBrowserSyncAdapterService"
             android:exported="false">
@@ -438,6 +453,11 @@ by a child template that "extends" this file.
                 <action android:name="android.accounts.LOGIN_ACCOUNTS_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- Download service -->
+        <service android:name="org.chromium.chrome.browser.download.DownloadNotificationService"
+            android:exported="false">
+        </service>
 
         <!-- Precache service.
         Not enabled on Stable or Work channels. This is currently an experiment

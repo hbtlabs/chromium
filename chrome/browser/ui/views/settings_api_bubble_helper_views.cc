@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/settings_api_bubble_helper_views.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "chrome/browser/extensions/ntp_overridden_bubble_delegate.h"
 #include "chrome/browser/extensions/settings_api_bubble_delegate.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
@@ -35,7 +38,7 @@ void ShowSettingsApiBubble(SettingsApiOverrideType type,
     return;
 
   ExtensionMessageBubbleView* bubble = new ExtensionMessageBubbleView(
-      anchor_view, arrow, settings_api_bubble.Pass());
+      anchor_view, arrow, std::move(settings_api_bubble));
   views::BubbleDelegateView::CreateBubble(bubble);
   bubble->Show();
 }
@@ -109,7 +112,7 @@ void MaybeShowExtensionControlledNewTabPage(
       BrowserView::GetBrowserViewForBrowser(browser)
           ->toolbar()
           ->app_menu_button(),
-      views::BubbleBorder::TOP_RIGHT, ntp_overridden_bubble.Pass());
+      views::BubbleBorder::TOP_RIGHT, std::move(ntp_overridden_bubble));
   views::BubbleDelegateView::CreateBubble(bubble);
   bubble->Show();
 }

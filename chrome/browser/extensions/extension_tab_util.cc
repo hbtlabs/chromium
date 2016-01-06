@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/extension_tab_util.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
@@ -398,7 +401,7 @@ base::DictionaryValue* ExtensionTabUtil::CreateTabValue(
   result->SetBoolean(keys::kPinnedKey,
                      tab_strip && tab_strip->IsTabPinned(tab_index));
   result->SetBoolean(keys::kAudibleKey, contents->WasRecentlyAudible());
-  result->Set(keys::kMutedInfoKey, CreateMutedInfo(contents).Pass());
+  result->Set(keys::kMutedInfoKey, CreateMutedInfo(contents));
   result->SetBoolean(keys::kIncognitoKey,
                      contents->GetBrowserContext()->IsOffTheRecord());
   result->SetInteger(keys::kWidthKey,

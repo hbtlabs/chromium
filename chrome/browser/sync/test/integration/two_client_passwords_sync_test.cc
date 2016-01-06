@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include <limits>
+
 #include "base/guid.h"
 #include "base/hash.h"
+#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
@@ -76,7 +82,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Race) {
 
 IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
                        SetPassphraseAndAddPassword) {
-  GetFakeServer()->EnableImplicitPermanentFolderCreation();
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   SetEncryptionPassphrase(0, kValidPassphrase, ProfileSyncService::EXPLICIT);
@@ -220,8 +225,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ONLY(TwoClientAddPass)) {
   // Add one new password per profile. A unique form is created for each to
   // prevent them from overwriting each other.
   for (int i = 0; i < num_clients(); ++i) {
-    AddLogin(GetPasswordStore(i),
-             CreateTestPasswordForm(base::RandInt(0, kint32max)));
+    AddLogin(GetPasswordStore(i), CreateTestPasswordForm(base::RandInt(
+                                      0, std::numeric_limits<int32_t>::max())));
   }
 
   // Blocks and waits for password forms in all profiles to match.

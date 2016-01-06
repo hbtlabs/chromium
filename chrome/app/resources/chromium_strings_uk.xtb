@@ -41,13 +41,13 @@
 <translation id="225614027745146050">Вітаємо!</translation>
 <translation id="2316129865977710310">Ні, дякую</translation>
 <translation id="2347108572062610441">Це розширення змінило сторінку, яка відкривається під час запуску Chromium.</translation>
+<translation id="2372704305038231957">32-розрядна версія Chromium може працювати неналежним чином, оскільки ця система Linux більше не підтримується. Установіть 64-розрядну версію Chromium.</translation>
 <translation id="2389622953163669926">{NUM_DOWNLOAD,plural, =1{Триває завантаження. Скасувати його та вийти з Chromium?}one{Триває # завантаження. Скасувати їх і вийти з Chromium?}few{Тривають # завантаження. Скасувати їх і вийти з Chromium?}many{Тривають # завантажень. Скасувати їх і вийти з Chromium?}other{Тривають # завантаження. Скасувати їх і вийти з Chromium?}}</translation>
 <translation id="2396765026452590966">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час запуску Chromium.</translation>
 <translation id="2485422356828889247">Видалити</translation>
 <translation id="2486653164587200256">Chromium може працювати неналежним чином, оскільки Windows XP та Windows Vista більше не підтримуються.</translation>
 <translation id="2535480412977113886">ОС Chromium не вдалося синхронізувати ваші дані, оскільки дані для входу в обліковий запис застаріли.</translation>
 <translation id="2558641060352364164">Цей сайт використовує Chromium Frame. Ми припиняємо підтримку цього плагіна. Видаліть його та встановіть сучасний веб-переглядач.</translation>
-<translation id="2565260267992448464">Chromium не може показати веб-сторінку, оскільки ваш комп’ютер не під’єднано до Інтернету.</translation>
 <translation id="2572494885440352020">Помічник Chromium</translation>
 <translation id="2602806952220118310">Chromium – сповіщення</translation>
 <translation id="2636877269779209383">Chromium потрібен доступ до камери, щоб використовувати її на цьому сайті.</translation>
@@ -61,8 +61,6 @@
 <translation id="2886012850691518054">Додатково: допоможіть покращити Chromium,  автоматично надсилаючи статистику використання та звіти про аварійне завершення роботи в Google.</translation>
 <translation id="2910007522516064972">Про &amp;Chromium</translation>
 <translation id="2966088006374919794">Chromium потребує запуску зовнішньої програми обробки посилань типу <ph name="SCHEME" />. Потрібний тип посилання: <ph name="PROTOLINK" />.</translation>
-<translation id="3017978164171051358">Веб-сайт <ph name="SITE" /> зазвичай використовує шифрування для захисту вашої інформації. Під час цієї спроби Chromium під’єднатися до сторінки <ph name="SITE" /> з неї
-отримано незвичні й неправильні облікові дані. Це може статися, коли зловмисник намагається видавати себе за веб-сайт <ph name="SITE" /> або з’єднання перервано екраном входу Wi-Fi. Ваша інформація залишається захищеною, оскільки Chromium припинив з’єднання до того, як почався обмін будь-якими даними.</translation>
 <translation id="3032787606318309379">Додавання в Chromium...</translation>
 <translation id="3046695367536568084">Щоб користуватися додатками, потрібно ввійти в Chromium. Це дозволяє веб-переглядачу Chromium синхронізувати ваші додатки, закладки, історію, паролі й інші налаштування на різних пристроях.</translation>
 <translation id="3068515742935458733">Допоможіть покращити Chromium, надсилаючи звіти про аварійне завершення роботи та <ph name="UMA_LINK" /> в Google</translation>
@@ -88,7 +86,6 @@
 <translation id="358997566136285270">Логотип Chromium</translation>
 <translation id="3595526210123705352">Під час перезавантаження в режимі Windows 8 додатки Chromium закриються та перезапустяться.</translation>
 <translation id="3738139272394829648">Пошук дотиком</translation>
-<translation id="3744899669254331632">Зараз не можна перейти на сторінку <ph name="SITE" />, оскільки веб-сайт надіслав зашифровані облікові дані, які Chromium не може обробити. Помилки мережі й атаки зазвичай є тимчасовими, тому ця сторінка може працювати пізніше.</translation>
 <translation id="3748537968684000502">Ви переглядаєте безпечну сторінку Chromium.</translation>
 <translation id="378917192836375108">Chromium дозволяє натиснути номер телефону в Інтернеті та зателефонувати за ним через Skype.</translation>
 <translation id="3848258323044014972"><ph name="PAGE_TITLE" /> – Chromium</translation>
@@ -110,16 +107,6 @@
 <translation id="4458285410772214805">Щоб зміна почала діяти, вийдіть і ввійдіть знову.</translation>
 <translation id="4488676065623537541">Ваші платіжні дані збережено в Chromium.</translation>
 <translation id="4549794359424059447">Наступні версії Chromium не підтримуватимуть Windows XP та Windows Vista.</translation>
-<translation id="4559775032954821361">Перейдіть у
-          меню Chromium &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Налаштування LAN
-          і зніміть прапорець біля опції "Використовувати проксі-сервер для вашої локальної мережі".</translation>
 <translation id="4567424176335768812">Ви ввійшли як <ph name="USER_EMAIL_ADDRESS" />. Ваші закладки, історія й інші налаштування будуть доступні на всіх пристроях, на яких ви ввійдете в цей обліковий запис.</translation>
 <translation id="457845228957001925">Важлива інформація про ваші дані Chromium</translation>
 <translation id="459535195905078186">Програми Chromium</translation>
@@ -141,16 +128,9 @@
 <translation id="5680901439334282664">увійдіть в обліковий запис Chromium</translation>
 <translation id="5772805321386874569">(потрібно <ph name="BEGIN_BUTTON" />перезапустити<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium майже готовий.</translation>
-<translation id="580822234363523061">Перейдіть у
-          меню Chromium &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          і переконайтеся, що встановлено значення конфігурації "без проксі" чи "безпосередньо".</translation>
 <translation id="5820394555380036790">ОС Chromium</translation>
 <translation id="5823381412099532241">Не вдалось оновити Chromium до останньої версії. Щоб застосувати виправлення системи безпеки та скористатись новими цікавими функціями, потрібно оновити Chromium.</translation>
+<translation id="5859963531214966875">Наступні версії Chromium не підтримуватимуть цю систему Linux.</translation>
 <translation id="5862307444128926510">Вітаємо в Chromium</translation>
 <translation id="5877064549588274448">Канал змінено. Перезапустіть пристрій, щоб застосувати зміни.</translation>
 <translation id="5909170354645388250">Не використовується в Chromium. Заповнювач для синхронізації карт ресурсу. Потрібен один аргумент: $1.</translation>
@@ -170,6 +150,8 @@
 <translation id="6485906693002546646">Ви синхронізуєте дані Chromium через обліковий запис <ph name="PROFILE_EMAIL" />. Щоб оновити параметри синхронізації або використовувати Chromium без облікового запису Google, перейдіть на сторінку <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6510925080656968729">Видалити Chromium</translation>
 <translation id="6526111688217511984">Щоб завантажувати файли, Chromium потребує доступу до пам’яті.</translation>
+<translation id="6584627348340620412">Наступні 32-розрядні версії Chromium не підтримуватимуть цю систему Linux. Установіть 64-розрядну версію.</translation>
+<translation id="6593914713218535185">Chromium може працювати неналежним чином, оскільки ця система Linux більше не підтримується.</translation>
 <translation id="6637001341228460105">Chromium потрібен доступ до мікрофона, щоб використовувати його на цьому сайті.</translation>
 <translation id="6638567566961868659">Шукайте свої закладки в меню Chromium або на панелі закладок.</translation>
 <translation id="6676384891291319759">Доступ до Інтернету</translation>
@@ -225,9 +207,6 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="8033665941300843262">Chromium потрібен доступ до дозволів, щоб використовувати їх на цьому сайті.</translation>
 <translation id="805745970029938373">Тут можна переглядати всі ваші сповіщення з програм і розширень Chromium, а також веб-сайтів.</translation>
 <translation id="8134284582177628525">Якщо ви користуєтеся цим комп’ютером спільно з користувачем <ph name="PROFILE_NAME" />, додайте себе в Chromium, щоб переглядати веб-сайти окремо. Також можна від’єднати обліковий запис Google цього користувача.</translation>
-<translation id="8187289872471304532">Перейдіть у меню
-          Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies (Програми &gt; Системні налаштування &gt; Мережа &gt; Розширені &gt; Проксі-сервери)
-          і зніміть прапорці біля всіх вибраних проксі-серверів.</translation>
 <translation id="8269379391216269538">Допоможіть покращити Chromium</translation>
 <translation id="8453117565092476964">Архів програми встановлення пошкоджений або недійсний. Завантажте Chromium ще раз.</translation>
 <translation id="8493179195440786826">Версія Chromium застаріла</translation>
@@ -235,8 +214,6 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="85843667276690461">Отримати довідку щодо користування Chromium</translation>
 <translation id="8586442755830160949">Авторське право <ph name="YEAR" /> Автори Chromium. Усі права захищено.</translation>
 <translation id="8605166112420372522">Перезапустити Chromium на робочому столі</translation>
-<translation id="8610831143142469229">Надайте Chromium доступ до мережі в налаштуваннях свого брандмауера чи
-        антивірусного програмного забезпечення.</translation>
 <translation id="8621669128220841554">Не вдалося встановити через невизначену помилку. Завантажте Chromium ще раз.</translation>
 <translation id="8628626585870903697">У Chromium немає засобу перегляду файлів PDF, який потрібен для перегляду версії для друку.</translation>
 <translation id="8684913864886094367">Chromium було неправильно закрито.</translation>
@@ -255,7 +232,6 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="8985587603644336029">Хтось раніше входив у Chromium на цьому комп’ютері як <ph name="ACCOUNT_EMAIL_LAST" />. Якщо це не ваш обліковий запис, створіть нового користувача Chromium, щоб зберігати свою інформацію окремо.
 
 Якщо ви все одно ввійдете, наявні дані Chromium, як-от закладки, історію й інші налаштування, буде об’єднано з обліковим записом <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
-<translation id="8987477933582888019">Веб-переглядач</translation>
 <translation id="9013087743919948559">Додати в Chromium</translation>
 <translation id="9013262824292842194">Chromium потребує ОС Windows Vista чи Windows XP із SP2 або новішу версію.</translation>
 <translation id="9019929317751753759">Щоб зробити Chromium безпечнішим, ми вимкнули наведене нижче розширення, установлене не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> і, можливо, додане без вашого відома.</translation>
@@ -265,7 +241,6 @@ Chromium не може відновити ваші налаштування.</tr
 <translation id="911206726377975832">Також видалити дані веб-перегляду?</translation>
 <translation id="918373042641772655">Якщо від’єднати користувача <ph name="USERNAME" />, вашу історію, закладки, налаштування й інші дані Chromium, збережені на цьому пристрої, буде видалено. Дані, які зберігаються в обліковому записі Google, не буде видалено. Ними можна керувати на <ph name="GOOGLE_DASHBOARD_LINK" />Інформаційній панелі Google<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
-<translation id="9191268552238695869">Адміністратор установив Chromium у цій операційній системі, зробивши його доступним для всіх користувачів. Зараз Chromium на рівні системи замінить ваше встановлення на рівні користувача.</translation>
 <translation id="9197815481970649201">Ви ввійшли в Chromium</translation>
 <translation id="95514773681268843">Перш ніж використовувати цей пристрій, потрібно прочитати й прийняти наведені нижче Загальні положення та умови для <ph name="DOMAIN" />. Ці умови не розширюють, не змінюють і не обмежують Умови використання ОС Chromium.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>

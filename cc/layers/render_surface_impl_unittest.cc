@@ -4,6 +4,8 @@
 
 #include "cc/layers/render_surface_impl.h"
 
+#include <stddef.h>
+
 #include "cc/layers/append_quads_data.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/test/fake_mask_layer_impl.h"
@@ -22,7 +24,7 @@ TEST(RenderSurfaceLayerImplTest, Occlusion) {
   LayerImpl* owning_layer_impl = impl.AddChildToRoot<LayerImpl>();
   owning_layer_impl->SetBounds(layer_size);
   owning_layer_impl->SetDrawsContent(true);
-  owning_layer_impl->SetHasRenderSurface(true);
+  owning_layer_impl->SetForceRenderSurface(true);
 
   impl.CalcDrawProps(viewport_size);
 

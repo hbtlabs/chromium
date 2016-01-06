@@ -6,16 +6,21 @@ package org.chromium.chrome.browser.physicalweb;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.AnimationDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.SystemClock;
 import android.support.v7.app.AppCompatActivity;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 
 import java.util.Collection;
@@ -26,14 +31,15 @@ import java.util.HashSet;
  * This activity does not and should not rely directly or indirectly on the native library.
  */
 public class ListUrlsActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
+    public static final String REFERER_KEY = "referer";
+    public static final int NOTIFICATION_REFERER = 1;
+    public static final int OPTIN_REFERER = 2;
     private static final String TAG = "PhysicalWeb";
-    private static final long SCAN_TIMEOUT_MILLIS = 5000; // 5 seconds
     private NearbyUrlsAdapter mAdapter;
     private PwsClient mPwsClient;
-    private Handler mTimerHandler;
-    private Runnable mTimerCallback;
     private ListView mListView;
-    private TextView mEmptyView;
+    private TextView mEmptyListText;
+    private ImageView mScanningImageView;
     private boolean mDisplayRecorded;
 
     @Override
@@ -43,39 +49,67 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
 
         mAdapter = new NearbyUrlsAdapter(this);
 
+        View emptyView = findViewById(android.R.id.empty);
         mListView = (ListView) findViewById(android.R.id.list);
-        mEmptyView = (TextView) findViewById(android.R.id.empty);
-        mListView.setEmptyView(mEmptyView);
+        mListView.setEmptyView(emptyView);
         mListView.setAdapter(mAdapter);
         mListView.setOnItemClickListener(this);
 
+        mEmptyListText = (TextView) findViewById(R.id.physical_web_empty_list_text);
+
+        mScanningImageView = (ImageView) findViewById(R.id.physical_web_logo);
+
         mPwsClient = new PwsClient();
-        int referer = getIntent().getIntExtra(UrlManager.REFERER_KEY, 0);
+        int referer = getIntent().getIntExtra(REFERER_KEY, 0);
         if (savedInstanceState == null  // Ensure this is a newly-created activity
-                && referer == UrlManager.NOTIFICATION_REFERER) {
-            PhysicalWebUma.onNotificationPressed();
+                && referer == NOTIFICATION_REFERER) {
+            PhysicalWebUma.onNotificationPressed(this);
         }
         mDisplayRecorded = false;
+    }
 
-        mTimerHandler = new Handler();
-        mTimerCallback = new Runnable() {
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuItem item = menu.add(R.string.close);
+        item.setIcon(R.drawable.btn_close);
+        item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
-            public void run() {
-                updateEmptyListMessage(false);
+            public boolean onMenuItemClick(MenuItem item) {
+                finish();
+                return true;
             }
-        };
+        });
+        return true;
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         mAdapter.clear();
-        Collection<String> urls = UrlManager.getInstance(this).getUrls();
+        Collection<String> urls = UrlManager.getInstance(this).getUrls(true);
+
+        // If we don't have any URLs to scan for, we can just stop.
+        if (urls.isEmpty()) {
+            updateForScanningStateChanged(false);
+            return;
+        }
+
+        // Otherwise, we can update the UI to make it obvious we are busy.
+        updateForScanningStateChanged(true);
+
         final long timestamp = SystemClock.elapsedRealtime();
         mPwsClient.resolve(urls, new PwsClient.ResolveScanCallback() {
             @Override
             public void onPwsResults(Collection<PwsResult> pwsResults) {
-                PhysicalWebUma.onPwsResponse(SystemClock.elapsedRealtime() - timestamp);
+                long duration = SystemClock.elapsedRealtime() - timestamp;
+                PhysicalWebUma.onForegroundPwsResolution(ListUrlsActivity.this, duration);
+
+                // If PWS has returned no results, we know we have nothing to display
+                if (pwsResults.isEmpty()) {
+                    updateForScanningStateChanged(false);
+                }
+
                 // filter out duplicate site URLs
                 Collection<String> siteUrls = new HashSet<>();
                 for (PwsResult pwsResult : pwsResults) {
@@ -91,22 +125,18 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
                         }
                     }
                 }
+
+
                 // TODO(cco3): Right now we use a simple boolean to see if we've previously recorded
                 //             how many URLs we display, but in the future we need to switch to
                 //             something more sophisticated that recognizes when a "refresh" has
                 //             taken place and the displayed URLs are significantly different.
                 if (!mDisplayRecorded) {
                     mDisplayRecorded = true;
-                    PhysicalWebUma.onUrlsDisplayed(mAdapter.getCount());
+                    PhysicalWebUma.onUrlsDisplayed(ListUrlsActivity.this, mAdapter.getCount());
                 }
             }
         });
-
-        // Nearby doesn't tell us when it's finished but it usually only
-        // takes a few seconds.
-        updateEmptyListMessage(true);
-        mTimerHandler.removeCallbacks(mTimerCallback);
-        mTimerHandler.postDelayed(mTimerCallback, SCAN_TIMEOUT_MILLIS);
     }
 
     /**
@@ -118,7 +148,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
      */
     @Override
     public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
-        PhysicalWebUma.onUrlSelected();
+        PhysicalWebUma.onUrlSelected(this);
         PwsResult pwsResult = mAdapter.getItem(position);
         Intent intent = createNavigateToUrlIntent(pwsResult);
         startActivity(intent);
@@ -133,13 +163,24 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         });
     }
 
-    private void updateEmptyListMessage(boolean isScanning) {
-        int messageId = R.string.physical_web_empty_list;
+    private void updateForScanningStateChanged(boolean isScanning) {
         if (isScanning) {
-            messageId = R.string.physical_web_empty_list_scanning;
-        }
+            mEmptyListText.setText(R.string.physical_web_empty_list_scanning);
 
-        mEmptyView.setText(messageId);
+            mScanningImageView.setImageResource(R.drawable.physical_web_scanning_animation);
+            mScanningImageView.setColorFilter(null);
+
+            AnimationDrawable animationDrawable =
+                    (AnimationDrawable) mScanningImageView.getDrawable();
+            animationDrawable.start();
+        } else {
+            mEmptyListText.setText(R.string.physical_web_empty_list);
+
+            int tintColor = ApiCompatibilityUtils.getColor(getResources(),
+                    R.color.physical_web_logo_gray_tint);
+            mScanningImageView.setImageResource(R.drawable.physical_web_logo);
+            mScanningImageView.setColorFilter(tintColor, PorterDuff.Mode.SRC_IN);
+        }
     }
 
     private static Intent createNavigateToUrlIntent(PwsResult pwsResult) {

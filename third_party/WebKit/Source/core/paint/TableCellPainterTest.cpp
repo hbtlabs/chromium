@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
-
 #include "core/paint/PaintControllerPaintTest.h"
 #include "core/paint/PaintLayerPainter.h"
 
@@ -27,7 +25,6 @@ TEST_F(TableCellPainterTest, TableCellBackgroundInterestRect)
         "</table>");
 
     LayoutView& layoutView = *document().layoutView();
-    PaintLayer& rootLayer = *layoutView.layer();
     LayoutObject& cell1 = *document().getElementById("cell1")->layoutObject();
     LayoutObject& cell2 = *document().getElementById("cell2")->layoutObject();
 
@@ -35,24 +32,18 @@ TEST_F(TableCellPainterTest, TableCellBackgroundInterestRect)
     updateLifecyclePhasesBeforePaint();
     IntRect interestRect(0, 0, 200, 200);
     paint(&interestRect);
-    commit();
 
-    EXPECT_DISPLAY_LIST(rootPaintController().displayItemList(), 4,
-        TestDisplayItem(rootLayer, DisplayItem::Subsequence),
+    EXPECT_DISPLAY_LIST(rootPaintController().displayItemList(), 2,
         TestDisplayItem(layoutView, DisplayItem::BoxDecorationBackground),
-        TestDisplayItem(cell1, DisplayItem::TableCellBackgroundFromRow),
-        TestDisplayItem(rootLayer, DisplayItem::EndSubsequence));
+        TestDisplayItem(cell1, DisplayItem::TableCellBackgroundFromRow));
 
     updateLifecyclePhasesBeforePaint();
     interestRect = IntRect(0, 300, 200, 1000);
     paint(&interestRect);
-    commit();
 
-    EXPECT_DISPLAY_LIST(rootPaintController().displayItemList(), 4,
-        TestDisplayItem(rootLayer, DisplayItem::Subsequence),
+    EXPECT_DISPLAY_LIST(rootPaintController().displayItemList(), 2,
         TestDisplayItem(layoutView, DisplayItem::BoxDecorationBackground),
-        TestDisplayItem(cell2, DisplayItem::TableCellBackgroundFromRow),
-        TestDisplayItem(rootLayer, DisplayItem::EndSubsequence));
+        TestDisplayItem(cell2, DisplayItem::TableCellBackgroundFromRow));
 }
 
 } // namespace blink

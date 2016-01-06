@@ -4,10 +4,16 @@
 
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
+#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/field_trial.h"
 #include "base/prefs/overlay_user_pref_store.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "base/prefs/pref_service.h"
@@ -15,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -62,6 +69,7 @@ const char* kPrefsToObserve[] = {
 #if defined(ENABLE_EXTENSIONS)
   prefs::kAnimationPolicy,
 #endif
+  prefs::kDataSaverEnabled,
   prefs::kDefaultCharset,
   prefs::kDisable3DAPIs,
   prefs::kEnableHyperlinkAuditing,
@@ -247,7 +255,7 @@ UScriptCode GetScriptOfFontPref(const char* pref_name) {
   size_t len = strlen(pref_name);
   DCHECK_GT(len, kScriptNameLength);
   const char* scriptName = &pref_name[len - kScriptNameLength];
-  int32 code = u_getPropertyValueEnum(UCHAR_SCRIPT, scriptName);
+  int32_t code = u_getPropertyValueEnum(UCHAR_SCRIPT, scriptName);
   DCHECK(code >= 0 && code < USCRIPT_CODE_LIMIT);
   return static_cast<UScriptCode>(code);
 }
@@ -316,6 +324,14 @@ void RegisterLocalizedFontPref(user_prefs::PrefRegistrySyncable* registry,
       default_message_id), &val);
   DCHECK(success);
   registry->RegisterIntegerPref(path, val);
+}
+
+bool IsAutodetectEncodingEnabledByDefault() {
+  const std::string group_name = base::FieldTrialList::FindFullName(
+      "AutodetectEncoding");
+  return base::StartsWith(group_name,
+                          "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
 }
 
 }  // namespace
@@ -581,9 +597,11 @@ void PrefsTabHelper::RegisterProfilePrefs(
                             IDS_MINIMUM_FONT_SIZE);
   RegisterLocalizedFontPref(registry, prefs::kWebKitMinimumLogicalFontSize,
                             IDS_MINIMUM_LOGICAL_FONT_SIZE);
+  bool uses_universal_detector = IsAutodetectEncodingEnabledByDefault() ||
+      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true";
   registry->RegisterBooleanPref(
       prefs::kWebKitUsesUniversalDetector,
-      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true",
+      uses_universal_detector,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterStringPref(
       prefs::kStaticEncodings,

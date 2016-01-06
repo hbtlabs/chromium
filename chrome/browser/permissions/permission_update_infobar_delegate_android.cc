@@ -119,7 +119,9 @@ bool PermissionUpdateInfoBarDelegate::RegisterPermissionUpdateInfoBarDelegate(
 }
 
 void PermissionUpdateInfoBarDelegate::OnPermissionResult(
-    JNIEnv* env, jobject obj, jboolean all_permissions_granted) {
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean all_permissions_granted) {
   base::ResetAndReturn(&callback_).Run(all_permissions_granted);
   infobar()->RemoveSelf();
 }
@@ -144,6 +146,11 @@ PermissionUpdateInfoBarDelegate::PermissionUpdateInfoBarDelegate(
 PermissionUpdateInfoBarDelegate::~PermissionUpdateInfoBarDelegate() {
   Java_PermissionUpdateInfoBarDelegate_onNativeDestroyed(
       base::android::AttachCurrentThread(), java_delegate_.obj());
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+PermissionUpdateInfoBarDelegate::GetIdentifier() const {
+  return PERMISSION_UPDATE_INFOBAR_DELEGATE;
 }
 
 int PermissionUpdateInfoBarDelegate::GetIconId() const {

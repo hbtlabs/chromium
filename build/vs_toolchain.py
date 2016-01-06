@@ -104,7 +104,7 @@ def _CopyRuntime2013(target_dir, source_dir, dll_pattern):
 def _CopyRuntime2015(target_dir, source_dir, dll_pattern):
   """Copy both the msvcp and vccorlib runtime DLLs, only if the target doesn't
   exist, but the target directory does exist."""
-  for file_part in ('msvcp', 'vccorlib'):
+  for file_part in ('msvcp', 'vccorlib', 'vcruntime'):
     dll = dll_pattern % file_part
     target = os.path.join(target_dir, dll)
     source = os.path.join(source_dir, dll)
@@ -195,7 +195,7 @@ def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
   if os.environ.get('GYP_MSVS_VERSION') == '2015':
-    return ['49ae4b60d898182fc3f521c2fcda82c453915011']
+    return ['8c3265958030a53f93f9cf027cfa5d5d9717fbf6'] # Update 1
   else:
     # Default to VS2013.
     return ['9ff97c632ae1fee0c98bcd53e71770eb3a0d8deb']

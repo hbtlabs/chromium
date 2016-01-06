@@ -4,9 +4,13 @@
 
 #include "chrome/browser/signin/chrome_signin_client.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -39,6 +43,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -63,20 +68,19 @@ ChromeSigninClient::ChromeSigninClient(
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
   if (!user)
     return;
-  auto* user_manager = user_manager::UserManager::Get();
   const AccountId account_id = user->GetAccountId();
-  if (user_manager->GetKnownUserDeviceId(account_id).empty()) {
+  if (user_manager::known_user::GetDeviceId(account_id).empty()) {
     const std::string legacy_device_id =
         GetPrefs()->GetString(prefs::kGoogleServicesSigninScopedDeviceId);
     if (!legacy_device_id.empty()) {
       // Need to move device ID from the old location to the new one, if it has
       // not been done yet.
-      user_manager->SetKnownUserDeviceId(account_id, legacy_device_id);
+      user_manager::known_user::SetDeviceId(account_id, legacy_device_id);
     } else {
-      user_manager->SetKnownUserDeviceId(
-          account_id,
-          GenerateSigninScopedDeviceID(
-              user_manager->IsUserNonCryptohomeDataEphemeral(account_id)));
+      user_manager::known_user::SetDeviceId(
+          account_id, GenerateSigninScopedDeviceID(
+                          user_manager::UserManager::Get()
+                              ->IsUserNonCryptohomeDataEphemeral(account_id)));
     }
   }
   GetPrefs()->SetString(prefs::kGoogleServicesSigninScopedDeviceId,
@@ -154,8 +158,7 @@ std::string ChromeSigninClient::GetSigninScopedDeviceId() {
     return std::string();
 
   const std::string signin_scoped_device_id =
-      user_manager::UserManager::Get()->GetKnownUserDeviceId(
-          user->GetAccountId());
+      user_manager::known_user::GetDeviceId(user->GetAccountId());
   LOG_IF(ERROR, signin_scoped_device_id.empty())
       << "Device ID is not set for user.";
   return signin_scoped_device_id;
@@ -228,7 +231,7 @@ ChromeSigninClient::AddCookieChangedCallback(
   DCHECK(context_getter.get());
   scoped_ptr<SigninCookieChangedSubscription> subscription(
       new SigninCookieChangedSubscription(context_getter, url, name, callback));
-  return subscription.Pass();
+  return std::move(subscription);
 }
 
 void ChromeSigninClient::OnSignedIn(const std::string& account_id,

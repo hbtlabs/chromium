@@ -4,7 +4,11 @@
 
 #include "content/renderer/media/audio_track_recorder.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/audio_bus.h"
@@ -137,7 +141,9 @@ void AudioTrackRecorder::AudioEncoder::OnSetFormat(
   opus_encoder_ = opus_encoder_create(params.sample_rate(), params.channels(),
                                       OPUS_APPLICATION_AUDIO, &opus_result);
   if (opus_result < 0) {
-    DLOG(ERROR) << "Couldn't init opus encoder: " << opus_strerror(opus_result);
+    DLOG(ERROR) << "Couldn't init opus encoder: " << opus_strerror(opus_result)
+                << ", sample rate: " << params.sample_rate()
+                << ", channels: " << params.channels();
     return;
   }
 
@@ -181,7 +187,7 @@ void AudioTrackRecorder::AudioEncoder::EncodeAudio(
 
     scoped_ptr<std::string> encoded_data(new std::string());
     if (EncodeFromFilledBuffer(encoded_data.get())) {
-      on_encoded_audio_cb_.Run(audio_params_, encoded_data.Pass(),
+      on_encoded_audio_cb_.Run(audio_params_, std::move(encoded_data),
                                buffer_capture_time);
     }
 
@@ -228,7 +234,7 @@ bool AudioTrackRecorder::AudioEncoder::EncodeFromFilledBuffer(
   out->resize(OPUS_MAX_PAYLOAD_SIZE);
   const opus_int32 result = opus_encode_float(
       opus_encoder_, buffer_.get(), frames_per_buffer_,
-      reinterpret_cast<uint8*>(string_as_array(out)), OPUS_MAX_PAYLOAD_SIZE);
+      reinterpret_cast<uint8_t*>(string_as_array(out)), OPUS_MAX_PAYLOAD_SIZE);
   if (result > 1) {
     // TODO(ajose): Investigate improving this. http://crbug.com/547918
     out->resize(result);

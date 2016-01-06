@@ -7,11 +7,10 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-
 #include <map>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -72,11 +71,11 @@ class TestURLRequestContext : public URLRequestContext {
 
   void set_http_network_session_params(
       scoped_ptr<HttpNetworkSession::Params> params) {
-    http_network_session_params_ = params.Pass();
+    http_network_session_params_ = std::move(params);
   }
 
   void SetSdchManager(scoped_ptr<SdchManager> sdch_manager) {
-    context_storage_.set_sdch_manager(sdch_manager.Pass());
+    context_storage_.set_sdch_manager(std::move(sdch_manager));
   }
 
  private:
@@ -340,6 +339,7 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   bool OnCanAccessFile(const URLRequest& request,
                        const base::FilePath& path) const override;
   bool OnAreExperimentalCookieFeaturesEnabled() const override;
+  bool OnAreStrictSecureCookiesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const URLRequest& request,
       const GURL& target_url,
@@ -397,14 +397,15 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
 class TestJobInterceptor : public URLRequestJobFactory::ProtocolHandler {
  public:
   TestJobInterceptor();
+  ~TestJobInterceptor() override;
 
   URLRequestJob* MaybeCreateJob(
       URLRequest* request,
       NetworkDelegate* network_delegate) const override;
-  void set_main_intercept_job(URLRequestJob* job);
+  void set_main_intercept_job(scoped_ptr<URLRequestJob> job);
 
  private:
-  mutable URLRequestJob* main_intercept_job_;
+  mutable scoped_ptr<URLRequestJob> main_intercept_job_;
 };
 
 }  // namespace net

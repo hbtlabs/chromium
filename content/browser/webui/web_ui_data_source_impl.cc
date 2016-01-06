@@ -4,9 +4,12 @@
 
 #include "content/browser/webui/web_ui_data_source_impl.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_util.h"
 #include "content/grit/content_resources.h"
@@ -70,6 +73,11 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
   }
   bool ShouldDenyXFrameOptions() const override {
     return parent_->deny_xframe_options_;
+  }
+  void WillServiceRequest(const net::URLRequest* request,
+                          std::string* path) const override {
+    // We want to remove any query strings from the path.
+    *path = path->substr(0, path->find_first_of('?'));
   }
 
  private:

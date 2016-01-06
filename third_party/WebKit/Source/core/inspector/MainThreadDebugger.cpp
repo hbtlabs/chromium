@@ -28,12 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/MainThreadDebugger.h"
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/DebuggerScript.h"
 #include "core/inspector/InspectorTaskRunner.h"
+#include "core/inspector/v8/V8Debugger.h"
 #include "platform/UserGestureIndicator.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -56,7 +57,8 @@ int frameId(LocalFrame* frame)
 MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
 
 MainThreadDebugger::MainThreadDebugger(PassOwnPtr<ClientMessageLoop> clientMessageLoop, v8::Isolate* isolate)
-    : ScriptDebuggerBase(isolate)
+    : m_isolate(isolate)
+    , m_debugger(V8Debugger::create(isolate, this))
     , m_clientMessageLoop(clientMessageLoop)
     , m_taskRunner(adoptPtr(new InspectorTaskRunner(isolate)))
 {
@@ -74,7 +76,7 @@ MainThreadDebugger::~MainThreadDebugger()
 
 Mutex& MainThreadDebugger::creationMutex()
 {
-    AtomicallyInitializedStaticReference(Mutex, mutex, (new Mutex));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, (new Mutex));
     return mutex;
 }
 
@@ -101,6 +103,11 @@ void MainThreadDebugger::interruptMainThreadAndRun(PassOwnPtr<InspectorTaskRunne
     MutexLocker locker(creationMutex());
     if (s_instance)
         s_instance->m_taskRunner->interruptAndRun(task);
+}
+
+v8::Local<v8::Object> MainThreadDebugger::compileDebuggerScript()
+{
+    return blink::compileDebuggerScript(m_isolate);
 }
 
 void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId)

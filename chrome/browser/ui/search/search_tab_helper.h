@@ -7,9 +7,9 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/ui/search/search_ipc_router.h"
@@ -125,6 +125,10 @@ class SearchTabHelper : public content::WebContentsObserver,
                            OnHistorySyncCheckSyncing);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
                            OnHistorySyncCheckNotSyncing);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromServer);
+  FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
+                           OnMostVisitedItemsChangedFromClient);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
                            IgnoreMessageIfThePageIsNotActive);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
@@ -200,6 +204,10 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   // Returns the OmniboxView for |web_contents_| or NULL if not available.
   OmniboxView* GetOmniboxView() const;
+
+  // Record whether each suggestion comes from server or client.
+  void LogMostVisitedItemsSource(
+      const std::vector<InstantMostVisitedItem>& items);
 
   typedef bool (*OmniboxHasFocusFn)(OmniboxView*);
 

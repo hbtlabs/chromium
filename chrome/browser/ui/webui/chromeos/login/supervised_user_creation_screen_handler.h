@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "components/user_manager/user_image/default_user_images.h"
@@ -32,7 +33,7 @@ class SupervisedUserCreationScreenHandler : public BaseScreenHandler {
 
     // Starts supervised user creation flow, with manager identified by
     // |manager_id| and |manager_password|.
-    virtual void AuthenticateManager(const std::string& manager_id,
+    virtual void AuthenticateManager(const AccountId& manager_account_id,
                                      const std::string& manager_password) = 0;
 
     // Starts supervised user creation flow, with supervised user that would

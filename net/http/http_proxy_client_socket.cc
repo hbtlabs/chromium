@@ -244,11 +244,11 @@ int HttpProxyClientSocket::Write(IOBuffer* buf, int buf_len,
   return transport_->socket()->Write(buf, buf_len, callback);
 }
 
-int HttpProxyClientSocket::SetReceiveBufferSize(int32 size) {
+int HttpProxyClientSocket::SetReceiveBufferSize(int32_t size) {
   return transport_->socket()->SetReceiveBufferSize(size);
 }
 
-int HttpProxyClientSocket::SetSendBufferSize(int32 size) {
+int HttpProxyClientSocket::SetSendBufferSize(int32_t size) {
   return transport_->socket()->SetSendBufferSize(size);
 }
 
@@ -268,7 +268,7 @@ int HttpProxyClientSocket::PrepareForAuthRestart() {
   // The request should be retried at a higher layer.
   if (!response_.headers->IsKeepAlive() ||
       !http_stream_parser_->CanFindEndOfResponse() ||
-      !transport_->socket()->IsConnectedAndIdle()) {
+      !transport_->socket()->IsConnected()) {
     transport_->socket()->Disconnect();
     return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
   }
@@ -284,6 +284,10 @@ int HttpProxyClientSocket::PrepareForAuthRestart() {
 }
 
 int HttpProxyClientSocket::DidDrainBodyForAuthRestart() {
+  // Can't reuse the socket if there's still unread data on it.
+  if (!transport_->socket()->IsConnectedAndIdle())
+    return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
+
   next_state_ = STATE_GENERATE_AUTH_TOKEN;
   transport_->set_reuse_type(ClientSocketHandle::REUSED_IDLE);
 

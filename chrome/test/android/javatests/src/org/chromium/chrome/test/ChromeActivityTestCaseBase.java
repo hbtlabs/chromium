@@ -11,7 +11,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Bundle;
 import android.provider.Browser;
+import android.test.InstrumentationTestRunner;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -118,12 +120,32 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
     protected boolean mSkipClearAppData = false;
     protected boolean mSkipCheckHttpServer = false;
 
+    private Thread.UncaughtExceptionHandler mDefaultUncaughtExceptionHandler;
+
+    private class ChromeUncaughtExceptionHandler implements Thread.UncaughtExceptionHandler {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+            String stackTrace = Log.getStackTraceString(e);
+            if (e.getClass().getName().endsWith("StrictModeViolation")) {
+                stackTrace += "\nSearch logcat for \"StrictMode policy violation\" for full stack.";
+            }
+            Bundle resultsBundle = new Bundle();
+            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_CLASS,
+                    getClass().getName());
+            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_NAME_TEST, getName());
+            resultsBundle.putString(InstrumentationTestRunner.REPORT_KEY_STACK, stackTrace);
+            getInstrumentation().sendStatus(-1, resultsBundle);
+            mDefaultUncaughtExceptionHandler.uncaughtException(t, e);
+        }
+    }
+
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        mDefaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new ChromeUncaughtExceptionHandler());
         ApplicationTestUtils.setUp(
                 getInstrumentation().getTargetContext(), !mSkipClearAppData, !mSkipCheckHttpServer);
-
         setActivityInitialTouchMode(false);
         startMainActivity();
     }
@@ -131,6 +153,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
     @Override
     protected void tearDown() throws Exception {
         ApplicationTestUtils.tearDown(getInstrumentation().getTargetContext());
+        Thread.setDefaultUncaughtExceptionHandler(mDefaultUncaughtExceptionHandler);
         super.tearDown();
     }
 
@@ -352,8 +375,8 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * Load a url in a new tab. The {@link Tab} will pretend to be created from a link.
      * @param url The url of the page to load.
      */
-    public void loadUrlInNewTab(final String url) throws InterruptedException {
-        loadUrlInNewTab(url, false);
+    public Tab loadUrlInNewTab(final String url) throws InterruptedException {
+        return loadUrlInNewTab(url, false);
     }
 
     /**
@@ -361,7 +384,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
      * @param url The url of the page to load.
      * @param incognito Whether the new tab should be incognito.
      */
-    public void loadUrlInNewTab(final String url, final boolean incognito)
+    public Tab loadUrlInNewTab(final String url, final boolean incognito)
             throws InterruptedException {
         Tab tab = null;
         if (FeatureUtilities.isDocumentMode(getInstrumentation().getContext())) {
@@ -405,6 +428,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
         }
         ChromeTabUtils.waitForTabPageLoaded(tab, url);
         getInstrumentation().waitForIdleSync();
+        return tab;
     }
 
     /**

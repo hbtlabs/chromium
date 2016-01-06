@@ -4,12 +4,15 @@
 
 #include "content/renderer/media/remote_media_stream_impl.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/renderer/media/media_stream.h"
@@ -140,14 +143,20 @@ class RemoteVideoTrackAdapter
   }
 
  protected:
-  ~RemoteVideoTrackAdapter() override {}
+  ~RemoteVideoTrackAdapter() override {
+    DCHECK(main_thread_->BelongsToCurrentThread());
+    if (initialized()) {
+      static_cast<MediaStreamRemoteVideoSource*>(
+          webkit_track()->source().extraData())->OnSourceTerminated();
+    }
+  }
 
  private:
   void InitializeWebkitVideoTrack(scoped_ptr<TrackObserver> observer,
                                   bool enabled) {
     DCHECK(main_thread_->BelongsToCurrentThread());
     scoped_ptr<MediaStreamRemoteVideoSource> video_source(
-        new MediaStreamRemoteVideoSource(observer.Pass()));
+        new MediaStreamRemoteVideoSource(std::move(observer)));
     InitializeWebkitTrack(blink::WebMediaStreamSource::TypeVideo);
     webkit_track()->source().setExtraData(video_source.get());
     // Initial constraints must be provided to a MediaStreamVideoTrack. But
@@ -227,10 +236,13 @@ void RemoteAudioTrackAdapter::Unregister() {
 }
 
 void RemoteAudioTrackAdapter::InitializeWebkitAudioTrack() {
-  scoped_ptr<MediaStreamRemoteAudioTrack> media_stream_track(
-      new MediaStreamRemoteAudioTrack(observed_track().get()));
   InitializeWebkitTrack(blink::WebMediaStreamSource::TypeAudio);
-  webkit_track()->setExtraData(media_stream_track.release());
+
+  webkit_track()->source().setExtraData(
+      new MediaStreamRemoteAudioSource(observed_track().get()));
+  webkit_track()->setExtraData(
+      new MediaStreamRemoteAudioTrack(
+          webkit_track()->source(), webkit_track()->isEnabled()));
 }
 
 void RemoteAudioTrackAdapter::OnChanged() {
@@ -315,7 +327,7 @@ void RemoteMediaStreamImpl::Observer::OnChangedOnMainThread(
     scoped_ptr<RemoteVideoTrackAdapters> video_tracks) {
   DCHECK(main_thread_->BelongsToCurrentThread());
   if (media_stream_)
-    media_stream_->OnChanged(audio_tracks.Pass(), video_tracks.Pass());
+    media_stream_->OnChanged(std::move(audio_tracks), std::move(video_tracks));
 }
 
 // Called on the signaling thread.

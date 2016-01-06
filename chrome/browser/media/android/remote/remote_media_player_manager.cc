@@ -20,17 +20,18 @@ RemoteMediaPlayerManager::RemoteMediaPlayerManager(
       weak_ptr_factory_(this) {
 }
 
-RemoteMediaPlayerManager::~RemoteMediaPlayerManager() {}
+RemoteMediaPlayerManager::~RemoteMediaPlayerManager() {
+  for (MediaPlayerAndroid* player : alternative_players_)
+    player->DeleteOnCorrectThread();
+
+  alternative_players_.weak_clear();
+}
 
 void RemoteMediaPlayerManager::OnStart(int player_id) {
   RemoteMediaPlayerBridge* remote_player = GetRemotePlayer(player_id);
-  if (remote_player) {
-    if (IsPlayingRemotely(player_id)) {
-      remote_player->Start();
-    } else if (remote_player->TakesOverCastDevice()) {
-      return;
-    }
-  }
+  if (remote_player && IsPlayingRemotely(player_id))
+    remote_player->Start();
+
   BrowserMediaPlayerManager::OnStart(player_id);
 }
 

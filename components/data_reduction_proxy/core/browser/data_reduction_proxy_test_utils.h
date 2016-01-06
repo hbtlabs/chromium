@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_TEST_UTILS_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_TEST_UTILS_H_
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/macros.h"
@@ -105,6 +107,8 @@ class TestDataReductionProxyConfigServiceClient
 
   ~TestDataReductionProxyConfigServiceClient() override;
 
+  using DataReductionProxyConfigServiceClient::OnIPAddressChanged;
+
   void SetNow(const base::Time& time);
 
   void SetCustomReleaseTime(const base::TimeTicks& release_time);
@@ -114,9 +118,6 @@ class TestDataReductionProxyConfigServiceClient
   int GetBackoffErrorCount();
 
   void SetConfigServiceURL(const GURL& service_url);
-
-  using DataReductionProxyConfigServiceClient::
-      minimum_refresh_interval_on_success;
 
  protected:
   // Overrides of DataReductionProxyConfigServiceClient
@@ -302,6 +303,16 @@ class DataReductionProxyTestContext {
   };
 
   virtual ~DataReductionProxyTestContext();
+
+  // Returns the name of the preference used to enable the Data Reduction
+  // Proxy.
+  const char* GetDataReductionProxyEnabledPrefName() const;
+
+  // Registers, sets, and gets the preference used to enable the Data Reduction
+  // Proxy, respectively.
+  void RegisterDataReductionProxyEnabledPref();
+  void SetDataReductionProxyEnabled(bool enabled);
+  bool IsDataReductionProxyEnabled() const;
 
   // Waits while executing all tasks on the current SingleThreadTaskRunner.
   void RunUntilIdle();

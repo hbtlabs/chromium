@@ -5,7 +5,6 @@
 #ifndef EXTENSIONS_COMMON_CONSTANTS_H_
 #define EXTENSIONS_COMMON_CONSTANTS_H_
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "ui/base/layout.h"
 
@@ -126,7 +125,7 @@ enum AppLaunchSource {
   SOURCE_KEYBOARD,
   SOURCE_EXTENSIONS_PAGE,
   SOURCE_MANAGEMENT_API,
-  SOURCE_EPHEMERAL_APP_UNUSED,
+  SOURCE_EPHEMERAL_APP_DEPRECATED,
   SOURCE_BACKGROUND,
   SOURCE_KIOSK,
   SOURCE_CHROME_INTERNAL,
@@ -189,10 +188,6 @@ enum ExtensionIcons {
   EXTENSION_ICON_BITTY = 16,
   EXTENSION_ICON_INVALID = 0,
 };
-
-// List of sizes for extension icons that can be defined in the manifest.
-extern const int kExtensionIconSizes[];
-extern const size_t kNumExtensionIconSizes;
 
 // The extension id of the PDF extension.
 extern const char kPdfExtensionId[];

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -25,6 +28,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/install_chrome_app.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -597,7 +601,7 @@ bool StartupBrowserCreatorImpl::ProcessStartupURLs(
       return false;
     }
 
-    uint32 restore_behavior = SessionRestore::SYNCHRONOUS;
+    uint32_t restore_behavior = SessionRestore::SYNCHRONOUS;
     if (browser_defaults::kAlwaysCreateTabbedBrowserOnSessionRestore ||
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kCreateBrowserOnStartupForTests)) {
@@ -681,10 +685,6 @@ Browser* StartupBrowserCreatorImpl::ProcessSpecifiedURLs(
     // specified on the command line. Filter out any urls that are to be
     // restored by virtue of having been previously pinned.
     AddUniqueURLs(pref.urls, &tabs);
-  } else if (pref.type == SessionStartupPref::HOMEPAGE) {
-    // If 'homepage' selected, either by the user or by a policy, we should
-    // have migrated them to another value.
-    NOTREACHED() << "SessionStartupPref has deprecated type HOMEPAGE";
   }
 
   if (tabs.empty())
@@ -872,7 +872,8 @@ void StartupBrowserCreatorImpl::AddStartupURLs(
     signin::DidShowPromoAtStartup(profile_);
 
     const GURL sync_promo_url = signin::GetPromoURL(
-        signin_metrics::SOURCE_START_PAGE, false);
+        signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+        signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false);
 
     // No need to add if the sync promo is already in the startup list.
     bool add_promo = true;

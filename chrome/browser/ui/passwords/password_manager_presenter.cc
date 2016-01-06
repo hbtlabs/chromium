@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/user_metrics_action.h"
@@ -11,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -242,7 +245,7 @@ void PasswordManagerPresenter::PasswordListPopulater::Populate() {
 void PasswordManagerPresenter::PasswordListPopulater::OnGetPasswordStoreResults(
     ScopedVector<autofill::PasswordForm> results) {
   page_->password_list_ =
-      password_manager_util::ConvertScopedVector(results.Pass());
+      password_manager_util::ConvertScopedVector(std::move(results));
   page_->SetPasswordList();
 }
 
@@ -264,6 +267,6 @@ void PasswordManagerPresenter::PasswordExceptionListPopulater::Populate() {
 void PasswordManagerPresenter::PasswordExceptionListPopulater::
     OnGetPasswordStoreResults(ScopedVector<autofill::PasswordForm> results) {
   page_->password_exception_list_ =
-      password_manager_util::ConvertScopedVector(results.Pass());
+      password_manager_util::ConvertScopedVector(std::move(results));
   page_->SetPasswordExceptionList();
 }

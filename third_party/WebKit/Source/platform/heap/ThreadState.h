@@ -40,7 +40,6 @@
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/ThreadSpecific.h"
 #include "wtf/Threading.h"
 #include "wtf/ThreadingPrimitives.h"
@@ -57,6 +56,7 @@ class CrossThreadPersistentRegion;
 struct GCInfo;
 class GarbageCollectedMixinConstructorMarker;
 class HeapObjectHeader;
+class PersistentNode;
 class PersistentRegion;
 class BaseHeap;
 class SafePointAwareMutexLocker;
@@ -111,7 +111,7 @@ static bool invokePreFinalizer(void* object)        \
     self->Class::preFinalizer();                    \
     return true;                                    \
 }                                                   \
-using UsingPreFinazlizerMacroNeedsTrailingSemiColon = char
+using UsingPreFinalizerMacroNeedsTrailingSemiColon = char
 
 #if ENABLE(OILPAN)
 #define WILL_BE_USING_PRE_FINALIZER(Class, method) USING_PRE_FINALIZER(Class, method)
@@ -509,6 +509,14 @@ public:
     size_t threadStackSize();
 #endif
 
+#if defined(LEAK_SANITIZER)
+    void registerStaticPersistentNode(PersistentNode*);
+    void releaseStaticPersistentNodes();
+
+    void enterStaticReferenceRegistrationDisabledScope();
+    void leaveStaticReferenceRegistrationDisabledScope();
+#endif
+
 private:
     enum SnapshotType {
         HeapSnapshot,
@@ -649,6 +657,15 @@ private:
 
 #if defined(ADDRESS_SANITIZER)
     void* m_asanFakeStack;
+#endif
+
+#if defined(LEAK_SANITIZER)
+    // PersistentNodes that are stored in static references;
+    // references we have to clear before initiating LSan's leak detection.
+    HashSet<PersistentNode*> m_staticPersistents;
+
+    // Count that controls scoped disabling of persistent registration.
+    size_t m_disabledStaticPersistentsRegistration;
 #endif
 
     // Ideally we want to allocate an array of size |gcInfoTableMax| but it will

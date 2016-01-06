@@ -36,15 +36,16 @@ void BlimpBrowserMainParts::PreMainMessageLoopRun() {
   net_log_.reset(new net::NetLog());
   scoped_ptr<BlimpBrowserContext> browser_context(
       new BlimpBrowserContext(false, net_log_.get()));
-  engine_session_.reset(new BlimpEngineSession(std::move(browser_context)));
+  engine_session_.reset(
+      new BlimpEngineSession(std::move(browser_context), net_log_.get()));
   engine_session_->Initialize();
 
   // TODO(haibinlu): Create EngineConnectionManager to accept new connections.
   // TODO(haibinlu): Remove these test messages and switch to using the
   // MessageDispatcher for incoming messages.
   scoped_ptr<BlimpMessage> message(new BlimpMessage);
-  message->set_type(BlimpMessage::CONTROL);
-  message->mutable_control()->set_type(ControlMessage::CREATE_TAB);
+  message->set_type(BlimpMessage::TAB_CONTROL);
+  message->mutable_tab_control()->set_type(TabControlMessage::CREATE_TAB);
   engine_session_->ProcessMessage(std::move(message),
                                   net::CompletionCallback());
   message.reset(new BlimpMessage);

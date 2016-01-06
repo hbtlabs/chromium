@@ -9,6 +9,7 @@
 #include "ash/ash_switches.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/json_pref_store.h"
@@ -34,6 +35,7 @@
 #include "chromeos/login/user_names.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/tracing/tracing_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -76,6 +78,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableAcceleratedVideoDecode,
     ::switches::kDisableBlinkFeatures,
     ::switches::kDisableCastStreamingHWEncoding,
+    ::switches::kDisableCompositorAnimationTimelines,
     ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
@@ -96,7 +99,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableZeroCopy,
     ::switches::kEnableBlinkFeatures,
-    ::switches::kEnableCompositorAnimationTimelines,
     ::switches::kDisableDisplayList2dCanvas,
     ::switches::kEnableDisplayList2dCanvas,
     ::switches::kForceDisplayList2dCanvas,
@@ -147,8 +149,9 @@ void DeriveCommandLine(const GURL& start_url,
 #if defined(ENABLE_TOPCHROME_MD)
     ::switches::kTopChromeMD,
 #endif
+    ::switches::kTraceToConsole,
+    ::switches::kUIDisableCompositorAnimationTimelines,
     ::switches::kUIDisablePartialSwap,
-    ::switches::kUIEnableCompositorAnimationTimelines,
     ::switches::kUIPrioritizeInGpuProcess,
 #if defined(USE_CRAS)
     ::switches::kUseCras,
@@ -189,15 +192,14 @@ void DeriveCommandLine(const GURL& start_url,
     // content/browser/renderer_host/render_process_host_impl.cc.
     cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
+    cc::switches::kDisableCompositorPropertyTrees,
     cc::switches::kDisableMainFrameBeforeActivation,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableBeginFrameScheduling,
-    cc::switches::kEnableCompositorPropertyTrees,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnablePropertyTreeVerification,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kShowCompositedLayerBorders,
-    cc::switches::kShowFPSCounter,
     cc::switches::kShowLayerAnimationBounds,
     cc::switches::kShowPropertyChangedRects,
     cc::switches::kShowReplicaScreenSpaceRects,

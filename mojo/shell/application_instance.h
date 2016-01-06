@@ -5,10 +5,14 @@
 #ifndef MOJO_SHELL_APPLICATION_INSTANCE_H_
 #define MOJO_SHELL_APPLICATION_INSTANCE_H_
 
+#include <stdint.h>
+
 #include <set>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/process/process_handle.h"
 #include "mojo/application/public/interfaces/application.mojom.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -21,6 +25,7 @@ namespace mojo {
 namespace shell {
 
 class ApplicationManager;
+class NativeRunner;
 
 // Encapsulates a connection to an instance of an application, tracked by the
 // shell's ApplicationManager.
@@ -41,8 +46,14 @@ class ApplicationInstance : public Shell {
 
   void ConnectToClient(scoped_ptr<ConnectToApplicationParams> params);
 
+  // Required before GetProcessId can be called.
+  void SetNativeRunner(NativeRunner* native_runner);
+
   Application* application() { return application_.get(); }
   const Identity& identity() const { return identity_; }
+  int id() const { return id_; }
+  base::ProcessId pid() const { return pid_; }
+  void set_pid(base::ProcessId pid) { pid_ = pid; }
   base::Closure on_application_end() const { return on_application_end_; }
   void set_requesting_content_handler_id(uint32_t id) {
     requesting_content_handler_id_ = id;
@@ -61,13 +72,21 @@ class ApplicationInstance : public Shell {
       const ConnectToApplicationCallback& callback) override;
   void QuitApplication() override;
 
+  static int GenerateUniqueID();
+
   void CallAcceptConnection(scoped_ptr<ConnectToApplicationParams> params);
 
   void OnConnectionError();
 
   void OnQuitRequestedResult(bool can_quit);
 
+  void DestroyRunner();
+
   ApplicationManager* const manager_;
+  // An id that identifies this instance. Distinct from pid, as a single process
+  // may vend multiple application instances, and this object may exist before a
+  // process is launched.
+  const int id_;
   const Identity identity_;
   const bool allow_any_application_;
   uint32_t requesting_content_handler_id_;
@@ -76,6 +95,8 @@ class ApplicationInstance : public Shell {
   Binding<Shell> binding_;
   bool queue_requests_;
   std::vector<ConnectToApplicationParams*> queued_client_requests_;
+  NativeRunner* native_runner_;
+  base::ProcessId pid_;
 
   DISALLOW_COPY_AND_ASSIGN(ApplicationInstance);
 };

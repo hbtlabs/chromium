@@ -114,7 +114,12 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
   }
 
   CreatePrompt();
-  prompt_->ConfirmReEnable(this, extension);
+  ExtensionInstallPrompt::PromptType type =
+      ExtensionInstallPrompt::GetReEnablePromptTypeForExtension(profile_,
+                                                                extension);
+  prompt_->ShowDialog(this, extension, nullptr,
+                      make_scoped_ptr(new ExtensionInstallPrompt::Prompt(type)),
+                      ExtensionInstallPrompt::GetDefaultShowDialogCallback());
 }
 
 void ExtensionEnableFlow::CreatePrompt() {

@@ -6,8 +6,10 @@
 
 #import <Carbon/Carbon.h>  // kVK_Return.
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
 #include "base/mac/bundle_locations.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -50,6 +52,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_service.h"
@@ -165,7 +168,7 @@ NSTextView* BuildFixedWidthTextViewWithLink(
     CGFloat frame_width) {
   base::scoped_nsobject<HyperlinkTextView> text_view(
       [[HyperlinkTextView alloc] initWithFrame:NSZeroRect]);
-  NSColor* link_color = gfx::SkColorToCalibratedNSColor(
+  NSColor* link_color = skia::SkColorToCalibratedNSColor(
       chrome_style::GetLinkColor());
   NSMutableString* finalMessage =
       [NSMutableString stringWithFormat:@"%@\n", message];
@@ -198,7 +201,7 @@ NSTextView* BuildFixedWidthTextViewWithLink(
 
 // Returns the native dialog background color.
 NSColor* GetDialogBackgroundColor() {
-  return gfx::SkColorToCalibratedNSColor(
+  return skia::SkColorToCalibratedNSColor(
       ui::NativeThemeMac::instance()->GetSystemColor(
           ui::NativeTheme::kColorId_DialogBackground));
 }
@@ -798,7 +801,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     // native control.
     SkColor hoverColor = ui::GetAuraColor(
         ui::NativeTheme::kColorId_ButtonHoverBackgroundColor, nullptr);
-    hoverColor_.reset([gfx::SkColorToSRGBNSColor(hoverColor) retain]);
+    hoverColor_.reset([skia::SkColorToSRGBNSColor(hoverColor) retain]);
 
     [self setBordered:NO];
     [self setFont:[NSFont labelFontOfSize:kTextFontSize]];
@@ -1194,7 +1197,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
            anchoredAt:(NSPoint)point
              viewMode:(profiles::BubbleViewMode)viewMode
          tutorialMode:(profiles::TutorialMode)tutorialMode
-          serviceType:(signin::GAIAServiceType)serviceType {
+          serviceType:(signin::GAIAServiceType)serviceType
+          accessPoint:(signin_metrics::AccessPoint)accessPoint {
   base::scoped_nsobject<InfoBubbleWindow> window([[InfoBubbleWindow alloc]
       initWithContentRect:ui::kWindowSizeDeterminedLater
                 styleMask:NSBorderlessWindowMask
@@ -1209,6 +1213,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     tutorialMode_ = tutorialMode;
     observer_.reset(new ActiveProfileObserverBridge(self, browser_));
     serviceType_ = serviceType;
+    accessPoint_ = accessPoint;
 
     avatarMenu_.reset(new AvatarMenu(
         &g_browser_process->profile_manager()->GetProfileInfoCache(),
@@ -1562,7 +1567,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   tutorialMode_ = mode;
 
   NSColor* tutorialBackgroundColor =
-      gfx::SkColorToSRGBNSColor(profiles::kAvatarTutorialBackgroundColor);
+      skia::SkColorToSRGBNSColor(profiles::kAvatarTutorialBackgroundColor);
   base::scoped_nsobject<NSView> container([[BackgroundColorView alloc]
       initWithFrame:NSMakeRect(0, 0, kFixedMenuWidth, 0)
           withColor:tutorialBackgroundColor]);
@@ -1639,7 +1644,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   NSTextField* contentLabel = BuildLabel(
       contentMessage,
       NSMakePoint(kHorizontalSpacing, yOffset),
-      gfx::SkColorToSRGBNSColor(profiles::kAvatarTutorialContentTextColor));
+      skia::SkColorToSRGBNSColor(profiles::kAvatarTutorialContentTextColor));
   [contentLabel setFrameSize:NSMakeSize(availableWidth, 0)];
   [GTMUILocalizerAndLayoutTweaker sizeToFitFixedWidthTextField:contentLabel];
   [container addSubview:contentLabel];
@@ -1993,7 +1998,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       avatarMenu_->GetItemAt(avatarMenu_->GetActiveProfileIndex());
   DCHECK(item.signed_in);
 
-  NSColor* backgroundColor = gfx::SkColorToCalibratedNSColor(
+  NSColor* backgroundColor = skia::SkColorToCalibratedNSColor(
       profiles::kAvatarBubbleAccountsBackgroundColor);
   base::scoped_nsobject<NSView> container([[BackgroundColorView alloc]
       initWithFrame:rect
@@ -2076,21 +2081,21 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   int messageId = -1;
   switch (viewMode_) {
     case profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN:
-      url = signin::GetPromoURL(signin_metrics::SOURCE_AVATAR_BUBBLE_SIGN_IN,
-                                false /* auto_close */,
-                                true /* is_constrained */);
+      url = signin::GetPromoURL(
+          accessPoint_, signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT,
+          false /* auto_close */, true /* is_constrained */);
       messageId = IDS_PROFILES_GAIA_SIGNIN_TITLE;
       break;
     case profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT:
       url = signin::GetPromoURL(
-          signin_metrics::SOURCE_AVATAR_BUBBLE_ADD_ACCOUNT,
-          false /* auto_close */,
-          true /* is_constrained */);
+          accessPoint_, signin_metrics::Reason::REASON_ADD_SECONDARY_ACCOUNT,
+          false /* auto_close */, true /* is_constrained */);
       messageId = IDS_PROFILES_GAIA_ADD_ACCOUNT_TITLE;
       break;
     case profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH:
       DCHECK(HasAuthError(browser_->profile()));
       url = signin::GetReauthURL(
+          accessPoint_, signin_metrics::Reason::REASON_REAUTHENTICATION,
           browser_->profile(), GetAuthErrorAccountId(browser_->profile()));
       messageId = IDS_PROFILES_GAIA_REAUTH_TITLE;
       break;
@@ -2321,8 +2326,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   base::scoped_nsobject<NSButton> link(
       [[HyperlinkButtonCell buttonWithString:title] retain]);
 
-  [[link cell] setShouldUnderline:NO];
-  [[link cell] setTextColor:gfx::SkColorToCalibratedNSColor(
+  [[link cell] setTextColor:skia::SkColorToCalibratedNSColor(
       chrome_style::GetLinkColor())];
   [link setTitle:title];
   [link setBordered:NO];
@@ -2355,7 +2359,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   if (warningImage)
     availableTextWidth -= kHorizontalSpacing;
 
-  NSColor* backgroundColor = gfx::SkColorToCalibratedNSColor(
+  NSColor* backgroundColor = skia::SkColorToCalibratedNSColor(
       profiles::kAvatarBubbleAccountsBackgroundColor);
   base::scoped_nsobject<BackgroundColorHoverButton> button(
       [[BackgroundColorHoverButton alloc] initWithFrame:rect

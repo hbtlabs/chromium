@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "content/browser/webui/url_data_manager_backend.h"
@@ -54,7 +55,7 @@ class UrlDataManagerBackendTest : public testing::Test {
         GURL("chrome://resources/polymer/v1_0/polymer/polymer-extracted.js"),
         net::HIGHEST, delegate);
     request->SetExtraRequestHeaderByName("Origin", origin, true);
-    return request.Pass();
+    return request;
   }
 
  protected:

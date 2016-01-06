@@ -7,11 +7,13 @@
 #include "base/command_line.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
@@ -36,6 +38,7 @@ using chromeos::attestation::PlatformVerificationDialog;
 ProtectedMediaIdentifierPermissionContext::
     ProtectedMediaIdentifierPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
+                            content::PermissionType::PROTECTED_MEDIA_IDENTIFIER,
                             CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER)
 #if defined(OS_CHROMEOS)
       ,
@@ -68,9 +71,11 @@ void ProtectedMediaIdentifierPermissionContext::RequestPermission(
     // Log to the developer console.
     web_contents->GetMainFrame()->AddMessageToConsole(
         content::CONSOLE_MESSAGE_LEVEL_LOG,
-        base::StringPrintf("%s permission has been blocked.",
+        base::StringPrintf(
+            "%s permission has been blocked.",
             PermissionUtil::GetPermissionString(
-                CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER).c_str()));
+                content::PermissionType::PROTECTED_MEDIA_IDENTIFIER)
+                .c_str()));
     // The kill switch is enabled for this permission; Block all requests and
     // run the callback immediately.
     callback.Run(CONTENT_SETTING_BLOCK);

@@ -60,12 +60,15 @@ QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicConfig& config,
                        EpollServer* epoll_server,
                        ProofVerifier* proof_verifier)
-    : QuicClientBase(server_id, supported_versions, config, proof_verifier),
+    : QuicClientBase(server_id,
+                     supported_versions,
+                     config,
+                     new QuicEpollConnectionHelper(epoll_server),
+                     proof_verifier),
       server_address_(server_address),
       local_port_(0),
       epoll_server_(epoll_server),
       fd_(-1),
-      helper_(CreateQuicConnectionHelper()),
       initialized_(false),
       packets_dropped_(0),
       overflow_supported_(false),
@@ -74,7 +77,8 @@ QuicClient::QuicClient(IPEndPoint server_address,
 
 QuicClient::~QuicClient() {
   if (connected()) {
-    session()->connection()->SendConnectionClose(QUIC_PEER_GOING_AWAY);
+    session()->connection()->SendConnectionCloseWithDetails(
+        QUIC_PEER_GOING_AWAY, "Client being torn down");
   }
 
   STLDeleteElements(&data_to_resend_on_connect_);
@@ -88,8 +92,8 @@ bool QuicClient::Initialize() {
 
   // If an initial flow control window has not explicitly been set, then use the
   // same values that Chrome uses.
-  const uint32 kSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
-  const uint32 kStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
+  const uint32_t kSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
+  const uint32_t kStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
   if (config()->GetInitialStreamFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
     config()->SetInitialStreamFlowControlWindowToSend(kStreamMaxRecvWindowSize);
@@ -169,10 +173,9 @@ bool QuicClient::CreateUDPSocket() {
   sockaddr_storage raw_addr;
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(client_address_.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
-                           &raw_addr_len));
-  rc = bind(fd_,
-            reinterpret_cast<const sockaddr*>(&raw_addr),
-            sizeof(raw_addr));
+                                   &raw_addr_len));
+  rc =
+      bind(fd_, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
     return false;
@@ -245,7 +248,7 @@ void QuicClient::StartConnect() {
   }
 
   CreateQuicClientSession(new QuicConnection(
-      GetNextConnectionId(), server_address_, helper_.get(), factory,
+      GetNextConnectionId(), server_address_, helper(), factory,
       /* owns_writer= */ false, Perspective::IS_CLIENT, supported_versions()));
 
   // Reset |writer_| after |session()| so that the old writer outlives the old
@@ -260,7 +263,8 @@ void QuicClient::Disconnect() {
   DCHECK(initialized_);
 
   if (connected()) {
-    session()->connection()->SendConnectionClose(QUIC_PEER_GOING_AWAY);
+    session()->connection()->SendConnectionCloseWithDetails(
+        QUIC_PEER_GOING_AWAY, "Client disconnecting");
   }
   STLDeleteElements(&data_to_resend_on_connect_);
   STLDeleteElements(&data_sent_before_handshake_);
@@ -319,12 +323,12 @@ void QuicClient::MaybeAddQuicDataToResend(QuicDataToResend* data_to_resend) {
   data_sent_before_handshake_.push_back(data_to_resend);
 }
 
-void QuicClient::SendRequestAndWaitForResponse(
-    const BalsaHeaders& headers,
-    StringPiece body,
-    bool fin) {
+void QuicClient::SendRequestAndWaitForResponse(const BalsaHeaders& headers,
+                                               StringPiece body,
+                                               bool fin) {
   SendRequest(headers, body, fin);
-  while (WaitForEvents()) {}
+  while (WaitForEvents()) {
+  }
 }
 
 void QuicClient::SendRequestsAndWaitForResponse(
@@ -334,7 +338,8 @@ void QuicClient::SendRequestsAndWaitForResponse(
     headers.SetRequestFirstlineFromStringPieces("GET", url_list[i], "HTTP/1.1");
     SendRequest(headers, "", true);
   }
-  while (WaitForEvents()) {}
+  while (WaitForEvents()) {
+  }
 }
 
 bool QuicClient::WaitForEvents() {
@@ -403,8 +408,8 @@ void QuicClient::OnClose(QuicSpdyStream* stream) {
                                                &headers);
 
   if (response_listener_.get() != nullptr) {
-    response_listener_->OnCompleteResponse(
-        stream->id(), headers, client_stream->data());
+    response_listener_->OnCompleteResponse(stream->id(), headers,
+                                           client_stream->data());
   }
 
   // Store response headers and body.
@@ -412,6 +417,7 @@ void QuicClient::OnClose(QuicSpdyStream* stream) {
     latest_response_code_ = headers.parsed_response_code();
     headers.DumpHeadersToString(&latest_response_headers_);
     latest_response_body_ = client_stream->data();
+    latest_response_trailers_ = client_stream->trailers().DebugString();
   }
 }
 
@@ -430,8 +436,9 @@ const string& QuicClient::latest_response_body() const {
   return latest_response_body_;
 }
 
-QuicEpollConnectionHelper* QuicClient::CreateQuicConnectionHelper() {
-  return new QuicEpollConnectionHelper(epoll_server_);
+const string& QuicClient::latest_response_trailers() const {
+  LOG_IF(DFATAL, !store_response_) << "Response not stored!";
+  return latest_response_trailers_;
 }
 
 QuicPacketWriter* QuicClient::CreateQuicPacketWriter() {

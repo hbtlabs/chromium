@@ -131,6 +131,7 @@ component("gl") {
   public_deps = [
     "//base",
     "//third_party/mesa:mesa_headers",
+    "//ui/base/",
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -158,9 +159,6 @@ component("gl") {
       "gl_implementation_osmesa.h",
     ]
   }
-  if (is_linux) {
-    deps += [ "//third_party/libevent" ]
-  }
   if (!is_android) {  # TODO(GYP) Enable on Android when osmesa links.
     deps += [ "//third_party/mesa:osmesa" ]
   }
@@ -178,6 +176,8 @@ component("gl") {
       "gl_image_glx.cc",
       "gl_image_glx.h",
       "gl_implementation_x11.cc",
+      "gl_surface_egl_x11.cc",
+      "gl_surface_egl_x11.h",
       "gl_surface_glx.cc",
       "gl_surface_glx.h",
       "gl_surface_x11.cc",
@@ -288,6 +288,7 @@ source_set("gl_unittest_utils") {
   deps = [
     ":gl",
     "//testing/gmock",
+    "//testing/gtest",
   ]
 }
 
@@ -305,8 +306,10 @@ source_set("test_support") {
 
   configs += [ "//third_party/khronos:khronos_headers" ]
 
-  deps = [
+  public_deps = [
     ":gl",
+  ]
+  deps = [
     "//testing/gtest",
   ]
 

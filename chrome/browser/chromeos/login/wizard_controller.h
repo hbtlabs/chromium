@@ -8,10 +8,10 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -322,6 +322,9 @@ class WizardController : public BaseScreenDelegate,
   // controller takes the ownership of |pairing_controller| after that call.
   void OnSharkConnected(
       scoped_ptr<pairing_chromeos::HostPairingController> pairing_controller);
+
+  // Callback function for AddNetworkRequested().
+  void OnSetHostNetworkFailed();
 
   // Start the enrollment screen using the config from
   // |prescribed_enrollment_config_|.

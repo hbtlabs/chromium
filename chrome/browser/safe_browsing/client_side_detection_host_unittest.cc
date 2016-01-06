@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/safe_browsing/client_side_detection_host.h"
+
+#include <utility>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "chrome/browser/safe_browsing/browser_feature_extractor.h"
-#include "chrome/browser/safe_browsing/client_side_detection_host.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -96,13 +100,13 @@ ACTION(QuitUIMessageLoop) {
 ACTION_P(InvokeDoneCallback, verdict) {
   scoped_ptr<ClientPhishingRequest> request(::std::tr1::get<1>(args));
   request->CopyFrom(*verdict);
-  ::std::tr1::get<2>(args).Run(true, request.Pass());
+  ::std::tr1::get<2>(args).Run(true, std::move(request));
 }
 
 ACTION_P(InvokeMalwareCallback, verdict) {
   scoped_ptr<ClientMalwareRequest> request(::std::tr1::get<1>(args));
   request->CopyFrom(*verdict);
-  ::std::tr1::get<2>(args).Run(true, request.Pass());
+  ::std::tr1::get<2>(args).Run(true, std::move(request));
 }
 
 void EmptyUrlCheckCallback(bool processed) {
@@ -351,7 +355,7 @@ class ClientSideDetectionHostTest : public ChromeRenderViewHostTestHarness {
               csd_host_->unsafe_resource_->render_view_id);
   }
 
-  void SetUnsafeSubResourceForCurrent() {
+  void SetUnsafeSubResourceForCurrent(bool expect_unsafe_resource) {
     UnsafeResource resource;
     resource.url = GURL("http://www.malware.com/");
     resource.original_url = web_contents()->GetURL();
@@ -366,8 +370,9 @@ class ClientSideDetectionHostTest : public ChromeRenderViewHostTestHarness {
         web_contents()->GetRenderViewHost()->GetRoutingID();
     csd_host_->OnSafeBrowsingHit(resource);
     resource.callback.Reset();
-    ASSERT_TRUE(csd_host_->DidShowSBInterstitial());
-    TestUnsafeResourceCopied(resource);
+    ASSERT_EQ(expect_unsafe_resource, csd_host_->DidShowSBInterstitial());
+    if (expect_unsafe_resource)
+      TestUnsafeResourceCopied(resource);
   }
 
   void NavigateWithSBHitAndCommit(const GURL& url) {
@@ -415,7 +420,6 @@ class ClientSideDetectionHostTest : public ChromeRenderViewHostTestHarness {
       EXPECT_NE(web_contents()->GetRenderViewHost()->GetRoutingID(),
                 pending_rvh()->GetRoutingID());
     }
-    ASSERT_FALSE(csd_host_->DidShowSBInterstitial());
 
     content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
     ASSERT_FALSE(csd_host_->DidShowSBInterstitial());
@@ -690,7 +694,7 @@ TEST_F(ClientSideDetectionHostTest,
                                 &kFalse, &kFalse, &kFalse, &kFalse);
   NavigateAndCommit(url);
   WaitAndCheckPreClassificationChecks();
-  SetUnsafeSubResourceForCurrent();
+  SetUnsafeSubResourceForCurrent(true /* expect_unsafe_resource */);
 
   EXPECT_CALL(*csd_service_,
               SendClientReportPhishingRequest(
@@ -746,6 +750,69 @@ TEST_F(ClientSideDetectionHostTest,
                                 &kFalse, &kFalse, &kFalse, &kFalse);
   NavigateWithoutSBHitAndCommit(start_url);
   WaitAndCheckPreClassificationChecks();
+}
+
+TEST_F(
+    ClientSideDetectionHostTest,
+    OnPhishingDetectionDoneVerdictNotPhishingButSBMatchOnSubresourceWhileNavPending) {
+  // When a malware hit happens on a committed page while a slow pending load is
+  // in progress, the csd report should be sent for the committed page.
+
+  // Do an initial navigation to a safe host.
+  GURL start_url("http://safe.example.com/");
+  ExpectPreClassificationChecks(
+      start_url, &kFalse, &kFalse, &kFalse, &kFalse, &kFalse, &kFalse, &kFalse,
+      &kFalse);
+  NavigateAndCommit(start_url);
+  WaitAndCheckPreClassificationChecks();
+
+  // Now navigate to a different host which does not have a SB hit.
+  GURL url("http://not-malware-not-phishing-but-malware-subresource.com/");
+  ClientPhishingRequest verdict;
+  verdict.set_url(url.spec());
+  verdict.set_client_score(0.1f);
+  verdict.set_is_phishing(false);
+
+  ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
+                                &kFalse, &kFalse, &kFalse, &kFalse);
+  NavigateWithoutSBHitAndCommit(url);
+
+  // Simulate a subresource malware hit on committed page.
+  SetUnsafeSubResourceForCurrent(true /* expect_unsafe_resource */);
+
+  // Create a pending navigation, but don't commit it.
+  GURL pending_url("http://slow.example.com/");
+  content::WebContentsTester::For(web_contents())->StartNavigation(pending_url);
+
+  WaitAndCheckPreClassificationChecks();
+
+  // Even though we have a pending navigation, the DidShowSBInterstitial check
+  // should apply to the committed navigation, so we should get a report even
+  // though the verdict has is_phishing = false.
+  EXPECT_CALL(*csd_service_,
+              SendClientReportPhishingRequest(
+                  Pointee(PartiallyEqualVerdict(verdict)), _, CallbackIsNull()))
+      .WillOnce(DoAll(DeleteArg<0>(), QuitUIMessageLoop()));
+  std::vector<GURL> redirect_chain;
+  redirect_chain.push_back(url);
+  SetRedirectChain(redirect_chain);
+  OnPhishingDetectionDone(verdict.SerializeAsString());
+  base::MessageLoop::current()->Run();
+  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
+}
+
+TEST_F(ClientSideDetectionHostTest, SafeBrowsingHitOnFreshTab) {
+  // A fresh WebContents should not have any NavigationEntries yet. (See
+  // https://crbug.com/524208.)
+  EXPECT_EQ(nullptr, controller().GetLastCommittedEntry());
+  EXPECT_EQ(nullptr, controller().GetPendingEntry());
+
+  // Simulate a subresource malware hit (this could happen if the WebContents
+  // was created with window.open, and had content injected into it).
+  SetUnsafeSubResourceForCurrent(false /* expect_unsafe_resource */);
+
+  // If the test didn't crash, we're good. (Nothing else to test, since there
+  // was no DidNavigateMainFrame, CSD won't do anything with this hit.)
 }
 
 TEST_F(ClientSideDetectionHostTest,

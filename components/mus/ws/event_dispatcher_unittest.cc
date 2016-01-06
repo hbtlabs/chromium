@@ -4,6 +4,10 @@
 
 #include "components/mus/ws/event_dispatcher.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "components/mus/public/cpp/event_matcher.h"
 #include "components/mus/ws/event_dispatcher_delegate.h"
 #include "components/mus/ws/server_window.h"
@@ -28,7 +32,7 @@ class TestEventDispatcherDelegate : public EventDispatcherDelegate {
   ~TestEventDispatcherDelegate() override {}
 
   mojom::EventPtr GetAndClearLastDispatchedEvent() {
-    return last_dispatched_event_.Pass();
+    return std::move(last_dispatched_event_);
   }
 
   uint32_t GetAndClearLastAccelerator() {
@@ -72,7 +76,7 @@ class TestEventDispatcherDelegate : public EventDispatcherDelegate {
                                   bool in_nonclient_area,
                                   mojom::EventPtr event) override {
     last_target_ = target;
-    last_dispatched_event_ = event.Pass();
+    last_dispatched_event_ = std::move(event);
     last_in_nonclient_area_ = in_nonclient_area;
   }
 
@@ -172,34 +176,34 @@ TEST(EventDispatcherTest, AcceleratorBasic) {
   uint32_t accelerator_1 = 1;
   mojom::EventMatcherPtr matcher = mus::CreateKeyMatcher(
       mus::mojom::KEYBOARD_CODE_W, mus::mojom::EVENT_FLAGS_CONTROL_DOWN);
-  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_1, matcher.Pass()));
+  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_1, std::move(matcher)));
 
   uint32_t accelerator_2 = 2;
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_N,
                                   mus::mojom::EVENT_FLAGS_NONE);
-  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_2, matcher.Pass()));
+  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_2, std::move(matcher)));
 
   // Attempting to add a new accelerator with the same id should fail.
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_T,
                                   mus::mojom::EVENT_FLAGS_NONE);
-  EXPECT_FALSE(dispatcher.AddAccelerator(accelerator_2, matcher.Pass()));
+  EXPECT_FALSE(dispatcher.AddAccelerator(accelerator_2, std::move(matcher)));
 
   // Adding the accelerator with the same id should succeed once the existing
   // accelerator is removed.
   dispatcher.RemoveAccelerator(accelerator_2);
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_T,
                                   mus::mojom::EVENT_FLAGS_NONE);
-  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_2, matcher.Pass()));
+  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_2, std::move(matcher)));
 
   // Attempting to add an accelerator with the same matcher should fail.
   uint32_t accelerator_3 = 3;
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_T,
                                   mus::mojom::EVENT_FLAGS_NONE);
-  EXPECT_FALSE(dispatcher.AddAccelerator(accelerator_3, matcher.Pass()));
+  EXPECT_FALSE(dispatcher.AddAccelerator(accelerator_3, std::move(matcher)));
 
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_T,
                                   mus::mojom::EVENT_FLAGS_CONTROL_DOWN);
-  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_3, matcher.Pass()));
+  EXPECT_TRUE(dispatcher.AddAccelerator(accelerator_3, std::move(matcher)));
 }
 
 TEST(EventDispatcherTest, EventMatching) {
@@ -212,9 +216,17 @@ TEST(EventDispatcherTest, EventMatching) {
   mojom::EventMatcherPtr matcher = mus::CreateKeyMatcher(
       mus::mojom::KEYBOARD_CODE_W, mus::mojom::EVENT_FLAGS_CONTROL_DOWN);
   uint32_t accelerator_1 = 1;
-  dispatcher.AddAccelerator(accelerator_1, matcher.Pass());
+  dispatcher.AddAccelerator(accelerator_1, std::move(matcher));
 
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
+  dispatcher.OnEvent(mojom::Event::From(key));
+  EXPECT_EQ(accelerator_1,
+            event_dispatcher_delegate.GetAndClearLastAccelerator());
+
+  // EF_NUM_LOCK_DOWN should be ignored since CreateKeyMatcher defaults to
+  // ignoring.
+  key = ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_W,
+                     ui::EF_CONTROL_DOWN | ui::EF_NUM_LOCK_DOWN);
   dispatcher.OnEvent(mojom::Event::From(key));
   EXPECT_EQ(accelerator_1,
             event_dispatcher_delegate.GetAndClearLastAccelerator());
@@ -226,7 +238,7 @@ TEST(EventDispatcherTest, EventMatching) {
   uint32_t accelerator_2 = 2;
   matcher = mus::CreateKeyMatcher(mus::mojom::KEYBOARD_CODE_W,
                                   mus::mojom::EVENT_FLAGS_NONE);
-  dispatcher.AddAccelerator(accelerator_2, matcher.Pass());
+  dispatcher.AddAccelerator(accelerator_2, std::move(matcher));
   dispatcher.OnEvent(mojom::Event::From(key));
   EXPECT_EQ(accelerator_2,
             event_dispatcher_delegate.GetAndClearLastAccelerator());

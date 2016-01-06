@@ -2,9 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include <utility>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/notifications/notification_delegate.h"
 #include "chrome/browser/notifications/notification_test_util.h"
@@ -288,11 +294,11 @@ TEST_F(PlatformNotificationServiceTest, DisplayNameForContextMessage) {
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetID("honijodknafkokifofgiaalefdiedpko")
-          .SetManifest(extensions::DictionaryBuilder()
-                           .Set("name", "NotificationTest")
-                           .Set("version", "1.0")
-                           .Set("manifest_version", 2)
-                           .Set("description", "Test Extension"))
+          .SetManifest(std::move(extensions::DictionaryBuilder()
+                                     .Set("name", "NotificationTest")
+                                     .Set("version", "1.0")
+                                     .Set("manifest_version", 2)
+                                     .Set("description", "Test Extension")))
           .Build();
 
   extensions::ExtensionRegistry* registry =
@@ -326,13 +332,15 @@ TEST_F(PlatformNotificationServiceTest, ExtensionPermissionChecks) {
   // Create a mocked extension that has the notifications API permission.
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
-          .SetManifest(extensions::DictionaryBuilder()
-                           .Set("name", "NotificationTest")
-                           .Set("version", "1.0")
-                           .Set("manifest_version", 2)
-                           .Set("description", "Test Extension")
-                           .Set("permissions", extensions::ListBuilder().Append(
-                                                   "notifications")))
+          .SetManifest(
+              std::move(extensions::DictionaryBuilder()
+                            .Set("name", "NotificationTest")
+                            .Set("version", "1.0")
+                            .Set("manifest_version", 2)
+                            .Set("description", "Test Extension")
+                            .Set("permissions",
+                                 std::move(extensions::ListBuilder().Append(
+                                     "notifications")))))
           .Build();
 
   // Install the extension on the faked extension service, and verify that it
@@ -374,11 +382,11 @@ TEST_F(PlatformNotificationServiceTest, CreateNotificationFromData) {
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetID("honijodknafkokifofgiaalefdiedpko")
-          .SetManifest(extensions::DictionaryBuilder()
-                           .Set("name", "NotificationTest")
-                           .Set("version", "1.0")
-                           .Set("manifest_version", 2)
-                           .Set("description", "Test Extension"))
+          .SetManifest(std::move(extensions::DictionaryBuilder()
+                                     .Set("name", "NotificationTest")
+                                     .Set("version", "1.0")
+                                     .Set("manifest_version", 2)
+                                     .Set("description", "Test Extension")))
           .Build();
 
   extensions::ExtensionRegistry* registry =

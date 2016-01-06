@@ -4,6 +4,10 @@
 
 #include "components/rappor/rappor_service.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/prefs/testing_pref_service.h"
@@ -121,7 +125,7 @@ TEST(RapporServiceTest, RecordSample) {
       rappor_service.CreateSample(SAFEBROWSING_RAPPOR_TYPE);
   sample->SetStringField("Url", "example.com");
   sample->SetFlagsField("Flags1", 0xbcd, 12);
-  rappor_service.RecordSampleObj("ObjMetric", sample.Pass());
+  rappor_service.RecordSampleObj("ObjMetric", std::move(sample));
   uint64_t url_hash = base::HashMetricName("ObjMetric.Url");
   uint64_t flags_hash = base::HashMetricName("ObjMetric.Flags1");
   RapporReports reports;

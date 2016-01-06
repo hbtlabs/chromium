@@ -7,6 +7,9 @@
 // NOTE: All messages must send an |int request_id| as their first parameter.
 
 // Multiply-included message file, hence no include guard.
+
+#include <stdint.h>
+
 #include "base/memory/shared_memory.h"
 #include "base/process/process.h"
 #include "content/common/content_param_traits_macros.h"
@@ -29,6 +32,10 @@ struct LoadTimingInfo;
 
 namespace content {
 struct ResourceDevToolsInfo;
+
+// TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+// This method sanity checks the contents of the DataReceived resource message.
+void CheckContentsOfResourceMessage(const IPC::Message* m);
 }
 
 namespace IPC {
@@ -193,7 +200,7 @@ IPC_STRUCT_BEGIN(ResourceHostMsg_Request)
   IPC_STRUCT_MEMBER(net::RequestPriority, priority)
 
   // Used by plugin->browser requests to get the correct net::URLRequestContext.
-  IPC_STRUCT_MEMBER(uint32, request_context)
+  IPC_STRUCT_MEMBER(uint32_t, request_context)
 
   // Indicates which frame (or worker context) the request is being loaded into,
   // or kAppCacheNoHostId.
@@ -297,7 +304,7 @@ IPC_STRUCT_BEGIN(ResourceMsg_RequestCompleteData)
   IPC_STRUCT_MEMBER(base::TimeTicks, completion_time)
 
   // Total amount of data received from the network.
-  IPC_STRUCT_MEMBER(int64, encoded_data_length)
+  IPC_STRUCT_MEMBER(int64_t, encoded_data_length)
 IPC_STRUCT_END()
 
 // Resource messages sent from the browser to the renderer.
@@ -315,8 +322,8 @@ IPC_MESSAGE_CONTROL2(ResourceMsg_ReceivedCachedMetadata,
 // Sent as upload progress is being made.
 IPC_MESSAGE_CONTROL3(ResourceMsg_UploadProgress,
                      int /* request_id */,
-                     int64 /* position */,
-                     int64 /* size */)
+                     int64_t /* position */,
+                     int64_t /* size */)
 
 // Sent when the request has been redirected.  The receiver is expected to
 // respond with either a FollowRedirect message (if the redirect is to be
@@ -342,6 +349,12 @@ IPC_MESSAGE_CONTROL4(ResourceMsg_SetDataBuffer,
                      base::SharedMemoryHandle /* shm_handle */,
                      int /* shm_size */,
                      base::ProcessId /* renderer_pid */)
+
+// A message that always precedes ResourceMsg_DataReceived. Exists to help debug
+// https://code.google.com/p/chromium/issues/detail?id=527588.
+IPC_MESSAGE_CONTROL2(ResourceMsg_DataReceivedDebug,
+                     int /* request_id */,
+                     int /* data_offset */)
 
 // Sent when some data from a resource request is ready.  The data offset and
 // length specify a byte range into the shared memory buffer provided by the

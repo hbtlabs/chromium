@@ -5,6 +5,9 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_ASSOCIATED_INTERFACE_PTR_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_ASSOCIATED_INTERFACE_PTR_H_
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
@@ -19,9 +22,11 @@ namespace mojo {
 // InterfacePtr, except that it doesn't own a message pipe handle.
 template <typename Interface>
 class AssociatedInterfacePtr {
-  MOVE_ONLY_TYPE_WITH_MOVE_CONSTRUCTOR_FOR_CPP_03(AssociatedInterfacePtr)
+  DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND(AssociatedInterfacePtr)
 
  public:
+  using GenericInterface = typename Interface::GenericInterface;
+
   // Constructs an unbound AssociatedInterfacePtr.
   AssociatedInterfacePtr() {}
   AssociatedInterfacePtr(decltype(nullptr)) {}
@@ -52,7 +57,7 @@ class AssociatedInterfacePtr {
   // NOTE: Please see the comments of
   // AssociatedGroup.CreateAssociatedInterface() about when you can use this
   // object to make calls.
-  void Bind(AssociatedInterfacePtrInfo<Interface> info) {
+  void Bind(AssociatedInterfacePtrInfo<GenericInterface> info) {
     reset();
 
     bool is_local =
@@ -62,7 +67,7 @@ class AssociatedInterfacePtr {
                         "at the other side of the message pipe.";
 
     if (info.is_valid() && is_local)
-      internal_state_.Bind(info.Pass());
+      internal_state_.Bind(std::move(info));
   }
 
   bool is_bound() const { return internal_state_.is_bound(); }
@@ -120,7 +125,7 @@ class AssociatedInterfacePtr {
   // It is an error to call PassInterface() while there are pending responses.
   // TODO: fix this restriction, it's not always obvious when there is a
   // pending response.
-  AssociatedInterfacePtrInfo<Interface> PassInterface() {
+  AssociatedInterfacePtrInfo<GenericInterface> PassInterface() {
     DCHECK(!internal_state_.has_pending_callbacks());
     State state;
     internal_state_.Swap(&state);
@@ -173,16 +178,16 @@ class AssociatedInterfacePtr {
 // as soon as the request is sent, |ptr| is usable. There is no need to wait
 // until the request is bound to an implementation at the remote side.
 template <typename Interface>
-AssociatedInterfaceRequest<Interface> GetProxy(
+AssociatedInterfaceRequest<typename Interface::GenericInterface> GetProxy(
     AssociatedInterfacePtr<Interface>* ptr,
     AssociatedGroup* group) {
-  AssociatedInterfaceRequest<Interface> request;
-  AssociatedInterfacePtrInfo<Interface> ptr_info;
+  AssociatedInterfaceRequest<typename Interface::GenericInterface> request;
+  AssociatedInterfacePtrInfo<typename Interface::GenericInterface> ptr_info;
   group->CreateAssociatedInterface(AssociatedGroup::WILL_PASS_REQUEST,
                                    &ptr_info, &request);
 
-  ptr->Bind(ptr_info.Pass());
-  return request.Pass();
+  ptr->Bind(std::move(ptr_info));
+  return std::move(request);
 }
 
 }  // namespace mojo

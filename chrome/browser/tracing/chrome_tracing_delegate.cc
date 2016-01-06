@@ -4,9 +4,12 @@
 
 #include "chrome/browser/tracing/chrome_tracing_delegate.h"
 
+#include <utility>
+
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -15,6 +18,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/trace_event_args_whitelist.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/variations/active_field_trials.h"
 #include "content/public/browser/background_tracing_config.h"
@@ -148,5 +152,10 @@ void ChromeTracingDelegate::GenerateMetadataDict(
   for (const auto& it : variations)
     variations_list->Append(new base::StringValue(it));
 
-  metadata_dict->Set("field-trials", variations_list.Pass());
+  metadata_dict->Set("field-trials", std::move(variations_list));
+}
+
+content::MetadataFilterPredicate
+ChromeTracingDelegate::GetMetadataFilterPredicate() {
+  return base::Bind(&IsMetadataWhitelisted);
 }

@@ -73,7 +73,10 @@ function init() {
           shouldBeTrue("lastPointerEvent.isPrimary");
 
           numericAttributes.forEach(function(attribute) {
-            shouldBeEqualToNumber("lastPointerEvent." + attribute, eval("event." + attribute));
+            var expectedValue = eval("event." + attribute);
+            if (attribute == "button" && event.type != "mousedown" && event.type != "mouseup")
+              expectedValue = -1;
+            shouldBeEqualToNumber("lastPointerEvent." + attribute, expectedValue);
           });
 
         } else {

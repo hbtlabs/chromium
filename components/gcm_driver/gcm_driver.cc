@@ -4,6 +4,8 @@
 
 #include "components/gcm_driver/gcm_driver.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -164,10 +166,10 @@ void GCMDriver::Send(const std::string& app_id,
   SendImpl(app_id, receiver_id, message);
 }
 
-void GCMDriver::GetPublicKey(
+void GCMDriver::GetEncryptionInfo(
     const std::string& app_id,
-    const GetPublicKeyCallback& callback) {
-  encryption_provider_.GetPublicKey(app_id, callback);
+    const GetEncryptionInfoCallback& callback) {
+  encryption_provider_.GetEncryptionInfo(app_id, callback);
 }
 
 void GCMDriver::UnregisterWithSenderIdImpl(const std::string& app_id,

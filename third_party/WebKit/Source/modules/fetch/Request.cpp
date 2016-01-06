@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "modules/fetch/Request.h"
 
 #include "bindings/core/v8/Dictionary.h"
@@ -16,6 +15,7 @@
 #include "modules/fetch/FetchBlobDataConsumerHandle.h"
 #include "modules/fetch/FetchManager.h"
 #include "modules/fetch/RequestInit.h"
+#include "platform/HTTPNames.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/Referrer.h"
@@ -101,9 +101,11 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
             exceptionState.throwTypeError("Failed to parse URL from " + inputString);
             return nullptr;
         }
-        // TODO(yhirano): Implement the following substep:
         //   "If |parsedURL| includes credentials, throw a TypeError."
-        //
+        if (!parsedURL.user().isEmpty() || !parsedURL.pass().isEmpty()) {
+            exceptionState.throwTypeError("Request cannot be constructed from a URL that includes credentials: " + inputString);
+            return nullptr;
+        }
         // "Set |request|'s url to |parsedURL| and replace |request|'s url list
         // single URL with a copy of |parsedURL|."
         request->setURL(parsedURL);
@@ -304,7 +306,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     // "If either |init|'s body member is present or |temporaryBody| is
     // non-null, and |request|'s method is `GET` or `HEAD`, throw a TypeError.
     if (init.body || temporaryBody) {
-        if (request->method() == "GET" || request->method() == "HEAD") {
+        if (request->method() == HTTPNames::GET || request->method() == HTTPNames::HEAD) {
             exceptionState.throwTypeError("Request with GET/HEAD method cannot have body.");
             return nullptr;
         }
@@ -321,8 +323,8 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         //   `Content-Type`/|Content-Type| to |r|'s Headers object. Rethrow any
         //   exception."
         temporaryBody = new BodyStreamBuffer(init.body.release());
-        if (!init.contentType.isEmpty() && !r->headers()->has("Content-Type", exceptionState)) {
-            r->headers()->append("Content-Type", init.contentType, exceptionState);
+        if (!init.contentType.isEmpty() && !r->headers()->has(HTTPNames::Content_Type, exceptionState)) {
+            r->headers()->append(HTTPNames::Content_Type, init.contentType, exceptionState);
         }
         if (exceptionState.hadException())
             return nullptr;
@@ -605,6 +607,12 @@ FetchRequestData* Request::passRequestData()
 bool Request::hasBody() const
 {
     return bodyBuffer();
+}
+
+void Request::stop()
+{
+    if (bodyBuffer())
+        bodyBuffer()->stop();
 }
 
 void Request::populateWebServiceWorkerRequest(WebServiceWorkerRequest& webRequest) const

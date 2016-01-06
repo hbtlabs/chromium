@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/RuleFeature.h"
 
 #include "core/css/CSSSelectorList.h"
@@ -38,10 +37,9 @@ public:
 
     void updateInvalidationSets(const String& selectorText)
     {
-        CSSSelectorList selectorList;
-        CSSParser::parseSelector(strictCSSParserContext(), selectorText, selectorList);
+        CSSSelectorList selectorList = CSSParser::parseSelector(strictCSSParserContext(), selectorText);
 
-        RefPtrWillBeRawPtr<StyleRule> styleRule = StyleRule::create(selectorList, MutableStylePropertySet::create(HTMLStandardMode));
+        RefPtrWillBeRawPtr<StyleRule> styleRule = StyleRule::create(std::move(selectorList), MutableStylePropertySet::create(HTMLStandardMode));
         RuleData ruleData(styleRule.get(), 0, 0, RuleHasNoSpecialState);
         m_ruleFeatureSet.updateInvalidationSets(ruleData);
     }

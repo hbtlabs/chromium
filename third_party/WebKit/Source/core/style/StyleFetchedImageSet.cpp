@@ -23,7 +23,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/style/StyleFetchedImageSet.h"
 
 #include "core/css/CSSImageSetValue.h"
@@ -41,10 +40,19 @@ StyleFetchedImageSet::StyleFetchedImageSet(ImageResource* image, float imageScal
 {
     m_isImageResourceSet = true;
     m_bestFitImage->addClient(this);
+#if ENABLE(OILPAN)
+    ThreadState::current()->registerPreFinalizer(this);
+#endif
 }
 
-
 StyleFetchedImageSet::~StyleFetchedImageSet()
+{
+#if !ENABLE(OILPAN)
+    dispose();
+#endif
+}
+
+void StyleFetchedImageSet::dispose()
 {
     m_bestFitImage->removeClient(this);
 }

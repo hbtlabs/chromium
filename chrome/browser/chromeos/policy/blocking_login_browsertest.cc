@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "chrome/browser/browser_process.h"
@@ -176,7 +177,7 @@ class BlockingLoginTest
       }
     }
 
-    return response.Pass();
+    return response;
   }
 
   // Creates a new canned response that will respond with the given HTTP

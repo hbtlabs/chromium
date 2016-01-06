@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -311,7 +314,7 @@ void WindowManager::OnDisplayConfigured(const gfx::Rect& bounds, bool success) {
     scoped_ptr<DemoWindow> window(
         new DemoWindow(this, &renderer_factory_, bounds));
     window->Start();
-    windows_.push_back(window.Pass());
+    windows_.push_back(std::move(window));
   } else {
     LOG(ERROR) << "Failed to configure display at " << bounds.ToString();
   }

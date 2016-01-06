@@ -4,6 +4,11 @@
 
 #include "remoting/protocol/capture_scheduler.h"
 
+#include <stddef.h>
+
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/timer/mock_timer.h"
@@ -58,7 +63,7 @@ class CaptureSchedulerTest : public testing::Test {
 
     scoped_ptr<VideoAck> ack(new VideoAck());
     ack->set_frame_id(packet.frame_id());
-    scheduler_->ProcessVideoAck(ack.Pass());
+    scheduler_->ProcessVideoAck(std::move(ack));
 
     EXPECT_TRUE(capture_timer_->IsRunning());
     EXPECT_EQ(std::max(base::TimeDelta(),
