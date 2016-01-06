@@ -12,10 +12,13 @@ source_set("mus") {
     "render_widget_window_tree_client_factory.h",
   ]
 
+  configs += [ "//content:content_implementation" ]
+
   deps = [
     "//base",
     "//cc",
     "//components/mus/public/interfaces",
+    "//content/common:mojo_bindings",
     "//mojo/converters/blink",
     "//third_party/WebKit/public:blink",
   ]

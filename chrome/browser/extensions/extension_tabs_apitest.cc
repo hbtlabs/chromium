@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -216,6 +217,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiCaptureTest, CaptureVisibleDisabled) {
                                                true);
   ASSERT_TRUE(RunExtensionSubtest("tabs/capture_visible_tab",
                                   "test_disabled.html")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsOnCreated) {
+  ASSERT_TRUE(RunExtensionTest("tabs/on_created")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsOnUpdated) {

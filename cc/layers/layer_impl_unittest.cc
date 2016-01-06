@@ -4,10 +4,12 @@
 
 #include "cc/layers/layer_impl.h"
 
+#include "cc/animation/mutable_properties.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/filter_operations.h"
+#include "cc/test/animation_test_common.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
@@ -195,12 +197,14 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   // changed.
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBounds(arbitrary_size));
 
-  // Changing this property does not cause the layer to be marked as changed
+  // Changing these properties does not cause the layer to be marked as changed
   // but does cause the layer to need to push properties.
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetIsRootForIsolatedGroup(true));
-
-  // Changing these properties should cause the layer to need to push properties
+  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
+      root->SetElementId(2));
+  EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
+      root->SetMutableProperties(kMutablePropertyOpacity));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
       root->SetScrollParent(scroll_parent.get()));
   EXECUTE_AND_VERIFY_NEEDS_PUSH_PROPERTIES_AND_SUBTREE_DID_NOT_CHANGE(
@@ -294,13 +298,18 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   // verified.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetDrawsContent(true));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer2->SetDrawsContent(true));
-  // Render surface functions.
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+  // Render surface functions should not trigger update draw properties, because
+  // creating render surface is part of update draw properties.
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(false));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(false));
   // Create a render surface, because we must have a render surface if we have
   // filters.
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetHasRenderSurface(true));
+
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(true));
+  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetForceRenderSurface(false));
 
   // Related filter functions.
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetFilters(arbitrary_filters));
@@ -371,6 +380,9 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetTransform(arbitrary_transform));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetElementId(2));
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
+      layer->SetMutableProperties(kMutablePropertyTransform));
 }
 
 TEST(LayerImplTest, SafeOpaqueBackgroundColor) {

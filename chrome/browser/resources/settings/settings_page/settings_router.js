@@ -66,7 +66,12 @@ Polymer({
     currentRouteTitles: {
       notify: true,
       type: Object,
-      value: function() { return {}; },
+      value: function() {
+        return {
+          pageTitle: '',
+          subpageTitles: [],
+        };
+      },
     },
   },
 
@@ -90,19 +95,28 @@ Polymer({
       subpage: [],
       subpageTitles: [],
     },
+<if expr="chromeos">
+    {
+      url: '/networkDetail',
+      page: 'basic',
+      section: 'internet',
+      subpage: ['network-detail'],
+      subpageTitles: ['internetDetailPageTitle'],
+    },
+    {
+      url: '/knownNetworks',
+      page: 'basic',
+      section: 'internet',
+      subpage: ['known-networks'],
+      subpageTitles: ['internetKnownNetworksPageTitle'],
+    },
+</if>
     {
       url: '/fonts',
       page: 'basic',
       section: 'appearance',
       subpage: ['appearance-fonts'],
       subpageTitles: ['customizeFonts'],
-    },
-    {
-      url: '/startup',
-      page: 'basic',
-      section: 'on-startup',
-      subpage: ['startup-urls'],
-      subpageTitles: ['onStartupSetPages'],
     },
     {
       url: '/searchEngines',
@@ -125,6 +139,15 @@ Polymer({
       subpage: ['sync'],
       subpageTitles: ['syncPageTitle'],
     },
+<if expr="chromeos">
+    {
+      url: '/accounts',
+      page: 'basic',
+      section: 'people',
+      subpage: ['users'],
+      subpageTitles: ['usersPageTitle'],
+    },
+</if>
     {
       url: '/certificates',
       page: 'advanced',
@@ -133,11 +156,26 @@ Polymer({
       subpageTitles: ['manageCertificates'],
     },
     {
-      url: '/content',
+      url: '/siteSettings',
       page: 'advanced',
       section: 'privacy',
       subpage: ['site-settings'],
       subpageTitles: ['siteSettings'],
+    },
+    {
+      url: '/siteSettings/category',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category'],
+      subpageTitles: ['siteSettings', 'siteSettingsCategoryPageTitle'],
+    },
+    {
+      url: '/siteSettings/category/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category', 'site-details'],
+      subpageTitles: ['siteSettings', 'siteSettingsCategoryPageTitle',
+          'siteSettingsSiteDetailsPageTitle'],
     },
     {
       url: '/clearBrowserData',
@@ -146,20 +184,23 @@ Polymer({
       subpage: ['clear-browsing-data'],
       subpageTitles: ['clearBrowsingData'],
     },
+<if expr="chromeos">
     {
-      url: '/networkDetail',
-      page: 'basic',
-      section: 'internet',
-      subpage: ['network-detail'],
-      subpageTitles: ['internetDetailPageTitle'],
+      url: '/bluetoothAddDevice',
+      page: 'advanced',
+      section: 'bluetooth',
+      subpage: ['bluetooth-add-device'],
+      subpageTitles: ['bluetoothAddDevicePageTitle'],
     },
     {
-      url: '/knownNetworks',
-      page: 'basic',
-      section: 'internet',
-      subpage: ['known-networks'],
-      subpageTitles: ['internetKnownNetworksPageTitle'],
+      url: '/bluetoothAddDevice/bluetoothPairDevice',
+      page: 'advanced',
+      section: 'bluetooth',
+      subpage: ['bluetooth-add-device', 'bluetooth-pair-device'],
+      subpageTitles: ['bluetoothAddDevicePageTitle',
+                      'bluetoothPairDevicePageTitle'],
     },
+</if>
     {
       url: '/languages',
       page: 'advanced',
@@ -233,12 +274,12 @@ Polymer({
         // Push the current route to the history state, so when the user
         // navigates with the browser back button, we can recall the route.
         if (oldRoute) {
-          history.pushState(historicState, null, route.url);
+          window.history.pushState(historicState, document.title, route.url);
         } else {
           // For the very first route (oldRoute will be undefined), we replace
           // the existing state instead of pushing a new one. This is to allow
           // the user to use the browser back button to exit Settings entirely.
-          history.replaceState(historicState, null);
+          window.history.replaceState(historicState, document.title);
         }
 
         return;

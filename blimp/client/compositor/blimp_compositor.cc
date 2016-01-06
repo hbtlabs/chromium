@@ -17,13 +17,8 @@
 #include "blimp/client/compositor/blimp_layer_tree_settings.h"
 #include "blimp/client/compositor/blimp_output_surface.h"
 #include "blimp/client/compositor/test/dummy_layer_driver.h"
+#include "blimp/client/session/render_widget_feature.h"
 #include "blimp/common/compositor/blimp_task_graph_runner.h"
-#include "blimp/common/proto/blimp_message.pb.h"
-#include "blimp/common/proto/compositor.pb.h"
-#include "blimp/common/proto/input.pb.h"
-#include "blimp/common/proto/render_widget.pb.h"
-#include "blimp/net/blimp_message_multiplexer.h"
-#include "blimp/net/null_blimp_message_processor.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_settings.h"
 #include "cc/output/output_surface.h"
@@ -39,9 +34,6 @@ base::LazyInstance<blimp::BlimpTaskGraphRunner> g_task_graph_runner =
 
 const int kDummyTabId = 0;
 
-base::LazyInstance<blimp::NullBlimpMessageProcessor> g_blimp_message_processor =
-    LAZY_INSTANCE_INITIALIZER;
-
 // TODO(dtrainor): Replace this when Layer content comes from the server (see
 // crbug.com/527200 for details).
 base::LazyInstance<blimp::DummyLayerDriver> g_dummy_layer_driver =
@@ -51,26 +43,29 @@ base::LazyInstance<blimp::DummyLayerDriver> g_dummy_layer_driver =
 
 namespace blimp {
 
-BlimpCompositor::BlimpCompositor(float dp_to_px)
+BlimpCompositor::BlimpCompositor(float dp_to_px,
+                                 RenderWidgetFeature* render_widget_feature)
     : device_scale_factor_(dp_to_px),
       window_(gfx::kNullAcceleratedWidget),
       host_should_be_visible_(false),
       output_surface_request_pending_(false),
       remote_proto_channel_receiver_(nullptr),
-      // TODO(dtrainor): Properly pull these from BlimpMessageMultiplexer.
-      render_widget_processor_(g_blimp_message_processor.Pointer(),
-                               g_blimp_message_processor.Pointer()) {
-  render_widget_processor_.SetDelegate(kDummyTabId, this);
+      render_widget_feature_(render_widget_feature) {
+  render_widget_feature_->SetDelegate(kDummyTabId, this);
 }
 
 BlimpCompositor::~BlimpCompositor() {
-  render_widget_processor_.RemoveDelegate(kDummyTabId);
+  render_widget_feature_->RemoveDelegate(kDummyTabId);
   SetVisible(false);
 
   // Destroy |host_| first, as it has a reference to the |settings_| and runs
   // tasks on |compositor_thread_|.
   host_.reset();
   settings_.reset();
+
+  // We must destroy |host_| before the |input_manager_|.
+  input_manager_.reset();
+
   if (compositor_thread_)
     compositor_thread_->Stop();
 }
@@ -131,6 +126,12 @@ void BlimpCompositor::ReleaseAcceleratedWidget() {
   window_ = gfx::kNullAcceleratedWidget;
 }
 
+bool BlimpCompositor::OnTouchEvent(const ui::MotionEvent& motion_event) {
+  if (input_manager_)
+    return input_manager_->OnTouchEvent(motion_event);
+  return false;
+}
+
 void BlimpCompositor::WillBeginMainFrame() {}
 
 void BlimpCompositor::DidBeginMainFrame() {}
@@ -178,7 +179,7 @@ void BlimpCompositor::SetProtoReceiver(ProtoReceiver* receiver) {
 
 void BlimpCompositor::SendCompositorProto(
     const cc::proto::CompositorMessage& proto) {
-  render_widget_processor_.SendCompositorMessage(kDummyTabId, proto);
+  render_widget_feature_->SendCompositorMessage(kDummyTabId, proto);
 }
 
 void BlimpCompositor::OnRenderWidgetInitialized() {
@@ -188,6 +189,12 @@ void BlimpCompositor::OnRenderWidgetInitialized() {
 
   // Destroy the old LayerTreeHost state.
   host_.reset();
+
+  // Destroy the old input manager state.
+  // It is important to destroy the LayerTreeHost before destroying the input
+  // manager as it has a reference to the cc::InputHandlerClient owned by the
+  // BlimpInputManager.
+  input_manager_.reset();
 
   // Reset other state.
   output_surface_request_pending_ = false;
@@ -210,6 +217,11 @@ void BlimpCompositor::OnCompositorMessageReceived(
 void BlimpCompositor::GenerateLayerTreeSettings(
     cc::LayerTreeSettings* settings) {
   PopulateCommonLayerTreeSettings(settings);
+}
+
+void BlimpCompositor::SendWebInputEvent(
+    const blink::WebInputEvent& input_event) {
+  render_widget_feature_->SendInputEvent(kDummyTabId, input_event);
 }
 
 void BlimpCompositor::CreateLayerTreeHost(
@@ -244,6 +256,15 @@ void BlimpCompositor::CreateLayerTreeHost(
       cc::Layer::Create(BlimpCompositor::LayerSettings()));
   host_->SetRootLayer(root);
   g_dummy_layer_driver.Pointer()->SetParentLayer(root);
+
+  // TODO(khushalsagar): Create this after successful initialization of the
+  // remote client compositor when implemented.
+  DCHECK(!input_manager_);
+  input_manager_ =
+      BlimpInputManager::Create(this,
+                                base::ThreadTaskRunnerHandle::Get(),
+                                GetCompositorTaskRunner(),
+                                host_->GetInputHandler());
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

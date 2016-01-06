@@ -6,14 +6,17 @@
 
 #include <algorithm>
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "grit/theme_resources.h"
 #include "ui/base/resource/material_design/material_design_controller.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/paint_recorder.h"
@@ -69,13 +72,12 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
   // The contents is owned by the LocationBarView.
   set_owned_by_client();
 
-  const ui::ThemeProvider* theme = location_bar_view_->GetThemeProvider();
+  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    top_shadow_ = theme->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_TOP);
-    bottom_shadow_ =
-        theme->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_BOTTOM);
+    top_shadow_ = rb->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_TOP);
+    bottom_shadow_ = rb->GetImageSkiaNamed(IDR_OMNIBOX_DROPDOWN_SHADOW_BOTTOM);
   } else {
-    bottom_shadow_ = theme->GetImageSkiaNamed(IDR_BUBBLE_B);
+    bottom_shadow_ = rb->GetImageSkiaNamed(IDR_BUBBLE_B);
   }
 
   SetEventTargeter(
@@ -447,11 +449,10 @@ void OmniboxPopupContentsView::OnPaint(gfx::Canvas* canvas) {
   if (ui::MaterialDesignController::IsModeMaterial()) {
     canvas->TileImageInt(*top_shadow_, 0, 0, width(), top_shadow_->height());
   } else {
-    canvas->FillRect(
-        gfx::Rect(0, 0, width(),
-                  views::NonClientFrameView::kClientEdgeThickness),
-        ThemeProperties::GetDefaultColor(
-            ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+    canvas->FillRect(gfx::Rect(0, 0, width(),
+                               views::NonClientFrameView::kClientEdgeThickness),
+                     location_bar_view_->GetThemeProvider()->GetColor(
+                         ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
   }
 
   // Bottom border.

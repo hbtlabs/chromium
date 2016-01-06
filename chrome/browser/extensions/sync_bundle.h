@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/api/sync_change.h"
 #include "sync/api/sync_change_processor.h"
@@ -59,9 +60,8 @@ class SyncBundle {
   // locally.
   bool HasPendingExtensionData(const std::string& id) const;
 
-  // Adds pending data for the extension with the given |id|.
-  void AddPendingExtensionData(const std::string& id,
-                               const ExtensionSyncData& sync_data);
+  // Adds pending data for the given extension.
+  void AddPendingExtensionData(const ExtensionSyncData& extension_sync_data);
 
   // Returns a vector of all the pending extension data.
   std::vector<ExtensionSyncData> GetPendingExtensionData() const;

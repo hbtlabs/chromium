@@ -128,9 +128,9 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     // response (as opposed to treating it like a typed string in the Omnibox).
     private static final float VOICE_SEARCH_CONFIDENCE_NAVIGATE_THRESHOLD = 0.9f;
 
-    private static final int CONTENT_OVERLAY_COLOR = Color.argb(166, 0, 0, 0);
-    private static final int OMNIBOX_RESULTS_BG_COLOR = Color.rgb(245, 245, 246);
-    private static final int OMNIBOX_INCOGNITO_RESULTS_BG_COLOR = Color.rgb(50, 50, 50);
+    private static final int CONTENT_OVERLAY_COLOR = 0xA6000000;
+    private static final int OMNIBOX_RESULTS_BG_COLOR = 0xFFF5F5F6;
+    private static final int OMNIBOX_INCOGNITO_RESULTS_BG_COLOR = 0xFF323232;
 
     /**
      * URI schemes that ContentView can handle.
@@ -229,6 +229,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     private boolean mSuggestionModalShown;
     private boolean mUseDarkColors;
+    private boolean mIsEmphasizingHttpsScheme;
 
     // True if the user has just selected a suggestion from the suggestion list. This suppresses
     // the recording of the dismissal of the suggestion list. (The list is only considered to have
@@ -1204,7 +1205,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             mSecurityButton.setImageResource(id);
         }
 
-        if (mSecurityIconType == securityLevel) return;
+        boolean shouldEmphasizeHttpsScheme = shouldEmphasizeHttpsScheme();
+        if (mSecurityIconType == securityLevel
+                && mIsEmphasizingHttpsScheme == shouldEmphasizeHttpsScheme) {
+            return;
+        }
         mSecurityIconType = securityLevel;
 
         if (securityLevel == ConnectionSecurityLevel.NONE) {
@@ -1216,6 +1221,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         // refresh the emphasis.
         mUrlBar.deEmphasizeUrl();
         emphasizeUrl();
+        mIsEmphasizingHttpsScheme = shouldEmphasizeHttpsScheme;
     }
 
     private void emphasizeUrl() {
@@ -1410,7 +1416,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 .addOnLayoutChangeListener(suggestionListResizer);
 
         mSuggestionList = new OmniboxSuggestionsList(getContext());
+
+        // Ensure the results container is initialized and add the suggestion list to it.
+        initOmniboxResultsContainer();
         mOmniboxResultsContainer.addView(mSuggestionList);
+
         // Start with visibility GONE to ensure that show() is called. http://crbug.com/517438
         mSuggestionList.setVisibility(GONE);
         mSuggestionList.setAdapter(mSuggestionListAdapter);
@@ -2077,28 +2087,32 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         return currentTab != null ? currentTab.getContentViewCore() : null;
     }
 
+    private void initOmniboxResultsContainer() {
+        if (mOmniboxResultsContainer != null) return;
+
+        ViewStub overlayStub =
+                (ViewStub) getRootView().findViewById(R.id.omnibox_results_container_stub);
+        mOmniboxResultsContainer = (ViewGroup) overlayStub.inflate();
+        mOmniboxResultsContainer.setBackgroundColor(CONTENT_OVERLAY_COLOR);
+        // Prevent touch events from propagating down to the chrome view.
+        mOmniboxResultsContainer.setOnTouchListener(new OnTouchListener() {
+            @Override
+            @SuppressLint("ClickableViewAccessibility")
+            public boolean onTouch(View v, MotionEvent event) {
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_CANCEL
+                        || action == MotionEvent.ACTION_UP) {
+                    mUrlBar.clearFocus();
+                    updateOmniboxResultsContainerBackground(false);
+                }
+                return true;
+            }
+        });
+    }
+
     private void updateOmniboxResultsContainer() {
         if (mSuggestionsShown || mUrlHasFocus) {
-            if (mOmniboxResultsContainer == null) {
-                ViewStub overlayStub =
-                        (ViewStub) getRootView().findViewById(R.id.omnibox_results_container_stub);
-                mOmniboxResultsContainer = (ViewGroup) overlayStub.inflate();
-                mOmniboxResultsContainer.setBackgroundColor(CONTENT_OVERLAY_COLOR);
-                // Prevent touch events from propagating down to the chrome view.
-                mOmniboxResultsContainer.setOnTouchListener(new OnTouchListener() {
-                    @Override
-                    @SuppressLint("ClickableViewAccessibility")
-                    public boolean onTouch(View v, MotionEvent event) {
-                        int action = event.getActionMasked();
-                        if (action == MotionEvent.ACTION_CANCEL
-                                || action == MotionEvent.ACTION_UP) {
-                            mUrlBar.clearFocus();
-                            updateOmniboxResultsContainerBackground(false);
-                        }
-                        return true;
-                    }
-                });
-            }
+            initOmniboxResultsContainer();
             updateOmniboxResultsContainerVisibility(true);
         } else if (mOmniboxResultsContainer != null) {
             updateOmniboxResultsContainerBackground(false);
@@ -2266,7 +2280,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     @Override
     public void updateVisualsForState() {
-        if (updateUseDarkColors() || getToolbarDataProvider().isUsingBrandColor()) {
+        if (updateUseDarkColors() || mIsEmphasizingHttpsScheme != shouldEmphasizeHttpsScheme()) {
             updateSecurityIcon(getSecurityLevel());
         }
         ColorStateList colorStateList = ApiCompatibilityUtils.getColorStateList(getResources(),

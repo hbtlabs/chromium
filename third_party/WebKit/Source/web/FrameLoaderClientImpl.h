@@ -143,10 +143,13 @@ public:
     bool allowRunningInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) override;
     void didNotAllowScript() override;
     void didNotAllowPlugins() override;
+    void didUseKeygen() override;
 
     WebCookieJar* cookieJar() const override;
     bool willCheckAndDispatchMessageEvent(SecurityOrigin* target, MessageEvent*, LocalFrame* sourceFrame) const override;
+    void frameFocused() const override;
     void didChangeName(const String&) override;
+    void didEnforceStrictMixedContentChecking() override;
     void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
     void didChangeFrameOwnerProperties(HTMLFrameElementBase*) override;
 

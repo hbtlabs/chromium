@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
@@ -31,9 +35,10 @@ class WindowManagerAppTest : public mojo::test::ApplicationTestBase,
         window_tree_client_request = GetProxy(&window_tree_client);
     mojo::Map<mojo::String, mojo::Array<uint8_t>> properties;
     properties.mark_non_null();
-    window_manager->OpenWindow(window_tree_client.Pass(), properties.Pass());
+    window_manager->OpenWindow(std::move(window_tree_client),
+                               std::move(properties));
     mus::WindowTreeConnection* connection = mus::WindowTreeConnection::Create(
-        this, window_tree_client_request.Pass(),
+        this, std::move(window_tree_client_request),
         mus::WindowTreeConnection::CreateType::WAIT_FOR_EMBED);
     return connection->GetRoot();
   }
@@ -46,8 +51,7 @@ class WindowManagerAppTest : public mojo::test::ApplicationTestBase,
   DISALLOW_COPY_AND_ASSIGN(WindowManagerAppTest);
 };
 
-// TODO(sky): flakey, http://crbug.com/559412 .
-TEST_F(WindowManagerAppTest, DISABLED_OpenWindow) {
+TEST_F(WindowManagerAppTest, OpenWindow) {
   mus::mojom::WindowManagerPtr connection;
   ConnectToWindowManager(&connection);
 

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/mediastream/RTCPeerConnection.h"
 
 #include "bindings/core/v8/ArrayValue.h"
@@ -127,6 +126,27 @@ private:
 };
 
 } // namespace
+
+RTCPeerConnection::EventWrapper::EventWrapper(
+    PassRefPtrWillBeRawPtr<Event> event,
+    PassOwnPtr<BoolFunction> function)
+    : m_event(event)
+    , m_setupFunction(function)
+{
+}
+
+bool RTCPeerConnection::EventWrapper::setup()
+{
+    if (m_setupFunction) {
+        return (*m_setupFunction)();
+    }
+    return true;
+}
+
+DEFINE_TRACE(RTCPeerConnection::EventWrapper)
+{
+    visitor->trace(m_event);
+}
 
 RTCConfiguration* RTCPeerConnection::parseConfiguration(const Dictionary& configuration, ExceptionState& exceptionState)
 {
@@ -959,11 +979,20 @@ void RTCPeerConnection::changeIceGatheringState(ICEGatheringState iceGatheringSt
     m_iceGatheringState = iceGatheringState;
 }
 
-void RTCPeerConnection::changeIceConnectionState(ICEConnectionState iceConnectionState)
+bool RTCPeerConnection::setIceConnectionState(ICEConnectionState iceConnectionState)
 {
     if (m_iceConnectionState != ICEConnectionStateClosed && m_iceConnectionState != iceConnectionState) {
         m_iceConnectionState = iceConnectionState;
-        scheduleDispatchEvent(Event::create(EventTypeNames::iceconnectionstatechange));
+        return true;
+    }
+    return false;
+}
+
+void RTCPeerConnection::changeIceConnectionState(ICEConnectionState iceConnectionState)
+{
+    if (m_iceConnectionState != ICEConnectionStateClosed) {
+        scheduleDispatchEvent(Event::create(EventTypeNames::iceconnectionstatechange),
+            WTF::bind(&RTCPeerConnection::setIceConnectionState, this, iceConnectionState));
     }
 }
 
@@ -980,7 +1009,13 @@ void RTCPeerConnection::closeInternal()
 
 void RTCPeerConnection::scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
 {
-    m_scheduledEvents.append(event);
+    scheduleDispatchEvent(event, nullptr);
+}
+
+void RTCPeerConnection::scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event> event,
+    PassOwnPtr<BoolFunction> setupFunction)
+{
+    m_scheduledEvents.append(new EventWrapper(event, setupFunction));
 
     m_dispatchScheduledEventRunner.runAsync();
 }
@@ -990,12 +1025,15 @@ void RTCPeerConnection::dispatchScheduledEvent()
     if (m_stopped)
         return;
 
-    WillBeHeapVector<RefPtrWillBeMember<Event>> events;
+    HeapVector<Member<EventWrapper>> events;
     events.swap(m_scheduledEvents);
 
-    WillBeHeapVector<RefPtrWillBeMember<Event>>::iterator it = events.begin();
-    for (; it != events.end(); ++it)
-        dispatchEvent((*it).release());
+    HeapVector<Member<EventWrapper>>::iterator it = events.begin();
+    for (; it != events.end(); ++it) {
+        if ((*it)->setup()) {
+            dispatchEvent((*it)->m_event.release());
+        }
+    }
 
     events.clear();
 }

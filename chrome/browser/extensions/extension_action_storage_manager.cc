@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/extension_action_storage_manager.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
@@ -48,7 +51,7 @@ enum StoredAppearance {
 
 // Conversion function for reading/writing to storage.
 SkColor RawStringToSkColor(const std::string& str) {
-  uint64 value = 0;
+  uint64_t value = 0;
   base::StringToUint64(str, &value);
   SkColor color = static_cast<SkColor>(value);
   DCHECK(value == color);  // ensure value fits into color's 32 bits
@@ -182,7 +185,7 @@ scoped_ptr<base::DictionaryValue> DefaultsToValue(ExtensionAction* action) {
       std::string size_string = base::IntToString(size);
       icon_value->SetString(size_string, BitmapToString(rep.sk_bitmap()));
     }
-    dict->Set(kIconStorageKey, icon_value.Pass());
+    dict->Set(kIconStorageKey, std::move(icon_value));
   }
   return dict;
 }
@@ -244,8 +247,7 @@ void ExtensionActionStorageManager::WriteToStorage(
     scoped_ptr<base::DictionaryValue> defaults =
         DefaultsToValue(extension_action);
     store->SetExtensionValue(extension_action->extension_id(),
-                             kBrowserActionStorageKey,
-                             defaults.Pass());
+                             kBrowserActionStorageKey, std::move(defaults));
   }
 }
 

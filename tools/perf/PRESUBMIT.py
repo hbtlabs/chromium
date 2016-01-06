@@ -107,7 +107,7 @@ def PostUploadHook(cl, change, output_api):
   """git cl upload will call this hook after the issue is created/modified.
 
   This hook adds extra try bots list to the CL description in order to run
-  Telemetry benchmarks on Perf trybots in addtion to CQ trybots if the CL
+  Telemetry benchmarks on Perf trybots in addition to CQ trybots if the CL
   contains any changes to Telemetry benchmarks.
   """
   benchmarks_modified = _AreBenchmarksModified(change)
@@ -123,7 +123,8 @@ def PostUploadHook(cl, change, output_api):
     'linux_perf_bisect',
     'mac_10_10_perf_bisect',
     'win_perf_bisect',
-    'android_nexus5_perf_bisect'
+    # crbug.com/568661, Disable android bots for CQ due to scheduled lab move.
+    # 'android_nexus5_perf_bisect'
   ]
   bots = ['tryserver.chromium.perf:%s' % s for s in bots]
   bots_string = ';'.join(bots)

@@ -4,6 +4,9 @@
 
 #include "chrome/test/chromedriver/chrome/web_view_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
@@ -150,6 +153,27 @@ Status WebViewImpl::ConnectIfNecessary() {
 
 Status WebViewImpl::HandleReceivedEvents() {
   return client_->HandleReceivedEvents();
+}
+
+Status WebViewImpl::GetUrl(std::string* url) {
+  base::DictionaryValue params;
+  scoped_ptr<base::DictionaryValue> result;
+  Status status = client_->SendCommandAndGetResult(
+      "Page.getNavigationHistory", params, &result);
+  if (status.IsError())
+    return status;
+  int current_index = 0;
+  if (!result->GetInteger("currentIndex", &current_index))
+    return Status(kUnknownError, "navigation history missing currentIndex");
+  base::ListValue* entries = nullptr;
+  if (!result->GetList("entries", &entries))
+    return Status(kUnknownError, "navigation history missing entries");
+  base::DictionaryValue* entry = nullptr;
+  if (!entries->GetDictionary(current_index, &entry))
+    return Status(kUnknownError, "navigation history missing entry");
+  if (!entry->GetString("url", url))
+    return Status(kUnknownError, "navigation history entry is missing url");
+  return Status(kOk);
 }
 
 Status WebViewImpl::Load(const std::string& url) {
@@ -557,7 +581,7 @@ Status WebViewImpl::EndProfile(scoped_ptr<base::Value>* profile_data) {
     }
   }
 
-  *profile_data = profile_result.Pass();
+  *profile_data = std::move(profile_result);
   return status;
 }
 

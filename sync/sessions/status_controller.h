@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "sync/base/sync_export.h"
@@ -30,9 +31,9 @@
 namespace syncer {
 namespace sessions {
 
-class SYNC_EXPORT_PRIVATE StatusController {
+class SYNC_EXPORT StatusController {
  public:
-  explicit StatusController();
+  StatusController();
   ~StatusController();
 
   // ClientToServer messages.

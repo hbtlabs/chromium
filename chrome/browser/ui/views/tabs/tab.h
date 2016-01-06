@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
@@ -50,6 +51,9 @@ class Tab : public gfx::AnimationDelegate,
  public:
   // The Tab's class name.
   static const char kViewClassName[];
+
+  // The color of an inactive tab.
+  static const SkColor kInactiveTabColor;
 
   explicit Tab(TabController* controller);
   ~Tab() override;
@@ -157,6 +161,15 @@ class Tab : public gfx::AnimationDelegate,
   // This is necessary for correct vertical alignment of the frame, tab, and
   // toolbar images with custom themes.
   static int GetYInsetForActiveTabBackground();
+
+  // Returns the inverse of the slope of the diagonal portion of the tab outer
+  // border.  (This is a positive value, so it's specifically for the slope of
+  // the leading edge.)
+  //
+  // This returns the inverse (dx/dy instead of dy/dx) because we use exact
+  // values for the vertical distances between points and then compute the
+  // horizontal deltas from those.
+  static float GetInverseDiagonalSlope();
 
  private:
   friend class TabTest;
@@ -297,6 +310,16 @@ class Tab : public gfx::AnimationDelegate,
 
   // Schedules repaint task for icon.
   void ScheduleIconPaint();
+
+  // Computes a path corresponding to the tab's content region inside the outer
+  // stroke.
+  void GetFillPath(float scale, SkPath* path) const;
+
+  // Computes a path corresponding to the tab's outer border for a given |scale|
+  // and stores it in |path|.  If |extend_to_top| is true, the path is extended
+  // vertically to the top of the tab bounds.  The caller uses this for Fitts'
+  // Law purposes in maximized/fullscreen mode.
+  void GetBorderPath(float scale, bool extend_to_top, SkPath* path) const;
 
   // Returns the rectangle for the light bar in immersive mode.
   gfx::Rect GetImmersiveBarRect() const;

@@ -137,6 +137,7 @@ if (use_ozone) {
       "//ui/events/devices",
       "//ui/events/platform",
       "//ui/gfx",
+      "//ui/ozone:ozone_base",
     ]
 
     public_configs = [ ":evdev" ]
@@ -201,7 +202,6 @@ component("events_ozone_layout") {
     configs += [ ":xkbcommon" ]
 
     sources += [
-      "layout/xkb/scoped_xkb.h",
       "layout/xkb/xkb.h",
       "layout/xkb/xkb_evdev_codes.cc",
       "layout/xkb/xkb_evdev_codes.h",

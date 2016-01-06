@@ -4,12 +4,18 @@
 
 #include "cc/layers/layer_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/animation/animation_registrar.h"
+#include "cc/animation/mutable_properties.h"
 #include "cc/base/math_util.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/debug/debug_colors.h"
@@ -85,12 +91,16 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       num_dependents_need_push_properties_(0),
       sorting_context_id_(0),
       current_draw_mode_(DRAW_MODE_NONE),
+      element_id_(0),
+      mutable_properties_(kMutablePropertyNone),
+      force_render_surface_(false),
       num_layer_or_descendants_with_copy_request_(0),
       frame_timing_requests_dirty_(false),
       visited_(false),
       layer_or_descendant_is_drawn_(false),
       layer_or_descendant_has_input_handler_(false),
-      sorted_for_recursion_(false) {
+      sorted_for_recursion_(false),
+      is_hidden_from_property_trees_(false) {
   DCHECK_GT(layer_id_, 0);
   DCHECK(layer_tree_impl_);
   layer_tree_impl_->RegisterLayer(this);
@@ -138,7 +148,7 @@ scoped_ptr<LayerImpl> LayerImpl::RemoveChild(LayerImpl* child) {
        it != children_.end();
        ++it) {
     if (it->get() == child) {
-      scoped_ptr<LayerImpl> ret = it->Pass();
+      scoped_ptr<LayerImpl> ret = std::move(*it);
       children_.erase(it);
       layer_tree_impl()->set_needs_update_draw_properties();
       return ret;
@@ -277,7 +287,6 @@ void LayerImpl::PassCopyRequests(
   if (requests->empty())
     return;
 
-  DCHECK(render_surface());
   bool was_empty = copy_requests_.empty();
   for (auto& request : *requests)
     copy_requests_.push_back(std::move(request));
@@ -570,7 +579,14 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetDoubleSided(double_sided_);
   layer->SetDrawsContent(DrawsContent());
   layer->SetHideLayerAndSubtree(hide_layer_and_subtree_);
+  // If whether layer has render surface changes, we need to update draw
+  // properties.
+  // TODO(weiliangc): Should be safely removed after impl side is able to
+  // update render surfaces without rebuilding property trees.
+  if (layer->has_render_surface() != has_render_surface())
+    layer->layer_tree_impl()->set_needs_update_draw_properties();
   layer->SetHasRenderSurface(!!render_surface());
+  layer->SetForceRenderSurface(force_render_surface_);
   layer->SetFilters(filters());
   layer->SetBackgroundFilters(background_filters());
   layer->SetMasksToBounds(masks_to_bounds_);
@@ -596,6 +612,8 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetTransformAndInvertibility(transform_, transform_is_invertible_);
 
   layer->SetScrollClipLayer(scroll_clip_layer_id_);
+  layer->SetElementId(element_id_);
+  layer->SetMutableProperties(mutable_properties_);
   layer->set_user_scrollable_horizontal(user_scrollable_horizontal_);
   layer->set_user_scrollable_vertical(user_scrollable_vertical_);
 
@@ -610,6 +628,7 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetClipTreeIndex(clip_tree_index_);
   layer->SetEffectTreeIndex(effect_tree_index_);
   layer->set_offset_to_transform_parent(offset_to_transform_parent_);
+  layer->set_is_hidden_from_property_trees(is_hidden_from_property_trees_);
 
   LayerImpl* scroll_parent = nullptr;
   if (scroll_parent_) {
@@ -677,6 +696,13 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   update_rect_ = gfx::Rect();
   needs_push_properties_ = false;
   num_dependents_need_push_properties_ = 0;
+}
+
+bool LayerImpl::IsAffectedByPageScale() const {
+  TransformTree& transform_tree =
+      layer_tree_impl()->property_trees()->transform_tree;
+  return transform_tree.Node(transform_tree_index())
+      ->data.in_subtree_of_page_scale_layer;
 }
 
 gfx::Vector2dF LayerImpl::FixedContainerSizeDelta() const {
@@ -1216,6 +1242,28 @@ bool LayerImpl::OpacityIsAnimatingOnImplOnly() const {
   return opacity_animation && opacity_animation->is_impl_only();
 }
 
+void LayerImpl::SetElementId(uint64_t element_id) {
+  if (element_id == element_id_)
+    return;
+
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
+               "LayerImpl::SetElementId", "id", element_id);
+
+  element_id_ = element_id;
+  SetNeedsPushProperties();
+}
+
+void LayerImpl::SetMutableProperties(uint32_t properties) {
+  if (mutable_properties_ == properties)
+    return;
+
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
+               "LayerImpl::SetMutableProperties", "properties", properties);
+
+  mutable_properties_ = properties;
+  SetNeedsPushProperties();
+}
+
 void LayerImpl::SetBlendMode(SkXfermode::Mode blend_mode) {
   if (blend_mode_ == blend_mode)
     return;
@@ -1326,6 +1374,12 @@ bool LayerImpl::HasOnlyTranslationTransforms() const {
                  : LayerAnimationController::ObserverType::PENDING;
   return layer_animation_controller_->HasOnlyTranslationTransforms(
       observer_type);
+}
+
+bool LayerImpl::AnimationsPreserveAxisAlignment() const {
+  return layer_animation_controller_
+             ? layer_animation_controller_->AnimationsPreserveAxisAlignment()
+             : layer_tree_impl_->AnimationsPreserveAxisAlignment(this);
 }
 
 bool LayerImpl::MaximumTargetScale(float* max_scale) const {
@@ -1630,6 +1684,11 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetInteger("gpu_memory_usage",
                     base::saturated_cast<int>(GPUMemoryUsageInBytes()));
 
+  if (mutable_properties_ != kMutablePropertyNone) {
+    state->SetInteger("element_id", base::saturated_cast<int>(element_id_));
+    state->SetInteger("mutable_properties", mutable_properties_);
+  }
+
   MathUtil::AddToTracedValue(
       "scroll_offset", scroll_offset_ ? scroll_offset_->Current(IsActive())
                                       : gfx::ScrollOffset(),
@@ -1767,7 +1826,6 @@ void LayerImpl::SetHasRenderSurface(bool should_have_render_surface) {
     return;
 
   SetNeedsPushProperties();
-  layer_tree_impl()->set_needs_update_draw_properties();
   if (should_have_render_surface) {
     render_surface_ = make_scoped_ptr(new RenderSurfaceImpl(this));
     return;
@@ -1804,6 +1862,14 @@ gfx::Transform LayerImpl::ScreenSpaceTransform() const {
   return draw_properties().screen_space_transform;
 }
 
+void LayerImpl::SetForceRenderSurface(bool force_render_surface) {
+  if (force_render_surface == force_render_surface_)
+    return;
+
+  force_render_surface_ = force_render_surface;
+  NoteLayerPropertyChanged();
+}
+
 Region LayerImpl::GetInvalidationRegion() {
   return Region(update_rect_);
 }
@@ -1819,6 +1885,14 @@ gfx::Rect LayerImpl::GetScaledEnclosingRectInTargetSpace(float scale) const {
   gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(bounds(), scale);
   return MathUtil::MapEnclosingClippedRect(scaled_draw_transform,
                                            gfx::Rect(scaled_bounds));
+}
+
+bool LayerImpl::LayerIsHidden() const {
+  if (layer_tree_impl()->settings().use_property_trees) {
+    return is_hidden_from_property_trees_;
+  } else {
+    return hide_layer_and_subtree_ || (parent() && parent()->LayerIsHidden());
+  }
 }
 
 float LayerImpl::GetIdealContentsScale() const {

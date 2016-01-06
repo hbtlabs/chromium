@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/sys_string_conversions.h"
@@ -1556,7 +1557,7 @@ NSImage* Overlay(NSImage* ground, NSImage* overlay, CGFloat alpha) {
   if (isApp) {
     SkBitmap* icon = extensions_tab_helper->GetExtensionAppIcon();
     if (icon)
-      image = gfx::SkBitmapToNSImageWithColorSpace(*icon, colorSpace);
+      image = skia::SkBitmapToNSImageWithColorSpace(*icon, colorSpace);
   } else {
     image = mac::FaviconForWebContents(contents);
   }
@@ -2358,8 +2359,7 @@ NSImage* Overlay(NSImage* ground, NSImage* overlay, CGFloat alpha) {
 }
 
 - (void)setNewTabImages {
-  ThemeService *theme =
-      static_cast<ThemeService*>([[tabStripView_ window] themeProvider]);
+  const ui::ThemeProvider* theme = [[tabStripView_ window] themeProvider];
   if (!theme)
     return;
 
@@ -2380,7 +2380,7 @@ NSImage* Overlay(NSImage* ground, NSImage* overlay, CGFloat alpha) {
                     forButtonState:image_button_cell::kPressedState];
 
   // IDR_THEME_TAB_BACKGROUND_INACTIVE is only used with the default theme.
-  if (theme->UsingDefaultTheme()) {
+  if (theme->UsingSystemTheme()) {
     const CGFloat alpha = tabs::kImageNoFocusAlpha;
     NSImage* background = ApplyMask(
         theme->GetNSImageNamed(IDR_THEME_TAB_BACKGROUND_INACTIVE), mask);

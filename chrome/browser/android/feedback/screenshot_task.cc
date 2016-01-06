@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/feedback/screenshot_task.h"
 
+#include <stddef.h>
+
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted_memory.h"
@@ -31,7 +33,7 @@ void SnapshotCallback(JNIEnv* env,
                       base::android::ScopedJavaGlobalRef<jobject>* callback,
                       scoped_refptr<base::RefCountedBytes> png_data) {
   jbyteArray jbytes = nullptr;
-  if (!png_data.get()) {
+  if (png_data.get()) {
     size_t size = png_data->size();
     jbytes = env->NewByteArray(size);
     env->SetByteArrayRegion(jbytes, 0, size, (jbyte*) png_data->front());

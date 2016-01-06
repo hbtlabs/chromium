@@ -6,6 +6,7 @@
 
 #include <mfapi.h>
 #include <mferror.h>
+#include <stddef.h>
 
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -63,9 +64,9 @@ static bool LoadMediaFoundationDlls() {
       L"%WINDIR%\\system32\\mfreadwrite.dll",
   };
 
-  for (int i = 0; i < arraysize(kMfDLLs); ++i) {
+  for (const wchar_t* kMfDLL : kMfDLLs) {
     wchar_t path[MAX_PATH] = {0};
-    ExpandEnvironmentStringsW(kMfDLLs[i], path, arraysize(path));
+    ExpandEnvironmentStringsW(kMfDLL, path, arraysize(path));
     if (!LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH))
       return false;
   }

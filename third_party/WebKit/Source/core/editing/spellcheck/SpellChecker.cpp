@@ -24,7 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 
 #include "core/HTMLNames.h"
@@ -511,8 +510,6 @@ void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask
 
     for (int iter = 0; iter < kNumChunksToCheck; ++iter) {
         EphemeralRange checkRange = expandRangeToSentenceBoundary(fullParagraphToCheck.subrange(currentChunkStart, kChunkSize));
-        if (checkRange.isNull())
-            continue;
         int checkingLength = 0;
         markAllMisspellingsAndBadGrammarInRanges(textCheckingOptions, checkRange, checkRange, iter, &checkingLength);
         currentChunkStart += checkingLength;

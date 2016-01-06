@@ -4,11 +4,14 @@
 
 #include "mojo/services/network/network_service_delegate.h"
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "mojo/application/public/cpp/application_connection.h"
@@ -32,7 +35,7 @@ class SQLThread : public base::Thread {
  public:
   SQLThread(filesystem::DirectoryPtr directory)
       : base::Thread(kSQLThreadName),
-        directory_info_(directory.PassInterface().Pass()) {
+        directory_info_(directory.PassInterface()) {
     base::Thread::Options options;
     options.message_pump_factory =
         base::Bind(&mojo::common::MessagePumpMojo::Create);
@@ -42,8 +45,8 @@ class SQLThread : public base::Thread {
 
   void Init() override {
     filesystem::DirectoryPtr directory;
-    directory.Bind(directory_info_.Pass());
-    vfs_.reset(new sql::ScopedMojoFilesystemVFS(directory.Pass()));
+    directory.Bind(std::move(directory_info_));
+    vfs_.reset(new sql::ScopedMojoFilesystemVFS(std::move(directory)));
   }
 
   void CleanUp() override {
@@ -100,11 +103,11 @@ void NetworkServiceDelegate::Initialize(ApplicationImpl* app) {
 
   filesystem::FileError error = filesystem::FILE_ERROR_FAILED;
   filesystem::DirectoryPtr directory;
-  files_->OpenFileSystem("origin", GetProxy(&directory), client.Pass(),
+  files_->OpenFileSystem("origin", GetProxy(&directory), std::move(client),
                          Capture(&error));
   files_.WaitForIncomingResponse();
 
-  io_worker_thread_.reset(new SQLThread(directory.Pass()));
+  io_worker_thread_.reset(new SQLThread(std::move(directory)));
 #endif
 
   // TODO(erg): Find everything else that writes to the filesystem and
@@ -157,15 +160,14 @@ void NetworkServiceDelegate::Quit() {
 void NetworkServiceDelegate::Create(ApplicationConnection* connection,
                                     InterfaceRequest<NetworkService> request) {
   new NetworkServiceImpl(app_->app_lifetime_helper()->CreateAppRefCount(),
-                         request.Pass());
+                         std::move(request));
 }
 
 void NetworkServiceDelegate::Create(ApplicationConnection* connection,
                                     InterfaceRequest<CookieStore> request) {
-  new CookieStoreImpl(context_.get(),
-                      GURL(connection->GetRemoteApplicationURL()).GetOrigin(),
-                      app_->app_lifetime_helper()->CreateAppRefCount(),
-                      request.Pass());
+  new CookieStoreImpl(
+      context_.get(), GURL(connection->GetRemoteApplicationURL()).GetOrigin(),
+      app_->app_lifetime_helper()->CreateAppRefCount(), std::move(request));
 }
 
 void NetworkServiceDelegate::Create(
@@ -173,7 +175,7 @@ void NetworkServiceDelegate::Create(
     InterfaceRequest<WebSocketFactory> request) {
   new WebSocketFactoryImpl(context_.get(),
                            app_->app_lifetime_helper()->CreateAppRefCount(),
-                           request.Pass());
+                           std::move(request));
 }
 
 void NetworkServiceDelegate::Create(
@@ -181,7 +183,7 @@ void NetworkServiceDelegate::Create(
     InterfaceRequest<URLLoaderFactory> request) {
   new URLLoaderFactoryImpl(context_.get(),
                            app_->app_lifetime_helper()->CreateAppRefCount(),
-                           request.Pass());
+                           std::move(request));
 }
 
 void NetworkServiceDelegate::OnFileSystemShutdown() {

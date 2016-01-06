@@ -8,7 +8,6 @@
 
 #include <Cocoa/Cocoa.h>
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -120,7 +119,7 @@ int PlatformFontMac::GetStyle() const {
   return font_style_;
 }
 
-std::string PlatformFontMac::GetFontName() const {
+const std::string& PlatformFontMac::GetFontName() const {
   return font_name_;
 }
 

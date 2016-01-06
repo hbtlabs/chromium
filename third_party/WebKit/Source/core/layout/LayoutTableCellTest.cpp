@@ -23,7 +23,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/layout/LayoutTableCell.h"
 
 #include "core/layout/LayoutTestHelper.h"
@@ -97,18 +96,18 @@ TEST_F(LayoutTableCellTest, DoNotResetColspanJustBelowBoundary)
 
 TEST_F(LayoutTableCellTest, ResetRowspanIfTooBig)
 {
-    setBodyInnerHTML("<table><td rowspan='14000'></td></table>");
+    setBodyInnerHTML("<table><td rowspan='70000'></td></table>");
 
     LayoutTableCell* cell = toLayoutTableCell(document().body()->firstChild()->firstChild()->firstChild()->firstChild()->layoutObject());
-    ASSERT_EQ(cell->rowSpan(), 8190U);
+    ASSERT_EQ(cell->rowSpan(), 65534U);
 }
 
 TEST_F(LayoutTableCellTest, DoNotResetRowspanJustBelowBoundary)
 {
-    setBodyInnerHTML("<table><td rowspan='8190'></td></table>");
+    setBodyInnerHTML("<table><td rowspan='65534'></td></table>");
 
     LayoutTableCell* cell = toLayoutTableCell(document().body()->firstChild()->firstChild()->firstChild()->firstChild()->layoutObject());
-    ASSERT_EQ(cell->rowSpan(), 8190U);
+    ASSERT_EQ(cell->rowSpan(), 65534U);
 }
 
 }

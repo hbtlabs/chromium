@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/guid.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
@@ -18,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_controller_impl.h"
@@ -281,8 +284,8 @@ class TestAutofillDialogController
   void ShowNewCreditCardBubble(
       scoped_ptr<CreditCard> new_card,
       scoped_ptr<AutofillProfile> billing_profile) override {
-    mock_new_card_bubble_controller_->Show(new_card.Pass(),
-                                           billing_profile.Pass());
+    mock_new_card_bubble_controller_->Show(std::move(new_card),
+                                           std::move(billing_profile));
   }
 
   // AutofillDialogControllerImpl calls this method before showing the dialog

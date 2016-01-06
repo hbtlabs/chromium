@@ -5,8 +5,8 @@
 #ifndef CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 #define CHROME_TEST_BASE_TEST_BROWSER_WINDOW_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/test_download_shelf.h"
 #include "chrome/browser/ui/browser.h"
@@ -140,8 +140,11 @@ class TestBrowserWindow : public BrowserWindow {
       override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
-      const signin::ManageAccountsParams& manage_accounts_params) override {}
-  void ShowModalSigninWindow(AvatarBubbleMode mode) override {}
+      const signin::ManageAccountsParams& manage_accounts_params,
+      signin_metrics::AccessPoint access_point) override {}
+  void ShowModalSigninWindow(
+      AvatarBubbleMode mode,
+      signin_metrics::AccessPoint access_point) override {}
   void CloseModalSigninWindow() override {}
   int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,

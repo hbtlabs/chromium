@@ -4,6 +4,8 @@
 
 #include "components/arc/arc_bridge_service.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/sequenced_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -14,21 +16,19 @@ namespace arc {
 
 namespace {
 
-// Weak pointer.  This class is owned by ChromeBrowserMainPartsChromeos.
+// Weak pointer.  This class is owned by ArcServiceManager.
 ArcBridgeService* g_arc_bridge_service = nullptr;
 
 }  // namespace
 
 ArcBridgeService::ArcBridgeService()
-    : origin_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      available_(false),
-      state_(State::STOPPED) {
+    : available_(false), state_(State::STOPPED), weak_factory_(this) {
   DCHECK(!g_arc_bridge_service);
   g_arc_bridge_service = this;
 }
 
 ArcBridgeService::~ArcBridgeService() {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK(state() == State::STOPPING || state() == State::STOPPED);
   DCHECK(g_arc_bridge_service == this);
   g_arc_bridge_service = nullptr;
@@ -37,8 +37,7 @@ ArcBridgeService::~ArcBridgeService() {
 // static
 ArcBridgeService* ArcBridgeService::Get() {
   DCHECK(g_arc_bridge_service);
-  DCHECK(g_arc_bridge_service->origin_task_runner()->
-      RunsTasksOnCurrentThread());
+  DCHECK(g_arc_bridge_service->CalledOnValidThread());
   return g_arc_bridge_service;
 }
 
@@ -48,38 +47,164 @@ bool ArcBridgeService::GetEnabled(const base::CommandLine* command_line) {
 }
 
 void ArcBridgeService::AddObserver(Observer* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(CalledOnValidThread());
   observer_list_.AddObserver(observer);
 }
 
 void ArcBridgeService::RemoveObserver(Observer* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(CalledOnValidThread());
   observer_list_.RemoveObserver(observer);
 }
 
-void ArcBridgeService::AddNotificationObserver(NotificationObserver* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
-  notification_observer_list_.AddObserver(observer);
+void ArcBridgeService::OnAppInstanceReady(AppInstancePtr app_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_app_ptr_ = std::move(app_ptr);
+  temporary_app_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnAppVersionReady, weak_factory_.GetWeakPtr()));
 }
 
-void ArcBridgeService::RemoveNotificationObserver(
-    NotificationObserver* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
-  notification_observer_list_.RemoveObserver(observer);
+void ArcBridgeService::OnAppVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  app_ptr_ = std::move(temporary_app_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnAppInstanceReady());
+  app_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseAppChannel, weak_factory_.GetWeakPtr()));
 }
 
-void ArcBridgeService::AddAppObserver(AppObserver* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
-  app_observer_list_.AddObserver(observer);
+void ArcBridgeService::CloseAppChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!app_ptr_)
+    return;
+
+  app_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnAppInstanceClosed());
 }
 
-void ArcBridgeService::RemoveAppObserver(AppObserver* observer) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
-  app_observer_list_.RemoveObserver(observer);
+void ArcBridgeService::OnInputInstanceReady(InputInstancePtr input_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_input_ptr_ = std::move(input_ptr);
+  temporary_input_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnInputVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnInputVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  input_ptr_ = std::move(temporary_input_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnInputInstanceReady());
+  input_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseInputChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseInputChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!input_ptr_)
+    return;
+
+  input_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnInputInstanceClosed());
+}
+
+void ArcBridgeService::OnNotificationsInstanceReady(
+    NotificationsInstancePtr notifications_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_notifications_ptr_ = std::move(notifications_ptr);
+  temporary_notifications_ptr_.QueryVersion(
+      base::Bind(&ArcBridgeService::OnNotificationsVersionReady,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnNotificationsVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  notifications_ptr_ = std::move(temporary_notifications_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnNotificationsInstanceReady());
+  notifications_ptr_.set_connection_error_handler(
+      base::Bind(&ArcBridgeService::CloseNotificationsChannel,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseNotificationsChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!notifications_ptr_)
+    return;
+
+  notifications_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnNotificationsInstanceClosed());
+}
+
+void ArcBridgeService::OnPowerInstanceReady(PowerInstancePtr power_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_power_ptr_ = std::move(power_ptr);
+  temporary_power_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnPowerVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnPowerVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  power_ptr_ = std::move(temporary_power_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnPowerInstanceReady());
+  power_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::ClosePowerChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::ClosePowerChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!power_ptr_)
+    return;
+
+  power_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnPowerInstanceClosed());
+}
+
+void ArcBridgeService::OnProcessInstanceReady(ProcessInstancePtr process_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_process_ptr_ = std::move(process_ptr);
+  temporary_process_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnProcessVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnProcessVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  process_ptr_ = std::move(temporary_process_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnProcessInstanceReady());
+  process_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseProcessChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseProcessChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!process_ptr_)
+    return;
+
+  process_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnProcessInstanceClosed());
+}
+
+void ArcBridgeService::OnSettingsInstanceReady(
+    SettingsInstancePtr settings_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_settings_ptr_ = std::move(settings_ptr);
+  temporary_settings_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnSettingsVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnSettingsVersionReady(int32_t version) {
+  settings_ptr_ = std::move(temporary_settings_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnSettingsInstanceReady());
+  settings_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseSettingsChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseSettingsChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!settings_ptr_)
+    return;
+
+  settings_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnSettingsInstanceClosed());
 }
 
 void ArcBridgeService::SetState(State state) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(CalledOnValidThread());
   // DCHECK on enum classes not supported.
   DCHECK(state_ != state);
   state_ = state;
@@ -87,18 +212,25 @@ void ArcBridgeService::SetState(State state) {
 }
 
 void ArcBridgeService::SetAvailable(bool available) {
-  DCHECK(origin_task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK(available_ != available);
   available_ = available;
   FOR_EACH_OBSERVER(Observer, observer_list(), OnAvailableChanged(available_));
 }
 
-// static
-scoped_ptr<ArcBridgeService> ArcBridgeService::Create(
-    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
-    const scoped_refptr<base::SequencedTaskRunner>& file_task_runner) {
-  return make_scoped_ptr(new ArcBridgeServiceImpl(ipc_task_runner,
-                                                  file_task_runner));
+bool ArcBridgeService::CalledOnValidThread() {
+  return thread_checker_.CalledOnValidThread();
+}
+
+void ArcBridgeService::CloseAllChannels() {
+  // Call all the error handlers of all the channels to both close the channel
+  // and notify any observers that the channel is closed.
+  CloseAppChannel();
+  CloseInputChannel();
+  CloseNotificationsChannel();
+  ClosePowerChannel();
+  CloseProcessChannel();
+  CloseSettingsChannel();
 }
 
 }  // namespace arc

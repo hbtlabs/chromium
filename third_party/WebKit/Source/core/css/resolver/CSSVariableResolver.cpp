@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/resolver/CSSVariableResolver.h"
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/StyleBuilderFunctions.h"
+#include "core/StylePropertyShorthand.h"
+#include "core/css/CSSValuePool.h"
 #include "core/css/CSSVariableData.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/parser/CSSParserToken.h"
@@ -109,24 +110,36 @@ void CSSVariableResolver::resolveVariableReferencesFromTokens(CSSParserTokenRang
 
 void CSSVariableResolver::resolveAndApplyVariableReferences(StyleResolverState& state, CSSPropertyID id, const CSSVariableReferenceValue& value)
 {
+
     // TODO(leviw): This should be a stack
     CSSVariableResolver resolver(state.style()->variables());
 
     Vector<CSSParserToken> tokens;
     ResolutionState resolutionContext;
     resolver.resolveVariableReferencesFromTokens(value.variableDataValue()->tokens(), tokens, resolutionContext);
-    if (!resolutionContext.success)
+
+    if (resolutionContext.success) {
+        CSSParserContext context(HTMLStandardMode, 0);
+
+        WillBeHeapVector<CSSProperty, 256> parsedProperties;
+
+        if (CSSPropertyParser::parseValue(id, false, CSSParserTokenRange(tokens), context, parsedProperties, StyleRule::Type::Style)) {
+            unsigned parsedPropertiesCount = parsedProperties.size();
+            for (unsigned i = 0; i < parsedPropertiesCount; ++i)
+                StyleBuilder::applyProperty(parsedProperties[i].id(), state, parsedProperties[i].value());
+            return;
+        }
+    }
+
+    RefPtrWillBeRawPtr<CSSUnsetValue> unset = cssValuePool().createUnsetValue();
+    if (isShorthandProperty(id)) {
+        StylePropertyShorthand shorthand = shorthandForProperty(id);
+        for (unsigned i = 0; i < shorthand.length(); i++)
+            StyleBuilder::applyProperty(shorthand.properties()[i], state, unset.get());
         return;
+    }
 
-    CSSParserContext context(HTMLStandardMode, 0);
-
-    WillBeHeapVector<CSSProperty, 256> parsedProperties;
-
-    CSSPropertyParser::parseValue(id, false, CSSParserTokenRange(tokens), context, parsedProperties, StyleRule::Type::Style);
-
-    unsigned parsedPropertiesCount = parsedProperties.size();
-    for (unsigned i = 0; i < parsedPropertiesCount; ++i)
-        StyleBuilder::applyProperty(parsedProperties[i].id(), state, parsedProperties[i].value());
+    StyleBuilder::applyProperty(id, state, unset.get());
 }
 
 void CSSVariableResolver::resolveVariableDefinitions(StyleVariableData* variables)

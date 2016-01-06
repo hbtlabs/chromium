@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
-
 #include "core/frame/VisualViewport.h"
 
 #include "core/dom/Document.h"
@@ -1587,15 +1585,9 @@ TEST_P(ParameterizedVisualViewportTest, WindowDimensionsOnLoadWideContent)
     EXPECT_EQ(std::string("2000x1500"), std::string(output->innerHTML().ascii().data()));
 }
 
-static void turnOnInvertedScrollOrder(WebSettings* settings)
-{
-    VisualViewportTest::configureSettings(settings);
-    settings->setInvertViewportScrollOrder(true);
-}
-
 TEST_P(ParameterizedVisualViewportTest, PinchZoomGestureScrollsVisualViewportOnly)
 {
-    initializeWithDesktopSettings(turnOnInvertedScrollOrder);
+    initializeWithDesktopSettings();
     webViewImpl()->resize(IntSize(100, 100));
 
     registerMockedHttpURLLoad("200-by-800-viewport.html");

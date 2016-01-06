@@ -11,6 +11,7 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/bind.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "cc/resources/ui_resource_client.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
@@ -55,6 +56,12 @@ class LayerTitleCache {
                    jint favicon_resource_id,
                    bool is_incognito,
                    bool is_rtl);
+
+  // Called from Java, updates favicon.
+  void UpdateFavicon(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj,
+                     jint tab_id,
+                     jint favicon_resource_id);
 
   void ClearExcept(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,

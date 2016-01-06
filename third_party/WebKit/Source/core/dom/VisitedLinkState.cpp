@@ -26,7 +26,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/dom/VisitedLinkState.h"
 
 #include "core/HTMLNames.h"
@@ -59,12 +58,14 @@ VisitedLinkState::VisitedLinkState(const Document& document)
 {
 }
 
-void VisitedLinkState::invalidateStyleForAllLinks()
+void VisitedLinkState::invalidateStyleForAllLinks(bool invalidateVisitedLinkHashes)
 {
     if (m_linksCheckedForVisitedState.isEmpty())
         return;
     for (Node& node : NodeTraversal::startsAt(document().firstChild())) {
         if (node.isLink()) {
+            if (invalidateVisitedLinkHashes && isHTMLAnchorElement(node))
+                toHTMLAnchorElement(node).invalidateCachedVisitedLinkHash();
             toElement(node).pseudoStateChanged(CSSSelector::PseudoLink);
             toElement(node).pseudoStateChanged(CSSSelector::PseudoVisited);
         }

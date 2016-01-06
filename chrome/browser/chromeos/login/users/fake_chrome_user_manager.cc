@@ -144,7 +144,7 @@ void FakeChromeUserManager::RemoveUser(
     user_manager::RemoveUserDelegate* delegate) {}
 
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
-  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id.GetUserEmail());
+  WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id);
   FakeUserManager::RemoveUserFromList(account_id);
 }
 
@@ -187,16 +187,5 @@ UserFlow* FakeChromeUserManager::GetDefaultUserFlow() const {
     default_flow_.reset(new DefaultUserFlow());
   return default_flow_.get();
 }
-
-bool FakeChromeUserManager::FindKnownUserPrefs(
-    const AccountId& account_id,
-    const base::DictionaryValue** out_value) {
-  return false;
-}
-
-void FakeChromeUserManager::UpdateKnownUserPrefs(
-    const AccountId& account_id,
-    const base::DictionaryValue& values,
-    bool clear) {}
 
 }  // namespace chromeos

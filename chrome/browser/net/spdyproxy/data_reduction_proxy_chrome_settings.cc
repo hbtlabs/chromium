@@ -5,6 +5,7 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 
 #include <string>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/memory/ref_counted.h"
@@ -14,10 +15,12 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
@@ -165,7 +168,8 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
 }
 
 DataReductionProxyChromeSettings::DataReductionProxyChromeSettings()
-    : data_reduction_proxy::DataReductionProxySettings() {
+    : data_reduction_proxy::DataReductionProxySettings(),
+      data_reduction_proxy_enabled_pref_name_(prefs::kDataSaverEnabled) {
 }
 
 DataReductionProxyChromeSettings::~DataReductionProxyChromeSettings() {
@@ -198,11 +202,13 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
 
   scoped_ptr<data_reduction_proxy::DataReductionProxyService> service =
       make_scoped_ptr(new data_reduction_proxy::DataReductionProxyService(
-          this, profile_prefs, request_context_getter, store.Pass(),
+          this, profile_prefs, request_context_getter, std::move(store),
           ui_task_runner, io_data->io_task_runner(), db_task_runner,
           commit_delay));
   data_reduction_proxy::DataReductionProxySettings::
-      InitDataReductionProxySettings(profile_prefs, io_data, service.Pass());
+      InitDataReductionProxySettings(data_reduction_proxy_enabled_pref_name_,
+                                     profile_prefs, io_data,
+                                     std::move(service));
   io_data->SetDataReductionProxyService(
       data_reduction_proxy_service()->GetWeakPtr());
 

@@ -10,6 +10,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -193,6 +194,10 @@ bool GaiaAuthFetcher::HasPendingFetch() {
 
 void GaiaAuthFetcher::SetPendingFetch(bool pending_fetch) {
   fetch_pending_ = pending_fetch;
+}
+
+void GaiaAuthFetcher::SetLogoutHeaders(const std::string& headers) {
+  logout_headers_ = headers;
 }
 
 void GaiaAuthFetcher::CancelRequest() {
@@ -629,7 +634,7 @@ void GaiaAuthFetcher::StartListAccounts() {
 void GaiaAuthFetcher::StartLogOut() {
   DCHECK(!fetch_pending_) << "Tried to fetch two things at once!";
 
-  CreateAndStartGaiaFetcher(std::string(), std::string(), logout_gurl_,
+  CreateAndStartGaiaFetcher(std::string(), logout_headers_, logout_gurl_,
                             net::LOAD_NORMAL);
 }
 

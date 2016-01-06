@@ -4,10 +4,15 @@
 
 #include "ui/gfx/canvas.h"
 
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/gfx/font_list.h"

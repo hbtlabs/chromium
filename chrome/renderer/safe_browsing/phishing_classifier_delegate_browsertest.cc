@@ -5,13 +5,17 @@
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
 
 #include <stdint.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -192,8 +196,7 @@ class PhishingClassifierDelegateTest : public InProcessBrowserTest {
 
   scoped_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request) {
-    std::map<std::string, std::string>::const_iterator host_it =
-        request.headers.find("Host");
+    auto host_it = request.headers.find("Host");
     if (host_it == request.headers.end())
       return scoped_ptr<net::test_server::HttpResponse>();
 
@@ -207,7 +210,7 @@ class PhishingClassifierDelegateTest : public InProcessBrowserTest {
     http_response->set_code(net::HTTP_OK);
     http_response->set_content_type("text/html");
     http_response->set_content(response_content_);
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   content::WebContents* GetWebContents() {

@@ -4,11 +4,14 @@
 
 #include "components/html_viewer/global_state.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/layer_settings.h"
 #include "components/html_viewer/blink_platform_impl.h"
@@ -160,7 +163,7 @@ void GlobalState::InitIfNecessary(const gfx::Size& screen_size_in_pixels,
     ui::RegisterPathProvider();
     base::File pak_file_2 = pak_file.Duplicate();
     ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
-      pak_file_2.Pass(), base::MemoryMappedFile::Region::kWholeFile);
+        std::move(pak_file_2), base::MemoryMappedFile::Region::kWholeFile);
   }
 
   mojo::InitLogging();
@@ -172,7 +175,7 @@ void GlobalState::InitIfNecessary(const gfx::Size& screen_size_in_pixels,
 
   // TODO(sky): why is this always using 100?
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromFile(
-      pak_file.Pass(), ui::SCALE_FACTOR_100P);
+      std::move(pak_file), ui::SCALE_FACTOR_100P);
 
   compositor_thread_.Start();
 
@@ -195,7 +198,7 @@ const mus::mojom::GpuInfo* GlobalState::GetGpuInfo() {
 
 void GlobalState::GetGpuInfoCallback(mus::mojom::GpuInfoPtr gpu_info) {
   CHECK(gpu_info);
-  gpu_info_ = gpu_info.Pass();
+  gpu_info_ = std::move(gpu_info);
   gpu_service_.reset();
 }
 

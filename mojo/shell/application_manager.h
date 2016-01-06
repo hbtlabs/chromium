@@ -6,14 +6,17 @@
 #define MOJO_SHELL_APPLICATION_MANAGER_H_
 
 #include <map>
+#include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/application/public/interfaces/application.mojom.h"
+#include "mojo/application/public/interfaces/application_manager.mojom.h"
 #include "mojo/application/public/interfaces/service_provider.mojom.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
+#include "mojo/common/weak_interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/shell/application_loader.h"
@@ -76,7 +79,7 @@ class ApplicationManager {
 
   // Sets the default Loader to be used if not overridden by SetLoaderForURL().
   void set_default_loader(scoped_ptr<ApplicationLoader> loader) {
-    default_loader_ = loader.Pass();
+    default_loader_ = std::move(loader);
   }
 
   // Sets a Loader to be used for a specific url.
@@ -95,6 +98,9 @@ class ApplicationManager {
   void CreateInstanceForHandle(ScopedHandle channel,
                                const GURL& url,
                                CapabilityFilterPtr filter);
+  void AddListener(mojom::ApplicationManagerListenerPtr listener);
+  void GetRunningApplications(
+      const Callback<void(Array<mojom::ApplicationInfoPtr>)>& callback);
 
  private:
   using IdentityToInstanceMap = std::map<Identity, ApplicationInstance*>;
@@ -121,6 +127,7 @@ class ApplicationManager {
   void RunNativeApplication(InterfaceRequest<Application> application_request,
                             bool start_sandboxed,
                             scoped_ptr<Fetcher> fetcher,
+                            ApplicationInstance* instance,
                             const base::FilePath& file_path,
                             bool path_exists);
 
@@ -128,7 +135,11 @@ class ApplicationManager {
   // no loader configured for the URL.
   ApplicationLoader* GetLoaderForURL(const GURL& url);
 
+  void ApplicationPIDAvailable(int id, base::ProcessId pid);
   void CleanupRunner(NativeRunner* runner);
+
+  mojom::ApplicationInfoPtr CreateApplicationInfoForInstance(
+      ApplicationInstance* instance) const;
 
   scoped_ptr<PackageManager> const package_manager_;
   // Loader management.
@@ -138,9 +149,11 @@ class ApplicationManager {
 
   IdentityToInstanceMap identity_to_instance_;
 
+  WeakInterfacePtrSet<mojom::ApplicationManagerListener> listeners_;
+
   base::TaskRunner* task_runner_;
   scoped_ptr<NativeRunnerFactory> native_runner_factory_;
-  ScopedVector<NativeRunner> native_runners_;
+  std::vector<scoped_ptr<NativeRunner>> native_runners_;
   base::WeakPtrFactory<ApplicationManager> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ApplicationManager);

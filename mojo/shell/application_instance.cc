@@ -4,6 +4,11 @@
 
 #include "mojo/shell/application_instance.h"
 
+#include <stdint.h>
+
+#include <utility>
+
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/stl_util.h"
 #include "mojo/application/public/interfaces/content_handler.mojom.h"
@@ -13,6 +18,13 @@
 
 namespace mojo {
 namespace shell {
+namespace {
+
+base::StaticAtomicSequenceNumber g_instance_id;
+
+const int kInvalidInstanceId = -1;
+
+}  // namespace
 
 ApplicationInstance::ApplicationInstance(
     ApplicationPtr application,
@@ -21,16 +33,17 @@ ApplicationInstance::ApplicationInstance(
     uint32_t requesting_content_handler_id,
     const base::Closure& on_application_end)
     : manager_(manager),
+      id_(GenerateUniqueID()),
       identity_(identity),
       allow_any_application_(identity.filter().size() == 1 &&
                              identity.filter().count("*") == 1),
       requesting_content_handler_id_(requesting_content_handler_id),
       on_application_end_(on_application_end),
-      application_(application.Pass()),
+      application_(std::move(application)),
       binding_(this),
-      queue_requests_(false) {
-  binding_.set_connection_error_handler([this]() { OnConnectionError(); });
-}
+      queue_requests_(false),
+      native_runner_(nullptr),
+      pid_(base::kNullProcessId) {}
 
 ApplicationInstance::~ApplicationInstance() {
   for (auto request : queued_client_requests_)
@@ -41,7 +54,8 @@ ApplicationInstance::~ApplicationInstance() {
 void ApplicationInstance::InitializeApplication() {
   ShellPtr shell;
   binding_.Bind(GetProxy(&shell));
-  application_->Initialize(shell.Pass(), identity_.url().spec());
+  binding_.set_connection_error_handler([this]() { OnConnectionError(); });
+  application_->Initialize(std::move(shell), identity_.url().spec());
 }
 
 void ApplicationInstance::ConnectToClient(
@@ -51,7 +65,11 @@ void ApplicationInstance::ConnectToClient(
     return;
   }
 
-  CallAcceptConnection(params.Pass());
+  CallAcceptConnection(std::move(params));
+}
+
+void ApplicationInstance::SetNativeRunner(NativeRunner* native_runner) {
+  native_runner_ = native_runner;
 }
 
 // Shell implementation:
@@ -79,12 +97,12 @@ void ApplicationInstance::ConnectToApplication(
     params->SetSource(this);
     GURL app_url(app_request->url);
     params->SetTargetURLRequest(
-        app_request.Pass(),
+        std::move(app_request),
         Identity(app_url, std::string(), capability_filter));
-    params->set_services(services.Pass());
-    params->set_exposed_services(exposed_services.Pass());
+    params->set_services(std::move(services));
+    params->set_exposed_services(std::move(exposed_services));
     params->set_connect_callback(callback);
-    manager_->ConnectToApplication(params.Pass());
+    manager_->ConnectToApplication(std::move(params));
   } else {
     LOG(WARNING) << "CapabilityFilter prevented connection from: " <<
         identity_.url() << " to: " << url.spec();
@@ -99,6 +117,14 @@ void ApplicationInstance::QuitApplication() {
                  base::Unretained(this)));
 }
 
+// static
+int ApplicationInstance::GenerateUniqueID() {
+  int id = g_instance_id.GetNext() + 1;
+  CHECK_NE(0, id);
+  CHECK_NE(kInvalidInstanceId, id);
+  return id;
+}
+
 void ApplicationInstance::CallAcceptConnection(
     scoped_ptr<ConnectToApplicationParams> params) {
   params->connect_callback().Run(requesting_content_handler_id_);
@@ -109,7 +135,7 @@ void ApplicationInstance::CallAcceptConnection(
 
   application_->AcceptConnection(
       params->source().url().spec(), params->TakeServices(),
-      params->TakeExposedServices(), Array<String>::From(interfaces).Pass(),
+      params->TakeExposedServices(), Array<String>::From(interfaces),
       params->target().url().spec());
 }
 
@@ -144,7 +170,7 @@ void ApplicationInstance::OnConnectionError() {
     if (!request->target_url_request()) {
       URLRequestPtr url_request = mojo::URLRequest::New();
       url_request->url = request->target().url().spec();
-      request->SetTargetURLRequest(url_request.Pass(), request->target());
+      request->SetTargetURLRequest(std::move(url_request), request->target());
     }
     manager->ConnectToApplication(make_scoped_ptr(request));
   }

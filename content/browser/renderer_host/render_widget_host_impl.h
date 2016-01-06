@@ -5,6 +5,9 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_IMPL_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <string>
@@ -12,6 +15,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -196,8 +200,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
     return owned_by_render_frame_host_;
   }
 
-  // Tells the renderer to die and then calls Destroy().
-  virtual void Shutdown();
+  // Tells the renderer to die and optionally delete |this|.
+  void ShutdownAndDestroyWidget(bool also_delete);
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -352,9 +356,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
     return ignore_input_events_;
   }
 
-  // Whether forwarded WebInputEvents should be ignored.  True if either
-  // |ignore_input_events_| or |process_->IgnoreInputEvents()| is true.
-  bool IgnoreInputEvents() const;
+  // Whether forwarded WebInputEvents should be dropped.
+  bool ShouldDropInputEvents() const;
 
   bool has_touch_handler() const { return has_touch_handler_; }
 
@@ -366,7 +369,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void SetEditCommandsForNextKeyEvent(
       const std::vector<EditCommand>& commands);
 
-  // Executes the edit command on the RenderView.
+  // Executes the edit command.
   void ExecuteEditCommand(const std::string& command,
                           const std::string& value);
 
@@ -486,6 +489,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // request to create a new RenderWidget.
   void SetInitialRenderSizeParams(const ViewMsg_Resize_Params& resize_params);
 
+  // Called when we receive a notification indicating that the renderer process
+  // is gone. This will reset our state so that our state will be consistent if
+  // a new renderer is created.
+  void RendererExited(base::TerminationStatus status, int exit_code);
+
   // Expose increment/decrement of the in-flight event count, so
   // RenderViewHostImpl can account for in-flight beforeunload/unload events.
   int increment_in_flight_event_count() { return ++in_flight_event_count_; }
@@ -497,11 +505,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool renderer_initialized() const { return renderer_initialized_; }
 
  protected:
-  // Called when we receive a notification indicating that the renderer
-  // process has gone. This will reset our state so that our state will be
-  // consistent if a new renderer is created.
-  void RendererExited(base::TerminationStatus status, int exit_code);
-
   // Retrieves an id the renderer can use to refer to its view.
   // This is used for various IPC messages, including plugins.
   gfx::NativeViewId GetNativeViewId() const;
@@ -518,24 +521,19 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   bool IsMouseLocked() const;
 
-  // The View associated with the RenderViewHost. The lifetime of this object
+  // The View associated with the RenderWidgetHost. The lifetime of this object
   // is associated with the lifetime of the Render process. If the Renderer
   // crashes, its View is destroyed and this pointer becomes NULL, even though
   // render_view_host_ lives on to load another URL (creating a new View while
   // doing so).
-  RenderWidgetHostViewBase* view_;
-
-  // A weak pointer to the view. The above pointer should be weak, but changing
-  // that to be weak causes crashes on Android.
-  // TODO(ccameron): Fix this.
-  // http://crbug.com/404828
-  base::WeakPtr<RenderWidgetHostViewBase> view_weak_;
+  base::WeakPtr<RenderWidgetHostViewBase> view_;
 
  private:
   friend class MockRenderWidgetHost;
 
-  // Tell this object to destroy itself.
-  void Destroy();
+  // Tell this object to destroy itself. If |also_delete| is specified, the
+  // destructor is called as well.
+  void Destroy(bool also_delete);
 
   // Called by |hang_monitor_timeout_| on delayed response from the renderer.
   void RendererIsUnresponsive();
@@ -563,7 +561,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool OnSwapCompositorFrame(const IPC::Message& message);
   void OnUpdateRect(const ViewHostMsg_UpdateRect_Params& params);
   void OnQueueSyntheticGesture(const SyntheticGesturePacket& gesture_packet);
-  virtual void OnFocus();
   void OnSetCursor(const WebCursor& cursor);
   void OnTextInputStateChanged(
       const ViewHostMsg_TextInputState_Params& params);
@@ -646,6 +643,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // tab only when we lose our renderer and not if a paint occurs during
   // initialization.
   bool renderer_initialized_;
+
+  // True if |Destroy()| has been called.
+  bool destroyed_;
 
   // Our delegate, which wants to know mainly about keyboard events.
   // It will remain non-NULL until DetachDelegate() is called.

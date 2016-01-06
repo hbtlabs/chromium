@@ -4,6 +4,8 @@
 
 #include "content/renderer/renderer_blink_platform_impl.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
@@ -58,6 +60,7 @@
 #include "content/renderer/dom_storage/webstoragenamespace_impl.h"
 #include "content/renderer/gamepad_shared_memory_reader.h"
 #include "content/renderer/media/audio_decoder.h"
+#include "content/renderer/media/canvas_capture_handler.h"
 #include "content/renderer/media/media_recorder_handler.h"
 #include "content/renderer/media/renderer_webaudiodevice_impl.h"
 #include "content/renderer/media/renderer_webmidiaccessor_impl.h"
@@ -138,6 +141,7 @@
 using blink::Platform;
 using blink::WebAudioDevice;
 using blink::WebBlobRegistry;
+using blink::WebCanvasCaptureHandler;
 using blink::WebDatabaseObserver;
 using blink::WebFileInfo;
 using blink::WebFileSystem;
@@ -148,10 +152,12 @@ using blink::WebMIDIAccessor;
 using blink::WebMediaRecorderHandler;
 using blink::WebMediaStreamCenter;
 using blink::WebMediaStreamCenterClient;
+using blink::WebMediaStreamTrack;
 using blink::WebMimeRegistry;
 using blink::WebRTCPeerConnectionHandler;
 using blink::WebRTCPeerConnectionHandlerClient;
 using blink::WebStorageNamespace;
+using blink::WebSize;
 using blink::WebString;
 using blink::WebURL;
 using blink::WebVector;
@@ -207,7 +213,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 #if defined(OS_MACOSX)
   bool loadFont(NSFont* src_font,
                 CGFontRef* container,
-                uint32* font_id) override;
+                uint32_t* font_id) override;
 #elif defined(OS_POSIX)
   void getFallbackFontForCharacter(
       blink::WebUChar32 character,
@@ -297,7 +303,7 @@ blink::WebURLLoader* RendererBlinkPlatformImpl::createURLLoader() {
             ? loading_task_runner_ : base::ThreadTaskRunnerHandle::Get()));
   return new content::WebURLLoaderImpl(
       child_thread ? child_thread->resource_dispatcher() : NULL,
-      task_runner.Pass());
+      std::move(task_runner));
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::currentThread() {
@@ -383,7 +389,7 @@ RendererBlinkPlatformImpl::prescientNetworking() {
 }
 
 void RendererBlinkPlatformImpl::cacheMetadata(const blink::WebURL& url,
-                                              int64 response_time,
+                                              int64_t response_time,
                                               const char* data,
                                               size_t size) {
   // Let the browser know we generated cacheable metadata for this resource. The
@@ -540,8 +546,8 @@ bool RendererBlinkPlatformImpl::FileUtilities::SendSyncMessageFromAnyThread(
 
 bool RendererBlinkPlatformImpl::SandboxSupport::loadFont(NSFont* src_font,
                                                          CGFontRef* out,
-                                                         uint32* font_id) {
-  uint32 font_data_size;
+                                                         uint32_t* font_id) {
+  uint32_t font_data_size;
   FontDescriptor src_font_descriptor(src_font);
   base::SharedMemoryHandle font_data;
   if (!RenderThread::Get()->Send(new RenderProcessHostMsg_LoadFont(
@@ -819,9 +825,7 @@ blink::WebString RendererBlinkPlatformImpl::signedPublicKeyAndChallengeString(
     const blink::WebURL& url) {
   std::string signed_public_key;
   RenderThread::Get()->Send(new RenderProcessHostMsg_Keygen(
-      static_cast<uint32>(key_size_index),
-      challenge.utf8(),
-      GURL(url),
+      static_cast<uint32_t>(key_size_index), challenge.utf8(), GURL(url),
       &signed_public_key));
   return WebString::fromUTF8(signed_public_key);
 }
@@ -933,6 +937,19 @@ bool RendererBlinkPlatformImpl::SetSandboxEnabledForTesting(bool enable) {
   bool was_enabled = g_sandbox_enabled;
   g_sandbox_enabled = enable;
   return was_enabled;
+}
+
+//------------------------------------------------------------------------------
+
+WebCanvasCaptureHandler* RendererBlinkPlatformImpl::createCanvasCaptureHandler(
+    const WebSize& size,
+    double frame_rate,
+    WebMediaStreamTrack* track) {
+#if defined(ENABLE_WEBRTC)
+  return new CanvasCaptureHandler(size, frame_rate, track);
+#else
+  return nullptr;
+#endif  // defined(ENABLE_WEBRTC)
 }
 
 //------------------------------------------------------------------------------
@@ -1101,7 +1118,7 @@ void RendererBlinkPlatformImpl::SetMockDeviceOrientationDataForTesting(
 
 void RendererBlinkPlatformImpl::vibrate(unsigned int milliseconds) {
   GetConnectedVibrationManagerService()->Vibrate(
-      base::checked_cast<int64>(milliseconds));
+      base::checked_cast<int64_t>(milliseconds));
   vibration_manager_.reset();
 }
 
@@ -1186,7 +1203,7 @@ void RendererBlinkPlatformImpl::startListening(
     observer = CreatePlatformEventObserverFromType(type);
     if (!observer)
       return;
-    platform_event_observers_.AddWithID(observer, static_cast<int32>(type));
+    platform_event_observers_.AddWithID(observer, static_cast<int32_t>(type));
   }
   observer->Start(listener);
 

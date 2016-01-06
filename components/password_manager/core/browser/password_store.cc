@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -56,7 +57,7 @@ void PasswordStore::GetLoginsRequest::NotifyConsumerWithResults(
         login = nullptr;
       }
     }
-    results = remaining_logins.Pass();
+    results = std::move(remaining_logins);
   }
 
   origin_task_runner_->PostTask(
@@ -90,7 +91,7 @@ bool PasswordStore::Init(const syncer::SyncableService::StartSyncFlare& flare) {
 
 void PasswordStore::SetAffiliatedMatchHelper(
     scoped_ptr<AffiliatedMatchHelper> helper) {
-  affiliated_match_helper_ = helper.Pass();
+  affiliated_match_helper_ = std::move(helper);
 }
 
 void PasswordStore::AddLogin(const PasswordForm& form) {
@@ -401,7 +402,7 @@ void PasswordStore::GetAutofillableLoginsImpl(
   ScopedVector<PasswordForm> obtained_forms;
   if (!FillAutofillableLogins(&obtained_forms))
     obtained_forms.clear();
-  request->NotifyConsumerWithResults(obtained_forms.Pass());
+  request->NotifyConsumerWithResults(std::move(obtained_forms));
 }
 
 void PasswordStore::GetBlacklistLoginsImpl(
@@ -409,7 +410,7 @@ void PasswordStore::GetBlacklistLoginsImpl(
   ScopedVector<PasswordForm> obtained_forms;
   if (!FillBlacklistLogins(&obtained_forms))
     obtained_forms.clear();
-  request->NotifyConsumerWithResults(obtained_forms.Pass());
+  request->NotifyConsumerWithResults(std::move(obtained_forms));
 }
 
 void PasswordStore::NotifySiteStats(const GURL& origin_domain,
@@ -440,7 +441,7 @@ void PasswordStore::GetLoginsWithAffiliationsImpl(
     results.insert(results.end(), more_results.begin(), more_results.end());
     more_results.weak_clear();
   }
-  request->NotifyConsumerWithResults(results.Pass());
+  request->NotifyConsumerWithResults(std::move(results));
 }
 
 void PasswordStore::ScheduleGetLoginsWithAffiliations(
@@ -463,7 +464,7 @@ scoped_ptr<PasswordForm> PasswordStore::GetLoginImpl(
         !candidate->is_public_suffix_match) {
       scoped_ptr<PasswordForm> result(candidate);
       candidate = nullptr;
-      return result.Pass();
+      return result;
     }
   }
   return make_scoped_ptr<PasswordForm>(nullptr);

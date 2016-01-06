@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/extension_prefs_unittest.h"
 
-#include "base/basictypes.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/prefs/mock_pref_change_callback.h"
@@ -923,9 +922,9 @@ class ExtensionPrefsComponentExtension : public ExtensionPrefsTest {
     // Adding a component extension.
     component_extension_ =
         ExtensionBuilder()
-            .SetManifest(DictionaryBuilder()
-                             .Set(manifest_keys::kName, "a")
-                             .Set(manifest_keys::kVersion, "0.1"))
+            .SetManifest(std::move(DictionaryBuilder()
+                                       .Set(manifest_keys::kName, "a")
+                                       .Set(manifest_keys::kVersion, "0.1")))
             .SetLocation(Manifest::COMPONENT)
             .SetPath(prefs_.extensions_dir().AppendASCII("a"))
             .Build();
@@ -934,9 +933,9 @@ class ExtensionPrefsComponentExtension : public ExtensionPrefsTest {
     // Adding a non component extension.
     no_component_extension_ =
         ExtensionBuilder()
-            .SetManifest(DictionaryBuilder()
-                             .Set(manifest_keys::kName, "b")
-                             .Set(manifest_keys::kVersion, "0.1"))
+            .SetManifest(std::move(DictionaryBuilder()
+                                       .Set(manifest_keys::kName, "b")
+                                       .Set(manifest_keys::kVersion, "0.1")))
             .SetLocation(Manifest::INTERNAL)
             .SetPath(prefs_.extensions_dir().AppendASCII("b"))
             .Build();

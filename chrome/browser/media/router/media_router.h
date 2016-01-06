@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_H_
 #define CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -100,8 +102,12 @@ class MediaRouter : public KeyedService {
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks) = 0;
 
-  // Closes the media route specified by |route_id|.
-  virtual void CloseRoute(const MediaRoute::Id& route_id) = 0;
+  // Terminates the media route specified by |route_id|.
+  virtual void TerminateRoute(const MediaRoute::Id& route_id) = 0;
+
+  // Detaches the media route specified by |route_id|. The request might come
+  // from the page or from an event like navigation or garbage collection.
+  virtual void DetachRoute(const MediaRoute::Id& route_id) = 0;
 
   // Posts |message| to a MediaSink connected via MediaRoute with |route_id|.
   virtual void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -112,7 +118,7 @@ class MediaRouter : public KeyedService {
   // This is called for Blob / ArrayBuffer / ArrayBufferView types.
   virtual void SendRouteBinaryMessage(
       const MediaRoute::Id& route_id,
-      scoped_ptr<std::vector<uint8>> data,
+      scoped_ptr<std::vector<uint8_t>> data,
       const SendRouteMessageCallback& callback) = 0;
 
   // Adds a new |issue|.
@@ -120,11 +126,6 @@ class MediaRouter : public KeyedService {
 
   // Clears the issue with the id |issue_id|.
   virtual void ClearIssue(const Issue::Id& issue_id) = 0;
-
-  // Indicates that a presentation session has detached from the underlying
-  // MediaRoute |route_id| (due to navigation, garbage collection, etc.)
-  virtual void OnPresentationSessionDetached(
-      const MediaRoute::Id& route_id) = 0;
 
   // Returns whether or not there is currently an active local displayable
   // route.

@@ -21,8 +21,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
@@ -30,6 +28,12 @@
 #include "core/SVGNames.h"
 #include "core/XLinkNames.h"
 #include "core/XMLNames.h"
+#include "core/animation/AnimationStack.h"
+#include "core/animation/DocumentAnimations.h"
+#include "core/animation/ElementAnimations.h"
+#include "core/animation/InterpolationEnvironment.h"
+#include "core/animation/InvalidatableInterpolation.h"
+#include "core/animation/SVGInterpolation.h"
 #include "core/css/CSSCursorImageValue.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
@@ -51,6 +55,7 @@
 #include "core/svg/properties/SVGProperty.h"
 #include "platform/JSONValues.h"
 #include "wtf/TemporaryChange.h"
+#include "wtf/Threading.h"
 
 namespace blink {
 
@@ -240,6 +245,31 @@ void SVGElement::setInstanceUpdatesBlocked(bool value)
 void SVGElement::setWebAnimationsPending()
 {
     document().accessSVGExtensions().addWebAnimationsPendingSVGElement(*this);
+    ensureSVGRareData()->setWebAnimatedAttributesDirty(true);
+    ensureUniqueElementData().m_animatedSVGAttributesAreDirty = true;
+}
+
+static bool isSVGAttributeHandle(const PropertyHandle& propertyHandle)
+{
+    return propertyHandle.isSVGAttribute();
+}
+
+void SVGElement::applyActiveWebAnimations()
+{
+    ActiveInterpolationsMap activeInterpolationsMap = AnimationStack::activeInterpolations(
+        &elementAnimations()->animationStack(), nullptr, nullptr, KeyframeEffect::DefaultPriority, isSVGAttributeHandle);
+    for (auto& entry : activeInterpolationsMap) {
+        const QualifiedName& attribute = entry.key.svgAttribute();
+        const Interpolation& interpolation = *entry.value.first();
+        if (interpolation.isInvalidatableInterpolation()) {
+            InterpolationEnvironment environment(*this, propertyFromAttribute(attribute)->baseValueBase());
+            InvalidatableInterpolation::applyStack(entry.value, environment);
+        } else {
+            // TODO(alancutter): Remove this old code path once animations have completely migrated to InterpolationTypes.
+            toSVGInterpolation(interpolation).apply(*this);
+        }
+    }
+    svgRareData()->setWebAnimatedAttributesDirty(false);
 }
 
 template<typename T>
@@ -247,8 +277,7 @@ static void updateInstancesAnimatedAttribute(SVGElement* element, const Qualifie
 {
     SVGElement::InstanceUpdateBlocker blocker(element);
     for (SVGElement* instance : SVGAnimateElement::findElementInstances(element)) {
-        RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> animatedProperty = instance->propertyFromAttribute(attribute);
-        if (animatedProperty) {
+        if (SVGAnimatedPropertyBase* animatedProperty = instance->propertyFromAttribute(attribute)) {
             callback(*animatedProperty);
             instance->invalidateSVGAttributes();
             instance->svgAttributeChanged(attribute);
@@ -605,12 +634,9 @@ bool SVGElement::inUseShadowTree() const
 
 void SVGElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
-    if (property) {
-        SVGParsingError parseError = NoError;
-        property->setBaseValueAsString(value, parseError);
+    if (SVGAnimatedPropertyBase* property = propertyFromAttribute(name)) {
+        SVGParsingError parseError = property->setBaseValueAsString(value);
         reportAttributeParsingError(parseError, name, value);
-
         return;
     }
 
@@ -619,8 +645,7 @@ void SVGElement::parseAttribute(const QualifiedName& name, const AtomicString& o
         // the className here. svgAttributeChanged actually causes the resulting
         // style updates (instead of Element::parseAttribute). We don't
         // tell Element about the change to avoid parsing the class list twice
-        SVGParsingError parseError = NoError;
-        m_className->setBaseValueAsString(value, parseError);
+        SVGParsingError parseError = m_className->setBaseValueAsString(value);
         reportAttributeParsingError(parseError, name, value);
     } else if (name == tabindexAttr) {
         Element::parseAttribute(name, oldValue, value);
@@ -717,13 +742,13 @@ void SVGElement::addToPropertyMap(PassRefPtrWillBeRawPtr<SVGAnimatedPropertyBase
     m_attributeToPropertyMap.set(attributeName, property.release());
 }
 
-PassRefPtrWillBeRawPtr<SVGAnimatedPropertyBase> SVGElement::propertyFromAttribute(const QualifiedName& attributeName)
+SVGAnimatedPropertyBase* SVGElement::propertyFromAttribute(const QualifiedName& attributeName) const
 {
-    AttributeToPropertyMap::iterator it = m_attributeToPropertyMap.find<SVGAttributeHashTranslator>(attributeName);
+    AttributeToPropertyMap::const_iterator it = m_attributeToPropertyMap.find<SVGAttributeHashTranslator>(attributeName);
     if (it == m_attributeToPropertyMap.end())
         return nullptr;
 
-    return it->value;
+    return it->value.get();
 }
 
 bool SVGElement::isAnimatableCSSProperty(const QualifiedName& attrName)
@@ -860,8 +885,10 @@ void SVGElement::attributeChanged(const QualifiedName& name, const AtomicString&
 
     // Changes to the style attribute are processed lazily (see Element::getAttribute() and related methods),
     // so we don't want changes to the style attribute to result in extra work here.
-    if (name != HTMLNames::styleAttr)
-        svgAttributeChanged(name);
+    if (name == HTMLNames::styleAttr)
+        return;
+
+    svgAttributeBaseValChanged(name);
 }
 
 void SVGElement::svgAttributeChanged(const QualifiedName& attrName)
@@ -890,10 +917,37 @@ void SVGElement::svgAttributeChanged(const QualifiedName& attrName)
     }
 }
 
+void SVGElement::svgAttributeBaseValChanged(const QualifiedName& attribute)
+{
+    svgAttributeChanged(attribute);
+
+    if (!hasSVGRareData() || svgRareData()->webAnimatedAttributes().isEmpty())
+        return;
+
+    // TODO(alancutter): Only mark attributes as dirty if their animation depends on the underlying value.
+    svgRareData()->setWebAnimatedAttributesDirty(true);
+    elementData()->m_animatedSVGAttributesAreDirty = true;
+}
+
+void SVGElement::ensureAttributeAnimValUpdated()
+{
+    if (!RuntimeEnabledFeatures::webAnimationsSVGEnabled())
+        return;
+
+    if ((hasSVGRareData() && svgRareData()->webAnimatedAttributesDirty())
+        || (elementAnimations() && DocumentAnimations::needsAnimationTimingUpdate(document()))) {
+        DocumentAnimations::updateAnimationTimingIfNeeded(document());
+        applyActiveWebAnimations();
+    }
+}
+
 void SVGElement::synchronizeAnimatedSVGAttribute(const QualifiedName& name) const
 {
     if (!elementData() || !elementData()->m_animatedSVGAttributesAreDirty)
         return;
+
+    // We const_cast here because we have deferred baseVal mutation animation updates to this point in time.
+    const_cast<SVGElement*>(this)->ensureAttributeAnimValUpdated();
 
     if (name == anyQName()) {
         AttributeToPropertyMap::const_iterator::Values it = m_attributeToPropertyMap.values().begin();
@@ -989,9 +1043,6 @@ void SVGElement::invalidateInstances()
     }
 
     svgRareData()->elementInstances().clear();
-
-    if (inDocument())
-        document().updateLayoutTreeIfNeeded();
 }
 
 SVGElement::InstanceUpdateBlocker::InstanceUpdateBlocker(SVGElement* targetElement)
@@ -1010,7 +1061,9 @@ SVGElement::InstanceUpdateBlocker::~InstanceUpdateBlocker()
 #if ENABLE(ASSERT)
 bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 {
-    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, animatableAttributes, ());
+    // This static is atomically initialized to dodge a warning about
+    // a race when dumping debug data for a layer.
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(HashSet<QualifiedName>, animatableAttributes, new HashSet<QualifiedName>());
 
     if (animatableAttributes.isEmpty()) {
         const QualifiedName* const animatableAttrs[] = {

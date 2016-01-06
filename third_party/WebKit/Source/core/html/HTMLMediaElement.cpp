@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/HTMLMediaElement.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -384,7 +383,7 @@ HTMLMediaElement::~HTMLMediaElement()
     removeElementFromDocumentMap(this, &document());
 
     // Destroying the player may cause a resource load to be canceled,
-    // which could result in Document::dispatchWindowLoadEvent() being
+    // which could result in LocalDOMWindow::dispatchWindowLoadEvent() being
     // called via ResourceFetch::didLoadResource() then
     // FrameLoader::checkCompleted(). To prevent load event dispatching during
     // object destruction, we use Document::incrementLoadEventDelayCount().
@@ -508,6 +507,8 @@ void HTMLMediaElement::parseAttribute(const QualifiedName& name, const AtomicStr
         configureMediaControls();
     } else if (name == preloadAttr) {
         setPlayerPreload();
+    } else if (name == disableremoteplaybackAttr) {
+        UseCounter::count(document(), UseCounter::DisableRemotePlaybackAttribute);
     } else {
         HTMLElement::parseAttribute(name, oldValue, value);
     }
@@ -557,7 +558,7 @@ void HTMLMediaElement::removedFrom(ContainerNode* insertionPoint)
     if (insertionPoint->inActiveDocument()) {
         configureMediaControls();
         if (m_networkState > NETWORK_EMPTY)
-            pause();
+            pauseInternal();
     }
 }
 
@@ -1907,7 +1908,7 @@ void HTMLMediaElement::setPreload(const AtomicString& preload)
 WebMediaPlayer::Preload HTMLMediaElement::preloadType() const
 {
     // Force preload to none for cellular connections.
-    if (networkStateNotifier().connectionType() == WebConnectionTypeCellular) {
+    if (networkStateNotifier().isCellularConnectionType()) {
         UseCounter::count(document(), UseCounter::HTMLMediaElementPreloadForcedNone);
         return WebMediaPlayer::PreloadNone;
     }
@@ -1972,6 +1973,12 @@ void HTMLMediaElement::playInternal()
 {
     WTF_LOG(Media, "HTMLMediaElement::playInternal(%p)", this);
 
+    // Always return the buffering strategy to normal when not paused,
+    // regardless of the cause. (In contrast with aggressive buffering which is
+    // only enabled by pause(), not pauseInternal().)
+    if (webMediaPlayer())
+        webMediaPlayer()->setBufferingStrategy(WebMediaPlayer::BufferingStrategy::Normal);
+
     // 4.8.10.9. Playing the media resource
     if (m_networkState == NETWORK_EMPTY)
         scheduleDelayedAction(LoadMediaResource);
@@ -2020,6 +2027,18 @@ bool HTMLMediaElement::isBailout() const
 void HTMLMediaElement::pause()
 {
     WTF_LOG(Media, "HTMLMediaElement::pause(%p)", this);
+
+    // Only buffer aggressively on a user-initiated pause. Other types of pauses
+    // (which go directly to pauseInternal()) should not cause this behavior.
+    if (webMediaPlayer() && UserGestureIndicator::processingUserGesture())
+        webMediaPlayer()->setBufferingStrategy(WebMediaPlayer::BufferingStrategy::Aggressive);
+
+    pauseInternal();
+}
+
+void HTMLMediaElement::pauseInternal()
+{
+    WTF_LOG(Media, "HTMLMediaElement::pauseInternal(%p)", this);
 
     if (m_networkState == NETWORK_EMPTY)
         scheduleDelayedAction(LoadMediaResource);
@@ -2166,7 +2185,7 @@ void HTMLMediaElement::playbackProgressTimerFired(Timer<HTMLMediaElement>*)
         if (!m_paused) {
             UseCounter::count(document(), UseCounter::HTMLMediaElementPauseAtFragmentEnd);
             // changes paused to true and fires a simple event named pause at the media element.
-            pause();
+            pauseInternal();
         }
     }
 
@@ -2778,7 +2797,7 @@ void HTMLMediaElement::playbackStateChanged()
         return;
 
     if (webMediaPlayer()->paused())
-        pause();
+        pauseInternal();
     else
         playInternal();
 }

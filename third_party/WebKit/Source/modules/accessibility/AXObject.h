@@ -215,19 +215,6 @@ enum AccessibilityState {
 
 class AccessibilityText final : public GarbageCollectedFinalized<AccessibilityText> {
 public:
-    static AccessibilityText* create(const String& text, const AccessibilityTextSource& source)
-    {
-        return new AccessibilityText(text, source, nullptr);
-    }
-    static AccessibilityText* create(const String& text, const AccessibilityTextSource& source, AXObject* element)
-    {
-        return new AccessibilityText(text, source, element);
-    }
-
-    String text() const { return m_text; }
-    AccessibilityTextSource textSource() const { return m_textSource; }
-    AXObject* textElement() const { return m_textElement; }
-
     DEFINE_INLINE_TRACE()
     {
         visitor->trace(m_textElement);
@@ -236,12 +223,10 @@ public:
 private:
     AccessibilityText(const String& text, const AccessibilityTextSource& source, AXObject* element)
     : m_text(text)
-    , m_textSource(source)
     , m_textElement(element)
     { }
 
     String m_text;
-    AccessibilityTextSource m_textSource;
     Member<AXObject> m_textElement;
 };
 
@@ -590,7 +575,6 @@ public:
     bool isLandmarkRelated() const;
     virtual bool isLink() const { return false; }
     virtual bool isList() const { return false; }
-    bool isListItem() const { return roleValue() == ListItemRole; }
     virtual bool isMenu() const { return false; }
     virtual bool isMenuButton() const { return false; }
     virtual bool isMenuList() const { return false; }
@@ -619,7 +603,6 @@ public:
     virtual bool isTextControl() const { return false; }
     virtual bool isTableCol() const { return false; }
     bool isTree() const { return roleValue() == TreeRole; }
-    bool isTreeItem() const { return roleValue() == TreeItemRole; }
     bool isWebArea() const { return roleValue() == WebAreaRole; }
 
     // Check object state.
@@ -694,9 +677,10 @@ public:
     // exposed by one of the two functions above.
     virtual String placeholder(AXNameFrom, AXDescriptionFrom) const { return String(); }
 
-    // Internal function used by name and description, above.
+    // Internal functions used by name and description, above.
     typedef HeapHashSet<Member<const AXObject>> AXObjectSet;
     virtual String textAlternative(bool recursive, bool inAriaLabelledByTraversal, AXObjectSet& visited, AXNameFrom& nameFrom, AXRelatedObjectVector* relatedObjects, NameSources* nameSources) const { return String(); }
+    virtual String textFromDescendants(AXObjectSet& visited, bool recursive) const { return String(); }
 
     // Returns result of Accessible Name Calculation algorithm.
     // This is a simpler high-level interface to |name| used by Inspector.
@@ -791,10 +775,6 @@ public:
     virtual int setSize() const { return 0; }
     bool supportsSetSizeAndPosInSet() const;
 
-    // ARIA trees.
-    // Used by an ARIA tree to get all its rows.
-    void ariaTreeRows(AXObjectVector&);
-
     // ARIA live-region features.
     bool isLiveRegion() const;
     const AXObject* liveRegionRoot() const;
@@ -831,8 +811,7 @@ public:
 
     // Low-level accessibility tree exploration, only for use within the accessibility module.
     virtual AXObject* rawFirstChild() const { return 0; }
-    virtual AXObject* rawFirstSibling() const { return 0; }
-    AXObject* firstAccessibleObjectFromNode(const Node*);
+    virtual AXObject* rawNextSibling() const { return 0; }
     virtual void addChildren() { }
     virtual bool canHaveChildren() const { return true; }
     bool hasChildren() const { return m_haveChildren; }
@@ -892,7 +871,6 @@ public:
     void scrollToGlobalPoint(const IntPoint&) const;
     virtual void setFocused(bool) { }
     virtual void setSelected(bool) { }
-    void setSelectedText(const String&) { }
     virtual void setValue(const String&) { }
     virtual void setValue(float) { }
 
@@ -945,10 +923,6 @@ protected:
     virtual bool nameFromContents() const;
 
     AccessibilityRole buttonRoleType() const;
-
-    unsigned getLengthForTextRange() const { return text().length(); }
-
-    bool m_detached;
 
     mutable Member<AXObject> m_parent;
 

@@ -72,6 +72,16 @@ crbug.com/24182 virtual/gpu/fast/canvas/getPutImageDataPairTest.html [ Slow ]
 crbug.com/24182 virtual/gpu/fast/canvas/webgl/read-pixels-test.html [ Slow ]
 crbug.com/24182 fast/dom/timer-throttling-background-page-near-alignment-interval.html [ Slow ]
 crbug.com/24182 http/tests/perf/large-inlined-script.html [ Slow ]
+crbug.com/451577 [ Debug ] fast/dom/gc-treescope.html  [ Slow ]
+crbug.com/451577 [ Debug ] fast/frames/calculate-round.html [ Slow ]
+crbug.com/451577 imported/web-platform-tests/IndexedDB/idbindex-multientry-big.htm [ Slow ]
+crbug.com/451577 [ Mac10.7 Mac10.8 ] inspector/elements/user-properties.html [ Slow ]
+crbug.com/451577 [ XP ] inspector/elements/user-properties.html [ Slow ]
+crbug.com/451577 [ Mac XP ] inspector/extensions/extensions-reload.html [ Slow ]
+crbug.com/451577 [ Mac XP ] inspector/extensions/extensions-resources.html [ Slow ]
+crbug.com/451577 [ Win10 XP ] inspector/extensions/extensions-sidebar.html [ Slow ]
+crbug.com/451577 [ Mac XP ] inspector/layers/layer-canvas-log.html [ Slow ]
+crbug.com/451577 [ Mac XP ] inspector/network/network-domain-filter.html [ Slow ]
 
 crbug.com/474121 editing/deleting/password-delete-performance.html [ Slow ]
 crbug.com/237245 [ Debug Win7 ] editing/selection/programmatic-selection-on-mac-is-directionless.html [ Slow ]
@@ -91,9 +101,10 @@ crbug.com/450493 http/tests/inspector/sources/ [ Slow ]
 crbug.com/450493 http/tests/inspector/stacktraces/ [ Slow ]
 crbug.com/450493 inspector/profiler/ [ Slow ]
 crbug.com/420008 inspector/tracing/ [ Slow ]
-crbug.com/420008 virtual/syncpaint/inspector/tracing/ [ Slow ]
 crbug.com/420008 virtual/threaded/inspector/tracing/ [ Slow ]
 crbug.com/246190 [ Release ] http/tests/inspector/indexeddb/ [ Slow ]
+crbug.com/451577 [ Mac ] inspector/extensions/extensions-sidebar.html [ Slow ]
+crbug.com/451577 [ Mac ] inspector/extensions/extensions-events.html [ Slow ]
 
 # Random slow tests
 webkit.org/b/90488 [ Release ] http/tests/inspector/compiler-source-mapping-debug.html [ Slow ]
@@ -105,11 +116,11 @@ webkit.org/b/60109 inspector/elements/edit/edit-dom-actions.html [ Slow ]
 webkit.org/b/84735 [ Win ] http/tests/inspector/change-iframe-src.html [ Slow ]
 crbug.com/504565 [ Mac ] http/tests/inspector/search/sources-search-scope.html [ Slow ]
 
+crbug.com/510337 cssom/cssvalue-comparison.html [ Slow ]
+crbug.com/510337 inspector/elements/styles-1/edit-value-url-with-color.html [ Slow ]
+
 # This test is intentionally SLOW as we're waiting for a connection timeout.
 crbug.com/73609 http/tests/media/video-play-stall.html [ Slow ]
-
-# This test uses a throttled load to stay in NETWORK_LOADING.
-crbug.com/400659 http/tests/media/gc-while-network-loading.html [ Slow ]
 
 # This has been Slow in Debug since added in r164270.
 crbug.com/330389 [ Debug ] css-parser/color3_hsl.html [ Slow ]
@@ -132,7 +143,6 @@ crbug.com/248938 virtual/threaded/animations/3d/replace-filling-transform.html [
 crbug.com/311482 virtual/threaded/animations/interpolation/filter-interpolation.html [ Slow ]
 crbug.com/311482 virtual/threaded/animations/keyframes-unprefixed-03.html [ Slow ]
 crbug.com/243871 virtual/threaded/fast/scroll-behavior/ [ Slow ]
-crbug.com/243871 virtual/threaded_animation_timelines/fast/scroll-behavior/ [ Slow ]
 
 crbug.com/258896 animations/animation-direction-reverse-fill-mode.html [ Slow ]
 
@@ -230,4 +240,3 @@ crbug.com/528419 [ Linux ] inspector/elements/shadow/shadow-host-display-modes.h
 crbug.com/528419 [ Linux ] inspector/elements/styles-2/pseudo-elements.html [ Slow ]
 
 crbug.com/529345 [ Win10 ] paint/masks/fieldset-mask.html [ Slow ]
-

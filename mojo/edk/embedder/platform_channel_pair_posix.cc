@@ -5,6 +5,7 @@
 #include "mojo/edk/embedder/platform_channel_pair.h"
 
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -137,7 +138,7 @@ PlatformChannelPair::PrepareToPassClientHandleToChildProcessAsString(
     target_fd++;
 
   handle_passing_info->push_back(
-      std::pair<int, int>(client_handle_.get().fd, target_fd));
+      std::pair<int, int>(client_handle_.get().handle, target_fd));
   return base::IntToString(target_fd);
 }
 

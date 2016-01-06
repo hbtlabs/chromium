@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -36,9 +37,6 @@ class BrowserContext;
 class DevToolsTargetImpl;
 class PortForwardingController;
 class Profile;
-class WebRTCDeviceProvider;
-class SigninManagerBase;
-class ProfileOAuth2TokenService;
 
 class DevToolsAndroidBridge : public KeyedService {
  public:
@@ -159,9 +157,7 @@ class DevToolsAndroidBridge : public KeyedService {
     virtual ~DeviceListListener() {}
   };
 
-  DevToolsAndroidBridge(Profile* profile,
-                        SigninManagerBase* signin_manager,
-                        ProfileOAuth2TokenService* token_service);
+  explicit DevToolsAndroidBridge(Profile* profile);
   void AddDeviceListListener(DeviceListListener* listener);
   void RemoveDeviceListListener(DeviceListListener* listener);
 
@@ -273,8 +269,6 @@ class DevToolsAndroidBridge : public KeyedService {
   }
 
   Profile* const profile_;
-  SigninManagerBase* const signin_manager_;
-  ProfileOAuth2TokenService* const token_service_;
   const scoped_ptr<AndroidDeviceManager> device_manager_;
 
   typedef std::map<std::string, scoped_refptr<AndroidDeviceManager::Device>>

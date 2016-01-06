@@ -4,6 +4,9 @@
 
 #include "content/child/service_worker/service_worker_dispatcher.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -19,7 +22,7 @@
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/common/url_utils.h"
+#include "content/public/common/content_constants.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
 
@@ -56,6 +59,10 @@ ServiceWorkerDispatcher::~ServiceWorkerDispatcher() {
 
 void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
+
+  // When you add a new message handler, you should consider adding a similar
+  // handler in ServiceWorkerMessageFilter to release references passed from
+  // the browser process in case we fail to post task to the thread.
   IPC_BEGIN_MESSAGE_MAP(ServiceWorkerDispatcher, msg)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_AssociateRegistration,
                         OnAssociateRegistration)
@@ -96,10 +103,6 @@ void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
   DCHECK(handled) << "Unhandled message:" << msg.type();
 }
 
-bool ServiceWorkerDispatcher::Send(IPC::Message* msg) {
-  return thread_safe_sender_->Send(msg);
-}
-
 void ServiceWorkerDispatcher::RegisterServiceWorker(
     int provider_id,
     const GURL& pattern,
@@ -107,8 +110,8 @@ void ServiceWorkerDispatcher::RegisterServiceWorker(
     WebServiceWorkerRegistrationCallbacks* callbacks) {
   DCHECK(callbacks);
 
-  if (pattern.possibly_invalid_spec().size() > GetMaxURLChars() ||
-      script_url.possibly_invalid_spec().size() > GetMaxURLChars()) {
+  if (pattern.possibly_invalid_spec().size() > kMaxURLChars ||
+      script_url.possibly_invalid_spec().size() > kMaxURLChars) {
     scoped_ptr<WebServiceWorkerRegistrationCallbacks>
         owned_callbacks(callbacks);
     std::string error_message(kServiceWorkerRegisterErrorPrefix);
@@ -131,7 +134,7 @@ void ServiceWorkerDispatcher::RegisterServiceWorker(
 
 void ServiceWorkerDispatcher::UpdateServiceWorker(
     int provider_id,
-    int64 registration_id,
+    int64_t registration_id,
     WebServiceWorkerUpdateCallbacks* callbacks) {
   DCHECK(callbacks);
   int request_id = pending_update_callbacks_.Add(callbacks);
@@ -141,7 +144,7 @@ void ServiceWorkerDispatcher::UpdateServiceWorker(
 
 void ServiceWorkerDispatcher::UnregisterServiceWorker(
     int provider_id,
-    int64 registration_id,
+    int64_t registration_id,
     WebServiceWorkerUnregistrationCallbacks* callbacks) {
   DCHECK(callbacks);
   int request_id = pending_unregistration_callbacks_.Add(callbacks);
@@ -158,7 +161,7 @@ void ServiceWorkerDispatcher::GetRegistration(
     WebServiceWorkerGetRegistrationCallbacks* callbacks) {
   DCHECK(callbacks);
 
-  if (document_url.possibly_invalid_spec().size() > GetMaxURLChars()) {
+  if (document_url.possibly_invalid_spec().size() > kMaxURLChars) {
     scoped_ptr<WebServiceWorkerGetRegistrationCallbacks> owned_callbacks(
         callbacks);
     std::string error_message(kServiceWorkerGetRegistrationErrorPrefix);
@@ -273,7 +276,8 @@ ServiceWorkerDispatcher::GetOrCreateServiceWorker(
     return found->second;
 
   // WebServiceWorkerImpl constructor calls AddServiceWorker.
-  return new WebServiceWorkerImpl(handle_ref.Pass(), thread_safe_sender_.get());
+  return new WebServiceWorkerImpl(std::move(handle_ref),
+                                  thread_safe_sender_.get());
 }
 
 scoped_refptr<WebServiceWorkerRegistrationImpl>
@@ -321,10 +325,11 @@ ServiceWorkerDispatcher::GetOrAdoptRegistration(
   // WebServiceWorkerRegistrationImpl constructor calls
   // AddServiceWorkerRegistration.
   scoped_refptr<WebServiceWorkerRegistrationImpl> registration(
-      new WebServiceWorkerRegistrationImpl(registration_ref.Pass()));
-  registration->SetInstalling(GetOrCreateServiceWorker(installing_ref.Pass()));
-  registration->SetWaiting(GetOrCreateServiceWorker(waiting_ref.Pass()));
-  registration->SetActive(GetOrCreateServiceWorker(active_ref.Pass()));
+      new WebServiceWorkerRegistrationImpl(std::move(registration_ref)));
+  registration->SetInstalling(
+      GetOrCreateServiceWorker(std::move(installing_ref)));
+  registration->SetWaiting(GetOrCreateServiceWorker(std::move(waiting_ref)));
+  registration->SetActive(GetOrCreateServiceWorker(std::move(active_ref)));
   return registration;
 }
 
@@ -343,7 +348,8 @@ void ServiceWorkerDispatcher::OnAssociateRegistration(
   ProviderContextMap::iterator context = provider_contexts_.find(provider_id);
   if (context != provider_contexts_.end()) {
     context->second->OnAssociateRegistration(
-        registration.Pass(), installing.Pass(), waiting.Pass(), active.Pass());
+        std::move(registration), std::move(installing), std::move(waiting),
+        std::move(active));
   }
 }
 
@@ -655,11 +661,12 @@ void ServiceWorkerDispatcher::OnSetVersionAttributes(
     // Populate the version fields (eg. .installing) with worker objects.
     ChangedVersionAttributesMask mask(changed_mask);
     if (mask.installing_changed())
-      found->second->SetInstalling(GetOrCreateServiceWorker(installing.Pass()));
+      found->second->SetInstalling(
+          GetOrCreateServiceWorker(std::move(installing)));
     if (mask.waiting_changed())
-      found->second->SetWaiting(GetOrCreateServiceWorker(waiting.Pass()));
+      found->second->SetWaiting(GetOrCreateServiceWorker(std::move(waiting)));
     if (mask.active_changed())
-      found->second->SetActive(GetOrCreateServiceWorker(active.Pass()));
+      found->second->SetActive(GetOrCreateServiceWorker(std::move(active)));
   }
 }
 
@@ -689,7 +696,7 @@ void ServiceWorkerDispatcher::OnSetControllerServiceWorker(
   scoped_ptr<ServiceWorkerHandleReference> handle_ref = Adopt(info);
   ProviderContextMap::iterator provider = provider_contexts_.find(provider_id);
   if (provider != provider_contexts_.end())
-    provider->second->OnSetControllerServiceWorker(handle_ref.Pass());
+    provider->second->OnSetControllerServiceWorker(std::move(handle_ref));
 
   ProviderClientMap::iterator found = provider_clients_.find(provider_id);
   if (found != provider_clients_.end()) {

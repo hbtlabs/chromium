@@ -8,6 +8,7 @@
 #include "base/process/launch.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/infobars/infobar_responder.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -229,10 +230,6 @@ class WebRtcApprtcBrowserTest : public WebRtcTestBase {
 };
 
 IN_PROC_BROWSER_TEST_F(WebRtcApprtcBrowserTest, MANUAL_WorksOnApprtc) {
-  // Disabled on Win XP: http://code.google.com/p/webrtc/issues/detail?id=2703.
-  if (OnWinXp())
-    return;
-
   DetectErrorsInJavaScript();
   ASSERT_TRUE(LaunchApprtcInstanceOnLocalhost("9999"));
   ASSERT_TRUE(LaunchColliderOnLocalHost("http://localhost:9999", "8089"));
@@ -281,10 +278,6 @@ IN_PROC_BROWSER_TEST_F(WebRtcApprtcBrowserTest, MANUAL_WorksOnApprtc) {
 
 IN_PROC_BROWSER_TEST_F(WebRtcApprtcBrowserTest,
                        MAYBE_MANUAL_FirefoxApprtcInteropTest) {
-  // Disabled on Win XP: http://code.google.com/p/webrtc/issues/detail?id=2703.
-  if (OnWinXp())
-    return;
-
   DetectErrorsInJavaScript();
   ASSERT_TRUE(LaunchApprtcInstanceOnLocalhost("9999"));
   ASSERT_TRUE(LaunchColliderOnLocalHost("http://localhost:9999", "8089"));

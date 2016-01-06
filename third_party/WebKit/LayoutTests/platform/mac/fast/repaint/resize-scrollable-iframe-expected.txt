@@ -25,12 +25,14 @@
         "RootInlineBox",
         "LayoutBlockFlow (anonymous)",
         "LayoutBlockFlow (anonymous)",
+        "RootInlineBox",
         "LayoutIFrame IFRAME id='iframe'",
         "LayoutView #document",
         "LayoutView #document",
+        "LayoutView #document",
         "HorizontalScrollbar",
-        "VerticalScrollbar",
-        "LayoutView #document"
+        "LayoutView #document",
+        "VerticalScrollbar"
       ]
     }
   ]

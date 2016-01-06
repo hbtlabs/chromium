@@ -27,7 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/shadow/MediaControlElements.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -229,8 +228,8 @@ void* MediaControlOverlayEnclosureElement::preDispatchEventHandler(Event* event)
     // (if the other requirements are right) even if JavaScript is doing its own handling of the event.
     // Doing it in preDispatchEventHandler prevents any interference from JavaScript.
     // Note that we can't simply test for click, since JS handling of touch events can prevent their translation to click events.
-    if (event && (event->type() == EventTypeNames::click || event->type() == EventTypeNames::touchstart) && mediaElement().hasRemoteRoutes() && !mediaElement().shouldShowControls())
-        mediaControls().showOverlayCastButton();
+    if (event && (event->type() == EventTypeNames::click || event->type() == EventTypeNames::touchstart))
+        mediaControls().showOverlayCastButtonIfNeeded();
     return MediaControlDivElement::preDispatchEventHandler(event);
 }
 

@@ -22,7 +22,6 @@
  * 02110-1301  USA
  */
 
-#include "config.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
 
 #include "core/StylePropertyShorthand.h"
@@ -32,6 +31,7 @@
 #include "core/css/CSSBorderImageSliceValue.h"
 #include "core/css/CSSCounterValue.h"
 #include "core/css/CSSCustomIdentValue.h"
+#include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSGridLineNamesValue.h"
@@ -56,6 +56,7 @@
 #include "core/style/PathStyleMotionPath.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
+#include "core/svg/SVGPathUtilities.h"
 #include "platform/LengthFunctions.h"
 
 namespace blink {
@@ -1353,6 +1354,27 @@ static PassRefPtrWillBeRawPtr<CSSValue> valueForScrollSnapCoordinate(const Vecto
     return list.release();
 }
 
+PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(const AtomicString customPropertyName, const ComputedStyle& style)
+{
+    StyleVariableData* variables = style.variables();
+    if (!variables)
+        return nullptr;
+
+    CSSVariableData* data = variables->getVariable(customPropertyName);
+    if (!data)
+        return nullptr;
+
+    return CSSCustomPropertyDeclaration::create(customPropertyName, data);
+}
+
+const HashMap<AtomicString, RefPtr<CSSVariableData>>* ComputedStyleCSSValueMapping::getVariables(const ComputedStyle& style)
+{
+    StyleVariableData* variables = style.variables();
+    if (variables)
+        return variables->getVariables();
+    return nullptr;
+}
+
 PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const ComputedStyle& style, const LayoutObject* layoutObject, Node* styledNode, bool allowVisitedStyle)
 {
     const SVGComputedStyle& svgStyle = style.svgStyle();
@@ -1718,8 +1740,8 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
     case CSSPropertyHeight:
         if (layoutObject) {
             // According to http://www.w3.org/TR/CSS2/visudet.html#the-height-property,
-            // the "height" property does not apply for non-replaced inline elements.
-            if (!layoutObject->isReplaced() && layoutObject->isInline())
+            // the "height" property does not apply for non-atomic inline elements.
+            if (!layoutObject->isAtomicInlineLevel() && layoutObject->isInline())
                 return cssValuePool().createIdentifierValue(CSSValueAuto);
             return zoomAdjustedPixelValue(sizingBox(layoutObject).height(), style);
         }
@@ -2036,8 +2058,8 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
     case CSSPropertyWidth:
         if (layoutObject) {
             // According to http://www.w3.org/TR/CSS2/visudet.html#the-width-property,
-            // the "width" property does not apply for non-replaced inline elements.
-            if (!layoutObject->isReplaced() && layoutObject->isInline())
+            // the "width" property does not apply for non-atomic inline elements.
+            if (!layoutObject->isAtomicInlineLevel() && layoutObject->isInline())
                 return cssValuePool().createIdentifierValue(CSSValueAuto);
             return zoomAdjustedPixelValue(sizingBox(layoutObject).width(), style);
         }
@@ -2258,10 +2280,18 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
     case CSSPropertyClip: {
         if (style.hasAutoClip())
             return cssValuePool().createIdentifierValue(CSSValueAuto);
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> top = zoomAdjustedPixelValue(style.clip().top().value(), style);
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> right = zoomAdjustedPixelValue(style.clip().right().value(), style);
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> bottom = zoomAdjustedPixelValue(style.clip().bottom().value(), style);
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> left = zoomAdjustedPixelValue(style.clip().left().value(), style);
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> top = style.clip().top().isAuto()
+            ? cssValuePool().createIdentifierValue(CSSValueAuto)
+            : zoomAdjustedPixelValue(style.clip().top().value(), style);
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> right = style.clip().right().isAuto()
+            ? cssValuePool().createIdentifierValue(CSSValueAuto)
+            : zoomAdjustedPixelValue(style.clip().right().value(), style);
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> bottom = style.clip().bottom().isAuto()
+            ? cssValuePool().createIdentifierValue(CSSValueAuto)
+            : zoomAdjustedPixelValue(style.clip().bottom().value(), style);
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> left = style.clip().left().isAuto()
+            ? cssValuePool().createIdentifierValue(CSSValueAuto)
+            : zoomAdjustedPixelValue(style.clip().left().value(), style);
         return CSSQuadValue::create(top.release(), right.release(), bottom.release(), left.release(), CSSQuadValue::SerializeAsRect);
     }
     case CSSPropertySpeak:
@@ -2605,6 +2635,8 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
     case CSSPropertyMarker:
         // the above properties are not yet implemented in the engine
         return nullptr;
+    case CSSPropertyD:
+        return svgStyle.d();
     case CSSPropertyCx:
         return zoomAdjustedPixelValueForLength(svgStyle.cx(), style);
     case CSSPropertyCy:
@@ -2690,13 +2722,13 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
             list->append(cssValuePool().createIdentifierValue(CSSValueStyle));
         if (style.contain() & ContainsLayout)
             list->append(cssValuePool().createIdentifierValue(CSSValueLayout));
-        if (style.contain() & ContainsPaint)
+        if (style.containsPaint())
             list->append(cssValuePool().createIdentifierValue(CSSValuePaint));
         ASSERT(list->length());
         return list.release();
     }
     case CSSPropertyVariable:
-        // TODO(leviw): We should have a way to retrive variables here.
+        // Variables are retrieved via get(AtomicString).
         ASSERT_NOT_REACHED();
         return nullptr;
     case CSSPropertyAll:

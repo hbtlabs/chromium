@@ -29,7 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/FrameLoaderClientImpl.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -292,6 +291,12 @@ void FrameLoaderClientImpl::didNotAllowPlugins()
     if (m_webFrame->contentSettingsClient())
         m_webFrame->contentSettingsClient()->didNotAllowPlugins();
 
+}
+
+void FrameLoaderClientImpl::didUseKeygen()
+{
+    if (m_webFrame->contentSettingsClient())
+        m_webFrame->contentSettingsClient()->didUseKeygen();
 }
 
 bool FrameLoaderClientImpl::hasWebView() const
@@ -776,19 +781,11 @@ PassRefPtrWillBeRawPtr<Widget> FrameLoaderClientImpl::createPlugin(
     RefPtrWillBeRawPtr<WebPluginContainerImpl> container =
         WebPluginContainerImpl::create(element, webPlugin);
 
-    if (!webPlugin->initialize(container.get())) {
-#if ENABLE(OILPAN)
-        container->dispose();
-#endif
+    if (!webPlugin->initialize(container.get()))
         return nullptr;
-    }
 
-    if (policy != AllowDetachedPlugin && !element->layoutObject()) {
-#if ENABLE(OILPAN)
-        container->dispose();
-#endif
+    if (policy != AllowDetachedPlugin && !element->layoutObject())
         return nullptr;
-    }
 
     return container;
 }
@@ -878,11 +875,24 @@ bool FrameLoaderClientImpl::willCheckAndDispatchMessageEvent(
         WebLocalFrameImpl::fromFrame(sourceFrame), m_webFrame, WebSecurityOrigin(target), WebDOMMessageEvent(event));
 }
 
+void FrameLoaderClientImpl::frameFocused() const
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->frameFocused();
+}
+
 void FrameLoaderClientImpl::didChangeName(const String& name)
 {
     if (!m_webFrame->client())
         return;
     m_webFrame->client()->didChangeName(m_webFrame, name);
+}
+
+void FrameLoaderClientImpl::didEnforceStrictMixedContentChecking()
+{
+    if (!m_webFrame->client())
+        return;
+    m_webFrame->client()->didEnforceStrictMixedContentChecking();
 }
 
 void FrameLoaderClientImpl::didChangeSandboxFlags(Frame* childFrame, SandboxFlags flags)

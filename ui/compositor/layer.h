@@ -5,15 +5,17 @@
 #ifndef UI_COMPOSITOR_LAYER_H_
 #define UI_COMPOSITOR_LAYER_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "cc/animation/animation_events.h"
-#include "cc/animation/layer_animation_event_observer.h"
 #include "cc/base/region.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer_client.h"
@@ -68,8 +70,7 @@ class COMPOSITOR_EXPORT Layer
     : public LayerAnimationDelegate,
       NON_EXPORTED_BASE(public cc::ContentLayerClient),
       NON_EXPORTED_BASE(public cc::TextureLayerClient),
-      NON_EXPORTED_BASE(public cc::LayerClient),
-      NON_EXPORTED_BASE(public cc::LayerAnimationEventObserver) {
+      NON_EXPORTED_BASE(public cc::LayerClient) {
  public:
   Layer();
   explicit Layer(LayerType type);
@@ -372,9 +373,6 @@ class COMPOSITOR_EXPORT Layer
   scoped_refptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer* layer) override;
 
-  // LayerAnimationEventObserver
-  void OnAnimationStarted(const cc::AnimationEvent& event) override;
-
   // Whether this layer has animations waiting to get sent to its cc::Layer.
   bool HasPendingThreadedAnimations() {
     return pending_threaded_animations_.size() != 0;
@@ -415,6 +413,7 @@ class COMPOSITOR_EXPORT Layer
   void AddThreadedAnimation(scoped_ptr<cc::Animation> animation) override;
   void RemoveThreadedAnimation(int animation_id) override;
   LayerAnimatorCollection* GetLayerAnimatorCollection() override;
+  cc::Layer* GetCcLayer() const override;
 
   // Creates a corresponding composited layer for |type_|.
   void CreateCcLayer();
@@ -438,11 +437,8 @@ class COMPOSITOR_EXPORT Layer
   // be called once we have been added to a tree.
   void SendPendingThreadedAnimations();
 
-  void AddAnimatorsInTreeToCollection(LayerAnimatorCollection* collection);
-  void RemoveAnimatorsInTreeFromCollection(LayerAnimatorCollection* collection);
-
-  // Returns whether the layer has an animating LayerAnimator.
-  bool IsAnimating() const;
+  void SetCompositorForAnimatorsInTree(Compositor* compositor);
+  void ResetCompositorForAnimatorsInTree(Compositor* compositor);
 
   const LayerType type_;
 

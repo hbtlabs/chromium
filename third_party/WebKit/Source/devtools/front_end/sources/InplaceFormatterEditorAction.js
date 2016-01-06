@@ -54,7 +54,6 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
         this._sourcesView.addEventListener(WebInspector.SourcesView.Events.EditorClosed, this._editorClosed.bind(this));
 
         this._button = new WebInspector.ToolbarButton(WebInspector.UIString("Format"), "format-toolbar-item");
-        this._button.setToggled(false);
         this._button.addEventListener("click", this._formatSourceInPlace, this);
         this._updateButton(sourcesView.currentUISourceCode());
 
@@ -92,7 +91,7 @@ WebInspector.InplaceFormatterEditorAction.prototype = {
          */
         function contentLoaded(content)
         {
-            var highlighterType = WebInspector.SourcesView.uiSourceCodeHighlighterType(uiSourceCode);
+            var highlighterType = WebInspector.NetworkProject.uiSourceCodeMimeType(uiSourceCode);
             WebInspector.Formatter.format(uiSourceCode.contentType(), highlighterType, content || "", innerCallback.bind(this));
         }
 

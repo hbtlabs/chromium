@@ -66,7 +66,7 @@ GURL LayoutTestPushMessagingService::GetPushEndpoint() {
 
 void LayoutTestPushMessagingService::SubscribeFromDocument(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     int renderer_id,
     int render_frame_id,
@@ -78,7 +78,7 @@ void LayoutTestPushMessagingService::SubscribeFromDocument(
 
 void LayoutTestPushMessagingService::SubscribeFromWorker(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     bool user_visible,
     const PushMessagingService::RegisterCallback& callback) {
@@ -98,10 +98,10 @@ void LayoutTestPushMessagingService::SubscribeFromWorker(
   }
 }
 
-void LayoutTestPushMessagingService::GetPublicEncryptionKey(
+void LayoutTestPushMessagingService::GetEncryptionInfo(
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const PublicKeyCallback& callback) {
+    const EncryptionInfoCallback& callback) {
   std::vector<uint8_t> p256dh(
         kTestP256Key, kTestP256Key + arraysize(kTestP256Key));
   std::vector<uint8_t> auth(
@@ -129,7 +129,7 @@ bool LayoutTestPushMessagingService::SupportNonVisibleMessages() {
 
 void LayoutTestPushMessagingService::Unsubscribe(
     const GURL& requesting_origin,
-    int64 service_worker_registration_id,
+    int64_t service_worker_registration_id,
     const std::string& sender_id,
     const UnregisterCallback& callback) {
   callback.Run(PUSH_UNREGISTRATION_STATUS_SUCCESS_UNREGISTERED);

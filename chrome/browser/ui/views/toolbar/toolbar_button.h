@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_BUTTON_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/animation/ink_drop_host.h"
@@ -12,12 +13,14 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
 
+class Profile;
+
 namespace ui {
 class MenuModel;
 }
 
 namespace views {
-class InkDropAnimationController;
+class InkDropDelegate;
 class MenuRunner;
 }
 
@@ -29,7 +32,9 @@ class ToolbarButton : public views::LabelButton,
  public:
   // Takes ownership of the |model|, which can be null if no menu
   // is to be shown.
-  ToolbarButton(views::ButtonListener* listener, ui::MenuModel* model);
+  ToolbarButton(Profile* profile,
+                views::ButtonListener* listener,
+                ui::MenuModel* model);
   ~ToolbarButton() override;
 
   // Set up basic mouseover border behavior.
@@ -42,7 +47,6 @@ class ToolbarButton : public views::LabelButton,
 
   // views::LabelButton:
   gfx::Size GetPreferredSize() const override;
-  void Layout() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -65,8 +69,6 @@ class ToolbarButton : public views::LabelButton,
  protected:
   // views::LabelButton:
   bool ShouldEnterPushedState(const ui::Event& event) override;
-  void NotifyClick(const ui::Event& event) override;
-  void OnClickCanceled(const ui::Event& event) override;
 
   // Returns if menu should be shown. Override this to change default behavior.
   virtual bool ShouldShowMenu();
@@ -74,16 +76,15 @@ class ToolbarButton : public views::LabelButton,
   // Function to show the dropdown menu.
   virtual void ShowDropDownMenu(ui::MenuSourceType source_type);
 
-  views::InkDropAnimationController* ink_drop_animation_controller() {
-    return ink_drop_animation_controller_.get();
-  }
-
  private:
   // views::LabelButton:
   const char* GetClassName() const override;
 
   // views::InkDropHost:
   gfx::Point CalculateInkDropCenter() const override;
+
+  // The associated profile. The browser theme affects rendering.
+  Profile* profile_;
 
   // The model that populates the attached menu.
   scoped_ptr<ui::MenuModel> model_;
@@ -97,8 +98,8 @@ class ToolbarButton : public views::LabelButton,
   // Menu runner to display drop down menu.
   scoped_ptr<views::MenuRunner> menu_runner_;
 
-  // Animation controller for the ink drop ripple effect.
-  scoped_ptr<views::InkDropAnimationController> ink_drop_animation_controller_;
+  // Controls the visual feedback for the button state.
+  scoped_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   // A factory for tasks that show the dropdown context menu for the button.
   base::WeakPtrFactory<ToolbarButton> show_menu_factory_;

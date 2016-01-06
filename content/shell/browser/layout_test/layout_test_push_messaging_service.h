@@ -5,9 +5,12 @@
 #ifndef CONTENT_SHELL_BROWSER_LAYOUT_TEST_LAYOUT_TEST_PUSH_MESSAGING_SERVICE_H_
 #define CONTENT_SHELL_BROWSER_LAYOUT_TEST_LAYOUT_TEST_PUSH_MESSAGING_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 
+#include "base/macros.h"
 #include "content/public/browser/push_messaging_service.h"
 #include "content/public/common/push_messaging_status.h"
 #include "third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h"
@@ -35,10 +38,10 @@ class LayoutTestPushMessagingService : public PushMessagingService {
       const std::string& sender_id,
       bool user_visible,
       const PushMessagingService::RegisterCallback& callback) override;
-  void GetPublicEncryptionKey(
+  void GetEncryptionInfo(
       const GURL& origin,
       int64_t service_worker_registration_id,
-      const PushMessagingService::PublicKeyCallback& callback) override;
+      const PushMessagingService::EncryptionInfoCallback& callback) override;
   blink::WebPushPermissionStatus GetPermissionStatus(
       const GURL& requesting_origin,
       const GURL& embedding_origin,

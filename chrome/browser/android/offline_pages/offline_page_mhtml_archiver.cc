@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sha1.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -115,7 +114,7 @@ void OfflinePageMHTMLArchiver::GenerateMHTML(
 void OfflinePageMHTMLArchiver::OnGenerateMHTMLDone(
     const GURL& url,
     const base::FilePath& file_path,
-    int64 file_size) {
+    int64_t file_size) {
   if (file_size < 0) {
     ReportFailure(ArchiverResult::ERROR_ARCHIVE_CREATION_FAILED);
   } else {

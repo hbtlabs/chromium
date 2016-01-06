@@ -4,7 +4,10 @@
 
 #include "mojo/runner/child/test_native_main.h"
 
+#include <utility>
+
 #include "base/debug/stack_trace.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
 #include "base/threading/thread.h"
@@ -45,6 +48,7 @@ int TestNativeMain(mojo::ApplicationDelegate* application_delegate) {
 #endif
 
   {
+    mojo::embedder::PreInitializeChildProcess();
     mojo::embedder::Init();
 
     ProcessDelegate process_delegate;
@@ -56,16 +60,14 @@ int TestNativeMain(mojo::ApplicationDelegate* application_delegate) {
         mojo::embedder::ProcessType::NONE, &process_delegate,
         io_thread.task_runner().get(), mojo::embedder::ScopedPlatformHandle());
 
-    base::MessageLoop loop(mojo::common::MessagePumpMojo::Create());
     mojo::InterfaceRequest<mojo::Application> application_request;
     scoped_ptr<mojo::runner::RunnerConnection> connection(
         mojo::runner::RunnerConnection::ConnectToRunner(
             &application_request, ScopedMessagePipeHandle()));
-    {
-      mojo::ApplicationImpl impl(application_delegate,
-                                 application_request.Pass());
-      loop.Run();
-    }
+    base::MessageLoop loop(mojo::common::MessagePumpMojo::Create());
+    mojo::ApplicationImpl impl(application_delegate,
+                               std::move(application_request));
+    loop.Run();
 
     mojo::embedder::ShutdownIPCSupport();
   }

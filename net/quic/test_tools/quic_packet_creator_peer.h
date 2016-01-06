@@ -5,6 +5,9 @@
 #ifndef NET_QUIC_TEST_TOOLS_QUIC_PACKET_CREATOR_PEER_H_
 #define NET_QUIC_TEST_TOOLS_QUIC_PACKET_CREATOR_PEER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "net/quic/quic_protocol.h"
 
 namespace net {
@@ -51,6 +54,8 @@ class QuicPacketCreatorPeer {
   static QuicTime::Delta GetFecTimeout(QuicPacketCreator* creator);
   // TODO(rtenneti): Delete this code after the 0.25 RTT FEC experiment.
   static float GetRttMultiplierForFecTimeout(QuicPacketCreator* creator);
+  static EncryptionLevel GetEncryptionLevel(QuicPacketCreator* creator);
+  static QuicPathId GetCurrentPath(QuicPacketCreator* creator);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicPacketCreatorPeer);

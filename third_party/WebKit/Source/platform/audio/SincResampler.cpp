@@ -26,12 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
-#if ENABLE(WEB_AUDIO)
-
 #include "platform/audio/SincResampler.h"
 
+#if ENABLE(WEB_AUDIO)
 #include "platform/audio/AudioBus.h"
 #include "wtf/CPU.h"
 #include "wtf/MathExtras.h"

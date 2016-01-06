@@ -4,7 +4,11 @@
 
 #include "components/mus/public/cpp/window.h"
 
+#include <limits.h>
+#include <stdint.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "components/mus/common/util.h"
@@ -107,12 +111,15 @@ TEST_F(WindowTest, GetChildById) {
 
 TEST_F(WindowTest, DrawnAndVisible) {
   TestWindow w1;
+  EXPECT_FALSE(w1.visible());
+  w1.SetVisible(true);
   EXPECT_TRUE(w1.visible());
   EXPECT_FALSE(w1.IsDrawn());
 
   WindowPrivate(&w1).set_drawn(true);
 
   TestWindow w11;
+  w11.SetVisible(true);
   w1.AddChild(&w11);
   EXPECT_TRUE(w11.visible());
   EXPECT_TRUE(w11.IsDrawn());
@@ -688,6 +695,8 @@ class VisibilityChangeObserver : public WindowObserver {
 
 TEST_F(WindowObserverTest, SetVisible) {
   TestWindow w1;
+  EXPECT_FALSE(w1.visible());
+  w1.SetVisible(true);
   EXPECT_TRUE(w1.visible());
   {
     // Change wisibility from true to false and make sure we get notifications.
@@ -709,8 +718,10 @@ TEST_F(WindowObserverTest, SetVisible) {
 
 TEST_F(WindowObserverTest, SetVisibleParent) {
   TestWindow parent;
+  parent.SetVisible(true);
   WindowPrivate(&parent).set_id(1);
   TestWindow child;
+  child.SetVisible(true);
   WindowPrivate(&child).set_id(2);
   parent.AddChild(&child);
   EXPECT_TRUE(parent.visible());
@@ -729,8 +740,10 @@ TEST_F(WindowObserverTest, SetVisibleParent) {
 
 TEST_F(WindowObserverTest, SetVisibleChild) {
   TestWindow parent;
+  parent.SetVisible(true);
   WindowPrivate(&parent).set_id(1);
   TestWindow child;
+  child.SetVisible(true);
   WindowPrivate(&child).set_id(2);
   parent.AddChild(&child);
   EXPECT_TRUE(parent.visible());

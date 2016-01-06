@@ -5,9 +5,12 @@
 #ifndef MEDIA_BLINK_BUFFERED_RESOURCE_LOADER_H_
 #define MEDIA_BLINK_BUFFERED_RESOURCE_LOADER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/seekable_buffer.h"
 #include "media/blink/active_loader.h"
@@ -208,7 +211,7 @@ class MEDIA_BLINK_EXPORT BufferedResourceLoader
   // Returns the original URL of the response. If the request is redirected to
   // another URL it is the URL after redirected. If the response is generated in
   // a Service Worker it is empty.
-  const GURL response_original_url() const { return response_original_url_; }
+  const GURL& response_original_url() const { return response_original_url_; }
 
   // Returns an estimate of the amount of memory owned by the resource loader.
   int64_t GetMemoryUsage() const;

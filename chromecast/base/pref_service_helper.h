@@ -1,0 +1,40 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Helper to initialize PrefService for cast shell.
+
+#ifndef CHROMECAST_BASE_PREF_SERVICE_HELPER_H_
+#define CHROMECAST_BASE_PREF_SERVICE_HELPER_H_
+
+#include "base/memory/scoped_ptr.h"
+#include "base/prefs/pref_service.h"
+
+class PrefRegistrySimple;
+
+namespace base {
+class SequencedWorkerPool;
+}  // namespace base
+
+namespace chromecast {
+
+// It uses JsonPrefStore internally and/so the format of config file is same to
+// that of JsonPrefStore.
+class PrefServiceHelper {
+ public:
+  // Loads configs from config file. Returns true if successful.
+  static scoped_ptr<PrefService> CreatePrefService(
+      PrefRegistrySimple* registry,
+      base::SequencedWorkerPool* worker_pool);
+
+ private:
+  // Registers any needed preferences for the current platform.
+  static void RegisterPlatformPrefs(PrefRegistrySimple* registry);
+
+  // Called after the pref file has been loaded.
+  static void OnPrefsLoaded(PrefService* pref_service);
+};
+
+}  // namespace chromecast
+
+#endif  // CHROMECAST_BASE_PREF_SERVICE_HELPER_H_

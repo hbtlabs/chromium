@@ -4,6 +4,9 @@
 
 #include "google_apis/drive/base_requests.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -58,7 +61,7 @@ class FakeMultipartUploadRequest : public MultipartUploadRequestBase {
       base::SequencedTaskRunner* blocking_task_runner,
       const std::string& metadata_json,
       const std::string& content_type,
-      int64 content_length,
+      int64_t content_length,
       const base::FilePath& local_file_path,
       const FileResourceCallback& callback,
       const google_apis::ProgressCallback& progress_callback,
@@ -127,7 +130,7 @@ class BaseRequestsTest : public testing::Test {
     response->set_code(response_code_);
     response->set_content(response_body_);
     response->set_content_type("application/json");
-    return response.Pass();
+    return std::move(response);
   }
 
   base::MessageLoopForIO message_loop_;

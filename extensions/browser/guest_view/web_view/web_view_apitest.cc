@@ -4,10 +4,14 @@
 
 #include "extensions/browser/guest_view/web_view/web_view_apitest.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
@@ -59,8 +63,7 @@ static scoped_ptr<net::test_server::HttpResponse> UserAgentResponseHandler(
                         base::CompareCase::SENSITIVE))
     return scoped_ptr<net::test_server::HttpResponse>();
 
-  std::map<std::string, std::string>::const_iterator it =
-        request.headers.find("User-Agent");
+  auto it = request.headers.find("User-Agent");
   EXPECT_TRUE(it != request.headers.end());
   if (!base::StartsWith("foobar", it->second, base::CompareCase::SENSITIVE))
     return scoped_ptr<net::test_server::HttpResponse>();
@@ -69,7 +72,7 @@ static scoped_ptr<net::test_server::HttpResponse> UserAgentResponseHandler(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
   http_response->AddCustomHeader("Location", redirect_target.spec());
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 class WebContentsHiddenObserver : public content::WebContentsObserver {
@@ -109,7 +112,7 @@ scoped_ptr<net::test_server::HttpResponse> RedirectResponseHandler(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
   http_response->AddCustomHeader("Location", redirect_target.spec());
-  return http_response.Pass();
+  return std::move(http_response);
 }
 
 // Handles |request| by serving an empty response.

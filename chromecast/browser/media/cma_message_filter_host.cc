@@ -4,6 +4,8 @@
 
 #include "chromecast/browser/media/cma_message_filter_host.h"
 
+#include <stdint.h>
+
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -47,8 +49,8 @@ base::LazyInstance<MediaPipelineCmaMap> g_pipeline_map_cma =
     LAZY_INSTANCE_INITIALIZER;
 
 uint64_t GetPipelineCmaId(int process_id, int media_id) {
-  return (static_cast<uint64>(process_id) << 32) +
-      static_cast<uint64>(media_id);
+  return (static_cast<uint64_t>(process_id) << 32) +
+         static_cast<uint64_t>(media_id);
 }
 
 MediaPipelineHost* GetMediaPipeline(int process_id, int media_id) {
@@ -350,6 +352,8 @@ void CmaMessageFilterHost::AudioInitialize(
   }
 
   AvPipelineClient client;
+  client.wait_for_key_cb = ::media::BindToCurrentLoop(base::Bind(
+      &CmaMessageFilterHost::OnWaitForKey, weak_this_, media_id, track_id));
   client.eos_cb = ::media::BindToCurrentLoop(base::Bind(
       &CmaMessageFilterHost::OnEos, weak_this_, media_id, track_id));
   client.playback_error_cb = ::media::BindToCurrentLoop(base::Bind(
@@ -380,6 +384,9 @@ void CmaMessageFilterHost::VideoInitialize(
   }
 
   VideoPipelineClient client;
+  client.av_pipeline_client.wait_for_key_cb = ::media::BindToCurrentLoop(
+      base::Bind(&CmaMessageFilterHost::OnWaitForKey, weak_this_,
+                 media_id, track_id));
   client.av_pipeline_client.eos_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaMessageFilterHost::OnEos, weak_this_,
                  media_id, track_id));
@@ -496,6 +503,11 @@ void CmaMessageFilterHost::OnBufferingNotification(
     int media_id, ::media::BufferingState state) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   Send(new CmaMsg_BufferingNotification(media_id, state));
+}
+
+void CmaMessageFilterHost::OnWaitForKey(int media_id, TrackId track_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  Send(new CmaMsg_WaitForKey(media_id, track_id));
 }
 
 void CmaMessageFilterHost::OnEos(int media_id, TrackId track_id) {

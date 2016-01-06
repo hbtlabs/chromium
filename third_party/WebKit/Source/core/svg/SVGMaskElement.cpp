@@ -21,8 +21,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGMaskElement.h"
 
 #include "core/layout/svg/LayoutSVGResourceMasker.h"
@@ -87,7 +85,7 @@ bool SVGMaskElement::isPresentationAttributeWithSVGDOM(const QualifiedName& attr
 
 void SVGMaskElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_x)
         addPropertyToPresentationAttributeStyle(style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
     else if (property == m_y)

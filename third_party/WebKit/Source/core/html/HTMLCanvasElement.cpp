@@ -25,7 +25,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/HTMLCanvasElement.h"
 
 #include "bindings/core/v8/ExceptionMessages.h"
@@ -80,8 +79,24 @@ const int MaxCanvasArea = 32768 * 8192; // Maximum canvas area in CSS pixels
 // In Skia, we will also limit width/height to 32767.
 const int MaxSkiaDim = 32767; // Maximum width/height in CSS pixels.
 
+// We estimate the max limit of GPU allocated memory for canvases before Chrome
+// becomes laggy by setting the total allocated memory for accelerated canvases
+// to be equivalent to memory used by 80 accelerated canvases, each has a size
+// of 1000*500 and 2d context.
+// Each such canvas occupies 4000000 = 1000 * 500 * 2 * 4 bytes, where 2 is the
+// gpuBufferCount in ImageBuffer::updateGPUMemoryUsage() and 4 means four bytes
+// per pixel per buffer.
+#if !OS(ANDROID)
+const int MaxGlobalGPUMemoryUsage = 4000000 * 80;
+#else
+// We estimate that the max limit for android phones is a quarter of that for
+// desktops based on local experimental results on Android One.,
+const int MaxGlobalGPUMemoryUsage = 4000000 * 20;
+#endif
+
 // A default value of quality argument for toDataURL and toBlob
-// It is in an invalid range (outside 0.0 - 1.0) so that it will not be misinterpreted as a user-input value
+// It is in an invalid range (outside 0.0 - 1.0) so that it will not be
+// misinterpreted as a user-input value
 const int UndefinedQualityValue = -1.0;
 
 // Default image mime type for toDataURL and toBlob functions
@@ -283,6 +298,8 @@ void HTMLCanvasElement::didDraw(const FloatRect& rect)
 
 void HTMLCanvasElement::didFinalizeFrame()
 {
+    notifyListenersCanvasChanged();
+
     if (m_dirtyRect.isEmpty())
         return;
 
@@ -393,14 +410,42 @@ bool HTMLCanvasElement::paintsIntoCanvasBuffer() const
 
     if (!m_context->isAccelerated())
         return true;
-
     if (layoutBox() && layoutBox()->hasAcceleratedCompositing())
         return false;
 
     return true;
 }
 
-void HTMLCanvasElement::paint(GraphicsContext* context, const LayoutRect& r)
+void HTMLCanvasElement::notifyListenersCanvasChanged()
+{
+    if (!originClean()) {
+        m_listeners.clear();
+        return;
+    }
+
+    bool listenerNeedsNewFrameCapture = false;
+    for (const CanvasDrawListener* listener : m_listeners) {
+        if (listener->needsNewFrame()) {
+            listenerNeedsNewFrameCapture = true;
+        }
+    }
+
+    if (listenerNeedsNewFrameCapture) {
+        SourceImageStatus status;
+        RefPtr<Image> sourceImage = getSourceImageForCanvas(&status, PreferNoAcceleration);
+        if (status != NormalSourceImageStatus)
+            return;
+        RefPtr<SkImage> image = sourceImage->imageForCurrentFrame();
+        for (CanvasDrawListener* listener : m_listeners) {
+            if (listener->needsNewFrame()) {
+                listener->sendNewFrame(image);
+            }
+        }
+    }
+
+}
+
+void HTMLCanvasElement::paint(GraphicsContext& context, const LayoutRect& r)
 {
     // FIXME: crbug.com/438240; there is a bug with the new CSS blending and compositing feature.
     if (!m_context)
@@ -410,14 +455,14 @@ void HTMLCanvasElement::paint(GraphicsContext* context, const LayoutRect& r)
 
     m_context->paintRenderingResultsToCanvas(FrontBuffer);
     if (hasImageBuffer()) {
-        if (!context->contextDisabled()) {
+        if (!context.contextDisabled()) {
             SkXfermode::Mode compositeOperator = !m_context || m_context->hasAlpha() ? SkXfermode::kSrcOver_Mode : SkXfermode::kSrc_Mode;
             buffer()->draw(context, pixelSnappedIntRect(r), 0, compositeOperator);
         }
     } else {
         // When alpha is false, we should draw to opaque black.
         if (!m_context->hasAlpha())
-            context->fillRect(FloatRect(r), Color(0, 0, 0));
+            context.fillRect(FloatRect(r), Color(0, 0, 0));
     }
 
     if (is3D() && paintsIntoCanvasBuffer())
@@ -566,6 +611,16 @@ void HTMLCanvasElement::toBlob(FileCallback* callback, const String& mimeType, c
     asyncCreatorRef->scheduleAsyncBlobCreation(false, quality);
 }
 
+void HTMLCanvasElement::addListener(CanvasDrawListener* listener)
+{
+    m_listeners.add(listener);
+}
+
+void HTMLCanvasElement::removeListener(CanvasDrawListener* listener)
+{
+    m_listeners.remove(listener);
+}
+
 SecurityOrigin* HTMLCanvasElement::securityOrigin() const
 {
     return document().securityOrigin();
@@ -612,6 +667,13 @@ bool HTMLCanvasElement::shouldAccelerate(const IntSize& size) const
         return false;
 
     if (!Platform::current()->canAccelerate2dCanvas())
+        return false;
+
+    // When GPU allocated memory runs low (due to having created too many
+    // accelerated canvases), the compositor starves and browser becomes laggy.
+    // Thus, we should stop allocating more GPU memory to new canvases created
+    // when the current memory usage exceeds the threshold.
+    if (ImageBuffer::getGlobalGPUMemoryUsage() >= MaxGlobalGPUMemoryUsage)
         return false;
 
     return true;
@@ -741,6 +803,7 @@ void HTMLCanvasElement::notifySurfaceInvalid()
 
 DEFINE_TRACE(HTMLCanvasElement)
 {
+    visitor->trace(m_listeners);
     visitor->trace(m_context);
     DocumentVisibilityObserver::trace(visitor);
     HTMLElement::trace(visitor);

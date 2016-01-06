@@ -7,15 +7,19 @@
 // instead). We could special-case it, but it is easier to just have empty
 // passwords. This will not be needed anymore if crbug.com/466638 is fixed.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/affiliation_service.h"
 #include "components/password_manager/core/browser/mock_affiliated_match_helper.h"
@@ -66,13 +70,6 @@ class MockPasswordStoreConsumer : public PasswordStoreConsumer {
   void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
     OnGetPasswordStoreResultsConstRef(results.get());
   }
-};
-
-class MockPasswordStoreObserver
-    : public password_manager::PasswordStore::Observer {
- public:
-  MOCK_METHOD1(OnLoginsChanged,
-               void(const password_manager::PasswordStoreChangeList& changes));
 };
 
 class StartSyncFlareMock {
@@ -173,8 +170,7 @@ TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
   // Build the forms vector and add the forms to the store.
   ScopedVector<PasswordForm> all_forms;
   for (size_t i = 0; i < arraysize(form_data); ++i) {
-    all_forms.push_back(
-        CreatePasswordFormFromDataForTesting(form_data[i]).Pass());
+    all_forms.push_back(CreatePasswordFormFromDataForTesting(form_data[i]));
     store->AddLogin(*all_forms.back());
   }
   base::MessageLoop::current()->RunUntilIdle();
@@ -344,7 +340,7 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
 
   MockPasswordStoreConsumer mock_consumer;
   ScopedVector<autofill::PasswordForm> expected_forms;
-  expected_forms.push_back(new_form.Pass());
+  expected_forms.push_back(std::move(new_form));
   EXPECT_CALL(mock_consumer,
               OnGetPasswordStoreResultsConstRef(
                   UnorderedPasswordFormElementsAre(expected_forms.get())));

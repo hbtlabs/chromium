@@ -4,6 +4,8 @@
 
 #include "components/browser_sync/browser/profile_sync_components_factory_impl.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/pref_service.h"
@@ -11,15 +13,15 @@
 #include "components/autofill/core/browser/autofill_wallet_data_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_data_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_data_type_controller.h"
+#include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/history/core/browser/history_delete_directives_data_type_controller.h"
-#include "components/history/core/browser/typed_url_change_processor.h"
 #include "components/history/core/browser/typed_url_data_type_controller.h"
-#include "components/history/core/browser/typed_url_model_associator.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_data_type_controller.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
@@ -53,9 +55,7 @@ using browser_sync::HistoryDeleteDirectivesDataTypeController;
 using browser_sync::PasswordDataTypeController;
 using browser_sync::SessionDataTypeController;
 using browser_sync::SyncBackendHost;
-using browser_sync::TypedUrlChangeProcessor;
 using browser_sync::TypedUrlDataTypeController;
-using browser_sync::TypedUrlModelAssociator;
 using sync_driver::DataTypeController;
 using sync_driver::DataTypeErrorHandler;
 using sync_driver::DataTypeManager;
@@ -95,7 +95,9 @@ ProfileSyncComponentsFactoryImpl::ProfileSyncComponentsFactoryImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
     const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
     OAuth2TokenService* token_service,
-    net::URLRequestContextGetter* url_request_context_getter)
+    net::URLRequestContextGetter* url_request_context_getter,
+    const scoped_refptr<autofill::AutofillWebDataService>& web_data_service,
+    const scoped_refptr<password_manager::PasswordStore>& password_store)
     : sync_client_(sync_client),
       channel_(channel),
       version_(version),
@@ -107,6 +109,8 @@ ProfileSyncComponentsFactoryImpl::ProfileSyncComponentsFactoryImpl(
       db_thread_(db_thread),
       token_service_(token_service),
       url_request_context_getter_(url_request_context_getter),
+      web_data_service_(web_data_service),
+      password_store_(password_store),
       weak_factory_(this) {
   DCHECK(token_service_);
   DCHECK(url_request_context_getter_);
@@ -140,8 +144,9 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
   // Autofill sync is enabled by default.  Register unless explicitly
   // disabled.
   if (!disabled_types.Has(syncer::AUTOFILL)) {
-    sync_service->RegisterDataTypeController(new AutofillDataTypeController(
-        ui_thread_, db_thread_, error_callback, sync_client_));
+    sync_service->RegisterDataTypeController(
+        new AutofillDataTypeController(ui_thread_, db_thread_, error_callback,
+                                       sync_client_, web_data_service_));
   }
 
   // Autofill profile sync is enabled by default.  Register unless explicitly
@@ -149,7 +154,8 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
   if (!disabled_types.Has(syncer::AUTOFILL_PROFILE)) {
     sync_service->RegisterDataTypeController(
         new AutofillProfileDataTypeController(ui_thread_, db_thread_,
-                                              error_callback, sync_client_));
+                                              error_callback, sync_client_,
+                                              web_data_service_));
   }
 
   // Wallet data sync is enabled by default, but behind a syncer experiment
@@ -159,7 +165,7 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
     sync_service->RegisterDataTypeController(
         new browser_sync::AutofillWalletDataTypeController(
             ui_thread_, db_thread_, error_callback, sync_client_,
-            syncer::AUTOFILL_WALLET_DATA));
+            syncer::AUTOFILL_WALLET_DATA, web_data_service_));
   }
 
   // Wallet metadata sync depends on Wallet data sync. Register if Wallet data
@@ -169,7 +175,7 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
     sync_service->RegisterDataTypeController(
         new browser_sync::AutofillWalletDataTypeController(
             ui_thread_, db_thread_, error_callback, sync_client_,
-            syncer::AUTOFILL_WALLET_METADATA));
+            syncer::AUTOFILL_WALLET_METADATA, web_data_service_));
   }
 
   // Bookmark sync is enabled by default.  Register unless explicitly
@@ -203,13 +209,8 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
   if (!disabled_types.Has(syncer::PROXY_TABS) && !history_disabled) {
     sync_service->RegisterDataTypeController(
         new ProxyDataTypeController(ui_thread_, syncer::PROXY_TABS));
-    // TODO(zea): remove this once SyncedWindowDelegateGetter is componentized.
-    // For now, we know that the implementation of SyncService is always a
-    // ProfileSyncService at this level.
-    ProfileSyncService* pss = static_cast<ProfileSyncService*>(sync_service);
     sync_service->RegisterDataTypeController(new SessionDataTypeController(
         ui_thread_, error_callback, sync_client_,
-        pss->GetSyncedWindowDelegatesGetter(),
         sync_service->GetLocalDeviceInfoProvider(), history_disabled_pref_));
   }
 
@@ -228,7 +229,7 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
   if (!disabled_types.Has(syncer::PASSWORDS)) {
     sync_service->RegisterDataTypeController(new PasswordDataTypeController(
         ui_thread_, error_callback, sync_client_,
-        sync_client_->GetPasswordStateChangedCallback()));
+        sync_client_->GetPasswordStateChangedCallback(), password_store_));
   }
 
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
@@ -319,7 +320,7 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
   // Only construct an AttachmentUploader and AttachmentDownload if we have sync
   // credentials. We may not have sync credentials because there may not be a
   // signed in sync user (e.g. sync is running in "backup" mode).
-  if (!user_share.sync_credentials.email.empty() &&
+  if (!user_share.sync_credentials.account_id.empty() &&
       !user_share.sync_credentials.scope_set.empty()) {
     scoped_refptr<OAuth2TokenServiceRequest::TokenServiceProvider>
         token_service_provider(
@@ -329,7 +330,7 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
     // per AttachmentService (bug 369536).
     attachment_uploader.reset(new syncer::AttachmentUploaderImpl(
         sync_service_url_, url_request_context_getter_,
-        user_share.sync_credentials.email,
+        user_share.sync_credentials.account_id,
         user_share.sync_credentials.scope_set, token_service_provider,
         store_birthday, model_type));
 
@@ -337,7 +338,7 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
         new TokenServiceProvider(ui_thread_, token_service_);
     attachment_downloader = syncer::AttachmentDownloader::Create(
         sync_service_url_, url_request_context_getter_,
-        user_share.sync_credentials.email,
+        user_share.sync_credentials.account_id,
         user_share.sync_credentials.scope_set, token_service_provider,
         store_birthday, model_type);
   }
@@ -351,10 +352,10 @@ ProfileSyncComponentsFactoryImpl::CreateAttachmentService(
   const base::TimeDelta max_backoff_delay = base::TimeDelta::FromHours(4);
   scoped_ptr<syncer::AttachmentService> attachment_service(
       new syncer::AttachmentServiceImpl(
-          attachment_store.Pass(), attachment_uploader.Pass(),
-          attachment_downloader.Pass(), delegate, initial_backoff_delay,
+          std::move(attachment_store), std::move(attachment_uploader),
+          std::move(attachment_downloader), delegate, initial_backoff_delay,
           max_backoff_delay));
-  return attachment_service.Pass();
+  return attachment_service;
 }
 
 sync_driver::SyncApiComponentFactory::SyncComponents
@@ -375,22 +376,5 @@ ProfileSyncComponentsFactoryImpl::CreateBookmarkSyncComponents(
       kExpectMobileBookmarksFolder);
   BookmarkChangeProcessor* change_processor = new BookmarkChangeProcessor(
       sync_service->GetSyncClient(), model_associator, error_handler);
-  return SyncComponents(model_associator, change_processor);
-}
-
-sync_driver::SyncApiComponentFactory::SyncComponents
-ProfileSyncComponentsFactoryImpl::CreateTypedUrlSyncComponents(
-    sync_driver::SyncService* sync_service,
-    history::HistoryBackend* history_backend,
-    sync_driver::DataTypeErrorHandler* error_handler) {
-  DCHECK(!ui_thread_->BelongsToCurrentThread());
-
-  // TODO(zea): Once TypedURLs are converted to SyncableService, remove
-  // |sync_service_| member, and make GetSyncService require it be called on
-  // the UI thread.
-  TypedUrlModelAssociator* model_associator =
-      new TypedUrlModelAssociator(sync_service, history_backend, error_handler);
-  TypedUrlChangeProcessor* change_processor = new TypedUrlChangeProcessor(
-      model_associator, history_backend, error_handler, ui_thread_);
   return SyncComponents(model_associator, change_processor);
 }

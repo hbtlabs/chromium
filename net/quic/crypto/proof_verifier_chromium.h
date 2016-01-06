@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_verify_result.h"
@@ -31,7 +31,6 @@ class TransportSecurityState;
 class NET_EXPORT_PRIVATE ProofVerifyDetailsChromium
     : public ProofVerifyDetails {
  public:
-
   // ProofVerifyDetails implementation
   ProofVerifyDetails* Clone() const override;
 

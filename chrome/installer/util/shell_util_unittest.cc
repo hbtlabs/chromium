@@ -4,6 +4,8 @@
 
 #include "chrome/installer/util/shell_util.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/base_paths.h"
@@ -13,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -1023,7 +1026,7 @@ TEST(ShellUtilTest, GetUserSpecificRegistrySuffix) {
   base::string16 suffix;
   ASSERT_TRUE(ShellUtil::GetUserSpecificRegistrySuffix(&suffix));
   ASSERT_TRUE(base::StartsWith(suffix, L".", base::CompareCase::SENSITIVE));
-  ASSERT_EQ(27, suffix.length());
+  ASSERT_EQ(27u, suffix.length());
   ASSERT_TRUE(base::ContainsOnlyChars(suffix.substr(1),
                                       L"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"));
 }
@@ -1048,7 +1051,7 @@ TEST(ShellUtilTest, ByteArrayToBase32) {
                                 L"MZXW6YTB", L"MZXW6YTBOI"};
 
   // Run the tests, with one more letter in the input every pass.
-  for (int i = 0; i < arraysize(expected); ++i) {
+  for (size_t i = 0; i < arraysize(expected); ++i) {
     ASSERT_EQ(expected[i],
               ShellUtil::ByteArrayToBase32(test_array, i));
   }

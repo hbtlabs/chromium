@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/containers/hash_tables.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/animation/scrollbar_animation_controller.h"
@@ -63,7 +65,7 @@ class FakeResourceTrackingLayerTreeHost : public FakeLayerTreeHost {
  public:
   FakeResourceTrackingLayerTreeHost(FakeLayerTreeHostClient* client,
                                     LayerTreeHost::InitParams* params)
-      : FakeLayerTreeHost(client, params),
+      : FakeLayerTreeHost(client, params, CompositorMode::SingleThreaded),
         next_id_(1),
         total_ui_resource_created_(0),
         total_ui_resource_deleted_(0) {
@@ -632,7 +634,7 @@ TEST_F(ScrollbarLayerTestMaxTextureSize, DirectRenderer) {
   int max_size = 0;
   context->getIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
   SetScrollbarBounds(gfx::Size(max_size + 100, max_size + 100));
-  RunTest(true, false);
+  RunTest(CompositorMode::Threaded, false);
 }
 
 TEST_F(ScrollbarLayerTestMaxTextureSize, DelegatingRenderer) {
@@ -641,7 +643,7 @@ TEST_F(ScrollbarLayerTestMaxTextureSize, DelegatingRenderer) {
   int max_size = 0;
   context->getIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
   SetScrollbarBounds(gfx::Size(max_size + 100, max_size + 100));
-  RunTest(true, true);
+  RunTest(CompositorMode::Threaded, true);
 }
 
 class ScrollbarLayerTestResourceCreationAndRelease : public ScrollbarLayerTest {

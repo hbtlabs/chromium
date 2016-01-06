@@ -4,6 +4,8 @@
 
 #include "chromeos/network/network_state_handler.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
@@ -997,7 +999,7 @@ ScopedVector<std::string> NetworkStateHandler::GetTechnologiesForType(
     technologies.push_back(new std::string(shill::kTypeVPN));
 
   CHECK_GT(technologies.size(), 0ul);
-  return technologies.Pass();
+  return technologies;
 }
 
 }  // namespace chromeos

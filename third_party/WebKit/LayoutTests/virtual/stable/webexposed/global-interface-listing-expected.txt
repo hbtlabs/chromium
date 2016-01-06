@@ -231,6 +231,9 @@ interface Blob
     getter type
     method constructor
     method slice
+interface BlobEvent : Event
+    getter data
+    method constructor
 interface CDATASection : Text
     method constructor
 interface CSS
@@ -563,6 +566,7 @@ interface DOMTokenList
     method item
     method keys
     method remove
+    method supports
     method toString
     method toggle
     method values
@@ -2030,6 +2034,7 @@ interface HTMLMediaElement : HTMLElement
     getter currentTime
     getter defaultMuted
     getter defaultPlaybackRate
+    getter disableRemotePlayback
     getter duration
     getter ended
     getter error
@@ -2063,6 +2068,7 @@ interface HTMLMediaElement : HTMLElement
     setter currentTime
     setter defaultMuted
     setter defaultPlaybackRate
+    setter disableRemotePlayback
     setter loop
     setter muted
     setter onencrypted
@@ -2846,6 +2852,31 @@ interface MediaQueryListEvent : Event
     getter matches
     getter media
     method constructor
+interface MediaRecorder : EventTarget
+    static method isTypeSupported
+    getter ignoreMutedMedia
+    getter mimeType
+    getter ondataavailable
+    getter onerror
+    getter onpause
+    getter onresume
+    getter onstart
+    getter onstop
+    getter state
+    getter stream
+    method constructor
+    method pause
+    method requestData
+    method resume
+    method start
+    method stop
+    setter ignoreMutedMedia
+    setter ondataavailable
+    setter onerror
+    setter onpause
+    setter onresume
+    setter onstart
+    setter onstop
 interface MediaSource : EventTarget
     static method isTypeSupported
     getter activeSourceBuffers
@@ -4509,6 +4540,7 @@ interface ServiceWorkerRegistration : EventTarget
     getter onupdatefound
     getter pushManager
     getter scope
+    getter sync
     method constructor
     method getNotifications
     method showNotification
@@ -4611,6 +4643,10 @@ interface SubtleCrypto
     method unwrapKey
     method verify
     method wrapKey
+interface SyncManager
+    method constructor
+    method getTags
+    method register
 interface Text : CharacterData
     getter wholeText
     method constructor
@@ -5719,7 +5755,6 @@ interface webkitSpeechRecognition : EventTarget
     getter onspeechend
     getter onspeechstart
     getter onstart
-    getter serviceURI
     method abort
     method constructor
     method start
@@ -5740,7 +5775,6 @@ interface webkitSpeechRecognition : EventTarget
     setter onspeechend
     setter onspeechstart
     setter onstart
-    setter serviceURI
 interface webkitSpeechRecognitionError : Event
     getter error
     getter message

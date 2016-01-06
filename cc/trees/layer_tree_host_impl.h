@@ -5,12 +5,14 @@
 #ifndef CC_TREES_LAYER_TREE_HOST_IMPL_H_
 #define CC_TREES_LAYER_TREE_HOST_IMPL_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_events.h"
@@ -96,8 +98,6 @@ class LayerTreeHostImplClient {
   virtual void SetEstimatedParentDrawTime(base::TimeDelta draw_time) = 0;
   virtual void DidSwapBuffersOnImplThread() = 0;
   virtual void DidSwapBuffersCompleteOnImplThread() = 0;
-  virtual void OnResourcelessSoftareDrawStateChanged(
-      bool resourceless_draw) = 0;
   virtual void OnCanDrawStateChanged(bool can_draw) = 0;
   virtual void NotifyReadyToActivate() = 0;
   virtual void NotifyReadyToDraw() = 0;
@@ -124,7 +124,7 @@ class LayerTreeHostImplClient {
   virtual void DidCompletePageScaleAnimationOnImplThread() = 0;
 
   // Called when output surface asks for a draw.
-  virtual void OnDrawForOutputSurface() = 0;
+  virtual void OnDrawForOutputSurface(bool resourceless_software_draw) = 0;
 
   virtual void PostFrameTimingEventsOnImplThread(
       scoped_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
@@ -254,6 +254,7 @@ class CC_EXPORT LayerTreeHostImpl
   void TreeLayerTransformIsPotentiallyAnimatingChanged(int layer_id,
                                                        LayerTreeImpl* tree,
                                                        bool is_animating);
+  bool AnimationsPreserveAxisAlignment(const LayerImpl* layer) const;
 
   // LayerTreeMutatorsClient implementation.
   bool IsLayerInTree(int layer_id, LayerTreeType tree_type) const override;
@@ -348,20 +349,19 @@ class CC_EXPORT LayerTreeHostImpl
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
   void SetNeedsRedrawRect(const gfx::Rect& rect) override;
-  void SetExternalDrawConstraints(
-      const gfx::Transform& transform,
-      const gfx::Rect& viewport,
-      const gfx::Rect& clip,
-      const gfx::Rect& viewport_rect_for_tile_priority,
-      const gfx::Transform& transform_for_tile_priority,
-      bool resourceless_software_draw) override;
+  void SetExternalTilePriorityConstraints(
+      const gfx::Rect& viewport_rect,
+      const gfx::Transform& transform) override;
   void DidLoseOutputSurface() override;
   void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
   void ReclaimResources(const CompositorFrameAck* ack) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
-  void OnDraw() override;
+  void OnDraw(const gfx::Transform& transform,
+              const gfx::Rect& viewport,
+              const gfx::Rect& clip,
+              bool resourceless_software_draw) override;
 
   // Called from LayerTreeImpl.
   void OnCanDrawStateChangedForTree();

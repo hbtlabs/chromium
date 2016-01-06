@@ -5,8 +5,10 @@
 #include "chrome/browser/printing/printing_message_filter.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/printing/printer_query.h"
@@ -301,7 +303,7 @@ void PrintingMessageFilter::OnUpdatePrintSettings(
     printer_query = queue_->CreatePrinterQuery(host_id, routing_id);
   }
   printer_query->SetSettings(
-      new_settings.Pass(),
+      std::move(new_settings),
       base::Bind(&PrintingMessageFilter::OnUpdatePrintSettingsReply, this,
                  printer_query, reply_msg));
 }
@@ -335,7 +337,7 @@ void PrintingMessageFilter::OnUpdatePrintSettingsReply(
 }
 
 #if defined(ENABLE_PRINT_PREVIEW)
-void PrintingMessageFilter::OnCheckForCancel(int32 preview_ui_id,
+void PrintingMessageFilter::OnCheckForCancel(int32_t preview_ui_id,
                                              int preview_request_id,
                                              bool* cancel) {
   PrintPreviewUI::GetCurrentPrintPreviewStatus(preview_ui_id,

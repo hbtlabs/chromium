@@ -31,7 +31,7 @@ config("jingle_unexported_configs") {
     "../../testing/gtest/include",
     "../../third_party",
     "../../third_party/libyuv/include",
-    "../../third_party/usrsctp",
+    "../../third_party/usrsctp/usrsctplib",
   ]
 
   if (is_win && current_cpu == "x86") {
@@ -321,6 +321,8 @@ if (enable_webrtc) {
       "source/talk/app/webrtc/mediastreamhandler.cc",
       "source/talk/app/webrtc/mediastreamhandler.h",
       "source/talk/app/webrtc/mediastreaminterface.h",
+      "source/talk/app/webrtc/mediastreamobserver.cc",
+      "source/talk/app/webrtc/mediastreamobserver.h",
       "source/talk/app/webrtc/mediastreamprovider.h",
       "source/talk/app/webrtc/mediastreamproxy.h",
       "source/talk/app/webrtc/mediastreamtrack.h",
@@ -335,6 +337,8 @@ if (enable_webrtc) {
       "source/talk/app/webrtc/portallocatorfactory.h",
       "source/talk/app/webrtc/remoteaudiosource.cc",
       "source/talk/app/webrtc/remoteaudiosource.h",
+      "source/talk/app/webrtc/remoteaudiotrack.cc",
+      "source/talk/app/webrtc/remoteaudiotrack.h",
       "source/talk/app/webrtc/remotevideocapturer.cc",
       "source/talk/app/webrtc/remotevideocapturer.h",
       "source/talk/app/webrtc/rtpreceiver.cc",

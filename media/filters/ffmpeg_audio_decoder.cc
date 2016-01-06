@@ -4,6 +4,8 @@
 
 #include "media/filters/ffmpeg_audio_decoder.h"
 
+#include <stdint.h>
+
 #include "base/callback_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
@@ -42,7 +44,7 @@ static inline int DetermineChannels(AVFrame* frame) {
 
 // Called by FFmpeg's allocation routine to free a buffer. |opaque| is the
 // AudioBuffer allocated, so unref it.
-static void ReleaseAudioBufferImpl(void* opaque, uint8* data) {
+static void ReleaseAudioBufferImpl(void* opaque, uint8_t* data) {
   scoped_refptr<AudioBuffer> buffer;
   buffer.swap(reinterpret_cast<AudioBuffer**>(&opaque));
 }
@@ -108,7 +110,7 @@ static int GetAudioBuffer(struct AVCodecContext* s, AVFrame* frame, int flags) {
   } else {
     // There are more channels than can fit into data[], so allocate
     // extended_data[] and fill appropriately.
-    frame->extended_data = static_cast<uint8**>(
+    frame->extended_data = static_cast<uint8_t**>(
         av_malloc(number_of_planes * sizeof(*frame->extended_data)));
     int i = 0;
     for (; i < AV_NUM_DATA_POINTERS; ++i)
@@ -251,7 +253,7 @@ bool FFmpegAudioDecoder::FFmpegDecode(
     packet.data = NULL;
     packet.size = 0;
   } else {
-    packet.data = const_cast<uint8*>(buffer->data());
+    packet.data = const_cast<uint8_t*>(buffer->data());
     packet.size = buffer->data_size();
   }
 

@@ -10,6 +10,8 @@
 #include "net/quic/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
+#include "net/quic/test_tools/quic_connection_peer.h"
+#include "net/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/quic/quic_spdy_client_stream.h"
@@ -22,6 +24,8 @@ using net::test::DefaultQuicConfig;
 using net::test::MockConnection;
 using net::test::MockConnectionHelper;
 using net::test::PacketSavingConnection;
+using net::test::QuicConnectionPeer;
+using net::test::QuicPacketCreatorPeer;
 using net::test::QuicSpdySessionPeer;
 using net::test::SupportedVersions;
 using net::test::TestPeerIPAddress;
@@ -38,24 +42,27 @@ namespace test {
 namespace {
 
 const char kServerHostname[] = "test.example.com";
-const uint16 kPort = 80;
+const uint16_t kPort = 80;
 
 class ToolsQuicClientSessionTest
     : public ::testing::TestWithParam<QuicVersion> {
  protected:
   ToolsQuicClientSessionTest()
-      : crypto_config_(CryptoTestUtils::ProofVerifierForTesting()),
-        connection_(new PacketSavingConnection(&helper_,
-                                               Perspective::IS_CLIENT,
-                                               SupportedVersions(GetParam()))),
-        session_(new QuicClientSession(
-            DefaultQuicConfig(),
-            connection_,
-            QuicServerId(kServerHostname, kPort, PRIVACY_MODE_DISABLED),
-            &crypto_config_)) {
-    session_->Initialize();
+      : crypto_config_(CryptoTestUtils::ProofVerifierForTesting()) {
+    Initialize();
     // Advance the time, because timers do not like uninitialized times.
     connection_->AdvanceTime(QuicTime::Delta::FromSeconds(1));
+  }
+
+  void Initialize() {
+    session_.reset();
+    connection_ = new PacketSavingConnection(&helper_, Perspective::IS_CLIENT,
+                                             SupportedVersions(GetParam()));
+    session_.reset(new QuicClientSession(
+        DefaultQuicConfig(), connection_,
+        QuicServerId(kServerHostname, kPort, PRIVACY_MODE_DISABLED),
+        &crypto_config_));
+    session_->Initialize();
   }
 
   void CompleteCryptoHandshake() {
@@ -73,11 +80,53 @@ class ToolsQuicClientSessionTest
   scoped_ptr<QuicClientSession> session_;
 };
 
-INSTANTIATE_TEST_CASE_P(Tests, ToolsQuicClientSessionTest,
+INSTANTIATE_TEST_CASE_P(Tests,
+                        ToolsQuicClientSessionTest,
                         ::testing::ValuesIn(QuicSupportedVersions()));
 
 TEST_P(ToolsQuicClientSessionTest, CryptoConnect) {
   CompleteCryptoHandshake();
+}
+
+TEST_P(ToolsQuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
+  ValueRestore<bool> old_flag(&FLAGS_quic_block_unencrypted_writes, true);
+  // Complete a handshake in order to prime the crypto config for 0-RTT.
+  CompleteCryptoHandshake();
+
+  // Now create a second session using the same crypto config.
+  Initialize();
+
+  // Starting the handshake should move immediately to encryption
+  // established and will allow streams to be created.
+  session_->CryptoConnect();
+  EXPECT_TRUE(session_->IsEncryptionEstablished());
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  DCHECK_NE(kCryptoStreamId, stream->id());
+  EXPECT_TRUE(stream != nullptr);
+
+  // Process an "inchoate" REJ from the server which will cause
+  // an inchoate CHLO to be sent and will leave the encryption level
+  // at NONE.
+  CryptoHandshakeMessage rej;
+  CryptoTestUtils::FillInDummyReject(&rej, /* stateless */ false);
+  EXPECT_TRUE(session_->IsEncryptionEstablished());
+  session_->GetCryptoStream()->OnHandshakeMessage(rej);
+  EXPECT_FALSE(session_->IsEncryptionEstablished());
+  EXPECT_EQ(ENCRYPTION_NONE,
+            QuicPacketCreatorPeer::GetEncryptionLevel(
+                QuicConnectionPeer::GetPacketCreator(connection_)));
+  // Verify that no new streams may be created.
+  EXPECT_TRUE(session_->CreateOutgoingDynamicStream(kDefaultPriority) ==
+              nullptr);
+  // Verify that no data may be send on existing streams.
+  char data[] = "hello world";
+  struct iovec iov = {data, arraysize(data)};
+  QuicIOVector iovector(&iov, 1, iov.iov_len);
+  QuicConsumedData consumed = session_->WritevData(
+      stream->id(), iovector, 0, false, MAY_FEC_PROTECT, nullptr);
+  EXPECT_FALSE(consumed.fin_consumed);
+  EXPECT_EQ(0u, consumed.bytes_consumed);
 }
 
 TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithNoFinOrRst) {
@@ -88,16 +137,17 @@ TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithNoFinOrRst) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
 
-  QuicSpdyClientStream* stream = session_->CreateOutgoingDynamicStream();
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
   ASSERT_TRUE(stream);
-  EXPECT_FALSE(session_->CreateOutgoingDynamicStream());
+  EXPECT_FALSE(session_->CreateOutgoingDynamicStream(kDefaultPriority));
 
   // Close the stream, but without having received a FIN or a RST_STREAM
   // and check that a new one can not be created.
   session_->CloseStream(stream->id());
-  EXPECT_EQ(1u, session_->GetNumOpenStreams());
+  EXPECT_EQ(1u, session_->GetNumOpenOutgoingStreams());
 
-  stream = session_->CreateOutgoingDynamicStream();
+  stream = session_->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_FALSE(stream);
 }
 
@@ -109,9 +159,10 @@ TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithRst) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
 
-  QuicSpdyClientStream* stream = session_->CreateOutgoingDynamicStream();
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
   ASSERT_TRUE(stream);
-  EXPECT_FALSE(session_->CreateOutgoingDynamicStream());
+  EXPECT_FALSE(session_->CreateOutgoingDynamicStream(kDefaultPriority));
 
   // Close the stream and receive an RST frame to remove the unfinished stream
   session_->CloseStream(stream->id());
@@ -119,8 +170,8 @@ TEST_P(ToolsQuicClientSessionTest, MaxNumStreamsWithRst) {
       stream->id(), AdjustErrorForVersion(QUIC_RST_ACKNOWLEDGEMENT, GetParam()),
       0));
   // Check that a new one can be created.
-  EXPECT_EQ(0u, session_->GetNumOpenStreams());
-  stream = session_->CreateOutgoingDynamicStream();
+  EXPECT_EQ(0u, session_->GetNumOpenOutgoingStreams());
+  stream = session_->CreateOutgoingDynamicStream(kDefaultPriority);
   EXPECT_TRUE(stream);
 }
 
@@ -131,7 +182,7 @@ TEST_P(ToolsQuicClientSessionTest, GoAwayReceived) {
   // streams.
   session_->connection()->OnGoAwayFrame(
       QuicGoAwayFrame(QUIC_PEER_GOING_AWAY, 1u, "Going away."));
-  EXPECT_EQ(nullptr, session_->CreateOutgoingDynamicStream());
+  EXPECT_EQ(nullptr, session_->CreateOutgoingDynamicStream(kDefaultPriority));
 }
 
 TEST_P(ToolsQuicClientSessionTest, SetFecProtectionFromConfig) {
@@ -147,9 +198,11 @@ TEST_P(ToolsQuicClientSessionTest, SetFecProtectionFromConfig) {
 
   // Verify that headers stream is always protected and data streams are
   // optionally protected.
-  EXPECT_EQ(FEC_PROTECT_ALWAYS, QuicSpdySessionPeer::GetHeadersStream(
-                                    session_.get())->fec_policy());
-  QuicSpdyClientStream* stream = session_->CreateOutgoingDynamicStream();
+  EXPECT_EQ(
+      FEC_PROTECT_ALWAYS,
+      QuicSpdySessionPeer::GetHeadersStream(session_.get())->fec_policy());
+  QuicSpdyClientStream* stream =
+      session_->CreateOutgoingDynamicStream(kDefaultPriority);
   ASSERT_TRUE(stream);
   EXPECT_EQ(FEC_PROTECT_OPTIONAL, stream->fec_policy());
 }

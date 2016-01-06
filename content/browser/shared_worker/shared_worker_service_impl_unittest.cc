@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 #include <vector>
 
 #include "base/atomic_sequence_num.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
@@ -208,7 +210,7 @@ class MockRendererProcessHost {
     CHECK(queued_messages_.size());
     scoped_ptr<IPC::Message> msg(*queued_messages_.begin());
     queued_messages_.weak_erase(queued_messages_.begin());
-    return msg.Pass();
+    return msg;
   }
 
   void FastShutdownIfPossible() {
@@ -251,6 +253,8 @@ void PostCreateWorker(MockRendererProcessHost* renderer,
   params.security_policy_type = blink::WebContentSecurityPolicyTypeReport;
   params.document_id = document_id;
   params.render_frame_route_id = render_frame_route_id;
+  params.creation_context_type =
+      blink::WebSharedWorkerCreationContextTypeSecure;
   EXPECT_TRUE(
       renderer->OnMessageReceived(new ViewHostMsg_CreateWorker(params, reply)));
 }

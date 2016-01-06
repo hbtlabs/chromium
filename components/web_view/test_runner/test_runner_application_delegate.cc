@@ -5,6 +5,7 @@
 #include "components/web_view/test_runner/test_runner_application_delegate.h"
 
 #include <iostream>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -15,6 +16,7 @@
 #include "base/path_service.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "components/mus/public/cpp/scoped_window_ptr.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
@@ -50,7 +52,7 @@ void TestRunnerApplicationDelegate::LaunchURL(const GURL& test_url) {
   }
   mojo::URLRequestPtr request(mojo::URLRequest::New());
   request->url = test_url.spec();
-  web_view_->web_view()->LoadRequest(request.Pass());
+  web_view_->web_view()->LoadRequest(std::move(request));
 }
 
 void TestRunnerApplicationDelegate::Terminate() {
@@ -122,7 +124,7 @@ void TestRunnerApplicationDelegate::OnConnectionLost(
 
 void TestRunnerApplicationDelegate::TopLevelNavigateRequest(
     mojo::URLRequestPtr request) {
-  web_view_->web_view()->LoadRequest(request.Pass());
+  web_view_->web_view()->LoadRequest(std::move(request));
 }
 
 void TestRunnerApplicationDelegate::TopLevelNavigationStarted(
@@ -157,7 +159,7 @@ void TestRunnerApplicationDelegate::TestFinished() {
 void TestRunnerApplicationDelegate::Create(
     mojo::ApplicationConnection* connection,
     mojo::InterfaceRequest<web_view::LayoutTestRunner> request) {
-  layout_test_runner_.AddBinding(this, request.Pass());
+  layout_test_runner_.AddBinding(this, std::move(request));
 }
 
 }  // namespace web_view

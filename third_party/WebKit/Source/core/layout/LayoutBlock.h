@@ -276,6 +276,23 @@ public:
     bool recalcChildOverflowAfterStyleChange();
     bool recalcOverflowAfterStyleChange();
 
+    // An example explaining layout tree structure about first-line style:
+    // <style>
+    //   #enclosingFirstLineStyleBlock::first-line { ... }
+    // </style>
+    // <div id="enclosingFirstLineStyleBlock">
+    //   <div>
+    //     <div id="nearestInnerBlockWithFirstLine">
+    //       [<span>]first line text[</span>]
+    //     </div>
+    //   </div>
+    // </div>
+
+    // Returns the nearest enclosing block (including this block) that contributes a first-line style to our first line.
+    LayoutBlock* enclosingFirstLineStyleBlock() const;
+    // Returns this block or the nearest inner block containing the actual first line.
+    LayoutBlockFlow* nearestInnerBlockWithFirstLine() const;
+
 protected:
     void willBeDestroyed() override;
 
@@ -342,7 +359,7 @@ protected:
     virtual void simplifiedNormalFlowLayout();
 
 public:
-    virtual void computeOverflow(LayoutUnit oldClientAfterEdge);
+    virtual void computeOverflow(LayoutUnit oldClientAfterEdge, bool = false);
 protected:
     virtual void addOverflowFromChildren();
     void addOverflowFromPositionedObjects();
@@ -355,7 +372,10 @@ protected:
 
     void updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren, LayoutBox&);
 
-    bool isInlineBlockOrInlineTable() const final { return isInline() && isReplaced(); }
+    // TODO(jchaffraix): We should rename this function as inline-flex and inline-grid as also covered.
+    // Alternatively it should be removed as we clarify the meaning of isAtomicInlineLevel to imply
+    // isInline.
+    bool isInlineBlockOrInlineTable() const final { return isInline() && isAtomicInlineLevel(); }
 
     void invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState& childPaintInvalidationState) override;
     void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason, const LayoutRect* paintInvalidationRect) const override;
@@ -388,17 +408,13 @@ private:
 
     bool avoidsFloats() const override { return true; }
 
-    bool hitTestContents(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
+    bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
     // FIXME-BLOCKFLOW: Remove virtualizaion when all callers have moved to LayoutBlockFlow
     virtual bool hitTestFloats(HitTestResult&, const HitTestLocation&, const LayoutPoint&) { return false; }
 
-    virtual bool isPointInOverflowControl(HitTestResult&, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset) const;
+    bool isPointInOverflowControl(HitTestResult&, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset) const;
 
     void computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const;
-
-    // Obtains the nearest enclosing block (including this block) that contributes a first-line style to our inline
-    // children.
-    LayoutBlock* firstLineBlock() const override;
 
     LayoutObject* hoverAncestor() const final;
     void updateDragState(bool dragOn) final;

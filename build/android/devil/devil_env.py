@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import os
+import platform
 import sys
 import tempfile
 import threading
@@ -37,28 +38,31 @@ _DEVIL_DEFAULT_CONFIG = os.path.abspath(os.path.join(
 _LEGACY_ENVIRONMENT_VARIABLES = {
   'ADB_PATH': {
     'dependency_name': 'adb',
-    'platform': 'android_host',
+    'platform': 'linux_x86_64',
   },
   'ANDROID_SDK_ROOT': {
     'dependency_name': 'android_sdk',
-    'platform': 'android_host',
+    'platform': 'linux_x86_64',
   },
 }
 
 
 def _GetEnvironmentVariableConfig():
-  env_var_config = {}
-  for k, v in _LEGACY_ENVIRONMENT_VARIABLES.iteritems():
-    path = os.environ.get(k)
-    if path:
-      env_var_config[v['dependency_name']] = {
+  path_config = (
+      (os.environ.get(k), v)
+      for k, v in _LEGACY_ENVIRONMENT_VARIABLES.iteritems())
+  return {
+    'config_type': 'BaseConfig',
+    'dependencies': {
+      c['dependency_name']: {
         'file_info': {
-          v['platform']: {
-            'local_paths': [path]
-          }
-        }
-      }
-  return env_var_config
+          c['platform']: {
+            'local_paths': [p],
+          },
+        },
+      } for p, c in path_config if p
+    },
+  }
 
 
 class _Environment(object):
@@ -100,12 +104,16 @@ class _Environment(object):
     # TODO(jbudorick): Remove this recursion if/when dependency_manager
     # supports loading configurations directly from a dict.
     if configs:
-      with tempfile.NamedTemporaryFile() as next_config_file:
-        next_config_file.write(json.dumps(configs[0]))
-        next_config_file.flush()
-        self._InitializeRecursive(
-            configs=configs[1:],
-            config_files=[next_config_file.name] + (config_files or []))
+      with tempfile.NamedTemporaryFile(delete=False) as next_config_file:
+        try:
+          next_config_file.write(json.dumps(configs[0]))
+          next_config_file.close()
+          self._InitializeRecursive(
+              configs=configs[1:],
+              config_files=[next_config_file.name] + (config_files or []))
+        finally:
+          if os.path.exists(next_config_file.name):
+            os.remove(next_config_file.name)
     else:
       config_files = config_files or []
       if 'DEVIL_ENV_CONFIG' in os.environ:
@@ -120,18 +128,18 @@ class _Environment(object):
       self.Initialize()
     if dependency in _ANDROID_BUILD_TOOLS:
       self.FetchPath('android_build_tools_libc++', arch=arch, device=device)
-    return self._dm.FetchPath(dependency, _GetPlatform(arch, device))
+    return self._dm.FetchPath(dependency, GetPlatform(arch, device))
 
   def LocalPath(self, dependency, arch=None, device=None):
     if self._dm is None:
       self.Initialize()
-    return self._dm.LocalPath(dependency, _GetPlatform(arch, device))
+    return self._dm.LocalPath(dependency, GetPlatform(arch, device))
 
 
-def _GetPlatform(arch, device):
-  if not arch:
-    arch = device.product_cpu_abi if device else 'host'
-  return 'android_%s' % arch
+def GetPlatform(arch=None, device=None):
+  if device:
+    return 'android_%s' % (arch or device.product_cpu_abi)
+  return 'linux_%s' % platform.machine()
 
 
 config = _Environment()

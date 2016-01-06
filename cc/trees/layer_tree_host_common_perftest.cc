@@ -4,6 +4,8 @@
 
 #include "cc/trees/layer_tree_host_common.h"
 
+#include <stddef.h>
+
 #include <deque>
 #include <sstream>
 
@@ -79,7 +81,7 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
 
 class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
  public:
-  void RunCalcDrawProps() { RunTest(false, false); }
+  void RunCalcDrawProps() { RunTest(CompositorMode::SingleThreaded, false); }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -132,7 +134,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
 class BspTreePerfTest : public CalcDrawPropsTest {
  public:
   BspTreePerfTest() : num_duplicates_(1) {}
-  void RunSortLayers() { RunTest(false, false); }
+  void RunSortLayers() { RunTest(CompositorMode::SingleThreaded, false); }
 
   void SetNumberOfDuplicates(int num_duplicates) {
     num_duplicates_ = num_duplicates;

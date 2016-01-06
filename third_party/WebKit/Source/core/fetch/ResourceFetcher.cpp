@@ -24,7 +24,6 @@
     pages from the web. It has a memory cache for these objects.
 */
 
-#include "config.h"
 #include "core/fetch/ResourceFetcher.h"
 
 #include "bindings/core/v8/V8DOMActivityLogger.h"
@@ -166,7 +165,6 @@ static WebURLRequest::RequestContext requestContextFromType(bool isMainFrame, Re
 
 ResourceFetcher::ResourceFetcher(FetchContext* context)
     : m_context(context)
-    , m_garbageCollectDocumentResourcesTimer(this, &ResourceFetcher::garbageCollectDocumentResourcesTimerFired)
     , m_resourceTimingReportTimer(this, &ResourceFetcher::resourceTimingReportTimerFired)
     , m_autoLoadImages(true)
     , m_imagesEnabled(true)
@@ -195,7 +193,8 @@ WebTaskRunner* ResourceFetcher::loadingTaskRunner()
 Resource* ResourceFetcher::cachedResource(const KURL& resourceURL) const
 {
     KURL url = MemoryCache::removeFragmentIdentifierIfNeeded(resourceURL);
-    return m_documentResources.get(url).get();
+    const WeakPtrWillBeWeakMember<Resource>& resource = m_documentResources.get(url);
+    return resource.get();
 }
 
 bool ResourceFetcher::canAccessResource(Resource* resource, SecurityOrigin* sourceOrigin, const KURL& url, AccessControlLoggingDecision logErrorsDecision) const
@@ -273,17 +272,23 @@ static PassRefPtr<TraceEvent::ConvertableToTraceFormat> urlForTraceEvent(const K
     return value.release();
 }
 
-void ResourceFetcher::preCacheData(const FetchRequest& request, const ResourceFactory& factory, const SubstituteData& substituteData)
+ResourcePtr<Resource> ResourceFetcher::preCacheData(const FetchRequest& request, const ResourceFactory& factory, const SubstituteData& substituteData)
 {
     const KURL& url = request.resourceRequest().url();
     ASSERT(url.protocolIsData() || substituteData.isValid());
-    if ((factory.type() == Resource::MainResource && !substituteData.isValid()) || factory.type() == Resource::Raw || factory.type() == Resource::Media)
-        return;
+
+    // TODO(japhet): We only send main resource data: urls through WebURLLoader for the benefit of
+    // a service worker test (RenderViewImplTest.ServiceWorkerNetworkProviderSetup), which is at a
+    // layer where it isn't easy to mock out a network load. It uses data: urls to emulate the
+    // behavior it wants to test, which would otherwise be reserved for network loads.
+    if ((factory.type() == Resource::MainResource && !substituteData.isValid()) || factory.type() == Resource::Raw)
+        return nullptr;
 
     const String cacheIdentifier = getCacheIdentifier();
     if (Resource* oldResource = memoryCache()->resourceForURL(url, cacheIdentifier)) {
-        if (!substituteData.isValid())
-            return;
+        // There's no reason to re-parse if we saved the data from the previous parse.
+        if (request.options().dataBufferingPolicy != DoNotBufferData)
+            return oldResource;
         memoryCache()->remove(oldResource);
     }
 
@@ -297,7 +302,7 @@ void ResourceFetcher::preCacheData(const FetchRequest& request, const ResourceFa
     } else {
         data = PassRefPtr<SharedBuffer>(Platform::current()->parseDataURL(url, mimetype, charset));
         if (!data)
-            return;
+            return nullptr;
     }
     ResourceResponse response(url, mimetype, data->size(), charset, String());
     response.setHTTPStatusCode(200);
@@ -315,7 +320,7 @@ void ResourceFetcher::preCacheData(const FetchRequest& request, const ResourceFa
     resource->setCacheIdentifier(cacheIdentifier);
     resource->finish();
     memoryCache()->add(resource.get());
-    scheduleDocumentResourcesGC();
+    return resource;
 }
 
 void ResourceFetcher::moveCachedNonBlockingResourceToBlocking(Resource* resource)
@@ -337,10 +342,6 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, co
     context().upgradeInsecureRequest(request);
     context().addClientHintsIfNecessary(request);
     context().addCSPHeaderIfNecessary(factory.type(), request);
-
-    bool isStaticData = request.resourceRequest().url().protocolIsData() || substituteData.isValid();
-    if (isStaticData)
-        preCacheData(request, factory, substituteData);
 
     KURL url = request.resourceRequest().url();
     TRACE_EVENT1("blink", "ResourceFetcher::requestResource", "url", urlForTraceEvent(url));
@@ -371,8 +372,14 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, co
         }
     }
 
+    bool isStaticData = request.resourceRequest().url().protocolIsData() || substituteData.isValid();
+    ResourcePtr<Resource> resource;
+    if (isStaticData)
+        resource = preCacheData(request, factory, substituteData);
+    if (!resource)
+        resource = memoryCache()->resourceForURL(url, getCacheIdentifier());
+
     // See if we can use an existing resource from the cache. If so, we need to move it to be load blocking.
-    ResourcePtr<Resource> resource = memoryCache()->resourceForURL(url, getCacheIdentifier());
     moveCachedNonBlockingResourceToBlocking(resource.get());
 
     const RevalidationPolicy policy = determineRevalidationPolicy(factory.type(), request, resource.get(), isStaticData);
@@ -444,7 +451,7 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, co
     // use.
     // Remove main resource from cache to prevent reuse.
     if (factory.type() == Resource::MainResource) {
-        ASSERT(policy != Use || substituteData.isValid());
+        ASSERT(policy != Use || isStaticData);
         ASSERT(policy != Revalidate);
         memoryCache()->remove(resource.get());
     }
@@ -452,7 +459,7 @@ ResourcePtr<Resource> ResourceFetcher::requestResource(FetchRequest& request, co
     requestLoadStarted(resource.get(), request, policy == Use ? ResourceLoadingFromCache : ResourceLoadingFromNetwork, isStaticData);
 
     ASSERT(resource->url() == url.string());
-    m_documentResources.set(resource->url(), resource);
+    m_documentResources.set(resource->url(), resource->asWeakPtr());
     return resource;
 }
 
@@ -483,7 +490,7 @@ void ResourceFetcher::initializeResourceRequest(ResourceRequest& request, Resour
     if (request.requestContext() == WebURLRequest::RequestContextUnspecified)
         determineRequestContext(request, type);
     if (type == Resource::LinkPrefetch || type == Resource::LinkSubresource)
-        request.setHTTPHeaderField("Purpose", "prefetch");
+        request.setHTTPHeaderField(HTTPNames::Purpose, "prefetch");
 
     context().addAdditionalRequestHeaders(request, (type == Resource::MainResource) ? FetchMainResource : FetchSubresource);
 }
@@ -501,21 +508,21 @@ void ResourceFetcher::initializeRevalidation(const FetchRequest& request, Resour
     revalidatingRequest.clearHTTPReferrer();
     initializeResourceRequest(revalidatingRequest, resource->type());
 
-    const AtomicString& lastModified = resource->response().httpHeaderField("Last-Modified");
-    const AtomicString& eTag = resource->response().httpHeaderField("ETag");
+    const AtomicString& lastModified = resource->response().httpHeaderField(HTTPNames::Last_Modified);
+    const AtomicString& eTag = resource->response().httpHeaderField(HTTPNames::ETag);
     if (!lastModified.isEmpty() || !eTag.isEmpty()) {
         ASSERT(context().cachePolicy() != CachePolicyReload);
         if (context().cachePolicy() == CachePolicyRevalidate)
-            revalidatingRequest.setHTTPHeaderField("Cache-Control", "max-age=0");
+            revalidatingRequest.setHTTPHeaderField(HTTPNames::Cache_Control, "max-age=0");
     }
     if (!lastModified.isEmpty())
-        revalidatingRequest.setHTTPHeaderField("If-Modified-Since", lastModified);
+        revalidatingRequest.setHTTPHeaderField(HTTPNames::If_Modified_Since, lastModified);
     if (!eTag.isEmpty())
-        revalidatingRequest.setHTTPHeaderField("If-None-Match", eTag);
+        revalidatingRequest.setHTTPHeaderField(HTTPNames::If_None_Match, eTag);
 
     double stalenessLifetime = resource->stalenessLifetime();
     if (std::isfinite(stalenessLifetime) && stalenessLifetime > 0) {
-        revalidatingRequest.setHTTPHeaderField("Resource-Freshness", AtomicString(String::format("max-age=%.0lf,stale-while-revalidate=%.0lf,age=%.0lf", resource->freshnessLifetime(), stalenessLifetime, resource->currentAge())));
+        revalidatingRequest.setHTTPHeaderField(HTTPNames::Resource_Freshness, AtomicString(String::format("max-age=%.0lf,stale-while-revalidate=%.0lf,age=%.0lf", resource->freshnessLifetime(), stalenessLifetime, resource->currentAge())));
     }
 
     resource->setRevalidatingRequest(revalidatingRequest);
@@ -545,7 +552,7 @@ void ResourceFetcher::storeResourceTimingInitiatorInformation(Resource* resource
     OwnPtr<ResourceTimingInfo> info = ResourceTimingInfo::create(resource->options().initiatorInfo.name, monotonicallyIncreasingTime(), resource->type() == Resource::MainResource);
 
     if (resource->isCacheValidator()) {
-        const AtomicString& timingAllowOrigin = resource->response().httpHeaderField("Timing-Allow-Origin");
+        const AtomicString& timingAllowOrigin = resource->response().httpHeaderField(HTTPNames::Timing_Allow_Origin);
         if (!timingAllowOrigin.isEmpty())
             info->setOriginalTimingAllowOrigin(timingAllowOrigin);
     }
@@ -764,9 +771,12 @@ bool ResourceFetcher::shouldDeferImageLoad(const KURL& url) const
 
 void ResourceFetcher::reloadImagesIfNotDeferred()
 {
+    // TODO(japhet): Once oilpan ships, the const auto&
+    // can be replaced with a Resource*. Also, null checking
+    // the resource probably won't be necesssary.
     for (const auto& documentResource : m_documentResources) {
         Resource* resource = documentResource.value.get();
-        if (resource->type() == Resource::Image && resource->stillNeedsLoad() && !clientDefersImage(resource->url()))
+        if (resource && resource->type() == Resource::Image && resource->stillNeedsLoad() && !clientDefersImage(resource->url()))
             const_cast<Resource*>(resource)->load(this, defaultResourceOptions());
     }
 }
@@ -780,39 +790,7 @@ void ResourceFetcher::redirectReceived(Resource* resource, const ResourceRespons
 
 void ResourceFetcher::didLoadResource()
 {
-    scheduleDocumentResourcesGC();
     context().didLoadResource();
-}
-
-void ResourceFetcher::scheduleDocumentResourcesGC()
-{
-    if (!m_garbageCollectDocumentResourcesTimer.isActive())
-        m_garbageCollectDocumentResourcesTimer.startOneShot(0, BLINK_FROM_HERE);
-}
-
-// Garbage collecting m_documentResources is a workaround for the
-// ResourcePtrs on the RHS being strong references. Ideally this
-// would be a weak map, however ResourcePtrs perform additional
-// bookkeeping on Resources, so instead pseudo-GC them -- when the
-// reference count reaches 1, m_documentResources is the only reference, so
-// remove it from the map.
-void ResourceFetcher::garbageCollectDocumentResourcesTimerFired(Timer<ResourceFetcher>* timer)
-{
-    ASSERT_UNUSED(timer, timer == &m_garbageCollectDocumentResourcesTimer);
-    garbageCollectDocumentResources();
-}
-
-void ResourceFetcher::garbageCollectDocumentResources()
-{
-    typedef Vector<String, 10> StringVector;
-    StringVector resourcesToDelete;
-
-    for (const auto& documentResource : m_documentResources) {
-        if (documentResource.value->hasOneHandle())
-            resourcesToDelete.append(documentResource.key);
-    }
-
-    m_documentResources.removeAll(resourcesToDelete);
 }
 
 int ResourceFetcher::requestCount() const
@@ -1056,7 +1034,9 @@ void ResourceFetcher::updateAllImageResourcePriorities()
 
     TRACE_EVENT0("blink", "ResourceLoadPriorityOptimizer::updateAllImageResourcePriorities");
     for (const auto& loader : m_loaders->hashSet()) {
+        ASSERT(loader);
         Resource* resource = loader->cachedResource();
+        ASSERT(resource);
         if (!resource->isImage())
             continue;
 
@@ -1174,6 +1154,7 @@ DEFINE_TRACE(ResourceFetcher)
     visitor->trace(m_loaders);
     visitor->trace(m_nonBlockingLoaders);
 #if ENABLE(OILPAN)
+    visitor->trace(m_documentResources);
     visitor->trace(m_preloads);
     visitor->trace(m_resourceTimingInfoMap);
 #endif

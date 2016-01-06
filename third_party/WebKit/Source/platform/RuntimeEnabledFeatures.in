@@ -19,6 +19,9 @@
 //
 // condition=ENABLE_NAME is used for wrapping features in compile-time
 // #if ENABLE(FEATURE) guards.  These are deprecated and should all be removed.
+//
+// api_name=API_NAME is used to enable the feature through the experimental framework, so that the feature can be
+// enabled at runtime on a per-page basis through a signed API key for the corresponding API name.
 
 AdditiveAnimations status=experimental, depends_on=StackedCSSPropertyAnimations
 AppBanner status=stable
@@ -27,8 +30,7 @@ ApplicationCache status=stable
 AudioOutputDevices status=experimental
 AudioVideoTracks depends_on=Media, status=experimental
 AuthorShadowDOMForAnyElement
-BackgroundSync status=experimental
-BackgroundSyncPeriodic status=experimental
+BackgroundSync status=stable
 BackgroundSyncV2 status=experimental
 CacheStorageMatchAll status=stable
 ClientHints status=stable
@@ -41,7 +43,6 @@ ContextMenu status=experimental
 CredentialManager status=test
 CSS3Text status=experimental
 CSS3TextDecorations status=experimental
-CSSAttributeCaseSensitivity status=experimental
 CSSBackdropFilter status=experimental
 CSSCompositing status=stable
 CSSContainment status=experimental
@@ -51,10 +52,11 @@ CSSGridLayout status=experimental
 CSSIndependentTransformProperties status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
+CSSPropertyD status=experimental
 CSSStickyPosition
 CSSTouchActionPanDirections status=experimental
 CSSTypedOM status=experimental
-CSSVariables status=experimental
+CSSVariables status=stable
 CSSViewport status=experimental
 CSSScrollSnapPoints status=test
 // getPropertyCSSValue, CSSValue, etc. will be removed once layout tests no longer depend on them. crbug.com/331608
@@ -72,7 +74,8 @@ ComputedAccessibilityInfo status=experimental
 EventListenerOptions status=experimental
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
-ExperimentalFramework
+ExperimentalFramework status=test
+ExperimentalV8Extras status=experimental
 FastMobileScrolling
 FileAPIBlobClose status=experimental
 FileSystem status=stable
@@ -101,9 +104,10 @@ LinkHeader status=stable
 FractionalScrollOffsets status=experimental
 Media status=stable
 MediaCapture
+MediaCaptureFromElement status=test
 MediaConstraints status=test
 MediaDevices status=stable
-MediaRecorder status=experimental
+MediaRecorder status=stable
 MediaSession
 MediaSource status=stable
 MediaSourceExperimental depends_on=MediaSource, status=experimental
@@ -144,6 +148,7 @@ ReducedReferrerGranularity
 RenderingPipelineThrottling status=experimental
 RequestIdleCallback status=stable
 RequestAutocomplete status=test
+ResponseConstructedWithReadableStream status=experimental
 RestrictIFramePermissions
 RTCCertificate status=experimental
 SandboxBlocksModals status=stable
@@ -156,9 +161,8 @@ SelectionForComposedTree status=stable
 SelectionPaintingWithoutSelectionGaps status=stable
 ServiceWorkerClientAttributes status=stable
 ServiceWorkerPerformanceTimeline status=stable
-ServiceWorkerWindowClientNavigate status=experimental
+ServiceWorkerWindowClientNavigate status=stable
 ShadowDOMV1 status=experimental
-ShadowRootClosedMode status=experimental
 ShadowRootDelegatesFocus status=experimental
 SharedArrayBuffer
 SharedWorker status=stable
@@ -199,7 +203,6 @@ WebVR depends_on=GeometryInterfaces, status=test
 WebVTTRegions depends_on=Media, status=experimental
 V8IdleTasks
 XSLT status=stable
-SVG1DOM status=stable
 smil status=stable
 ScrollCustomization
 ScrollRestoration status=stable

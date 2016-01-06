@@ -203,6 +203,9 @@
   "ios/chrome/app/strings/ios_google_chrome_strings.grd": {
     "messages": [26055],
   },
+  "ios/chrome/app/resources/ios_resources.grd": {
+    "structures": [26150],
+  },
   "ios/chrome/app/theme/ios_theme_resources.grd": {
     "structures": [26155],
   },
@@ -294,9 +297,6 @@
   "third_party/WebKit/public/blink_resources.grd": {
     "includes": [30370],
     "structures": [30670],
-  },
-  "chrome/browser/devtools/device/webrtc/resources.grd": {
-    "includes": [30820],
   },
   "chrome/browser/resources/md_policy/policy_resources.grd": {
     "structures": [30900],

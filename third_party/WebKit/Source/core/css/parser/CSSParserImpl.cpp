@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/parser/CSSParserImpl.h"
 
 #include "core/css/CSSCustomPropertyDeclaration.h"
@@ -579,12 +578,11 @@ PassRefPtrWillBeRawPtr<StyleRulePage> CSSParserImpl::consumePageRule(CSSParserTo
     selector->setForPage();
     Vector<OwnPtr<CSSParserSelector>> selectorVector;
     selectorVector.append(selector.release());
-    CSSSelectorList selectorList;
-    selectorList.adoptSelectorVector(selectorVector);
+    CSSSelectorList selectorList = CSSSelectorList::adoptSelectorVector(selectorVector);
 
     consumeDeclarationList(block, StyleRule::Style);
 
-    return StyleRulePage::create(selectorList, createStylePropertySet(m_parsedProperties, m_context.mode()));
+    return StyleRulePage::create(std::move(selectorList), createStylePropertySet(m_parsedProperties, m_context.mode()));
 }
 
 PassRefPtrWillBeRawPtr<StyleRuleKeyframe> CSSParserImpl::consumeKeyframeStyleRule(CSSParserTokenRange prelude, CSSParserTokenRange block)
@@ -619,8 +617,7 @@ static void observeSelectors(CSSParserObserverWrapper& wrapper, CSSParserTokenRa
 
 PassRefPtrWillBeRawPtr<StyleRule> CSSParserImpl::consumeStyleRule(CSSParserTokenRange prelude, CSSParserTokenRange block)
 {
-    CSSSelectorList selectorList;
-    CSSSelectorParser::parseSelector(prelude, m_context, m_styleSheet, selectorList);
+    CSSSelectorList selectorList = CSSSelectorParser::parseSelector(prelude, m_context, m_styleSheet);
     if (!selectorList.isValid())
         return nullptr; // Parse error, invalid selector list
 
@@ -629,7 +626,7 @@ PassRefPtrWillBeRawPtr<StyleRule> CSSParserImpl::consumeStyleRule(CSSParserToken
 
     consumeDeclarationList(block, StyleRule::Style);
 
-    return StyleRule::create(selectorList, createStylePropertySet(m_parsedProperties, m_context.mode()));
+    return StyleRule::create(std::move(selectorList), createStylePropertySet(m_parsedProperties, m_context.mode()));
 }
 
 void CSSParserImpl::consumeDeclarationList(CSSParserTokenRange range, StyleRule::Type ruleType)

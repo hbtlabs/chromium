@@ -9,6 +9,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/context_menu_params.h"
@@ -16,6 +17,7 @@
 
 namespace content {
 struct ContextMenuParams;
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -24,7 +26,8 @@ class ContextMenuHelper
  public:
   ~ContextMenuHelper() override;
 
-  void ShowContextMenu(const content::ContextMenuParams& params);
+  bool ShowContextMenu(content::RenderFrameHost* render_frame_host,
+                       const content::ContextMenuParams& params);
 
   void SetPopulator(jobject jpopulator);
 
@@ -51,6 +54,8 @@ class ContextMenuHelper
   content::WebContents* web_contents_;
 
   content::ContextMenuParams context_menu_params_;
+  int render_frame_id_;
+  int render_process_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuHelper);
 };

@@ -23,10 +23,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-#if ENABLE(WEB_AUDIO)
 #include "modules/webaudio/AudioParamTimeline.h"
 
+#if ENABLE(WEB_AUDIO)
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "platform/FloatConversion.h"
@@ -53,26 +52,6 @@ const float kSetTargetThreshold = 5e-7;
 // 0, a common case.  This value MUST be larger than least positive normalized single precision
 // value (1.1754944e-38) because we normally operate with flush-to-zero enabled.
 const float kSetTargetZeroThreshold = 1e-20;
-
-static bool isPositiveAudioParamValue(float value, ExceptionState& exceptionState)
-{
-    if (value > 0)
-        return true;
-
-    // Use denorm_min() in error message to make it clear what the mininum positive value is. The
-    // Javascript API uses doubles, which gets converted to floats, sometimes causing an underflow.
-    // This is confusing if the user specified a small non-zero (double) value that underflowed to
-    // 0.
-    exceptionState.throwDOMException(
-        InvalidAccessError,
-        ExceptionMessages::indexOutsideRange("float target value",
-            value,
-            std::numeric_limits<float>::denorm_min(),
-            ExceptionMessages::InclusiveBound,
-            std::numeric_limits<float>::infinity(),
-            ExceptionMessages::ExclusiveBound));
-    return false;
-}
 
 static bool isNonNegativeAudioParamTime(double time, ExceptionState& exceptionState, String message = "Time")
 {
@@ -180,9 +159,18 @@ void AudioParamTimeline::exponentialRampToValueAtTime(float value, double time, 
 {
     ASSERT(isMainThread());
 
-    if (!isPositiveAudioParamValue(value, exceptionState)
-        || !isNonNegativeAudioParamTime(time, exceptionState))
+    if (!isNonNegativeAudioParamTime(time, exceptionState))
         return;
+
+    if (!value) {
+        exceptionState.throwDOMException(
+            InvalidAccessError,
+            "The float target value provided (" + String::number(value)
+            + ") should not be in the range (" + String::number(-std::numeric_limits<float>::denorm_min())
+            + ", " + String::number(std::numeric_limits<float>::denorm_min())
+            + ").");
+        return;
+    }
 
     insertEvent(ParamEvent::createExponentialRampEvent(value, time), exceptionState);
 }
@@ -421,6 +409,12 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
 
         float value1 = event.value();
         double time1 = event.time();
+
+        // If the current event is SetValue, set the default value too so that it appears as if
+        // SetValue were actually run for any corner caes where we want to use the default value.
+        if (event.type() == ParamEvent::SetValue)
+            value = value1;
+
         float value2 = nextEvent ? nextEvent->value() : value1;
         double time2 = nextEvent ? nextEvent->time() : endFrame / sampleRate + 1;
 
@@ -476,8 +470,9 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
                 ++currentFrame;
             }
         } else if (nextEventType == ParamEvent::ExponentialRampToValue) {
-            if (value1 <= 0 || value2 <= 0) {
-                // Handle negative values error case by propagating previous value.
+            if (value1 * value2 <= 0) {
+                // It's an error if value1 and value2 have opposite signs or if one of them is zero.
+                // Handle this by propagating the previous value.
                 for (; writeIndex < fillToFrame; ++writeIndex)
                     values[writeIndex] = value;
             } else {
@@ -527,6 +522,7 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
 
                     // Simply stay at a constant value.
                     value = event.value();
+
                     for (; writeIndex < fillToFrame; ++writeIndex)
                         values[writeIndex] = value;
 

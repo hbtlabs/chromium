@@ -4,6 +4,9 @@
 
 #include "content/child/service_worker/web_service_worker_registration_impl.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_registration_handle_reference.h"
 #include "content/child/service_worker/web_service_worker_impl.h"
@@ -43,7 +46,7 @@ WebServiceWorkerRegistrationImpl::QueuedTask::~QueuedTask() {}
 
 WebServiceWorkerRegistrationImpl::WebServiceWorkerRegistrationImpl(
     scoped_ptr<ServiceWorkerRegistrationHandleReference> handle_ref)
-    : handle_ref_(handle_ref.Pass()), proxy_(nullptr) {
+    : handle_ref_(std::move(handle_ref)), proxy_(nullptr) {
   DCHECK(handle_ref_);
   DCHECK_NE(kInvalidServiceWorkerRegistrationHandleId,
             handle_ref_->handle_id());
@@ -138,7 +141,7 @@ void WebServiceWorkerRegistrationImpl::unregister(
                                       registration_id(), callbacks);
 }
 
-int64 WebServiceWorkerRegistrationImpl::registration_id() const {
+int64_t WebServiceWorkerRegistrationImpl::registration_id() const {
   return handle_ref_->registration_id();
 }
 

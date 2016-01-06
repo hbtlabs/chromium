@@ -78,7 +78,7 @@ public:
 
     Resource* cachedResource(const KURL&) const;
 
-    typedef HashMap<String, ResourcePtr<Resource>> DocumentResourceMap;
+    using DocumentResourceMap = WillBeHeapHashMap<String, WeakPtrWillBeWeakMember<Resource>>;
     const DocumentResourceMap& allResources() const { return m_documentResources; }
 
     bool autoLoadImages() const { return m_autoLoadImages; }
@@ -90,8 +90,6 @@ public:
 
     FetchContext& context() const { return m_context ? *m_context.get() : FetchContext::nullInstance(); }
     void clearContext() { m_context.clear(); }
-
-    void garbageCollectDocumentResources();
 
     int requestCount() const;
 
@@ -163,7 +161,7 @@ private:
     ResourcePtr<Resource> createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
     void storeResourceTimingInitiatorInformation(Resource*);
     bool scheduleArchiveLoad(Resource*, const ResourceRequest&);
-    void preCacheData(const FetchRequest&, const ResourceFactory&, const SubstituteData&);
+    ResourcePtr<Resource> preCacheData(const FetchRequest&, const ResourceFactory&, const SubstituteData&);
 
     enum RevalidationPolicy { Use, Revalidate, Reload, Load };
     RevalidationPolicy determineRevalidationPolicy(Resource::Type, const FetchRequest&, Resource* existingResource, bool isStaticData) const;
@@ -173,8 +171,6 @@ private:
     void initializeResourceRequest(ResourceRequest&, Resource::Type);
 
     static bool resourceNeedsLoad(Resource*, const FetchRequest&, RevalidationPolicy);
-
-    void garbageCollectDocumentResourcesTimerFired(Timer<ResourceFetcher>*);
 
     void resourceTimingReportTimerFired(Timer<ResourceFetcher>*);
 
@@ -197,12 +193,11 @@ private:
     OwnPtrWillBeMember<WillBeHeapListHashSet<RawPtrWillBeMember<Resource>>> m_preloads;
     OwnPtrWillBeMember<ArchiveResourceCollection> m_archiveResourceCollection;
 
-    Timer<ResourceFetcher> m_garbageCollectDocumentResourcesTimer;
     Timer<ResourceFetcher> m_resourceTimingReportTimer;
 
     // We intentionally use a Member instead of a ResourcePtr.
     // See the comment on m_preloads.
-    typedef WillBeHeapHashMap<RawPtrWillBeMember<Resource>, OwnPtr<ResourceTimingInfo>> ResourceTimingInfoMap;
+    using ResourceTimingInfoMap = WillBeHeapHashMap<RawPtrWillBeMember<Resource>, OwnPtr<ResourceTimingInfo>>;
     ResourceTimingInfoMap m_resourceTimingInfoMap;
 
     Vector<OwnPtr<ResourceTimingInfo>> m_scheduledResourceTimingReports;

@@ -92,6 +92,24 @@ public:
     static bool isColorKeyword(CSSValueID);
     static bool isValidNumericValue(double);
 
+    // TODO(rwlbuis): move to CSSPropertyParser.cpp once CSSParserToken conversion is done.
+    static PassRefPtrWillBeRawPtr<CSSValue> createCSSImageValueWithReferrer(const AtomicString& rawValue, const CSSParserContext& context)
+    {
+        RefPtrWillBeRawPtr<CSSValue> imageValue = CSSImageValue::create(rawValue, context.completeURL(rawValue));
+        toCSSImageValue(imageValue.get())->setReferrer(context.referrer());
+        return imageValue;
+    }
+
+    // TODO(rwlbuis): move to CSSPropertyParser.cpp once CSSParserToken conversion is done.
+    static bool isGeneratedImage(CSSValueID id)
+    {
+        return id == CSSValueLinearGradient || id == CSSValueRadialGradient
+            || id == CSSValueRepeatingLinearGradient || id == CSSValueRepeatingRadialGradient
+            || id == CSSValueWebkitLinearGradient || id == CSSValueWebkitRadialGradient
+            || id == CSSValueWebkitRepeatingLinearGradient || id == CSSValueWebkitRepeatingRadialGradient
+            || id == CSSValueWebkitGradient || id == CSSValueWebkitCrossFade;
+    }
+
 private:
     CSSPropertyParser(const CSSParserTokenRange&, const CSSParserContext&,
         WillBeHeapVector<CSSProperty, 256>&);
@@ -109,10 +127,7 @@ private:
     bool parseViewportDescriptor(CSSPropertyID propId, bool important);
     bool parseFontFaceDescriptor(CSSPropertyID);
 
-    KURL completeURL(const String& url) const;
-
     void addProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important, bool implicit = false);
-    void rollbackLastProperties(int num);
     void addExpandedPropertyForValue(CSSPropertyID propId, PassRefPtrWillBeRawPtr<CSSValue>, bool);
 
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseValidPrimitive(CSSValueID ident, CSSParserValue*);
@@ -123,9 +138,6 @@ private:
     bool consume4Values(const StylePropertyShorthand&, bool important);
 
     bool parse4Values(CSSPropertyID, const CSSPropertyID* properties, bool important);
-    PassRefPtrWillBeRawPtr<CSSValueList> parseContent();
-
-    PassRefPtrWillBeRawPtr<CSSValue> parseAttr(CSSParserValueList* args);
 
     bool parseFillImage(CSSParserValueList*, RefPtrWillBeRawPtr<CSSValue>&);
 
@@ -154,8 +166,6 @@ private:
     bool consumeAnimationShorthand(const StylePropertyShorthand&, bool useLegacyParsing, bool important);
 
     bool consumeColumns(bool important);
-
-    PassRefPtrWillBeRawPtr<CSSValue> consumeCursor(CSSParserTokenRange&);
 
     PassRefPtrWillBeRawPtr<CSSValue> parseGridPosition();
     bool parseIntegerOrCustomIdentFromGridPosition(RefPtrWillBeRawPtr<CSSPrimitiveValue>& numericValue, RefPtrWillBeRawPtr<CSSCustomIdentValue>& gridLineName);
@@ -194,14 +204,10 @@ private:
 
     bool consumeBorderSpacing(bool important);
 
-    PassRefPtrWillBeRawPtr<CSSValue> parseCounterContent(CSSParserValueList* args, bool counters);
-
     bool parseColorParameters(const CSSParserValue*, int* colorValues, bool parseAlpha);
     bool parseHSLParameters(const CSSParserValue*, double* colorValues, bool parseAlpha);
     PassRefPtrWillBeRawPtr<CSSValue> parseColor(const CSSParserValue*, bool acceptQuirkyColors = false);
     bool parseColorFromValue(const CSSParserValue*, RGBA32&, bool acceptQuirkyColors = false);
-
-    PassRefPtrWillBeRawPtr<CSSValueList> consumeFontFaceSrc();
 
     // CSS3 Parsing Routines (for properties specific to CSS3)
     bool parseBorderImageShorthand(CSSPropertyID, bool important);
@@ -230,7 +236,6 @@ private:
     bool parseCrossfade(CSSParserValueList*, RefPtrWillBeRawPtr<CSSValue>&);
 
     PassRefPtrWillBeRawPtr<CSSValue> parseImageSet(CSSParserValueList*);
-    PassRefPtrWillBeRawPtr<CSSValue> consumeImageSet(CSSParserTokenRange&);
 
     PassRefPtrWillBeRawPtr<CSSValueList> parseFilter();
     PassRefPtrWillBeRawPtr<CSSFunctionValue> parseBuiltinFilterArguments(CSSParserValueList*, CSSValueID);
@@ -243,18 +248,7 @@ private:
     PassRefPtrWillBeRawPtr<CSSStringValue> createPrimitiveStringValue(CSSParserValue*);
     PassRefPtrWillBeRawPtr<CSSCustomIdentValue> createPrimitiveCustomIdentValue(CSSParserValue*);
 
-    // TODO(rwlbuis): move to CSSPropertyParser.cpp once CSSParserToken conversion is done.
-    inline PassRefPtrWillBeRawPtr<CSSValue> createCSSImageValueWithReferrer(const AtomicString& rawValue, const KURL& url)
-    {
-        RefPtrWillBeRawPtr<CSSValue> imageValue = CSSImageValue::create(rawValue, url);
-        toCSSImageValue(imageValue.get())->setReferrer(m_context.referrer());
-        return imageValue;
-    }
-
     PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> parseInsetRoundedCorners(PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue>, CSSParserValueList*);
-
-    PassRefPtrWillBeRawPtr<CSSValue> consumeFontFaceSrcURI();
-    PassRefPtrWillBeRawPtr<CSSValue> consumeFontFaceSrcLocal();
 
     class ImplicitScope {
         STACK_ALLOCATED();

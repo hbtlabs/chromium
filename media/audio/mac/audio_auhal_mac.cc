@@ -6,7 +6,6 @@
 
 #include <CoreServices/CoreServices.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
@@ -53,6 +52,7 @@ AUHALStream::AUHALStream(AudioManagerMac* manager,
       hardware_latency_frames_(0),
       stopped_(true),
       current_hardware_pending_bytes_(0),
+      current_lost_frames_(0),
       last_sample_time_(0.0),
       last_number_of_frames_(0),
       total_lost_frames_(0),
@@ -108,6 +108,18 @@ bool AUHALStream::Open() {
   // the Render() callback.
   DCHECK_GT(output_channels_, 0);
   output_bus_ = AudioBus::CreateWrapper(output_channels_);
+
+  // Try to set the I/O buffer size for the HAL to |number_of_frames_| and set
+  // |size_was_changed| to true if the size was changed. The status of other
+  // active audio input and output streams are involved in the final setting.
+  // NOTE: always do this setting before configuring the audio unit since there
+  // is a risk of deadlocking in Core Audio otherwise.
+  bool size_was_changed = false;
+  const bool is_input = false;
+  if (!manager_->MaybeChangeBufferSize(device_, is_input, number_of_frames_,
+                                       &size_was_changed)) {
+    return false;
+  }
 
   bool configured = ConfigureAUHAL();
   if (configured)
@@ -227,7 +239,7 @@ OSStatus AUHALStream::Render(
 
   // Update the playout latency.
   const double playout_latency_frames = GetPlayoutLatency(output_time_stamp);
-  current_hardware_pending_bytes_ = static_cast<uint32>(
+  current_hardware_pending_bytes_ = static_cast<uint32_t>(
       (playout_latency_frames + 0.5) * params_.GetBytesPerFrame());
 
   if (audio_fifo_)
@@ -248,11 +260,11 @@ void AUHALStream::ProvideInput(int frame_delay, AudioBus* dest) {
   }
 
   // Supply the input data and render the output data.
-  source_->OnMoreData(
-      dest,
-      current_hardware_pending_bytes_ +
-      frame_delay * params_.GetBytesPerFrame());
+  source_->OnMoreData(dest, current_hardware_pending_bytes_ +
+                                frame_delay * params_.GetBytesPerFrame(),
+                      current_lost_frames_);
   dest->Scale(volume_);
+  current_lost_frames_ = 0;
 }
 
 // AUHAL callback.
@@ -360,6 +372,7 @@ void AUHALStream::UpdatePlayoutTimestamp(const AudioTimeStamp* timestamp) {
       // glitch count etc and keep a record of the largest glitch.
       auto lost_frames = diff - last_number_of_frames_;
       total_lost_frames_ += lost_frames;
+      current_lost_frames_ += lost_frames;
       if (lost_frames > largest_glitch_frames_)
         largest_glitch_frames_ = lost_frames;
       ++glitches_detected_;
@@ -493,13 +506,6 @@ bool AUHALStream::ConfigureAUHAL() {
                        output_channels_,
                        kAudioUnitScope_Input,
                        0)) {
-    CloseAudioUnit();
-    return false;
-  }
-
-  bool size_was_changed = false;
-  if (!manager_->MaybeChangeBufferSize(device_, audio_unit_, 0,
-                                       number_of_frames_, &size_was_changed)) {
     CloseAudioUnit();
     return false;
   }

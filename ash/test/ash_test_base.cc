@@ -75,6 +75,12 @@ class AshEventGeneratorDelegate
     return aura::client::GetScreenPositionClient(window->GetRootWindow());
   }
 
+  void DispatchKeyEventToIME(ui::EventTarget* target,
+                             ui::KeyEvent* event) override {
+    // In Ash environment, the key event will be processed by event rewriters
+    // first.
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(AshEventGeneratorDelegate);
 };
@@ -174,7 +180,7 @@ ui::test::EventGenerator& AshTestBase::GetEventGenerator() {
   return *event_generator_.get();
 }
 
-gfx::Display::Rotation AshTestBase::GetActiveDisplayRotation(int64 id) {
+gfx::Display::Rotation AshTestBase::GetActiveDisplayRotation(int64_t id) {
   return Shell::GetInstance()
       ->display_manager()
       ->GetDisplayInfo(id)

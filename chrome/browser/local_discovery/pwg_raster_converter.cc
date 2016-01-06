@@ -5,6 +5,7 @@
 #include "chrome/browser/local_discovery/pwg_raster_converter.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind_helpers.h"
 #include "base/cancelable_callback.h"
@@ -13,6 +14,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
@@ -58,14 +60,14 @@ class FileHandlers {
   IPC::PlatformFileForTransit GetPdfForProcess(base::ProcessHandle process) {
     DCHECK(pdf_file_.IsValid());
     IPC::PlatformFileForTransit transit =
-        IPC::TakeFileHandleForProcess(pdf_file_.Pass(), process);
+        IPC::TakeFileHandleForProcess(std::move(pdf_file_), process);
     return transit;
   }
 
   IPC::PlatformFileForTransit GetPwgForProcess(base::ProcessHandle process) {
     DCHECK(pwg_file_.IsValid());
     IPC::PlatformFileForTransit transit =
-        IPC::TakeFileHandleForProcess(pwg_file_.Pass(), process);
+        IPC::TakeFileHandleForProcess(std::move(pwg_file_), process);
     return transit;
   }
 

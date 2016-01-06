@@ -5,8 +5,11 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_TESTS_ROUTER_TEST_UTIL_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_TESTS_ROUTER_TEST_UTIL_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/callback.h"
 #include "mojo/public/cpp/bindings/message.h"
 
 namespace mojo {
@@ -22,12 +25,15 @@ void AllocResponseMessage(uint32_t name,
 
 class MessageAccumulator : public MessageReceiver {
  public:
-  explicit MessageAccumulator(MessageQueue* queue);
+  MessageAccumulator(MessageQueue* queue,
+                     const base::Closure& closure = base::Closure());
+  ~MessageAccumulator() override;
 
   bool Accept(Message* message) override;
 
  private:
   MessageQueue* queue_;
+  base::Closure closure_;
 };
 
 class ResponseGenerator : public MessageReceiverWithResponderStatus {
@@ -47,7 +53,8 @@ class ResponseGenerator : public MessageReceiverWithResponderStatus {
 
 class LazyResponseGenerator : public ResponseGenerator {
  public:
-  LazyResponseGenerator();
+  explicit LazyResponseGenerator(
+      const base::Closure& closure = base::Closure());
 
   ~LazyResponseGenerator() override;
 
@@ -57,6 +64,8 @@ class LazyResponseGenerator : public ResponseGenerator {
   bool has_responder() const { return !!responder_; }
 
   bool responder_is_valid() const { return responder_->IsValid(); }
+
+  void set_closure(const base::Closure& closure) { closure_ = closure; }
 
   // Sends the response and delete the responder.
   void CompleteWithResponse() { Complete(true); }
@@ -73,6 +82,7 @@ class LazyResponseGenerator : public ResponseGenerator {
   uint32_t name_;
   uint64_t request_id_;
   std::string request_string_;
+  base::Closure closure_;
 };
 
 }  // namespace test

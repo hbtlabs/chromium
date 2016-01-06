@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
@@ -24,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/apps/app_url_redirector.h"
 #include "chrome/browser/browser_about_handler.h"
@@ -112,11 +114,13 @@
 #include "components/data_reduction_proxy/content/browser/data_reduction_proxy_message_filter.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/dom_distiller/core/url_constants.h"
+#include "components/error_page/common/error_page_switches.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/metrics/client_info.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/rappor/rappor_utils.h"
+#include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_message_filter.h"
 #include "components/translate/core/common/translate_switches.h"
@@ -280,6 +284,10 @@
 #include "chrome/browser/media/router/presentation_service_delegate_impl.h"
 #endif
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#include "components/webusb/public/interfaces/webusb_permission_bubble.mojom.h"
+#endif
+
 #if defined(ENABLE_WAYLAND_SERVER)
 #include "chrome/browser/chrome_browser_main_extra_parts_exo.h"
 #endif
@@ -298,6 +306,7 @@ using content::SiteInstance;
 using content::WebContents;
 using content::WebPreferences;
 using message_center::NotifierId;
+using security_interstitials::SSLErrorUI;
 
 #if defined(OS_POSIX)
 using content::FileDescriptorInfo;
@@ -656,8 +665,25 @@ void CreateUsbDeviceManager(
 
   UsbTabHelper* tab_helper =
       UsbTabHelper::GetOrCreateForWebContents(web_contents);
-  tab_helper->CreateDeviceManager(render_frame_host, request.Pass());
+  tab_helper->CreateDeviceManager(render_frame_host, std::move(request));
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+void CreateWebUsbPermissionBubble(
+    RenderFrameHost* render_frame_host,
+    mojo::InterfaceRequest<webusb::WebUsbPermissionBubble> request) {
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(render_frame_host);
+  if (!web_contents) {
+    NOTREACHED();
+    return;
+  }
+
+  UsbTabHelper* tab_helper =
+      UsbTabHelper::GetOrCreateForWebContents(web_contents);
+  tab_helper->CreatePermissionBubble(render_frame_host, std::move(request));
+}
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 }  // namespace
 
@@ -784,14 +810,8 @@ std::string ChromeContentBrowserClient::GetStoragePartitionIdForSite(
 
   // The partition ID for webview guest processes is the string value of its
   // SiteInstance URL - "chrome-guest://app_id/persist?partition".
-  if (site.SchemeIs(content::kGuestScheme)) {
+  if (site.SchemeIs(content::kGuestScheme))
     partition_id = site.spec();
-  } else if (!switches::IsEnableWebviewBasedSignin() &&
-             site.GetOrigin().spec() == chrome::kChromeUIChromeSigninURL) {
-    // The non-webview Chrome signin page has an embedded iframe of extension
-    // and web content, thus it must be isolated from other webUI pages.
-    partition_id = site.GetOrigin().spec();
-  }
 
   DCHECK(IsValidStoragePartitionId(browser_context, partition_id));
   return partition_id;
@@ -820,9 +840,8 @@ void ChromeContentBrowserClient::GetStoragePartitionConfigForSite(
   partition_name->clear();
   *in_memory = false;
 
-  bool success = false;
 #if defined(ENABLE_EXTENSIONS)
-  success = extensions::WebViewGuest::GetGuestPartitionConfigForSite(
+  bool success = extensions::WebViewGuest::GetGuestPartitionConfigForSite(
       site, partition_domain, partition_name, in_memory);
 
   if (!success && site.SchemeIs(extensions::kExtensionScheme)) {
@@ -850,14 +869,6 @@ void ChromeContentBrowserClient::GetStoragePartitionConfigForSite(
     success = true;
   }
 #endif
-
-  if (!success &&
-      (!switches::IsEnableWebviewBasedSignin() &&
-       site.GetOrigin().spec() == chrome::kChromeUIChromeSigninURL)) {
-    // The non-webview Chrome signin page has an embedded iframe of extension
-    // and web content, thus it must be isolated from other webUI pages.
-    *partition_domain = chrome::kChromeUIChromeSigninHost;
-  }
 
   // Assert that if |can_be_default| is false, the code above must have found a
   // non-default partition.  If this fails, the caller has a serious logic
@@ -1047,7 +1058,7 @@ ChromeContentBrowserClient::CreateRequestContext(
     content::URLRequestInterceptorScopedVector request_interceptors) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   return profile->CreateRequestContext(protocol_handlers,
-                                       request_interceptors.Pass());
+                                       std::move(request_interceptors));
 }
 
 net::URLRequestContextGetter*
@@ -1059,10 +1070,8 @@ ChromeContentBrowserClient::CreateRequestContextForStoragePartition(
     content::URLRequestInterceptorScopedVector request_interceptors) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   return profile->CreateRequestContextForStoragePartition(
-      partition_path,
-      in_memory,
-      protocol_handlers,
-      request_interceptors.Pass());
+      partition_path, in_memory, protocol_handlers,
+      std::move(request_interceptors));
 }
 
 bool ChromeContentBrowserClient::IsHandledURL(const GURL& url) {
@@ -1419,7 +1428,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
 
   static const char* const kDinosaurEasterEggSwitches[] = {
-    switches::kDisableDinosaurEasterEgg,
+      error_page::switches::kDisableDinosaurEasterEgg,
   };
   command_line->CopySwitchesFrom(browser_command_line,
                                  kDinosaurEasterEggSwitches,
@@ -1499,7 +1508,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 
       if (prefs->HasPrefPath(prefs::kAllowDinosaurEasterEgg) &&
           !prefs->GetBoolean(prefs::kAllowDinosaurEasterEgg))
-        command_line->AppendSwitch(switches::kDisableDinosaurEasterEgg);
+        command_line->AppendSwitch(
+            error_page::switches::kDisableDinosaurEasterEgg);
     }
 
     if (IsAutoReloadEnabled())
@@ -1519,11 +1529,15 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 
       // Command line switches override
       const std::string& show_saved_copy_value =
-          browser_command_line.GetSwitchValueASCII(switches::kShowSavedCopy);
-      if (show_saved_copy_value == switches::kEnableShowSavedCopyPrimary ||
-          show_saved_copy_value == switches::kEnableShowSavedCopySecondary ||
-          show_saved_copy_value == switches::kDisableShowSavedCopy) {
-        command_line->AppendSwitchASCII(switches::kShowSavedCopy,
+          browser_command_line.GetSwitchValueASCII(
+              error_page::switches::kShowSavedCopy);
+      if (show_saved_copy_value ==
+              error_page::switches::kEnableShowSavedCopyPrimary ||
+          show_saved_copy_value ==
+              error_page::switches::kEnableShowSavedCopySecondary ||
+          show_saved_copy_value ==
+              error_page::switches::kDisableShowSavedCopy) {
+        command_line->AppendSwitchASCII(error_page::switches::kShowSavedCopy,
                                         show_saved_copy_value);
       } else {
         std::string group =
@@ -1531,11 +1545,12 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 
         if (group == "Primary") {
           command_line->AppendSwitchASCII(
-              switches::kShowSavedCopy, switches::kEnableShowSavedCopyPrimary);
+              error_page::switches::kShowSavedCopy,
+              error_page::switches::kEnableShowSavedCopyPrimary);
         } else if (group == "Secondary") {
           command_line->AppendSwitchASCII(
-              switches::kShowSavedCopy,
-              switches::kEnableShowSavedCopySecondary);
+              error_page::switches::kShowSavedCopy,
+              error_page::switches::kEnableShowSavedCopySecondary);
         }
       }
     }
@@ -1745,7 +1760,7 @@ bool ChromeContentBrowserClient::AllowSetCookie(
     content::ResourceContext* context,
     int render_process_id,
     int render_frame_id,
-    net::CookieOptions* options) {
+    const net::CookieOptions& options) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(context);
   content_settings::CookieSettings* cookie_settings =
@@ -1755,7 +1770,7 @@ bool ChromeContentBrowserClient::AllowSetCookie(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&TabSpecificContentSettings::CookieChanged, render_process_id,
-                 render_frame_id, url, first_party, cookie_line, *options,
+                 render_frame_id, url, first_party, cookie_line, options,
                  !allow));
   return allow;
 }
@@ -2001,11 +2016,11 @@ void ChromeContentBrowserClient::AllowCertificateError(
   // ownership of ssl_blocking_page.
   int options_mask = 0;
   if (overridable)
-    options_mask |= SSLBlockingPage::OVERRIDABLE;
+    options_mask |= SSLErrorUI::SOFT_OVERRIDE_ENABLED;
   if (strict_enforcement)
-    options_mask |= SSLBlockingPage::STRICT_ENFORCEMENT;
+    options_mask |= SSLErrorUI::STRICT_ENFORCEMENT;
   if (expired_previous_decision)
-    options_mask |= SSLBlockingPage::EXPIRED_BUT_PREVIOUSLY_ALLOWED;
+    options_mask |= SSLErrorUI::EXPIRED_BUT_PREVIOUSLY_ALLOWED;
 
   safe_browsing::SafeBrowsingService* safe_browsing_service =
       g_browser_process->safe_browsing_service();
@@ -2015,7 +2030,7 @@ void ChromeContentBrowserClient::AllowCertificateError(
                                           : nullptr));
   SSLErrorHandler::HandleSSLError(web_contents, cert_error, ssl_info,
                                   request_url, options_mask,
-                                  cert_reporter.Pass(), callback);
+                                  std::move(cert_reporter), callback);
 }
 
 void ChromeContentBrowserClient::SelectClientCertificate(
@@ -2066,7 +2081,7 @@ void ChromeContentBrowserClient::SelectClientCertificate(
   }
 
   chrome::ShowSSLClientCertificateSelector(web_contents, cert_request_info,
-                                           delegate.Pass());
+                                           std::move(delegate));
 }
 
 void ChromeContentBrowserClient::AddCertificate(
@@ -2261,8 +2276,21 @@ void ChromeContentBrowserClient::OverrideWebkitPrefs(
 
   if (!prefs->GetBoolean(prefs::kWebKitJavascriptEnabled))
     web_prefs->javascript_enabled = false;
-  if (!prefs->GetBoolean(prefs::kWebKitWebSecurityEnabled))
+
+  // Only allow disabling web security via the command-line flag if the user
+  // has specified a distinct profile directory. This still enables tests to
+  // disable web security by setting the pref directly.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!prefs->GetBoolean(prefs::kWebKitWebSecurityEnabled)) {
     web_prefs->web_security_enabled = false;
+  } else if (!web_prefs->web_security_enabled &&
+             command_line->HasSwitch(switches::kDisableWebSecurity) &&
+             !command_line->HasSwitch(switches::kUserDataDir)) {
+    LOG(ERROR) << "Web security may only be disabled if '--user-data-dir' is "
+               "also specified.";
+    web_prefs->web_security_enabled = true;
+  }
+
   if (!prefs->GetBoolean(prefs::kWebKitPluginsEnabled))
     web_prefs->plugins_enabled = false;
   web_prefs->loads_images_automatically =
@@ -2327,6 +2355,9 @@ void ChromeContentBrowserClient::OverrideWebkitPrefs(
     web_prefs->strict_mixed_content_checking = true;
     web_prefs->strict_powerful_feature_restrictions = true;
   }
+
+  web_prefs->data_saver_enabled =
+      prefs->GetBoolean(prefs::kDataSaverEnabled);
 
   for (size_t i = 0; i < extra_parts_.size(); ++i)
     extra_parts_[i]->OverrideWebkitPrefs(rvh, web_prefs);
@@ -2614,6 +2645,10 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
     content::ServiceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
   registry->AddService(base::Bind(&CreateUsbDeviceManager, render_frame_host));
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  registry->AddService(
+      base::Bind(&CreateWebUsbPermissionBubble, render_frame_host));
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 }
 
 void ChromeContentBrowserClient::RegisterOutOfProcessMojoApplications(
@@ -2681,8 +2716,7 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   if (!prerender_contents && handle->IsInMainFrame()) {
     throttles.push_back(
         navigation_interception::InterceptNavigationDelegate::CreateThrottleFor(
-            handle)
-            .Pass());
+            handle));
   }
 #else
   if (handle->IsInMainFrame()) {
@@ -2691,7 +2725,7 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
     scoped_ptr<content::NavigationThrottle> url_to_app_throttle =
         AppUrlRedirector::MaybeCreateThrottleFor(handle);
     if (url_to_app_throttle)
-      throttles.push_back(url_to_app_throttle.Pass());
+      throttles.push_back(std::move(url_to_app_throttle));
   }
 #endif
 
@@ -2709,7 +2743,7 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   }
 #endif
 
-  return throttles.Pass();
+  return throttles;
 }
 
 content::DevToolsManagerDelegate*

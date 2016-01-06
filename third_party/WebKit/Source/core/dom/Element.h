@@ -211,7 +211,7 @@ public:
     void scrollTo(double x, double y);
     virtual void scrollTo(const ScrollToOptions&);
 
-    IntRect boundsInViewport();
+    IntRect boundsInViewport() const;
 
     ClientRectList* getClientRects();
     ClientRect* getBoundingClientRect();
@@ -353,6 +353,8 @@ public:
     ShadowRoot* userAgentShadowRoot() const;
 
     ShadowRoot* youngestShadowRoot() const;
+
+    ShadowRoot* shadowRootIfV1() const;
 
     ShadowRoot& ensureUserAgentShadowRoot();
     virtual void willAddFirstAuthorShadowRoot() { }
@@ -530,14 +532,22 @@ public:
     void setTabIndex(int);
     short tabIndex() const override;
 
-    void incrementProxyCount();
-    void decrementProxyCount();
+    // A compositor proxy is a very limited wrapper around an element. It
+    // exposes only those properties that are requested at the time the proxy is
+    // created. In order to know which properties are actually proxied, we
+    // maintain a count of the number of compositor proxies associated with each
+    // property.
+    bool hasCompositorProxy() const;
+    void incrementCompositorProxiedProperties(uint32_t mutableProperties);
+    void decrementCompositorProxiedProperties(uint32_t mutableProperties);
+    uint32_t compositorMutableProperties() const;
 
     // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
     // the element is inDocument() and the context is an isolated world.
-    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2);
-    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3);
-    void logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3, const String& arg4);
+    void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1);
+    void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2);
+    void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2, const QualifiedName& attr3);
+    void logUpdateAttributeIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attributeName, const AtomicString& oldValue, const AtomicString& newValue);
 
     DECLARE_VIRTUAL_TRACE();
 

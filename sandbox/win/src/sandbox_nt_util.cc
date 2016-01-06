@@ -4,6 +4,9 @@
 
 #include "sandbox/win/src/sandbox_nt_util.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/win/pe_image.h"
@@ -134,8 +137,7 @@ bool MapGlobalMemory() {
     if (NULL != _InterlockedCompareExchangePointer(&g_shared_IPC_memory,
                                                    memory, NULL)) {
         // Somebody beat us to the memory setup.
-        ret = g_nt.UnmapViewOfSection(NtCurrentProcess, memory);
-        VERIFY_SUCCESS(ret);
+        VERIFY_SUCCESS(g_nt.UnmapViewOfSection(NtCurrentProcess, memory));
     }
     DCHECK_NT(g_shared_IPC_size > 0);
     g_shared_policy_memory = reinterpret_cast<char*>(g_shared_IPC_memory)

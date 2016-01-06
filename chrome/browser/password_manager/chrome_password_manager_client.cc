@@ -5,6 +5,7 @@
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -13,6 +14,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -42,6 +44,7 @@
 #include "components/password_manager/core/browser/password_manager_settings_migration_experiment.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "components/password_manager/sync/browser/password_sync_util.h"
@@ -52,7 +55,7 @@
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 #if defined(OS_MACOSX) || BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/password_manager/save_password_infobar_delegate.h"
@@ -161,8 +164,8 @@ ChromePasswordManagerClient::ChromePasswordManagerClient(
 ChromePasswordManagerClient::~ChromePasswordManagerClient() {}
 
 bool ChromePasswordManagerClient::IsAutomaticPasswordSavingEnabled() const {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-             password_manager::switches::kEnableAutomaticPasswordSaving) &&
+  return base::FeatureList::IsEnabled(
+             password_manager::features::kEnableAutomaticPasswordSaving) &&
          chrome::GetChannel() == version_info::Channel::UNKNOWN;
 }
 
@@ -224,9 +227,10 @@ bool ChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
         PasswordsClientUIDelegateFromWebContents(web_contents());
     if (update_password && IsUpdatePasswordUIEnabled()) {
       manage_passwords_ui_controller->OnUpdatePasswordSubmitted(
-          form_to_save.Pass());
+          std::move(form_to_save));
     } else {
-      manage_passwords_ui_controller->OnPasswordSubmitted(form_to_save.Pass());
+      manage_passwords_ui_controller->OnPasswordSubmitted(
+          std::move(form_to_save));
     }
   } else {
 #if defined(OS_MACOSX) || BUILDFLAG(ANDROID_JAVA_UI)
@@ -236,8 +240,8 @@ bool ChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
         password_manager::metrics_util::GroupIdToString(
             password_manager::metrics_util::MonitoredDomainGroupId(
                 form_to_save->pending_credentials().signon_realm, GetPrefs())));
-    SavePasswordInfoBarDelegate::Create(
-        web_contents(), form_to_save.Pass(), uma_histogram_suffix, type);
+    SavePasswordInfoBarDelegate::Create(web_contents(), std::move(form_to_save),
+                                        uma_histogram_suffix, type);
 #else
     NOTREACHED() << "Aura platforms should always use the bubble";
 #endif
@@ -254,14 +258,15 @@ bool ChromePasswordManagerClient::PromptUserToChooseCredentials(
   // Deletes itself on the event from Java counterpart, when user interacts with
   // dialog.
   AccountChooserDialogAndroid* acccount_chooser_dialog =
-      new AccountChooserDialogAndroid(web_contents(), local_forms.Pass(),
-                                      federated_forms.Pass(), origin, callback);
+      new AccountChooserDialogAndroid(web_contents(), std::move(local_forms),
+                                      std::move(federated_forms), origin,
+                                      callback);
   acccount_chooser_dialog->ShowDialog();
   return true;
 #else
   return PasswordsClientUIDelegateFromWebContents(web_contents())
-      ->OnChooseCredentials(local_forms.Pass(), federated_forms.Pass(), origin,
-                            callback);
+      ->OnChooseCredentials(std::move(local_forms), std::move(federated_forms),
+                            origin, callback);
 #endif
 }
 
@@ -278,7 +283,7 @@ void ChromePasswordManagerClient::NotifyUserAutoSignin(
   ShowAutoSigninPrompt(web_contents(), local_forms[0]->username_value);
 #else
   PasswordsClientUIDelegateFromWebContents(web_contents())
-      ->OnAutoSignin(local_forms.Pass());
+      ->OnAutoSignin(std::move(local_forms));
 
 #endif
 }
@@ -292,7 +297,7 @@ void ChromePasswordManagerClient::AutomaticPasswordSave(
     PasswordsClientUIDelegate* manage_passwords_ui_controller =
         PasswordsClientUIDelegateFromWebContents(web_contents());
     manage_passwords_ui_controller->OnAutomaticPasswordSave(
-        saved_form.Pass());
+        std::move(saved_form));
   }
 #endif
 }
@@ -497,7 +502,12 @@ bool ChromePasswordManagerClient::IsTheHotNewBubbleUIEnabled() {
 
 bool ChromePasswordManagerClient::IsUpdatePasswordUIEnabled() const {
 #if defined(OS_MACOSX)
-  return false;
+  if (!ChromePasswordManagerClient::IsTheHotNewBubbleUIEnabled()) {
+    // Currently Password update UI is implemented only for Bubble UI.
+    return false;
+  }
+  return base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordChangeSupport);
 #else
   return IsTheHotNewBubbleUIEnabled();
 #endif

@@ -4,9 +4,11 @@
 
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/memory/singleton.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
@@ -134,7 +135,9 @@ ProfileSyncServiceFactory::~ProfileSyncServiceFactory() {
 
 KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = static_cast<Profile*>(context);
+  ProfileSyncService::InitParams init_params;
+
+  Profile* profile = Profile::FromBrowserContext(context);
 
   SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile);
 
@@ -147,10 +150,10 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   // once http://crbug.com/171406 has been fixed.
   AboutSigninInternalsFactory::GetForProfile(profile);
 
-  scoped_ptr<SigninManagerWrapper> signin_wrapper(
-      new SupervisedUserSigninManagerWrapper(profile, signin));
+  init_params.signin_wrapper =
+      make_scoped_ptr(new SupervisedUserSigninManagerWrapper(profile, signin));
 
-  ProfileOAuth2TokenService* token_service =
+  init_params.oauth2_token_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
 
   // TODO(tim): Currently, AUTO/MANUAL settings refer to the *first* time sync
@@ -159,25 +162,31 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   // intervention). We can get rid of the browser_default eventually, but
   // need to take care that ProfileSyncService doesn't get tripped up between
   // those two cases. Bug 88109.
-  browser_sync::ProfileSyncServiceStartBehavior behavior =
-      browser_defaults::kSyncAutoStarts ? browser_sync::AUTO_START
-                                        : browser_sync::MANUAL_START;
-  browser_sync::ChromeSyncClient* chrome_sync_client =
-      new browser_sync::ChromeSyncClient(profile);
-  ProfileSyncService* pss = new ProfileSyncService(
-      make_scoped_ptr(chrome_sync_client), signin_wrapper.Pass(), token_service,
-      behavior, base::Bind(&UpdateNetworkTime), profile->GetPath(),
-      profile->GetRequestContext(), profile->GetDebugName(),
-      chrome::GetChannel(),
+  init_params.start_behavior = browser_defaults::kSyncAutoStarts
+                                   ? browser_sync::AUTO_START
+                                   : browser_sync::MANUAL_START;
+
+  init_params.sync_client =
+      make_scoped_ptr(new browser_sync::ChromeSyncClient(profile));
+
+  init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
+  init_params.base_directory = profile->GetPath();
+  init_params.url_request_context = profile->GetRequestContext();
+  init_params.debug_identifier = profile->GetDebugName();
+  init_params.channel = chrome::GetChannel();
+
+  init_params.db_thread = content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::DB);
+  init_params.file_thread =
       content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::DB),
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::FILE),
-      content::BrowserThread::GetBlockingPool());
+          content::BrowserThread::FILE);
+  init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
+
+  auto pss = make_scoped_ptr(new ProfileSyncService(std::move(init_params)));
 
   // Will also initialize the sync client.
   pss->Initialize();
-  return pss;
+  return pss.release();
 }
 
 // static

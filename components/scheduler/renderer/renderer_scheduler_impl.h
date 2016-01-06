@@ -6,6 +6,7 @@
 #define COMPONENTS_SCHEDULER_RENDERER_RENDERER_SCHEDULER_IMPL_H_
 
 #include "base/atomicops.h"
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "components/scheduler/base/pollable_thread_safe_flag.h"
 #include "components/scheduler/child/idle_helper.h"
@@ -293,6 +294,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool touchstart_expected_soon;
     bool have_seen_a_begin_main_frame;
     bool has_visible_render_widget_with_touch_handler;
+    bool begin_frame_not_expected_soon;
   };
 
   struct AnyThread {
@@ -307,6 +309,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool in_idle_period;
     bool begin_main_frame_on_critical_path;
     bool last_gesture_was_compositor_driven;
+    bool have_seen_touchstart;
   };
 
   struct CompositorThreadOnly {

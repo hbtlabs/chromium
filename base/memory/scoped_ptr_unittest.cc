@@ -4,11 +4,14 @@
 
 #include "base/memory/scoped_ptr.h"
 
+#include <stddef.h>
+
 #include <sstream>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -399,6 +402,7 @@ TEST(ScopedPtrTest, MoveBehavior) {
     EXPECT_TRUE(scoper3.get());
   }
 
+#if !(defined(OS_ANDROID) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)))
   // Test uncaught Pass() does not have side effects, because Pass()
   // is implemented by std::move().
   // TODO(danakj): Remove this test case when we remove Pass().
@@ -414,6 +418,7 @@ TEST(ScopedPtrTest, MoveBehavior) {
     EXPECT_TRUE(rvalue);
   }
   EXPECT_EQ(0, constructed);
+#endif
 
   // Test that passing to function which does nothing does not leak.
   {

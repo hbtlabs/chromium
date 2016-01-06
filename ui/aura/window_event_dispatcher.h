@@ -5,10 +5,12 @@
 #ifndef UI_AURA_WINDOW_EVENT_DISPATCHER_H_
 #define UI_AURA_WINDOW_EVENT_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -94,7 +96,7 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   // event processing, so that gesture events can be properly created and
   // dispatched. |event|'s location should be in the dispatcher's coordinate
   // space, in DIPs.
-  virtual void ProcessedTouchEvent(uint32 unique_event_id,
+  virtual void ProcessedTouchEvent(uint32_t unique_event_id,
                                    Window* window,
                                    ui::EventResult result);
 
@@ -162,6 +164,7 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
                                                     ui::EventType type)
       WARN_UNUSED_RESULT;
   ui::EventDispatchDetails ProcessGestures(
+      Window* target,
       ui::GestureRecognizer::Gestures* gestures) WARN_UNUSED_RESULT;
 
   // Called when a window becomes invisible, either by being removed
@@ -170,9 +173,6 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   // will cause a window to lose capture and some windows may destroy themselves
   // on capture (like DragDropTracker).
   void OnWindowHidden(Window* invisible, WindowHiddenReason reason);
-
-  // Returns a target window for the given gesture event.
-  Window* GetGestureTarget(ui::GestureEvent* event);
 
   bool is_dispatched_held_event(const ui::Event& event) const;
 
@@ -195,8 +195,10 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
 
   // Overridden from ui::GestureEventHelper.
   bool CanDispatchToConsumer(ui::GestureConsumer* consumer) override;
-  void DispatchGestureEvent(ui::GestureEvent* event) override;
-  void DispatchCancelTouchEvent(ui::TouchEvent* event) override;
+  void DispatchGestureEvent(ui::GestureConsumer* raw_input_consumer,
+                            ui::GestureEvent* event) override;
+  void DispatchCancelTouchEvent(ui::GestureConsumer* raw_input_consumer,
+                                ui::TouchEvent* event) override;
 
   // Overridden from WindowObserver:
   void OnWindowDestroying(Window* window) override;
@@ -246,7 +248,7 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   WindowTreeHost* host_;
 
   // Touch ids that are currently down.
-  uint32 touch_ids_down_;
+  uint32_t touch_ids_down_;
 
   Window* mouse_pressed_handler_;
   Window* mouse_moved_handler_;

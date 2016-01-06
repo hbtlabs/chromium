@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/editing/VisibleUnits.h"
 
 #include "core/HTMLNames.h"
@@ -2382,7 +2381,7 @@ static bool endsOfNodeAreVisuallyDistinctPositions(Node* node)
         return true;
 
     // There is a VisiblePosition inside an empty inline-block container.
-    return node->layoutObject()->isReplaced() && canHaveChildrenForEditing(node) && toLayoutBox(node->layoutObject())->size().height() != 0 && !node->hasChildren();
+    return node->layoutObject()->isAtomicInlineLevel() && canHaveChildrenForEditing(node) && toLayoutBox(node->layoutObject())->size().height() != 0 && !node->hasChildren();
 }
 
 template <typename Strategy>
@@ -2894,7 +2893,7 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
         LayoutObject* layoutObject = &box->layoutObject();
 
         while (true) {
-            if ((layoutObject->isReplaced() || layoutObject->isBR()) && offset == box->caretRightmostOffset())
+            if ((layoutObject->isAtomicInlineLevel() || layoutObject->isBR()) && offset == box->caretRightmostOffset())
                 return box->isLeftToRightDirection() ? previousVisuallyDistinctCandidate(deepPosition) : nextVisuallyDistinctCandidate(deepPosition);
 
             if (!layoutObject->node()) {
@@ -3069,7 +3068,7 @@ static PositionTemplate<Strategy> rightVisuallyDistinctCandidate(const VisiblePo
         LayoutObject* layoutObject = &box->layoutObject();
 
         while (true) {
-            if ((layoutObject->isReplaced() || layoutObject->isBR()) && offset == box->caretLeftmostOffset())
+            if ((layoutObject->isAtomicInlineLevel() || layoutObject->isBR()) && offset == box->caretLeftmostOffset())
                 return box->isLeftToRightDirection() ? nextVisuallyDistinctCandidate(deepPosition) : previousVisuallyDistinctCandidate(deepPosition);
 
             if (!layoutObject->node()) {

@@ -4,20 +4,23 @@
 
 #include "content/browser/gpu/gpu_process_host.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/base64.h"
 #include "base/base_switches.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/sha1.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/tracing/tracing_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -69,11 +72,6 @@
 #include "ui/gfx/x/x11_switches.h"
 #endif
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-#include "content/browser/browser_io_surface_manager_mac.h"
-#include "content/common/child_process_messages.h"
-#endif
-
 #if defined(OS_MACOSX)
 #include "content/browser/renderer_host/render_widget_resize_helper_mac.h"
 #endif
@@ -107,6 +105,9 @@ static const char* const kSwitchNames[] = {
   switches::kEnableHeapProfiling,
   switches::kEnableLogging,
   switches::kEnableShareGroupAsyncTextureUpload,
+#if defined(OS_ANDROID)
+  switches::kEnableUnifiedMediaPipeline,
+#endif
 #if defined(OS_CHROMEOS)
   switches::kDisableVaapiAcceleratedVideoEncode,
 #endif
@@ -445,13 +446,6 @@ GpuProcessHost::~GpuProcessHost() {
     queued_messages_.pop();
   }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  if (!io_surface_manager_token_.IsZero()) {
-    BrowserIOSurfaceManager::GetInstance()->InvalidateGpuProcessToken();
-    io_surface_manager_token_.SetZero();
-  }
-#endif
-
   // This is only called on the IO thread so no race against the constructor
   // for another GpuProcessHost.
   if (g_gpu_process_hosts[kind_] == this)
@@ -562,14 +556,6 @@ bool GpuProcessHost::Init() {
   if (!Send(new GpuMsg_Initialize()))
     return false;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  io_surface_manager_token_ =
-      BrowserIOSurfaceManager::GetInstance()->GenerateGpuProcessToken();
-  // Note: A valid IOSurface manager token needs to be sent to the Gpu process
-  // before any GpuMemoryBuffer allocation requests can be sent.
-  Send(new ChildProcessMsg_SetIOSurfaceManagerToken(io_surface_manager_token_));
-#endif
-
   return true;
 }
 
@@ -638,7 +624,7 @@ bool GpuProcessHost::OnMessageReceived(const IPC::Message& message) {
   return true;
 }
 
-void GpuProcessHost::OnChannelConnected(int32 peer_pid) {
+void GpuProcessHost::OnChannelConnected(int32_t peer_pid) {
   TRACE_EVENT0("gpu", "GpuProcessHost::OnChannelConnected");
 
   while (!queued_messages_.empty()) {
@@ -712,7 +698,7 @@ void GpuProcessHost::CreateGpuMemoryBuffer(
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     int client_id,
-    int32 surface_id,
+    int32_t surface_id,
     const CreateGpuMemoryBufferCallback& callback) {
   TRACE_EVENT0("gpu", "GpuProcessHost::CreateGpuMemoryBuffer");
 
@@ -931,13 +917,6 @@ void GpuProcessHost::ForceShutdown() {
   if (g_gpu_process_hosts[kind_] == this)
     g_gpu_process_hosts[kind_] = NULL;
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  if (!io_surface_manager_token_.IsZero()) {
-    BrowserIOSurfaceManager::GetInstance()->InvalidateGpuProcessToken();
-    io_surface_manager_token_.SetZero();
-  }
-#endif
-
   process_->ForceShutdown();
 }
 
@@ -1142,7 +1121,7 @@ void GpuProcessHost::LoadedShader(const std::string& key,
     Send(new GpuMsg_LoadedShader(data));
 }
 
-void GpuProcessHost::CreateChannelCache(int32 client_id) {
+void GpuProcessHost::CreateChannelCache(int32_t client_id) {
   TRACE_EVENT0("gpu", "GpuProcessHost::CreateChannelCache");
 
   scoped_refptr<ShaderDiskCache> cache =
@@ -1155,12 +1134,12 @@ void GpuProcessHost::CreateChannelCache(int32 client_id) {
   client_id_to_shader_cache_[client_id] = cache;
 }
 
-void GpuProcessHost::OnDestroyChannel(int32 client_id) {
+void GpuProcessHost::OnDestroyChannel(int32_t client_id) {
   TRACE_EVENT0("gpu", "GpuProcessHost::OnDestroyChannel");
   client_id_to_shader_cache_.erase(client_id);
 }
 
-void GpuProcessHost::OnCacheShader(int32 client_id,
+void GpuProcessHost::OnCacheShader(int32_t client_id,
                                    const std::string& key,
                                    const std::string& shader) {
   TRACE_EVENT0("gpu", "GpuProcessHost::OnCacheShader");

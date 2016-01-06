@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/frame/browser_view.h"
 
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
@@ -17,6 +20,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/chrome_dll_resource.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -38,11 +42,9 @@
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar_constants.h"
-#include "chrome/browser/ui/bookmarks/bookmark_bubble_delegate.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bubble_sign_in_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -53,7 +55,7 @@
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/search/search_delegate.h"
 #include "chrome/browser/ui/search/search_model.h"
-#include "chrome/browser/ui/search/search_ui.h"
+#include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -149,6 +151,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
+#if defined(USE_ASH)
+#include "chrome/browser/ui/ash/ash_util.h"
+#endif
+
 #if defined(USE_AURA)
 #include "ui/aura/client/window_tree_client.h"
 #include "ui/aura/window.h"
@@ -210,14 +216,16 @@ void PaintHorizontalBorder(gfx::Canvas* canvas,
 // will be removed.
 void PaintDetachedBookmarkBar(gfx::Canvas* canvas,
                               BookmarkBarView* view,
-                              ThemeService* theme_service) {
+                              Profile* profile) {
   // Paint background for detached state; if animating, this is fade in/out.
+  const ui::ThemeProvider& tp =
+      ThemeService::GetThemeProviderForProfile(profile);
   canvas->DrawColor(
-      chrome::GetDetachedBookmarkBarBackgroundColor(theme_service));
+      tp.GetColor(ThemeProperties::COLOR_DETACHED_BOOKMARK_BAR_BACKGROUND));
   // Draw the separators above and below bookmark bar;
   // if animating, these are fading in/out.
   SkColor separator_color =
-      chrome::GetDetachedBookmarkBarSeparatorColor(theme_service);
+      tp.GetColor(ThemeProperties::COLOR_DETACHED_BOOKMARK_BAR_SEPARATOR);
 
   if (ui::MaterialDesignController::IsModeMaterial()) {
     BrowserView::Paint1pxHorizontalLine(
@@ -245,13 +253,20 @@ void PaintBackgroundAttachedMode(gfx::Canvas* canvas,
                                  chrome::HostDesktopType host_desktop_type) {
   canvas->FillRect(bounds,
                    theme_provider->GetColor(ThemeProperties::COLOR_TOOLBAR));
-  canvas->TileImageInt(*theme_provider->GetImageSkiaNamed(IDR_THEME_TOOLBAR),
-                       background_origin.x(),
-                       background_origin.y(),
-                       bounds.x(),
-                       bounds.y(),
-                       bounds.width(),
-                       bounds.height());
+
+  // Always tile the background image in pre-MD. In MD, only tile if there's a
+  // non-default image.
+  // TODO(estade): remove IDR_THEME_TOOLBAR when MD is default.
+  if (theme_provider->HasCustomImage(IDR_THEME_TOOLBAR) ||
+      !ui::MaterialDesignController::IsModeMaterial()) {
+    canvas->TileImageInt(*theme_provider->GetImageSkiaNamed(IDR_THEME_TOOLBAR),
+                         background_origin.x(),
+                         background_origin.y(),
+                         bounds.x(),
+                         bounds.y(),
+                         bounds.width(),
+                         bounds.height());
+  }
 
   if (host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH &&
       !ui::MaterialDesignController::IsModeMaterial()) {
@@ -292,15 +307,12 @@ void PaintAttachedBookmarkBar(gfx::Canvas* canvas,
     // Draw the separator below the Bookmarks Bar; this is fading in/out.
     if (ui::MaterialDesignController::IsModeMaterial()) {
       BrowserView::Paint1pxHorizontalLine(
-          canvas,
-          ThemeProperties::GetDefaultColor(
-              ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
+          canvas, view->GetThemeProvider()->GetColor(
+                      ThemeProperties::COLOR_TOOLBAR_SEPARATOR),
           view->GetLocalBounds(), true);
     } else {
-      PaintHorizontalBorder(canvas,
-                            view,
-                            false,
-                            ThemeProperties::GetDefaultColor(
+      PaintHorizontalBorder(canvas, view, false,
+                            view->GetThemeProvider()->GetColor(
                                 ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
     }
   }
@@ -404,55 +416,24 @@ BookmarkBarViewBackground::BookmarkBarViewBackground(
 void BookmarkBarViewBackground::Paint(gfx::Canvas* canvas,
                                       views::View* view) const {
   int toolbar_overlap = bookmark_bar_view_->GetToolbarOverlap();
-  if (!bookmark_bar_view_->IsDetached()) {
+
+  SkAlpha detached_alpha = static_cast<SkAlpha>(
+      bookmark_bar_view_->size_animation().CurrentValueBetween(0xff, 0));
+  if (detached_alpha != 0xff) {
     PaintAttachedBookmarkBar(canvas,
                              bookmark_bar_view_,
                              browser_view_,
                              browser_->host_desktop_type(),
                              toolbar_overlap);
-    return;
   }
 
-  // As 'hidden' according to the animation is the full in-tab state, we invert
-  // the value - when current_state is at '0', we expect the bar to be docked.
-  double current_state = 1 - bookmark_bar_view_->GetAnimationValue();
-
-  ThemeService* ts = ThemeServiceFactory::GetForProfile(browser_->profile());
-  if (current_state == 0.0 || current_state == 1.0) {
-    PaintDetachedBookmarkBar(canvas, bookmark_bar_view_, ts);
+  if (!bookmark_bar_view_->IsDetached() || detached_alpha == 0)
     return;
-  }
+
   // While animating, set opacity to cross-fade between attached and detached
   // backgrounds including their respective separators.
-  int detached_alpha = static_cast<uint8>(current_state * 255);
-  int attached_alpha = 255 - detached_alpha;
-  if (browser_->bookmark_bar_state() == BookmarkBar::DETACHED) {
-    // To animate from attached to detached state:
-    // - fade out attached background
-    // - fade in detached background.
-    canvas->SaveLayerAlpha(attached_alpha);
-    PaintAttachedBookmarkBar(canvas,
-                             bookmark_bar_view_,
-                             browser_view_,
-                             browser_->host_desktop_type(),
-                             toolbar_overlap);
-    canvas->Restore();
-    canvas->SaveLayerAlpha(detached_alpha);
-    PaintDetachedBookmarkBar(canvas, bookmark_bar_view_, ts);
-  } else {
-    // To animate from detached to attached state:
-    // - fade out detached background
-    // - fade in attached background.
-    canvas->SaveLayerAlpha(detached_alpha);
-    PaintDetachedBookmarkBar(canvas, bookmark_bar_view_, ts);
-    canvas->Restore();
-    canvas->SaveLayerAlpha(attached_alpha);
-    PaintAttachedBookmarkBar(canvas,
-                             bookmark_bar_view_,
-                             browser_view_,
-                             browser_->host_desktop_type(),
-                             toolbar_overlap);
-  }
+  canvas->SaveLayerAlpha(detached_alpha);
+  PaintDetachedBookmarkBar(canvas, bookmark_bar_view_, browser_->profile());
   canvas->Restore();
 }
 
@@ -1027,6 +1008,11 @@ void BrowserView::UpdateExclusiveAccessExitBubbleContent(
   }
 }
 
+void BrowserView::OnExclusiveAccessUserInput() {
+  if (exclusive_access_bubble_.get())
+    exclusive_access_bubble_->OnUserInput();
+}
+
 bool BrowserView::ShouldHideUIForFullscreen() const {
   // Immersive mode needs UI for the slide-down top panel.
   if (immersive_mode_controller_->IsEnabled())
@@ -1262,7 +1248,8 @@ bool BrowserView::IsBookmarkBarVisible() const {
 }
 
 bool BrowserView::IsBookmarkBarAnimating() const {
-  return bookmark_bar_view_.get() && bookmark_bar_view_->is_animating();
+  return bookmark_bar_view_.get() &&
+         bookmark_bar_view_->size_animation().is_animating();
 }
 
 bool BrowserView::IsTabStripEditable() const {
@@ -1293,12 +1280,12 @@ void BrowserView::ShowUpdateChromeDialog() {
 }
 
 void BrowserView::ShowBookmarkBubble(const GURL& url, bool already_bookmarked) {
-  scoped_ptr<BookmarkBubbleDelegate> delegate;
+  scoped_ptr<BubbleSyncPromoDelegate> delegate;
   delegate.reset(new BookmarkBubbleSignInDelegate(browser_.get()));
 
   BookmarkBubbleView::ShowBubble(GetToolbarView()->GetBookmarkBubbleAnchor(),
                                  gfx::Rect(), nullptr, bookmark_bar_view_.get(),
-                                 delegate.Pass(), browser_->profile(), url,
+                                 std::move(delegate), browser_->profile(), url,
                                  already_bookmarked);
 }
 
@@ -1363,7 +1350,7 @@ void BrowserView::ShowOneClickSigninBubble(
     anchor_view = toolbar_->location_bar();
 
   OneClickSigninBubbleView::ShowBubble(type, email, error_message,
-                                       delegate.Pass(), anchor_view,
+                                       std::move(delegate), anchor_view,
                                        start_sync_callback);
 }
 #endif
@@ -1816,9 +1803,7 @@ bool BrowserView::GetSavedWindowPlacement(
     ui::WindowShowState* show_state) const {
   chrome::GetSavedWindowBoundsAndShowState(browser_.get(), bounds, show_state);
 
-  if (browser_->is_type_popup() &&
-      !browser_->is_app() &&
-      !browser_->is_trusted_source()) {
+  if (chrome::SavedBoundsAreContentBounds(browser_.get())) {
     // This is normal non-app popup window. The value passed in |bounds|
     // represents two pieces of information:
     // - the position of the window, in screen coordinates (outer position).
@@ -2107,8 +2092,7 @@ void BrowserView::InitViews() {
 
   contents_container_ = new views::View();
   contents_container_->set_background(views::Background::CreateSolidBackground(
-      ThemeProperties::GetDefaultColor(
-          ThemeProperties::COLOR_CONTROL_BACKGROUND)));
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_CONTROL_BACKGROUND)));
   contents_container_->AddChildView(devtools_web_view_);
   contents_container_->AddChildView(contents_web_view_);
   contents_container_->SetLayoutManager(new ContentsLayoutManager(
@@ -2554,7 +2538,8 @@ void BrowserView::UpdateAcceleratorMetrics(const ui::Accelerator& accelerator,
 
 void BrowserView::ShowAvatarBubbleFromAvatarButton(
     AvatarBubbleMode mode,
-    const signin::ManageAccountsParams& manage_accounts_params) {
+    const signin::ManageAccountsParams& manage_accounts_params,
+    signin_metrics::AccessPoint access_point) {
 #if defined(FRAME_AVATAR_BUTTON)
   // Do not show avatar bubble if there is no avatar menu button.
   if (!frame_->GetNewAvatarMenuButton())
@@ -2566,10 +2551,10 @@ void BrowserView::ShowAvatarBubbleFromAvatarButton(
                                                &tutorial_mode);
 
   if (SigninViewController::ShouldShowModalSigninForMode(bubble_view_mode)) {
-    ShowModalSigninWindow(mode);
+    ShowModalSigninWindow(mode, access_point);
   } else {
     ProfileChooserView::ShowBubble(
-        bubble_view_mode, tutorial_mode, manage_accounts_params,
+        bubble_view_mode, tutorial_mode, manage_accounts_params, access_point,
         frame_->GetNewAvatarMenuButton(), views::BubbleBorder::TOP_RIGHT,
         views::BubbleBorder::ALIGN_EDGE_TO_ANCHOR_EDGE, browser());
     ProfileMetrics::LogProfileOpenMethod(ProfileMetrics::ICON_AVATAR_BUBBLE);
@@ -2579,12 +2564,15 @@ void BrowserView::ShowAvatarBubbleFromAvatarButton(
 #endif
 }
 
-void BrowserView::ShowModalSigninWindow(AvatarBubbleMode mode) {
+void BrowserView::ShowModalSigninWindow(
+    AvatarBubbleMode mode,
+    signin_metrics::AccessPoint access_point) {
   profiles::BubbleViewMode bubble_view_mode;
   profiles::TutorialMode tutorial_mode;
   profiles::BubbleViewModeFromAvatarBubbleMode(mode, &bubble_view_mode,
                                                &tutorial_mode);
-  signin_view_controller_.ShowModalSignin(bubble_view_mode, browser());
+  signin_view_controller_.ShowModalSignin(bubble_view_mode, browser(),
+                                          access_point);
 }
 
 void BrowserView::CloseModalSigninWindow() {

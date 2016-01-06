@@ -4,6 +4,10 @@
 
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "ash/audio/sounds.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/high_contrast/high_contrast_controller.h"
@@ -16,6 +20,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
@@ -1048,8 +1053,9 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
                         IsVirtualKeyboardEnabled());
   UMA_HISTOGRAM_BOOLEAN("Accessibility.CrosStickyKeys", IsStickyKeysEnabled());
   if (MagnificationManager::Get()) {
-    uint32 type = MagnificationManager::Get()->IsMagnifierEnabled() ?
-                      MagnificationManager::Get()->GetMagnifierType() : 0;
+    uint32_t type = MagnificationManager::Get()->IsMagnifierEnabled()
+                        ? MagnificationManager::Get()->GetMagnifierType()
+                        : 0;
     // '0' means magnifier is disabled.
     UMA_HISTOGRAM_ENUMERATION("Accessibility.CrosScreenMagnifier",
                               type,
@@ -1170,9 +1176,9 @@ void AccessibilityManager::PostLoadChromeVox(Profile* profile) {
         extensions::events::ACCESSIBILITY_PRIVATE_ON_INTRODUCE_CHROME_VOX,
         extensions::api::accessibility_private::OnIntroduceChromeVox::
             kEventName,
-        event_args.Pass()));
+        std::move(event_args)));
     event_router->DispatchEventWithLazyListener(
-        extension_misc::kChromeVoxExtensionId, event.Pass());
+        extension_misc::kChromeVoxExtensionId, std::move(event));
   }
 
   should_speak_chrome_vox_announcements_on_user_screen_ =

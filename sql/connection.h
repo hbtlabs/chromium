@@ -5,6 +5,7 @@
 #ifndef SQL_CONNECTION_H_
 #define SQL_CONNECTION_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <map>
 #include <set>
@@ -509,6 +510,7 @@ class SQL_EXPORT Connection : public base::trace_event::MemoryDumpProvider {
   friend class test::ScopedMockTimeSource;
 
   FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, CollectDiagnosticInfo);
+  FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, GetAppropriateMmapSize);
   FRIEND_TEST_ALL_PREFIXES(SQLConnectionTest, RegisterIntentToUpload);
 
   // Internal initialize function used by both Init and InitInMemory. The file

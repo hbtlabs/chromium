@@ -313,11 +313,12 @@ source_set("browser") {
       "//chrome/browser/metrics/variations:chrome_ui_string_overrider_factory",
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/common/net",
-      "//chrome/installer/util",
+      "//chrome/installer/util:with_no_strings",
       "//components/about_handler",
       "//components/app_modal",
       "//components/autofill/content/browser",
       "//components/browsing_data",
+      "//components/contextual_search:browser",
       "//components/data_reduction_proxy/content/browser",
       "//components/data_use_measurement/content",
       "//components/devtools_discovery",
@@ -465,6 +466,12 @@ source_set("browser") {
     sources += rebase_path(gypi_values.chrome_browser_task_manager_sources,
                            ".",
                            "//chrome")
+    if (is_chromeos) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_task_manager_chromeos_sources,
+                      ".",
+                      "//chrome")
+    }
   }
   if (enable_spellcheck) {
     sources += rebase_path(gypi_values.chrome_browser_spellchecker_sources,
@@ -477,7 +484,7 @@ source_set("browser") {
   if (enable_nacl) {
     sources +=
         rebase_path(gypi_values.chrome_browser_nacl_sources, ".", "//chrome")
-    deps += [ "//components/nacl:nacl_browser" ]
+    deps += [ "//components/nacl/browser" ]
   }
 
   if (enable_configuration_policy) {
@@ -735,7 +742,10 @@ source_set("browser") {
     sources += rebase_path(gypi_values.chrome_browser_non_mobile_sources,
                            ".",
                            "//chrome")
-    deps += [ "//components/feedback" ]
+    deps += [
+      "//chrome/browser/profile_resetter:profile_reset_report_proto",
+      "//components/feedback",
+    ]
   }
 
   if (!is_chrome_branded) {
@@ -754,7 +764,7 @@ source_set("browser") {
     sources += rebase_path(gypi_values.chrome_browser_android_java_ui_sources,
                            ".",
                            "//chrome")
-    sources += rebase_path(gypi_values.chrome_browser_bookmark_android_sources,
+    sources += rebase_path(gypi_values.chrome_browser_offline_pages_sources,
                            ".",
                            "//chrome")
     deps += [
@@ -1111,8 +1121,6 @@ source_set("test_support") {
     "signin/fake_signin_manager_builder.h",
     "ssl/ssl_client_auth_requestor_mock.cc",
     "ssl/ssl_client_auth_requestor_mock.h",
-    "sync/profile_sync_service_mock.cc",
-    "sync/profile_sync_service_mock.h",
     "sync/profile_sync_test_util.cc",
     "sync/profile_sync_test_util.h",
   ]
@@ -1129,6 +1137,7 @@ source_set("test_support") {
     "//chrome/browser",
     "//chrome/common",
     "//chrome/common/safe_browsing:proto",
+    "//components/browser_sync/browser:test_support",
     "//components/invalidation/impl",
     "//components/invalidation/impl:test_support",
     "//components/password_manager/core/browser:test_support",

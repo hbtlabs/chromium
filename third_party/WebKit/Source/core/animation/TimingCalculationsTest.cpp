@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/animation/TimingCalculations.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -93,6 +92,8 @@ TEST(AnimationTimingCalculationsTest, ScaledActiveTime)
     timing.playbackRate = 0;
     EXPECT_EQ(0, calculateScaledActiveTime(std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(), 0, timing));
     timing.playbackRate = 1;
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), calculateScaledActiveTime(std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(), 0, timing));
+    timing.playbackRate = -1;
     EXPECT_EQ(std::numeric_limits<double>::infinity(), calculateScaledActiveTime(std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(), 0, timing));
 }
 

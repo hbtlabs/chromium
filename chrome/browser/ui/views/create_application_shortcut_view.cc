@@ -4,14 +4,17 @@
 
 #include "chrome/browser/ui/views/create_application_shortcut_view.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -393,9 +396,9 @@ bool CreateApplicationShortcutView::Accept() {
   creation_locations.in_quick_launch_bar = false;
 #endif
 
-  web_app::CreateShortcutsWithInfo(web_app::SHORTCUT_CREATION_BY_USER,
-                                   creation_locations, shortcut_info_.Pass(),
-                                   file_handlers_info_);
+  web_app::CreateShortcutsWithInfo(
+      web_app::SHORTCUT_CREATION_BY_USER, creation_locations,
+      std::move(shortcut_info_), file_handlers_info_);
   return true;
 }
 
@@ -555,6 +558,6 @@ bool CreateChromeApplicationShortcutView::Cancel() {
 void CreateChromeApplicationShortcutView::OnAppInfoLoaded(
     scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
-  shortcut_info_ = shortcut_info.Pass();
+  shortcut_info_ = std::move(shortcut_info);
   file_handlers_info_ = file_handlers_info;
 }

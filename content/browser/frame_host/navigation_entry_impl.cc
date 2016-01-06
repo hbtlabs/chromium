@@ -4,12 +4,16 @@
 
 #include "content/browser/frame_host/navigation_entry_impl.h"
 
+#include <stddef.h>
+
 #include <queue>
 
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
+#include "content/common/content_constants_internal.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_state_serialization.h"
 #include "content/common/site_isolation_policy.h"
@@ -125,11 +129,11 @@ NavigationEntryImpl::TreeNode::CloneAndReplace(
         child->CloneAndReplace(frame_tree_node, frame_navigation_entry));
   }
 
-  return copy.Pass();
+  return copy;
 }
 
 scoped_ptr<NavigationEntry> NavigationEntry::Create() {
-  return make_scoped_ptr(new NavigationEntryImpl()).Pass();
+  return make_scoped_ptr(new NavigationEntryImpl());
 }
 
 NavigationEntryImpl* NavigationEntryImpl::FromNavigationEntry(
@@ -211,6 +215,23 @@ const GURL& NavigationEntryImpl::GetBaseURLForDataURL() const {
   return base_url_for_data_url_;
 }
 
+#if defined(OS_ANDROID)
+void NavigationEntryImpl::SetDataURLAsString(
+    scoped_refptr<base::RefCountedString> data_url) {
+  if (data_url) {
+    // A quick check that it's actually a data URL.
+    DCHECK(base::StartsWith(data_url->front_as<char>(), url::kDataScheme,
+                            base::CompareCase::SENSITIVE));
+  }
+  data_url_as_string_ = data_url;
+}
+
+const scoped_refptr<const base::RefCountedString>
+NavigationEntryImpl::GetDataURLAsString() const {
+  return data_url_as_string_;
+}
+#endif
+
 void NavigationEntryImpl::SetReferrer(const Referrer& referrer) {
   frame_tree_->frame_entry->set_referrer(referrer);
 }
@@ -285,7 +306,7 @@ void NavigationEntryImpl::SetPageID(int page_id) {
   page_id_ = page_id;
 }
 
-int32 NavigationEntryImpl::GetPageID() const {
+int32_t NavigationEntryImpl::GetPageID() const {
   return page_id_;
 }
 
@@ -374,11 +395,11 @@ bool NavigationEntryImpl::GetHasPostData() const {
   return has_post_data_;
 }
 
-void NavigationEntryImpl::SetPostID(int64 post_id) {
+void NavigationEntryImpl::SetPostID(int64_t post_id) {
   post_id_ = post_id;
 }
 
-int64 NavigationEntryImpl::GetPostID() const {
+int64_t NavigationEntryImpl::GetPostID() const {
   return post_id_;
 }
 
@@ -520,6 +541,9 @@ scoped_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->extra_headers_ = extra_headers_;
   // ResetForCommit: source_site_instance_
   copy->base_url_for_data_url_ = base_url_for_data_url_;
+#if defined(OS_ANDROID)
+  copy->data_url_as_string_ = data_url_as_string_;
+#endif
   // ResetForCommit: is_renderer_initiated_
   copy->cached_display_title_ = cached_display_title_;
   // ResetForCommit: transferred_global_request_id_
@@ -530,7 +554,7 @@ scoped_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   // ResetForCommit: intent_received_timestamp_
   copy->extra_data_ = extra_data_;
 
-  return copy.Pass();
+  return copy;
 }
 
 CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
@@ -601,12 +625,29 @@ RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
     current_offset_to_send = -1;
     current_length_to_send = 0;
   }
-  return RequestNavigationParams(
+
+  RequestNavigationParams request_params(
       GetIsOverridingUserAgent(), redirects, GetCanLoadLocalResources(),
       base::Time::Now(), frame_entry.page_state(), GetPageID(), GetUniqueID(),
       is_same_document_history_load, has_committed_real_load,
       intended_as_new_entry, pending_offset_to_send, current_offset_to_send,
-      current_length_to_send, should_clear_history_list());
+      current_length_to_send, IsViewSourceMode(), should_clear_history_list());
+#if defined(OS_ANDROID)
+  if (GetDataURLAsString() &&
+      GetDataURLAsString()->size() <= kMaxLengthOfDataURLString) {
+    // The number of characters that is enough for validating a data: URI.  From
+    // the GURL's POV, the only important part here is scheme, it doesn't check
+    // the actual content. Thus we can take only the prefix of the url, to avoid
+    // unneeded copying of a potentially long string.
+    const size_t kDataUriPrefixMaxLen = 64;
+    GURL data_url(std::string(
+        GetDataURLAsString()->front_as<char>(),
+        std::min(GetDataURLAsString()->size(), kDataUriPrefixMaxLen)));
+    if (data_url.is_valid() && data_url.SchemeIs(url::kDataScheme))
+      request_params.data_url_as_string = GetDataURLAsString()->data();
+  }
+#endif
+  return request_params;
 }
 
 void NavigationEntryImpl::ResetForCommit() {
@@ -633,8 +674,8 @@ void NavigationEntryImpl::ResetForCommit() {
 void NavigationEntryImpl::AddOrUpdateFrameEntry(
     FrameTreeNode* frame_tree_node,
     const std::string& frame_unique_name,
-    int64 item_sequence_number,
-    int64 document_sequence_number,
+    int64_t item_sequence_number,
+    int64_t document_sequence_number,
     SiteInstanceImpl* site_instance,
     const GURL& url,
     const Referrer& referrer,

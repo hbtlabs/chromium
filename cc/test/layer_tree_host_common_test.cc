@@ -4,6 +4,8 @@
 
 #include "cc/test/layer_tree_host_common_test.h"
 
+#include <stddef.h>
+
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -11,11 +13,12 @@
 #include "cc/trees/layer_tree_host_common.h"
 
 namespace cc {
-
 LayerTreeHostCommonTestBase::LayerTreeHostCommonTestBase(
     const LayerTreeSettings& settings)
     : LayerTestCommon::LayerImplTest(settings),
       render_surface_layer_list_count_(0) {
+  layer_settings_.use_compositor_animation_timelines =
+      settings.use_compositor_animation_timelines;
 }
 
 LayerTreeHostCommonTestBase::~LayerTreeHostCommonTestBase() {
@@ -41,13 +44,26 @@ void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
     const gfx::PointF& position,
     const gfx::Size& bounds,
     bool flatten_transform,
+    bool is_3d_sorted) {
+  SetLayerPropertiesForTestingInternal(layer, transform, transform_origin,
+                                       position, bounds, flatten_transform,
+                                       is_3d_sorted);
+}
+
+void LayerTreeHostCommonTestBase::SetLayerPropertiesForTesting(
+    LayerImpl* layer,
+    const gfx::Transform& transform,
+    const gfx::Point3F& transform_origin,
+    const gfx::PointF& position,
+    const gfx::Size& bounds,
+    bool flatten_transform,
     bool is_3d_sorted,
     bool create_render_surface) {
   SetLayerPropertiesForTestingInternal(layer, transform, transform_origin,
                                        position, bounds, flatten_transform,
                                        is_3d_sorted);
   if (create_render_surface) {
-    layer->SetHasRenderSurface(true);
+    layer->SetForceRenderSurface(true);
   }
 }
 
@@ -83,11 +99,8 @@ void LayerTreeHostCommonTestBase::
   LayerTreeHostCommon::PreCalculateMetaInformation(root_layer);
 
   gfx::Transform identity_transform;
-  bool preserves_2d_axis_alignment = false;
+
   bool can_render_to_separate_surface = true;
-  LayerTreeHostCommon::UpdateRenderSurfaces(
-      root_layer, can_render_to_separate_surface, identity_transform,
-      preserves_2d_axis_alignment);
 
   Layer* page_scale_layer = nullptr;
   Layer* inner_viewport_scroll_layer =
@@ -118,7 +131,9 @@ void LayerTreeHostCommonTestBase::
   LayerTreeHostCommon::PreCalculateMetaInformationForTesting(root_layer);
 
   gfx::Transform identity_transform;
+
   bool can_render_to_separate_surface = true;
+
   LayerImpl* page_scale_layer = nullptr;
   LayerImpl* inner_viewport_scroll_layer =
       root_layer->layer_tree_impl()->InnerViewportScrollLayer();
@@ -134,14 +149,15 @@ void LayerTreeHostCommonTestBase::
   gfx::Size device_viewport_size =
       gfx::Size(root_layer->bounds().width() * device_scale_factor,
                 root_layer->bounds().height() * device_scale_factor);
-  std::vector<LayerImpl*> update_layer_list;
+  update_layer_list_impl_.reset(new LayerImplList);
   BuildPropertyTreesAndComputeVisibleRects(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor,
       gfx::Rect(device_viewport_size), identity_transform,
       can_render_to_separate_surface,
-      root_layer->layer_tree_impl()->property_trees(), &update_layer_list);
+      root_layer->layer_tree_impl()->property_trees(),
+      update_layer_list_impl_.get());
 }
 
 void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
@@ -211,9 +227,15 @@ bool LayerTreeHostCommonTestBase::UpdateLayerListContains(int id) const {
   return false;
 }
 
+class LayerTreeSettingsForCommonTest : public LayerTreeSettings {
+ public:
+  LayerTreeSettingsForCommonTest() {
+    use_compositor_animation_timelines = true;
+  }
+};
+
 LayerTreeHostCommonTest::LayerTreeHostCommonTest()
-    : LayerTreeHostCommonTestBase(LayerTreeSettings()) {
-}
+    : LayerTreeHostCommonTestBase(LayerTreeSettingsForCommonTest()) {}
 
 LayerTreeHostCommonTest::LayerTreeHostCommonTest(
     const LayerTreeSettings& settings)

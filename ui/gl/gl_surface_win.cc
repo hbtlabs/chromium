@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/windows_version.h"
@@ -312,7 +313,7 @@ scoped_refptr<GLSurface> GLSurface::CreateViewGLSurface(
           new NativeViewGLSurfaceEGL(window));
       scoped_ptr<VSyncProvider> sync_provider;
       sync_provider.reset(new WinVSyncProvider(window));
-      if (!surface->Initialize(sync_provider.Pass()))
+      if (!surface->Initialize(std::move(sync_provider)))
         return NULL;
 
       return surface;

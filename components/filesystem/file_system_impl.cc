@@ -4,6 +4,9 @@
 
 #include "components/filesystem/file_system_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -11,6 +14,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/file_system_app.h"
 #include "mojo/application/public/cpp/application_connection.h"
@@ -46,8 +50,7 @@ FileSystemImpl::FileSystemImpl(FileSystemApp* app,
                                mojo::InterfaceRequest<FileSystem> request)
     : app_(app),
       remote_application_url_(connection->GetRemoteApplicationURL()),
-      binding_(this, request.Pass()) {
-}
+      binding_(this, std::move(request)) {}
 
 FileSystemImpl::~FileSystemImpl() {
 }
@@ -85,8 +88,8 @@ void FileSystemImpl::OpenFileSystem(const mojo::String& file_system,
 
   if (!path.empty()) {
     DirectoryImpl* dir_impl =
-        new DirectoryImpl(directory.Pass(), path, temp_dir.Pass());
-    app_->RegisterDirectoryToClient(dir_impl, client.Pass());
+        new DirectoryImpl(std::move(directory), path, std::move(temp_dir));
+    app_->RegisterDirectoryToClient(dir_impl, std::move(client));
     callback.Run(FILE_ERROR_OK);
   } else {
     callback.Run(FILE_ERROR_FAILED);

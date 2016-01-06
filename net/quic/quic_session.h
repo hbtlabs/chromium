@@ -7,12 +7,15 @@
 #ifndef NET_QUIC_QUIC_SESSION_H_
 #define NET_QUIC_QUIC_SESSION_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_endpoint.h"
@@ -146,19 +149,22 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   QuicConnection* connection() { return connection_.get(); }
   const QuicConnection* connection() const { return connection_.get(); }
   size_t num_active_requests() const { return dynamic_stream_map_.size(); }
-  const IPEndPoint& peer_address() const {
-    return connection_->peer_address();
-  }
+  const IPEndPoint& peer_address() const { return connection_->peer_address(); }
   QuicConnectionId connection_id() const {
     return connection_->connection_id();
   }
 
   // Returns the number of currently open streams, excluding the reserved
-  // headers and crypto streams.
-  virtual size_t GetNumOpenStreams() const;
-
-  // Same as GetNumOpenStreams(), but never counting unfinished streams.
+  // headers and crypto streams, and never counting unfinished streams.
   virtual size_t GetNumActiveStreams() const;
+
+  // Returns the number of currently open peer initiated streams, excluding the
+  // reserved headers and crypto streams.
+  virtual size_t GetNumOpenIncomingStreams() const;
+
+  // Returns the number of currently open self initiated streams, excluding the
+  // reserved headers and crypto streams.
+  virtual size_t GetNumOpenOutgoingStreams() const;
 
   // Returns the number of "available" streams, the stream ids less than
   // largest_peer_created_stream_id_ that have not yet been opened.
@@ -202,7 +208,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   void StreamDraining(QuicStreamId id);
 
   // Close the connection, if it is not already closed.
-  void CloseConnection(QuicErrorCode error);
+  void CloseConnectionWithDetails(QuicErrorCode error, const char* details);
 
  protected:
   typedef base::hash_map<QuicStreamId, ReliableQuicStream*> StreamMap;
@@ -214,12 +220,14 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   // Create a new stream, owned by the caller, to handle a locally-initiated
   // stream.  Returns nullptr if max streams have already been opened.
-  virtual ReliableQuicStream* CreateOutgoingDynamicStream() = 0;
+  virtual ReliableQuicStream* CreateOutgoingDynamicStream(
+      SpdyPriority priority) = 0;
 
   // Return the reserved crypto stream.
   virtual QuicCryptoStream* GetCryptoStream() = 0;
 
-  // Adds 'stream' to the active stream map.
+  // Adds |stream| to the dynamic stream map.
+  // Takes ownership of |stream|.
   virtual void ActivateStream(ReliableQuicStream* stream);
 
   // Returns the stream ID for a new outgoing stream, and increments the
@@ -255,6 +263,19 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
     largest_peer_created_stream_id_ = largest_peer_created_stream_id;
   }
   void set_error(QuicErrorCode error) { error_ = error; }
+  QuicWriteBlockedList* write_blocked_streams() {
+    return &write_blocked_streams_;
+  }
+
+  size_t GetNumDynamicOutgoingStreams() const;
+
+  size_t GetNumDrainingOutgoingStreams() const;
+
+  size_t num_locally_closed_incoming_streams_highest_offset() const {
+    return num_locally_closed_incoming_streams_highest_offset_;
+  }
+
+  size_t GetNumLocallyClosedOutgoingStreamsHighestOffset() const;
 
  private:
   friend class test::QuicSessionPeer;
@@ -269,7 +290,8 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // When this data arrives (via stream frame w. FIN, or RST) this method
   // is called, and correctly updates the connection level flow controller.
   void UpdateFlowControlOnFinalReceivedByteOffset(
-      QuicStreamId id, QuicStreamOffset final_byte_offset);
+      QuicStreamId id,
+      QuicStreamOffset final_byte_offset);
 
   // Called in OnConfigNegotiated when we receive a new stream level flow
   // control window in a negotiated config. Closes the connection if invalid.
@@ -286,6 +308,9 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // Called in OnConfigNegotiated for finch trials to measure performance of
   // starting with smaller flow control receive windows and auto-tuning.
   void AdjustInitialFlowControlWindows(size_t stream_window);
+
+  // Return true if given stream is peer initiated.
+  bool IsIncomingStream(QuicStreamId id) const;
 
   // Keep track of highest received byte offset of locally closed streams, while
   // waiting for a definitive final highest offset from the peer.
@@ -309,7 +334,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // that create these streams.
   StreamMap static_stream_map_;
 
-  // Map from StreamId to pointers to streams that are owned by the caller.
+  // Map from StreamId to pointers to streams. Owns the streams.
   StreamMap dynamic_stream_map_;
 
   // The ID to use for the next outgoing stream.
@@ -328,6 +353,16 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   QuicWriteBlockedList write_blocked_streams_;
 
   QuicStreamId largest_peer_created_stream_id_;
+
+  // A counter for peer initiated streams which are in the dynamic_stream_map_.
+  size_t num_dynamic_incoming_streams_;
+
+  // A counter for peer initiated streams which are in the draining_streams_.
+  size_t num_draining_incoming_streams_;
+
+  // A counter for peer initiated streams which are in the
+  // locally_closed_streams_highest_offset_.
+  size_t num_locally_closed_incoming_streams_highest_offset_;
 
   // The latched error with which the connection was closed.
   QuicErrorCode error_;

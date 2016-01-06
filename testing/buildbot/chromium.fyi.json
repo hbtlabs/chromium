@@ -257,6 +257,24 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "blimp_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_heap_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_platform_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cacheinvalidation_unittests"
       },
       {
@@ -357,6 +375,21 @@
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gin_unittests"
+      },
+      {
+        "test": "gl_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "gn_unittests"
       },
       {
         "swarming": {
@@ -521,7 +554,19 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "webkit_unit_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "wm_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "wtf_unittests"
       }
     ]
   },
@@ -1267,13 +1312,6 @@
         "test": "blink_platform_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 5
-        },
-        "test": "browser_tests"
-      },
-      {
         "test": "cacheinvalidation_unittests"
       },
       {
@@ -1283,19 +1321,10 @@
         "test": "cc_unittests"
       },
       {
-        "test": "components_unittests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "content_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_unittests"
       },
       {
         "swarming": {
@@ -1313,9 +1342,6 @@
         "test": "extensions_browsertests"
       },
       {
-        "test": "extensions_unittests"
-      },
-      {
         "test": "gcm_unit_tests"
       },
       {
@@ -1331,32 +1357,13 @@
         "test": "gpu_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "test": "ipc_tests"
-      },
-      {
         "test": "jingle_unittests"
       },
       {
         "test": "media_blink_unittests"
       },
       {
-        "test": "media_unittests"
-      },
-      {
         "test": "midi_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 4
-        },
-        "test": "net_unittests"
       },
       {
         "test": "ppapi_unittests"
@@ -1377,32 +1384,10 @@
         "test": "sql_unittests"
       },
       {
-        "test": "sync_unit_tests"
-      },
-      {
         "test": "ui_base_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 2
-        },
-        "test": "unit_tests"
-      },
-      {
         "test": "url_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "wtf_unittests"
       }
     ]
   },
@@ -1438,7 +1423,8 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "shards": 10
         },
         "test": "browser_tests"
       },
@@ -1804,6 +1790,9 @@
         "test": "sync_unit_tests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ui_base_unittests"
       },
       {
@@ -1826,38 +1815,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "wtf_unittests"
-      }
-    ],
-    "isolated_scripts": [
-      {
-        "isolate_name": "telemetry_gpu_unittests",
-        "name": "telemetry_gpu_unittests",
-        "override_compile_targets": [
-          "telemetry_gpu_unittests_run"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        }
-      },
-      {
-        "isolate_name": "telemetry_perf_unittests",
-        "name": "telemetry_perf_unittests",
-        "override_compile_targets": [
-          "telemetry_perf_unittests_run"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        }
-      },
-      {
-        "isolate_name": "telemetry_unittests",
-        "name": "telemetry_unittests",
-        "override_compile_targets": [
-          "telemetry_unittests_run"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        }
       }
     ],
     "scripts": [
@@ -3282,13 +3239,6 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
@@ -3451,12 +3401,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "ui_base_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "unit_tests"
       },
       {
         "swarming": {
@@ -5701,15 +5645,39 @@
     "gtest_tests": [
       {
         "args": [
+          "--site-per-process"
+        ],
+        "test": "app_shell_unittests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "blimp_unittests"
+      },
+      {
+        "args": [
           "--site-per-process",
-          "--gtest_filter=-BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:ErrorPageTest.*:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:IsolatedAppTest.*:MimeHandlerViewTest.*:*PDFExtensionTest.*:PhishingDOMFeatureExtractorTest.SubFrames:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.ClientEmptyReferer:ReferrerPolicyTest.HttpsRedirect:*.RestoreWebUISettings:SSLUITest.TestGoodFrameNavigation:SSLUITest.TestMarkNonSecureAs:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:*.NavigateFromNTPToOptionsInSameTab:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTestInstance/RestoreOnStartupPolicyTest.RunTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
+          "--test-launcher-filter-file=src/testing/buildbot/filters/site-per-process.browser_tests.filter"
         ],
         "test": "browser_tests"
       },
       {
         "args": [
+          "--site-per-process"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
           "--site-per-process",
-          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:*.RestoreSubframeFileAccessForHistoryNavigation"
+          "--test-launcher-filter-file=src/testing/buildbot/filters/site-per-process.content_browsertests.filter"
         ],
         "test": "content_browsertests"
       },
@@ -5721,8 +5689,37 @@
       },
       {
         "args": [
-          "--site-per-process",
-          "--gtest_filter=-CaptivePortalTabHelperTest.HttpsSubframe*"
+          "--site-per-process"
+        ],
+        "test": "extensions_browsertests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "extensions_unittests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "interactive_ui_tests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "nacl_loader_unittests"
+      },
+      {
+        "args": [
+          "--site-per-process"
+        ],
+        "test": "sync_integration_tests"
+      },
+      {
+        "args": [
+          "--site-per-process"
         ],
         "test": "unit_tests"
       }
@@ -5732,15 +5729,39 @@
     "gtest_tests": [
       {
         "args": [
-          "--site-per-process",
-          "--gtest_filter=-BrowserTest.InterstitialCancelsGuestViewDialogs:BrowserTest.OtherRedirectsDontForkProcess:BrowserTest.WindowOpenClose:ChromeRenderProcessHostTest.*:ChromeRenderProcessHostTestWithCommandLine.*:ErrorPageTest.*:ExtensionApiTest.Tabs2:ExtensionApiTest.TabsOnUpdated:ExtensionOptionsApiTest.ExtensionCanEmbedOwnOptions:IsolatedAppTest.*:MimeHandlerViewTest.*:*PDFExtensionTest.*:PhishingDOMFeatureExtractorTest.SubFrames:PrerenderBrowserTest.*:ProcessManagementTest.*:RedirectTest.ClientEmptyReferer:ReferrerPolicyTest.HttpsRedirect:*.RestoreWebUISettings:SSLUITest.TestGoodFrameNavigation:SSLUITest.TestMarkNonSecureAs:WebNavigationApiTest.CrossProcessFragment:WebNavigationApiTest.ServerRedirectSingleProcess:WebNavigationApiTest.CrossProcessHistory:WebViewDPITest.*:WebViewPluginTest.*:WebViewTest.AcceptTouchEvents:WebViewTest.IndexedDBIsolation:WebViewTest.ScreenCoordinates:WebViewTest.ContextMenusAPI_PreventDefault:WebViewTest.TestContextMenu:WebViewTest.NestedGuestContainerBounds:WebViewFocusTest.*:WebViewNewWindowTest.*:WebViewVisibilityTest.*:*.NavigateFromNTPToOptionsInSameTab:*.TabMove:*.WhitelistedExtension:*.NewTabPageURL:*.HomepageLocation:RestoreOnStartupPolicyTestInstance/RestoreOnStartupPolicyTest.RunTest*:PhishingClassifierDelegateTest.*:WebUIWebViewBrowserTest*:WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs:SingleProcessTracingBrowserTest.TestMemoryInfra"
+          "--isolate-extensions"
+        ],
+        "test": "app_shell_unittests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "ash_unittests"
+      },
+      {
+        "args": [
+          "--isolate-extensions",
+          "--gtest_filter=-PhishingClassifierDelegateTest.*:WebNavigationApiTest.*"
         ],
         "test": "browser_tests"
       },
       {
         "args": [
+          "--isolate-extensions"
+        ],
+        "test": "components_browsertests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "components_unittests"
+      },
+      {
+        "args": [
           "--site-per-process",
-          "--gtest_filter=-*.PopupPendingAndBackToSameSiteInstance:SessionHistoryTest.CrossFrameFormBackForward:SessionHistoryTest.FrameBackForward:DevToolsProtocolTest.NavigationPreservesMessages:NavigationControllerBrowserTest.ReloadOriginalRequest:*.RestoreSubframeFileAccessForHistoryNavigation"
+          "--gtest_filter=-SessionHistoryTest.FrameBackForward:NavigationControllerBrowserTest.ReloadOriginalRequest:*.RestoreSubframeFileAccessForHistoryNavigation"
         ],
         "test": "content_browsertests"
       },
@@ -5752,8 +5773,43 @@
       },
       {
         "args": [
-          "--site-per-process",
-          "--gtest_filter=-CaptivePortalTabHelperTest.HttpsSubframe*"
+          "--isolate-sites-for-testing=chrome-extension://*"
+        ],
+        "test": "extensions_browsertests"
+      },
+      {
+        "args": [
+          "--isolate-sites-for-testing=chrome-extension://*"
+        ],
+        "test": "extensions_unittests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "installer_util_unittests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "interactive_ui_tests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "nacl_loader_unittests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
+        ],
+        "test": "sync_integration_tests"
+      },
+      {
+        "args": [
+          "--isolate-extensions"
         ],
         "test": "unit_tests"
       }

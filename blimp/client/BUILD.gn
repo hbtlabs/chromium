@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ui.gni")
+
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
@@ -10,6 +12,8 @@ if (is_android) {
 component("blimp_client") {
   sources = [
     "blimp_client_export.h",
+    "blimp_startup.cc",
+    "blimp_startup.h",
     "compositor/blimp_compositor.cc",
     "compositor/blimp_compositor.h",
     "compositor/blimp_context_provider.cc",
@@ -18,15 +22,27 @@ component("blimp_client") {
     "compositor/blimp_layer_tree_settings.h",
     "compositor/blimp_output_surface.cc",
     "compositor/blimp_output_surface.h",
-    "compositor/render_widget_message_processor.cc",
-    "compositor/render_widget_message_processor.h",
     "compositor/test/dummy_layer_driver.cc",
     "compositor/test/dummy_layer_driver.h",
-    "navigation_message_processor.cc",
-    "navigation_message_processor.h",
+    "input/blimp_input_handler_wrapper.cc",
+    "input/blimp_input_handler_wrapper.h",
+    "input/blimp_input_manager.cc",
+    "input/blimp_input_manager.h",
+    "session/blimp_client_session.cc",
+    "session/blimp_client_session.h",
+    "session/navigation_feature.cc",
+    "session/navigation_feature.h",
+    "session/render_widget_feature.cc",
+    "session/render_widget_feature.h",
+    "session/tab_control_feature.cc",
+    "session/tab_control_feature.h",
   ]
 
   defines = [ "BLIMP_CLIENT_IMPLEMENTATION=1" ]
+
+  public_deps = [
+    "//ui/events",
+  ]
 
   deps = [
     "//base",
@@ -38,6 +54,9 @@ component("blimp_client") {
     "//gpu/command_buffer/client:gl_in_process_context",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/skia_bindings",
+    "//net",
+    "//ui/events/blink",
+    "//ui/events/gestures/blink",
     "//ui/gfx/geometry",
     "//ui/gl",
     "//url:url",
@@ -48,8 +67,9 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "compositor/render_widget_message_processor_unittest.cc",
-    "navigation_message_processor_unittest.cc",
+    "session/navigation_feature_unittest.cc",
+    "session/render_widget_feature_unittest.cc",
+    "session/tab_control_feature_unittest.cc",
   ]
 
   deps = [
@@ -66,6 +86,32 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+}
+
+if (is_linux && !is_chromeos && use_x11) {
+  executable("blimp_shell") {
+    sources = [
+      "linux/blimp_display_manager.cc",
+      "linux/blimp_display_manager.h",
+      "linux/blimp_main.cc",
+      "session/blimp_client_session_linux.cc",
+      "session/blimp_client_session_linux.h",
+    ]
+
+    deps = [
+      ":blimp_client",
+      "//base",
+      "//blimp/net:blimp_net",
+      "//net",
+      "//ui/events/platform/x11",
+      "//ui/platform_window/x11",
+    ]
+
+    public_configs = [ "//build/config/linux:x11" ]
+    public_deps = [
+      "//ui/events/platform/x11",
+    ]
+  }
 }
 
 if (is_android) {
@@ -92,6 +138,8 @@ if (is_android) {
     sources = [
       "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
+      "android/java/src/org/chromium/blimp/session/TabControlFeature.java",
       "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
     ]
 
@@ -175,6 +223,8 @@ if (is_android) {
       "android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "android/java/src/org/chromium/blimp/BlimpView.java",
+      "android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
+      "android/java/src/org/chromium/blimp/session/TabControlFeature.java",
       "android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
       "android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
     ]
@@ -202,6 +252,7 @@ if (is_android) {
       ":blimp_client",
       ":jni_headers",
       "//base",
+      "//blimp/common/proto",
       "//blimp/net:blimp_net",
       "//skia",
       "//ui/gfx/geometry",
@@ -220,6 +271,10 @@ if (is_android) {
       "android/toolbar.h",
       "compositor/blimp_compositor_android.cc",
       "compositor/blimp_compositor_android.h",
+      "session/blimp_client_session_android.cc",
+      "session/blimp_client_session_android.h",
+      "session/tab_control_feature_android.cc",
+      "session/tab_control_feature_android.h",
     ]
 
     libs = [ "android" ]

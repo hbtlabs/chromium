@@ -24,7 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/testing/Internals.h"
 
 #include "bindings/core/v8/ExceptionMessages.h"
@@ -46,6 +45,7 @@
 #include "core/dom/ClientRect.h"
 #include "core/dom/ClientRectList.h"
 #include "core/dom/DOMArrayBuffer.h"
+#include "core/dom/DOMNodeIds.h"
 #include "core/dom/DOMPoint.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/Document.h"
@@ -145,6 +145,7 @@
 #include "wtf/PassOwnPtr.h"
 #include "wtf/dtoa.h"
 #include "wtf/text/StringBuffer.h"
+#include <deque>
 #include <v8.h>
 
 namespace blink {
@@ -1722,15 +1723,6 @@ ClientRectList* Internals::nonFastScrollableRects(Document* document, ExceptionS
     return page->nonFastScrollableRects(document->frame());
 }
 
-void Internals::garbageCollectDocumentResources(Document* document) const
-{
-    ASSERT(document);
-    ResourceFetcher* fetcher = document->fetcher();
-    if (!fetcher)
-        return;
-    fetcher->garbageCollectDocumentResources();
-}
-
 void Internals::evictAllResources() const
 {
     memoryCache()->evictResources();
@@ -1744,10 +1736,15 @@ String Internals::counterValue(Element* element)
     return counterValueForElement(element);
 }
 
-int Internals::pageNumber(Element* element, float pageWidth, float pageHeight)
+int Internals::pageNumber(Element* element, float pageWidth, float pageHeight, ExceptionState& exceptionState)
 {
     if (!element)
         return 0;
+
+    if (pageWidth <= 0 || pageHeight <= 0) {
+        exceptionState.throwDOMException(V8TypeError, "Page width and height must be larger than 0.");
+        return 0;
+    }
 
     return PrintContext::pageNumberForElement(element, FloatSize(pageWidth, pageHeight));
 }
@@ -1773,10 +1770,15 @@ Vector<String> Internals::allIconURLs(Document* document) const
     return iconURLs(document, Favicon | TouchIcon | TouchPrecomposedIcon);
 }
 
-int Internals::numberOfPages(float pageWidth, float pageHeight)
+int Internals::numberOfPages(float pageWidth, float pageHeight, ExceptionState& exceptionState)
 {
     if (!frame())
         return -1;
+
+    if (pageWidth <= 0 || pageHeight <= 0) {
+        exceptionState.throwDOMException(V8TypeError, "Page width and height must be larger than 0.");
+        return -1;
+    }
 
     return PrintContext::numberOfPages(frame(), FloatSize(pageWidth, pageHeight));
 }
@@ -1982,19 +1984,26 @@ void Internals::forceFullRepaint(Document* document, ExceptionState& exceptionSt
 void Internals::startTrackingPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking()->paintController()->startTrackingPaintInvalidationObjects();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    if (graphicsLayer->drawsContent())
+        graphicsLayer->paintController().startTrackingPaintInvalidationObjects();
 }
 
 void Internals::stopTrackingPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking()->paintController()->stopTrackingPaintInvalidationObjects();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    if (graphicsLayer->drawsContent())
+        graphicsLayer->paintController().stopTrackingPaintInvalidationObjects();
 }
 
 Vector<String> Internals::trackedPaintInvalidationObjects()
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    return toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking()->paintController()->trackedPaintInvalidationObjects();
+    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutView()->layer()->graphicsLayerBacking();
+    if (!graphicsLayer->drawsContent())
+        return Vector<String>();
+    return graphicsLayer->paintController().trackedPaintInvalidationObjects();
 }
 
 ClientRectList* Internals::draggableRegions(Document* document, ExceptionState& exceptionState)
@@ -2370,8 +2379,12 @@ void Internals::setNetworkStateNotifierTestOnly(bool testOnly)
 void Internals::setNetworkConnectionInfo(const String& type, double downlinkMaxMbps, ExceptionState& exceptionState)
 {
     WebConnectionType webtype;
-    if (type == "cellular") {
-        webtype = WebConnectionTypeCellular;
+    if (type == "cellular2g") {
+        webtype = WebConnectionTypeCellular2G;
+    } else if (type == "cellular3g") {
+        webtype = WebConnectionTypeCellular3G;
+    } else if (type == "cellular4g") {
+        webtype = WebConnectionTypeCellular4G;
     } else if (type == "bluetooth") {
         webtype = WebConnectionTypeBluetooth;
     } else if (type == "ethernet") {
@@ -2411,9 +2424,9 @@ unsigned Internals::canvasFontCacheMaxFonts()
 void Internals::setScrollChain(
     ScrollState* scrollState, const WillBeHeapVector<RefPtrWillBeMember<Element>>& elements, ExceptionState&)
 {
-    WillBeHeapDeque<RefPtrWillBeMember<Element>> scrollChain;
+    std::deque<int> scrollChain;
     for (size_t i = 0; i < elements.size(); ++i)
-        scrollChain.append(elements[i]);
+        scrollChain.push_back(DOMNodeIds::idForNode(elements[i].get()));
     scrollState->setScrollChain(scrollChain);
 }
 
@@ -2517,11 +2530,7 @@ bool Internals::setScrollbarVisibilityInScrollableArea(Node* node, bool visible)
     ScrollableArea* scrollableArea = layer->scrollableArea();
     if (!scrollableArea)
         return false;
-    ScrollAnimatorBase* animator = layer->scrollableArea()->scrollAnimator();
-    if (!animator)
-        return false;
-
-    return animator->setScrollbarsVisibleForTesting(visible);
+    return layer->scrollableArea()->scrollAnimator().setScrollbarsVisibleForTesting(visible);
 }
 
 void Internals::forceRestrictIFramePermissions()

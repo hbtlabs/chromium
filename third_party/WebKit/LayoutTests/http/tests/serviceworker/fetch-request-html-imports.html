@@ -2,8 +2,8 @@
 <title>Service Worker: FetchEvent for HTMLImports</title>
 <script src="../resources/testharness.js"></script>
 <script src="../resources/testharnessreport.js"></script>
-<script src="../resources/get-host-info.js"></script>
-<script src="resources/test-helpers.js?pipe=sub"></script>
+<script src="../resources/get-host-info.js?pipe=sub"></script>
+<script src="resources/test-helpers.js"></script>
 <script>
 async_test(function(t) {
     var SCOPE = 'resources/fetch-request-html-imports-iframe.html';
@@ -25,32 +25,32 @@ async_test(function(t) {
 
           assert_equals(
               same.body.innerText,
-              'mode=cors credentials=include',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for same origin HTMLImport ' +
               'must be set correctly.');
           assert_equals(
               same_same.body.innerText,
-              'mode=cors credentials=include',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for same origin HTMLImport ' +
               'from same origin HTMLImports must be set correctly.');
           assert_equals(
               same_other.body.innerText,
-              'mode=cors credentials=omit',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for other origin HTMLImport ' +
               'from same origin HTMLImports must be set correctly.');
           assert_equals(
               other.body.innerText,
-              'mode=cors credentials=omit',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for other origin HTMLImport ' +
               'must be set correctly.');
           assert_equals(
               other_same.body.innerText,
-              'mode=cors credentials=include',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for same origin HTMLImport ' +
               'from other origin HTMLImports must be set correctly.');
           assert_equals(
               other_other.body.innerText,
-              'mode=cors credentials=omit',
+              'mode=cors credentials=same-origin',
               'The request mode and credentials for other origin HTMLImport ' +
               'from other origin HTMLImport must be set correctly.');
 

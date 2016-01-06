@@ -4,6 +4,7 @@
 
 #include <windows.h>  // NOLINT
 #include <shlwapi.h>  // NOLINT
+#include <stddef.h>
 #include <userenv.h>  // NOLINT
 
 #include "chrome/app/main_dll_loader_win.h"
@@ -13,8 +14,10 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/environment.h"
+#include "base/files/memory_mapped_file.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -43,7 +46,6 @@
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/module_util_win.h"
 #include "chrome/installer/util/util_constants.h"
-#include "components/crash/content/app/crash_keys_win.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "components/crash/content/app/crashpad.h"
 #include "components/startup_metric_utils/browser/pre_read_field_trial_utils_win.h"
@@ -63,26 +65,44 @@ HMODULE LoadModuleWithDirectory(const base::FilePath& module, bool pre_read) {
   ::SetCurrentDirectoryW(module.DirName().value().c_str());
 
   // Get pre-read options from the PreRead field trial.
-  bool trial_should_pre_read = true;
-  bool trial_should_pre_read_high_priority = false;
+  bool trial_no_pre_read = false;
+  bool trial_high_priority = false;
+  bool trial_only_if_cold = false;
+  bool trial_prefetch_virtual_memory = false;
   startup_metric_utils::GetPreReadOptions(
       BrowserDistribution::GetDistribution()->GetRegistryPath(),
-      &trial_should_pre_read, &trial_should_pre_read_high_priority);
+      &trial_no_pre_read, &trial_high_priority, &trial_only_if_cold,
+      &trial_prefetch_virtual_memory);
 
-  if (pre_read && trial_should_pre_read) {
+  // Pre-read the binary to warm the memory caches (avoids a lot of random IO).
+  if (pre_read && !trial_no_pre_read) {
     base::ThreadPriority previous_priority = base::ThreadPriority::NORMAL;
-    if (trial_should_pre_read_high_priority) {
+    if (trial_high_priority) {
       previous_priority = base::PlatformThread::GetCurrentThreadPriority();
       base::PlatformThread::SetCurrentThreadPriority(
           base::ThreadPriority::DISPLAY);
     }
 
-    // We pre-read the binary to warm the memory caches (fewer hard faults to
-    // page parts of the binary in).
-    const size_t kStepSize = 1024 * 1024;
-    PreReadFile(module, kStepSize);
+    if (trial_only_if_cold) {
+      base::MemoryMappedFile module_memory_map;
+      const bool map_initialize_success = module_memory_map.Initialize(module);
+      DCHECK(map_initialize_success);
+      if (!IsMemoryMappedFileWarm(module_memory_map)) {
+        if (trial_prefetch_virtual_memory)
+          PreReadMemoryMappedFile(module_memory_map, module);
+        else
+          PreReadFile(module);
+      }
+    } else if (trial_prefetch_virtual_memory) {
+      base::MemoryMappedFile module_memory_map;
+      const bool map_initialize_success = module_memory_map.Initialize(module);
+      DCHECK(map_initialize_success);
+      PreReadMemoryMappedFile(module_memory_map, module);
+    } else {
+      PreReadFile(module);
+    }
 
-    if (trial_should_pre_read_high_priority)
+    if (trial_high_priority)
       base::PlatformThread::SetCurrentThreadPriority(previous_priority);
   }
 
@@ -103,6 +123,9 @@ void ClearDidRun(const base::FilePath& dll_path) {
 typedef int (*InitMetro)();
 
 #if defined(KASKO)
+
+// For ::GetProfileType().
+#pragma comment(lib, "userenv.lib")
 
 // Returns a string containing a list of all modifiers for the loaded profile.
 std::wstring GetProfileType() {
@@ -332,15 +355,6 @@ void ChromeDllLoader::OnBeforeLaunch(const std::string& process_type,
                     is_per_user_install)) {
               minidump_type = kasko::api::LARGER_DUMP_TYPE;
             }
-
-            // TODO(scottmg): http://crbug.com/564329 Breakpad is no longer
-            // initialized. For now, initialize the CustomInfoEntries here so
-            // Kasko can pull them out.
-            static breakpad::CrashKeysWin crash_keys_win;
-            crash_keys_win.GetCustomInfo(
-                exe_path.value(), base::UTF8ToUTF16(process_type),
-                GetProfileType(), base::CommandLine::ForCurrentProcess(),
-                &chrome_crash_client);
           }
 
           kasko_client_.reset(

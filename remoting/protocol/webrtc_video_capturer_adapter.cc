@@ -4,16 +4,18 @@
 
 #include "remoting/protocol/webrtc_video_capturer_adapter.h"
 
+#include <utility>
+
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 
 namespace remoting {
 
 // Number of frames to be captured per second.
-const int kFramesPerSec = 10;
+const int kFramesPerSec = 30;
 
 WebrtcVideoCapturerAdapter::WebrtcVideoCapturerAdapter(
     scoped_ptr<webrtc::DesktopCapturer> capturer)
-    : desktop_capturer_(capturer.Pass()) {
+    : desktop_capturer_(std::move(capturer)) {
   DCHECK(desktop_capturer_);
 
   thread_checker_.DetachFromThread();
@@ -77,7 +79,8 @@ cricket::CaptureState WebrtcVideoCapturerAdapter::Start(
     const cricket::VideoFormat& capture_format) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!capture_timer_);
-  DCHECK_EQ(capture_format.fourcc, (static_cast<uint32>(cricket::FOURCC_ARGB)));
+  DCHECK_EQ(capture_format.fourcc,
+            (static_cast<uint32_t>(cricket::FOURCC_ARGB)));
 
   if (!desktop_capturer_) {
     VLOG(1) << "WebrtcVideoCapturerAdapter failed to start.";
@@ -157,13 +160,13 @@ void WebrtcVideoCapturerAdapter::Stop() {
   DCHECK_NE(capture_state(), cricket::CS_STOPPED);
 
   capture_timer_.reset();
+  desktop_capturer_.reset();
 
   SetCaptureFormat(nullptr);
   SetCaptureState(cricket::CS_STOPPED);
 
   VLOG(1) << "WebrtcVideoCapturerAdapter stopped.";
 }
-
 
 bool WebrtcVideoCapturerAdapter::IsRunning() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -176,7 +179,7 @@ bool WebrtcVideoCapturerAdapter::IsScreencast() const {
 }
 
 bool WebrtcVideoCapturerAdapter::GetPreferredFourccs(
-    std::vector<uint32>* fourccs) {
+    std::vector<uint32_t>* fourccs) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!fourccs)
     return false;

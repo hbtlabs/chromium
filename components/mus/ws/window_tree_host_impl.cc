@@ -15,6 +15,7 @@
 #include "components/mus/ws/window_tree_impl.h"
 #include "mojo/common/common_type_converters.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
+#include "mojo/converters/input_events/input_events_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -28,6 +29,28 @@ base::TimeDelta GetDefaultAckTimerDelay() {
 #endif
 }
 
+bool EventsCanBeCoalesced(const mojom::Event& one, const mojom::Event& two) {
+  if (one.action != two.action || one.flags != two.flags)
+    return false;
+  // TODO(sad): wheel events can also be merged.
+  if (one.action != mojom::EVENT_TYPE_POINTER_MOVE)
+    return false;
+  DCHECK(one.pointer_data);
+  DCHECK(two.pointer_data);
+  if (one.pointer_data->kind != two.pointer_data->kind ||
+      one.pointer_data->pointer_id != two.pointer_data->pointer_id)
+    return false;
+
+  return true;
+}
+
+mojom::EventPtr CoalesceEvents(mojom::EventPtr first, mojom::EventPtr second) {
+  DCHECK_EQ(first->action, mojom::EVENT_TYPE_POINTER_MOVE)
+      << " Non-move events cannot be merged yet.";
+  // For mouse moves, the new event just replaces the old event.
+  return second;
+}
+
 }  // namespace
 
 WindowTreeHostImpl::WindowTreeHostImpl(
@@ -39,11 +62,11 @@ WindowTreeHostImpl::WindowTreeHostImpl(
     mojom::WindowManagerPtr window_manager)
     : delegate_(nullptr),
       connection_manager_(connection_manager),
-      client_(client.Pass()),
+      client_(std::move(client)),
       event_dispatcher_(this),
       display_manager_(
           DisplayManager::Create(app_impl, gpu_state, surfaces_state)),
-      window_manager_(window_manager.Pass()),
+      window_manager_(std::move(window_manager)),
       tree_awaiting_input_ack_(nullptr),
       last_cursor_(0) {
   display_manager_->Init(this);
@@ -63,6 +86,10 @@ void WindowTreeHostImpl::Init(WindowTreeHostDelegate* delegate) {
   delegate_ = delegate;
   if (delegate_ && root_)
     delegate_->OnDisplayInitialized();
+}
+
+const WindowTreeImpl* WindowTreeHostImpl::GetWindowTree() const {
+  return delegate_ ? delegate_->GetWindowTree() : nullptr;
 }
 
 WindowTreeImpl* WindowTreeHostImpl::GetWindowTree() {
@@ -133,9 +160,24 @@ void WindowTreeHostImpl::SetImeVisibility(ServerWindow* window, bool visible) {
   display_manager_->SetImeVisibility(visible);
 }
 
+void WindowTreeHostImpl::OnWindowTreeConnectionError(WindowTreeImpl* tree) {
+  if (tree_awaiting_input_ack_ != tree)
+    return;
+  // The WindowTree is dying. So it's not going to ack the event.
+  OnEventAck(tree_awaiting_input_ack_);
+}
+
 void WindowTreeHostImpl::OnCursorUpdated(ServerWindow* window) {
   if (window == event_dispatcher_.mouse_cursor_source_window())
     UpdateNativeCursor(window->cursor());
+}
+
+void WindowTreeHostImpl::MaybeChangeCursorOnWindowTreeChange() {
+  event_dispatcher_.UpdateCursorProviderByLastKnownLocation();
+  ServerWindow* cursor_source_window =
+      event_dispatcher_.mouse_cursor_source_window();
+  if (cursor_source_window)
+    UpdateNativeCursor(cursor_source_window->cursor());
 }
 
 void WindowTreeHostImpl::SetSize(mojo::SizePtr size) {
@@ -150,7 +192,7 @@ void WindowTreeHostImpl::AddAccelerator(
     uint32_t id,
     mojom::EventMatcherPtr event_matcher,
     const AddAcceleratorCallback& callback) {
-  bool success = event_dispatcher_.AddAccelerator(id, event_matcher.Pass());
+  bool success = event_dispatcher_.AddAccelerator(id, std::move(event_matcher));
   callback.Run(success);
 }
 
@@ -158,16 +200,16 @@ void WindowTreeHostImpl::RemoveAccelerator(uint32_t id) {
   event_dispatcher_.RemoveAccelerator(id);
 }
 
-void WindowTreeHostImpl::AddActivationParent(uint32_t window_id) {
-  ServerWindow* window =
-      connection_manager_->GetWindow(WindowIdFromTransportId(window_id));
+void WindowTreeHostImpl::AddActivationParent(Id transport_window_id) {
+  ServerWindow* window = connection_manager_->GetWindow(
+      MapWindowIdFromClient(transport_window_id));
   if (window)
     activation_parents_.insert(window->id());
 }
 
-void WindowTreeHostImpl::RemoveActivationParent(uint32_t window_id) {
-  ServerWindow* window =
-      connection_manager_->GetWindow(WindowIdFromTransportId(window_id));
+void WindowTreeHostImpl::RemoveActivationParent(Id transport_window_id) {
+  ServerWindow* window = connection_manager_->GetWindow(
+      MapWindowIdFromClient(transport_window_id));
   if (window)
     activation_parents_.erase(window->id());
 }
@@ -190,13 +232,20 @@ void WindowTreeHostImpl::SetUnderlaySurfaceOffsetAndExtendedHitArea(
   window->set_extended_hit_test_region(hit_area.To<gfx::Insets>());
 }
 
+WindowId WindowTreeHostImpl::MapWindowIdFromClient(
+    Id transport_window_id) const {
+  const WindowTreeImpl* connection = GetWindowTree();
+  return connection ? connection->MapWindowIdFromClient(transport_window_id)
+                    : WindowIdFromTransportId(transport_window_id);
+}
+
 void WindowTreeHostImpl::OnClientClosed() {
   // |display_manager_.reset()| destroys the display-manager first, and then
   // sets |display_manager_| to nullptr. However, destroying |display_manager_|
   // can destroy the corresponding WindowTreeHostConnection, and |this|. So
   // setting it to nullptr afterwards in reset() ends up writing on free'd
   // memory. So transfer over to a local scoped_ptr<> before destroying it.
-  scoped_ptr<DisplayManager> temp = display_manager_.Pass();
+  scoped_ptr<DisplayManager> temp = std::move(display_manager_);
 }
 
 void WindowTreeHostImpl::OnEventAck(mojom::WindowTree* tree) {
@@ -219,9 +268,9 @@ void WindowTreeHostImpl::OnEventAckTimeout() {
 void WindowTreeHostImpl::DispatchNextEventFromQueue() {
   if (event_queue_.empty())
     return;
-  mojom::EventPtr next_event = event_queue_.front().Pass();
+  mojom::EventPtr next_event = std::move(event_queue_.front());
   event_queue_.pop();
-  event_dispatcher_.OnEvent(next_event.Pass());
+  event_dispatcher_.OnEvent(std::move(next_event));
 }
 
 void WindowTreeHostImpl::UpdateNativeCursor(int32_t cursor_id) {
@@ -235,15 +284,21 @@ ServerWindow* WindowTreeHostImpl::GetRootWindow() {
   return root_.get();
 }
 
-void WindowTreeHostImpl::OnEvent(mojom::EventPtr event) {
+void WindowTreeHostImpl::OnEvent(const ui::Event& event) {
+  mojom::EventPtr mojo_event(mojom::Event::From(event));
   // If this is still waiting for an ack from a previously sent event, then
   // queue up the event to be dispatched once the ack is received.
   if (event_ack_timer_.IsRunning()) {
-    // TODO(sad): Coalesce if possible.
-    event_queue_.push(event.Pass());
+    if (!event_queue_.empty() &&
+        EventsCanBeCoalesced(*event_queue_.back(), *mojo_event)) {
+      event_queue_.back() =
+          CoalesceEvents(std::move(event_queue_.back()), std::move(mojo_event));
+      return;
+    }
+    event_queue_.push(std::move(mojo_event));
     return;
   }
-  event_dispatcher_.OnEvent(event.Pass());
+  event_dispatcher_.OnEvent(std::move(mojo_event));
 }
 
 void WindowTreeHostImpl::OnDisplayClosed() {
@@ -320,7 +375,7 @@ void WindowTreeHostImpl::OnFocusChanged(
                                                  new_focused_window);
     }
     embedded_connection_old =
-        connection_manager_->GetConnectionWithRoot(old_focused_window->id());
+        connection_manager_->GetConnectionWithRoot(old_focused_window);
     if (embedded_connection_old) {
       DCHECK_NE(owning_connection_old, embedded_connection_old);
       embedded_connection_old->ProcessFocusChanged(old_focused_window,
@@ -339,7 +394,7 @@ void WindowTreeHostImpl::OnFocusChanged(
                                                  new_focused_window);
     }
     embedded_connection_new =
-        connection_manager_->GetConnectionWithRoot(new_focused_window->id());
+        connection_manager_->GetConnectionWithRoot(new_focused_window);
     if (embedded_connection_new &&
         embedded_connection_new != owning_connection_old &&
         embedded_connection_new != embedded_connection_old) {
@@ -364,7 +419,7 @@ void WindowTreeHostImpl::OnFocusChanged(
 
 void WindowTreeHostImpl::OnAccelerator(uint32_t accelerator_id,
                                        mojom::EventPtr event) {
-  client()->OnAccelerator(accelerator_id, event.Pass());
+  client()->OnAccelerator(accelerator_id, std::move(event));
 }
 
 void WindowTreeHostImpl::SetFocusedWindowFromEventDispatcher(
@@ -394,13 +449,13 @@ void WindowTreeHostImpl::DispatchInputEventToWindow(ServerWindow* target,
   WindowTreeImpl* connection =
       in_nonclient_area
           ? connection_manager_->GetConnection(target->id().connection_id)
-          : connection_manager_->GetConnectionWithRoot(target->id());
+          : connection_manager_->GetConnectionWithRoot(target);
   if (!connection) {
     DCHECK(!in_nonclient_area);
     connection = connection_manager_->GetConnection(target->id().connection_id);
   }
   tree_awaiting_input_ack_ = connection;
-  connection->DispatchInputEvent(target, event.Pass());
+  connection->DispatchInputEvent(target, std::move(event));
 
   // TOOD(sad): Adjust this delay, possibly make this dynamic.
   const base::TimeDelta max_delay = base::debug::BeingDebugged()

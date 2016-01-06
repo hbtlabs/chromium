@@ -4,9 +4,14 @@
 
 #include "chrome/browser/extensions/external_install_error.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/extensions/extension_install_error_menu_item_id_provider.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/external_install_manager.h"
@@ -69,14 +74,17 @@ class ExternalInstallMenuAlert : public GlobalError {
   // The owning ExternalInstallError.
   ExternalInstallError* error_;
 
+  // Provides menu item id for GlobalError.
+  ExtensionInstallErrorMenuItemIdProvider id_provider_;
+
   DISALLOW_COPY_AND_ASSIGN(ExternalInstallMenuAlert);
 };
 
 // A global error that spawns a bubble when the menu item is clicked.
 class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
  public:
-  explicit ExternalInstallBubbleAlert(ExternalInstallError* error,
-                                      ExtensionInstallPrompt::Prompt* prompt);
+  ExternalInstallBubbleAlert(ExternalInstallError* error,
+                             ExtensionInstallPrompt::Prompt* prompt);
   ~ExternalInstallBubbleAlert() override;
 
  private:
@@ -99,8 +107,10 @@ class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
 
   // The owning ExternalInstallError.
   ExternalInstallError* error_;
+  ExtensionInstallErrorMenuItemIdProvider id_provider_;
 
   // The Prompt with all information, which we then use to populate the bubble.
+  // Owned by |error|.
   ExtensionInstallPrompt::Prompt* prompt_;
 
   DISALLOW_COPY_AND_ASSIGN(ExternalInstallBubbleAlert);
@@ -125,7 +135,7 @@ bool ExternalInstallMenuAlert::HasMenuItem() {
 }
 
 int ExternalInstallMenuAlert::MenuItemCommandID() {
-  return IDC_EXTERNAL_EXTENSION_ALERT;
+  return id_provider_.menu_command_id();
 }
 
 base::string16 ExternalInstallMenuAlert::MenuItemLabel() {
@@ -176,7 +186,7 @@ bool ExternalInstallBubbleAlert::HasMenuItem() {
 }
 
 int ExternalInstallBubbleAlert::MenuItemCommandID() {
-  return IDC_EXTERNAL_EXTENSION_ALERT;
+  return id_provider_.menu_command_id();
 }
 
 base::string16 ExternalInstallBubbleAlert::MenuItemLabel() {
@@ -280,8 +290,8 @@ ExternalInstallError::ExternalInstallError(
       error_service_(GlobalErrorServiceFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context_))),
       weak_factory_(this) {
-  prompt_ = new ExtensionInstallPrompt::Prompt(
-      ExtensionInstallPrompt::EXTERNAL_INSTALL_PROMPT);
+  prompt_.reset(new ExtensionInstallPrompt::Prompt(
+      ExtensionInstallPrompt::EXTERNAL_INSTALL_PROMPT));
 
   webstore_data_fetcher_.reset(new WebstoreDataFetcher(
       this, browser_context_->GetRequestContext(), GURL(), extension_id_));
@@ -303,7 +313,7 @@ void ExternalInstallError::InstallUIProceed() {
     // remove the error...
   } else {
     // ... Otherwise we have to do it explicitly.
-    manager_->RemoveExternalInstallError();
+    manager_->RemoveExternalInstallError(extension_id_);
   }
 }
 
@@ -319,7 +329,7 @@ void ExternalInstallError::InstallUIAbort(bool user_initiated) {
     // remove the error...
   } else {
     // ... Otherwise we have to do it explicitly.
-    manager_->RemoveExternalInstallError();
+    manager_->RemoveExternalInstallError(extension_id_);
   }
 }
 
@@ -332,7 +342,7 @@ void ExternalInstallError::ShowDialog(Browser* browser) {
   install_ui_show_params_.reset(
       new ExtensionInstallPromptShowParams(web_contents));
   ExtensionInstallPrompt::GetDefaultShowDialogCallback().Run(
-      install_ui_show_params_.get(), this, prompt_);
+      install_ui_show_params_.get(), this, std::move(prompt_));
 }
 
 const Extension* ExternalInstallError::GetExtension() const {
@@ -379,20 +389,19 @@ void ExternalInstallError::OnFetchComplete() {
       new ExtensionInstallPrompt(Profile::FromBrowserContext(browser_context_),
                                  NULL));  // NULL native window.
 
-  install_ui_->ConfirmExternalInstall(
-      this,
-      GetExtension(),
-      base::Bind(&ExternalInstallError::OnDialogReady,
-                 weak_factory_.GetWeakPtr()),
-      prompt_);
+  install_ui_->ShowDialog(this, GetExtension(),
+                          nullptr,  // Force a fetch of the icon.
+                          std::move(prompt_),
+                          base::Bind(&ExternalInstallError::OnDialogReady,
+                                     weak_factory_.GetWeakPtr()));
 }
 
 void ExternalInstallError::OnDialogReady(
     ExtensionInstallPromptShowParams* show_params,
     ExtensionInstallPrompt::Delegate* prompt_delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt) {
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   DCHECK_EQ(this, prompt_delegate);
-  prompt_ = prompt;
+  prompt_ = std::move(prompt);
 
   if (alert_type_ == BUBBLE_ALERT) {
     global_error_.reset(new ExternalInstallBubbleAlert(this, prompt_.get()));

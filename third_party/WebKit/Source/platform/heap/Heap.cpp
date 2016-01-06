@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/heap/Heap.h"
 
 #include "platform/ScriptForbiddenScope.h"
@@ -48,7 +47,6 @@
 #include "wtf/LeakAnnotations.h"
 #include "wtf/MainThread.h"
 #include "wtf/Partitions.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -397,9 +395,7 @@ void Heap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType gcType
 
     // Resume all parked threads upon leaving this scope.
     ResumeThreadScope resumeThreads(gcType);
-
-    if (state->isMainThread())
-        ScriptForbiddenScope::enter();
+    ScriptForbiddenIfMainThreadScope scriptForbidden;
 
     TRACE_EVENT2("blink_gc", "Heap::collectGarbage",
         "lazySweeping", gcType == BlinkGC::GCWithoutSweep,
@@ -462,9 +458,6 @@ void Heap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType gcType
         s_gcGeneration = 1;
     }
 #endif
-
-    if (state->isMainThread())
-        ScriptForbiddenScope::exit();
 }
 
 void Heap::collectGarbageForTerminatingThread(ThreadState* state)
@@ -661,7 +654,7 @@ BasePage* Heap::lookup(Address address)
 
 static Mutex& regionTreeMutex()
 {
-    AtomicallyInitializedStaticReference(Mutex, mutex, new Mutex);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
     return mutex;
 }
 

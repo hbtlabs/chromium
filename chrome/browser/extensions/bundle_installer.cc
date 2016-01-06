@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -185,11 +186,7 @@ void BundleInstaller::CompleteInstall(content::WebContents* web_contents,
         gfx::ImageSkia::CreateFrom1xBitmap(entry.second.icon);
 
     scoped_refptr<WebstoreInstaller> installer = new WebstoreInstaller(
-        profile_,
-        this,
-        web_contents,
-        entry.first,
-        approval.Pass(),
+        profile_, this, web_contents, entry.first, std::move(approval),
         WebstoreInstaller::INSTALL_SOURCE_OTHER);
     installer->Start();
   }
@@ -287,12 +284,19 @@ void BundleInstaller::ShowPrompt() {
     if (browser)
       web_contents = browser->tab_strip_model()->GetActiveWebContents();
     install_ui_.reset(new ExtensionInstallPrompt(web_contents));
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt;
     if (delegated_username_.empty()) {
-      install_ui_->ConfirmBundleInstall(this, &icon_, permissions.Pass());
+      prompt.reset(new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::BUNDLE_INSTALL_PROMPT));
     } else {
-      install_ui_->ConfirmPermissionsForDelegatedBundleInstall(
-          this, delegated_username_, &icon_, permissions.Pass());
+      prompt.reset(new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::DELEGATED_BUNDLE_PERMISSIONS_PROMPT));
+      prompt->set_delegated_username(delegated_username_);
     }
+    prompt->set_bundle(this);
+    install_ui_->ShowDialog(
+        this, nullptr, &icon_, std::move(prompt), std::move(permissions),
+        ExtensionInstallPrompt::GetDefaultShowDialogCallback());
   }
 }
 

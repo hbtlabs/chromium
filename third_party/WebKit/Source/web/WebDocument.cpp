@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "public/web/WebDocument.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -320,6 +319,18 @@ bool WebDocument::manifestUseCredentials() const
 WebDistillabilityFeatures WebDocument::distillabilityFeatures()
 {
     return DocumentStatisticsCollector::collectStatistics(*unwrap<Document>());
+}
+
+bool WebDocument::attemptedToDetermineEncodingFromContentSniffing() const
+{
+    const Document* document = constUnwrap<Document>();
+    return document->attemptedToDetermineEncodingFromContentSniffing();
+}
+
+bool WebDocument::encodingWasDetectedFromContentSniffing() const
+{
+    const Document* document = constUnwrap<Document>();
+    return document->encodingWasDetectedFromContentSniffing();
 }
 
 WebDocument::WebDocument(const PassRefPtrWillBeRawPtr<Document>& elem)

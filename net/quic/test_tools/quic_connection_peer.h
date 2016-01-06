@@ -5,7 +5,7 @@
 #ifndef NET_QUIC_TEST_TOOLS_QUIC_CONNECTION_PEER_H_
 #define NET_QUIC_TEST_TOOLS_QUIC_CONNECTION_PEER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_connection_stats.h"
 #include "net/quic/quic_protocol.h"
@@ -44,8 +44,7 @@ class QuicConnectionPeer {
   static void PopulateStopWaitingFrame(QuicConnection* connection,
                                        QuicStopWaitingFrame* stop_waiting);
 
-  static QuicConnectionVisitorInterface* GetVisitor(
-      QuicConnection* connection);
+  static QuicConnectionVisitorInterface* GetVisitor(QuicConnection* connection);
 
   static QuicPacketCreator* GetPacketCreator(QuicConnection* connection);
 

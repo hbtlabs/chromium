@@ -6,14 +6,17 @@
 
 #include "chrome/browser/extensions/api/debugger/debugger_api.h"
 
+#include <stddef.h>
 #include <map>
 #include <set>
+#include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/scoped_observer.h"
@@ -98,6 +101,7 @@ class ExtensionDevToolsInfoBarDelegate : public ConfirmInfoBarDelegate {
 
   // ConfirmInfoBarDelegate:
   Type GetInfoBarType() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
   void InfoBarDismissed() override;
   base::string16 GetMessageText() const override;
@@ -123,6 +127,11 @@ ExtensionDevToolsInfoBarDelegate::~ExtensionDevToolsInfoBarDelegate() {
 infobars::InfoBarDelegate::Type
 ExtensionDevToolsInfoBarDelegate::GetInfoBarType() const {
   return WARNING_TYPE;
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+ExtensionDevToolsInfoBarDelegate::GetIdentifier() const {
+  return EXTENSION_DEV_TOOLS_INFOBAR_DELEGATE;
 }
 
 bool ExtensionDevToolsInfoBarDelegate::ShouldExpire(
@@ -208,7 +217,7 @@ ExtensionDevToolsInfoBar::ExtensionDevToolsInfoBar(
           base::Bind(&ExtensionDevToolsInfoBar::InfoBarDismissed,
                      base::Unretained(this)),
           extension_name));
-  infobar_ = GlobalConfirmInfoBar::Show(delegate.Pass());
+  infobar_ = GlobalConfirmInfoBar::Show(std::move(delegate));
 }
 
 ExtensionDevToolsInfoBar::~ExtensionDevToolsInfoBar() {
@@ -392,11 +401,11 @@ void ExtensionDevToolsClientHost::SendDetachedEvent() {
 
   scoped_ptr<base::ListValue> args(OnDetach::Create(debuggee_,
                                                     detach_reason_));
-  scoped_ptr<Event> event(
-      new Event(events::DEBUGGER_ON_DETACH, OnDetach::kEventName, args.Pass()));
+  scoped_ptr<Event> event(new Event(events::DEBUGGER_ON_DETACH,
+                                    OnDetach::kEventName, std::move(args)));
   event->restrict_to_browser_context = profile_;
   EventRouter::Get(profile_)
-      ->DispatchEventToExtension(extension_id_, event.Pass());
+      ->DispatchEventToExtension(extension_id_, std::move(event));
 }
 
 void ExtensionDevToolsClientHost::OnExtensionUnloaded(
@@ -440,11 +449,11 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
 
     scoped_ptr<base::ListValue> args(
         OnEvent::Create(debuggee_, method_name, params));
-    scoped_ptr<Event> event(
-        new Event(events::DEBUGGER_ON_EVENT, OnEvent::kEventName, args.Pass()));
+    scoped_ptr<Event> event(new Event(events::DEBUGGER_ON_EVENT,
+                                      OnEvent::kEventName, std::move(args)));
     event->restrict_to_browser_context = profile_;
     EventRouter::Get(profile_)
-        ->DispatchEventToExtension(extension_id_, event.Pass());
+        ->DispatchEventToExtension(extension_id_, std::move(event));
   } else {
     DebuggerSendCommandFunction* function = pending_requests_[id].get();
     if (!function)

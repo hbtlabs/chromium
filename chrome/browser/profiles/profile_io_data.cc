@@ -4,9 +4,10 @@
 
 #include "chrome/browser/profiles/profile_io_data.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -14,6 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
@@ -22,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -362,8 +365,8 @@ void InitializeAndPassKeygenHandler(
     const base::Callback<void(scoped_ptr<net::KeygenHandler>)>& callback,
     scoped_ptr<ChromeNSSCryptoModuleDelegate> delegate) {
   if (delegate)
-    keygen_handler->set_crypto_module_delegate(delegate.Pass());
-  callback.Run(keygen_handler.Pass());
+    keygen_handler->set_crypto_module_delegate(std::move(delegate));
+  callback.Run(std::move(keygen_handler));
 }
 #endif  // defined(USE_NSS_CERTS)
 
@@ -510,7 +513,7 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   scoped_ptr<policy::PolicyCertVerifier> verifier =
       policy::PolicyCertServiceFactory::CreateForProfile(profile);
   policy_cert_verifier_ = verifier.get();
-  cert_verifier_ = verifier.Pass();
+  cert_verifier_ = std::move(verifier);
 #endif
   // The URLBlacklistManager has to be created on the UI thread to register
   // observers of |pref_service|, and it also has to clean up on
@@ -556,7 +559,7 @@ ProfileIOData::MediaRequestContext::MediaRequestContext() {
 
 void ProfileIOData::MediaRequestContext::SetHttpTransactionFactory(
     scoped_ptr<net::HttpTransactionFactory> http_factory) {
-  http_factory_ = http_factory.Pass();
+  http_factory_ = std::move(http_factory);
   set_http_transaction_factory(http_factory_.get());
 }
 
@@ -575,13 +578,13 @@ void ProfileIOData::AppRequestContext::SetCookieStore(
 
 void ProfileIOData::AppRequestContext::SetHttpTransactionFactory(
     scoped_ptr<net::HttpTransactionFactory> http_factory) {
-  http_factory_ = http_factory.Pass();
+  http_factory_ = std::move(http_factory);
   set_http_transaction_factory(http_factory_.get());
 }
 
 void ProfileIOData::AppRequestContext::SetJobFactory(
     scoped_ptr<net::URLRequestJobFactory> job_factory) {
-  job_factory_ = job_factory.Pass();
+  job_factory_ = std::move(job_factory);
   set_job_factory(job_factory_.get());
 }
 
@@ -799,12 +802,10 @@ net::URLRequestContext* ProfileIOData::GetIsolatedAppRequestContext(
   if (ContainsKey(app_request_context_map_, partition_descriptor)) {
     context = app_request_context_map_[partition_descriptor];
   } else {
-    context =
-        AcquireIsolatedAppRequestContext(main_context,
-                                         partition_descriptor,
-                                         protocol_handler_interceptor.Pass(),
-                                         protocol_handlers,
-                                         request_interceptors.Pass());
+    context = AcquireIsolatedAppRequestContext(
+        main_context, partition_descriptor,
+        std::move(protocol_handler_interceptor), protocol_handlers,
+        std::move(request_interceptors));
     app_request_context_map_[partition_descriptor] = context;
   }
   DCHECK(context);
@@ -899,7 +900,7 @@ bool ProfileIOData::IsDataReductionProxyEnabled() const {
 void ProfileIOData::set_data_reduction_proxy_io_data(
     scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
         data_reduction_proxy_io_data) const {
-  data_reduction_proxy_io_data_ = data_reduction_proxy_io_data.Pass();
+  data_reduction_proxy_io_data_ = std::move(data_reduction_proxy_io_data);
 }
 
 base::WeakPtr<net::HttpServerProperties>
@@ -909,7 +910,7 @@ ProfileIOData::http_server_properties() const {
 
 void ProfileIOData::set_http_server_properties(
     scoped_ptr<net::HttpServerProperties> http_server_properties) const {
-  http_server_properties_ = http_server_properties.Pass();
+  http_server_properties_ = std::move(http_server_properties);
 }
 
 ProfileIOData::ResourceContext::ResourceContext(ProfileIOData* io_data)
@@ -964,7 +965,7 @@ ProfileIOData::ResourceContext::CreateClientCertStore() {
 }
 
 void ProfileIOData::ResourceContext::CreateKeygenHandler(
-    uint32 key_size_in_bits,
+    uint32_t key_size_in_bits,
     const std::string& challenge_string,
     const GURL& url,
     const base::Callback<void(scoped_ptr<net::KeygenHandler>)>& callback) {
@@ -1053,7 +1054,7 @@ void ProfileIOData::Init(
       io_thread->net_log(),
       io_thread_globals->proxy_script_fetcher_context.get(),
       io_thread_globals->system_network_delegate.get(),
-      profile_params_->proxy_config_service.Pass(), command_line,
+      std::move(profile_params_->proxy_config_service), command_line,
       quick_check_enabled_.GetValue());
   transport_security_state_.reset(new net::TransportSecurityState());
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
@@ -1096,7 +1097,7 @@ void ProfileIOData::Init(
   if (use_system_key_slot_)
     EnableNSSSystemKeySlotForResourceContext(resource_context_.get());
 
-  certificate_provider_ = profile_params_->certificate_provider.Pass();
+  certificate_provider_ = std::move(profile_params_->certificate_provider);
 #endif
 
   if (g_cert_verifier_for_testing) {
@@ -1108,7 +1109,7 @@ void ProfileIOData::Init(
     // The private slot won't be ready by this point. It shouldn't be necessary
     // for cert trust purposes anyway.
     scoped_refptr<net::CertVerifyProc> verify_proc(
-        new chromeos::CertVerifyProcChromeOS(public_slot.Pass()));
+        new chromeos::CertVerifyProcChromeOS(std::move(public_slot)));
     if (policy_cert_verifier_) {
       DCHECK_EQ(policy_cert_verifier_, cert_verifier_.get());
       policy_cert_verifier_->InitializeOnIOThread(verify_proc);
@@ -1133,11 +1134,10 @@ void ProfileIOData::Init(
       new net::MultiLogCTVerifier());
   ct_verifier->AddLogs(io_thread_globals->ct_logs);
   main_request_context_->set_cert_transparency_verifier(ct_verifier.get());
-  cert_transparency_verifier_ = ct_verifier.Pass();
+  cert_transparency_verifier_ = std::move(ct_verifier);
 
-  InitializeInternal(
-      network_delegate.Pass(), profile_params_.get(),
-      protocol_handlers, request_interceptors.Pass());
+  InitializeInternal(std::move(network_delegate), profile_params_.get(),
+                     protocol_handlers, std::move(request_interceptors));
 
   profile_params_.reset();
   initialized_ = true;
@@ -1217,21 +1217,22 @@ scoped_ptr<net::URLRequestJobFactory> ProfileIOData::SetUpJobFactoryDefaults(
 #endif
 
   // Set up interceptors in the reverse order.
-  scoped_ptr<net::URLRequestJobFactory> top_job_factory = job_factory.Pass();
+  scoped_ptr<net::URLRequestJobFactory> top_job_factory =
+      std::move(job_factory);
   for (content::URLRequestInterceptorScopedVector::reverse_iterator i =
            request_interceptors.rbegin();
        i != request_interceptors.rend();
        ++i) {
     top_job_factory.reset(new net::URLRequestInterceptingJobFactory(
-        top_job_factory.Pass(), make_scoped_ptr(*i)));
+        std::move(top_job_factory), make_scoped_ptr(*i)));
   }
   request_interceptors.weak_clear();
 
   if (protocol_handler_interceptor) {
-    protocol_handler_interceptor->Chain(top_job_factory.Pass());
-    return protocol_handler_interceptor.Pass();
+    protocol_handler_interceptor->Chain(std::move(top_job_factory));
+    return std::move(protocol_handler_interceptor);
   } else {
-    return top_job_factory.Pass();
+    return top_job_factory;
   }
 }
 
@@ -1311,7 +1312,7 @@ scoped_ptr<net::HttpCache> ProfileIOData::CreateMainHttpFactory(
   return make_scoped_ptr(new net::HttpCache(
       make_scoped_ptr(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), session)),
-      main_backend.Pass(), true /* set_up_quic_server_info */));
+      std::move(main_backend), true /* set_up_quic_server_info */));
 }
 
 scoped_ptr<net::HttpCache> ProfileIOData::CreateHttpFactory(
@@ -1320,7 +1321,7 @@ scoped_ptr<net::HttpCache> ProfileIOData::CreateHttpFactory(
   return make_scoped_ptr(new net::HttpCache(
       make_scoped_ptr(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), shared_session)),
-      backend.Pass(), true /* set_up_quic_server_info */));
+      std::move(backend), true /* set_up_quic_server_info */));
 }
 
 void ProfileIOData::SetCookieSettingsForTesting(

@@ -4,11 +4,11 @@
 
 #include "chrome/browser/chromeos/input_method/input_method_manager_impl.h"
 
+#include <stdint.h>
 #include <algorithm>  // std::find
-
 #include <sstream>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/hash.h"
 #include "base/location.h"
@@ -199,7 +199,7 @@ InputMethodManagerImpl::StateImpl::GetActiveInputMethods() const {
     result->push_back(
         InputMethodUtil::GetFallbackInputMethodDescriptor());
   }
-  return result.Pass();
+  return result;
 }
 
 const std::vector<std::string>&
@@ -845,7 +845,7 @@ InputMethodManagerImpl::GetActiveIMEState() {
 InputMethodManagerImpl::InputMethodManagerImpl(
     scoped_ptr<InputMethodDelegate> delegate,
     bool enable_extension_loading)
-    : delegate_(delegate.Pass()),
+    : delegate_(std::move(delegate)),
       ui_session_(STATE_LOGIN_SCREEN),
       state_(NULL),
       util_(delegate_.get()),
@@ -859,7 +859,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
   // Initializes the system IME list.
   scoped_ptr<ComponentExtensionIMEManagerDelegate> comp_delegate(
       new ComponentExtensionIMEManagerImpl());
-  component_extension_ime_manager_->Initialize(comp_delegate.Pass());
+  component_extension_ime_manager_->Initialize(std::move(comp_delegate));
   const InputMethodDescriptors& descriptors =
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor();
   util_.ResetInputMethods(descriptors);
@@ -922,7 +922,7 @@ void InputMethodManagerImpl::SetUISessionState(UISessionState new_ui_session) {
 
 scoped_ptr<InputMethodDescriptors>
 InputMethodManagerImpl::GetSupportedInputMethods() const {
-  return scoped_ptr<InputMethodDescriptors>(new InputMethodDescriptors).Pass();
+  return scoped_ptr<InputMethodDescriptors>(new InputMethodDescriptors);
 }
 
 const InputMethodDescriptor* InputMethodManagerImpl::LookupInputMethod(
@@ -1129,7 +1129,7 @@ void InputMethodManagerImpl::SetImeKeyboardForTesting(ImeKeyboard* keyboard) {
 
 void InputMethodManagerImpl::InitializeComponentExtensionForTesting(
     scoped_ptr<ComponentExtensionIMEManagerDelegate> delegate) {
-  component_extension_ime_manager_->Initialize(delegate.Pass());
+  component_extension_ime_manager_->Initialize(std::move(delegate));
   util_.ResetInputMethods(
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor());
 }

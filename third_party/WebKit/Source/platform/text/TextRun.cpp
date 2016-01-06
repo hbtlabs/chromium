@@ -23,7 +23,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/text/TextRun.h"
 
 #include "platform/fonts/Character.h"
@@ -31,12 +30,13 @@
 namespace blink {
 
 struct ExpectedTextRunSize {
+    DISALLOW_NEW();
     const void* pointer;
     int integers[2];
     float float1;
     float float2;
     float float3;
-    uint32_t bitfields : 12;
+    uint32_t bitfields : 10;
     TabSize tabSize;
 };
 

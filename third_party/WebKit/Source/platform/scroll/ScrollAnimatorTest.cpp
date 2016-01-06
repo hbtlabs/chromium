@@ -25,7 +25,6 @@
 
 // Tests for the ScrollAnimator class.
 
-#include "config.h"
 #include "platform/scroll/ScrollAnimator.h"
 
 #include "platform/Logging.h"
@@ -73,6 +72,7 @@ public:
     MOCK_CONST_METHOD0(scrollbarsCanBeActive, bool());
     MOCK_CONST_METHOD0(scrollableAreaBoundingBox, IntRect());
     MOCK_METHOD0(registerForAnimation, void());
+    MOCK_METHOD0(scheduleAnimation, bool());
 
     bool userInputScrollable(ScrollbarOrientation) const override { return true; }
     bool shouldPlaceVerticalScrollbarOnLeft() const override { return false; }
@@ -101,30 +101,34 @@ static void reset(ScrollAnimator& scrollAnimator)
     scrollAnimator.scrollToOffsetWithoutAnimation(FloatPoint());
 }
 
-TEST(ScrollAnimatorTest, Enabled)
+// TODO(skobes): Add unit tests for composited scrolling paths.
+
+TEST(ScrollAnimatorTest, MainThreadEnabled)
 {
     OwnPtrWillBeRawPtr<MockScrollableArea> scrollableArea = MockScrollableArea::create(true);
     OwnPtrWillBeRawPtr<ScrollAnimator> scrollAnimator = adoptPtrWillBeNoop(new ScrollAnimator(scrollableArea.get(), getMockedTime));
 
     EXPECT_CALL(*scrollableArea, minimumScrollPosition()).Times(AtLeast(1)).WillRepeatedly(Return(IntPoint()));
     EXPECT_CALL(*scrollableArea, maximumScrollPosition()).Times(AtLeast(1)).WillRepeatedly(Return(IntPoint(1000, 1000)));
-    EXPECT_CALL(*scrollableArea, setScrollOffset(_, _)).Times(12);
-    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(3);
+    EXPECT_CALL(*scrollableArea, setScrollOffset(_, _)).Times(9);
+    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(6);
+    EXPECT_CALL(*scrollableArea, scheduleAnimation()).Times(AtLeast(1)).WillRepeatedly(Return(true));
 
-    EXPECT_FALSE(scrollAnimator->hasRunningAnimation());
+    EXPECT_FALSE(scrollAnimator->hasAnimationThatRequiresService());
 
     ScrollResultOneDimensional result = scrollAnimator->userScroll(HorizontalScrollbar, ScrollByLine, 100, -1);
-    EXPECT_FALSE(scrollAnimator->hasRunningAnimation());
+    EXPECT_FALSE(scrollAnimator->hasAnimationThatRequiresService());
     EXPECT_FALSE(result.didScroll);
-    EXPECT_FLOAT_EQ(-100.0, result.unusedScrollDelta);
+    EXPECT_FLOAT_EQ(-1.0f, result.unusedScrollDelta);
 
     result = scrollAnimator->userScroll(HorizontalScrollbar, ScrollByLine, 100, 1);
-    EXPECT_TRUE(scrollAnimator->hasRunningAnimation());
+    EXPECT_TRUE(scrollAnimator->hasAnimationThatRequiresService());
     EXPECT_TRUE(result.didScroll);
     EXPECT_FLOAT_EQ(0.0, result.unusedScrollDelta);
 
     gMockedTime += 0.05;
-    scrollAnimator->serviceScrollAnimations();
+    scrollAnimator->updateCompositorAnimations();
+    scrollAnimator->tickAnimation(getMockedTime());
 
     EXPECT_NE(100, scrollAnimator->currentPosition().x());
     EXPECT_NE(0, scrollAnimator->currentPosition().x());
@@ -132,10 +136,11 @@ TEST(ScrollAnimatorTest, Enabled)
     reset(*scrollAnimator);
 
     scrollAnimator->userScroll(HorizontalScrollbar, ScrollByPage, 100, 1);
-    EXPECT_TRUE(scrollAnimator->hasRunningAnimation());
+    EXPECT_TRUE(scrollAnimator->hasAnimationThatRequiresService());
 
     gMockedTime += 0.05;
-    scrollAnimator->serviceScrollAnimations();
+    scrollAnimator->updateCompositorAnimations();
+    scrollAnimator->tickAnimation(getMockedTime());
 
     EXPECT_NE(100, scrollAnimator->currentPosition().x());
     EXPECT_NE(0, scrollAnimator->currentPosition().x());
@@ -143,25 +148,27 @@ TEST(ScrollAnimatorTest, Enabled)
     reset(*scrollAnimator);
 
     scrollAnimator->userScroll(HorizontalScrollbar, ScrollByPixel, 4, 25);
-    EXPECT_TRUE(scrollAnimator->hasRunningAnimation());
+    EXPECT_TRUE(scrollAnimator->hasAnimationThatRequiresService());
 
     gMockedTime += 0.05;
-    scrollAnimator->serviceScrollAnimations();
+    scrollAnimator->updateCompositorAnimations();
+    scrollAnimator->tickAnimation(getMockedTime());
 
     EXPECT_NE(100, scrollAnimator->currentPosition().x());
     EXPECT_NE(0, scrollAnimator->currentPosition().x());
     EXPECT_EQ(0, scrollAnimator->currentPosition().y());
 
     gMockedTime += 1.0;
-    scrollAnimator->serviceScrollAnimations();
+    scrollAnimator->updateCompositorAnimations();
+    scrollAnimator->tickAnimation(getMockedTime());
 
-    EXPECT_FALSE(scrollAnimator->hasRunningAnimation());
+    EXPECT_FALSE(scrollAnimator->hasAnimationThatRequiresService());
     EXPECT_EQ(100, scrollAnimator->currentPosition().x());
 
     reset(*scrollAnimator);
 
     scrollAnimator->userScroll(HorizontalScrollbar, ScrollByPrecisePixel, 4, 25);
-    EXPECT_FALSE(scrollAnimator->hasRunningAnimation());
+    EXPECT_FALSE(scrollAnimator->hasAnimationThatRequiresService());
 
     EXPECT_EQ(100, scrollAnimator->currentPosition().x());
     EXPECT_NE(0, scrollAnimator->currentPosition().x());

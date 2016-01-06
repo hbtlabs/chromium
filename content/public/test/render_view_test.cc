@@ -4,11 +4,14 @@
 
 #include "content/public/test/render_view_test.h"
 
+#include <stddef.h>
+
 #include <cctype>
 
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/common/dom_storage/dom_storage_types.h"
@@ -60,14 +63,14 @@ using blink::WebURLRequest;
 
 namespace {
 
-const int32 kRouteId = 5;
-const int32 kMainFrameRouteId = 6;
+const int32_t kRouteId = 5;
+const int32_t kMainFrameRouteId = 6;
 // TODO(avi): Widget routing IDs should be distinct from the view routing IDs,
 // once RenderWidgetHost is distilled from RenderViewHostImpl.
 // https://crbug.com/545684
 const int32_t kMainFrameWidgetRouteId = 5;
-const int32 kNewWindowRouteId = 7;
-const int32 kNewFrameRouteId = 10;
+const int32_t kNewWindowRouteId = 7;
+const int32_t kNewFrameRouteId = 10;
 const int32_t kNewFrameWidgetRouteId = 7;
 
 // Converts |ascii_character| into |key_code| and returns true on success.
@@ -276,6 +279,12 @@ void RenderViewTest::SetUp() {
 
 #if !defined(OS_IOS)
   InitializeMojo();
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("use-new-edk")) {
+    test_io_thread_.reset(new base::TestIOThread(
+        base::TestIOThread::kAutoStart));
+    ipc_support_.reset(new mojo::test::ScopedIPCSupport(
+        test_io_thread_->task_runner()));
+  }
 #endif
 
   // This needs to pass the mock render thread to the view.
@@ -293,7 +302,7 @@ void RenderViewTest::TearDown() {
   scoped_ptr<blink::WebLeakDetector> leak_detector =
       make_scoped_ptr(blink::WebLeakDetector::create(this));
 
-  leak_detector->prepareForLeakDetection(GetMainFrame());
+  leak_detector->prepareForLeakDetection();
 
   view_ = NULL;
   mock_process_.reset();
@@ -317,6 +326,9 @@ void RenderViewTest::TearDown() {
   platform_.reset();
   params_.reset();
   command_line_.reset();
+
+  test_io_thread_.reset();
+  ipc_support_.reset();
 }
 
 void RenderViewTest::onLeakDetectionComplete(const Result& result) {
@@ -478,7 +490,7 @@ void RenderViewTest::Reload(const GURL& url) {
   FrameLoadWaiter(frame).Wait();
 }
 
-uint32 RenderViewTest::GetNavigationIPCType() {
+uint32_t RenderViewTest::GetNavigationIPCType() {
   return FrameHostMsg_DidCommitProvisionalLoad::ID;
 }
 

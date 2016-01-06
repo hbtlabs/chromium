@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/loader/FrameFetchContext.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -101,6 +100,7 @@ void FrameFetchContext::addAdditionalRequestHeaders(ResourceRequest& request, Fe
     if (!isMainResource) {
         RefPtr<SecurityOrigin> outgoingOrigin;
         if (!request.didSetHTTPReferrer()) {
+            ASSERT(m_document);
             outgoingOrigin = m_document->securityOrigin();
             request.setHTTPReferrer(SecurityPolicy::generateReferrer(m_document->referrerPolicy(), request.url(), m_document->outgoingReferrer()));
         } else {
@@ -117,6 +117,9 @@ void FrameFetchContext::addAdditionalRequestHeaders(ResourceRequest& request, Fe
     // The remaining modifications are only necessary for HTTP and HTTPS.
     if (!request.url().isEmpty() && !request.url().protocolIsInHTTPFamily())
         return;
+
+    if (frame()->settings() && frame()->settings()->dataSaverEnabled())
+        request.addHTTPHeaderField("Save-Data", "on");
 
     frame()->loader().applyUserAgent(request);
 }
@@ -167,6 +170,7 @@ static ResourceRequestCachePolicy memoryCachePolicyToResourceRequestCachePolicy(
 
 ResourceRequestCachePolicy FrameFetchContext::resourceRequestCachePolicy(const ResourceRequest& request, Resource::Type type) const
 {
+    ASSERT(frame());
     if (type == Resource::MainResource) {
         FrameLoadType frameLoadType = frame()->loader().loadType();
         if (request.httpMethod() == "POST" && frameLoadType == FrameLoadTypeBackForward)
@@ -188,6 +192,21 @@ ResourceRequestCachePolicy FrameFetchContext::resourceRequestCachePolicy(const R
                 return ReloadIgnoringCacheData;
         }
         return UseProtocolCachePolicy;
+    }
+
+    // For users on slow connections, we want to avoid blocking the parser in
+    // the main frame on script loads inserted via document.write, since it can
+    // add significant delays before page content is displayed on the screen.
+    // For now, as a prototype, we block fetches for main frame scripts
+    // inserted via document.write as long as the
+    // disallowFetchForDocWrittenScriptsInMainFrame setting is enabled. In the
+    // future, we'll extend this logic to only block if estimated network RTT
+    // is above some threshold.
+    if (type == Resource::Script && isMainFrame()) {
+        const bool isInDocumentWrite = m_document && m_document->isInDocumentWrite();
+        const bool disallowFetchForDocWriteScripts = frame()->settings() && frame()->settings()->disallowFetchForDocWrittenScriptsInMainFrame();
+        if (isInDocumentWrite && disallowFetchForDocWriteScripts)
+            return ReturnCacheDataDontLoad;
     }
 
     if (request.isConditional())
@@ -232,12 +251,12 @@ void FrameFetchContext::dispatchWillSendRequest(unsigned long identifier, Resour
 void FrameFetchContext::dispatchDidReceiveResponse(unsigned long identifier, const ResourceResponse& response, ResourceLoader* resourceLoader)
 {
     MixedContentChecker::checkMixedPrivatePublic(frame(), response.remoteIPAddress());
-    LinkLoader::loadLinkFromHeader(response.httpHeaderField("Link"), frame()->document(), NetworkHintsInterfaceImpl());
+    LinkLoader::loadLinkFromHeader(response.httpHeaderField(HTTPNames::Link), frame()->document(), NetworkHintsInterfaceImpl(), LinkLoader::DoNotLoadResources);
     if (m_documentLoader == frame()->loader().provisionalDocumentLoader()) {
         ResourceFetcher* fetcher = nullptr;
         if (frame()->document())
             fetcher = frame()->document()->fetcher();
-        m_documentLoader->clientHintsPreferences().updateFromAcceptClientHintsHeader(response.httpHeaderField("accept-ch"), fetcher);
+        m_documentLoader->clientHintsPreferences().updateFromAcceptClientHintsHeader(response.httpHeaderField(HTTPNames::Accept_CH), fetcher);
     }
 
     if (response.hasMajorCertificateErrors() && resourceLoader)
@@ -441,22 +460,24 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
     // I believe it's the Resource::Raw case.
     const ContentSecurityPolicy* csp = m_document ? m_document->contentSecurityPolicy() : nullptr;
 
-    // FIXME: This would be cleaner if moved this switch into an allowFromSource()
+    // TODO(mkwst): This would be cleaner if moved this switch into an allowFromSource()
     // helper on this object which took a Resource::Type, then this block would
     // collapse to about 10 lines for handling Raw and Script special cases.
     switch (type) {
     case Resource::XSLStyleSheet:
         ASSERT(RuntimeEnabledFeatures::xsltEnabled());
         ASSERT(ContentSecurityPolicy::isScriptResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
         break;
     case Resource::Script:
     case Resource::ImportResource:
         ASSERT(ContentSecurityPolicy::isScriptResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
-
+        ASSERT(frame());
         if (!frame()->loader().client()->allowScriptFromSource(!frame()->settings() || frame()->settings()->scriptEnabled(), url)) {
             frame()->loader().client()->didNotAllowScript();
             return ResourceRequestBlockedReasonCSP;
@@ -464,17 +485,20 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
         break;
     case Resource::CSSStyleSheet:
         ASSERT(ContentSecurityPolicy::isStyleResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowStyleFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
         break;
     case Resource::SVGDocument:
     case Resource::Image:
         ASSERT(ContentSecurityPolicy::isImageResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowImageFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
         break;
     case Resource::Font: {
         ASSERT(ContentSecurityPolicy::isFontResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowFontFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
         break;
@@ -487,6 +511,7 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
     case Resource::Media:
     case Resource::TextTrack:
         ASSERT(ContentSecurityPolicy::isMediaResource(resourceRequest));
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowMediaFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
 
@@ -502,6 +527,7 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
 
     // FIXME: Once we use RequestContext for CSP (http://crbug.com/390497), remove this extra check.
     if (resourceRequest.requestContext() == WebURLRequest::RequestContextManifest) {
+        ASSERT(csp);
         if (!shouldBypassMainWorldCSP && !csp->allowManifestFromSource(url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
     }

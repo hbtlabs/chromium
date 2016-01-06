@@ -794,7 +794,6 @@ public:
         HTMLImportsHasStyleSheets = 940,
         WebkitTextInClipProperty = 941,
         WebkitTextInColorProperty = 942,
-        HeaderValueNotMatchingRFC7230 = 943,
         ClipPathOfPositionedElement = 944,
         ClipCssOfPositionedElement = 945,
         NetInfoType = 946,
@@ -914,6 +913,45 @@ public:
         RTCPeerConnectionSetRemoteDescriptionLegacyNoFailureCallback = 1056,
         RTCPeerConnectionSetRemoteDescriptionLegacyCompliant = 1057,
         RTCPeerConnectionGetStatsLegacyNonCompliant = 1058,
+        NodeFilterIsFunction = 1059,
+        NodeFilterIsObject = 1060,
+        TextEncoderUTF16 = 1061,
+        CSSSelectorInternalPseudoListBox = 1062,
+        CSSSelectorInternalMediaControlsCastButton = 1063,
+        CSSSelectorInternalMediaControlsOverlayCastButton = 1064,
+        CSSSelectorInternalPseudoSpatialNavigationFocus = 1065,
+        SameOriginTextScript = 1066,
+        SameOriginApplicationScript = 1067,
+        SameOriginOtherScript = 1068,
+        CrossOriginTextScript = 1069,
+        CrossOriginApplicationScript = 1070,
+        CrossOriginOtherScript = 1071,
+        SVG1DOMSVGTests = 1072,
+        V8SVGViewElement_ViewTarget_AttributeGetter = 1073,
+        DisableRemotePlaybackAttribute = 1074,
+        V8SloppyMode = 1075,
+        V8StrictMode = 1076,
+        V8StrongMode = 1077,
+        AudioNodeConnectToAudioNode = 1078,
+        AudioNodeConnectToAudioParam = 1079,
+        AudioNodeDisconnectFromAudioNode = 1080,
+        AudioNodeDisconnectFromAudioParam = 1081,
+        V8CSSFontFaceRule_Style_AttributeGetter = 1082,
+        SelectionCollapseNull = 1083,
+        SelectionSetBaseAndExtentNull = 1084,
+        V8SVGSVGElement_CreateSVGNumber_Method = 1085,
+        V8SVGSVGElement_CreateSVGLength_Method = 1086,
+        V8SVGSVGElement_CreateSVGAngle_Method = 1087,
+        V8SVGSVGElement_CreateSVGPoint_Method = 1088,
+        V8SVGSVGElement_CreateSVGMatrix_Method = 1089,
+        V8SVGSVGElement_CreateSVGRect_Method = 1090,
+        V8SVGSVGElement_CreateSVGTransform_Method = 1091,
+        V8SVGSVGElement_CreateSVGTransformFromMatrix_Method = 1092,
+        FormNameAccessForNonDescendantImageElement = 1093,
+        FormControlsCollectionNameAccessForImageElement = 1094,
+        V8SVGSVGElement_Viewport_AttributeGetter = 1095,
+        V8RegExpPrototypeStickyGetter = 1096,
+        V8RegExpPrototypeToString = 1097,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
@@ -935,7 +973,7 @@ public:
     static void countIfNotPrivateScript(v8::Isolate*, const Document&, Feature);
     static void countIfNotPrivateScript(v8::Isolate*, const ExecutionContext*, Feature);
 
-    void count(CSSParserContext, CSSPropertyID);
+    void count(CSSParserMode, CSSPropertyID);
     void count(Feature);
 
     // "countDeprecation" sets the bit for this feature to 1, and sends a deprecation

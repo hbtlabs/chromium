@@ -5,9 +5,12 @@
 #ifndef UI_GL_GL_SURFACE_GLX_H_
 #define UI_GL_GL_SURFACE_GLX_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -57,7 +60,9 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
   // Implement GLSurfaceGLX.
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;

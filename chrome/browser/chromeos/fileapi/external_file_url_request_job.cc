@@ -5,10 +5,12 @@
 #include "chrome/browser/chromeos/fileapi/external_file_url_request_job.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
@@ -244,7 +246,7 @@ void ExternalFileURLRequestJob::OnHelperResultObtained(
 
   DCHECK(file_system_context.get());
   file_system_context_ = file_system_context;
-  isolated_file_system_scope_ = isolated_file_system_scope.Pass();
+  isolated_file_system_scope_ = std::move(isolated_file_system_scope);
   file_system_url_ = file_system_url;
   mime_type_ = mime_type;
 
@@ -297,8 +299,8 @@ void ExternalFileURLRequestJob::OnFileInfoObtained(
         net::URLRequestStatus::FAILED, net::ERR_REQUEST_RANGE_NOT_SATISFIABLE));
     return;
   }
-  const int64 offset = byte_range_.first_byte_position();
-  const int64 size =
+  const int64_t offset = byte_range_.first_byte_position();
+  const int64_t size =
       byte_range_.last_byte_position() + 1 - byte_range_.first_byte_position();
   set_expected_content_size(size);
   remaining_bytes_ = size;
@@ -352,7 +354,7 @@ int ExternalFileURLRequestJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
     return 0;
 
   const int result = stream_reader_->Read(
-      buf, std::min<int64>(buf_size, remaining_bytes_),
+      buf, std::min<int64_t>(buf_size, remaining_bytes_),
       base::Bind(&ExternalFileURLRequestJob::OnReadCompleted,
                  weak_ptr_factory_.GetWeakPtr()));
 

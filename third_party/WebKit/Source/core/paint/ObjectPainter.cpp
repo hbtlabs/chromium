@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/ObjectPainter.h"
 
 #include "core/layout/LayoutBlock.h"
@@ -177,7 +176,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext, const Vector<IntRect>
         int adjacentWidth2 = adjacentWidthEnd;
         if (edge.side == BSLeft || edge.side == BSBottom)
             std::swap(adjacentWidth1, adjacentWidth2);
-        ObjectPainter::drawLineForBoxSide(&graphicsContext, edge.x1, edge.y1, edge.x2, edge.y2, edge.side, outlineColor, style.outlineStyle(), adjacentWidth1, adjacentWidth2, false);
+        ObjectPainter::drawLineForBoxSide(graphicsContext, edge.x1, edge.y1, edge.x2, edge.y2, edge.side, outlineColor, style.outlineStyle(), adjacentWidth1, adjacentWidth2, false);
         adjacentWidthStart = adjacentWidthEnd;
     }
 
@@ -204,7 +203,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo, const LayoutPoint& 
     if (outlineRects.isEmpty())
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*paintInfo.context, m_layoutObject, paintInfo.phase, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutObject, paintInfo.phase, paintOffset))
         return;
 
     // The result rects are in coordinates of m_layoutObject's border box.
@@ -212,7 +211,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo, const LayoutPoint& 
     if (!m_layoutObject.isBox() && m_layoutObject.styleRef().isFlippedBlocksWritingMode()) {
         LayoutBlock* container = m_layoutObject.containingBlock();
         if (container) {
-            m_layoutObject.localToContainerRects(outlineRects, container, -paintOffset, paintOffset);
+            m_layoutObject.localToAncestorRects(outlineRects, container, -paintOffset, paintOffset);
             if (outlineRects.isEmpty())
                 return;
         }
@@ -225,11 +224,11 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo, const LayoutPoint& 
     IntRect unitedOutlineRect = unionRectEvenIfEmpty(pixelSnappedOutlineRects);
     IntRect bounds = unitedOutlineRect;
     bounds.inflate(m_layoutObject.styleRef().outlineOutsetExtent());
-    LayoutObjectDrawingRecorder recorder(*paintInfo.context, m_layoutObject, paintInfo.phase, bounds, paintOffset);
+    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutObject, paintInfo.phase, bounds, paintOffset);
 
     Color color = m_layoutObject.resolveColor(styleToUse, CSSPropertyOutlineColor);
     if (styleToUse.outlineStyleIsAuto()) {
-        paintInfo.context->drawFocusRing(pixelSnappedOutlineRects, styleToUse.outlineWidth(), styleToUse.outlineOffset(), color);
+        paintInfo.context.drawFocusRing(pixelSnappedOutlineRects, styleToUse.outlineWidth(), styleToUse.outlineOffset(), color);
         return;
     }
 
@@ -237,7 +236,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo, const LayoutPoint& 
         paintSingleRectangleOutline(paintInfo, unitedOutlineRect, styleToUse, color);
         return;
     }
-    paintComplexOutline(*paintInfo.context, pixelSnappedOutlineRects, styleToUse, color);
+    paintComplexOutline(paintInfo.context, pixelSnappedOutlineRects, styleToUse, color);
 }
 
 void ObjectPainter::paintInlineChildrenOutlines(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -269,20 +268,20 @@ void ObjectPainter::addPDFURLRectIfNeeded(const PaintInfo& paintInfo, const Layo
     if (rect.isEmpty())
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*paintInfo.context, m_layoutObject, DisplayItem::PrintedContentPDFURLRect, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutObject, DisplayItem::PrintedContentPDFURLRect, paintOffset))
         return;
 
-    LayoutObjectDrawingRecorder recorder(*paintInfo.context, m_layoutObject, DisplayItem::PrintedContentPDFURLRect, rect, paintOffset);
+    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutObject, DisplayItem::PrintedContentPDFURLRect, rect, paintOffset);
     if (url.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(url, m_layoutObject.document().baseURL())) {
         String fragmentName = url.fragmentIdentifier();
         if (m_layoutObject.document().findAnchor(fragmentName))
-            paintInfo.context->setURLFragmentForRect(fragmentName, rect);
+            paintInfo.context.setURLFragmentForRect(fragmentName, rect);
         return;
     }
-    paintInfo.context->setURLForRect(url, rect);
+    paintInfo.context.setURLForRect(url, rect);
 }
 
-void ObjectPainter::drawLineForBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void ObjectPainter::drawLineForBoxSide(GraphicsContext& graphicsContext, int x1, int y1, int x2, int y2,
     BoxSide side, Color color, EBorderStyle style,
     int adjacentWidth1, int adjacentWidth2, bool antialias)
 {
@@ -296,9 +295,10 @@ void ObjectPainter::drawLineForBoxSide(GraphicsContext* graphicsContext, int x1,
         length = y2 - y1;
     }
 
-    // FIXME: We really would like this check to be an ASSERT as we don't want to draw empty borders. However
-    // nothing guarantees that the following recursive calls to drawLineForBoxSide will have non-null dimensions.
-    if (!thickness || !length)
+    // We would like this check to be an ASSERT as we don't want to draw empty borders. However
+    // nothing guarantees that the following recursive calls to drawLineForBoxSide will have
+    // positive thickness and length.
+    if (length <= 0 || thickness <= 0)
         return;
 
     if (style == DOUBLE && thickness < 3)
@@ -338,66 +338,65 @@ void ObjectPainter::drawLineForBoxSide(GraphicsContext* graphicsContext, int x1,
     }
 }
 
-void ObjectPainter::drawDashedOrDottedBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void ObjectPainter::drawDashedOrDottedBoxSide(GraphicsContext& graphicsContext, int x1, int y1, int x2, int y2,
     BoxSide side, Color color, int thickness, EBorderStyle style, bool antialias)
 {
-    if (thickness <= 0)
-        return;
+    ASSERT(thickness > 0);
 
-    bool wasAntialiased = graphicsContext->shouldAntialias();
-    StrokeStyle oldStrokeStyle = graphicsContext->strokeStyle();
-    graphicsContext->setShouldAntialias(antialias);
-    graphicsContext->setStrokeColor(color);
-    graphicsContext->setStrokeThickness(thickness);
-    graphicsContext->setStrokeStyle(style == DASHED ? DashedStroke : DottedStroke);
+    bool wasAntialiased = graphicsContext.shouldAntialias();
+    StrokeStyle oldStrokeStyle = graphicsContext.strokeStyle();
+    graphicsContext.setShouldAntialias(antialias);
+    graphicsContext.setStrokeColor(color);
+    graphicsContext.setStrokeThickness(thickness);
+    graphicsContext.setStrokeStyle(style == DASHED ? DashedStroke : DottedStroke);
 
     switch (side) {
     case BSBottom:
     case BSTop: {
         int midY = y1 + thickness / 2;
-        graphicsContext->drawLine(IntPoint(x1, midY), IntPoint(x2, midY));
+        graphicsContext.drawLine(IntPoint(x1, midY), IntPoint(x2, midY));
         break;
     }
     case BSRight:
     case BSLeft: {
         int midX = x1 + thickness / 2;
-        graphicsContext->drawLine(IntPoint(midX, y1), IntPoint(midX, y2));
+        graphicsContext.drawLine(IntPoint(midX, y1), IntPoint(midX, y2));
         break;
     }
     }
-    graphicsContext->setShouldAntialias(wasAntialiased);
-    graphicsContext->setStrokeStyle(oldStrokeStyle);
+    graphicsContext.setShouldAntialias(wasAntialiased);
+    graphicsContext.setStrokeStyle(oldStrokeStyle);
 }
 
-void ObjectPainter::drawDoubleBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void ObjectPainter::drawDoubleBoxSide(GraphicsContext& graphicsContext, int x1, int y1, int x2, int y2,
     int length, BoxSide side, Color color, int thickness, int adjacentWidth1, int adjacentWidth2, bool antialias)
 {
     int thirdOfThickness = (thickness + 1) / 3;
-    ASSERT(thirdOfThickness);
+    ASSERT(thirdOfThickness > 0);
 
     if (!adjacentWidth1 && !adjacentWidth2) {
-        StrokeStyle oldStrokeStyle = graphicsContext->strokeStyle();
-        graphicsContext->setStrokeStyle(NoStroke);
-        graphicsContext->setFillColor(color);
+        StrokeStyle oldStrokeStyle = graphicsContext.strokeStyle();
+        graphicsContext.setStrokeStyle(NoStroke);
+        graphicsContext.setFillColor(color);
 
-        bool wasAntialiased = graphicsContext->shouldAntialias();
-        graphicsContext->setShouldAntialias(antialias);
+        bool wasAntialiased = graphicsContext.shouldAntialias();
+        graphicsContext.setShouldAntialias(antialias);
 
         switch (side) {
         case BSTop:
         case BSBottom:
-            graphicsContext->drawRect(IntRect(x1, y1, length, thirdOfThickness));
-            graphicsContext->drawRect(IntRect(x1, y2 - thirdOfThickness, length, thirdOfThickness));
+            graphicsContext.drawRect(IntRect(x1, y1, length, thirdOfThickness));
+            graphicsContext.drawRect(IntRect(x1, y2 - thirdOfThickness, length, thirdOfThickness));
             break;
         case BSLeft:
         case BSRight:
-            graphicsContext->drawRect(IntRect(x1, y1, thirdOfThickness, length));
-            graphicsContext->drawRect(IntRect(x2 - thirdOfThickness, y1, thirdOfThickness, length));
+            graphicsContext.drawRect(IntRect(x1, y1, thirdOfThickness, length));
+            graphicsContext.drawRect(IntRect(x2 - thirdOfThickness, y1, thirdOfThickness, length));
             break;
         }
 
-        graphicsContext->setShouldAntialias(wasAntialiased);
-        graphicsContext->setStrokeStyle(oldStrokeStyle);
+        graphicsContext.setShouldAntialias(wasAntialiased);
+        graphicsContext.setStrokeStyle(oldStrokeStyle);
         return;
     }
 
@@ -442,7 +441,7 @@ void ObjectPainter::drawDoubleBoxSide(GraphicsContext* graphicsContext, int x1, 
     }
 }
 
-void ObjectPainter::drawRidgeOrGrooveBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void ObjectPainter::drawRidgeOrGrooveBoxSide(GraphicsContext& graphicsContext, int x1, int y1, int x2, int y2,
     BoxSide side, Color color, EBorderStyle style, int adjacentWidth1, int adjacentWidth2, bool antialias)
 {
     EBorderStyle s1;
@@ -486,7 +485,7 @@ void ObjectPainter::drawRidgeOrGrooveBoxSide(GraphicsContext* graphicsContext, i
     }
 }
 
-void ObjectPainter::drawSolidBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void ObjectPainter::drawSolidBoxSide(GraphicsContext& graphicsContext, int x1, int y1, int x2, int y2,
     BoxSide side, Color color, int adjacentWidth1, int adjacentWidth2, bool antialias)
 {
     ASSERT(x2 >= x1);
@@ -495,12 +494,12 @@ void ObjectPainter::drawSolidBoxSide(GraphicsContext* graphicsContext, int x1, i
     if (!adjacentWidth1 && !adjacentWidth2) {
         // Tweak antialiasing to match the behavior of fillPolygon();
         // this matters for rects in transformed contexts.
-        bool wasAntialiased = graphicsContext->shouldAntialias();
+        bool wasAntialiased = graphicsContext.shouldAntialias();
         if (antialias != wasAntialiased)
-            graphicsContext->setShouldAntialias(antialias);
-        graphicsContext->fillRect(IntRect(x1, y1, x2 - x1, y2 - y1), color);
+            graphicsContext.setShouldAntialias(antialias);
+        graphicsContext.fillRect(IntRect(x1, y1, x2 - x1, y2 - y1), color);
         if (antialias != wasAntialiased)
-            graphicsContext->setShouldAntialias(wasAntialiased);
+            graphicsContext.setShouldAntialias(wasAntialiased);
         return;
     }
 
@@ -532,7 +531,7 @@ void ObjectPainter::drawSolidBoxSide(GraphicsContext* graphicsContext, int x1, i
         break;
     }
 
-    graphicsContext->fillPolygon(4, quad, color, antialias);
+    graphicsContext.fillPolygon(4, quad, color, antialias);
 }
 
 } // namespace blink

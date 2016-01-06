@@ -42,10 +42,10 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
     : QuicClientBase(server_id,
                      supported_versions,
                      QuicConfig(),
+                     CreateQuicConnectionHelper(),
                      proof_verifier),
       server_address_(server_address),
       local_port_(0),
-      helper_(CreateQuicConnectionHelper()),
       initialized_(false),
       packet_reader_started_(false),
       weak_factory_(this) {}
@@ -55,18 +55,21 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
                                    const QuicVersionVector& supported_versions,
                                    const QuicConfig& config,
                                    ProofVerifier* proof_verifier)
-    : QuicClientBase(server_id, supported_versions, config, proof_verifier),
+    : QuicClientBase(server_id,
+                     supported_versions,
+                     config,
+                     CreateQuicConnectionHelper(),
+                     proof_verifier),
       server_address_(server_address),
       local_port_(0),
-      helper_(CreateQuicConnectionHelper()),
       initialized_(false),
       packet_reader_started_(false),
       weak_factory_(this) {}
 
 QuicSimpleClient::~QuicSimpleClient() {
   if (connected()) {
-    session()->connection()->SendConnectionClosePacket(
-        QUIC_PEER_GOING_AWAY, "");
+    session()->connection()->SendConnectionClosePacket(QUIC_PEER_GOING_AWAY,
+                                                       "");
   }
   STLDeleteElements(&data_to_resend_on_connect_);
   STLDeleteElements(&data_sent_before_handshake_);
@@ -98,10 +101,8 @@ QuicSimpleClient::QuicDataToResend::~QuicDataToResend() {
 
 bool QuicSimpleClient::CreateUDPSocket() {
   scoped_ptr<UDPClientSocket> socket(
-      new UDPClientSocket(DatagramSocket::DEFAULT_BIND,
-                          RandIntCallback(),
-                          &net_log_,
-                          NetLog::Source()));
+      new UDPClientSocket(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
+                          &net_log_, NetLog::Source()));
 
   int address_family = server_address_.GetSockAddrFamily();
   if (bind_to_address_.size() != 0) {
@@ -219,7 +220,7 @@ void QuicSimpleClient::StartConnect() {
   }
 
   CreateQuicClientSession(new QuicConnection(
-      GetNextConnectionId(), server_address_, helper_.get(), factory,
+      GetNextConnectionId(), server_address_, helper(), factory,
       /* owns_writer= */ false, Perspective::IS_CLIENT, supported_versions()));
 
   session()->Initialize();
@@ -286,7 +287,8 @@ void QuicSimpleClient::SendRequestAndWaitForResponse(
     StringPiece body,
     bool fin) {
   SendRequest(request, body, fin);
-  while (WaitForEvents()) {}
+  while (WaitForEvents()) {
+  }
 }
 
 void QuicSimpleClient::SendRequestsAndWaitForResponse(
@@ -298,7 +300,8 @@ void QuicSimpleClient::SendRequestsAndWaitForResponse(
     SendRequest(request, "", true);
   }
 
-  while (WaitForEvents()) {}
+  while (WaitForEvents()) {
+  }
 }
 
 bool QuicSimpleClient::WaitForEvents() {
@@ -345,8 +348,8 @@ void QuicSimpleClient::OnClose(QuicSpdyStream* stream) {
   HttpResponseInfo response;
   SpdyHeadersToHttpResponse(client_stream->headers(), net::HTTP2, &response);
   if (response_listener_.get() != nullptr) {
-    response_listener_->OnCompleteResponse(
-        stream->id(), *response.headers, client_stream->data());
+    response_listener_->OnCompleteResponse(stream->id(), *response.headers,
+                                           client_stream->data());
   }
 
   // Store response headers and body.
@@ -373,7 +376,7 @@ const string& QuicSimpleClient::latest_response_body() const {
 }
 
 QuicConnectionId QuicSimpleClient::GenerateNewConnectionId() {
-  return helper_->GetRandomGenerator()->RandUint64();
+  return helper()->GetRandomGenerator()->RandUint64();
 }
 
 QuicConnectionHelper* QuicSimpleClient::CreateQuicConnectionHelper() {
@@ -385,7 +388,8 @@ QuicPacketWriter* QuicSimpleClient::CreateQuicPacketWriter() {
   return new QuicDefaultPacketWriter(socket_.get());
 }
 
-void QuicSimpleClient::OnReadError(int result) {
+void QuicSimpleClient::OnReadError(int result,
+                                   const DatagramClientSocket* socket) {
   LOG(ERROR) << "QuicSimpleClient read failed: " << ErrorToShortString(result);
   Disconnect();
 }

@@ -7,9 +7,13 @@
 
 #include "ui/events/blink/blink_event_util.h"
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <cmath>
 
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gesture_detection/gesture_event_data.h"
@@ -121,9 +125,6 @@ WebTouchPoint CreateWebTouchPoint(const MotionEvent& event,
 
   float major_radius = event.GetTouchMajor(pointer_index) / 2.f;
   float minor_radius = event.GetTouchMinor(pointer_index) / 2.f;
-
-  DCHECK_LE(minor_radius, major_radius);
-  DCHECK(!major_radius || minor_radius);
 
   float orientation_rad = event.GetOrientation(pointer_index);
   float orientation_deg = orientation_rad * 180.f / M_PI;

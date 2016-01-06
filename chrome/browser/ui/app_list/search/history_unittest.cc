@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -125,7 +127,7 @@ class SearchHistoryTest : public testing::Test {
   }
 
   size_t GetKnownResults(const std::string& query) {
-    known_results_ = history()->GetKnownResults(query).Pass();
+    known_results_ = history()->GetKnownResults(query);
     return known_results_->size();
   }
 

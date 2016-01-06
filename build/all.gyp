@@ -10,6 +10,9 @@
     # For Android-specific targets.
     'android_app_targets%': [],
   },
+  'includes': [
+    '../third_party/openh264/openh264_args.gypi',
+  ],
   'targets': [
     {
       'target_name': 'All',
@@ -84,10 +87,14 @@
             ['chromecast==0', {
               'dependencies': [
                 '../android_webview/android_webview.gyp:android_webview_apk',
-                '../android_webview/android_webview.gyp:system_webview_apk',
                 '../android_webview/android_webview_shell.gyp:system_webview_shell_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_public_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_sync_shell_apk',
+              ],
+            }],
+            ['chromecast==0 and use_webview_internal_framework==0', {
+              'dependencies': [
+                '../android_webview/android_webview.gyp:system_webview_apk',
               ],
             }],
             # TODO: Enable packed relocations for x64. See: b/20532404
@@ -228,10 +235,6 @@
             '../third_party/bspatch/bspatch.gyp:*',
             '../tools/win/static_initializers/static_initializers.gyp:*',
           ],
-        }, {
-          'dependencies': [
-            '../third_party/libevent/libevent.gyp:*',
-          ],
         }],
         ['toolkit_views==1', {
           'dependencies': [
@@ -284,6 +287,11 @@
         ['envoy==1', {
           'dependencies': [
             '../envoy/envoy.gyp:*',
+          ],
+        }],
+        ['use_openh264==1', {
+          'dependencies': [
+            '../third_party/openh264/openh264.gyp:*',
           ],
         }],
       ],
@@ -566,7 +574,6 @@
             '../chrome/chrome.gyp:load_library_perf_tests',
             '../chrome/chrome.gyp:performance_browser_tests',
             '../chrome/chrome.gyp:sync_performance_tests',
-            '../content/content_shell_and_tests.gyp:content_shell',
             '../gpu/gpu.gyp:gpu_perftests',
             '../media/media.gyp:media_perftests',
             '../media/midi/midi.gyp:midi_unittests',
@@ -828,6 +835,7 @@
             '../tools/android/android_tools.gyp:android_tools',
             '../tools/android/android_tools.gyp:memconsumer',
             '../tools/android/findbugs_plugin/findbugs_plugin.gyp:findbugs_plugin_test',
+            '../tools/cygprofile/cygprofile.gyp:cygprofile_unittests',
             '../ui/android/ui_android.gyp:ui_android_unittests',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests',
             '../ui/events/events_unittests.gyp:events_unittests',

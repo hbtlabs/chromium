@@ -6,17 +6,21 @@
 
 // TODOv3(shess): Review these changes carefully.
 
+#include "chrome/browser/safe_browsing/protocol_parser.h"
+
+#include <stdint.h>
 #include <stdlib.h>
+#include <utility>
 
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/safe_browsing/protocol_parser.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
 
 namespace safe_browsing {
@@ -72,8 +76,8 @@ class BufferReader {
     return true;
   }
 
-  // Read a 32-bit integer in network byte order into a local uint32.
-  bool GetNet32(uint32* i) {
+  // Read a 32-bit integer in network byte order into a local uint32_t.
+  bool GetNet32(uint32_t* i) {
     if (!GetData(i, sizeof(*i)))
       return false;
 
@@ -354,7 +358,7 @@ bool ParseChunk(const char* data,
   BufferReader reader(data, length);
 
   while (!reader.empty()) {
-    uint32 l = 0;
+    uint32_t l = 0;
     if (!reader.GetNet32(&l) || l == 0 || l > reader.length())
       return false;
 
@@ -366,7 +370,7 @@ bool ParseChunk(const char* data,
     if (!chunk->ParseFrom(reinterpret_cast<const unsigned char*>(p), l))
       return false;
 
-    chunks->push_back(chunk.Pass());
+    chunks->push_back(std::move(chunk));
   }
 
   DCHECK(reader.empty());

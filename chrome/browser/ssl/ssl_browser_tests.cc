@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
@@ -19,6 +22,7 @@
 #include "base/test/simple_test_clock.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -370,6 +374,16 @@ class SSLUITest
     observer.Wait();
   }
 
+  void SendInterstitialCommand(WebContents* tab, std::string command) {
+    InterstitialPage* interstitial_page = tab->GetInterstitialPage();
+    ASSERT_TRUE(interstitial_page);
+    ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
+              interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
+    SSLBlockingPage* ssl_interstitial = static_cast<SSLBlockingPage*>(
+        interstitial_page->GetDelegateForTesting());
+    ssl_interstitial->CommandReceived(command);
+  }
+
   bool IsShowingWebContentsModalDialog() const {
     return WebContentsModalDialogManager::FromWebContents(
         browser()->tab_strip_model()->GetActiveWebContents())->
@@ -459,6 +473,7 @@ class SSLUITest
     ui_test_utils::NavigateToURL(browser, https_server_expired_.GetURL("/"));
 
     WebContents* tab = browser->tab_strip_model()->GetActiveWebContents();
+    ASSERT_TRUE(tab != nullptr);
     CheckAuthenticationBrokenState(tab, net::CERT_STATUS_DATE_INVALID,
                                    AuthState::SHOWING_INTERSTITIAL);
 
@@ -466,9 +481,12 @@ class SSLUITest
         certificate_reporting_test_utils::SetUpMockSSLCertReporter(
             &run_loop, expect_report);
 
+    ASSERT_TRUE(tab->GetInterstitialPage() != nullptr);
     SSLBlockingPage* interstitial_page = static_cast<SSLBlockingPage*>(
         tab->GetInterstitialPage()->GetDelegateForTesting());
-    interstitial_page->SetSSLCertReporterForTesting(ssl_cert_reporter.Pass());
+    ASSERT_TRUE(interstitial_page != nullptr);
+    interstitial_page->SetSSLCertReporterForTesting(
+        std::move(ssl_cert_reporter));
 
     EXPECT_EQ(std::string(), GetLatestHostnameReported());
 
@@ -529,7 +547,7 @@ class SSLUITest
               interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
     BadClockBlockingPage* clock_page = static_cast<BadClockBlockingPage*>(
         tab->GetInterstitialPage()->GetDelegateForTesting());
-    clock_page->SetSSLCertReporterForTesting(ssl_cert_reporter.Pass());
+    clock_page->SetSSLCertReporterForTesting(std::move(ssl_cert_reporter));
 
     EXPECT_EQ(std::string(), GetLatestHostnameReported());
 
@@ -703,8 +721,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestBrokenHTTPSMetricsReporting_Proceed) {
       security_interstitials::MetricsHelper::TOTAL_VISITS, 1);
 
   // Decision should be recorded.
-  ProceedThroughInterstitial(
-      browser()->tab_strip_model()->GetActiveWebContents());
+  SendInterstitialCommand(browser()->tab_strip_model()->GetActiveWebContents(),
+                          "1");
   histograms.ExpectTotalCount(decision_histogram, 2);
   histograms.ExpectBucketCount(
       decision_histogram, security_interstitials::MetricsHelper::PROCEED, 1);
@@ -740,11 +758,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestBrokenHTTPSMetricsReporting_DontProceed) {
       security_interstitials::MetricsHelper::TOTAL_VISITS, 1);
 
   // Decision should be recorded.
-  InterstitialPage* interstitial_page = browser()
-                                            ->tab_strip_model()
-                                            ->GetActiveWebContents()
-                                            ->GetInterstitialPage();
-  interstitial_page->DontProceed();
+  SendInterstitialCommand(browser()->tab_strip_model()->GetActiveWebContents(),
+                          "0");
   histograms.ExpectTotalCount(decision_histogram, 2);
   histograms.ExpectBucketCount(
       decision_histogram, security_interstitials::MetricsHelper::DONT_PROCEED,

@@ -20,6 +20,7 @@ mojom("test_interfaces") {
     "scoping.mojom",
     "serialization_test_structs.mojom",
     "test_constants.mojom",
+    "test_native_types.mojom",
     "test_structs.mojom",
     "validation_test_interfaces.mojom",
   ]
@@ -66,4 +67,38 @@ mojom("versioning_test_client_interfaces") {
   ]
 
   with_environment = false
+}
+
+mojom("test_interfaces_chromium") {
+  testonly = true
+
+  sources = [
+    "test_native_types.mojom",
+  ]
+
+  variant = "chromium"
+  typemaps = [ "chromium_test.typemap" ]
+
+  with_environment = false
+
+  public_deps = [
+    ":test_interfaces",
+  ]
+}
+
+mojom("test_interfaces_blink") {
+  testonly = true
+
+  sources = [
+    "test_native_types.mojom",
+  ]
+
+  variant = "blink"
+  typemaps = [ "blink_test.typemap" ]
+
+  with_environment = false
+
+  public_deps = [
+    ":test_interfaces",
+  ]
 }

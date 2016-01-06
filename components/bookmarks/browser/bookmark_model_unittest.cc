@@ -4,13 +4,17 @@
 
 #include "components/bookmarks/browser/bookmark_model.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -422,7 +426,7 @@ class BookmarkModelTest : public testing::Test,
     BookmarkPermanentNode* extra_node = new BookmarkPermanentNode(100);
     BookmarkPermanentNodeList extra_nodes;
     extra_nodes.push_back(extra_node);
-    client_.SetExtraNodesToLoad(extra_nodes.Pass());
+    client_.SetExtraNodesToLoad(std::move(extra_nodes));
 
     model_->RemoveObserver(this);
     model_ = client_.CreateModel();

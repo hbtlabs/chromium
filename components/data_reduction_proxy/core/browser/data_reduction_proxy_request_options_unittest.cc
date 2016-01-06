@@ -14,11 +14,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
-#include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -150,14 +150,6 @@ class DataReductionProxyRequestOptionsTest : public testing::Test {
     request_options_->Init();
   }
 
-  void CreateRequest() {
-    net::URLRequestContext* context =
-        test_context_->request_context_getter()->GetURLRequestContext();
-    request_ = context->CreateRequest(GURL(), net::DEFAULT_PRIORITY, nullptr);
-  }
-
-  const net::URLRequest& request() { return *request_.get(); }
-
   TestDataReductionProxyParams* params() {
     return test_context_->config()->test_params();
   }
@@ -171,7 +163,6 @@ class DataReductionProxyRequestOptionsTest : public testing::Test {
     test_context_->RunUntilIdle();
     net::HttpRequestHeaders headers;
     request_options_->MaybeAddRequestHeader(
-        request_.get(),
         proxy_uri.empty() ? net::ProxyServer()
                           : net::ProxyServer::FromURI(
                                 proxy_uri, net::ProxyServer::SCHEME_HTTP),
@@ -189,7 +180,6 @@ class DataReductionProxyRequestOptionsTest : public testing::Test {
   base::MessageLoopForIO message_loop_;
   scoped_ptr<TestDataReductionProxyRequestOptions> request_options_;
   scoped_ptr<DataReductionProxyTestContext> test_context_;
-  scoped_ptr<net::URLRequest> request_;
 };
 
 TEST_F(DataReductionProxyRequestOptionsTest, AuthHashForSalt) {
@@ -304,63 +294,6 @@ TEST_F(DataReductionProxyRequestOptionsTest, ParseExperiments) {
 
   CreateRequestOptions(kBogusVersion);
   VerifyExpectedHeader(params()->DefaultOrigin(), expected_header);
-}
-
-TEST_F(DataReductionProxyRequestOptionsTest, ParseLocalSessionKey) {
-  const struct {
-    bool should_succeed;
-    std::string session_key;
-    std::string expected_session;
-    std::string expected_credentials;
-  } tests[] = {
-      {
-          true,
-          "foobar|1234",
-          "foobar",
-          "1234",
-      },
-      {
-          false,
-          "foobar|1234|foobaz",
-          std::string(),
-          std::string(),
-      },
-      {
-          false,
-          "foobar",
-          std::string(),
-          std::string(),
-      },
-      {
-          false,
-          std::string(),
-          std::string(),
-          std::string(),
-      },
-  };
-
-  std::string session;
-  std::string credentials;
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    EXPECT_EQ(tests[i].should_succeed,
-              DataReductionProxyRequestOptions::ParseLocalSessionKey(
-                  tests[i].session_key, &session, &credentials));
-    if (tests[i].should_succeed) {
-      EXPECT_EQ(tests[i].expected_session, session);
-      EXPECT_EQ(tests[i].expected_credentials, credentials);
-    }
-  }
-}
-
-TEST_F(DataReductionProxyRequestOptionsTest, PopulateConfigResponse) {
-  CreateRequestOptions(kBogusVersion);
-  ClientConfig config;
-  request_options()->PopulateConfigResponse(&config);
-  EXPECT_EQ(
-      "0-1633771873-1633771873-1633771873|96bd72ec4a050ba60981743d41787768",
-      config.session_key());
-  EXPECT_EQ(86400, config.refresh_duration().seconds());
-  EXPECT_EQ(0, config.refresh_duration().nanos());
 }
 
 }  // namespace data_reduction_proxy

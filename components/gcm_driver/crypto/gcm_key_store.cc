@@ -4,6 +4,8 @@
 
 #include "components/gcm_driver/crypto/gcm_key_store.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/logging.h"
@@ -116,7 +118,7 @@ void GCMKeyStore::CreateKeysAfterInitialize(const std::string& app_id,
   entries_to_save->push_back(std::make_pair(app_id, encryption_data));
 
   database_->UpdateEntries(
-      entries_to_save.Pass(), keys_to_remove.Pass(),
+      std::move(entries_to_save), std::move(keys_to_remove),
       base::Bind(&GCMKeyStore::DidStoreKeys, weak_factory_.GetWeakPtr(), app_id,
                  *pair, auth_secret, callback));
 }
@@ -163,7 +165,7 @@ void GCMKeyStore::DeleteKeysAfterInitialize(const std::string& app_id,
       new std::vector<std::string>(1, app_id));
 
   database_->UpdateEntries(
-      entries_to_save.Pass(), keys_to_remove.Pass(),
+      std::move(entries_to_save), std::move(keys_to_remove),
       base::Bind(&GCMKeyStore::DidDeleteKeys, weak_factory_.GetWeakPtr(),
                  app_id, callback));
 }

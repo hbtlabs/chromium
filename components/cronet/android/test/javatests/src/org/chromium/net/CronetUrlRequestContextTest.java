@@ -4,6 +4,8 @@
 
 package org.chromium.net;
 
+import static org.chromium.base.CollectionUtil.newHashSet;
+
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.os.ConditionVariable;
@@ -12,13 +14,16 @@ import android.os.Looper;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.PathUtils;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.test.util.Feature;
+import org.chromium.net.CronetEngine.UrlRequestInfo;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Executor;
@@ -26,6 +31,7 @@ import java.util.concurrent.Executor;
 /**
  * Test CronetEngine.
  */
+@JNINamespace("cronet")
 public class CronetUrlRequestContextTest extends CronetTestBase {
     // URLs used for tests.
     private static final String TEST_URL = "http://127.0.0.1:8000";
@@ -104,10 +110,12 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         int mRttObservationCount;
         int mThroughputObservationCount;
 
+        @Override
         public void onRttObservation(int rttMs, long when, int source) {
             mRttObservationCount++;
         }
 
+        @Override
         public void onThroughputObservation(int throughputKbps, long when, int source) {
             mThroughputObservationCount++;
         }
@@ -260,6 +268,129 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         mTestFramework.mCronetEngine.shutdown();
     }
 
+    private static class TestRequestFinishedListener
+            implements CronetEngine.RequestFinishedListener {
+        private UrlRequestInfo mRequestInfo = null;
+
+        @Override
+        public void onRequestFinished(UrlRequestInfo requestInfo) {
+            assertNull("onRequestFinished called repeatedly", mRequestInfo);
+            assertNotNull(requestInfo);
+            mRequestInfo = requestInfo;
+        }
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @SuppressWarnings("deprecation")
+    public void testRequestFinishedListener() throws Exception {
+        mTestFramework = startCronetTestFramework();
+        TestExecutor testExecutor = new TestExecutor();
+        TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
+        mTestFramework.mCronetEngine.enableNetworkQualityEstimator(testExecutor);
+        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder urlRequestBuilder = new UrlRequest.Builder(
+                TEST_URL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        urlRequestBuilder.addRequestAnnotation("request annotation")
+                .addRequestAnnotation(this)
+                .build()
+                .start();
+        callback.blockForDone();
+        testExecutor.runAllTasks();
+
+        CronetEngine.UrlRequestInfo requestInfo = requestFinishedListener.mRequestInfo;
+        assertNotNull("RequestFinishedListener must be called", requestInfo);
+        assertEquals(TEST_URL, requestInfo.getUrl());
+        assertNotNull(requestInfo.getResponseInfo());
+        assertEquals(newHashSet("request annotation", this), // Use sets for unordered comparison.
+                new HashSet<Object>(requestInfo.getAnnotations()));
+        CronetEngine.UrlRequestMetrics metrics = requestInfo.getMetrics();
+        assertNotNull("UrlRequestInfo.getMetrics() must not be null", metrics);
+        assertTrue(metrics.getTotalTimeMs() > 0);
+        assertTrue(metrics.getTotalTimeMs() >= metrics.getTtfbMs());
+        assertTrue(metrics.getReceivedBytesCount() > 0);
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @SuppressWarnings("deprecation")
+    public void testRequestFinishedListenerFailedRequest() throws Exception {
+        String connectionRefusedUrl = "http://127.0.0.1:3";
+        mTestFramework = startCronetTestFramework();
+        TestExecutor testExecutor = new TestExecutor();
+        TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
+        mTestFramework.mCronetEngine.enableNetworkQualityEstimator(testExecutor);
+        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder urlRequestBuilder = new UrlRequest.Builder(connectionRefusedUrl,
+                callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        urlRequestBuilder.build().start();
+        callback.blockForDone();
+        assertTrue(callback.mOnErrorCalled);
+        testExecutor.runAllTasks();
+
+        CronetEngine.UrlRequestInfo requestInfo = requestFinishedListener.mRequestInfo;
+        assertNotNull("RequestFinishedListener must be called", requestInfo);
+        assertEquals(connectionRefusedUrl, requestInfo.getUrl());
+        assertTrue(requestInfo.getAnnotations().isEmpty());
+        CronetEngine.UrlRequestMetrics metrics = requestInfo.getMetrics();
+        assertNotNull("UrlRequestInfo.getMetrics() must not be null", metrics);
+        assertTrue(metrics.getTotalTimeMs() > 0);
+        assertNull(metrics.getTtfbMs());
+        assertTrue(metrics.getReceivedBytesCount() == null || metrics.getReceivedBytesCount() == 0);
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @SuppressWarnings("deprecation")
+    public void testRequestFinishedListenerRemoved() throws Exception {
+        mTestFramework = startCronetTestFramework();
+        TestExecutor testExecutor = new TestExecutor();
+        TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
+        mTestFramework.mCronetEngine.enableNetworkQualityEstimator(testExecutor);
+        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+        mTestFramework.mCronetEngine.removeRequestFinishedListener(requestFinishedListener);
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder urlRequestBuilder = new UrlRequest.Builder(
+                TEST_URL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        urlRequestBuilder.build().start();
+        callback.blockForDone();
+        testExecutor.runAllTasks();
+
+        assertNull(
+                "RequestFinishedListener must not be called", requestFinishedListener.mRequestInfo);
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @SuppressWarnings("deprecation")
+    public void testRequestFinishedListenerDisabled() throws Exception {
+        mTestFramework = startCronetTestFramework();
+        TestExecutor testExecutor = new TestExecutor();
+        TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
+        try {
+            mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+            fail("addRequestFinishedListener unexpectedly succeeded "
+                    + "without a call to enableNetworkQualityEstimator()");
+        } catch (RuntimeException e) {
+            // Expected.
+        }
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder urlRequestBuilder = new UrlRequest.Builder(
+                TEST_URL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        urlRequestBuilder.build().start();
+        callback.blockForDone();
+        testExecutor.runAllTasks();
+
+        assertNull(
+                "RequestFinishedListener must not be called", requestFinishedListener.mRequestInfo);
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
     @SmallTest
     @Feature({"Cronet"})
     public void testShutdown() throws Exception {
@@ -318,6 +449,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         // scenario when shutdown is called right after construction before
         // context is fully initialized on the main thread.
         Runnable blockingTask = new Runnable() {
+            @Override
             public void run() {
                 try {
                     block.block();
@@ -355,6 +487,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
 
         // Post a task to main thread to init and shutdown on the main thread.
         Runnable blockingTask = new Runnable() {
+            @Override
             public void run() {
                 // Create new request context, loading the library.
                 final CronetEngine cronetEngine = testFramework.initCronetEngine();
@@ -791,4 +924,30 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         assertTrue(delta2.length != 0);
         assertFalse(Arrays.equals(delta1, delta2));
     }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    public void testCronetEngineBuilderConfig() throws Exception {
+        // This is to prompt load of native library.
+        startCronetTestFramework();
+        // Verify CronetEngine.Builder config is passed down accurately to native code.
+        CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
+        builder.enableHTTP2(false);
+        builder.enableQUIC(true);
+        builder.enableSDCH(true);
+        builder.addQuicHint("example.com", 12, 34);
+        builder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_IN_MEMORY, 54321);
+        builder.enableDataReductionProxy("abcd");
+        builder.setUserAgent("efgh");
+        builder.setExperimentalOptions("ijkl");
+        builder.setDataReductionProxyOptions("mnop", "qrst", "uvwx");
+        builder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
+        nativeVerifyUrlRequestContextConfig(
+                CronetUrlRequestContext.createNativeUrlRequestContextConfig(builder),
+                CronetTestFramework.getTestStorage(getContext()));
+    }
+
+    // Verifies that CronetEngine.Builder config from testCronetEngineBuilderConfig() is properly
+    // translated to a native UrlRequestContextConfig.
+    private static native void nativeVerifyUrlRequestContextConfig(long config, String storagePath);
 }

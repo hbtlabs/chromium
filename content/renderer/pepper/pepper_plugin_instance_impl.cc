@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
@@ -18,6 +20,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/texture_layer.h"
 #include "content/common/content_constants_internal.h"
@@ -308,7 +311,7 @@ scoped_ptr<const char* []> StringVectorToArgArray(
   scoped_ptr<const char * []> array(new const char* [vector.size()]);
   for (size_t i = 0; i < vector.size(); ++i)
     array[i] = vector[i].c_str();
-  return array.Pass();
+  return array;
 }
 
 // Returns true if this is a "system reserved" key which should not be sent to
@@ -378,6 +381,23 @@ PepperPluginInstanceImpl* PepperPluginInstanceImpl::Create(
                                       ppp_instance_combined,
                                       container,
                                       plugin_url);
+}
+
+// static
+PepperPluginInstance* PepperPluginInstance::Get(PP_Instance instance_id) {
+  PepperPluginInstanceImpl* instance =
+      PepperPluginInstanceImpl::GetForTesting(instance_id);
+  if (instance && !instance->is_deleted())
+    return instance;
+  return nullptr;
+}
+
+// static
+PepperPluginInstanceImpl* PepperPluginInstanceImpl::GetForTesting(
+    PP_Instance instance_id) {
+  PepperPluginInstanceImpl* instance =
+      HostGlobals::Get()->GetInstance(instance_id);
+  return instance;
 }
 
 PepperPluginInstanceImpl::ExternalDocumentLoader::ExternalDocumentLoader()
@@ -767,7 +787,7 @@ void PepperPluginInstanceImpl::CommitBackingTexture() {
   if (!texture_layer_.get())
     return;
   gpu::Mailbox mailbox;
-  uint32 sync_point = 0;
+  uint32_t sync_point = 0;
   bound_graphics_3d_->GetBackingMailbox(&mailbox, &sync_point);
   DCHECK(!mailbox.IsZero());
   DCHECK_NE(sync_point, 0u);
@@ -808,7 +828,7 @@ bool PepperPluginInstanceImpl::Initialize(
     return false;
 
   if (throttler) {
-    throttler_ = throttler.Pass();
+    throttler_ = std::move(throttler);
     throttler_->AddObserver(this);
   }
 
@@ -1958,7 +1978,7 @@ void PepperPluginInstanceImpl::UpdateLayer(bool device_changed) {
     return;
 
   gpu::Mailbox mailbox;
-  uint32 sync_point = 0;
+  uint32_t sync_point = 0;
   if (bound_graphics_3d_.get()) {
     bound_graphics_3d_->GetBackingMailbox(&mailbox, &sync_point);
     DCHECK_EQ(mailbox.IsZero(), sync_point == 0);
@@ -2391,13 +2411,13 @@ PP_Var PepperPluginInstanceImpl::GetDefaultCharSet(PP_Instance instance) {
 // Therefore, |content_decryptor_delegate_| must have been initialized when
 // the following methods are called.
 void PepperPluginInstanceImpl::PromiseResolved(PP_Instance instance,
-                                               uint32 promise_id) {
+                                               uint32_t promise_id) {
   content_decryptor_delegate_->OnPromiseResolved(promise_id);
 }
 
 void PepperPluginInstanceImpl::PromiseResolvedWithSession(
     PP_Instance instance,
-    uint32 promise_id,
+    uint32_t promise_id,
     PP_Var session_id_var) {
   content_decryptor_delegate_->OnPromiseResolvedWithSession(promise_id,
                                                             session_id_var);
@@ -2405,9 +2425,9 @@ void PepperPluginInstanceImpl::PromiseResolvedWithSession(
 
 void PepperPluginInstanceImpl::PromiseRejected(
     PP_Instance instance,
-    uint32 promise_id,
+    uint32_t promise_id,
     PP_CdmExceptionCode exception_code,
-    uint32 system_code,
+    uint32_t system_code,
     PP_Var error_description_var) {
   content_decryptor_delegate_->OnPromiseRejected(
       promise_id, exception_code, system_code, error_description_var);
@@ -2449,7 +2469,7 @@ void PepperPluginInstanceImpl::LegacySessionError(
     PP_Instance instance,
     PP_Var session_id_var,
     PP_CdmExceptionCode exception_code,
-    uint32 system_code,
+    uint32_t system_code,
     PP_Var error_description_var) {
   content_decryptor_delegate_->OnLegacySessionError(
       session_id_var, exception_code, system_code, error_description_var);
@@ -2540,7 +2560,7 @@ void PepperPluginInstanceImpl::SetTickmarks(PP_Instance instance,
 
   blink::WebVector<blink::WebRect> tickmarks_converted(
       static_cast<size_t>(count));
-  for (uint32 i = 0; i < count; ++i) {
+  for (uint32_t i = 0; i < count; ++i) {
     tickmarks_converted[i] = blink::WebRect(tickmarks[i].point.x,
                                             tickmarks[i].point.y,
                                             tickmarks[i].size.width,
@@ -2915,10 +2935,6 @@ PP_ExternalPluginResult PepperPluginInstanceImpl::ResetAsProxied(
 bool PepperPluginInstanceImpl::IsValidInstanceOf(PluginModule* module) {
   DCHECK(module);
   return module == module_.get() || module == original_module_.get();
-}
-
-PepperPluginInstance* PepperPluginInstance::Get(PP_Instance instance_id) {
-  return HostGlobals::Get()->GetInstance(instance_id);
 }
 
 RenderView* PepperPluginInstanceImpl::GetRenderView() {

@@ -20,25 +20,22 @@ namespace test {
 namespace {
 
 // Default packet length.
-const uint32 kDefaultLength = 1000;
+const uint32_t kDefaultLength = 1000;
 
 class TimeLossAlgorithmTest : public ::testing::Test {
  protected:
   TimeLossAlgorithmTest() {
     rtt_stats_.UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
-                         QuicTime::Delta::Zero(),
-                         clock_.Now());
+                         QuicTime::Delta::Zero(), clock_.Now());
   }
 
-  ~TimeLossAlgorithmTest() override {
-    STLDeleteElements(&packets_);
-  }
+  ~TimeLossAlgorithmTest() override { STLDeleteElements(&packets_); }
 
   void SendDataPacket(QuicPacketNumber packet_number) {
     packets_.push_back(new QuicEncryptedPacket(nullptr, kDefaultLength));
-    SerializedPacket packet(
-        packet_number, PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
-        new RetransmittableFrames(ENCRYPTION_NONE), false, false);
+    SerializedPacket packet(kDefaultPathId, packet_number,
+                            PACKET_1BYTE_PACKET_NUMBER, packets_.back(), 0,
+                            new RetransmittableFrames(), false, false);
     unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
                                    1000, true);
   }
@@ -68,7 +65,7 @@ TEST_F(TimeLossAlgorithmTest, NoLossFor500Nacks) {
     SendDataPacket(i);
   }
   unacked_packets_.RemoveFromInFlight(2);
-  for (uint16 i = 1; i < 500; ++i) {
+  for (uint16_t i = 1; i < 500; ++i) {
     unacked_packets_.NackPacket(1, i);
     VerifyLosses(2, nullptr, 0);
   }

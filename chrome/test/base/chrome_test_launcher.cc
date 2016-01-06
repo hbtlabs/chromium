@@ -9,11 +9,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/test_file_util.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_main_delegate.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -120,14 +122,6 @@ int LaunchChromeTests(int default_jobs,
   ChromeCrashReporterClient* crash_client = new ChromeCrashReporterClient();
   ANNOTATE_LEAKING_OBJECT_PTR(crash_client);
   crash_reporter::SetCrashReporterClient(crash_client);
-#endif
-
-#if defined(OS_WIN)
-  base::CommandLine::Init(0, nullptr);
-  std::string process_type =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kProcessType);
-  crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
 #endif
 
   ChromeTestLauncherDelegate launcher_delegate(runner);

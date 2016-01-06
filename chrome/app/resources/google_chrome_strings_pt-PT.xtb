@@ -53,6 +53,7 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="2485422356828889247">Desinstalar</translation>
 <translation id="2576431527583832481">O Chrome ficou ainda melhor! Está disponível uma nova versão.</translation>
 <translation id="2580411288591421699">Não é possível instalar a mesma versão do Google Chrome atualmente em execução. Feche o Google Chrome e tente novamente.</translation>
+<translation id="2582790009689336987">Em breve, este computador deixará de receber atualizações do Google Chrome, uma vez que este sistema Linux já não será suportado.</translation>
 <translation id="2588322182880276190">Logótipo do Chrome</translation>
 <translation id="2664962310688259219">Licenças de código aberto do SO Chrome</translation>
 <translation id="2665296953892887393">Ajudar a melhorar o Google Chrome ao enviar relatórios de falhas e <ph name="UMA_LINK" /> à Google</translation>
@@ -72,6 +73,7 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="3149510190863420837">Aplicações do Chrome</translation>
 <translation id="3197823471738295152">O dispositivo está atualizado.</translation>
 <translation id="3282568296779691940">Iniciar sessão no Chrome</translation>
+<translation id="3311976847535831054">Este computador deixará de receber atualizações do Google Chrome de 32 bits. Atualize para o Google Chrome de 64 bits.</translation>
 <translation id="3360895254066713204">Ajudante do Chrome</translation>
 <translation id="3396977131400919238">Ocorreu um erro no sistema operativo durante a instalação. Transfira de novo o Google Chrome.</translation>
 <translation id="3398288718845740432">Ocultar no menu do Chrome</translation>
@@ -98,6 +100,7 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="4251615635259297716">Associar os seus dados do Chrome a esta conta?</translation>
 <translation id="4309555186815777032">(é necessário <ph name="BEGIN_BUTTON" />reiniciar<ph name="END_BUTTON" /> o Chrome)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="437002079035561265">Este computador deixará de receber atualizações do Google Chrome, uma vez que este sistema Linux já não é suportado.</translation>
 <translation id="4407807842708586359">SO do Google Chrome</translation>
 <translation id="4458285410772214805">Termine sessão e volte a iniciar sessão para que esta alteração tenha efeito.</translation>
 <translation id="4480040274068703980">O SO Chrome não conseguiu sincronizar os dados devido a um erro no início de sessão.</translation>
@@ -110,6 +113,7 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="4728575227883772061">Houve uma falha na instalação devido a um erro não especificado. Se o Google Chrome estiver atualmente em execução, feche-o e tente de novo.</translation>
 <translation id="473775607612524610">Actualizar</translation>
 <translation id="4743926867934016338">Aceitar e pesquisar</translation>
+<translation id="4751441238232965030">Em breve, este computador deixará de receber atualizações do Google Chrome de 32 bits. Atualize para o Google Chrome de 64 bits.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4794050651896644714">Guardar os detalhes no Chrome</translation>
 <translation id="4891791193823137474">Permitir que o Google Chrome seja executado em segundo plano</translation>
@@ -136,30 +140,18 @@ Se, mesmo assim, iniciar sessão, as informações do Chrome, como marcadores, h
 <translation id="5563479599352954471">Pesquisar com um toque</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="5620765574781326016">Saiba mais acerca de tópicos em Websites sem sair da página.</translation>
-<translation id="5626352146162055517">Normalmente, o site <ph name="SITE" /> utiliza a encriptação para proteger as suas informações. Quando o Chrome tentou ligar-se a <ph name="SITE" /> desta vez, o Website devolveu credenciais
-invulgares e incorretas. Isto pode acontecer quando um utilizador mal intencionado tenta simular ser <ph name="SITE" /> ou quando um ecrã de início de sessão Wi-Fi interrompe a ligação. As suas informações continuam seguras porque o Chrome interrompeu a ligação antes de qualquer troca de dados.</translation>
 <translation id="568643307450491754">Encontre os seus marcadores no menu Chrome ou na barra de marcadores.</translation>
 <translation id="573759479754913123">Acerca do SO Chrome</translation>
 <translation id="5749068826913805084">O Chrome necessita de acesso ao armazenamento para transferir ficheiros.</translation>
 <translation id="5785746630574083988">A reinicialização no modo Windows 8 fecha e reinicia as aplicações do Chrome.</translation>
 <translation id="5855036575689098185">O software em execução no seu computador é incompatível com o Google Chrome.</translation>
 <translation id="5877064549588274448">Canal alterado. Reinicie o dispositivo para aplicar as alterações.</translation>
-<translation id="5890698319714066019">O Google Chrome não consegue apresentar a página Web, uma vez que o seu computador não está ligado à Internet.</translation>
 <translation id="5931853610562009806">No Mac, as palavras-passe podem ser guardadas no Porta-chaves e podem ser sincronizadas ou acedidas por outros utilizadores do Chrome que partilhem esta conta do OS X.</translation>
 <translation id="5940385492829620908">A sua Web, os seus marcadores e os seus outros itens do Chrome estão aqui.</translation>
 <translation id="5941830788786076944">Tornar o Google Chrome no browser padrão.</translation>
 <translation id="597770749449734237">Ativa atalhos de teclado adicionais, úteis para depurar o Google Chrome.</translation>
-<translation id="6011049234605203654">Aceda ao
-          menu Chrome &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          e certifique-se de que a sua configuração está definida como "sem proxy" ou "direta".</translation>
 <translation id="6012342843556706400">O Chrome necessita de acesso à localização para a partilhar com este site.</translation>
 <translation id="6014844626092547096">Tem agora sessão iniciada no Chrome! A sincronização foi desativada pelo seu administrador.</translation>
-<translation id="6049075767726609708">Um administrador instalou o Google Chrome neste sistema, disponível para todos os utilizadores. O Google Chrome ao nível do sistema substituirá a instalação ao nível do utilizador.</translation>
 <translation id="6113794647360055231">O Chrome está ainda melhor</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Atualizar o SO &amp;Chrome</translation>
@@ -177,16 +169,6 @@ invulgares e incorretas. Isto pode acontecer quando um utilizador mal intenciona
 <translation id="6676384891291319759">Aceder à Internet</translation>
 <translation id="6757767188268205357">Não incomodar</translation>
 <translation id="683440813066116847">Regra de importação para o Google Chrome Canary permitir o tráfego mDNS.</translation>
-<translation id="6855094794438142393">Aceda ao
-          menu Chrome &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Definições de LAN
-          e desmarque "Utilizar um servidor proxy para a rede local".</translation>
 <translation id="6883876366448858277">envia uma palavra e o respetivo contexto circundante à Pesquisa Google, que devolve definições, imagens e outros resultados da pesquisa.</translation>
 <translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">A atualizar o dispositivo...</translation>
@@ -208,7 +190,6 @@ invulgares e incorretas. Isto pode acontecer quando um utilizador mal intenciona
 <translation id="7282192067747128786">Chrome – Notificações (<ph name="QUANTITY" /> não lidas)</translation>
 <translation id="729375352412857283">Em breve, este computador deixará de receber atualizações do Google Chrome, uma vez que o Windows XP e o Windows Vista já não serão suportados.</translation>
 <translation id="7339898014177206373">Nova janela</translation>
-<translation id="7396375882099008034">Permita que o Chrome aceda à rede nas definições da sua firewall ou antivírus.</translation>
 <translation id="7398801000654795464">Iniciou sessão no Chrome com a conta <ph name="USER_EMAIL_ADDRESS" />. Utilize a mesma conta para iniciar sessão novamente.</translation>
 <translation id="7400722733683201933">Acerca do Google Chrome</translation>
 <translation id="7408085963519505752">Termos do SO Chrome</translation>
@@ -230,7 +211,6 @@ invulgares e incorretas. Isto pode acontecer quando um utilizador mal intenciona
 <translation id="781069973841903133">Ao reiniciar no modo imerso do Chrome, as aplicações do Chrome são fechadas e reiniciadas.</translation>
 <translation id="7825851276765848807">Ocorreu uma falha na instalação devido a um erro não especificado. Transfira novamente o Google Chrome.</translation>
 <translation id="7890208801193284374">Se partilhar um computador, os amigos e os familiares podem navegar separadamente e configurar o Chrome da forma que quiserem.</translation>
-<translation id="7984945080620862648">De momento é possível visitar <ph name="SITE" /> porque o Website enviou credenciais codificadas que o Chrome não consegue processar. Os erros de rede e os ataques normalmente são temporários, por isso, esta página voltará provavelmente a funcionar.</translation>
 <translation id="8000275528373650868">O Google Chrome requer o Windows Vista ou o Windows XP com SP2 ou superior.</translation>
 <translation id="8005540215158006229">O Chrome está quase pronto.</translation>
 <translation id="8008534537613507642">Reinstalar Chrome</translation>
@@ -238,7 +218,6 @@ invulgares e incorretas. Isto pode acontecer quando um utilizador mal intenciona
 <translation id="8032142183999901390">Depois de remover a sua conta do Chrome, poderá ter de recarregar os separadores abertos para que a alteração tenha efeito.</translation>
 <translation id="8037887340639533879">Não foi encontrada qualquer instalação do Google Chrome para atualização.</translation>
 <translation id="8129812357326543296">Acerca do &amp;Google Chrome</translation>
-<translation id="8187289872471304532">Aceda a Aplicações &gt; Preferências do Sistema &gt; Rede &gt; Avançadas &gt; Proxies e desmarque todos os proxies selecionados.</translation>
 <translation id="8205111949707227942">Opcional: Ajude a melhorar o Chrome OS ao enviar automaticamente estatísticas de utilização e relatórios de falhas para a Google.</translation>
 <translation id="8227755444512189073">O Google Chrome precisa de executar uma aplicação externa para processar links <ph name="SCHEME" />. O link solicitado é <ph name="PROTOLINK" />.</translation>
 <translation id="8255190535488645436">O Google Chrome está a utilizar a câmara e o microfone.</translation>
@@ -264,7 +243,6 @@ invulgares e incorretas. Isto pode acontecer quando um utilizador mal intenciona
 <translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Não tem os direitos adequados para uma instalação ao nível do sistema. Tente executar o programa de instalação novamente como Administrador.</translation>
 <translation id="8889942196804715220">Reiniciar no modo imerso do Chrome</translation>
-<translation id="8987477933582888019">Navegador de Internet</translation>
 <translation id="9026991721384951619">O SO Chrome não conseguiu sincronizar os dados porque os detalhes de início de sessão da sua conta estão desatualizados.</translation>
 <translation id="9102715433345326100">Este ficheiro é malicioso e o Chrome bloqueou-o.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Aviso:<ph name="END_BOLD" /> o Google Chrome não consegue impedir que as extensões gravem o seu histórico de navegação. Para desativar esta extensão no modo de navegação anónima, desmarque esta opção.</translation>

@@ -4,6 +4,10 @@
 
 #include "sync/internal_api/public/attachments/attachment_uploader_impl.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
@@ -149,7 +153,7 @@ class TokenServiceProvider
     : public OAuth2TokenServiceRequest::TokenServiceProvider,
       base::NonThreadSafe {
  public:
-  TokenServiceProvider(OAuth2TokenService* token_service);
+  explicit TokenServiceProvider(OAuth2TokenService* token_service);
 
   // OAuth2TokenService::TokenServiceProvider implementation.
   scoped_refptr<base::SingleThreadTaskRunner> GetTokenServiceTaskRunner()
@@ -394,7 +398,7 @@ scoped_ptr<HttpResponse> RequestHandler::HandleRequest(
   scoped_ptr<BasicHttpResponse> response(new BasicHttpResponse);
   response->set_code(GetStatusCode());
   response->set_content_type("text/plain");
-  return response.Pass();
+  return std::move(response);
 }
 
 void RequestHandler::SetStatusCode(const net::HttpStatusCode& status_code) {

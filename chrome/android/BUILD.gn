@@ -65,6 +65,7 @@ android_resources("chrome_java_resources") {
     ":chrome_strings_grd",
     "//chrome/app:java_strings_grd",
     "//components/policy:app_restrictions_resources",
+    "//components/strings:components_strings_grd",
     "//content/public/android:content_java_resources",
     "//third_party/android_data_chart:android_data_chart_java_resources",
     "//third_party/android_media:android_media_resources",
@@ -132,6 +133,8 @@ android_library("chrome_java") {
     "//base:base_java",
     "//components/safe_json/android:safe_json_java",
     "//components/variations/android:variations_java",
+    "//components/web_contents_delegate_android:web_contents_delegate_android_java",
+    "//components/web_restriction:web_restriction_java",
     "//content/public/android:content_java",
     "//media/base/android:media_java",
     "//media/midi:midi_java",
@@ -258,7 +261,7 @@ junit_binary("chrome_junit_tests") {
     "junit/src/org/chromium/chrome/browser/externalauth/ExternalAuthUtilsTest.java",
     "junit/src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
     "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientConnectionHelperTest.java",
-    "junit/src/org/chromium/chrome/browser/invalidations/InvalidationControllerTest.java",
+    "junit/src/org/chromium/chrome/browser/invalidation/InvalidationControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/AbstractMediaRouteControllerTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/MediaUrlResolverTest.java",
     "junit/src/org/chromium/chrome/browser/media/remote/RemoteVideoInfoTest.java",
@@ -339,6 +342,7 @@ android_library("chrome_shared_test_java") {
     "//components/precache/android:precache_java",
     "//components/precache/android:precache_javatests",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
+    "//components/web_restriction:web_restriction_java",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
     "//net/android:net_java",
@@ -529,6 +533,9 @@ instrumentation_test_apk("chrome_public_test_apk") {
   deps = [
     ":chrome_public_test_apk_manifest",
     ":chrome_shared_test_java",
+  ]
+  data_deps = [
+    "//chrome/test/android/chrome_public_test_support:chrome_public_test_support_apk",
   ]
   isolate_file = "../chrome_public_test_apk.isolate"
   proguard_enabled = !is_debug

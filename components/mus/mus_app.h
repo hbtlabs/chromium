@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_MUS_MUS_APP_H_
 #define COMPONENTS_MUS_MUS_APP_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
@@ -60,8 +63,7 @@ class MandolineUIServicesApp
   ws::ClientConnection* CreateClientConnectionForEmbedAtWindow(
       ws::ConnectionManager* connection_manager,
       mojo::InterfaceRequest<mojom::WindowTree> tree_request,
-      ConnectionSpecificId creator_id,
-      const ws::WindowId& root_id,
+      ws::ServerWindow* root,
       uint32_t policy_bitmask,
       mojom::WindowTreeClientPtr client) override;
 

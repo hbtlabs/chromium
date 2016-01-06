@@ -4,14 +4,18 @@
 
 #include "chrome/browser/ui/task_manager/task_manager_table_model.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/task_management/task_manager_interface.h"
 #include "chrome/browser/ui/task_manager/task_manager_columns.h"
@@ -31,13 +35,13 @@ namespace {
 
 #if defined(OS_MACOSX)
 // Match Activity Monitor's default refresh rate.
-const int64 kRefreshTimeMS = 2000;
+const int64_t kRefreshTimeMS = 2000;
 
 // Activity Monitor shows %cpu with one decimal digit -- be consistent with
 // that.
 const char kCpuTextFormatString[] = "%.1f";
 #else
-const int64 kRefreshTimeMS = 1000;
+const int64_t kRefreshTimeMS = 1000;
 const char kCpuTextFormatString[] = "%.0f";
 #endif  // defined(OS_MACOSX)
 
@@ -59,6 +63,8 @@ bool IsSharedByGroup(int column_id) {
     case IDS_TASK_MANAGER_WEBCORE_CSS_CACHE_COLUMN:
     case IDS_TASK_MANAGER_NACL_DEBUG_STUB_PORT_COLUMN:
     case IDS_TASK_MANAGER_IDLE_WAKEUPS_COLUMN:
+    case IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN:
+    case IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN:
       return true;
     default:
       return false;
@@ -71,6 +77,15 @@ int ValueCompare(T value1, T value2) {
   if (value1 == value2)
     return 0;
   return value1 < value2 ? -1 : 1;
+}
+
+// This is used to sort process priority. We want the backgrounded process (with
+// a true value) to come first.
+int BooleanCompare(bool value1, bool value2) {
+  if (value1 == value2)
+    return 0;
+
+  return value1 ? -1 : 1;
 }
 
 // Used when one or both of the results to compare are unavailable.
@@ -89,6 +104,10 @@ class TaskManagerValuesStringifier {
   TaskManagerValuesStringifier()
       : n_a_string_(l10n_util::GetStringUTF16(IDS_TASK_MANAGER_NA_CELL_TEXT)),
         zero_string_(base::ASCIIToUTF16("0")),
+        backgrounded_string_(l10n_util::GetStringUTF16(
+            IDS_TASK_MANAGER_BACKGROUNDED_TEXT)),
+        foregrounded_string_(l10n_util::GetStringUTF16(
+            IDS_TASK_MANAGER_FOREGROUNDED_TEXT)),
         asterisk_string_(base::ASCIIToUTF16("*")),
         unknown_string_(l10n_util::GetStringUTF16(
             IDS_TASK_MANAGER_UNKNOWN_VALUE_TEXT)),
@@ -103,7 +122,7 @@ class TaskManagerValuesStringifier {
                                                 cpu_usage));
   }
 
-  base::string16 GetMemoryUsageText(int64 memory_usage, bool has_duplicates) {
+  base::string16 GetMemoryUsageText(int64_t memory_usage, bool has_duplicates) {
     if (memory_usage == -1)
       return n_a_string_;
 
@@ -143,13 +162,13 @@ class TaskManagerValuesStringifier {
     return base::IntToString16(nacl_port);
   }
 
-  base::string16 GetWindowsHandlesText(int64 current, int64 peak) {
+  base::string16 GetWindowsHandlesText(int64_t current, int64_t peak) {
     return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_HANDLES_CELL_TEXT,
                                       base::Int64ToString16(current),
                                       base::Int64ToString16(peak));
   }
 
-  base::string16 GetNetworkUsageText(int64 network_usage) {
+  base::string16 GetNetworkUsageText(int64_t network_usage) {
     if (network_usage == -1)
       return n_a_string_;
 
@@ -165,7 +184,7 @@ class TaskManagerValuesStringifier {
     return base::IntToString16(proc_id);
   }
 
-  base::string16 FormatAllocatedAndUsedMemory(int64 allocated, int64 used) {
+  base::string16 FormatAllocatedAndUsedMemory(int64_t allocated, int64_t used) {
     return l10n_util::GetStringFUTF16(
         IDS_TASK_MANAGER_CACHE_SIZE_CELL_TEXT,
         ui::FormatBytesWithUnits(allocated, ui::DATA_UNITS_KIBIBYTE, false),
@@ -179,6 +198,12 @@ class TaskManagerValuesStringifier {
 
   const base::string16& n_a_string() const { return n_a_string_; }
   const base::string16& zero_string() const { return zero_string_; }
+  const base::string16& backgrounded_string() const {
+    return backgrounded_string_;
+  }
+  const base::string16& foregrounded_string() const {
+    return foregrounded_string_;
+  }
   const base::string16& asterisk_string() const { return asterisk_string_; }
   const base::string16& unknown_string() const { return unknown_string_; }
   const base::string16& disabled_nacl_debugging_string() const {
@@ -191,6 +216,12 @@ class TaskManagerValuesStringifier {
 
   // The value 0 as a string "0".
   const base::string16 zero_string_;
+
+  // The localized string "Backgrounded" for process priority.
+  const base::string16 backgrounded_string_;
+
+  // The localized string "Foregrounded" for process priority.
+  const base::string16 foregrounded_string_;
 
   // The string "*" that is used to show that there exists duplicates in the
   // GPU memory.
@@ -284,13 +315,13 @@ base::string16 TaskManagerTableModel::GetText(int row, int column) {
           observed_task_manager()->GetProcessId(tasks_[row]));
 
     case IDS_TASK_MANAGER_GDI_HANDLES_COLUMN: {
-      int64 current, peak;
+      int64_t current, peak;
       observed_task_manager()->GetGDIHandles(tasks_[row], &current, &peak);
       return stringifier_->GetWindowsHandlesText(current, peak);
     }
 
     case IDS_TASK_MANAGER_USER_HANDLES_COLUMN: {
-      int64 current, peak;
+      int64_t current, peak;
       observed_task_manager()->GetUSERHandles(tasks_[row], &current, &peak);
       return stringifier_->GetWindowsHandlesText(current, peak);
     }
@@ -333,7 +364,7 @@ base::string16 TaskManagerTableModel::GetText(int row, int column) {
           observed_task_manager()->GetSqliteMemoryUsed(tasks_[row]), false);
 
     case IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN: {
-      int64 v8_allocated, v8_used;
+      int64_t v8_allocated, v8_used;
       if (observed_task_manager()->GetV8Memory(tasks_[row],
                                                &v8_allocated,
                                                &v8_used)) {
@@ -349,6 +380,19 @@ base::string16 TaskManagerTableModel::GetText(int row, int column) {
 
       return stringifier_->GetNaClPortText(
           observed_task_manager()->GetNaClDebugStubPort(tasks_[row]));
+
+    case IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN:
+      return observed_task_manager()->IsTaskOnBackgroundedProcess(tasks_[row])
+          ? stringifier_->backgrounded_string()
+          : stringifier_->foregrounded_string();
+
+#if defined(OS_LINUX)
+    case IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN: {
+      const int fd_count = observed_task_manager()->GetOpenFdCount(tasks_[row]);
+      return fd_count >= 0 ? base::FormatNumber(fd_count)
+                           : stringifier_->n_a_string();
+    }
+#endif  // defined(OS_LINUX)
 
     default:
       NOTREACHED();
@@ -407,14 +451,14 @@ int TaskManagerTableModel::CompareValues(int row1,
                           observed_task_manager()->GetProcessId(tasks_[row2]));
 
     case IDS_TASK_MANAGER_GDI_HANDLES_COLUMN: {
-      int64 current1, peak1, current2, peak2;
+      int64_t current1, peak1, current2, peak2;
       observed_task_manager()->GetGDIHandles(tasks_[row1], &current1, &peak1);
       observed_task_manager()->GetGDIHandles(tasks_[row2], &current2, &peak2);
       return ValueCompare(current1, current2);
     }
 
     case IDS_TASK_MANAGER_USER_HANDLES_COLUMN: {
-      int64 current1, peak1, current2, peak2;
+      int64_t current1, peak1, current2, peak2;
       observed_task_manager()->GetUSERHandles(tasks_[row1], &current1, &peak1);
       observed_task_manager()->GetUSERHandles(tasks_[row2], &current2, &peak2);
       return ValueCompare(current1, current2);
@@ -461,7 +505,7 @@ int TaskManagerTableModel::CompareValues(int row1,
     }
 
     case IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN: {
-      int64 allocated1, allocated2, used1, used2;
+      int64_t allocated1, allocated2, used1, used2;
       observed_task_manager()->GetV8Memory(tasks_[row1], &allocated1, &used1);
       observed_task_manager()->GetV8Memory(tasks_[row2], &allocated2, &used2);
       return ValueCompare(allocated1, allocated2);
@@ -471,6 +515,24 @@ int TaskManagerTableModel::CompareValues(int row1,
       return ValueCompare(
           observed_task_manager()->GetSqliteMemoryUsed(tasks_[row1]),
           observed_task_manager()->GetSqliteMemoryUsed(tasks_[row2]));
+
+    case IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN: {
+      const bool is_proc1_bg =
+          observed_task_manager()->IsTaskOnBackgroundedProcess(tasks_[row1]);
+      const bool is_proc2_bg =
+          observed_task_manager()->IsTaskOnBackgroundedProcess(tasks_[row2]);
+      return BooleanCompare(is_proc1_bg, is_proc2_bg);
+    }
+
+#if defined(OS_LINUX)
+    case IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN: {
+      const int proc1_fd_count =
+          observed_task_manager()->GetOpenFdCount(tasks_[row1]);
+      const int proc2_fd_count =
+          observed_task_manager()->GetOpenFdCount(tasks_[row2]);
+      return ValueCompare(proc1_fd_count, proc2_fd_count);
+    }
+#endif  // defined(OS_LINUX)
 
     default:
       NOTREACHED();
@@ -526,6 +588,13 @@ void TaskManagerTableModel::StartUpdating() {
   TaskManagerInterface::GetTaskManager()->AddObserver(this);
   tasks_ = observed_task_manager()->GetTaskIdsList();
   OnRefresh();
+
+  // In order for the scrollbar of the TableView to work properly on startup of
+  // the task manager, we must invoke TableModelObserver::OnModelChanged() which
+  // in turn will invoke TableView::NumRowsChanged(). This will adjust the
+  // vertical scrollbar correctly. crbug.com/570966.
+  if (table_model_observer_)
+    table_model_observer_->OnModelChanged();
 }
 
 void TaskManagerTableModel::StopUpdating() {
@@ -553,7 +622,7 @@ void TaskManagerTableModel::UpdateRefreshTypes(int column_id, bool visibility) {
     case IDS_TASK_MANAGER_PROFILE_NAME_COLUMN:
     case IDS_TASK_MANAGER_TASK_COLUMN:
     case IDS_TASK_MANAGER_PROCESS_ID_COLUMN:
-      return;  // The data is these columns do not change.
+      return;  // The data in these columns do not change.
 
     case IDS_TASK_MANAGER_NET_COLUMN:
       type = REFRESH_TYPE_NETWORK_USAGE;
@@ -621,6 +690,16 @@ void TaskManagerTableModel::UpdateRefreshTypes(int column_id, bool visibility) {
     case IDS_TASK_MANAGER_NACL_DEBUG_STUB_PORT_COLUMN:
       type = REFRESH_TYPE_NACL;
       break;
+
+    case IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN:
+      type = REFRESH_TYPE_PRIORITY;
+      break;
+
+#if defined(OS_LINUX)
+    case IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN:
+      type = REFRESH_TYPE_FD_COUNT;
+      break;
+#endif  // defined(OS_LINUX)
 
     default:
       NOTREACHED();

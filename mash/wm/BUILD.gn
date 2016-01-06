@@ -126,6 +126,7 @@ mojo_native_application("apptests") {
   testonly = true
 
   sources = [
+    "accelerator_registrar_apptest.cc",
     "window_manager_apptest.cc",
   ]
 
@@ -153,6 +154,7 @@ source_set("unittests") {
 
   sources = [
     "frame/move_loop_unittest.cc",
+    "layout_manager_unittest.cc",
   ]
 
   deps = [

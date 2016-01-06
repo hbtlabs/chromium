@@ -22,14 +22,19 @@
 #include "chrome/browser/ui/webui/media_router/media_sink_with_cast_modes.h"
 #include "chrome/browser/ui/webui/media_router/query_result_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "third_party/icu/source/common/unicode/uversion.h"
 
 namespace content {
 class WebContents;
-}  // namespace content
+}
 
 namespace extensions {
 class ExtensionRegistry;
-}  // namespace extensions
+}
+
+namespace U_ICU_NAMESPACE {
+class Collator;
+}
 
 namespace media_router {
 
@@ -121,7 +126,13 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // Marked virtual for tests.
   virtual const std::string& GetRouteProviderExtensionId() const;
 
+  // Called to track UI metrics.
+  void SetUIInitializationTimer(const base::Time& start_time);
+  void OnUIInitiallyLoaded();
+  void OnUIInitialDataReceived();
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SortedSinks);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
                            UIMediaRoutesObserverFiltersNonDisplayRoutes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, GetExtensionNameExtensionPresent);
@@ -212,6 +223,10 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // |current_route_request_id_| when there is a new route request.
   int route_request_counter_;
 
+  // Used for locale-aware sorting of sinks by name. Set during |InitCommon()|
+  // using the current locale. Set to null
+  scoped_ptr<icu::Collator> collator_;
+
   std::vector<MediaSinkWithCastModes> sinks_;
   std::vector<MediaRoute> routes_;
   CastModeSet cast_modes_;
@@ -242,6 +257,10 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
 
   // Timer used to implement a timeout on a create route request.
   base::OneShotTimer route_creation_timer_;
+
+  // The start time for UI initialization metrics timer. When a dialog has been
+  // been painted and initialized with initial data, this should be cleared.
+  base::Time start_time_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   // Therefore |weak_factory_| must be placed at the end.

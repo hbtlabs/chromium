@@ -4,6 +4,8 @@
 
 #include "components/pairing/bluetooth_controller_pairing_controller.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -132,7 +134,7 @@ void BluetoothControllerPairingController::OnGetAdapter(
 void BluetoothControllerPairingController::OnStartDiscoverySession(
     scoped_ptr<device::BluetoothDiscoverySession> discovery_session) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  discovery_session_ = discovery_session.Pass();
+  discovery_session_ = std::move(discovery_session);
   ChangeStage(STAGE_DEVICES_DISCOVERY);
 
   for (const auto& device : adapter_->GetDevices())
@@ -358,6 +360,7 @@ void BluetoothControllerPairingController::OnAuthenticationDone(
   pairing_api::PairDevices pair_devices;
   pair_devices.set_api_version(kPairingAPIVersion);
   pair_devices.mutable_parameters()->set_admin_access_token(auth_token);
+  pair_devices.mutable_parameters()->set_enrolling_domain(domain);
 
   int size = 0;
   scoped_refptr<net::IOBuffer> io_buffer(
@@ -470,21 +473,21 @@ void BluetoothControllerPairingController::DisplayPinCode(
 
 void BluetoothControllerPairingController::DisplayPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   // Disallow unknown device.
   device->RejectPairing();
 }
 
 void BluetoothControllerPairingController::KeysEntered(
     device::BluetoothDevice* device,
-    uint32 entered) {
+    uint32_t entered) {
   // Disallow unknown device.
   device->RejectPairing();
 }
 
 void BluetoothControllerPairingController::ConfirmPasskey(
     device::BluetoothDevice* device,
-    uint32 passkey) {
+    uint32_t passkey) {
   confirmation_code_ = base::StringPrintf("%06d", passkey);
   ChangeStage(STAGE_WAITING_FOR_CODE_CONFIRMATION);
 }

@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/media_browsertest.h"
 #include "chrome/browser/media/test_license_server.h"
 #include "chrome/browser/media/wv_test_license_server_config.h"
@@ -215,7 +218,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     scoped_ptr<TestLicenseServerConfig> config = GetServerConfig(key_system);
     if (!config)
       return;
-    license_server_.reset(new TestLicenseServer(config.Pass()));
+    license_server_.reset(new TestLicenseServer(std::move(config)));
     EXPECT_TRUE(license_server_->Start());
     query_params->push_back(
         std::make_pair("licenseServerURL", license_server_->GetServerURL()));
@@ -233,13 +236,12 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
       const std::string& key_system) {
 #if defined(WIDEVINE_CDM_AVAILABLE)
     if (IsWidevine(key_system)) {
-      scoped_ptr<TestLicenseServerConfig> config =
-         scoped_ptr<TestLicenseServerConfig>(new WVTestLicenseServerConfig());
+      scoped_ptr<TestLicenseServerConfig> config(new WVTestLicenseServerConfig);
       if (config->IsPlatformSupported())
-        return config.Pass();
+        return config;
     }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
-    return scoped_ptr<TestLicenseServerConfig>();
+    return nullptr;
   }
 
  protected:

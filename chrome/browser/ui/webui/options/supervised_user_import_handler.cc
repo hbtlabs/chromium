@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/webui/options/supervised_user_import_handler.h"
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -37,7 +40,7 @@ scoped_ptr<base::ListValue> GetAvatarIcons() {
     avatar_icons->Append(new base::StringValue(avatar_url));
   }
 
-  return avatar_icons.Pass();
+  return avatar_icons;
 }
 
 bool ProfileIsLegacySupervised(const base::FilePath& profile_path) {

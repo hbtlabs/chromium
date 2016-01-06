@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "public/web/WebPluginContainer.h"
 
 #include "core/dom/Element.h"
@@ -101,9 +100,8 @@ private:
 class TestPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
     WebPlugin* createPlugin(WebLocalFrame* frame, const WebPluginParams& params) override
     {
-        if (params.mimeType == WebString::fromUTF8("application/x-webkit-test-webplugin"))
-            return new TestPlugin(frame, params, this);
-        if (params.mimeType == WebString::fromUTF8("application/pdf"))
+        if (params.mimeType == "application/x-webkit-test-webplugin"
+            || params.mimeType == "application/pdf")
             return new TestPlugin(frame, params, this);
         return WebFrameClient::createPlugin(frame, params);
     }
@@ -287,9 +285,9 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest)
     runPendingTasks();
 
     WebElement pluginContainerOneElement = webView->mainFrame()->document().getElementById(WebString::fromUTF8("translated-plugin"));
-    PlatformEvent::Modifiers modifierKey = PlatformEvent::CtrlKey;
+    PlatformEvent::Modifiers modifierKey = static_cast<PlatformEvent::Modifiers>(PlatformEvent::CtrlKey | PlatformEvent::NumLockOn | PlatformEvent::IsLeft);
 #if OS(MACOSX)
-    modifierKey = PlatformEvent::MetaKey;
+    modifierKey = static_cast<PlatformEvent::Modifiers>(PlatformEvent::MetaKey | PlatformEvent::NumLockOn | PlatformEvent::IsLeft);
 #endif
     PlatformKeyboardEvent platformKeyboardEventC(PlatformEvent::RawKeyDown, "", "", "67", "", "", 67, 0, false, modifierKey, 0.0);
     RefPtrWillBeRawPtr<KeyboardEvent> keyEventC = KeyboardEvent::create(platformKeyboardEventC, 0);

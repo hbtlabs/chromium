@@ -23,13 +23,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/HTMLTrackElement.h"
 
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/events/Event.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/LoadableTextTrack.h"
 #include "platform/Logging.h"
@@ -213,7 +213,7 @@ void HTMLTrackElement::loadTimerFired(Timer<HTMLTrackElement>*)
         m_loader->cancelLoad();
 
     m_loader = TextTrackLoader::create(*this, document());
-    if (!m_loader->load(m_url, corsMode))
+    if (!m_loader->load(m_url, crossOriginAttributeValue(corsMode)))
         didCompleteLoad(Failure);
 }
 

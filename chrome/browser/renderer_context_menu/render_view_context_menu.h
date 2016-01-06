@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -119,6 +120,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendAudioItems();
   void AppendCanvasItems();
   void AppendVideoItems();
+  void AppendMediaItems();
   void AppendPluginItems();
   void AppendPageItems();
   void AppendCopyItem();

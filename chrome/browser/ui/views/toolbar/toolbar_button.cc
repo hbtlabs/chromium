@@ -8,7 +8,11 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -18,40 +22,37 @@
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
 #include "ui/strings/grit/ui_strings.h"
-#include "ui/views/animation/ink_drop_animation_controller.h"
-#include "ui/views/animation/ink_drop_animation_controller_factory.h"
+#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 
-ToolbarButton::ToolbarButton(views::ButtonListener* listener,
+ToolbarButton::ToolbarButton(Profile* profile,
+                             views::ButtonListener* listener,
                              ui::MenuModel* model)
     : views::LabelButton(listener, base::string16()),
+      profile_(profile),
       model_(model),
       menu_showing_(false),
       y_position_on_lbuttondown_(0),
-      ink_drop_animation_controller_(
-          views::InkDropAnimationControllerFactory::
-              CreateInkDropAnimationController(this)),
+      ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       show_menu_factory_(this) {
+  set_ink_drop_delegate(ink_drop_delegate_.get());
+  set_has_ink_drop_action_on_click(true);
   set_context_menu_controller(this);
 
   const int kInkDropLargeSize = 32;
   const int kInkDropLargeCornerRadius = 5;
   const int kInkDropSmallSize = 24;
   const int kInkDropSmallCornerRadius = 2;
-
-  ink_drop_animation_controller_->SetInkDropSize(
-      gfx::Size(kInkDropLargeSize, kInkDropLargeSize),
-      kInkDropLargeCornerRadius,
-      gfx::Size(kInkDropSmallSize, kInkDropSmallSize),
+  ink_drop_delegate()->SetInkDropSize(
+      kInkDropLargeSize, kInkDropLargeCornerRadius, kInkDropSmallSize,
       kInkDropSmallCornerRadius);
 }
 
-ToolbarButton::~ToolbarButton() {
-}
+ToolbarButton::~ToolbarButton() {}
 
 void ToolbarButton::Init() {
   SetFocusable(false);
@@ -88,29 +89,21 @@ gfx::Size ToolbarButton::GetPreferredSize() const {
   return size;
 }
 
-void ToolbarButton::Layout() {
-  LabelButton::Layout();
-  ink_drop_animation_controller_->SetInkDropCenter(CalculateInkDropCenter());
-}
-
 bool ToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
-  if (IsTriggerableEvent(event)) {
-    if (enabled() && ShouldShowMenu() && HitTestPoint(event.location())) {
-      // Store the y pos of the mouse coordinates so we can use them later to
-      // determine if the user dragged the mouse down (which should pop up the
-      // drag down menu immediately, instead of waiting for the timer)
-      y_position_on_lbuttondown_ = event.y();
+  if (IsTriggerableEvent(event) && enabled() && ShouldShowMenu() &&
+      HitTestPoint(event.location())) {
+    // Store the y pos of the mouse coordinates so we can use them later to
+    // determine if the user dragged the mouse down (which should pop up the
+    // drag down menu immediately, instead of waiting for the timer)
+    y_position_on_lbuttondown_ = event.y();
 
-      // Schedule a task that will show the menu.
-      const int kMenuTimerDelay = 500;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&ToolbarButton::ShowDropDownMenu,
-                                show_menu_factory_.GetWeakPtr(),
-                                ui::GetMenuSourceTypeForEvent(event)),
-          base::TimeDelta::FromMilliseconds(kMenuTimerDelay));
-    }
-    ink_drop_animation_controller_->AnimateToState(
-        views::InkDropState::ACTION_PENDING);
+    // Schedule a task that will show the menu.
+    const int kMenuTimerDelay = 500;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&ToolbarButton::ShowDropDownMenu,
+                              show_menu_factory_.GetWeakPtr(),
+                              ui::GetMenuSourceTypeForEvent(event)),
+        base::TimeDelta::FromMilliseconds(kMenuTimerDelay));
   }
 
   return LabelButton::OnMousePressed(event);
@@ -149,7 +142,7 @@ void ToolbarButton::OnMouseExited(const ui::MouseEvent& event) {
   // Starting a drag results in a MouseExited, we need to ignore it.
   // A right click release triggers an exit event. We want to
   // remain in a PUSHED state until the drop down menu closes.
-  if (state_ != STATE_DISABLED && !InDrag() && state_ != STATE_PRESSED)
+  if (state() != STATE_DISABLED && !InDrag() && state() != STATE_PRESSED)
     SetState(STATE_NORMAL);
 }
 
@@ -161,32 +154,6 @@ void ToolbarButton::OnGestureEvent(ui::GestureEvent* event) {
   }
 
   LabelButton::OnGestureEvent(event);
-
-  views::InkDropState ink_drop_state = views::InkDropState::HIDDEN;
-  switch (event->type()) {
-    case ui::ET_GESTURE_TAP_DOWN:
-      ink_drop_state = views::InkDropState::ACTION_PENDING;
-      // The ui::ET_GESTURE_TAP_DOWN event needs to be marked as handled so that
-      // subsequent events for the gesture are sent to |this|.
-      event->SetHandled();
-      break;
-    case ui::ET_GESTURE_LONG_PRESS:
-      ink_drop_state = views::InkDropState::SLOW_ACTION_PENDING;
-      break;
-    case ui::ET_GESTURE_TAP:
-      ink_drop_state = views::InkDropState::QUICK_ACTION;
-      break;
-    case ui::ET_GESTURE_LONG_TAP:
-      ink_drop_state = views::InkDropState::SLOW_ACTION;
-      break;
-    case ui::ET_GESTURE_END:
-    case ui::ET_GESTURE_TAP_CANCEL:
-      ink_drop_state = views::InkDropState::HIDDEN;
-      break;
-    default:
-      return;
-  }
-  ink_drop_animation_controller_->AnimateToState(ink_drop_state);
 }
 
 void ToolbarButton::GetAccessibleState(ui::AXViewState* state) {
@@ -201,11 +168,10 @@ ToolbarButton::CreateDefaultBorder() const {
   scoped_ptr<views::LabelButtonBorder> border =
       views::LabelButton::CreateDefaultBorder();
 
-  const ui::ThemeProvider* provider = GetThemeProvider();
-  if (provider && provider->UsingSystemTheme())
+  if (ThemeServiceFactory::GetForProfile(profile_)->UsingSystemTheme())
     border->set_insets(GetLayoutInsets(TOOLBAR_BUTTON));
 
-  return border.Pass();
+  return border;
 }
 
 void ToolbarButton::ShowContextMenuForView(View* source,
@@ -247,17 +213,6 @@ bool ToolbarButton::ShouldEnterPushedState(const ui::Event& event) {
          event.type() == ui::ET_GESTURE_TAP_DOWN ||
          (event.IsMouseEvent() && ((ui::EF_LEFT_MOUSE_BUTTON |
              ui::EF_RIGHT_MOUSE_BUTTON) & event.flags()) != 0);
-}
-
-void ToolbarButton::NotifyClick(const ui::Event& event) {
-  LabelButton::NotifyClick(event);
-  ink_drop_animation_controller_->AnimateToState(
-      views::InkDropState::QUICK_ACTION);
-}
-
-void ToolbarButton::OnClickCanceled(const ui::Event& event) {
-  LabelButton::OnClickCanceled(event);
-  ink_drop_animation_controller_->AnimateToState(views::InkDropState::HIDDEN);
 }
 
 bool ToolbarButton::ShouldShowMenu() {
@@ -306,8 +261,7 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
 
   menu_showing_ = true;
 
-  ink_drop_animation_controller_->AnimateToState(
-      views::InkDropState::ACTIVATED);
+  ink_drop_delegate()->OnAction(views::InkDropState::ACTIVATED);
 
   // Create and run menu.  Display an empty menu if model is NULL.
   views::MenuRunner::RunResult result;
@@ -331,8 +285,7 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
   if (result == views::MenuRunner::MENU_DELETED)
     return;
 
-  ink_drop_animation_controller_->AnimateToState(
-      views::InkDropState::DEACTIVATED);
+  ink_drop_delegate()->OnAction(views::InkDropState::DEACTIVATED);
 
   menu_showing_ = false;
 
@@ -342,7 +295,7 @@ void ToolbarButton::ShowDropDownMenu(ui::MenuSourceType source_type) {
   SetMouseHandler(nullptr);
 
   // Set the state back to normal after the drop down menu is closed.
-  if (state_ != STATE_DISABLED)
+  if (state() != STATE_DISABLED)
     SetState(STATE_NORMAL);
 }
 

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/heap/StackFrameDepth.h"
 
 #include "public/platform/Platform.h"
@@ -97,9 +96,26 @@ size_t StackFrameDepth::getUnderestimatedStackSize()
 
     return 0;
 #elif OS(MACOSX)
-    // FIXME: pthread_get_stacksize_np() returns shorter size than actual stack
-    // size for the main thread on Mavericks(10.9).
-    return 0;
+    // pthread_get_stacksize_np() returns too low a value for the main thread on
+    // OSX 10.9, http://mail.openjdk.java.net/pipermail/hotspot-dev/2013-October/011369.html
+    //
+    // Multiple workarounds possible, adopt the one made by https://github.com/robovm/robovm/issues/274
+    // (cf. https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/Multithreading/CreatingThreads/CreatingThreads.html
+    // on why hardcoding sizes is reasonable.)
+    if (pthread_main_np()) {
+#if defined(IOS)
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        size_t guardSize = 0;
+        pthread_attr_getguardsize(&attr, &guardSize);
+        // Stack size for the main thread is 1MB on iOS including the guard page size.
+        return (1 * 1024 * 1024 - guardSize);
+#else
+        // Stack size for the main thread is 8MB on OSX excluding the guard page size.
+        return (8 * 1024 * 1024);
+#endif
+    }
+    return pthread_get_stacksize_np(pthread_self());
 #elif OS(WIN) && COMPILER(MSVC)
     return ThreadState::current()->threadStackSize();
 #else

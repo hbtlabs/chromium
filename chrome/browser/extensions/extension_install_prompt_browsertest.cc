@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/extension_install_prompt.h"
 
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,18 +20,17 @@ namespace {
 
 scoped_refptr<extensions::Extension> BuildTestExtension() {
   return extensions::ExtensionBuilder()
-      .SetManifest(extensions::DictionaryBuilder()
-                       .Set("name", "foo")
-                       .Set("version", "1.0"))
+      .SetManifest(std::move(extensions::DictionaryBuilder()
+                                 .Set("name", "foo")
+                                 .Set("version", "1.0")))
       .Build();
 }
 
 // ExtensionInstallPrompt::ShowDialogCallback which proceeds without showing the
 // prompt.
-void TestShowDialogCallback(
-    ExtensionInstallPromptShowParams* params,
-    ExtensionInstallPrompt::Delegate* delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt) {
+void TestShowDialogCallback(ExtensionInstallPromptShowParams* params,
+                            ExtensionInstallPrompt::Delegate* delegate,
+                            scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   delegate->InstallUIProceed();
 }
 
@@ -93,8 +93,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallPromptBrowserTest,
 
   base::RunLoop run_loop;
   TestExtensionInstallPromptDelegate delegate(run_loop.QuitClosure());
-  prompt.ConfirmInstall(&delegate, extension.get(),
-                        base::Bind(&TestShowDialogCallback));
+  prompt.ShowDialog(&delegate, extension.get(), nullptr,
+                    base::Bind(&TestShowDialogCallback));
   run_loop.Run();
   EXPECT_TRUE(delegate.DidAbort());
 }
@@ -116,8 +116,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallPromptBrowserTest,
 
   base::RunLoop run_loop;
   TestExtensionInstallPromptDelegate delegate(run_loop.QuitClosure());
-  prompt.ConfirmInstall(&delegate, extension.get(),
-                        base::Bind(&TestShowDialogCallback));
+  prompt.ShowDialog(&delegate, extension.get(), nullptr,
+                    base::Bind(&TestShowDialogCallback));
   run_loop.Run();
   EXPECT_TRUE(delegate.DidAbort());
 }
@@ -131,8 +131,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallPromptBrowserTest, NoParent) {
   ExtensionInstallPrompt prompt(browser()->profile(), NULL);
   base::RunLoop run_loop;
   TestExtensionInstallPromptDelegate delegate(run_loop.QuitClosure());
-  prompt.ConfirmInstall(&delegate, extension.get(),
-                        base::Bind(&TestShowDialogCallback));
+  prompt.ShowDialog(&delegate, extension.get(), nullptr,
+                    base::Bind(&TestShowDialogCallback));
   run_loop.Run();
 
   // TestShowDialogCallback() should have signaled the install to proceed.

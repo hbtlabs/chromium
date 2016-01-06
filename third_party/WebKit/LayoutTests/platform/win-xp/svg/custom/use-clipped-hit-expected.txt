@@ -6,8 +6,8 @@
       "contentsOpaque": true,
       "drawsContent": true,
       "repaintRects": [
-        [90, 115, 59, 19],
-        [90, 115, 59, 19],
+        [90, 115, 60, 19],
+        [90, 115, 60, 19],
         [90, 115, 43, 19],
         [90, 115, 43, 19]
       ],
@@ -16,6 +16,7 @@
         "LayoutSVGInlineText #text",
         "RootInlineBox",
         "LayoutSVGText text id='status'",
+        "RootInlineBox",
         "LayoutSVGInlineText #text",
         "InlineTextBox 'Passed'"
       ]

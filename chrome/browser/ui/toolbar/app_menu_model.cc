@@ -9,11 +9,13 @@
 
 #include "base/command_line.h"
 #include "base/debug/debugging_flags.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
@@ -954,6 +956,8 @@ bool AppMenuModel::AddGlobalErrorMenuItems() {
       SetIcon(GetIndexOfCommandId(error->MenuItemCommandID()),
               error->MenuItemIcon());
       menu_items_added = true;
+      content::RecordAction(
+          base::UserMetricsAction("Signin_Impression_FromMenu"));
     }
   }
   return menu_items_added;
@@ -982,7 +986,7 @@ void AppMenuModel::CreateCutCopyPasteMenu() {
   AddSeparator(ui::LOWER_SEPARATOR);
 
   // WARNING: Mac does not use the ButtonMenuItemModel, but instead defines the
-  // layout for this menu item in WrenchMenu.xib. It does, however, use the
+  // layout for this menu item in AppMenu.xib. It does, however, use the
   // command_id value from AddButtonItem() to identify this special item.
   edit_menu_item_model_.reset(new ui::ButtonMenuItemModel(IDS_EDIT, this));
   edit_menu_item_model_->AddGroupItemWithStringId(IDC_CUT, IDS_CUT);
@@ -998,7 +1002,7 @@ void AppMenuModel::CreateZoomMenu() {
   AddSeparator(ui::LOWER_SEPARATOR);
 
   // WARNING: Mac does not use the ButtonMenuItemModel, but instead defines the
-  // layout for this menu item in WrenchMenu.xib. It does, however, use the
+  // layout for this menu item in AppMenu.xib. It does, however, use the
   // command_id value from AddButtonItem() to identify this special item.
   zoom_menu_item_model_.reset(
       new ui::ButtonMenuItemModel(IDS_ZOOM_MENU, this));

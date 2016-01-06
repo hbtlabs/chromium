@@ -4,15 +4,20 @@
 
 #include "chrome/browser/web_applications/web_app.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/i18n/file_util_icu.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -114,14 +119,14 @@ void OnImageLoaded(scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     shortcut_info->favicon = image_family;
   }
 
-  callback.Run(shortcut_info.Pass(), file_handlers_info);
+  callback.Run(std::move(shortcut_info), file_handlers_info);
 }
 
 void IgnoreFileHandlersInfo(
     const web_app::ShortcutInfoCallback& shortcut_info_callback,
     scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
-  shortcut_info_callback.Run(shortcut_info.Pass());
+  shortcut_info_callback.Run(std::move(shortcut_info));
 }
 
 void ScheduleCreatePlatformShortcut(
@@ -164,10 +169,7 @@ base::FilePath GetSanitizedFileName(const base::string16& name) {
 
 }  // namespace internals
 
-ShortcutInfo::ShortcutInfo()
-    : is_platform_app(false) {
-}
-
+ShortcutInfo::ShortcutInfo() {}
 ShortcutInfo::~ShortcutInfo() {}
 
 ShortcutLocations::ShortcutLocations()
@@ -213,7 +215,13 @@ scoped_ptr<ShortcutInfo> ShortcutInfoForExtensionAndProfile(
   scoped_ptr<ShortcutInfo> shortcut_info(new ShortcutInfo);
   shortcut_info->extension_id = app->id();
   shortcut_info->is_platform_app = app->is_platform_app();
-  shortcut_info->from_bookmark = app->from_bookmark();
+
+  // Some default-installed apps are converted into bookmark apps on Chrome
+  // first run. These should not be considered as being created (by the user)
+  // from a web page.
+  shortcut_info->from_bookmark =
+      app->from_bookmark() && !app->was_installed_by_default();
+
   shortcut_info->url = extensions::AppLaunchInfo::GetLaunchWebURL(app);
   shortcut_info->title = base::UTF8ToUTF16(app->name());
   shortcut_info->description = base::UTF8ToUTF16(app->description());
@@ -404,14 +412,14 @@ void CreateShortcutsWithInfo(
       return;
   }
 
-  ScheduleCreatePlatformShortcut(reason, locations, shortcut_info.Pass(),
+  ScheduleCreatePlatformShortcut(reason, locations, std::move(shortcut_info),
                                  file_handlers_info);
 }
 
 void CreateNonAppShortcut(const ShortcutLocations& locations,
                           scoped_ptr<ShortcutInfo> shortcut_info) {
   ScheduleCreatePlatformShortcut(SHORTCUT_CREATION_AUTOMATED, locations,
-                                 shortcut_info.Pass(),
+                                 std::move(shortcut_info),
                                  extensions::FileHandlersInfo());
 }
 

@@ -29,7 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/ChromeClientImpl.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -208,13 +207,6 @@ void ChromeClientImpl::focusedNodeChanged(Node* fromNode, Node* toNode)
     if (toNode && toNode->isElementNode() && toElement(toNode)->isLiveLink() && toNode->shouldHaveFocusAppearance())
         focusURL = toElement(toNode)->hrefURL();
     m_webView->client()->setKeyboardFocusURL(focusURL);
-}
-
-void ChromeClientImpl::focusedFrameChanged(LocalFrame* frame)
-{
-    WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(frame);
-    if (webframe && webframe->client())
-        webframe->client()->frameFocused();
 }
 
 bool ChromeClientImpl::hadFormInteraction() const
@@ -416,7 +408,7 @@ bool ChromeClientImpl::openBeforeUnloadConfirmPanelDelegate(LocalFrame* frame, c
 void ChromeClientImpl::closeWindowSoon()
 {
     // Make sure this Page can no longer be found by JS.
-    Page::ordinaryPages().remove(m_webView->page());
+    m_webView->page()->willBeClosed();
 
     // Make sure that all loading is stopped.  Ensures that JS stops executing!
     m_webView->mainFrame()->stopLoading();
@@ -494,31 +486,36 @@ void ChromeClientImpl::invalidateRect(const IntRect& updateRect)
         m_webView->invalidateRect(updateRect);
 }
 
-void ChromeClientImpl::scheduleAnimation()
+void ChromeClientImpl::scheduleAnimation(Widget* widget)
 {
-    m_webView->scheduleAnimation();
-}
+    ASSERT(widget->isFrameView());
+    FrameView* view = toFrameView(widget);
+    LocalFrame* frame = view->frame().localFrameRoot();
 
-void ChromeClientImpl::scheduleAnimationForFrame(LocalFrame* localRoot)
-{
-    ASSERT(WebLocalFrameImpl::fromFrame(localRoot));
     // If the frame is still being created, it might not yet have a WebWidget.
     // FIXME: Is this the right thing to do? Is there a way to avoid having
     // a local frame root that doesn't have a WebWidget? During initialization
     // there is no content to draw so this call serves no purpose.
-    if (WebLocalFrameImpl::fromFrame(localRoot)->frameWidget())
-        toWebFrameWidgetImpl(WebLocalFrameImpl::fromFrame(localRoot)->frameWidget())->scheduleAnimation();
+    if (WebLocalFrameImpl::fromFrame(frame) && WebLocalFrameImpl::fromFrame(frame)->frameWidget()) {
+        WebLocalFrameImpl::fromFrame(frame)->frameWidget()->scheduleAnimation();
+    } else {
+        // TODO(lfg): We need to keep this for now because we still have some
+        // WebViews who don't have a WebViewFrameWidget. This should be
+        // removed once the WebViewFrameWidget refactor is complete.
+        m_webView->scheduleAnimation();
+    }
 }
 
 IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport) const
 {
-    IntRect screenRect(rectInViewport);
+    WebRect screenRect(rectInViewport);
 
     if (m_webView->client()) {
+        m_webView->client()->convertViewportToWindow(&screenRect);
         WebRect windowRect = m_webView->client()->windowRect();
-        screenRect.move(windowRect.x, windowRect.y);
+        screenRect.x += windowRect.x;
+        screenRect.y += windowRect.y;
     }
-
     return screenRect;
 }
 
@@ -753,6 +750,17 @@ void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer, LocalFr
     }
 }
 
+void ChromeClientImpl::didPaint(const PaintArtifact& paintArtifact)
+{
+    // TODO(jbroman): This doesn't handle OOPIF correctly. We probably need a
+    // branch for WebFrameWidget, like attachRootGraphicsLayer.
+
+    // TODO(jbroman): We shouldn't reattach the root layer every time.
+    m_webView->attachPaintArtifactCompositor();
+
+    m_webView->paintArtifactCompositor().update(paintArtifact);
+}
+
 void ChromeClientImpl::attachCompositorAnimationTimeline(WebCompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
 {
     // FIXME: For top-level frames we still use the WebView as a WebWidget. This
@@ -848,14 +856,14 @@ bool ChromeClientImpl::shouldOpenModalDialogDuringPageDismissal(const DialogType
     const char* kDialogs[] = {"alert", "confirm", "prompt"};
     int dialog = static_cast<int>(dialogType);
     ASSERT_WITH_SECURITY_IMPLICATION(0 <= dialog);
-    ASSERT_WITH_SECURITY_IMPLICATION(dialog < static_cast<int>(arraysize(kDialogs)));
+    ASSERT_WITH_SECURITY_IMPLICATION(dialog < static_cast<int>(WTF_ARRAY_LENGTH(kDialogs)));
 
     const char* kDismissals[] = {"beforeunload", "pagehide", "unload"};
     int dismissal = static_cast<int>(dismissalType) - 1; // Exclude NoDismissal.
     ASSERT_WITH_SECURITY_IMPLICATION(0 <= dismissal);
-    ASSERT_WITH_SECURITY_IMPLICATION(dismissal < static_cast<int>(arraysize(kDismissals)));
+    ASSERT_WITH_SECURITY_IMPLICATION(dismissal < static_cast<int>(WTF_ARRAY_LENGTH(kDismissals)));
 
-    Platform::current()->histogramEnumeration("Renderer.ModalDialogsDuringPageDismissal", dismissal * arraysize(kDialogs) + dialog, arraysize(kDialogs) * arraysize(kDismissals));
+    Platform::current()->histogramEnumeration("Renderer.ModalDialogsDuringPageDismissal", dismissal * WTF_ARRAY_LENGTH(kDialogs) + dialog, WTF_ARRAY_LENGTH(kDialogs) * WTF_ARRAY_LENGTH(kDismissals));
 
     String message = String("Blocked ") + kDialogs[dialog] + "('" + dialogMessage + "') during " + kDismissals[dismissal] + ".";
     m_webView->mainFrame()->addMessageToConsole(WebConsoleMessage(WebConsoleMessage::LevelError, message));

@@ -4,6 +4,9 @@
 
 #include "cc/blink/web_display_item_list_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "cc/blink/web_filter_operations_impl.h"
@@ -50,13 +53,11 @@ void WebDisplayItemListImpl::appendDrawingItem(
     const blink::WebRect& visual_rect,
     const SkPicture* picture) {
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item =
-        display_item_list_->CreateAndAppendItem<cc::DrawingDisplayItem>(
-            visual_rect);
-    item->SetNew(skia::SharePtr(const_cast<SkPicture*>(picture)));
+    display_item_list_->CreateAndAppendItem<cc::DrawingDisplayItem>(
+        visual_rect, skia::SharePtr(const_cast<SkPicture*>(picture)));
   } else {
-    cc::DrawingDisplayItem item;
-    item.SetNew(skia::SharePtr(const_cast<SkPicture*>(picture)));
+    cc::DrawingDisplayItem item(
+        skia::SharePtr(const_cast<SkPicture*>(picture)));
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -70,12 +71,10 @@ void WebDisplayItemListImpl::appendClipItem(
     rounded_rects.push_back(rounded_clip_rects[i]);
   }
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item = display_item_list_->CreateAndAppendItem<cc::ClipDisplayItem>(
-        visual_rect);
-    item->SetNew(clip_rect, rounded_rects);
+    display_item_list_->CreateAndAppendItem<cc::ClipDisplayItem>(
+        visual_rect, clip_rect, rounded_rects);
   } else {
-    cc::ClipDisplayItem item;
-    item.SetNew(clip_rect, rounded_rects);
+    cc::ClipDisplayItem item(clip_rect, rounded_rects);
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -96,13 +95,10 @@ void WebDisplayItemListImpl::appendClipPathItem(
     SkRegion::Op clip_op,
     bool antialias) {
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item =
-        display_item_list_->CreateAndAppendItem<cc::ClipPathDisplayItem>(
-            visual_rect);
-    item->SetNew(clip_path, clip_op, antialias);
+    display_item_list_->CreateAndAppendItem<cc::ClipPathDisplayItem>(
+        visual_rect, clip_path, clip_op, antialias);
   } else {
-    cc::ClipPathDisplayItem item;
-    item.SetNew(clip_path, clip_op, antialias);
+    cc::ClipPathDisplayItem item(clip_path, clip_op, antialias);
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -121,13 +117,10 @@ void WebDisplayItemListImpl::appendFloatClipItem(
     const blink::WebRect& visual_rect,
     const blink::WebFloatRect& clip_rect) {
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item =
-        display_item_list_->CreateAndAppendItem<cc::FloatClipDisplayItem>(
-            visual_rect);
-    item->SetNew(clip_rect);
+    display_item_list_->CreateAndAppendItem<cc::FloatClipDisplayItem>(
+        visual_rect, clip_rect);
   } else {
-    cc::FloatClipDisplayItem item;
-    item.SetNew(clip_rect);
+    cc::FloatClipDisplayItem item(clip_rect);
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -149,13 +142,10 @@ void WebDisplayItemListImpl::appendTransformItem(
   transform.matrix() = matrix;
 
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item =
-        display_item_list_->CreateAndAppendItem<cc::TransformDisplayItem>(
-            visual_rect);
-    item->SetNew(transform);
+    display_item_list_->CreateAndAppendItem<cc::TransformDisplayItem>(
+        visual_rect, transform);
   } else {
-    cc::TransformDisplayItem item;
-    item.SetNew(transform);
+    cc::TransformDisplayItem item(transform);
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -181,16 +171,16 @@ void WebDisplayItemListImpl::appendCompositingItem(
   // TODO(ajuma): This should really be rounding instead of flooring the alpha
   // value, but that breaks slimming paint reftests.
 
+  const bool kLcdTextRequiresOpaqueLayer = true;
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item =
-        display_item_list_->CreateAndAppendItem<cc::CompositingDisplayItem>(
-            visual_rect);
-    item->SetNew(static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)),
-                 xfermode, bounds, skia::SharePtr(color_filter));
+    display_item_list_->CreateAndAppendItem<cc::CompositingDisplayItem>(
+        visual_rect, static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)),
+        xfermode, bounds, skia::SharePtr(color_filter),
+        kLcdTextRequiresOpaqueLayer);
   } else {
-    cc::CompositingDisplayItem item;
-    item.SetNew(static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)),
-                xfermode, bounds, skia::SharePtr(color_filter));
+    cc::CompositingDisplayItem item(
+        static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)), xfermode,
+        bounds, skia::SharePtr(color_filter), kLcdTextRequiresOpaqueLayer);
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -213,12 +203,10 @@ void WebDisplayItemListImpl::appendFilterItem(
       static_cast<const WebFilterOperationsImpl&>(filters);
 
   if (display_item_list_->RetainsIndividualDisplayItems()) {
-    auto* item = display_item_list_->CreateAndAppendItem<cc::FilterDisplayItem>(
-        visual_rect);
-    item->SetNew(filters_impl.AsFilterOperations(), bounds);
+    display_item_list_->CreateAndAppendItem<cc::FilterDisplayItem>(
+        visual_rect, filters_impl.AsFilterOperations(), bounds);
   } else {
-    cc::FilterDisplayItem item;
-    item.SetNew(filters_impl.AsFilterOperations(), bounds);
+    cc::FilterDisplayItem item(filters_impl.AsFilterOperations(), bounds);
     display_item_list_->RasterIntoCanvas(item);
   }
 }

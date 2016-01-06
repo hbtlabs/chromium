@@ -4,6 +4,8 @@
 
 #include "chrome/browser/media/permission_bubble_media_access_handler.h"
 
+#include <utility>
+
 #include "base/metrics/field_trial.h"
 #include "chrome/browser/media/media_permission.h"
 #include "chrome/browser/media/media_stream_device_permissions.h"
@@ -167,7 +169,8 @@ void PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest(
   }
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  MediaStreamInfoBarDelegateAndroid::Create(web_contents, controller.Pass());
+  MediaStreamInfoBarDelegateAndroid::Create(web_contents,
+                                            std::move(controller));
 #else
   PermissionBubbleManager* bubble_manager =
       PermissionBubbleManager::FromWebContents(web_contents);
@@ -236,7 +239,7 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
             base::Unretained(this), web_contents));
   }
 
-  callback.Run(devices, result, ui.Pass());
+  callback.Run(devices, result, std::move(ui));
 }
 
 void PermissionBubbleMediaAccessHandler::Observe(

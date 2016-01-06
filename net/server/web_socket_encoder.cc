@@ -4,6 +4,7 @@
 
 #include "net/server/web_socket_encoder.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -91,7 +92,7 @@ WebSocket::ParseResult DecodeFrameHybi17(const base::StringPiece& frame,
   if (client_frame && !masked)  // In Hybi-17 spec client MUST mask its frame.
     return WebSocket::FRAME_ERROR;
 
-  uint64 payload_length64 = second_byte & kPayloadLengthMask;
+  uint64_t payload_length64 = second_byte & kPayloadLengthMask;
   if (payload_length64 > kMaxSingleBytePayloadLength) {
     int extended_payload_length_size;
     if (payload_length64 == kTwoBytePayloadLengthField)
@@ -110,7 +111,7 @@ WebSocket::ParseResult DecodeFrameHybi17(const base::StringPiece& frame,
   }
 
   size_t actual_masking_key_length = masked ? kMaskingKeyWidthInBytes : 0;
-  static const uint64 max_payload_length = 0x7FFFFFFFFFFFFFFFull;
+  static const uint64_t max_payload_length = 0x7FFFFFFFFFFFFFFFull;
   static size_t max_length = std::numeric_limits<size_t>::max();
   if (payload_length64 > max_payload_length ||
       payload_length64 + actual_masking_key_length > max_length) {
@@ -226,8 +227,8 @@ scoped_ptr<WebSocketEncoder> WebSocketEncoder::CreateServer(
       continue;
     }
     *deflate_parameters = response;
-    return make_scoped_ptr(
-        new WebSocketEncoder(FOR_SERVER, deflater.Pass(), inflater.Pass()));
+    return make_scoped_ptr(new WebSocketEncoder(FOR_SERVER, std::move(deflater),
+                                                std::move(inflater)));
   }
 
   // We cannot find an acceptable offer.
@@ -272,14 +273,16 @@ scoped_ptr<WebSocketEncoder> WebSocketEncoder::CreateClient(
     return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, nullptr, nullptr));
   }
 
-  return make_scoped_ptr(
-      new WebSocketEncoder(FOR_CLIENT, deflater.Pass(), inflater.Pass()));
+  return make_scoped_ptr(new WebSocketEncoder(FOR_CLIENT, std::move(deflater),
+                                              std::move(inflater)));
 }
 
 WebSocketEncoder::WebSocketEncoder(Type type,
                                    scoped_ptr<WebSocketDeflater> deflater,
                                    scoped_ptr<WebSocketInflater> inflater)
-    : type_(type), deflater_(deflater.Pass()), inflater_(inflater.Pass()) {}
+    : type_(type),
+      deflater_(std::move(deflater)),
+      inflater_(std::move(inflater)) {}
 
 WebSocketEncoder::~WebSocketEncoder() {}
 

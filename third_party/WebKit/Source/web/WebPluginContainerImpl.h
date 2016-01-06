@@ -62,6 +62,7 @@ struct WebPrintPresetOptions;
 
 class WebPluginContainerImpl final : public PluginView, public WebPluginContainer, public LocalFrameLifecycleObserver {
     WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WebPluginContainerImpl);
+    WILL_BE_USING_PRE_FINALIZER(WebPluginContainerImpl, dispose);
 public:
     static PassRefPtrWillBeRawPtr<WebPluginContainerImpl> create(HTMLPlugInElement* element, WebPlugin* webPlugin)
     {
@@ -81,7 +82,7 @@ public:
 
     // Widget methods
     void setFrameRect(const IntRect&) override;
-    void paint(GraphicsContext*, const CullRect&) const override;
+    void paint(GraphicsContext&, const CullRect&) const override;
     void invalidateRect(const IntRect&) override;
     void setFocus(bool, WebFocusType) override;
     void show() override;
@@ -90,7 +91,7 @@ public:
     void frameRectsChanged() override;
     void setParentVisible(bool) override;
     void setParent(Widget*) override;
-    void widgetPositionsUpdated() override;
+    void widgetGeometryMayHaveChanged() override;
     bool isPluginContainer() const override { return true; }
     void eventListenersRemoved() override;
 
@@ -138,7 +139,7 @@ public:
     // Sets up printing at the specified WebPrintParams. Returns the number of pages to be printed at these settings.
     int printBegin(const WebPrintParams&) const;
     // Prints the page specified by pageNumber (0-based index) into the supplied canvas.
-    void printPage(int pageNumber, GraphicsContext*, const IntRect& paintRect);
+    void printPage(int pageNumber, GraphicsContext&, const IntRect& paintRect);
     // Ends the print operation.
     void printEnd();
 
@@ -157,11 +158,6 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
     void dispose() override;
-
-#if ENABLE(OILPAN)
-    LocalFrame* pluginFrame() const override { return frame(); }
-    void shouldDisposePlugin() override;
-#endif
 
 private:
     // Sets |windowRect| to the content rect of the plugin in screen space.
@@ -206,11 +202,6 @@ private:
     bool m_wantsWheelEvents;
 
     bool m_inDispose;
-#if ENABLE(OILPAN)
-    // Oilpan: if true, the plugin container must dispose
-    // of its plugin when being finalized.
-    bool m_shouldDisposePlugin;
-#endif
 };
 
 DEFINE_TYPE_CASTS(WebPluginContainerImpl, Widget, widget, widget->isPluginContainer(), widget.isPluginContainer());

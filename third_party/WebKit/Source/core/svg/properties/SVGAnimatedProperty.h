@@ -60,7 +60,7 @@ public:
     virtual void setAnimatedValue(PassRefPtrWillBeRawPtr<SVGPropertyBase>) = 0;
     virtual void animationEnded();
 
-    virtual void setBaseValueAsString(const String& value, SVGParsingError& parseError) = 0;
+    virtual SVGParsingError setBaseValueAsString(const String&) = 0;
     virtual bool needsSynchronizeAttribute() = 0;
     virtual void synchronizeAttribute();
 
@@ -143,14 +143,9 @@ public:
         return m_currentValue;
     }
 
-    void setBaseValueAsString(const String& value, SVGParsingError& parseError) override
+    SVGParsingError setBaseValueAsString(const String& value) override
     {
-        TrackExceptionState es;
-
-        m_baseValue->setValueAsString(value, es);
-
-        if (es.hadException())
-            parseError = ParsingAttributeFailedError;
+        return m_baseValue->setValueAsString(value);
     }
 
     PassRefPtrWillBeRawPtr<SVGPropertyBase> createAnimatedValue() override
@@ -231,11 +226,12 @@ public:
 
         ASSERT(this->attributeName() != QualifiedName::null());
         this->contextElement()->invalidateSVGAttributes();
-        this->contextElement()->svgAttributeChanged(this->attributeName());
+        this->contextElement()->svgAttributeBaseValChanged(this->attributeName());
     }
 
     PrimitiveType animVal()
     {
+        this->contextElement()->ensureAttributeAnimValUpdated();
         return this->currentValue()->value();
     }
 

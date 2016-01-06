@@ -7,7 +7,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
-#include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +18,6 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/compression/compression_utils.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -108,18 +106,6 @@ class AutofillServerTest : public InProcessBrowserTest  {
     command_line->AppendSwitchASCII(
         ::switches::kForceFieldTrials, "AutofillFieldMetadata/Enabled/");
   }
-
-  void SetUpOnMainThread() override {
-    // Disable interactions with the Mac Keychain.
-    PrefService* pref_service = browser()->profile()->GetPrefs();
-    test::DisableSystemServices(pref_service);
-
-    // Enable uploads, and load a new tab to force the AutofillDownloadManager
-    // to update its cached view of the prefs.
-    pref_service->SetDouble(prefs::kAutofillPositiveUploadRate, 1.0);
-    pref_service->SetDouble(prefs::kAutofillNegativeUploadRate, 1.0);
-    AddBlankTabAndShow(browser());
-  }
 };
 
 // Regression test for http://crbug.com/177419
@@ -167,7 +153,8 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
   // submission, with form fields matching those from the query request.
   const char kUploadRequest[] =
       "<?xml version=\"1.0\"?>\n"
-      "<autofillupload clientversion=\"6.1.1715.1442/en (GGLL)\""
+      "<autofillupload submission=\"true\""
+      " clientversion=\"6.1.1715.1442/en (GGLL)\""
       " formsignature=\"15916856893790176210\""
       " autofillused=\"false\""
       " datapresent=\"1f7e0003780000080004\""

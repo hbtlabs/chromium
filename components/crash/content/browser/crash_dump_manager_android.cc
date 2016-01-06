@@ -4,6 +4,8 @@
 
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -78,7 +80,7 @@ base::File CrashDumpManager::CreateMinidumpFile(int child_process_id) {
     DCHECK(!ContainsKey(child_process_id_to_minidump_path_, child_process_id));
     child_process_id_to_minidump_path_[child_process_id] = minidump_path;
   }
-  return minidump_file.Pass();
+  return minidump_file;
 }
 
 // static
@@ -90,7 +92,7 @@ void CrashDumpManager::ProcessMinidump(
     base::android::ApplicationState app_state) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   CHECK(instance_);
-  int64 file_size = 0;
+  int64_t file_size = 0;
   int r = base::GetFileSize(minidump_path, &file_size);
   DCHECK(r) << "Failed to retrieve size for minidump "
             << minidump_path.value();
@@ -147,7 +149,7 @@ void CrashDumpManager::ProcessMinidump(
     NOTREACHED() << "Failed to retrieve the crash dump directory.";
     return;
   }
-  const uint64 rand = base::RandUint64();
+  const uint64_t rand = base::RandUint64();
   const std::string filename =
       base::StringPrintf("chromium-renderer-minidump-%016" PRIx64 ".dmp%d",
                          rand, pid);
@@ -185,37 +187,41 @@ void CrashDumpManager::BrowserChildProcessCrashed(
 void CrashDumpManager::Observe(int type,
                                const content::NotificationSource& source,
                                const content::NotificationDetails& details) {
+  content::RenderProcessHost* rph =
+      content::Source<content::RenderProcessHost>(source).ptr();
+  base::TerminationStatus term_status = base::TERMINATION_STATUS_MAX_ENUM;
+  base::android::ApplicationState app_state =
+      base::android::APPLICATION_STATE_UNKNOWN;
   switch (type) {
     case content::NOTIFICATION_RENDERER_PROCESS_TERMINATED: {
       // NOTIFICATION_RENDERER_PROCESS_TERMINATED is sent when the renderer
       // process is cleanly shutdown. However, we still need to close the
       // minidump_fd we kept open.
-      content::RenderProcessHost* rph =
-          content::Source<content::RenderProcessHost>(source).ptr();
-      OnChildExit(rph->GetID(),
-                  rph->GetHandle(),
-                  content::PROCESS_TYPE_RENDERER,
-                  base::TERMINATION_STATUS_NORMAL_TERMINATION,
-                  base::android::APPLICATION_STATE_UNKNOWN);
+      term_status = base::TERMINATION_STATUS_NORMAL_TERMINATION;
       break;
     }
     case content::NOTIFICATION_RENDERER_PROCESS_CLOSED: {
-      content::RenderProcessHost* rph =
-          content::Source<content::RenderProcessHost>(source).ptr();
+      // We do not care about android fast shutdowns as it is a known case where
+      // the renderer is intentionally killed when we are done with it.
+      if (rph->FastShutdownStarted()) {
+        break;
+      }
       content::RenderProcessHost::RendererClosedDetails* process_details =
           content::Details<content::RenderProcessHost::RendererClosedDetails>(
               details).ptr();
-      OnChildExit(rph->GetID(),
-                  rph->GetHandle(),
-                  content::PROCESS_TYPE_RENDERER,
-                  process_details->status,
-                  base::android::ApplicationStatusListener::GetState());
+      term_status = process_details->status;
+      app_state = base::android::ApplicationStatusListener::GetState();
       break;
     }
     default:
       NOTREACHED();
       return;
   }
+  OnChildExit(rph->GetID(),
+              rph->GetHandle(),
+              content::PROCESS_TYPE_RENDERER,
+              term_status,
+              app_state);
 }
 
 void CrashDumpManager::OnChildExit(int child_process_id,

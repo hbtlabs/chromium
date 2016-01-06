@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
 #include "third_party/libjingle/source/talk/app/webrtc/mediaconstraintsinterface.h"
 #include "third_party/libjingle/source/talk/media/base/videorenderer.h"
@@ -38,11 +39,12 @@ class MockVideoRenderer : public cricket::VideoRenderer {
 
 class MockVideoSource : public webrtc::VideoSourceInterface {
  public:
-  MockVideoSource();
+  MockVideoSource(bool remote);
 
   void RegisterObserver(webrtc::ObserverInterface* observer) override;
   void UnregisterObserver(webrtc::ObserverInterface* observer) override;
   MediaSourceInterface::SourceState state() const override;
+  bool remote() const override;
   cricket::VideoCapturer* GetVideoCapturer() override;
   void AddSink(cricket::VideoRenderer* output) override;
   void RemoveSink(cricket::VideoRenderer* output) override;
@@ -71,6 +73,7 @@ class MockVideoSource : public webrtc::VideoSourceInterface {
 
   std::vector<webrtc::ObserverInterface*> observers_;
   MediaSourceInterface::SourceState state_;
+  bool remote_;
   scoped_ptr<cricket::VideoCapturer> capturer_;
   MockVideoRenderer renderer_;
 };
@@ -78,11 +81,12 @@ class MockVideoSource : public webrtc::VideoSourceInterface {
 class MockAudioSource : public webrtc::AudioSourceInterface {
  public:
   explicit MockAudioSource(
-      const webrtc::MediaConstraintsInterface* constraints);
+      const webrtc::MediaConstraintsInterface* constraints, bool remote);
 
   void RegisterObserver(webrtc::ObserverInterface* observer) override;
   void UnregisterObserver(webrtc::ObserverInterface* observer) override;
   MediaSourceInterface::SourceState state() const override;
+  bool remote() const override;
 
   // Changes the state of the source to live and notifies the observer.
   void SetLive();
@@ -102,6 +106,7 @@ class MockAudioSource : public webrtc::AudioSourceInterface {
   ~MockAudioSource() override;
 
  private:
+  bool remote_;
   ObserverSet observers_;
   MediaSourceInterface::SourceState state_;
   webrtc::MediaConstraintsInterface::Constraints optional_constraints_;

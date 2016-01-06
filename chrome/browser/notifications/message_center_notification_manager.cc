@@ -4,10 +4,13 @@
 
 #include "chrome/browser/notifications/message_center_notification_manager.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/notification_provider/notification_provider_api.h"
 #include "chrome/browser/notifications/extension_welcome_notification.h"
 #include "chrome/browser/notifications/extension_welcome_notification_factory.h"
@@ -44,7 +47,7 @@ MessageCenterNotificationManager::MessageCenterNotificationManager(
     message_center::MessageCenter* message_center,
     scoped_ptr<message_center::NotifierSettingsProvider> settings_provider)
     : message_center_(message_center),
-      settings_provider_(settings_provider.Pass()),
+      settings_provider_(std::move(settings_provider)),
       system_observer_(this),
       stats_collector_(message_center),
       google_now_stats_collector_(message_center)

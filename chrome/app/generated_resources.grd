@@ -2083,6 +2083,12 @@ Even if you have downloaded files from this website before, the website might ha
         Downloaded in Incognito
       </message>
 
+      <!-- Download Notification Labels -->
+      <message name="IDS_DOWNLOAD_NOTIFICATION_COPY_TO_CLIPBOARD"
+               desc="In the download notification, the text of 'Copy to clipboard' button, which is to copy the file content (eg. an image for image files) to the clipboard">
+        Copy to clipboard
+      </message>
+
       <!-- Download Context Menu Items -->
       <if expr="not is_android">
         <if expr="not use_titlecase">
@@ -3431,16 +3437,10 @@ Even if you have downloaded files from this website before, the website might ha
       <message name="IDS_LOGIN_DIALOG_TITLE" desc="String to be displayed in the title bar of the login prompt dialog" formatter_data="android_java">
         Authentication Required
       </message>
-      <message name="IDS_LOGIN_DIALOG_DESCRIPTION" desc="String to be displayed in the login prompt dialog to explain what the user needs to do">
-        The server <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password. The server says: <ph name="REALM">$2<ex>opaque string</ex></ph>.
+      <message name="IDS_LOGIN_DIALOG_AUTHORITY" desc="String to be displayed in the login prompt dialog to explain that the user needs to log in, and the name of the web site">
+        <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password.
       </message>
-      <message name="IDS_LOGIN_DIALOG_DESCRIPTION_NO_REALM" desc="String to be displayed in the login prompt dialog to explain what the user needs to do">
-        The server <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password.
-      </message>
-      <message name="IDS_LOGIN_DIALOG_DESCRIPTION_PROXY" desc="String to be displayed in the proxy login prompt dialog to explain what the user needs to do">
-        The proxy <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password. The proxy says: <ph name="REALM">$2<ex>opaque string</ex></ph>.
-      </message>
-      <message name="IDS_LOGIN_DIALOG_DESCRIPTION_PROXY_NO_REALM" desc="String to be displayed in the proxy login prompt dialog to explain what the user needs to do">
+      <message name="IDS_LOGIN_DIALOG_PROXY_AUTHORITY" desc="String to be displayed in the proxy login prompt dialog to explain that the user needs to log in, and the name of the proxy">
         The proxy <ph name="DOMAIN">$1<ex>google.com</ex></ph> requires a username and password.
       </message>
       <message name="IDS_LOGIN_DIALOG_USERNAME_FIELD" desc="The label of the username field in the login prompt dialog" formatter_data="android_java">
@@ -3525,6 +3525,12 @@ Even if you have downloaded files from this website before, the website might ha
           <message name="IDS_TASK_MANAGER_IDLE_WAKEUPS_COLUMN" desc="Task manager idle processor wakeups column">
             Idle wake ups
           </message>
+          <message name="IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN" desc="Task manager open fds (file descriptors) count column">
+            File descriptors
+          </message>
+          <message name="IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN" desc="Task manager process priority column">
+            Process priority
+          </message>
           <message name="IDS_TASK_MANAGER_WEBCORE_IMAGE_CACHE_COLUMN" desc="Task manager WebCore image cache size column.">
             Image cache
           </message>
@@ -3584,6 +3590,12 @@ Even if you have downloaded files from this website before, the website might ha
           <message name="IDS_TASK_MANAGER_IDLE_WAKEUPS_COLUMN" desc="Task manager idle processor wakeups column">
             Idle Wake Ups
           </message>
+          <message name="IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN" desc="Task manager open fds (file descriptors) count column">
+            File Descriptors
+          </message>
+          <message name="IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN" desc="Task manager process priority column">
+            Process Priority
+          </message>
           <message name="IDS_TASK_MANAGER_WEBCORE_IMAGE_CACHE_COLUMN" desc="Task manager WebCore image cache size column.">
             Image Cache
           </message>
@@ -3614,6 +3626,12 @@ Even if you have downloaded files from this website before, the website might ha
         </message>
         <message name="IDS_TASK_MANAGER_NA_CELL_TEXT" desc="The value displayed for network / webcache usage when the information is not available (Not Applicable).">
           N/A
+        </message>
+        <message name="IDS_TASK_MANAGER_BACKGROUNDED_TEXT" desc="The value displayed for a process with backgrounded priority">
+          Low
+        </message>
+        <message name="IDS_TASK_MANAGER_FOREGROUNDED_TEXT" desc="The value displayed for a process with foregrounded priority">
+          Normal
         </message>
         <message name="IDS_TASK_MANAGER_UNKNOWN_VALUE_TEXT" desc="The value displayed for an unknown NaCl debug stub port in the task manager.">
           Unknown
@@ -3686,6 +3704,9 @@ Even if you have downloaded files from this website before, the website might ha
         </message>
         <message name="IDS_TASK_MANAGER_SUBFRAME_INCOGNITO_PREFIX" desc="The prefix for an Incognito out-of-process-iframe process row in the Task Manager (these processes are created when site isolation is enabled, in incognito mode)">
           Incognito Subframe: <ph name="SUBFRAME_SITE">$1<ex>https://youtube.com/</ex></ph>
+        </message>
+        <message name="IDS_TASK_MANAGER_ARC_PREFIX" desc="The prefix for an ARC process row">
+          ARC: <ph name="ARC_PROCESS_NAME">$1<ex>com.android.systemui</ex></ph>
         </message>
       </if>
 
@@ -4417,6 +4438,9 @@ Even if you have downloaded files from this website before, the website might ha
         <message name="IDS_EXTENSION_INSTALLED_MANAGE_SHORTCUTS" desc="Text for the link in the InfoBubble that opens the chrome://extensions page with the Configure Commands UI visible.">
           Manage shortcuts
         </message>
+        <message name="IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW" desc="Text of the sync promo at the bottom of the extension installed bubble, prompting the user to sign in in order to sync extensions.">
+          To get your extensions on all your computers, <ph name="SIGN_IN_LINK">$1<ex>sign in to Chrome</ex></ph>.
+        </message>
         <message name="IDS_EXTENSION_INSTALLED_SIGNIN_PROMO" desc="The remaining text of the sign-in promo paragraph. Will be appended as a label to the string above. The triple single quotes are needed to preserve the space before the word 'to' (which is handy when the language (Chrome is being translated to) uses space as word separator).">
           ''' to get this extension, your history, and other Chrome settings on all your devices.'''
         </message>
@@ -5089,18 +5113,18 @@ Keep your key file in a safe place. You will need it to create new versions of y
 
       <!-- Material Design version of chrome://policy -->
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_POLICY_PAGE_NAME" desc="Name for the flag to enable the material design policy page.">
-        Enable Material Design policy page
+          Enable Material Design policy page
       </message>
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_POLICY_PAGE_DESCRIPTION" desc="Description for the flag to enable the material design policy page.">
-        If enabled, the chrome://md-policy URL loads the Material Design policy page.
+          If enabled, the chrome://md-policy URL loads the Material Design policy page.
       </message>
 
       <!-- Material Design version of chrome://downloads -->
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_DOWNLOADS_NAME" desc="Name for the flag to enable the material design downloads page.">
-        Enable Material Design downloads
+          Enable Material Design downloads
       </message>
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_DOWNLOADS_DESCRIPTION" desc="Description for the flag to enable the material design downloads page.">
-        If enabled, the chrome://downloads/ URL loads the Material Design downloads page.
+          If enabled, the chrome://downloads/ URL loads the Material Design downloads page.
       </message>
 
       <!-- Material Design version of chrome://history -->
@@ -5109,6 +5133,22 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_HISTORY_DESCRIPTION" desc="Description for the flag to enable the material design history page.">
         If enabled, the chrome://history/ URL loads the Material Design history page.
+      </message>
+
+      <!-- Material Design version of chrome://extensions -->
+      <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_EXTENSIONS_NAME" desc="Name for the flag to enable the material design extensions page.">
+        Enable Material Design extensions
+      </message>
+      <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_EXTENSIONS_DESCRIPTION" desc="Description for the flag to enable the material design extensions page.">
+        If enabled, the chrome://extensions/ URL loads the Material Design extensions page.
+      </message>
+
+      <!-- Device scale factor change in content crbug.com/485650. -->
+      <message name="IDS_FLAGS_ENABLE_USE_ZOOM_FOR_DSF_NAME" desc="Name for the flag to use Blink's zooming mechanism to implement device scale factor.">
+        Use Blink's zoom for device scale factor.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_USE_ZOOM_FOR_DSF_DESCRIPTION" desc="Description for the flag to use Blink's zooming mechanism to implement device scale factor.">
+        If enabled, Blink uses its zooming mechanism to scale content for device scale factor.
       </message>
 
       <!-- Components -->
@@ -5431,12 +5471,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_COMPOSITED_LAYER_BORDERS_DESCRIPTION" desc="Description of the 'Composited layer borders' lab.">
         Renders a border around composited Render Layers to help debug and study layer compositing.
       </message>
-      <message name="IDS_FLAGS_SHOW_FPS_COUNTER" desc="Name of the 'Show FPS counter' lab.">
-        FPS counter
-      </message>
-      <message name="IDS_FLAGS_SHOW_FPS_COUNTER_DESCRIPTION" desc="Description of the 'Show FPS counter' lab.">
-        Shows a page's actual frame rate, in frames per second, when hardware acceleration is active.
-      </message>
       <message name="IDS_FLAGS_DEBUG_SHORTCUTS_NAME" desc="Name of the 'Debugging keyboard shortcuts' lab.">
         Debugging keyboard shortcuts
       </message>
@@ -5476,7 +5510,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Accelerated 2D canvas
       </message>
       <message name="IDS_FLAGS_ACCELERATED_2D_CANVAS_DESCRIPTION" desc="Description of the 'Accelerated 2D canvas' lab.">
-        Enables the use of the GPU to perform 2d canvas rendering and instead uses software rendering.
+        Enables the use of the GPU to perform 2d canvas rendering instead of using software rendering.
       </message>
       <message name="IDS_FLAGS_DISPLAY_LIST_2D_CANVAS_NAME" desc="Name of the 'Enable display list 2D canvas' lab.">
         Display list 2D canvas
@@ -5540,11 +5574,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_GESTURE_TAP_HIGHLIGHTING_DESCRIPTION" desc="Description for the flag to turn on gesture tap highlighting">
         Enable the experimental gesture tap highlight implementation.
       </message>
-      <message name="IDS_FLAGS_SMOOTH_SCROLLING_NAME" desc="Title for the flag to turn on smooth scrolling">
+      <message name="IDS_FLAGS_SMOOTH_SCROLLING_NAME" desc="Name of the smooth scrolling flag">
         Smooth Scrolling
       </message>
-      <message name="IDS_FLAGS_SMOOTH_SCROLLING_DESCRIPTION" desc="Description for the flag to turn on smooth scrolling">
-        Enable the experimental smooth scrolling implementation.
+      <message name="IDS_FLAGS_SMOOTH_SCROLLING_DESCRIPTION" desc="Description of the smooth scrolling flag">
+        Animate smoothly when scrolling page content.
       </message>
       <message name="IDS_FLAGS_OVERLAY_SCROLLBARS_NAME" desc="Title for the flag to turn on overlay scrollbars">
         Overlay Scrollbars
@@ -5612,7 +5646,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Panels
       </message>
       <message name="IDS_FLAGS_PANELS_DESCRIPTION" desc="Description for the flag to enable Panel windows.">
-        Enable Panel windows that open outside of the browser frame. Attempts to open a Panel will open a popup instead if not enabled. Panels are always enabled on the dev and canary channels.
+        Allow extensions to create panel windows that open outside of the browser frame. Attempts to open a panel will open a popup instead if not enabled. Default behavior is to allow only for whitelisted extensions. Enabled behavior is to allow for all extensions. Disabled behavior is to disallow panels for any extension.
       </message>
       <message name="IDS_FLAGS_WEBGL_DRAFT_EXTENSIONS_NAME" desc="Name of the 'Enable WebGL Draft Extensions' flag.">
         WebGL Draft Extensions
@@ -5844,6 +5878,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_EXPERIMENTAL_WEB_PLATFORM_FEATURES_DESCRIPTION" desc="Description for the flag to enable experimental Web Platform features.">
         Enables experimental Web Platform features that are in development.
       </message>
+      <message name="IDS_FLAGS_EXPERIMENTAL_FRAMEWORK_NAME" desc="Name for the flag to enable the Experimental Framework.">
+        Experimental Framework.
+      </message>
+      <message name="IDS_FLAGS_EXPERIMENTAL_FRAMEWORK_DESCRIPTION" desc="Description for the flag to enable the Experimental Framework.">
+        Enables the Experimental Framework for controlling access to API experiments.
+      </message>
       <message name="IDS_FLAGS_WEB_BLUETOOTH_NAME" desc="Name for the flag to enable Web Bluetooth.">
         Web Bluetooth
       </message>
@@ -6021,11 +6061,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_SAVE_PASSWORD" desc="The title of the save password bubble when a password can be saved.">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to save your password for this site?
       </message>
+      <message name="IDS_SAVE_ACCOUNT" desc="The title of the save password bubble when a federated credential can be saved.">
+        Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to save your account for this site?
+      </message>
       <message name="IDS_UPDATE_PASSWORD" desc="The title of the save password bubble when a password can be updated.">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to update your password for this site?
-      </message>
-      <message name="IDS_PASSWORD_MANAGER_SMART_LOCK" desc="The brand name of the password manager for the title of the save password bubble when a user is signed in.">
-        Google Smart Lock
       </message>
       <message name="IDS_PASSWORD_MANAGER_SMART_LOCK_FOR_PASSWORDS" desc="The more descriptive brand name of the password manager when the user is signed in. Used in various UI elements, can be in link format.">
         Google Smart Lock for Passwords
@@ -6033,11 +6073,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_PASSWORD_MANAGER_SMART_LOCK_WELCOME" desc="A warm welcome message displayed once in the Save password bubble for users which are signed-in to Chrome.">
         Smart Lock helps you quickly sign in to apps and sites using passwords you have saved with Google.
       </message>
-      <if expr="is_android">
-        <message name="IDS_PASSWORD_MANAGER_SMART_LOCK_PAGE" desc="URL of the passwords dashboard.">
-          https://passwords.google.com/?hl=[GRITLANGCODE]
-        </message>
-      </if>
       <message name="IDS_FLAGS_SUGGESTIONS_WITH_SUB_STRING_MATCH_NAME" desc="Name of the flag for substring matching for Autofill suggestions.">
         Substring matching for Autofill suggestions
       </message>
@@ -6068,9 +6103,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_PUSH_API_BACKGROUND_MODE_DESCRIPTION" desc="Description for the flag to enable background mode for the Push API.">
         Enable background mode for the Push API. This allows Chrome to continue running after the last window is closed, and to launch at OS startup, if the Push API needs it.
       </message>
-      <message name="IDS_FLAGS_ENABLE_STALE_WHILE_REVALIDATE_NAME" desc="Name of the flag to enable the stale-while-revalidate cache directive.">
-        Enable the stale-while-revalidate cache directive
-      </message>
+      <if expr="not is_ios">
+        <message name="IDS_FLAGS_ENABLE_STALE_WHILE_REVALIDATE_NAME" desc="Name of the flag to enable the &quot;stale-while-revalidate&quot; cache directive. This message is intended for web developers who are familiar with technical terms. &quot;stale-while-revalidate&quot; here is the literal string sent by the HTTP server, and so should be untranslated where possible. &quot;cache&quot; here refers to an HTTP cache. &quot;directive&quot; here is an instruction sent by an HTTP server to indicate what caching behaviour should be used.">
+          Enable the "stale-while-revalidate" cache directive
+        </message>
+        <message name="IDS_FLAGS_ENABLE_STALE_WHILE_REVALIDATE_DESCRIPTION" desc="Description of the flag to enable the &quot;stale-while-revalidate&quot; cache directive. This message is intended for web developers who are familiar with technical terms. &quot;Cache-Control: stale-while-revalidate&quot; is the literal string sent by the HTTP server, and so should be untranslated where possible. If necessary for translation it can be split into the HTTP header name part &quot;Cache-Control&quot; and the value part &quot;stale-while-revalidate&quot;. &quot;directive&quot; here is an instruction sent by an HTTP server to indicate what caching behaviour should be used. The directive is typically configured by the server administrator. &quot;servers&quot; here refers to HTTP server software. &quot;resources&quot; here means individual files served by HTTP servers and cached by the browser. &quot;be revalidated&quot; means &quot;be checked with the HTTP server whether or not the browser has the latest version&quot;. &quot;in the background&quot; here means without making the user wait. &quot;latency&quot; here refers to the time the user waits for a web page to be loaded or become usable.">
+          Enable the experimental implementation of the "Cache-Control: stale-while-revalidate" directive. This permits servers to specify that some resources may be revalidated in the background to improve latency. 
+        </message>
+      </if>
       <message name="IDS_FLAGS_ENABLE_NAVIGATION_TRACING" desc="Name of the flag to enable navigation tracing">
         Enable navigation tracing
       </message>
@@ -6078,6 +6118,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
         This is to be used in conjunction with the trace-upload-url flag.
         WARNING: When enabled, Chrome will record performance data for every navigation and upload it to the URL specified by the trace-upload-url flag. The trace may include personally identifiable information (PII) such as the titles and URLs of websites you visit.
       </message>
+      <if expr="is_android">
+        <message name="IDS_FLAGS_ENABLE_NON_VALIDATING_RELOAD_ON_REFRESH_CONTENT_NAME" desc="Name of the flag to enable non-validating reload on pull-to-refresh">
+          Enable non-validating reload on pull-to-refresh
+        </message>
+        <message name="IDS_FLAGS_ENABLE_NON_VALIDATING_RELOAD_ON_REFRESH_CONTENT_DESCRIPTION" desc="Description of the flag to enable non-validating reload on pull-to-refresh">
+          Forces pull-to-refresh trigger non-validating reload (while it usually means regular, cache-validating reload when the flag is disabled).
+        </message>
+      </if>
       <message name="IDS_FLAGS_TRACE_UPLOAD_URL" desc="Name of the flag to set the trace upload url">
         Trace label for navigation tracing
       </message>
@@ -6413,18 +6461,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_SITE_ENGAGEMENT_SERVICE_DESCRIPTION" desc="Description for the flag to enable the site engagement service.">
         Enables the Site Engagement Service, which records interaction with sites and allocates resources accordingly.
       </message>
-      <message name="IDS_FLAGS_OUT_OF_PROCESS_PDF_NAME" desc="Title for the flag to enable out of process PDF.">
-        Out of process PDF
-      </message>
-      <message name="IDS_FLAGS_OUT_OF_PROCESS_PDF_DESCRIPTION" desc="Description for the flag to enable out of process PDF.">
-        Enable the out of process PDF plugin.
-      </message>
-      <message name="IDS_FLAGS_PDF_MATERIAL_UI_NAME" desc="Title for the flag to enable the new material UI in the PDF Viewer.">
-        Material UI for PDF
-      </message>
-      <message name="IDS_FLAGS_PDF_MATERIAL_UI_DESCRIPTION" desc="Description for the flag to enable the new material UI in the PDF Viewer.">
-        Enable the new material UI in the PDF Viewer.
-      </message>
       <message name="IDS_FLAGS_THREADED_SCROLLING_NAME" desc="Title for the flag for threaded scrolling.">
         Threaded scrolling
       </message>
@@ -6545,18 +6581,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_SUPERVISED_USER_SAFESITES_ONLINE_CHECK_ONLY" desc="Description for the choice to enable only the online check in the supervised user SafeSites filtering feature.">
         Online check only
       </message>
-      <message name="IDS_FLAGS_NEW_VIDEO_RENDERER_NAME" desc="Title for the flag for the new video rendering path for video elements.">
-        New video rendering path for video elements
+      <message name="IDS_FLAGS_ENABLE_UNIFIED_MEDIA_PIPELINE_NAME" desc="Title for the flag to enable the unified media pipeline on Android.">
+        Enables the unified media pipeline on Android.
       </message>
-      <message name="IDS_FLAGS_NEW_VIDEO_RENDERER_DESCRIPTION" desc="Description for the flag for the new video rendering path for video elements.">
-        New compositor driven video rendering path for video elements.
-      </message>
-      <message name="IDS_FLAGS_SCROLL_TOP_LEFT_INTEROP_NAME" desc="Title for the flag to enable scrollTop interoperability">
-        Document scrolling element interoperability.
-      </message>
-      <message name="IDS_FLAGS_SCROLL_TOP_LEFT_INTEROP_DESCRIPTION" desc="Description for the flag to enable scrollTop interoperability.">
-        Control whether document.body.scrollTop/scrollLeft in JavaScript reflects the standard interoperable behavior (enabled) or legacy WebKit behavior (disabled).
-        When enabled, document.scrollingElement is document.documentElement, when disabled it's document.body (for strict-mode pages).
+      <message name="IDS_FLAGS_ENABLE_UNIFIED_MEDIA_PIPELINE_DESCRIPTION" desc="Description for the flag to enable the unified media pipeline on Android.">
+        Enables the unified (Android and desktop) media pipeline on Android.
       </message>
       <message name="IDS_FLAGS_TRY_SUPPORTED_CHANNEL_LAYOUTS_NAME" desc="Title for the flag to enable support for trying supported channel layouts.">
         Causes audio output streams to check if channel layouts other than the default hardware layout are available.
@@ -6667,7 +6696,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Enables the use of an AppContainer on sandboxed processes to improve security.
         </message>
       </if>
-      <if expr="toolkit_views">
+      <if expr="toolkit_views or is_android">
         <message name="IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_NAME" desc="Name of the flag to enable uploading Autofill credit cards.">
           Enable offering upload of Autofilled credit cards
         </message>
@@ -6687,6 +6716,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_FORCE_UI_DIRECTION_RTL" desc="Name for the option to force right-to-left UI direction mode.">
           Right-to-left
       </message>
+      <if expr="is_win or is_linux">
+        <message name="IDS_FLAGS_ENABLE_INPUT_IME_API_NAME" desc="Name of the flag to enable che chrome.input.ime API.">
+          Enable Input IME API
+        </message>
+        <message name="IDS_FLAGS_ENABLE_INPUT_IME_API_DESCRIPTION" desc="Description of the flag to enable the chrome.input.ime API.">
+          Enable the use of chrome.input.ime API.
+        </message>
+      </if>
 
       <!-- WebRTC logs -->
       <message name="IDS_WEBRTC_LOGS_TITLE" desc="Title for the chrome://webrtc-logs page.">
@@ -7430,16 +7467,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Enable with no field highlighting
       </message>
       <if expr="not is_android">
-        <if expr="use_titlecase">
-          <message name="IDS_PASSWORD_MANAGER_SAVE_BUTTON" desc="Save button text for password manager">
-            Save Password
-          </message>
-        </if>
-        <if expr="not use_titlecase">
-          <message name="IDS_PASSWORD_MANAGER_SAVE_BUTTON" desc="Save button text for password manager">
-            Save password
-          </message>
-        </if>
+        <message name="IDS_PASSWORD_MANAGER_SAVE_BUTTON" desc="Save button text for password manager">
+          Save
+        </message>
         <message name="IDS_PASSWORD_MANAGER_UPDATE_BUTTON" desc="Update button text for password manager">
           Update password
         </message>
@@ -7803,13 +7833,13 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Page blocked
       </message>
       <message name="IDS_BLOCK_INTERSTITIAL_MESSAGE" desc="A message for the supervised user when they attempt to visit a site that is not permitted by the manager.">
-        Oops, looks like you need permission from <ph name="NAME">$1<ex>John Doe</ex></ph> to access this page.
+        Oops! You need permission from <ph name="NAME">$1<ex>John Doe</ex></ph> to access this page.
       </message>
       <message name="IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE_SINGLE_PARENT" desc="A message for the child user when they attempt to visit a site that is not permitted by their parent.">
-        Oops! You need to ask your parent if it's ok to visit this page.
+        Oops! You need to ask your parent if it's OK to visit this page.
       </message>
       <message name="IDS_CHILD_BLOCK_INTERSTITIAL_MESSAGE_MULTI_PARENT" desc="A message for the child user when they attempt to visit a site that is not permitted by their parents.">
-        Oops! You need to ask your parents if it's ok to visit this page.
+        Oops! You need to ask your parents if it's OK to visit this page.
       </message>
       <message name="IDS_BLOCK_INTERSTITIAL_MESSAGE_ACCESS_REQUESTS_DISABLED" desc="A message for the supervised user when they attempt to visit a site that is not permitted by the manager (and they can't ask for permission).">
         Oops, looks like you don't have permission to access this page.
@@ -7818,7 +7848,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Go back
       </message>
       <message name="IDS_BLOCK_INTERSTITIAL_REQUEST_ACCESS_BUTTON" desc="A button for requesting access to blocked sites.">
-        Request permission
+        Ask permission
       </message>
       <message name="IDS_CHILD_BLOCK_INTERSTITIAL_REQUEST_ACCESS_BUTTON" desc="A button for requesting access to blocked sites.">
         Ask permission
@@ -7841,20 +7871,44 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_CHILD_BLOCK_INTERSTITIAL_REQUEST_FAILED_MESSAGE_MULTI_PARENT" desc="The text that tells the child user that a request to his/her parents failed.">
         We could not reach your parents at the moment. Please try again.
       </message>
-      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_DEFAULT" desc="Message to be shown when a site was blocked due to the default fallback behavior.">
-        This site was blocked due to the default fallback behavior.
+      <message name="IDS_CHILD_BLOCK_MESSAGE_DEFAULT_SINGLE_PARENT" desc="Message to be shown when a site was blocked due to the default fallback behavior and the child has one parent.">
+        You're seeing this message because your parent needs to approve new sites on your first visit.
       </message>
-      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_ASYNC_CHECKER" desc="Message to be shown when a site was blocked due to the SafeSites online safety check.">
-        This site was blocked due to the SafeSites online check.
+      <message name="IDS_CHILD_BLOCK_MESSAGE_DEFAULT_MULTI_PARENT" desc="Message to be shown when a site was blocked due to the default fallback behavior and the child has two parents.">
+        You're seeing this message because your parents need to approve new sites on your first visit.
       </message>
-      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_BLACKLIST" desc="Message to be shown when a site was blocked due to the static blacklist.">
-        This site was blocked due to the SafeSites static blacklist.
+      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_DEFAULT" desc="Message to be show to a supervised user when a site was blocked due to the default fallback behaviour.">
+        You're seeing this message because your manager needs to approve new sites on your first visit.
       </message>
-      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_MANUAL" desc="Message to be shown when a site was blocked due to a manual blacklist entry.">
-        This site was blocked due to a manual blacklist entry.
+      <message name="IDS_SUPERVISED_USER_BLOCK_HEADER_DEFAULT" desc="Header for the message to be shown when a site was blocked due to the default fallback behaviour.">
+        Not approved
+      </message>
+      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_SAFE_SITES" desc="Message to be shown when a site was blocked due to the SafeSites safety check.">
+        You're seeing this message because Google SafeSites is enabled.
+      </message>
+      <message name="IDS_SUPERVISED_USER_BLOCK_HEADER_SAFE_SITES" desc="Header for the message to be shown when a site was blocked due to the SafeSites safety check.">
+        SafeSites
+      </message>
+      <message name="IDS_CHILD_BLOCK_MESSAGE_MANUAL_SINGLE_PARENT" desc="Message to be shown to a child when a site was blocked due to a manual blacklist entry and the child has one parent.">
+        You're seeing this message because your parent blocked this site.
+      </message>
+      <message name="IDS_CHILD_BLOCK_MESSAGE_MANUAL_MULTI_PARENT" desc="Message to be shown to a child when a site was blocked due to a manual blacklist entry and the child has two parents.">
+        You're seeing this message because one of your parents blocked this site.
+      </message>
+      <message name="IDS_SUPERVISED_USER_BLOCK_MESSAGE_MANUAL" desc="Message to be shown to a supervised user when a site is blocked due to a manual blacklist entry">
+        You're seeing this message because your manager blocked this site.
+      </message>
+      <message name="IDS_SUPERVISED_USER_BLOCK_HEADER_MANUAL" desc="Header for the message to be shown when a site was blocked due to a manual blacklist entry.">
+        Blocked
       </message>
       <message name="IDS_BLOCK_INTERSTITIAL_SEND_FEEDBACK" desc="The text for a link to submit feedback about a blocked site.">
         Was this unexpected? Tell us about it!
+      </message>
+      <message name="IDS_BLOCK_INTERSTITIAL_SHOW_DETAILS" desc="The text for the link to show details about the interstitial.">
+        Details
+      </message>
+      <message name="IDS_BLOCK_INTERSTITIAL_HIDE_DETAILS" desc="The text for the link to hide details about the interstitial.">
+        Hide details
       </message>
       <message name="IDS_BLOCK_INTERSTITIAL_DEFAULT_FEEDBACK_TEXT" desc="The default text for feedback about a blocked site.">
         <ph name="REASON">$1<ex>This site was blocked due to the SafeSites filter.</ex></ph>
@@ -9092,39 +9146,6 @@ I don't think this site should be blocked!
         You can <ph name="BEGIN_ERROR_LINK">&lt;a href="#" id="report-error-link"&gt;</ph>report a detection problem<ph name="END_ERROR_LINK">&lt;/a&gt;</ph> or, if you understand the risks to your security, <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this unsafe site<ph name="END_LINK">&lt;/a&gt;</ph>.
       </message>
 
-      <!-- SSL Interstitial V2 -->
-      <message name="IDS_SSL_V2_TITLE" desc="The tab title for the SSL interstitial.">
-        Privacy error
-      </message>
-      <message name="IDS_SSL_V2_HEADING" desc="The large heading at the top of the SSL interstitial.">
-        Your connection is not private
-      </message>
-      <message name="IDS_SSL_V2_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the SSL interstitial.">
-        Attackers might be trying to steal your information from <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>google.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> (for example, passwords, messages, or credit cards).
-      </message>
-
-      <!-- SSL Interstitial V2: Overridable -->
-      <message name="IDS_SSL_OVERRIDABLE_SAFETY_BUTTON" desc="The text for the button that takes the user back to the previous page.">
-        Back to safety
-      </message>
-      <message name="IDS_SSL_OVERRIDABLE_PROCEED_PARAGRAPH" desc="The text for the paragraph at the bottom with the proceed link.">
-        <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Proceed to <ph name="SITE">$1<ex>example.com</ex></ph> (unsafe)<ph name="END_LINK">&lt;/a&gt;</ph>
-      </message>
-
-      <!-- SSL Interstitial V2: Non-overridable -->
-      <message name="IDS_SSL_RELOAD" desc="The text for the button that reloads the page.">
-        Reload
-      </message>
-      <message name="IDS_SSL_NONOVERRIDABLE_PINNED" desc="A sentence to explain why the user can't proceed, plus a link to a help page about certificate pinning.">
-      You cannot visit <ph name="SITE">$1<ex>google.com</ex></ph> right now because the website <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>uses certificate pinning<ph name="END_LINK">&lt;/a&gt;</ph>. Network errors and attacks are usually temporary, so this page will probably work later.
-      </message>
-      <message name="IDS_SSL_NONOVERRIDABLE_HSTS" desc="A sentence to explain why the user can't proceed, plus a link to a help page about HSTS.">
-      You cannot visit <ph name="SITE">$1<ex>google.com</ex></ph> right now because the website <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>uses HSTS<ph name="END_LINK">&lt;/a&gt;</ph>. Network errors and attacks are usually temporary, so this page will probably work later.
-      </message>
-      <message name="IDS_SSL_NONOVERRIDABLE_REVOKED" desc="A sentence to explain why the user can't proceed, plus a link to a help page about certificate revocation.">
-      You cannot visit <ph name="SITE">$1<ex>google.com</ex></ph> right now because <ph name="BEGIN_LINK">&lt;a href="#" id="help-link"&gt;</ph>this certificate has been revoked<ph name="END_LINK">&lt;/a&gt;</ph>. Network errors and attacks are usually temporary, so this page will probably work later.
-      </message>
-
       <!-- Captive portal interstitial -->
       <message name="IDS_CAPTIVE_PORTAL_HEADING_WIRED" desc="Heading in the error page when a secure request is blocked because a captive portal is manipulating a wired connection (e.g. ethernet)">
         Connect to network
@@ -9200,17 +9221,6 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_CRYPTO_MODULE_AUTH_DIALOG_OK_BUTTON_LABEL" desc="Label for OK button in the dialog that prompts for security device password.">
        Unlock
-      </message>
-
-      <!-- HTTP POST Warning -->
-      <message name="IDS_HTTP_POST_WARNING_TITLE" desc="Title for dialog that warns users about a navigation that results in a repost">
-        Confirm Form Resubmission
-      </message>
-      <message name="IDS_HTTP_POST_WARNING" desc="Re-navigation to page that leads to HTTP POST" formatter_data="android_java">
-        The page that you're looking for used information that you entered. Returning to that page might cause any action you took to be repeated. Do you want to continue?
-      </message>
-      <message name="IDS_HTTP_POST_WARNING_RESEND" desc="Resend button for post warning" formatter_data="android_java">
-        Continue
       </message>
 
       <!-- Menus -->
@@ -10015,15 +10025,6 @@ I don't think this site should be blocked!
       </if>
 
       <!-- chrome://settings strings that are used by all platforms including Android -->
-      <message name="IDS_SETTINGS_TITLE" desc="Title for the settings tab.">
-        Settings
-      </message>
-      <message name="IDS_SETTINGS_HIDE_ADVANCED_SETTINGS" desc="Title for the link to hide advanced settings.">
-        Hide advanced settings...
-      </message>
-      <message name="IDS_SETTINGS_SHOW_ADVANCED_SETTINGS" desc="Title for the link to show advanced settings.">
-        Show advanced settings...
-      </message>
       <message name="IDS_OPTIONS_PASSWORDS_MANAGE_PASSWORDS_LINK" desc="The label of the 'Manage passwords' link">
         Manage passwords
       </message>
@@ -10046,9 +10047,6 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR" desc="The placeholder/label text for credit card expiration year in the requestAutocomplete dialog.">
         Year
-      </message>
-      <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC" desc="The placeholder/label text for credit card verification code in the requestAutocomplete dialog.">
-        CVC
       </message>
       <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_PHONE_NUMBER" desc="The placeholder/label text for phone number in the requestAutocomplete dialog.">
         Phone number
@@ -10200,38 +10198,8 @@ I don't think this site should be blocked!
         </message>
       </if>
 
-      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_CHECKBOX" desc="Text for checkbox in card unmasking dialog that allows user to store a Wallet card on their local device. If checked, the dialog won't show up again for the given credit card." formatter_data="android_java">
-        Keep a copy of this card on this device
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP" desc="Text that provides further explanation for checkbox in card unmasking dialog that allows user to store a Wallet card on their local device." formatter_data="android_java">
-        If checked, Chrome will store a copy of your card on this device for faster form filling.
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP_IOS" desc="Text that provides further explanation on iOS for the option in the card unmasking dialog that allows user to store a Wallet card on their local device." formatter_data="android_java">
-        If enabled, Chrome will store a copy of your card on this device for faster form filling.
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_CONFIRM_BUTTON" desc="Text for button that confirms the credit card CVC entry dialog." formatter_data="android_java">
-        Verify
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_VERIFICATION_IN_PROGRESS" desc="Message displayed while credit card is being verified." formatter_data="android_java">
-        Verifying card
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_VERIFICATION_SUCCESS" desc="Message displayed after successful verification of credit card CVC." formatter_data="android_java">
-        Your card is verified
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_INVALID_EXPIRATION_DATE" desc="Error message to show when a user has input an invalid or old expiration date.">
-        The card is expired
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_EXPIRATION_DATE_SEPARATOR" desc="Separator for a credit card expiration date, e.g. the slash in 05/16." formatter_data="android_java">
-        /
-      </message>
-      <message name="IDS_AUTOFILL_CARD_UNMASK_NEW_CARD_LINK" desc="Text for link that prompts user to update their credit card after it may have been re-issued." formatter_data="android_java">
-        New card?
-      </message>
       <message name="IDS_AUTOFILL_FROM_GOOGLE_ACCOUNT" desc="The name of the Google product that stores user addresses or credit cards in the cloud." formatter_data="android_java">
         Google Payments
-      </message>
-      <message name="IDS_AUTOFILL_CLEAR_LOCAL_COPY_BUTTON" desc="The label of the button that clears the local copy of a Wallet Credit Card." formatter_data="android_java">
-        Clear copy
       </message>
 
       <message name="IDS_APPEARANCE_GROUP_NAME" desc="The title of the appearance group">
@@ -10258,11 +10226,6 @@ I don't think this site should be blocked!
       </if>
       <message name="IDS_THEMES_GALLERY_BUTTON" desc="The button to get more themes">
         Get themes
-      </message>
-
-      <!-- Misc advanced option description strings. -->
-      <message name="IDS_NETWORK_PREDICTION_ENABLED_DESCRIPTION" desc="In the advanced options tab, the text next to the checkbox that enables prediction of network actions.  Actions include DNS prefetching, TCP and SSL preconnection, and prerendering of webpages.">
-        Prefetch resources to load pages more quickly
       </message>
 
       <!-- Collected cookies window -->
@@ -11191,9 +11154,6 @@ The following application will be launched if you accept this request:
       </message>
       <message name="IDS_OPTIONS_FONTSETTINGS_CUSTOMIZE_FONTS_BUTTON" desc="The label of the 'Customize fonts' button">
         Customize fonts...
-      </message>
-      <message name="IDS_OPTIONS_PROXIES_CONFIGURE_BUTTON" desc="The label of the 'Configure proxy settings' button">
-        Change proxy settings...
       </message>
       <message name="IDS_OPTIONS_CERTIFICATES_MANAGE_BUTTON" desc="The label of the 'Manage Certificates' button">
         Manage certificates...
@@ -12756,8 +12716,11 @@ Some features may be unavailable.  Please check that the profile exists and you 
       <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_SENTENCE" desc="Text displayed in the bubble to tell users how to return to normal mode.">
         Press <ph name="ACCELERATOR">$1<ex>Esc</ex></ph> to exit.
       </message>
-      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT" desc="Text displayed in the bubble to tell users how to return to normal mode. Please surround the name of the key (e.g. 'Esc') in pipe characters so it can be rendered as a key.">
-        Press |<ph name="ACCELERATOR">$1<ex>Esc</ex></ph>| to exit
+      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_FULLSCREEN" desc="Text displayed in the bubble to tell users how to return from fullscreen mode (where the web page occupies the entire screen) to normal mode. Please surround the name of the key (e.g. 'Esc') in pipe characters so it can be rendered as a key.">
+        Press |<ph name="ACCELERATOR">$1<ex>Esc</ex></ph>| to exit fullscreen
+      </message>
+      <message name="IDS_FULLSCREEN_PRESS_ESC_TO_EXIT_MOUSELOCK" desc="Text displayed in the bubble to tell users how to return from mouselock mode (where the mouse cursor is hidden) to normal mode. Please surround the name of the key (e.g. 'Esc') in pipe characters so it can be rendered as a key.">
+        Press |<ph name="ACCELERATOR">$1<ex>Esc</ex></ph>| to show your cursor
       </message>
       <message name="IDS_FULLSCREEN_ALLOW" desc="Text in the bubble button that grants permission for a site to enter fullscreen and/or lock the mouse.">
         Allow
@@ -12981,8 +12944,11 @@ Some features may be unavailable.  Please check that the profile exists and you 
         <message name="IDS_PROFILES_CREATE_SIGN_IN_ERROR" desc="Message shown when a sign-in error occurs during creation of a new supervised user.">
           Oops! The new supervised user couldn't be created. Please make sure you're signed in properly and try again.
         </message>
-        <message name="IDS_PROFILES_CREATE_EXISTING_LEGACY_SUPERVISED_USER_ERROR" desc="Message shown when the user enters the name of a supervised user that can be imported.">
+        <message name="IDS_PROFILES_CREATE_LEGACY_SUPERVISED_USER_ERROR_EXISTS_REMOTELY" desc="Message shown when the user enters the name of a supervised user that can be imported.">
           Looks like you're already managing a user by that name.<ph name="LINE_BREAK">&lt;br/&gt;</ph>Did you want to <ph name="BEGIN_LINK">&lt;a is="action-link" id="supervised-user-import-existing"&gt;</ph>import <ph name="PROFILE_NAME">$1<ex>John</ex></ph> to this device<ph name="END_LINK">&lt;/a&gt;</ph>?
+        </message>
+        <message name="IDS_PROFILES_CREATE_LEGACY_SUPERVISED_USER_ERROR_EXISTS_LOCALLY" desc="Message shown when the user enters the name of a supervised user that we already have locally.">
+          Looks like you already have a supervised user with this name.
         </message>
         <message name="IDS_PROFILES_CREATE_SUPERVISED_SIGNED_IN_LABEL" desc="Label for the 'Supervised user' checkbox in the create-profile dialog when the current user is signed in.">
           Control and view the websites this person visits from <ph name="CUSTODIAN_EMAIL">$1<ex>user@gmail.com</ex></ph>.
@@ -13360,7 +13326,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
           Virtual Keyboard Overscroll
         </message>
         <message name="IDS_FLAGS_VIRTUAL_KEYBOARD_OVERSCROLL_DESCRIPTION" desc="Description of about:flags option to turn on overscrolling for the virtual keyboard">
-          Enable virtual keyboard overscroll support.
+          Enables virtual keyboard overscroll support.
         </message>
 
         <message name="IDS_FLAGS_INPUT_VIEW_NAME" desc="Name of about::flags option to enable IME extensions to override the virtual keyboard view">
@@ -13764,6 +13730,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_MULTIPLE_SCREEN_NAME" desc="Name for screens in the desktop media picker UI when there are multiple monitors.">
         Screen <ph name="SCREEN_INDEX">$1<ex>1</ex></ph>
+      </message>
+      <message name="IDS_DESTOP_MEDIA_PICKER_VIRTUAL_SCREEN_NAME" desc="The name of the virtual display which is shown in the picker">
+        Virtual Display
       </message>
 
       <!-- Local Device Discovery display strings -->
@@ -14623,24 +14592,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_MINOR_SHA1_DESCRIPTION" desc="Description of a security problem where the site's certificate expires in 2016 and contains a SHA1 signature in the chain.">
         The certificate for this site expires in 2016, and the certificate chain contains a certificate signed using SHA-1.
       </message>
-      <message name="IDS_PASSIVE_MIXED_CONTENT" desc="Summary phrase of a security problem where the site displayed passive mixed content.">
-        Mixed Content
-      </message>
-      <message name="IDS_PASSIVE_MIXED_CONTENT_DESCRIPTION" desc="Description of a security problem where the site displayed passive mixed content.">
-        The site includes HTTP resources.
-      </message>
-      <message name="IDS_ACTIVE_MIXED_CONTENT" desc="Summary phrase for a security problem where site ran active mixed content.">
-        Active Mixed Content
-      </message>
-      <message name="IDS_ACTIVE_MIXED_CONTENT_DESCRIPTION" desc="Description of a security problem where site ran active mixed content.">
-        You have recently allowed insecure content (such as scripts or iframes) to run on this site.
-      </message>
-      <message name="IDS_NO_MIXED_CONTENT" desc="Summary phrase for a site that does not have any mixed content.">
-        Secure Resources
-      </message>
-      <message name="IDS_NO_MIXED_CONTENT_DESCRIPTION" desc="Description of a site that does not have any mixed content.">
-        All resources on this page are served securely.
-      </message>
       <message name="IDS_CERTIFICATE_CHAIN_ERROR" desc="Summary phrase for a security problem with the site's certificate.">
         Certificate Error
       </message>
@@ -14689,6 +14640,18 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_NTP_POPULAR_SITES_DESCRIPTION" desc="Description for the flag to enable showing non-personalized popular suggestions on the New Tab Page, when no personal suggestions are available yet.">
         Pre-populate the New Tab page with popular sites.
       </message>
+      <message name="IDS_FLAGS_NTP_SWITCH_TO_EXISTING_TAB_NAME" desc="Name for the flag to control the behaviour when opening a suggestion from the New Tab Page if an existing tab for it is open.">
+        Switch to an existing tab for New Tab Page suggestions.
+      </message>
+      <message name="IDS_FLAGS_NTP_SWITCH_TO_EXISTING_TAB_DESCRIPTION" desc="Description for the flag to control the behaviour when opening a suggestion from the New Tab Page if an existing tab for it is open.">
+        When opening a suggestion from the New Tab Page, if a tab is already open for the suggestion, switch to that one instead of loading the suggestion in the new tab.
+      </message>
+      <message name="IDS_FLAGS_NTP_SWITCH_TO_EXISTING_TAB_MATCH_URL" desc="Match suggestions with existing tabs by their URL.">
+        Match by URL
+      </message>
+      <message name="IDS_FLAGS_NTP_SWITCH_TO_EXISTING_TAB_MATCH_HOST" desc="Match suggestions with existing tabs by their Hostname.">
+        Match by Hostname
+      </message>
       <message name="IDS_FLAGS_USE_ANDROID_MIDI_API_NAME" desc="Name for the flag to use android midi api.">
         Use Android Midi API
       </message>
@@ -14715,14 +14678,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
     </if>
 
     <if expr="not is_ios">
-      <!-- WebUSB permission bypass flag. -->
-      <message name="IDS_FLAGS_ENABLE_WEBUSB_ON_ANY_ORIGIN_NAME" desc="Title for the flag that bypasses WebUSB permission prompts.">
-        Allow WebUSB from any origin.
-      </message>
-      <message name="IDS_FLAGS_ENABLE_WEBUSB_ON_ANY_ORIGIN_DESCRIPTION" desc="Description for the flag that bypasses WebUSB permission prompts.">
-        If enabled, any origin is allowed to use connected WebUSB devices without prompting the user.
-      </message>
-
       <!-- WebUsb Notification -->
       <message name="IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION" desc="Content for notification shown to the user when a USB device gets plugged in.">
         Go to <ph name="LANDING_PAGE">$1<ex>www.google.com</ex></ph> to connect.
@@ -14778,6 +14733,60 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_DESCRIPTION" desc="Description of the flag to disable auto-hiding the toolbar.">
         When enabled, the toolbar will never be hidden due to scrolling on devices with a minimum screen dp >= 800. It will still be hidden if page contents go fullscreen.
       </message>
+
+      <!-- Update Menu Item Flags -->
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NAME" desc="Name of the flag to force show the update menu item.">
+        Force show update menu item
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DESCRIPTION" desc="Description of the flag to force show the update menu item.">
+        When enabled, an "Update Chrome" item will be shown in the app menu.
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_NAME" desc="Name of the flag to show a summary below the update menu item.">
+        Update menu item summary
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_DESCRIPTION" desc="Description of the flag to show a summary below the update menu item.">
+        When this flag and the force show update menu item flag are enabled, a summary will be displayed below the update menu item.
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NO_SUMMARY" desc="Option to not show a summary for the update menu item.">
+        No summary
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DEFAULT_SUMMARY" desc="Option to show the default summary for the update menu item.">
+        Default summary
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_CUSTOM_SUMMARY" desc="Option to show a custom summary for the update menu item.">
+        Custom summary
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_NAME" desc="Name of the flag to force show the update menu badge.">
+        Force show update menu badge
+      </message>
+      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_DESCRIPTION" desc="Description of the flag to force show the update menu badge.">
+        When enabled, an update badge will be shown on the app menu button.
+      </message>
+      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_NAME" desc="Name of the flag to set a market URL for testing the update menu item.">
+        Set market URL for testing
+      </message>
+      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_DESCRIPTION" desc="Description of the flag to set a market URL for testing the update menu item.">
+        When enabled, sets the market URL for use in testing the update menu item.
+      </message>
+    </if>
+
+    <if expr="not is_android and not is_ios">
+      <!-- Chooser Bubble Prompt -->
+      <message name="IDS_CHOOSER_BUBBLE_PROMPT" desc="The label that is used to introduce chooser details to the user in a popup.">
+        This site wants to connect to:
+      </message>
+      <!-- Chooser Bubble No Devices Found Prompt -->
+      <message name="IDS_CHOOSER_BUBBLE_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform user that no devices found in the chooser popup.">
+        No devices found.
+      </message>
+      <!-- Chooser Bubble Connect Button Text -->
+      <message name="IDS_CHOOSER_BUBBLE_CONNECT_BUTTON_TEXT" desc="The text that is shown on the connect button in the chooser popup.">
+        Connect
+      </message>
+      <!-- Chooser Bubble Cancel Button Text -->
+      <message name="IDS_CHOOSER_BUBBLE_CANCEL_BUTTON_TEXT" desc="The text that is shown on the cancel button in the chooser popup.">
+        Cancel
+      </message>
     </if>
 
     <if expr="is_android">
@@ -14788,6 +14797,13 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         If enabled, a tab switcher will show even when 'merge tabs and apps' option is on in the settings.
       </message>
     </if>
+
+      <message name="IDS_FLAGS_ENABLE_BROTLI_NAME" desc="Title for the flag to enable Brotli Content-Encoding.">
+        Brotli Content-Encoding.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_BROTLI_DESCRIPTION" desc="Description for the flag to enable Brotli Content-Encoding.">
+        Enable Brotli Content-Encoding support.
+      </message>
 
     </messages>
   </release>

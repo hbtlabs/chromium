@@ -4,8 +4,12 @@
 
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <limits>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -79,6 +83,8 @@ net::NetLog::EventType RequestJobResultToNetEventType(
       return n::TYPE_SERVICE_WORKER_ERROR_KILLED_WITH_BLOB;
     case m::REQUEST_JOB_ERROR_KILLED_WITH_STREAM:
       return n::TYPE_SERVICE_WORKER_ERROR_KILLED_WITH_STREAM;
+    case m::REQUEST_JOB_ERROR_BAD_DELEGATE:
+      return n::TYPE_SERVICE_WORKER_ERROR_BAD_DELEGATE;
     // We can't log if there's no request; fallthrough.
     case m::REQUEST_JOB_ERROR_NO_REQUEST:
     // Obsolete types; fallthrough.
@@ -95,10 +101,14 @@ net::NetLog::EventType RequestJobResultToNetEventType(
 
 }  // namespace
 
+bool ServiceWorkerURLRequestJob::Delegate::RequestStillValid(
+    ServiceWorkerMetrics::URLRequestJobResult* result) {
+  return true;
+}
+
 ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
     net::URLRequest* request,
     net::NetworkDelegate* network_delegate,
-    base::WeakPtr<ServiceWorkerProviderHost> provider_host,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
     const ResourceContext* resource_context,
     FetchRequestMode request_mode,
@@ -108,10 +118,9 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     scoped_refptr<ResourceRequestBody> body,
-    const OnPrepareToRestartCallback& on_prepare_to_restart_callback,
-    const OnStartCompletedCallback& on_start_completed_callback)
+    Delegate* delegate)
     : net::URLRequestJob(request, network_delegate),
-      provider_host_(provider_host),
+      delegate_(delegate),
       response_type_(NOT_DETERMINED),
       is_started_(false),
       service_worker_response_type_(blink::WebServiceWorkerResponseTypeDefault),
@@ -126,9 +135,23 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
       frame_type_(frame_type),
       fall_back_required_(false),
       body_(body),
-      on_prepare_to_restart_callback_(on_prepare_to_restart_callback),
-      on_start_completed_callback_(on_start_completed_callback),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  DCHECK(delegate_) << "ServiceWorkerURLRequestJob requires a delegate";
+}
+
+ServiceWorkerURLRequestJob::~ServiceWorkerURLRequestJob() {
+  ClearStream();
+
+  if (!ShouldRecordResult())
+    return;
+  ServiceWorkerMetrics::URLRequestJobResult result =
+      ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED;
+  if (response_body_type_ == STREAM)
+    result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED_WITH_STREAM;
+  else if (response_body_type_ == BLOB)
+    result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED_WITH_BLOB;
+  RecordResult(result);
+}
 
 void ServiceWorkerURLRequestJob::FallbackToNetwork() {
   DCHECK_EQ(NOT_DETERMINED, response_type_);
@@ -362,20 +385,6 @@ const net::HttpResponseInfo* ServiceWorkerURLRequestJob::http_info() const {
   return http_response_info_.get();
 }
 
-ServiceWorkerURLRequestJob::~ServiceWorkerURLRequestJob() {
-  ClearStream();
-
-  if (!ShouldRecordResult())
-    return;
-  ServiceWorkerMetrics::URLRequestJobResult result =
-      ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED;
-  if (response_body_type_ == STREAM)
-    result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED_WITH_STREAM;
-  else if (response_body_type_ == BLOB)
-    result = ServiceWorkerMetrics::REQUEST_JOB_ERROR_KILLED_WITH_BLOB;
-  RecordResult(result);
-}
-
 void ServiceWorkerURLRequestJob::MaybeStartRequest() {
   if (is_started_ && response_type_ != NOT_DETERMINED) {
     // Start asynchronously.
@@ -404,13 +413,12 @@ void ServiceWorkerURLRequestJob::StartRequest() {
       return;
 
     case FORWARD_TO_SERVICE_WORKER:
-      if (!provider_host_) {
-        RecordResult(ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_PROVIDER_HOST);
-        DeliverErrorResponse();
-        return;
-      }
-      if (!provider_host_->active_version()) {
-        RecordResult(ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_ACTIVE_VERSION);
+      ServiceWorkerMetrics::URLRequestJobResult result =
+          ServiceWorkerMetrics::REQUEST_JOB_ERROR_BAD_DELEGATE;
+      ServiceWorkerVersion* active_worker =
+          delegate_->GetServiceWorkerVersion(&result);
+      if (!active_worker) {
+        RecordResult(result);
         DeliverErrorResponse();
         return;
       }
@@ -419,8 +427,7 @@ void ServiceWorkerURLRequestJob::StartRequest() {
       // Send a fetch event to the ServiceWorker associated to the
       // provider_host.
       fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
-          CreateFetchRequest(),
-          provider_host_->active_version(),
+          CreateFetchRequest(), active_worker,
           base::Bind(&ServiceWorkerURLRequestJob::DidPrepareFetchEvent,
                      weak_factory_.GetWeakPtr()),
           base::Bind(&ServiceWorkerURLRequestJob::DidDispatchFetchEvent,
@@ -436,7 +443,7 @@ void ServiceWorkerURLRequestJob::StartRequest() {
 scoped_ptr<ServiceWorkerFetchRequest>
 ServiceWorkerURLRequestJob::CreateFetchRequest() {
   std::string blob_uuid;
-  uint64 blob_size = 0;
+  uint64_t blob_size = 0;
   CreateRequestBodyBlob(&blob_uuid, &blob_size);
   scoped_ptr<ServiceWorkerFetchRequest> request(
       new ServiceWorkerFetchRequest());
@@ -468,11 +475,11 @@ ServiceWorkerURLRequestJob::CreateFetchRequest() {
     request->referrer =
         Referrer(GURL(request_->referrer()), blink::WebReferrerPolicyDefault);
   }
-  return request.Pass();
+  return request;
 }
 
 bool ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
-                                                       uint64* blob_size) {
+                                                       uint64_t* blob_size) {
   if (!body_.get() || !blob_storage_context_)
     return false;
 
@@ -497,20 +504,21 @@ bool ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
       DCHECK_NE(storage::DataElement::TYPE_BLOB, item->type());
       resolved_elements.push_back(item->data_element_ptr());
     }
-    handles.push_back(handle.Pass());
-    snapshots.push_back(snapshot.Pass());
+    handles.push_back(std::move(handle));
+    snapshots.push_back(std::move(snapshot));
   }
 
   const std::string uuid(base::GenerateGUID());
-  uint64 total_size = 0;
+  uint64_t total_size = 0;
 
   storage::BlobDataBuilder blob_builder(uuid);
   for (size_t i = 0; i < resolved_elements.size(); ++i) {
     const ResourceRequestBody::Element& element = *resolved_elements[i];
-    if (total_size != kuint64max && element.length() != kuint64max)
+    if (total_size != std::numeric_limits<uint64_t>::max() &&
+        element.length() != std::numeric_limits<uint64_t>::max())
       total_size += element.length();
     else
-      total_size = kuint64max;
+      total_size = std::numeric_limits<uint64_t>::max();
     switch (element.type()) {
       case ResourceRequestBody::Element::TYPE_BYTES:
         blob_builder.AppendData(element.bytes(), element.length());
@@ -560,10 +568,10 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     return;
   }
 
-  // A null |provider_host_| probably means the tab was closed. The null value
-  // would cause problems down the line, so bail out.
-  if (!provider_host_) {
-    RecordResult(ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_PROVIDER_HOST);
+  ServiceWorkerMetrics::URLRequestJobResult result =
+      ServiceWorkerMetrics::REQUEST_JOB_ERROR_BAD_DELEGATE;
+  if (!delegate_->RequestStillValid(&result)) {
+    RecordResult(result);
     DeliverErrorResponse();
     return;
   }
@@ -571,9 +579,8 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
   if (status != SERVICE_WORKER_OK) {
     RecordResult(ServiceWorkerMetrics::REQUEST_JOB_ERROR_FETCH_EVENT_DISPATCH);
     if (is_main_resource_load_) {
-      // Using the service worker failed, so fallback to network. Detach the
-      // controller so subresource requests also skip the worker.
-      provider_host_->NotifyControllerLost();
+      // Using the service worker failed, so fallback to network.
+      delegate_->MainResourceLoadFailed();
       response_type_ = FALLBACK_TO_NETWORK;
       NotifyRestartRequired();
     } else {
@@ -591,8 +598,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     // we returns a fall_back_required response to the renderer.
     if ((request_mode_ == FETCH_REQUEST_MODE_CORS ||
          request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
-        provider_host_->document_url().GetOrigin() !=
-            request()->url().GetOrigin()) {
+        delegate_->GetRequestingOrigin() != request()->url().GetOrigin()) {
       fall_back_required_ = true;
       RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_FOR_CORS);
       CreateResponseHeader(
@@ -678,7 +684,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
       return;
     }
     blob_request_ = storage::BlobProtocolHandler::CreateBlobRequest(
-        blob_data_handle.Pass(), request()->context(), this);
+        std::move(blob_data_handle), request()->context(), this);
     blob_request_->Start();
   }
 
@@ -801,13 +807,13 @@ void ServiceWorkerURLRequestJob::NotifyStartError(
 }
 
 void ServiceWorkerURLRequestJob::NotifyRestartRequired() {
-  on_prepare_to_restart_callback_.Run(worker_start_time_, worker_ready_time_);
+  delegate_->OnPrepareToRestart(worker_start_time_, worker_ready_time_);
   URLRequestJob::NotifyRestartRequired();
 }
 
 void ServiceWorkerURLRequestJob::OnStartCompleted() const {
   if (response_type_ != FORWARD_TO_SERVICE_WORKER) {
-    on_start_completed_callback_.Run(
+    delegate_->OnStartCompleted(
         false /* was_fetched_via_service_worker */,
         false /* was_fallback_required */,
         GURL() /* original_url_via_service_worker */,
@@ -816,10 +822,10 @@ void ServiceWorkerURLRequestJob::OnStartCompleted() const {
         base::TimeTicks() /* service_worker_ready_time */);
     return;
   }
-  on_start_completed_callback_.Run(true /* was_fetched_via_service_worker */,
-                                   fall_back_required_, response_url_,
-                                   service_worker_response_type_,
-                                   worker_start_time_, worker_ready_time_);
+  delegate_->OnStartCompleted(true /* was_fetched_via_service_worker */,
+                              fall_back_required_, response_url_,
+                              service_worker_response_type_, worker_start_time_,
+                              worker_ready_time_);
 }
 
 }  // namespace content

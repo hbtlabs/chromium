@@ -43,7 +43,7 @@ class QuicChromeAlarm : public QuicAlarm {
       weak_factory_.InvalidateWeakPtrs();
     }
 
-    int64 delay_us = deadline().Subtract(clock_->Now()).ToMicroseconds();
+    int64_t delay_us = deadline().Subtract(clock_->Now()).ToMicroseconds();
     if (delay_us < 0) {
       delay_us = 0;
     }
@@ -97,11 +97,9 @@ QuicConnectionHelper::QuicConnectionHelper(base::TaskRunner* task_runner,
     : task_runner_(task_runner),
       clock_(clock),
       random_generator_(random_generator),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
-QuicConnectionHelper::~QuicConnectionHelper() {
-}
+QuicConnectionHelper::~QuicConnectionHelper() {}
 
 const QuicClock* QuicConnectionHelper::GetClock() const {
   return clock_;
@@ -113,6 +111,10 @@ QuicRandom* QuicConnectionHelper::GetRandomGenerator() {
 
 QuicAlarm* QuicConnectionHelper::CreateAlarm(QuicAlarm::Delegate* delegate) {
   return new QuicChromeAlarm(clock_, task_runner_, delegate);
+}
+
+QuicBufferAllocator* QuicConnectionHelper::GetBufferAllocator() {
+  return &buffer_allocator_;
 }
 
 }  // namespace net

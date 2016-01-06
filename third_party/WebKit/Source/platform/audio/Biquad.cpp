@@ -26,17 +26,15 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
-#if ENABLE(WEB_AUDIO)
-
 #include "platform/audio/Biquad.h"
 
+#if ENABLE(WEB_AUDIO)
 #include <stdio.h>
 #include <algorithm>
 #include "platform/audio/DenormalDisabler.h"
 #include "wtf/MathExtras.h"
 
+#include <complex>
 #if OS(MACOSX)
 #include <Accelerate/Accelerate.h>
 #endif
@@ -209,7 +207,7 @@ void Biquad::reset()
 void Biquad::setLowpassParams(double cutoff, double resonance)
 {
     // Limit cutoff to 0 to 1.
-    cutoff = std::max(0.0, std::min(cutoff, 1.0));
+    cutoff = clampTo(cutoff, 0.0, 1.0);
 
     if (cutoff == 1) {
         // When cutoff is 1, the z-transform is 1.
@@ -245,7 +243,7 @@ void Biquad::setLowpassParams(double cutoff, double resonance)
 void Biquad::setHighpassParams(double cutoff, double resonance)
 {
     // Limit cutoff to 0 to 1.
-    cutoff = std::max(0.0, std::min(cutoff, 1.0));
+    cutoff = clampTo(cutoff, 0.0, 1.0);
 
     if (cutoff == 1) {
         // The z-transform is 0.
@@ -307,7 +305,7 @@ void Biquad::setNormalizedCoefficients(double b0, double b1, double b2, double a
 void Biquad::setLowShelfParams(double frequency, double dbGain)
 {
     // Clip frequencies to between 0 and 1, inclusive.
-    frequency = std::max(0.0, std::min(frequency, 1.0));
+    frequency = clampTo(frequency, 0.0, 1.0);
 
     double A = pow(10.0, dbGain / 40);
 
@@ -342,7 +340,7 @@ void Biquad::setLowShelfParams(double frequency, double dbGain)
 void Biquad::setHighShelfParams(double frequency, double dbGain)
 {
     // Clip frequencies to between 0 and 1, inclusive.
-    frequency = std::max(0.0, std::min(frequency, 1.0));
+    frequency = clampTo(frequency, 0.0, 1.0);
 
     double A = pow(10.0, dbGain / 40);
 
@@ -377,7 +375,7 @@ void Biquad::setHighShelfParams(double frequency, double dbGain)
 void Biquad::setPeakingParams(double frequency, double Q, double dbGain)
 {
     // Clip frequencies to between 0 and 1, inclusive.
-    frequency = std::max(0.0, std::min(frequency, 1.0));
+    frequency = clampTo(frequency, 0.0, 1.0);
 
     // Don't let Q go negative, which causes an unstable filter.
     Q = std::max(0.0, Q);
@@ -415,7 +413,7 @@ void Biquad::setPeakingParams(double frequency, double Q, double dbGain)
 void Biquad::setAllpassParams(double frequency, double Q)
 {
     // Clip frequencies to between 0 and 1, inclusive.
-    frequency = std::max(0.0, std::min(frequency, 1.0));
+    frequency = clampTo(frequency, 0.0, 1.0);
 
     // Don't let Q go negative, which causes an unstable filter.
     Q = std::max(0.0, Q);
@@ -451,7 +449,7 @@ void Biquad::setAllpassParams(double frequency, double Q)
 void Biquad::setNotchParams(double frequency, double Q)
 {
     // Clip frequencies to between 0 and 1, inclusive.
-    frequency = std::max(0.0, std::min(frequency, 1.0));
+    frequency = clampTo(frequency, 0.0, 1.0);
 
     // Don't let Q go negative, which causes an unstable filter.
     Q = std::max(0.0, Q);

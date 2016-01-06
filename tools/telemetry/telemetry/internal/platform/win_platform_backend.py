@@ -29,8 +29,8 @@ from telemetry.internal.util import path
 try:
   import pywintypes  # pylint: disable=import-error
   import win32api  # pylint: disable=import-error
-  from win32com.shell import shell  # pylint: disable=F0401,E0611
-  from win32com.shell import shellcon  # pylint: disable=F0401,E0611
+  from win32com.shell import shell  # pylint: disable=no-name-in-module
+  from win32com.shell import shellcon  # pylint: disable=no-name-in-module
   import win32con  # pylint: disable=import-error
   import win32gui  # pylint: disable=import-error
   import win32process  # pylint: disable=import-error
@@ -236,6 +236,8 @@ class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
       return os_version_module.WIN7
     if os_version.startswith('6.2.'):
       return os_version_module.WIN8
+    if os_version.startswith('10.'):
+      return os_version_module.WIN10
 
     raise NotImplementedError('Unknown win version %s.' % os_version)
 

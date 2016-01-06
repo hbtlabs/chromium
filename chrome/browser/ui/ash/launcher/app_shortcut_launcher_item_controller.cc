@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/ash/launcher/app_shortcut_launcher_item_controller.h"
 
+#include <stddef.h>
+
 #include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
@@ -153,7 +155,7 @@ AppShortcutLauncherItemController::GetApplicationList(int event_flags) {
     items.push_back(new ChromeLauncherAppMenuItemTab(
         title, &app_icon, web_contents, i == 0));
   }
-  return items.Pass();
+  return items;
 }
 
 std::vector<content::WebContents*>

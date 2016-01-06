@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
@@ -9,12 +12,14 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -3112,7 +3117,7 @@ class URLRequestNonsecureConnection : public net::URLRequestMockHTTPJob {
                                         << net::SSL_CONNECTION_VERSION_SHIFT);
     // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 from
     // http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-4
-    const uint16 ciphersuite = 0xc02f;
+    const uint16_t ciphersuite = 0xc02f;
     net::SSLConnectionStatusSetCipherSuite(ciphersuite,
                                            &info->ssl_info.connection_status);
   }
@@ -3196,6 +3201,7 @@ void CheckDisplayModeMQ(
   run_loop.Run();
   EXPECT_TRUE(js_result_getter.GetResult());
 }
+
 }  // namespace
 
 // flaky new test: http://crbug.com/471703
@@ -3222,4 +3228,97 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_ChangeDisplayMode) {
   observer.Wait();
 
   CheckDisplayModeMQ(ASCIIToUTF16("fullscreen"), app_contents);
+}
+
+// Test to ensure the bounds of popup, devtool, and app windows are properly
+// restored.
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
+  {
+    // Minimum size that a popup window should have appended to its height when
+    // drawn (popup window bounds are for the content, not the window). This is
+    // the size of the toolbar on views platforms.
+    const int minimum_popup_padding = 29;
+
+    // Creates an untrusted popup window and asserts that the eventual height is
+    // padded with the toolbar and title bar height (initial height is content
+    // height).
+    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(),
+                                 chrome::HOST_DESKTOP_TYPE_NATIVE);
+    params.initial_bounds = gfx::Rect(0, 0, 100, 122);
+    Browser* browser = new Browser(params);
+    gfx::Rect bounds = browser->window()->GetBounds();
+
+    // Should be EXPECT_EQ, but this width is inconsistent across platforms.
+    // See https://crbug.com/567925.
+    EXPECT_GE(bounds.width(), 100);
+
+    // EXPECT_GE as Mac will have a larger height with the additional title bar.
+    EXPECT_GE(bounds.height(), 122 + minimum_popup_padding);
+    browser->window()->Close();
+  }
+
+  {
+    // Creates a trusted popup window and asserts that the eventual height
+    // doesn't change (initial height is window height).
+    Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(),
+                                 chrome::HOST_DESKTOP_TYPE_NATIVE);
+    params.initial_bounds = gfx::Rect(0, 0, 100, 122);
+    params.trusted_source = true;
+    Browser* browser = new Browser(params);
+    gfx::Rect bounds = browser->window()->GetBounds();
+
+    // Should be EXPECT_EQ, but this width is inconsistent across platforms.
+    // See https://crbug.com/567925.
+    EXPECT_GE(bounds.width(), 100);
+    EXPECT_EQ(122, bounds.height());
+    browser->window()->Close();
+  }
+
+  {
+    // Creates an untrusted app window and asserts that the eventual height
+    // doesn't change.
+    Browser::CreateParams params = Browser::CreateParams::CreateForApp(
+        "app-name", false, gfx::Rect(0, 0, 100, 122), browser()->profile(),
+        chrome::HOST_DESKTOP_TYPE_NATIVE);
+    Browser* browser = new Browser(params);
+    gfx::Rect bounds = browser->window()->GetBounds();
+
+    // Should be EXPECT_EQ, but this width is inconsistent across platforms.
+    // See https://crbug.com/567925.
+    EXPECT_GE(bounds.width(), 100);
+    EXPECT_EQ(122, bounds.height());
+    browser->window()->Close();
+  }
+
+  {
+    // Creates a trusted app window and asserts that the eventual height
+    // doesn't change.
+    Browser::CreateParams params = Browser::CreateParams::CreateForApp(
+        "app-name", true, gfx::Rect(0, 0, 100, 122), browser()->profile(),
+        chrome::HOST_DESKTOP_TYPE_NATIVE);
+    Browser* browser = new Browser(params);
+    gfx::Rect bounds = browser->window()->GetBounds();
+
+    // Should be EXPECT_EQ, but this width is inconsistent across platforms.
+    // See https://crbug.com/567925.
+    EXPECT_GE(bounds.width(), 100);
+    EXPECT_EQ(122, bounds.height());
+    browser->window()->Close();
+  }
+
+  {
+    // Creates a devtools window and asserts that the eventual height
+    // doesn't change.
+    Browser::CreateParams params = Browser::CreateParams::CreateForDevTools(
+        browser()->profile(), chrome::HOST_DESKTOP_TYPE_NATIVE);
+    params.initial_bounds = gfx::Rect(0, 0, 100, 122);
+    Browser* browser = new Browser(params);
+    gfx::Rect bounds = browser->window()->GetBounds();
+
+    // Should be EXPECT_EQ, but this width is inconsistent across platforms.
+    // See https://crbug.com/567925.
+    EXPECT_GE(bounds.width(), 100);
+    EXPECT_EQ(122, bounds.height());
+    browser->window()->Close();
+  }
 }

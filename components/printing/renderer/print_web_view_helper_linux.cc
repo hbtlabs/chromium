@@ -4,8 +4,11 @@
 
 #include "components/printing/renderer/print_web_view_helper.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/renderer/render_thread.h"
 #include "printing/metafile_skia_wrapper.h"
@@ -13,11 +16,11 @@
 #include "printing/pdf_metafile_skia.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-#include "base/process/process_handle.h"
-#else
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
 #include "base/file_descriptor_posix.h"
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#else
+#include "base/process/process_handle.h"
+#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 namespace printing {
 
@@ -60,28 +63,14 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
     return false;
 
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
-  std::vector<int> printed_pages;
-
-  if (params.pages.empty()) {
-    for (int i = 0; i < page_count; ++i) {
-      printed_pages.push_back(i);
-    }
-  } else {
-    // TODO(vitalybuka): redesign to make more code cross platform.
-    for (size_t i = 0; i < params.pages.size(); ++i) {
-      if (params.pages[i] >= 0 && params.pages[i] < page_count) {
-        printed_pages.push_back(params.pages[i]);
-      }
-    }
-  }
-
+  std::vector<int> printed_pages = GetPrintedPages(params, page_count);
   if (printed_pages.empty())
     return false;
 
   PrintMsg_PrintPage_Params page_params;
   page_params.params = params.params;
-  for (size_t i = 0; i < printed_pages.size(); ++i) {
-    page_params.page_number = printed_pages[i];
+  for (int page_number : printed_pages) {
+    page_params.page_number = page_number;
     PrintPageInternal(page_params, frame, &metafile);
   }
 

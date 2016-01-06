@@ -4,12 +4,16 @@
 
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <utility>
 
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -102,7 +106,7 @@ FilterBuilder::~FilterBuilder() {
 bool FilterBuilder::AddPattern(const std::string& pattern) {
   std::string scheme;
   std::string host;
-  uint16 port = 0;
+  uint16_t port = 0;
   std::string path;
   std::string query;
   bool match_subdomains = true;
@@ -138,7 +142,7 @@ void FilterBuilder::AddSiteList(
 
 scoped_ptr<SupervisedUserURLFilter::Contents> FilterBuilder::Build() {
   contents_->url_matcher.AddConditionSets(all_conditions_);
-  return contents_.Pass();
+  return std::move(contents_);
 }
 
 scoped_ptr<SupervisedUserURLFilter::Contents>
@@ -189,16 +193,39 @@ SupervisedUserURLFilter::BehaviorFromInt(int behavior_value) {
 }
 
 // static
-int SupervisedUserURLFilter::GetBlockMessageID(FilteringBehaviorReason reason) {
+int SupervisedUserURLFilter::GetBlockMessageID(
+    FilteringBehaviorReason reason, bool is_child_account, bool single_parent) {
   switch (reason) {
     case DEFAULT:
-      return IDS_SUPERVISED_USER_BLOCK_MESSAGE_DEFAULT;
-    case ASYNC_CHECKER:
-      return IDS_SUPERVISED_USER_BLOCK_MESSAGE_ASYNC_CHECKER;
+      return is_child_account ?
+          (single_parent ?
+              IDS_CHILD_BLOCK_MESSAGE_DEFAULT_SINGLE_PARENT :
+              IDS_CHILD_BLOCK_MESSAGE_DEFAULT_MULTI_PARENT) :
+          IDS_SUPERVISED_USER_BLOCK_MESSAGE_DEFAULT;
     case BLACKLIST:
-      return IDS_SUPERVISED_USER_BLOCK_MESSAGE_BLACKLIST;
+    case ASYNC_CHECKER:
+      return IDS_SUPERVISED_USER_BLOCK_MESSAGE_SAFE_SITES;
     case MANUAL:
-      return IDS_SUPERVISED_USER_BLOCK_MESSAGE_MANUAL;
+      return is_child_account ?
+          (single_parent ?
+              IDS_CHILD_BLOCK_MESSAGE_MANUAL_SINGLE_PARENT :
+              IDS_CHILD_BLOCK_MESSAGE_MANUAL_MULTI_PARENT) :
+          IDS_SUPERVISED_USER_BLOCK_MESSAGE_MANUAL;
+  }
+  NOTREACHED();
+  return 0;
+}
+
+// static
+int SupervisedUserURLFilter::GetBlockHeaderID(FilteringBehaviorReason reason) {
+  switch (reason) {
+    case DEFAULT:
+      return IDS_SUPERVISED_USER_BLOCK_HEADER_DEFAULT;
+    case BLACKLIST:
+    case ASYNC_CHECKER:
+      return IDS_SUPERVISED_USER_BLOCK_HEADER_SAFE_SITES;
+    case MANUAL:
+      return IDS_SUPERVISED_USER_BLOCK_HEADER_MANUAL;
   }
   NOTREACHED();
   return 0;
@@ -445,7 +472,7 @@ void SupervisedUserURLFilter::SetBlockingTaskRunnerForTesting(
 
 void SupervisedUserURLFilter::SetContents(scoped_ptr<Contents> contents) {
   DCHECK(CalledOnValidThread());
-  contents_ = contents.Pass();
+  contents_ = std::move(contents);
   FOR_EACH_OBSERVER(Observer, observers_, OnSiteListUpdated());
 }
 

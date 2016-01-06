@@ -27,7 +27,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/css/MediaQueryEvaluator.h"
 
 #include "core/CSSValueKeywords.h"
@@ -91,6 +90,11 @@ MediaQueryEvaluator::MediaQueryEvaluator(const MediaValues& mediaValues)
 
 MediaQueryEvaluator::~MediaQueryEvaluator()
 {
+}
+
+DEFINE_TRACE(MediaQueryEvaluator)
+{
+    visitor->trace(m_mediaValues);
 }
 
 const String MediaQueryEvaluator::mediaType() const

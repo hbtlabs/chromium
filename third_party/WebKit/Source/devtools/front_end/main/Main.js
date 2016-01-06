@@ -103,10 +103,10 @@ WebInspector.Main.prototype = {
     _initializeExperiments: function(prefs)
     {
         Runtime.experiments.register("accessibilityInspection", "Accessibility Inspection");
-        Runtime.experiments.register("animationInspection", "Animation Inspection");
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
+        Runtime.experiments.register("cpuThrottling", "CPU throttling", true);
         Runtime.experiments.register("deviceMode", "Device mode", true);
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
         Runtime.experiments.register("fileSystemInspection", "FileSystem inspection");
@@ -126,10 +126,10 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("securityPanel", "Security panel");
         Runtime.experiments.register("showPrimaryLoadWaterfallInNetworkTimeline", "Show primary load waterfall in Network timeline", true);
         Runtime.experiments.register("stepIntoAsync", "Step into async");
-        Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
-        Runtime.experiments.register("timelineTracingJSProfile", "Timeline tracing based JS profiler", true);
-        Runtime.experiments.register("timelineEventsTreeView", "Timeline events tree view", true);
         Runtime.experiments.register("timelineFlowEvents", "Timeline flow events", true);
+        Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
+        Runtime.experiments.register("timelineRecordingPerspectives", "Timeline recording perspectives UI");
+        Runtime.experiments.register("timelineTracingJSProfile", "Timeline tracing based JS profiler", true);
 
         Runtime.experiments.cleanUpStaleExperiments();
 
@@ -138,8 +138,6 @@ WebInspector.Main.prototype = {
             // Enable experiments for testing.
             if (testPath.indexOf("debugger/promise") !== -1)
                 Runtime.experiments.enableForTest("promiseTracker");
-            if (testPath.indexOf("elements/") !== -1)
-                Runtime.experiments.enableForTest("animationInspection");
             if (testPath.indexOf("layers/") !== -1)
                 Runtime.experiments.enableForTest("layersPanel");
             if (testPath.indexOf("timeline/") !== -1 || testPath.indexOf("layers/") !== -1)
@@ -149,7 +147,6 @@ WebInspector.Main.prototype = {
         }
 
         Runtime.experiments.setDefaultExperiments([
-            "animationInspection",
             "deviceMode",
             "securityPanel"
         ]);
@@ -218,6 +215,7 @@ WebInspector.Main.prototype = {
         new WebInspector.Main.PauseListener();
         new WebInspector.Main.InspectedNodeRevealer();
         new WebInspector.NetworkPanelIndicator();
+        new WebInspector.SourcesPanelIndicator();
         WebInspector.domBreakpointsSidebarPane = new WebInspector.DOMBreakpointsSidebarPane();
 
         WebInspector.actionRegistry = new WebInspector.ActionRegistry();
@@ -910,9 +908,9 @@ WebInspector.Main.MainMenuItem.prototype = {
             dockItemElement.appendChild(titleElement);
             var dockItemToolbar = new WebInspector.Toolbar("", dockItemElement);
             dockItemToolbar.makeBlueOnHover();
-            var undock = new WebInspector.ToolbarButton(WebInspector.UIString("Undock into separate window"), "dock-toolbar-item-undock");
-            var bottom = new WebInspector.ToolbarButton(WebInspector.UIString("Dock to bottom"), "dock-toolbar-item-bottom");
-            var right = new WebInspector.ToolbarButton(WebInspector.UIString("Dock to right"), "dock-toolbar-item-right");
+            var undock = new WebInspector.ToolbarToggle(WebInspector.UIString("Undock into separate window"), "dock-toolbar-item-undock");
+            var bottom = new WebInspector.ToolbarToggle(WebInspector.UIString("Dock to bottom"), "dock-toolbar-item-bottom");
+            var right = new WebInspector.ToolbarToggle(WebInspector.UIString("Dock to right"), "dock-toolbar-item-right");
             undock.addEventListener("mouseup", setDockSide.bind(null, WebInspector.DockController.State.Undocked));
             bottom.addEventListener("mouseup", setDockSide.bind(null, WebInspector.DockController.State.DockedToBottom));
             right.addEventListener("mouseup", setDockSide.bind(null, WebInspector.DockController.State.DockedToRight));
@@ -946,21 +944,39 @@ WebInspector.Main.MainMenuItem.prototype = {
  */
 WebInspector.NetworkPanelIndicator = function()
 {
-    var networkConditionsSetting = WebInspector.moduleSetting("networkConditions");
-    networkConditionsSetting.set({ "throughput": -1, "latency": 0 });
-    networkConditionsSetting.addChangeListener(updateVisibility);
+    var manager = WebInspector.multitargetNetworkManager;
+    manager.addEventListener(WebInspector.MultitargetNetworkManager.Events.ConditionsChanged, updateVisibility);
     var blockedURLsSetting = WebInspector.moduleSetting("blockedURLs");
     blockedURLsSetting.addChangeListener(updateVisibility);
     updateVisibility();
 
     function updateVisibility()
     {
-        if (WebInspector.NetworkManager.IsThrottlingEnabled(networkConditionsSetting.get())) {
+        if (manager.isThrottling()) {
             WebInspector.inspectorView.setPanelIcon("network", "warning-icon", WebInspector.UIString("Network throttling is enabled"));
         } else if (blockedURLsSetting.get().length) {
             WebInspector.inspectorView.setPanelIcon("network", "warning-icon", WebInspector.UIString("Requests may be blocked"));
         } else {
             WebInspector.inspectorView.setPanelIcon("network", "", "");
+        }
+    }
+}
+
+/**
+ * @constructor
+ */
+WebInspector.SourcesPanelIndicator = function()
+{
+    WebInspector.moduleSetting("javaScriptDisabled").addChangeListener(javaScriptDisabledChanged);
+    javaScriptDisabledChanged();
+
+    function javaScriptDisabledChanged()
+    {
+        var javaScriptDisabled = WebInspector.moduleSetting("javaScriptDisabled").get();
+        if (javaScriptDisabled) {
+            WebInspector.inspectorView.setPanelIcon("sources", "warning-icon", WebInspector.UIString("JavaScript is disabled"));
+        } else {
+            WebInspector.inspectorView.setPanelIcon("sources", "", "");
         }
     }
 }

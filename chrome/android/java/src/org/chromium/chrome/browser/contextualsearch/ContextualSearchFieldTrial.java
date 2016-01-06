@@ -11,16 +11,14 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.components.variations.VariationsAssociatedData;
-import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * Provides Field Trial support for the Contextual Search application within Chrome for Android.
  */
 public class ContextualSearchFieldTrial {
     private static final String FIELD_TRIAL_NAME = "ContextualSearch";
-    private static final String ENABLED_PARAM = "enabled";
+    private static final String DISABLED_PARAM = "disabled";
     private static final String ENABLED_VALUE = "true";
 
     static final String PEEK_PROMO_FORCED = "peek_promo_forced";
@@ -28,21 +26,35 @@ public class ContextualSearchFieldTrial {
     static final String PEEK_PROMO_MAX_SHOW_COUNT = "peek_promo_max_show_count";
     static final int PEEK_PROMO_DEFAULT_MAX_SHOW_COUNT = 10;
 
+    static final String DISABLE_SEARCH_TERM_RESOLUTION = "disable_search_term_resolution";
     static final String DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS = "disable_extra_search_bar_animations";
+    static final String ENABLE_DIGIT_BLACKLIST = "enable_digit_blacklist";
 
     // Translation.
+    @VisibleForTesting
+    static final String ENABLE_TRANSLATION_FOR_TESTING = "enable_translation_for_testing";
     @VisibleForTesting
     static final String DISABLE_FORCE_TRANSLATION_ONEBOX = "disable_force_translation_onebox";
     @VisibleForTesting
     static final String DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX =
             "disable_auto_detect_translation_onebox";
+    static final String DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION =
+            "disable_keyboard_languages_for_translation";
+    static final String DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION =
+            "disable_accept_languages_for_translation";
+    static final String ENABLE_ENGLISH_TARGET_TRANSLATION = "enable_english_target_translation";
 
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
+    private static Boolean sDisableSearchTermResolution;
     private static Boolean sIsPeekPromoEnabled;
     private static Integer sPeekPromoMaxCount;
-    private static Boolean sDisableForceTranslationOnebox;
-    private static Boolean sDisableAutoDetectTranslationOnebox;
+    private static Boolean sIsTranslationForTestingEnabled;
+    private static Boolean sIsForceTranslationOneboxDisabled;
+    private static Boolean sIsAutoDetectTranslationOneboxDisabled;
+    private static Boolean sIsAcceptLanguagesForTranslationDisabled;
+    private static Boolean sIsKeyboardLanguagesForTranslationDisabled;
+    private static Boolean sIsEnglishTargetTranslationEnabled;
 
     /**
      * Don't instantiate.
@@ -86,15 +98,27 @@ public class ContextualSearchFieldTrial {
             return true;
         }
 
-        // Enable contextual search for phones.
-        if (!DeviceFormFactor.isTablet(context)) return true;
+        // Allow disabling the feature remotely.
+        if (getBooleanParam(DISABLED_PARAM)) {
+            return false;
+        }
 
-        if (ChromeVersionInfo.isLocalBuild()) return true;
-
-        return getBooleanParam(ENABLED_PARAM);
+        return true;
     }
 
     /**
+     * @return Whether the search term resolution is enabled.
+     */
+    static boolean isSearchTermResolutionEnabled() {
+        if (sDisableSearchTermResolution == null) {
+            sDisableSearchTermResolution = getBooleanParam(DISABLE_SEARCH_TERM_RESOLUTION);
+        }
+
+        if (sDisableSearchTermResolution.booleanValue()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -122,6 +146,13 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
+     * @return Whether the digit blacklist is enabled.
+     */
+    static boolean isDigitBlacklistEnabled() {
+        return getBooleanParam(ENABLE_DIGIT_BLACKLIST);
+    }
+
+    /**
      * @return The maximum number of times the Peek Promo should be displayed.
      */
     static int getPeekPromoMaxShowCount() {
@@ -134,25 +165,67 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
+     * @return Whether any translate is enabled, used for testing only.
+     */
+    static boolean isTranslationForTestingEnabled() {
+        if (sIsTranslationForTestingEnabled == null) {
+            sIsTranslationForTestingEnabled = getBooleanParam(ENABLE_TRANSLATION_FOR_TESTING);
+        }
+        return sIsTranslationForTestingEnabled.booleanValue();
+    }
+
+    /**
      * @return Whether forcing a translation Onebox is disabled.
      */
-    static boolean disableForceTranslationOnebox() {
-        if (sDisableForceTranslationOnebox == null) {
-            sDisableForceTranslationOnebox = getBooleanParam(DISABLE_FORCE_TRANSLATION_ONEBOX);
+    static boolean isForceTranslationOneboxDisabled() {
+        if (sIsForceTranslationOneboxDisabled == null) {
+            sIsForceTranslationOneboxDisabled = getBooleanParam(DISABLE_FORCE_TRANSLATION_ONEBOX);
         }
-        return sDisableForceTranslationOnebox.booleanValue();
+        return sIsForceTranslationOneboxDisabled.booleanValue();
     }
 
     /**
      * @return Whether forcing a translation Onebox based on auto-detection of the source language
      *         is disabled.
      */
-    static boolean disableAutoDetectTranslationOnebox() {
-        if (sDisableAutoDetectTranslationOnebox == null) {
-            sDisableAutoDetectTranslationOnebox = getBooleanParam(
+    static boolean isAutoDetectTranslationOneboxDisabled() {
+        if (sIsAutoDetectTranslationOneboxDisabled == null) {
+            sIsAutoDetectTranslationOneboxDisabled = getBooleanParam(
                     DISABLE_AUTO_DETECT_TRANSLATION_ONEBOX);
         }
-        return sDisableAutoDetectTranslationOnebox.booleanValue();
+        return sIsAutoDetectTranslationOneboxDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether considering accept-languages for translation is disabled.
+     */
+    static boolean isAcceptLanguagesForTranslationDisabled() {
+        if (sIsAcceptLanguagesForTranslationDisabled == null) {
+            sIsAcceptLanguagesForTranslationDisabled = getBooleanParam(
+                    DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION);
+        }
+        return sIsAcceptLanguagesForTranslationDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether considering keyboards for translation is disabled.
+     */
+    static boolean isKeyboardLanguagesForTranslationDisabled() {
+        if (sIsKeyboardLanguagesForTranslationDisabled == null) {
+            sIsKeyboardLanguagesForTranslationDisabled =
+                    getBooleanParam(DISABLE_KEYBOARD_LANGUAGES_FOR_TRANSLATION);
+        }
+        return sIsKeyboardLanguagesForTranslationDisabled.booleanValue();
+    }
+
+    /**
+     * @return Whether English-target translation should be enabled (default is disabled for 'en').
+     */
+    static boolean isEnglishTargetTranslationEnabled() {
+        if (sIsEnglishTargetTranslationEnabled == null) {
+            sIsEnglishTargetTranslationEnabled = getBooleanParam(ENABLE_ENGLISH_TARGET_TRANSLATION);
+        }
+        return sIsEnglishTargetTranslationEnabled.booleanValue();
     }
 
     // --------------------------------------------------------------------------------------------

@@ -4,6 +4,8 @@
 
 #include "cc/layers/picture_image_layer.h"
 
+#include <stddef.h>
+
 #include "cc/layers/picture_image_layer_impl.h"
 #include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
@@ -83,9 +85,8 @@ scoped_refptr<DisplayItemList> PictureImageLayer::PaintContentsToDisplayList(
 
   skia::RefPtr<SkPicture> picture =
       skia::AdoptRef(recorder.endRecordingAsPicture());
-  auto* item =
-      display_list->CreateAndAppendItem<DrawingDisplayItem>(PaintableRegion());
-  item->SetNew(std::move(picture));
+  display_list->CreateAndAppendItem<DrawingDisplayItem>(PaintableRegion(),
+                                                        std::move(picture));
 
   display_list->Finalize();
   return display_list;

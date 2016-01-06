@@ -4,6 +4,8 @@
 
 #include "cc/base/rtree.h"
 
+#include <stddef.h>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
@@ -63,6 +65,33 @@ TEST(RTreeTest, Overlap) {
   for (size_t i = 0; i < 50; ++i) {
     EXPECT_EQ(results[i], 2450u + i);
   }
+}
+
+TEST(RTreeTest, GetBoundsEmpty) {
+  RTree rtree;
+  ASSERT_EQ(gfx::Rect(), rtree.GetBounds());
+}
+
+TEST(RTreeTest, GetBoundsNonOverlapping) {
+  std::vector<gfx::Rect> rects;
+  rects.push_back(gfx::Rect(5, 6, 7, 8));
+  rects.push_back(gfx::Rect(11, 12, 13, 14));
+
+  RTree rtree;
+  rtree.Build(rects);
+
+  ASSERT_EQ(gfx::Rect(5, 6, 19, 20), rtree.GetBounds());
+}
+
+TEST(RTreeTest, GetBoundsOverlapping) {
+  std::vector<gfx::Rect> rects;
+  rects.push_back(gfx::Rect(0, 0, 10, 10));
+  rects.push_back(gfx::Rect(5, 5, 5, 5));
+
+  RTree rtree;
+  rtree.Build(rects);
+
+  ASSERT_EQ(gfx::Rect(0, 0, 10, 10), rtree.GetBounds());
 }
 
 }  // namespace cc

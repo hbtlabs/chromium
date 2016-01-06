@@ -4,7 +4,11 @@
 
 #include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
@@ -93,9 +97,9 @@ InterfaceEndpointClient::InterfaceEndpointClient(
     ScopedInterfaceEndpointHandle handle,
     MessageReceiverWithResponderStatus* receiver,
     scoped_ptr<MessageFilter> payload_validator)
-    : handle_(handle.Pass()),
+    : handle_(std::move(handle)),
       incoming_receiver_(receiver),
-      payload_validator_(payload_validator.Pass()),
+      payload_validator_(std::move(payload_validator)),
       thunk_(this),
       next_request_id_(1),
       encountered_error_(false),
@@ -133,7 +137,7 @@ ScopedInterfaceEndpointHandle InterfaceEndpointClient::PassHandle() {
 
   handle_.router()->DetachEndpointClient(handle_);
 
-  return handle_.Pass();
+  return std::move(handle_);
 }
 
 void InterfaceEndpointClient::RaiseError() {

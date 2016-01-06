@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_BACKEND_H_
 #define COMPONENTS_HISTORY_CORE_BROWSER_HISTORY_BACKEND_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <utility>
@@ -14,12 +17,14 @@
 #include "base/containers/mru_cache.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "build/build_config.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/expire_history_backend.h"
 #include "components/history/core/browser/history_backend_notifier.h"
@@ -210,7 +215,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   //
   // As a side effect, caches the list of top hosts for the purposes of
   // generating internal metrics.
-  TopHostsList TopHosts(int num_hosts) const;
+  TopHostsList TopHosts(size_t num_hosts) const;
 
   // Gets the counts of URLs that belong to |origins| in the history database.
   // Origins that are not in the history database will be in the map with a
@@ -339,11 +344,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Downloads -----------------------------------------------------------------
 
-  uint32 GetNextDownloadId();
+  uint32_t GetNextDownloadId();
   void QueryDownloads(std::vector<DownloadRow>* rows);
   void UpdateDownload(const DownloadRow& data);
   bool CreateDownload(const DownloadRow& history_info);
-  void RemoveDownloads(const std::set<uint32>& ids);
+  void RemoveDownloads(const std::set<uint32_t>& ids);
 
   // Keyword search terms ------------------------------------------------------
 

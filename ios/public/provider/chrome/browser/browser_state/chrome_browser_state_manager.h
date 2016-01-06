@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace base {
 class FilePath;
@@ -25,10 +25,6 @@ class ChromeBrowserState;
 class ChromeBrowserStateManager {
  public:
   virtual ~ChromeBrowserStateManager() {}
-
-  // Temporary method to help migrating from ProfileManager to
-  // ChromeBrowserStateManager.
-  virtual void ShutDown() = 0;
 
   // Returns the ChromeBrowserState that was last used, creating one if
   // necessary.

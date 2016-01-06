@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/startup/session_crashed_infobar_delegate.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
@@ -53,6 +54,11 @@ SessionCrashedInfoBarDelegate::~SessionCrashedInfoBarDelegate() {
     content::BrowserContext::GetDefaultStoragePartition(profile_)->
         GetDOMStorageContext()->StartScavengingUnusedSessionStorage();
   }
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+SessionCrashedInfoBarDelegate::GetIdentifier() const {
+  return SESSION_CRASHED_INFOBAR_DELEGATE;
 }
 
 int SessionCrashedInfoBarDelegate::GetIconId() const {

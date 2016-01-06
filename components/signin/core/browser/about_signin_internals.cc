@@ -4,6 +4,8 @@
 
 #include "components/signin/core/browser/about_signin_internals.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/hash.h"
 #include "base/i18n/time_formatting.h"
@@ -13,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -286,12 +289,9 @@ void AboutSigninInternals::NotifyObservers() {
 }
 
 scoped_ptr<base::DictionaryValue> AboutSigninInternals::GetSigninStatus() {
-  return signin_status_.ToValue(account_tracker_,
-                                signin_manager_,
-                                signin_error_controller_,
-                                token_service_,
-                                cookie_manager_service_,
-                                client_->GetProductVersion()).Pass();
+  return signin_status_.ToValue(
+      account_tracker_, signin_manager_, signin_error_controller_,
+      token_service_, cookie_manager_service_, client_->GetProductVersion());
 }
 
 void AboutSigninInternals::OnAccessTokenRequested(
@@ -516,8 +516,6 @@ scoped_ptr<base::DictionaryValue> AboutSigninInternals::SigninStatus::ToValue(
   // A summary of signin related info first.
   base::ListValue* basic_info = AddSection(signin_info, "Basic Information");
   AddSectionEntry(basic_info, "Chrome Version", product_version);
-  AddSectionEntry(basic_info, "Webview Based Signin?",
-      switches::IsEnableWebviewBasedSignin() == true ? "On" : "Off");
   AddSectionEntry(basic_info, "New Profile Management?",
       switches::IsNewProfileManagement() == true ? "On" : "Off");
   AddSectionEntry(basic_info, "Account Consistency?",
@@ -674,5 +672,5 @@ scoped_ptr<base::DictionaryValue> AboutSigninInternals::SigninStatus::ToValue(
     account_info->Append(entry);
   }
 
-  return signin_status.Pass();
+  return signin_status;
 }

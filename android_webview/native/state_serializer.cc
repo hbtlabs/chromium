@@ -34,7 +34,7 @@ namespace {
 // Sanity check value that we are restoring from a valid pickle.
 // This can potentially used as an actual serialization version number in the
 // future if we ever decide to support restoring from older versions.
-const uint32 AW_STATE_VERSION = 20130814;
+const uint32_t AW_STATE_VERSION = 20151204;
 
 }  // namespace
 
@@ -140,7 +140,7 @@ bool WriteHeaderToPickle(base::Pickle* pickle) {
 }
 
 bool RestoreHeaderFromPickle(base::PickleIterator* iterator) {
-  uint32 state_version = -1;
+  uint32_t state_version = -1;
   if (!iterator->ReadUInt32(&state_version))
     return false;
 
@@ -178,6 +178,20 @@ bool WriteNavigationEntryToPickle(const content::NavigationEntry& entry,
 
   if (!pickle->WriteString(entry.GetBaseURLForDataURL().spec()))
     return false;
+
+  {
+    const char* data = nullptr;
+    size_t size = 0;
+    scoped_refptr<const base::RefCountedString> s = entry.GetDataURLAsString();
+    if (s) {
+      data = s->front_as<char>();
+      size = s->size();
+    }
+    // Even when |entry.GetDataForDataURL()| is null we still need to write a
+    // zero-length entry to ensure the fields all line up when read back in.
+    if (!pickle->WriteData(data, size))
+      return false;
+  }
 
   if (!pickle->WriteBool(static_cast<int>(entry.GetIsOverridingUserAgent())))
     return false;
@@ -261,6 +275,18 @@ bool RestoreNavigationEntryFromPickle(base::PickleIterator* iterator,
   }
 
   {
+    const char* data;
+    int size;
+    if (!iterator->ReadData(&data, &size))
+      return false;
+    if (size > 0) {
+      scoped_refptr<base::RefCountedString> ref = new base::RefCountedString();
+      ref->data().assign(data, size);
+      entry->SetDataURLAsString(ref);
+    }
+  }
+
+  {
     bool is_overriding_user_agent;
     if (!iterator->ReadBool(&is_overriding_user_agent))
       return false;
@@ -268,7 +294,7 @@ bool RestoreNavigationEntryFromPickle(base::PickleIterator* iterator,
   }
 
   {
-    int64 timestamp;
+    int64_t timestamp;
     if (!iterator->ReadInt64(&timestamp))
       return false;
     entry->SetTimestamp(base::Time::FromInternalValue(timestamp));

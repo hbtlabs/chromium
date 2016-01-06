@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/base_paths.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
@@ -42,7 +41,7 @@ class ELFImportsTest : public testing::Test {
 
     ASSERT_TRUE(module_mmap.Initialize(module_path));
     base::win::PEImageAsData pe_image_data(
-        reinterpret_cast<HMODULE>(const_cast<uint8*>(module_mmap.data())));
+        reinterpret_cast<HMODULE>(const_cast<uint8_t*>(module_mmap.data())));
     pe_image_data.EnumImportChunks(ELFImportsTest::ImportsCallback, imports);
   }
 };
@@ -91,8 +90,8 @@ TEST_F(ELFImportsTest, ChromeElfSanityCheck) {
   // Make sure all of ELF's imports are in the valid imports list.
   for (const std::string& import : elf_imports) {
     bool match = false;
-    for (int i = 0; i < arraysize(kValidFilePatterns); ++i) {
-      if (base::MatchPattern(import, kValidFilePatterns[i])) {
+    for (const char* kValidFilePattern : kValidFilePatterns) {
+      if (base::MatchPattern(import, kValidFilePattern)) {
         match = true;
         break;
       }

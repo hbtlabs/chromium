@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -206,7 +206,7 @@ class ChromeUserManagerImpl
   void OnUserNotAllowed(const std::string& user_email) override;
 
   // BootstrapManager::Delegate implementation:
-  void RemovePendingBootstrapUser(const std::string& user_id) override;
+  void RemovePendingBootstrapUser(const AccountId& account_id) override;
 
   // Update the number of users.
   void UpdateNumberOfUsers();

@@ -21,7 +21,6 @@
  *
  */
 
-#include "config.h"
 #include "core/layout/LayoutReplaced.h"
 
 #include "core/editing/PositionWithAffinity.h"
@@ -43,14 +42,18 @@ LayoutReplaced::LayoutReplaced(Element* element)
     : LayoutBox(element)
     , m_intrinsicSize(defaultWidth, defaultHeight)
 {
-    setReplaced(true);
+    // TODO(jchaffraix): We should not set this boolean for block-level
+    // replaced elements (crbug.com/567964).
+    setIsAtomicInlineLevel(true);
 }
 
 LayoutReplaced::LayoutReplaced(Element* element, const LayoutSize& intrinsicSize)
     : LayoutBox(element)
     , m_intrinsicSize(intrinsicSize)
 {
-    setReplaced(true);
+    // TODO(jchaffraix): We should not set this boolean for block-level
+    // replaced elements (crbug.com/567964).
+    setIsAtomicInlineLevel(true);
 }
 
 LayoutReplaced::~LayoutReplaced()
@@ -289,7 +292,7 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
             // of 'width' is: (used height) * (intrinsic ratio)
             if (intrinsicRatio && ((computedHeightIsAuto && !hasIntrinsicWidth && hasIntrinsicHeight) || !computedHeightIsAuto)) {
                 LayoutUnit logicalHeight = computeReplacedLogicalHeight();
-                return computeReplacedLogicalWidthRespectingMinMaxWidth(roundToInt(round(logicalHeight * intrinsicRatio)), shouldComputePreferred);
+                return computeReplacedLogicalWidthRespectingMinMaxWidth(logicalHeight * intrinsicRatio, shouldComputePreferred);
             }
 
             // If 'height' and 'width' both have computed values of 'auto' and the element has an intrinsic ratio but no intrinsic height or width, then the used value of
@@ -347,7 +350,7 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalHeight() const
     // Otherwise, if 'height' has a computed value of 'auto', and the element has an intrinsic ratio then the used value of 'height' is:
     // (used width) / (intrinsic ratio)
     if (intrinsicRatio)
-        return computeReplacedLogicalHeightRespectingMinMaxHeight(roundToInt(round(availableLogicalWidth() / intrinsicRatio)));
+        return computeReplacedLogicalHeightRespectingMinMaxHeight(availableLogicalWidth() / intrinsicRatio);
 
     // Otherwise, if 'height' has a computed value of 'auto', and the element has an intrinsic height, then that intrinsic height is the used value of 'height'.
     if (hasIntrinsicHeight)
@@ -367,9 +370,10 @@ void LayoutReplaced::computePreferredLogicalWidths()
 {
     ASSERT(preferredLogicalWidthsDirty());
 
-    // We cannot resolve any percent logical width here as the available logical
-    // width may not be set on our containing block.
-    if (style()->logicalWidth().hasPercent())
+    // We cannot resolve some logical width here (i.e. percent, fill-available or fit-content)
+    // as the available logical width may not be set on our containing block.
+    const Length& logicalWidth = style()->logicalWidth();
+    if (logicalWidth.hasPercent() || logicalWidth.isFillAvailable() || logicalWidth.isFitContent())
         computeIntrinsicLogicalWidths(m_minPreferredLogicalWidth, m_maxPreferredLogicalWidth);
     else
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = computeReplacedLogicalWidth(ComputePreferred);
@@ -430,7 +434,7 @@ LayoutRect LayoutReplaced::selectionRectForPaintInvalidation(const LayoutBoxMode
     if (rect.isEmpty())
         return rect;
 
-    mapRectToPaintInvalidationBacking(paintInvalidationContainer, rect, 0);
+    mapToVisibleRectInAncestorSpace(paintInvalidationContainer, rect, 0);
     // FIXME: groupedMapping() leaks the squashing abstraction.
     if (paintInvalidationContainer->layer()->groupedMapping())
         PaintLayer::mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);

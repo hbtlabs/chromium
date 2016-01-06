@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <list>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
@@ -55,7 +58,7 @@ class FFmpegVideoDecoderTest : public testing::Test {
     FFmpegGlue::InitializeFFmpeg();
 
     // Initialize various test buffers.
-    frame_buffer_.reset(new uint8[kCodedSize.GetArea()]);
+    frame_buffer_.reset(new uint8_t[kCodedSize.GetArea()]);
     end_of_stream_buffer_ = DecoderBuffer::CreateEOSBuffer();
     i_frame_buffer_ = ReadTestDataFile("vp8-I-frame-320x240");
     corrupt_i_frame_buffer_ = ReadTestDataFile("vp8-corrupt-I-frame");

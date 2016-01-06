@@ -18,6 +18,15 @@ declare_args() {
   # up when Chrome is not run from the command line, so should only be used for
   # development. Only has an effect on Windows builds.
   win_console_app = false
+
+  # Specify the current PGO phase, only used for the Windows MSVS build. Here's
+  # the different values that can be used:
+  #     0 : Means that PGO is turned off.
+  #     1 : Used during the PGI (instrumentation) phase.
+  #     2 : Used during the PGO (optimization) phase.
+  #
+  # TODO(sebmarchand): Add support for the PGU (update) phase.
+  chrome_pgo_phase = 0
 }
 
 if (is_android) {
@@ -96,19 +105,6 @@ if (!is_android) {
         "$root_out_dir/locales/fr.pak",
       ]
     }
-    if (enable_nacl) {
-      if (is_win || (is_linux && target_cpu == "x64")) {
-        data += [
-          # TODO(GYP): Enable this when the IRT is in the right location.
-          # "$root_out_dir/nacl_irt_x86_64.nexe"
-        ]
-      } else if (is_linux && target_cpu == "arm") {
-        data += [
-          # TODO(GYP): same comment
-          # "$root_out_dir/nacl_irt_arm.nexe"
-        ]
-      }
-    }
 
     data_deps = []
 
@@ -148,7 +144,7 @@ if (!is_android) {
         "//chrome/browser:chrome_process_finder",
         "//chrome/chrome_watcher",
         "//chrome/chrome_watcher:client",
-        "//chrome/installer/util",
+        "//chrome/installer/util:with_no_strings",
         "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app",
@@ -159,6 +155,7 @@ if (!is_android) {
         "//crypto",
         "//sandbox",
         "//third_party/crashpad/crashpad/handler:handler_lib",
+        "//third_party/kasko",
         "//ui/gfx",
         "//win8/delegate_execute",
         "//win8/metro_driver",
@@ -201,7 +198,7 @@ if (!is_android) {
         "//base/allocator",
 
         # Needed to use the master_preferences functions
-        "//chrome/installer/util",
+        "//chrome/installer/util:with_no_strings",
         "//content/public/app:both",
       ]
       if (enable_plugins && enable_pdf) {
@@ -345,8 +342,6 @@ if (is_mac || is_win) {
       configs -= [ "//build/config/win:default_incremental_linking" ]
       configs +=
           [ "//build/config/win:default_large_module_incremental_linking" ]
-
-      # TODO(GYP) bug 512851: PGO.
     }
 
     if (use_aura) {
@@ -434,21 +429,17 @@ if (is_mac || is_win) {
           configs -= [ "//build/config/win:default_incremental_linking" ]
           configs += [ "//build/config/win:no_incremental_linking" ]
         }
-        # TODO(GYP) bug 512851: PGO on Windows.
-        # ['chrome_pgo_phase==1', {
-        #   'msvs_settings': {
-        #     'VCLinkerTool': {
-        #       'LinkTimeCodeGeneration': '2',
-        #     },
-        #   },
-        # }],
-        # ['chrome_pgo_phase==2', {
-        #   'msvs_settings': {
-        #     'VCLinkerTool': {
-        #       'LinkTimeCodeGeneration': '3',
-        #     },
-        #   },
-        # }],
+        if (chrome_pgo_phase > 0) {
+          configs += [ "//build/config/compiler:optimize_max" ]
+        }
+        if (chrome_pgo_phase == 1) {
+          ldflags = [
+            "/LTCG:PGINSTRUMENT",
+            "/PogoSafeMode",
+          ]
+        } else if (chrome_pgo_phase == 2) {
+          ldflags = [ "/LTCG:PGOPTIMIZE" ]
+        }
       }
 
       if (enable_configuration_policy) {
@@ -556,6 +547,7 @@ if (is_win) {
     ]
     deps = [
       "//base",
+      "//components/startup_metric_utils/browser:lib",
     ]
   }
 }
@@ -693,10 +685,8 @@ repack("packed_extra_resources") {
       "$root_gen_dir/chrome/quota_internals_resources.pak",
       "$root_gen_dir/chrome/settings_resources.pak",
       "$root_gen_dir/chrome/sync_file_system_internals_resources.pak",
-      "$root_gen_dir/chrome/webrtc_device_provider_resources.pak",
     ]
     deps += [
-      "//chrome/browser/devtools:webrtc_device_provider_resources",
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/browser/resources:options_resources",
       "//chrome/browser/resources:quota_internals_resources",

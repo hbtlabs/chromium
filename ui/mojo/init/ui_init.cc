@@ -4,11 +4,13 @@
 
 #include "ui/mojo/init/ui_init.h"
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "ui/mojo/init/screen_mojo.h"
 
 #if defined(OS_ANDROID)
-#include "ui/events/gesture_detection/gesture_configuration.h"
+#include "ui/events/gesture_detection/gesture_configuration.h"  // nogncheck
 #endif
 
 namespace ui {

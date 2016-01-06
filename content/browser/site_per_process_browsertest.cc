@@ -4,17 +4,22 @@
 
 #include "content/browser/site_per_process_browsertest.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigator.h"
@@ -29,6 +34,8 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -406,6 +413,29 @@ class FrameFocusedObserver : public FrameTreeNode::Observer {
   DISALLOW_COPY_AND_ASSIGN(FrameFocusedObserver);
 };
 
+// This observer is used to wait for its owner FrameTreeNode to become deleted.
+class FrameDeletedObserver : public FrameTreeNode::Observer {
+ public:
+  FrameDeletedObserver(FrameTreeNode* owner)
+      : owner_(owner), message_loop_runner_(new MessageLoopRunner) {
+    owner->AddObserver(this);
+  }
+
+  void Wait() { message_loop_runner_->Run(); }
+
+ private:
+  // FrameTreeNode::Observer
+  void OnFrameTreeNodeDestroyed(FrameTreeNode* node) override {
+    if (node == owner_)
+      message_loop_runner_->Quit();
+  }
+
+  FrameTreeNode* owner_;
+  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameDeletedObserver);
+};
+
 // Helper function to focus a frame by sending it a mouse click and then
 // waiting for it to become focused.
 void FocusFrame(FrameTreeNode* frame) {
@@ -426,9 +456,9 @@ class ConsoleObserverDelegate : public WebContentsDelegate {
   ~ConsoleObserverDelegate() override {}
 
   bool AddMessageToConsole(WebContents* source,
-                           int32 level,
+                           int32_t level,
                            const base::string16& message,
-                           int32 line_no,
+                           int32_t line_no,
                            const base::string16& source_id) override;
 
   std::string message() { return message_; }
@@ -452,9 +482,9 @@ void ConsoleObserverDelegate::Wait() {
 
 bool ConsoleObserverDelegate::AddMessageToConsole(
     WebContents* source,
-    int32 level,
+    int32_t level,
     const base::string16& message,
-    int32 line_no,
+    int32_t line_no,
     const base::string16& source_id) {
   DCHECK(source == web_contents_);
 
@@ -1827,9 +1857,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // message loop, so no IPCs that alter the frame tree can be processed.
   FrameTreeNode* child = root->child_at(1);
   SiteInstance* site = NULL;
-  bool browser_side_navigation =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation);
+  bool browser_side_navigation = IsBrowserSideNavigationEnabled();
   std::string cross_site_rfh_type =
       browser_side_navigation ? "speculative" : "pending";
   {
@@ -3926,6 +3954,102 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, DISABLED_DocumentHasFocus) {
   EXPECT_TRUE(document_has_focus(child2));
 }
 
+// Check that window.focus works for cross-process subframes.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SubframeWindowFocus) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B C\n"
+      "   |--Site B ------- proxies for A C\n"
+      "   +--Site C ------- proxies for A B\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/\n"
+      "      C = http://c.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* child1 = root->child_at(0);
+  FrameTreeNode* child2 = root->child_at(1);
+
+  // The main frame should be focused to start with.
+  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
+
+  DOMMessageQueue msg_queue;
+
+  // Register focus and blur events that will send messages when each frame's
+  // window gets or loses focus.
+  const char kSetupFocusEvents[] =
+      "window.addEventListener('focus', function() {"
+      "  domAutomationController.setAutomationId(0);"
+      "  domAutomationController.send('%s-got-focus');"
+      "});"
+      "window.addEventListener('blur', function() {"
+      "  domAutomationController.setAutomationId(0);"
+      "  domAutomationController.send('%s-lost-focus');"
+      "});";
+  std::string script = base::StringPrintf(kSetupFocusEvents, "main", "main");
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), script));
+  script = base::StringPrintf(kSetupFocusEvents, "child1", "child1");
+  EXPECT_TRUE(ExecuteScript(child1->current_frame_host(), script));
+  script = base::StringPrintf(kSetupFocusEvents, "child2", "child2");
+  EXPECT_TRUE(ExecuteScript(child2->current_frame_host(), script));
+
+  // Execute window.focus on the B subframe from the A main frame.
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "frames[0].focus()"));
+
+  // Helper to wait for two specified messages to arrive on the specified
+  // DOMMessageQueue, assuming that the two messages can arrive in any order.
+  auto wait_for_two_messages = [](DOMMessageQueue* msg_queue,
+                                  const std::string& msg1,
+                                  const std::string& msg2) {
+    bool msg1_received = false;
+    bool msg2_received = false;
+    std::string status;
+    while (msg_queue->WaitForMessage(&status)) {
+      if (status == msg1)
+        msg1_received = true;
+      if (status == msg2)
+        msg2_received = true;
+      if (msg1_received && msg2_received)
+        break;
+    }
+  };
+
+  // Process A should fire a blur event, and process B should fire a focus
+  // event.  Wait for both events.
+  wait_for_two_messages(&msg_queue, "\"main-lost-focus\"",
+                        "\"child1-got-focus\"");
+
+  // The B subframe should now be focused in the browser process.
+  EXPECT_EQ(child1, root->frame_tree()->GetFocusedFrame());
+
+  // Now, execute window.focus on the C subframe from A main frame.  This
+  // checks that we can shift focus from one remote frame to another.
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), "frames[1].focus()"));
+
+  // Wait for the two subframes (B and C) to fire blur and focus events.
+  wait_for_two_messages(&msg_queue, "\"child1-lost-focus\"",
+                        "\"child2-got-focus\"");
+
+  // The C subframe should now be focused.
+  EXPECT_EQ(child2, root->frame_tree()->GetFocusedFrame());
+
+  // window.focus the main frame from the C subframe.
+  EXPECT_TRUE(ExecuteScript(child2->current_frame_host(), "parent.focus()"));
+
+  // Wait for the C subframe to blur and main frame to focus.
+  wait_for_two_messages(&msg_queue, "\"child2-lost-focus\"",
+                        "\"main-got-focus\"");
+
+  // The main frame should now be focused.
+  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
+}
+
 // There are no cursors on Android.
 #if !defined(OS_ANDROID)
 class CursorMessageFilter : public content::BrowserMessageFilter {
@@ -4069,6 +4193,91 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   EXPECT_EQ("FOO", result);
 }
 
+// Ensure that sequential focus navigation (advancing focused elements with
+// <tab> and <shift-tab>) works across cross-process subframes.
+// The test sets up six inputs fields in a page with two cross-process
+// subframes:
+//                 child1            child2
+//             /------------\    /------------\.
+//             | 2. <input> |    | 4. <input> |
+//  1. <input> | 3. <input> |    | 5. <input> |  6. <input>
+//             \------------/    \------------/.
+//
+// The test then presses <tab> six times to cycle through focused elements 1-6.
+// The test then repeats this with <shift-tab> to cycle in reverse order.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SequentialFocusNavigation) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContents* contents = shell()->web_contents();
+  FrameTreeNode* root =
+      static_cast<WebContentsImpl*>(contents)->GetFrameTree()->root();
+
+  // Assign a name to each frame.  This will be sent along in test messages
+  // from focus events.
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(),
+                            "window.name = 'root';"));
+  EXPECT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(),
+                            "window.name = 'child1';"));
+  EXPECT_TRUE(ExecuteScript(root->child_at(1)->current_frame_host(),
+                            "window.name = 'child2';"));
+
+  // This script will insert two <input> fields in the document, one at the
+  // beginning and one at the end.  For root frame, this means that we will
+  // have an <input>, then two <iframe> elements, then another <input>.
+  std::string script =
+      "function onFocus(e) {"
+      "  domAutomationController.setAutomationId(0);"
+      "  domAutomationController.send(window.name + '-focused-' + e.target.id);"
+      "}"
+      "var input1 = document.createElement('input');"
+      "input1.id = 'input1';"
+      "var input2 = document.createElement('input');"
+      "input2.id = 'input2';"
+      "document.body.insertBefore(input1, document.body.firstChild);"
+      "document.body.appendChild(input2);"
+      "input1.addEventListener('focus', onFocus, false);"
+      "input2.addEventListener('focus', onFocus, false);";
+
+  // Add two input fields to each of the three frames.
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+  EXPECT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(), script));
+  EXPECT_TRUE(ExecuteScript(root->child_at(1)->current_frame_host(), script));
+
+  // Helper to simulate a tab press and wait for a focus message.
+  auto press_tab_and_wait_for_message = [contents](bool reverse) {
+    DOMMessageQueue msg_queue;
+    std::string reply;
+    SimulateKeyPress(contents, ui::VKEY_TAB, false, reverse /* shift */, false,
+                     false);
+    EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
+    return reply;
+  };
+
+  // Press <tab> six times to focus each of the <input> elements in turn.
+  EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input1\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(root->child_at(1), root->frame_tree()->GetFocusedFrame());
+  EXPECT_EQ("\"child2-focused-input2\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ("\"root-focused-input2\"", press_tab_and_wait_for_message(false));
+  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
+
+  // Now, press <shift-tab> to navigate focus in the reverse direction.
+  EXPECT_EQ("\"child2-focused-input2\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ(root->child_at(1), root->frame_tree()->GetFocusedFrame());
+  EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
+  EXPECT_EQ("\"child1-focused-input1\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
+  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
+}
+
 // A WebContentsDelegate to capture ContextMenu creation events.
 class ContextMenuObserverDelegate : public WebContentsDelegate {
  public:
@@ -4179,6 +4388,277 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_CreateContextMenuTest) {
 
   EXPECT_EQ(point.x(), params.x);
   EXPECT_EQ(point.y(), params.y);
+}
+
+// Test for https://crbug.com/526304, where a parent frame executes a
+// remote-to-local navigation on a child frame and immediately removes the same
+// child frame.  This test exercises the path where the detach happens before
+// the provisional local frame is created.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       NavigateProxyAndDetachBeforeProvisionalFrameCreation) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContents* contents = shell()->web_contents();
+  FrameTreeNode* root =
+      static_cast<WebContentsImpl*>(contents)->GetFrameTree()->root();
+  EXPECT_EQ(2U, root->child_count());
+
+  // Navigate the first child frame to 'about:blank' (which is a
+  // remote-to-local transition), and then detach it.
+  FrameDeletedObserver observer(root->child_at(0));
+  std::string script =
+      "var f = document.querySelector('iframe');"
+      "f.contentWindow.location.href = 'about:blank';"
+      "setTimeout(function() { document.body.removeChild(f); }, 0);";
+  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
+  observer.Wait();
+  EXPECT_EQ(1U, root->child_count());
+
+  // Make sure the main frame renderer does not crash and ignores the
+  // navigation to the frame that's already been deleted.
+  int child_count = 0;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      root->current_frame_host(),
+      "domAutomationController.send(frames.length)",
+      &child_count));
+  EXPECT_EQ(1, child_count);
+}
+
+// Test for a variation of https://crbug.com/526304, where a child frame does a
+// remote-to-local navigation, and the parent frame removes that child frame
+// after the provisional local frame is created and starts to navigate, but
+// before it commits.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       NavigateProxyAndDetachBeforeCommit) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContents* contents = shell()->web_contents();
+  FrameTreeNode* root =
+      static_cast<WebContentsImpl*>(contents)->GetFrameTree()->root();
+  EXPECT_EQ(2U, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+
+  // Start a remote-to-local navigation for the child, but don't wait for
+  // commit.
+  GURL same_site_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  NavigationController::LoadURLParams params(same_site_url);
+  params.transition_type = ui::PAGE_TRANSITION_LINK;
+  params.frame_tree_node_id = child->frame_tree_node_id();
+  child->navigator()->GetController()->LoadURLWithParams(params);
+
+  // Tell parent to remove the first child.  This should happen after the
+  // previous navigation starts but before it commits.
+  FrameDeletedObserver observer(child);
+  EXPECT_TRUE(ExecuteScript(
+      root->current_frame_host(),
+      "document.body.removeChild(document.querySelector('iframe'));"));
+  observer.Wait();
+  EXPECT_EQ(1U, root->child_count());
+
+  // Make sure the a.com renderer does not crash.
+  int child_count = 0;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      root->current_frame_host(),
+      "domAutomationController.send(frames.length)",
+      &child_count));
+  EXPECT_EQ(1, child_count);
+}
+
+// Test for https://crbug.com/568670.  In A-embed-B, simultaneously have B
+// create a new (local) child frame, and have A detach B's proxy.  The child
+// frame creation sends an IPC to create a new proxy in A's process, and if
+// that IPC arrives after the detach, the new frame's parent (a proxy) won't be
+// available, and this shouldn't cause RenderFrameProxy::CreateFrameProxy to
+// crash.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       RaceBetweenCreateChildFrameAndDetachParentProxy) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  WebContents* contents = shell()->web_contents();
+  FrameTreeNode* root =
+      static_cast<WebContentsImpl*>(contents)->GetFrameTree()->root();
+
+  // Simulate subframe B creating a new child frame in parallel to main frame A
+  // detaching subframe B.  We can't use ExecuteScript in both A and B to do
+  // this simultaneously, as that won't guarantee the timing that we want.
+  // Instead, tell A to detach B and then send a fake proxy creation IPC to A
+  // that would've come from create-child-frame code in B.  Prepare parameters
+  // for that IPC ahead of the detach, while B's FrameTreeNode still exists.
+  SiteInstance* site_instance_a = root->current_frame_host()->GetSiteInstance();
+  RenderProcessHost* process_a =
+      root->render_manager()->current_frame_host()->GetProcess();
+  int new_routing_id = process_a->GetNextRoutingID();
+  int view_routing_id =
+      root->frame_tree()->GetRenderViewHost(site_instance_a)->GetRoutingID();
+  int parent_routing_id =
+      root->child_at(0)->render_manager()->GetProxyToParent()->GetRoutingID();
+
+  // Tell main frame A to delete its subframe B.
+  FrameDeletedObserver observer(root->child_at(0));
+  EXPECT_TRUE(ExecuteScript(
+      root->current_frame_host(),
+      "document.body.removeChild(document.querySelector('iframe'));"));
+
+  // Send the message to create a proxy for B's new child frame in A.  This
+  // used to crash, as parent_routing_id refers to a proxy that doesn't exist
+  // anymore.
+  process_a->Send(new FrameMsg_NewFrameProxy(
+      new_routing_id, view_routing_id, MSG_ROUTING_NONE, parent_routing_id,
+      FrameReplicationState()));
+
+  // Ensure the subframe is detached in the browser process.
+  observer.Wait();
+  EXPECT_EQ(0U, root->child_count());
+
+  // Make sure process A did not crash.
+  int child_count = 0;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      root->current_frame_host(),
+      "domAutomationController.send(frames.length)",
+      &child_count));
+  EXPECT_EQ(0, child_count);
+}
+
+// This test ensures that the RenderFrame isn't leaked in the renderer process
+// if a pending cross-process navigation is cancelled. The test works by trying
+// to create a new RenderFrame with the same routing id. If there is an
+// entry with the same routing ID, a CHECK is hit and the process crashes.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       SubframePendingAndBackToSameSiteInstance) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  NavigateToURL(shell(), main_url);
+
+  // Capture the FrameTreeNode this test will be navigating.
+  FrameTreeNode* node = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root()
+                            ->child_at(0);
+  EXPECT_TRUE(node);
+  EXPECT_NE(node->current_frame_host()->GetSiteInstance(),
+            node->parent()->current_frame_host()->GetSiteInstance());
+
+  // Navigate to the site of the parent, but to a page that will not commit.
+  GURL same_site_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  NavigationStallDelegate stall_delegate(same_site_url);
+  ResourceDispatcherHost::Get()->SetDelegate(&stall_delegate);
+  {
+    NavigationController::LoadURLParams params(same_site_url);
+    params.transition_type = ui::PAGE_TRANSITION_LINK;
+    params.frame_tree_node_id = node->frame_tree_node_id();
+    node->navigator()->GetController()->LoadURLWithParams(params);
+  }
+
+  // Grab the routing id of the pending RenderFrameHost and set up a process
+  // observer to ensure there is no crash when a new RenderFrame creation is
+  // attempted.
+  RenderProcessHost* process =
+      node->render_manager()->pending_frame_host()->GetProcess();
+  RenderProcessHostWatcher watcher(
+      process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  int frame_routing_id =
+      node->render_manager()->pending_frame_host()->GetRoutingID();
+  int proxy_routing_id =
+      node->render_manager()->GetProxyToParent()->GetRoutingID();
+
+  // Now go to c.com so the navigation to a.com is cancelled and send an IPC
+  // to create a new RenderFrame with the routing id of the previously pending
+  // one.
+  NavigateFrameToURL(node,
+                     embedded_test_server()->GetURL("c.com", "/title2.html"));
+  {
+    FrameMsg_NewFrame_Params params;
+    params.routing_id = frame_routing_id;
+    params.proxy_routing_id = proxy_routing_id;
+    params.opener_routing_id = MSG_ROUTING_NONE;
+    params.parent_routing_id =
+        shell()->web_contents()->GetMainFrame()->GetRoutingID();
+    params.previous_sibling_routing_id = MSG_ROUTING_NONE;
+    params.widget_params.routing_id = MSG_ROUTING_NONE;
+    params.widget_params.hidden = true;
+
+    process->Send(new FrameMsg_NewFrame(params));
+  }
+
+  // The test must wait for the process to exit, but if there is no leak, the
+  // RenderFrame will be properly created and there will be no crash.
+  // Therefore, navigate the main frame to completely different site, which
+  // will cause the original process to exit cleanly.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("d.com", "/title3.html")));
+  watcher.Wait();
+  EXPECT_TRUE(watcher.did_exit_normally());
+
+  ResourceDispatcherHost::Get()->SetDelegate(nullptr);
+}
+
+// This test ensures that the RenderFrame isn't leaked in the renderer process
+// when a remote parent detaches a child frame. The test works by trying
+// to create a new RenderFrame with the same routing id. If there is an
+// entry with the same routing ID, a CHECK is hit and the process crashes.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,b)"));
+  NavigateToURL(shell(), main_url);
+
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  EXPECT_EQ(2U, web_contents->GetFrameTree()->root()->child_count());
+
+  // Capture the FrameTreeNode this test will be navigating.
+  FrameTreeNode* node = web_contents->GetFrameTree()->root()->child_at(0);
+  EXPECT_TRUE(node);
+  EXPECT_NE(node->current_frame_host()->GetSiteInstance(),
+            node->parent()->current_frame_host()->GetSiteInstance());
+
+  // Grab the routing id of the first child RenderFrameHost and set up a process
+  // observer to ensure there is no crash when a new RenderFrame creation is
+  // attempted.
+  RenderProcessHost* process = node->current_frame_host()->GetProcess();
+  RenderProcessHostWatcher watcher(
+      process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  int frame_routing_id = node->current_frame_host()->GetRoutingID();
+  int widget_routing_id =
+      node->current_frame_host()->GetRenderWidgetHost()->GetRoutingID();
+  int parent_routing_id =
+      node->parent()->render_manager()->GetRoutingIdForSiteInstance(
+          node->current_frame_host()->GetSiteInstance());
+
+  // Have the parent frame remove the child frame from its DOM. This should
+  // result in the child RenderFrame being deleted in the remote process.
+  EXPECT_TRUE(ExecuteScript(web_contents,
+                            "document.body.removeChild("
+                            "document.querySelectorAll('iframe')[0])"));
+  EXPECT_EQ(1U, web_contents->GetFrameTree()->root()->child_count());
+
+  {
+    FrameMsg_NewFrame_Params params;
+    params.routing_id = frame_routing_id;
+    params.proxy_routing_id = MSG_ROUTING_NONE;
+    params.opener_routing_id = MSG_ROUTING_NONE;
+    params.parent_routing_id = parent_routing_id;
+    params.previous_sibling_routing_id = MSG_ROUTING_NONE;
+    params.widget_params.routing_id = widget_routing_id;
+    params.widget_params.hidden = true;
+
+    process->Send(new FrameMsg_NewFrame(params));
+  }
+
+  // The test must wait for the process to exit, but if there is no leak, the
+  // RenderFrame will be properly created and there will be no crash.
+  // Therefore, navigate the remaining subframe to completely different site,
+  // which will cause the original process to exit cleanly.
+  NavigateFrameToURL(
+      web_contents->GetFrameTree()->root()->child_at(0),
+      embedded_test_server()->GetURL("d.com", "/title3.html"));
+  watcher.Wait();
+  EXPECT_TRUE(watcher.did_exit_normally());
 }
 
 }  // namespace content

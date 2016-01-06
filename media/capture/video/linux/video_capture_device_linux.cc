@@ -4,17 +4,20 @@
 
 #include "media/capture/video/linux/video_capture_device_linux.h"
 
-#if defined(OS_OPENBSD)
-#include <sys/videoio.h>
-#else
-#include <linux/videodev2.h>
-#endif
+#include <stddef.h>
 
 #include <list>
 
 #include "base/bind.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "media/capture/video/linux/v4l2_capture_delegate.h"
+
+#if defined(OS_OPENBSD)
+#include <sys/videoio.h>
+#else
+#include <linux/videodev2.h>
+#endif
 
 namespace media {
 
@@ -43,8 +46,8 @@ static bool ReadIdFile(const std::string& path, std::string* id) {
 
 // Translates Video4Linux pixel formats to Chromium pixel formats.
 // static
-VideoPixelFormat
-VideoCaptureDeviceLinux::V4l2FourCcToChromiumPixelFormat(uint32 v4l2_fourcc) {
+VideoPixelFormat VideoCaptureDeviceLinux::V4l2FourCcToChromiumPixelFormat(
+    uint32_t v4l2_fourcc) {
   return V4L2CaptureDelegate::V4l2FourCcToChromiumPixelFormat(v4l2_fourcc);
 }
 

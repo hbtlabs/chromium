@@ -278,6 +278,16 @@ class PossibleTrybotBrowser(possible_browser.PossibleBrowser):
     the bisect config, commits it, uploads the CL to rietveld, and runs a
     tryjob on the given bot.
     """
+    print '\n**** WARNING ****'
+    print ('Running telemetry benchmark on trybot using --browser=trybot-... '
+           'is deprecated (see crbug.com/566605) and will be removed on '
+           'Jan 20th 2016. To run benchmark on trybot, use the '
+           'command `run_benchmark trybot ...` instead.')
+    user_input = raw_input(
+        "Enter 'c' to keep running the current command anyway: ")
+    if user_input != 'c':
+      return
+
     # First check if there are chromium changes to upload.
     status = self._AttemptTryjob(CHROMIUM_CONFIG_FILENAME)
     if status not in [SUCCESS, ERROR]:
@@ -310,12 +320,19 @@ def CanFindAvailableBrowsers():
 
 
 @decorators.Cache
-def _GetTrybotList():
+def _GetBuilderList():
   f = urllib2.urlopen(
       'http://build.chromium.org/p/tryserver.chromium.perf/json')
   builders = json.loads(f.read()).get('builders', {}).keys()
+  # Exclude unsupported bots like win xp and some dummy bots.
+  builders = [bot for bot in builders if bot not in EXCLUDED_BOTS]
+  return builders
+
+
+def _GetTrybotList():
+  builders = _GetBuilderList()
   builders = ['trybot-%s' % bot.replace('_perf_bisect', '').replace('_', '-')
-              for bot in builders if bot not in EXCLUDED_BOTS]
+              for bot in builders]
   builders.extend(INCLUDE_BOTS)
   return sorted(builders)
 
@@ -330,11 +347,7 @@ def _GetBuilderNames(browser_type):
       bot_platform += '-x64'
     return {bot_platform: bot}
 
-  f = urllib2.urlopen(
-      'http://build.chromium.org/p/tryserver.chromium.perf/json')
-  builders = json.loads(f.read()).get('builders', {}).keys()
-  # Exclude unsupported bots like win xp and some dummy bots.
-  builders = [bot for bot in builders if bot not in EXCLUDED_BOTS]
+  builders = _GetBuilderList()
 
   platform_and_bots = {}
   for os_name in ['linux', 'android', 'mac', 'win']:
@@ -373,6 +386,5 @@ def FindAllAvailableBrowsers(finder_options, device):
   """Find all perf trybots on tryserver.chromium.perf."""
   if not isinstance(device, trybot_device.TrybotDevice):
     return []
-
   return [PossibleTrybotBrowser(b, finder_options) for b in
           FindAllBrowserTypes(finder_options)]

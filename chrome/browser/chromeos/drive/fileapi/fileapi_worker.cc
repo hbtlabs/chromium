@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/drive/fileapi/fileapi_worker.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/task_runner_util.h"
@@ -146,7 +149,7 @@ void RunCreateWritableSnapshotFileCallback(
 void RunOpenFileCallback(const OpenFileCallback& callback,
                          const base::Closure& close_callback,
                          base::File file) {
-  callback.Run(file.Pass(), close_callback);
+  callback.Run(std::move(file), close_callback);
 }
 
 base::File OpenFile(const base::FilePath& path, int flags) {
@@ -293,7 +296,7 @@ void CreateFile(const base::FilePath& file_path,
 }
 
 void Truncate(const base::FilePath& file_path,
-              int64 length,
+              int64_t length,
               const StatusCallback& callback,
               FileSystemInterface* file_system) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);

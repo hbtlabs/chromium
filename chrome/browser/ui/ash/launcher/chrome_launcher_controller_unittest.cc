@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/ash_switches.h"
@@ -17,10 +19,12 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
@@ -245,7 +249,7 @@ class TestV2AppLauncherItemController : public LauncherItemController {
         new ChromeLauncherAppMenuItem(base::string16(), NULL, false));
     items.push_back(
         new ChromeLauncherAppMenuItem(base::string16(), NULL, false));
-    return items.Pass();
+    return items;
   }
   ui::MenuModel* CreateContextMenu(aura::Window* root_window) override {
     return NULL;
@@ -648,7 +652,7 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
     aura::client::ParentWindowWithContext(window.get(), GetContext(),
                                           gfx::Rect(200, 200));
 
-    return new TestBrowserWindowAura(window.Pass());
+    return new TestBrowserWindowAura(std::move(window));
   }
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerTest);
@@ -863,7 +867,7 @@ class MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest
     browser->window()->Show();
     NavigateAndCommitActiveTabWithTitle(browser.get(), GURL(url),
                                         ASCIIToUTF16(title));
-    return browser.Pass();
+    return browser;
   }
 
   // Creates a running V1 application.

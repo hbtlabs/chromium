@@ -4,6 +4,9 @@
 
 #include "components/printing/renderer/print_web_view_helper.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/process/process_handle.h"
@@ -58,19 +61,7 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
     return false;
 
   const PrintMsg_PrintPages_Params& params = *print_pages_params_;
-  std::vector<int> printed_pages;
-  if (params.pages.empty()) {
-    for (int i = 0; i < page_count; ++i) {
-      printed_pages.push_back(i);
-    }
-  } else {
-    // TODO(vitalybuka): redesign to make more code cross platform.
-    for (size_t i = 0; i < params.pages.size(); ++i) {
-      if (params.pages[i] >= 0 && params.pages[i] < page_count) {
-        printed_pages.push_back(params.pages[i]);
-      }
-    }
-  }
+  std::vector<int> printed_pages = GetPrintedPages(params, page_count);
   if (printed_pages.empty())
     return false;
 

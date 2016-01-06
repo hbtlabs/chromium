@@ -8,14 +8,15 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -45,6 +46,7 @@
 #include "content/browser/renderer_host/web_input_event_aura.h"
 #include "content/common/gpu/client/gl_helper.h"
 #include "content/common/gpu/gpu_messages.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/overscroll_configuration.h"
@@ -857,6 +859,23 @@ bool RenderWidgetHostViewAura::CanRendererHandleEvent(
   return true;
 }
 
+bool RenderWidgetHostViewAura::ShouldRouteEvent(const ui::Event* event) const {
+  // We should route an event in two cases:
+  // 1) Mouse events are routed only if cross-process frames are possible.
+  // 2) Touch events are always routed. In the absence of a BrowserPlugin
+  //    we expect the routing to always send the event to this view. If
+  //    one or more BrowserPlugins are present, then the event may be targeted
+  //    to one of them, or this view. This allows GuestViews to have access to
+  //    them while still forcing pinch-zoom to be handled by the top-level
+  //    frame. TODO(wjmaclean): At present, this doesn't work for OOPIF, but
+  //    it should be a simple extension to modify RenderWidgetHostViewChildFrame
+  //    in a similar manner to RenderWidgetHostViewGuest.
+  bool result = host_->delegate() && host_->delegate()->GetInputEventRouter();
+  if (event->IsMouseEvent())
+    result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible();
+  return result;
+}
+
 void RenderWidgetHostViewAura::HandleParentBoundsChanged() {
   SnapToPhysicalPixelBoundary();
 #if defined(OS_WIN)
@@ -1024,11 +1043,16 @@ void RenderWidgetHostViewAura::RenderProcessGone(base::TerminationStatus status,
 }
 
 void RenderWidgetHostViewAura::Destroy() {
-  // Beware, this function is not called on all destruction paths. It will
-  // implicitly end up calling ~RenderWidgetHostViewAura though, so all
-  // destruction/cleanup code should happen there, not here.
+  // Beware, this function is not called on all destruction paths. If |window_|
+  // has been created, then it will implicitly end up calling
+  // ~RenderWidgetHostViewAura when |window_| is destroyed. Otherwise, The
+  // destructor is invoked directly from here. So all destruction/cleanup code
+  // should happen there, not here.
   in_shutdown_ = true;
-  delete window_;
+  if (window_)
+    delete window_;
+  else
+    delete this;
 }
 
 void RenderWidgetHostViewAura::SetTooltipText(
@@ -1134,7 +1158,7 @@ bool RenderWidgetHostViewAura::CanCopyToVideoFrame() const {
 
 void RenderWidgetHostViewAura::BeginFrameSubscription(
     scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
-  delegated_frame_host_->BeginFrameSubscription(subscriber.Pass());
+  delegated_frame_host_->BeginFrameSubscription(std::move(subscriber));
 }
 
 void RenderWidgetHostViewAura::EndFrameSubscription() {
@@ -1183,7 +1207,7 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
 #endif
 
 void RenderWidgetHostViewAura::OnSwapCompositorFrame(
-    uint32 output_surface_id,
+    uint32_t output_surface_id,
     scoped_ptr<cc::CompositorFrame> frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
@@ -1706,7 +1730,7 @@ gfx::Rect RenderWidgetHostViewAura::GetCaretBounds() const {
 }
 
 bool RenderWidgetHostViewAura::GetCompositionCharacterBounds(
-    uint32 index,
+    uint32_t index,
     gfx::Rect* rect) const {
   DCHECK(rect);
   if (index >= composition_character_bounds_.size())
@@ -1938,19 +1962,16 @@ void RenderWidgetHostViewAura::OnWindowDestroying(aura::Window* window) {
   // Make sure that the input method no longer references to this object before
   // this object is removed from the root window (i.e. this object loses access
   // to the input method).
-  ui::InputMethod* input_method = GetInputMethod();
-  if (input_method)
-    input_method->DetachTextInputClient(this);
+  DetachFromInputMethod();
 
   if (overscroll_controller_)
     overscroll_controller_->Reset();
 }
 
 void RenderWidgetHostViewAura::OnWindowDestroyed(aura::Window* window) {
-  // Ask the RWH to drop reference to us.
-  if (!is_guest_view_hack_)
-    host_->ViewDestroyed();
-
+  // This is not called on all destruction paths (e.g. if this view was never
+  // inialized properly to create the window). So the destruction/cleanup code
+  // that do not depend on |window_| should happen in the destructor, not here.
   delete this;
 }
 
@@ -2127,7 +2148,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
     blink::WebMouseWheelEvent mouse_wheel_event =
         MakeWebMouseWheelEvent(static_cast<ui::MouseWheelEvent&>(*event));
     if (mouse_wheel_event.deltaX != 0 || mouse_wheel_event.deltaY != 0) {
-      if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
+      if (ShouldRouteEvent(event)) {
         host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
             this, &mouse_wheel_event);
       } else {
@@ -2146,7 +2167,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
 
       blink::WebMouseEvent mouse_event = MakeWebMouseEvent(*event);
       ModifyEventMovementAndCoords(&mouse_event);
-      if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
+      if (ShouldRouteEvent(event)) {
         host_->delegate()->GetInputEventRouter()->RouteMouseEvent(this,
                                                                   &mouse_event);
       } else {
@@ -2217,6 +2238,12 @@ void RenderWidgetHostViewAura::ProcessMouseEvent(
 void RenderWidgetHostViewAura::ProcessMouseWheelEvent(
     const blink::WebMouseWheelEvent& event) {
   host_->ForwardWheelEvent(event);
+}
+
+void RenderWidgetHostViewAura::ProcessTouchEvent(
+    const blink::WebTouchEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardTouchEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewAura::TransformPointToLocalCoordSpace(
@@ -2293,7 +2320,12 @@ void RenderWidgetHostViewAura::OnTouchEvent(ui::TouchEvent* event) {
   // Set unchanged touch point to StateStationary for touchmove and
   // touchcancel to make sure only send one ack per WebTouchEvent.
   MarkUnchangedTouchPointsAsStationary(&touch_event, event->touch_id());
-  host_->ForwardTouchEventWithLatencyInfo(touch_event, *event->latency());
+  if (ShouldRouteEvent(event)) {
+    host_->delegate()->GetInputEventRouter()->RouteTouchEvent(
+        this, &touch_event, *event->latency());
+  } else {
+    ProcessTouchEvent(touch_event, *event->latency());
+  }
 }
 
 void RenderWidgetHostViewAura::OnGestureEvent(ui::GestureEvent* event) {
@@ -2457,6 +2489,10 @@ void RenderWidgetHostViewAura::OnHostMoved(const aura::WindowTreeHost* host,
 // RenderWidgetHostViewAura, private:
 
 RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
+  // Ask the RWH to drop reference to us.
+  if (!is_guest_view_hack_)
+    host_->ViewDestroyed();
+
   selection_controller_.reset();
   selection_controller_client_.reset();
 
@@ -2584,7 +2620,7 @@ ui::InputMethod* RenderWidgetHostViewAura::GetInputMethod() const {
 void RenderWidgetHostViewAura::Shutdown() {
   if (!in_shutdown_) {
     in_shutdown_ = true;
-    host_->Shutdown();
+    host_->ShutdownAndDestroyWidget(true);
   }
 }
 
@@ -2823,6 +2859,8 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
   // out-of-process iframes), pick the one that should process this event.
   if (host_->delegate())
     target_host = host_->delegate()->GetFocusedRenderWidgetHost(host_);
+  if (!target_host)
+    return;
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   ui::TextEditKeyBindingsDelegateAuraLinux* keybinding_delegate =
@@ -2891,6 +2929,7 @@ void RenderWidgetHostViewAura::HandleGestureForTouchSelection(
       }
       break;
     case ui::ET_GESTURE_SCROLL_BEGIN:
+      selection_controller_->OnScrollBeginEvent();
       selection_controller_client_->OnScrollStarted();
       break;
     case ui::ET_GESTURE_SCROLL_END:

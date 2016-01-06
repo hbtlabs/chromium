@@ -19,7 +19,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/svg/line/SVGInlineTextBox.h"
 
 #include "core/editing/Editor.h"
@@ -89,10 +88,10 @@ int SVGInlineTextBox::offsetForPositionInFragment(const SVGTextFragment& fragmen
 
     // Eventually handle lengthAdjust="spacingAndGlyphs".
     // FIXME: Handle vertical text.
-    AffineTransform fragmentTransform;
-    fragment.buildFragmentTransform(fragmentTransform);
-    if (!fragmentTransform.isIdentity())
+    if (fragment.isTransformed()) {
+        AffineTransform fragmentTransform = fragment.buildFragmentTransform();
         textRun.setHorizontalGlyphStretch(narrowPrecisionToFloat(fragmentTransform.xScale()));
+    }
 
     return fragment.characterOffset - start() + lineLayoutItem.scaledFont().offsetForPosition(textRun, position * scalingFactor, includePartialGlyphs);
 }
@@ -139,7 +138,6 @@ LayoutRect SVGInlineTextBox::localSelectionRect(int startPosition, int endPositi
 
     const ComputedStyle& style = lineLayoutItem().styleRef();
 
-    AffineTransform fragmentTransform;
     FloatRect selectionRect;
     int fragmentStartPosition = 0;
     int fragmentEndPosition = 0;
@@ -154,8 +152,8 @@ LayoutRect SVGInlineTextBox::localSelectionRect(int startPosition, int endPositi
             continue;
 
         FloatRect fragmentRect = selectionRectForTextFragment(fragment, fragmentStartPosition, fragmentEndPosition, style);
-        fragment.buildFragmentTransform(fragmentTransform);
-        fragmentRect = fragmentTransform.mapRect(fragmentRect);
+        if (fragment.isTransformed())
+            fragmentRect = fragment.buildFragmentTransform().mapRect(fragmentRect);
 
         selectionRect.unite(fragmentRect);
     }
@@ -215,39 +213,33 @@ bool SVGInlineTextBox::mapStartEndPositionsIntoFragmentCoordinates(const SVGText
     return startPosition < endPosition;
 }
 
-void SVGInlineTextBox::paintDocumentMarker(GraphicsContext*, const LayoutPoint&, DocumentMarker*, const ComputedStyle&, const Font&, bool) const
+void SVGInlineTextBox::paintDocumentMarker(GraphicsContext&, const LayoutPoint&, DocumentMarker*, const ComputedStyle&, const Font&, bool) const
 {
     // SVG does not have support for generic document markers (e.g., spellchecking, etc).
 }
 
-void SVGInlineTextBox::paintTextMatchMarker(GraphicsContext* context, const LayoutPoint& point, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
+void SVGInlineTextBox::paintTextMatchMarkerForeground(const PaintInfo& paintInfo, const LayoutPoint& point, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
 {
-    SVGInlineTextBoxPainter(*this).paintTextMatchMarker(context, point, marker, style, font);
+    SVGInlineTextBoxPainter(*this).paintTextMatchMarkerForeground(paintInfo, point, marker, style, font);
+}
+
+void SVGInlineTextBox::paintTextMatchMarkerBackground(const PaintInfo& paintInfo, const LayoutPoint& point, DocumentMarker* marker, const ComputedStyle& style, const Font& font) const
+{
+    SVGInlineTextBoxPainter(*this).paintTextMatchMarkerBackground(paintInfo, point, marker, style, font);
 }
 
 LayoutRect SVGInlineTextBox::calculateBoundaries() const
 {
-    LayoutRect textRect;
-
     LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->lineLayoutItem());
-
     float scalingFactor = lineLayoutItem.scalingFactor();
     ASSERT(scalingFactor);
-
     LayoutUnit baseline = lineLayoutItem.scaledFont().fontMetrics().floatAscent() / scalingFactor;
 
-    AffineTransform fragmentTransform;
-    unsigned textFragmentsSize = m_textFragments.size();
-    for (unsigned i = 0; i < textFragmentsSize; ++i) {
-        const SVGTextFragment& fragment = m_textFragments.at(i);
-        FloatRect fragmentRect(fragment.x, fragment.y - baseline, fragment.width, fragment.height);
-        fragment.buildFragmentTransform(fragmentTransform);
-        fragmentRect = fragmentTransform.mapRect(fragmentRect);
+    LayoutRect textBoundingRect;
+    for (const SVGTextFragment& fragment : m_textFragments)
+        textBoundingRect.unite(LayoutRect(fragment.overflowBoundingBox(baseline)));
 
-        textRect.unite(LayoutRect(fragmentRect));
-    }
-
-    return textRect;
+    return textBoundingRect;
 }
 
 bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit, LayoutUnit)
@@ -269,14 +261,10 @@ bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation&
                 ASSERT(lineLayoutItem.scalingFactor());
                 float baseline = lineLayoutItem.scaledFont().fontMetrics().floatAscent() / lineLayoutItem.scalingFactor();
 
-                AffineTransform fragmentTransform;
-                for (const auto& fragment : m_textFragments) {
-                    FloatQuad fragmentQuad(FloatRect(fragment.x, fragment.y - baseline, fragment.width, fragment.height));
-                    fragment.buildFragmentTransform(fragmentTransform);
-                    if (!fragmentTransform.isIdentity())
-                        fragmentQuad = fragmentTransform.mapQuad(fragmentQuad);
-
-                    if (fragmentQuad.containsPoint(FloatPoint(locationInContainer.point()))) {
+                FloatPoint floatLocation = FloatPoint(locationInContainer.point());
+                for (const SVGTextFragment& fragment : m_textFragments) {
+                    FloatQuad fragmentQuad = fragment.boundingQuad(baseline);
+                    if (fragmentQuad.containsPoint(floatLocation)) {
                         lineLayoutItem.updateHitTestResult(result, locationInContainer.point() - toLayoutSize(accumulatedOffset));
                         if (!result.addNodeToListBasedTestResult(lineLayoutItem.node(), locationInContainer, rect))
                             return true;

@@ -628,18 +628,16 @@ WebInspector.CSSStyleModel.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.SDKObject}
- * @param {!WebInspector.CSSStyleModel} cssModel
- * @param {!CSSAgent.StyleSheetId} styleSheetId
- * @param {string} url
+ * @param {!WebInspector.CSSStyleSheetHeader} header
  * @param {number} lineNumber
  * @param {number=} columnNumber
  */
-WebInspector.CSSLocation = function(cssModel, styleSheetId, url, lineNumber, columnNumber)
+WebInspector.CSSLocation = function(header, lineNumber, columnNumber)
 {
-    WebInspector.SDKObject.call(this, cssModel.target());
-    this._cssModel = cssModel;
-    this.styleSheetId = styleSheetId;
-    this.url = url;
+    WebInspector.SDKObject.call(this, header.target());
+    this._header = header;
+    this.styleSheetId = header.id;
+    this.url = header.resourceURL();
     this.lineNumber = lineNumber;
     this.columnNumber = columnNumber || 0;
 }
@@ -650,7 +648,15 @@ WebInspector.CSSLocation.prototype = {
      */
     cssModel: function()
     {
-        return this._cssModel;
+        return this._header.cssModel();
+    },
+
+    /**
+     * @return {!WebInspector.CSSStyleSheetHeader}
+     */
+    header: function()
+    {
+        return this._header;
     },
 
     __proto__: WebInspector.SDKObject.prototype
@@ -1411,14 +1417,17 @@ WebInspector.CSSProperty.prototype = {
      */
     _formatStyle: function(styleText, indentation, endIndentation, tokenizerFactory)
     {
+        if (indentation)
+            indentation = "\n" + indentation;
         var result = "";
-        var lastWasSemicolon = true;
-        var lastWasMeta = false;
+        var propertyText;
         var insideProperty = false;
         var tokenize = tokenizerFactory.createTokenizer("text/css");
 
         tokenize("*{" + styleText + "}", processToken);
-
+        if (insideProperty)
+            result += propertyText;
+        result = result.substring(2, result.length - 1).trimRight();
         return result + (indentation ? "\n" + endIndentation : "");
 
         /**
@@ -1429,42 +1438,28 @@ WebInspector.CSSProperty.prototype = {
          */
         function processToken(token, tokenType, column, newColumn)
         {
-            if (token === "}" || token === ";")
-                result = result.trimRight();  // collect trailing space before } and ;
-            if (token === "}")
-                return;
-            if (newColumn <= 2)
-                return;
-            var isSemicolon = token === ";";
-            if (isSemicolon && lastWasSemicolon)
-                return;
-            lastWasSemicolon = isSemicolon || (lastWasSemicolon && tokenType && tokenType.includes("css-comment")) || (lastWasSemicolon && !token.trim());
-
-            // No formatting, only remove dupe ;
-            if (!indentation) {
-                result += token;
+            if (!insideProperty) {
+                var isDisabledProperty = tokenType && tokenType.includes("css-comment") && token.includes(":");
+                var isPropertyStart = tokenType && (tokenType.includes("css-meta") || tokenType.includes("css-property"));
+                if (isDisabledProperty) {
+                    result = result.trimRight() + indentation + token;
+                } else if (isPropertyStart) {
+                    insideProperty = true;
+                    propertyText = token;
+                } else if (token !== ";") {
+                    result += token;
+                }
                 return;
             }
 
-            // Format line breaks.
-            if (!insideProperty && !token.trim())
-                return;
-            if (tokenType && tokenType.includes("css-comment") && token.includes(":")) {
-                result += "\n" + indentation + token;
+            if (token === "}" || token === ";") {
+                result = result.trimRight() + indentation + propertyText.trim() + ";";
                 insideProperty = false;
-                return;
+                if (token === "}")
+                    result += "}";
+            } else {
+                propertyText += token;
             }
-
-            if (isSemicolon)
-                insideProperty = false;
-
-            if (!insideProperty && tokenType && (tokenType.includes("css-meta") || (tokenType.includes("css-property") && !lastWasMeta))) {
-                result += "\n" + indentation;
-                insideProperty = true;
-            }
-            result += token;
-
-            lastWasMeta = tokenType && tokenType.includes("css-meta");
         }
     },
 
@@ -1741,10 +1736,11 @@ WebInspector.CSSMedia.prototype = {
      */
     rawLocation: function()
     {
-        if (!this.header() || this.lineNumberInSource() === undefined)
+        var header = this.header();
+        if (!header || this.lineNumberInSource() === undefined)
             return null;
         var lineNumber = Number(this.lineNumberInSource());
-        return new WebInspector.CSSLocation(this._cssModel, this.header().id, this.sourceURL, lineNumber, this.columnNumberInSource());
+        return new WebInspector.CSSLocation(header, lineNumber, this.columnNumberInSource());
     }
 }
 
@@ -1855,8 +1851,17 @@ WebInspector.CSSStyleSheetHeader.prototype = {
      */
     _trimSourceURL: function(text)
     {
-        var sourceURLRegex = /\n[\040\t]*\/\*#[\040\t]sourceURL=[\040\t]*([^\s]*)[\040\t]*\*\/[\040\t]*$/mg;
-        return text.replace(sourceURLRegex, "");
+        var sourceURLIndex = text.lastIndexOf("/*# sourceURL=");
+        if (sourceURLIndex === -1)
+            return text;
+        var sourceURLLineIndex = text.lastIndexOf("\n", sourceURLIndex);
+        if (sourceURLLineIndex === -1)
+            return text;
+        var sourceURLLine = text.substr(sourceURLLineIndex + 1).split("\n", 1)[0];
+        var sourceURLRegex = /[\040\t]*\/\*# sourceURL=[\040\t]*([^\s]*)[\040\t]*\*\/[\040\t]*$/;
+        if (sourceURLLine.search(sourceURLRegex) === -1)
+            return text;
+        return text.substr(0, sourceURLLineIndex) + text.substr(sourceURLLineIndex + sourceURLLine.length + 1);
     },
 
     /**
@@ -2031,7 +2036,7 @@ WebInspector.CSSStyleModel.ComputedStyleLoader.prototype = {
          */
         function parsePayload(error, computedPayload)
         {
-            if (error || !computedPayload)
+            if (error || !computedPayload || !computedPayload.length)
                 return null;
             var result = new Map();
             for (var property of computedPayload)

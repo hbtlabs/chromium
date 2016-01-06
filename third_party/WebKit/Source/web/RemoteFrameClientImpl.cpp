@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "web/RemoteFrameClientImpl.h"
 
 #include "core/events/KeyboardEvent.h"
@@ -127,6 +126,12 @@ bool RemoteFrameClientImpl::willCheckAndDispatchMessageEvent(
     return true;
 }
 
+void RemoteFrameClientImpl::frameFocused() const
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->frameFocused();
+}
+
 void RemoteFrameClientImpl::navigate(const ResourceRequest& request, bool shouldReplaceCurrentEntry)
 {
     if (m_webFrame->client())
@@ -186,6 +191,11 @@ void RemoteFrameClientImpl::forwardInputEvent(Event* event)
 void RemoteFrameClientImpl::frameRectsChanged(const IntRect& frameRect)
 {
     m_webFrame->client()->frameRectsChanged(frameRect);
+}
+
+void RemoteFrameClientImpl::advanceFocus(WebFocusType type, LocalFrame* source)
+{
+    m_webFrame->client()->advanceFocus(type, WebLocalFrameImpl::fromFrame(source));
 }
 
 } // namespace blink

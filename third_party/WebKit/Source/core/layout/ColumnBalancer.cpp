@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
-
 #include "core/layout/ColumnBalancer.h"
 
 #include "core/layout/LayoutMultiColumnFlowThread.h"
@@ -98,29 +96,38 @@ LayoutUnit InitialColumnHeightFinder::initialMinimalBalancedHeight() const
 
 void InitialColumnHeightFinder::examineBoxAfterEntering(const LayoutBox& box)
 {
-    ASSERT(isFirstAfterBreak(flowThreadOffset()) || !box.paginationStrut());
-    if (box.hasForcedBreakBefore()) {
-        addContentRun(flowThreadOffset());
-    } else if (isFirstAfterBreak(flowThreadOffset())) {
-        // This box is first after a soft break.
-        recordStrutBeforeOffset(flowThreadOffset(), box.paginationStrut());
+    if (isLogicalTopWithinBounds(flowThreadOffset() - box.paginationStrut())) {
+        ASSERT(isFirstAfterBreak(flowThreadOffset()) || !box.paginationStrut());
+        if (box.hasForcedBreakBefore()) {
+            addContentRun(flowThreadOffset());
+        } else if (isFirstAfterBreak(flowThreadOffset())) {
+            // This box is first after a soft break.
+            recordStrutBeforeOffset(flowThreadOffset(), box.paginationStrut());
+        }
     }
 
-    if (box.hasForcedBreakAfter())
-        addContentRun(flowThreadOffset() + box.logicalHeight());
+    if (box.hasForcedBreakAfter()) {
+        LayoutUnit logicalBottomInFlowThread = flowThreadOffset() + box.logicalHeight();
+        if (isLogicalBottomWithinBounds(logicalBottomInFlowThread))
+            addContentRun(logicalBottomInFlowThread);
+    }
 
     if (box.paginationBreakability() != LayoutBox::AllowAnyBreaks) {
         LayoutUnit unsplittableLogicalHeight = box.logicalHeight();
         if (box.isFloating())
             unsplittableLogicalHeight += box.marginBefore() + box.marginAfter();
         m_tallestUnbreakableLogicalHeight = std::max(m_tallestUnbreakableLogicalHeight, unsplittableLogicalHeight);
-    } else if (box.isLayoutBlockFlow()) {
-        if (LayoutMultiColumnFlowThread* innerFlowThread = toLayoutBlockFlow(box).multiColumnFlowThread()) {
-            LayoutUnit offsetInInnerFlowThread = flowThreadOffset() - innerFlowThread->blockOffsetInEnclosingFlowThread();
-            LayoutUnit innerUnbreakableHeight = innerFlowThread->tallestUnbreakableLogicalHeight(offsetInInnerFlowThread);
-            m_tallestUnbreakableLogicalHeight = std::max(m_tallestUnbreakableLogicalHeight, innerUnbreakableHeight);
-        }
+        return;
     }
+    // Need to examine inner multicol containers to find their tallest unbreakable piece of content.
+    if (!box.isLayoutBlockFlow())
+        return;
+    LayoutMultiColumnFlowThread* innerFlowThread = toLayoutBlockFlow(box).multiColumnFlowThread();
+    if (!innerFlowThread || innerFlowThread->isLayoutPagedFlowThread())
+        return;
+    LayoutUnit offsetInInnerFlowThread = flowThreadOffset() - innerFlowThread->blockOffsetInEnclosingFragmentationContext();
+    LayoutUnit innerUnbreakableHeight = innerFlowThread->tallestUnbreakableLogicalHeight(offsetInInnerFlowThread);
+    m_tallestUnbreakableLogicalHeight = std::max(m_tallestUnbreakableLogicalHeight, innerUnbreakableHeight);
 }
 
 void InitialColumnHeightFinder::examineBoxBeforeLeaving(const LayoutBox& box)
@@ -144,7 +151,7 @@ void InitialColumnHeightFinder::examineLine(const RootInlineBox& line)
     LayoutUnit lineTopInFlowThread = flowThreadOffset() + lineTop;
     LayoutUnit minimumLogialHeight = columnLogicalHeightRequirementForLine(line.block().styleRef(), line);
     m_tallestUnbreakableLogicalHeight = std::max(m_tallestUnbreakableLogicalHeight, minimumLogialHeight);
-    ASSERT(isFirstAfterBreak(lineTopInFlowThread) || !line.paginationStrut());
+    ASSERT(isFirstAfterBreak(lineTopInFlowThread) || !line.paginationStrut() || !isLogicalTopWithinBounds(lineTopInFlowThread - line.paginationStrut()));
     if (isFirstAfterBreak(lineTopInFlowThread))
         recordStrutBeforeOffset(lineTopInFlowThread, line.paginationStrut());
 }
@@ -235,34 +242,37 @@ MinimumSpaceShortageFinder::MinimumSpaceShortageFinder(const MultiColumnFragment
 
 void MinimumSpaceShortageFinder::examineBoxAfterEntering(const LayoutBox& box)
 {
-    if (box.hasForcedBreakBefore())
-        m_forcedBreaksCount++;
-    if (box.hasForcedBreakAfter())
-        m_forcedBreaksCount++;
+    LayoutBox::PaginationBreakability breakability = box.paginationBreakability();
 
     // Look for breaks before the child box.
-    bool isFirstAfterBreak = this->isFirstAfterBreak(flowThreadOffset());
-    ASSERT(isFirstAfterBreak || !box.paginationStrut());
-    LayoutBox::PaginationBreakability breakability = box.paginationBreakability();
-    if (isFirstAfterBreak && !box.hasForcedBreakBefore()) {
-        // This box is first after a soft break.
-        LayoutUnit strut = box.paginationStrut();
-        // Figure out how much more space we would need to prevent it from being pushed to the next column.
-        recordSpaceShortage(box.logicalHeight() - strut);
-        if (breakability != LayoutBox::ForbidBreaks && m_pendingStrut == LayoutUnit::min()) {
-            // We now want to look for the first piece of unbreakable content (e.g. a line or a
-            // block-displayed image) inside this block. That ought to be a good candidate for
-            // minimum space shortage; a much better one than reporting space shortage for the
-            // entire block (which we'll also do (further down), in case we couldn't find anything
-            // more suitable).
-            m_pendingStrut = strut;
+    if (isLogicalTopWithinBounds(flowThreadOffset() - box.paginationStrut())) {
+        ASSERT(isFirstAfterBreak(flowThreadOffset()) || !box.paginationStrut());
+        if (box.hasForcedBreakBefore()) {
+            m_forcedBreaksCount++;
+        } else if (isFirstAfterBreak(flowThreadOffset())) {
+            // This box is first after a soft break.
+            LayoutUnit strut = box.paginationStrut();
+            // Figure out how much more space we would need to prevent it from being pushed to the next column.
+            recordSpaceShortage(box.logicalHeight() - strut);
+            if (breakability != LayoutBox::ForbidBreaks && m_pendingStrut == LayoutUnit::min()) {
+                // We now want to look for the first piece of unbreakable content (e.g. a line or a
+                // block-displayed image) inside this block. That ought to be a good candidate for
+                // minimum space shortage; a much better one than reporting space shortage for the
+                // entire block (which we'll also do (further down), in case we couldn't find anything
+                // more suitable).
+                m_pendingStrut = strut;
+            }
         }
     }
+
+    if (box.hasForcedBreakAfter() && isLogicalBottomWithinBounds(flowThreadOffset() + box.logicalHeight()))
+        m_forcedBreaksCount++;
 
     if (breakability != LayoutBox::ForbidBreaks) {
         // See if this breakable box crosses column boundaries.
         LayoutUnit bottomInFlowThread = flowThreadOffset() + box.logicalHeight();
-        if (isFirstAfterBreak || group().columnLogicalTopForOffset(flowThreadOffset()) != group().columnLogicalTopForOffset(bottomInFlowThread)) {
+        if (isFirstAfterBreak(flowThreadOffset())
+            || group().columnLogicalTopForOffset(flowThreadOffset()) != group().columnLogicalTopForOffset(bottomInFlowThread)) {
             // If the child crosses a column boundary, record space shortage, in case nothing
             // inside it has already done so. The column balancer needs to know by how much it
             // has to stretch the columns to make more content fit. If no breaks are reported
@@ -277,7 +287,7 @@ void MinimumSpaceShortageFinder::examineBoxAfterEntering(const LayoutBox& box)
     if (!box.isLayoutBlockFlow())
         return;
     LayoutMultiColumnFlowThread* flowThread = toLayoutBlockFlow(box).multiColumnFlowThread();
-    if (!flowThread)
+    if (!flowThread || flowThread->isLayoutPagedFlowThread())
         return;
     for (const LayoutMultiColumnSet* columnSet = flowThread->firstMultiColumnSet(); columnSet; columnSet = columnSet->nextSiblingMultiColumnSet()) {
         for (const MultiColumnFragmentainerGroup& row : columnSet->fragmentainerGroups()) {
@@ -314,7 +324,7 @@ void MinimumSpaceShortageFinder::examineLine(const RootInlineBox& line)
         m_pendingStrut = LayoutUnit::min();
         return;
     }
-    ASSERT(isFirstAfterBreak(lineTopInFlowThread) || !line.paginationStrut());
+    ASSERT(isFirstAfterBreak(lineTopInFlowThread) || !line.paginationStrut() || !isLogicalTopWithinBounds(lineTopInFlowThread - line.paginationStrut()));
     if (isFirstAfterBreak(lineTopInFlowThread))
         recordSpaceShortage(lineHeight - line.paginationStrut());
 }

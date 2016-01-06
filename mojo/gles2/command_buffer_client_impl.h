@@ -5,6 +5,9 @@
 #ifndef MOJO_GLES2_COMMAND_BUFFER_CLIENT_IMPL_H_
 #define MOJO_GLES2_COMMAND_BUFFER_CLIENT_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
@@ -65,16 +68,18 @@ class CommandBufferClientImpl
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  uint32 InsertSyncPoint() override;
-  uint32 InsertFutureSyncPoint() override;
-  void RetireSyncPoint(uint32 sync_point) override;
-  void SignalSyncPoint(uint32 sync_point,
+  uint32_t InsertSyncPoint() override;
+  uint32_t InsertFutureSyncPoint() override;
+  void RetireSyncPoint(uint32_t sync_point) override;
+  void SignalSyncPoint(uint32_t sync_point,
                        const base::Closure& callback) override;
-  void SignalQuery(uint32 query, const base::Closure& callback) override;
+  void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   bool IsGpuChannelLost() override;
+  void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   uint64_t GetCommandBufferID() const override;
+  int32_t GetExtraCommandBufferData() const override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -84,9 +89,6 @@ class CommandBufferClientImpl
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
 
  private:
-  class SyncClientImpl;
-  class SyncPointClientImpl;
-
   // mus::mojom::CommandBufferLostContextObserver implementation:
   void DidLoseContext(int32_t lost_reason) override;
 
@@ -99,9 +101,8 @@ class CommandBufferClientImpl
   std::vector<int32_t> attribs_;
   mojo::Binding<mus::mojom::CommandBufferLostContextObserver> observer_binding_;
   mus::mojom::CommandBufferPtr command_buffer_;
-  scoped_ptr<SyncClientImpl> sync_client_impl_;
-  scoped_ptr<SyncPointClientImpl> sync_point_client_impl_;
 
+  uint64_t command_buffer_id_;
   gpu::Capabilities capabilities_;
   State last_state_;
   mojo::ScopedSharedBufferHandle shared_state_handle_;

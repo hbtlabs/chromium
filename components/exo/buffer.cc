@@ -7,10 +7,12 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <GLES2/gl2extchromium.h>
-
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/output/context_provider.h"
@@ -131,7 +133,7 @@ gpu::SyncToken Buffer::Texture::BindTexImage() {
   // Create and return a sync token that can be used to ensure that the
   // BindTexImage2DCHROMIUM call is processed before issuing any commands
   // that will read from the texture on a different context.
-  uint64 fence_sync = gles2->InsertFenceSyncCHROMIUM();
+  uint64_t fence_sync = gles2->InsertFenceSyncCHROMIUM();
   gles2->OrderingBarrierCHROMIUM();
   gpu::SyncToken sync_token;
   gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
@@ -152,7 +154,7 @@ void Buffer::Texture::ReleaseTexImage(const gpu::SyncToken& sync_token) {
 
 Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
                unsigned texture_target)
-    : gpu_memory_buffer_(gpu_memory_buffer.Pass()),
+    : gpu_memory_buffer_(std::move(gpu_memory_buffer)),
       texture_target_(texture_target),
       use_count_(0) {}
 
@@ -168,7 +170,7 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
 
   // Creating a new texture is relatively expensive so we reuse the last
   // texture whenever possible.
-  scoped_ptr<Texture> texture = last_texture_.Pass();
+  scoped_ptr<Texture> texture = std::move(last_texture_);
 
   // If texture is lost, destroy it to ensure that we create a new one below.
   if (texture && texture->IsLost())
@@ -249,7 +251,7 @@ void Buffer::ReleaseTexture(base::WeakPtr<Buffer> buffer,
 
   // Allow buffer to reused texture if it's not lost.
   if (!is_lost)
-    buffer->last_texture_ = texture.Pass();
+    buffer->last_texture_ = std::move(texture);
 
   buffer->Release();
 }

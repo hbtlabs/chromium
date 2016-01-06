@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/invalidation/fake_invalidation_service.h"
@@ -284,12 +285,11 @@ class CloudPolicyTest : public InProcessBrowserTest,
         UserCloudPolicyManagerFactory::GetForBrowserContext(
             browser()->profile());
     ASSERT_TRUE(policy_manager);
-    policy_manager->Connect(
-        g_browser_process->local_state(),
-        g_browser_process->system_request_context(),
-        UserCloudPolicyManager::CreateCloudPolicyClient(
-            connector->device_management_service(),
-            g_browser_process->system_request_context()).Pass());
+    policy_manager->Connect(g_browser_process->local_state(),
+                            g_browser_process->system_request_context(),
+                            UserCloudPolicyManager::CreateCloudPolicyClient(
+                                connector->device_management_service(),
+                                g_browser_process->system_request_context()));
 #endif  // defined(OS_CHROMEOS)
 
     ASSERT_TRUE(policy_manager->core()->client());

@@ -47,12 +47,6 @@ Polymer({
     },
 
     /**
-     * The ID of the category this widget is displaying data for.
-     * See site_settings/constants.js for possible values.
-     */
-    category: Number,
-
-    /**
       * The type of category this widget is displaying data for. Normally
       * either ALLOW or BLOCK, representing which sites are allowed or blocked
       * respectively.
@@ -105,6 +99,10 @@ Polymer({
     },
   },
 
+  observers: [
+    'onCategoryChanged_(prefs.profile.content_settings.exceptions.*, category)',
+  ],
+
   ready: function() {
     CrSettingsPrefs.initialized.then(function() {
       this.initialize_();
@@ -117,10 +115,19 @@ Polymer({
    */
   initialize_: function() {
     this.setUpActionMenu_();
-    this.populateList_();
 
-    if (this.categoryEnabled)
+    if (this.categorySubtype == settings.PermissionValues.ALLOW) {
       this.$.category.opened = true;
+    }
+  },
+
+  /**
+   * Handles changes to the category, either via the underlying exceptions pref
+   * changing or direct manipulation of the |category| variable.
+   * @private
+   */
+  onCategoryChanged_: function() {
+    this.populateList_();
   },
 
   /**
@@ -187,10 +194,21 @@ Polymer({
 
   /**
    * A handler for activating one of the menu action items.
+   * @param {!{model: !{item: !{url: string}},
+   *           target: !{selectedItems: !{textContent: string}}}} event
    * @private
    */
   onActionMenuIronSelect_: function(event) {
-    // TODO(finnur): Implement.
+    var origin = event.model.item.url;
+    var action = event.target.selectedItems[0].textContent;
+    if (action == this.i18n_.resetAction) {
+      this.resetCategoryPermissionForOrigin(origin, this.category);
+    } else {
+      var value = (action == this.i18n_.allowAction) ?
+          settings.PermissionValues.ALLOW :
+          settings.PermissionValues.BLOCK;
+      this.setCategoryPermissionForOrigin(origin, value, this.category);
+    }
   },
 
   /**

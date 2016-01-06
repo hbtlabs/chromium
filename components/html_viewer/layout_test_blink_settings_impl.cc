@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/html_viewer/web_preferences.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 
@@ -95,7 +96,7 @@ void LayoutTestBlinkSettingsImpl::ApplySettingsToWebView(
   blink::WebRuntimeFeatures::enableTestOnlyFeatures(true);
 
 #if defined(OS_WIN)
-  gfx::InitDeviceScaleFactor(1.0f);
+  gfx::SetDefaultDeviceScaleFactor(1.0f);
 #endif
 }
 

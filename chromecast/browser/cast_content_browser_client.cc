@@ -4,14 +4,18 @@
 
 #include "chromecast/browser/cast_content_browser_client.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_browser_context.h"
@@ -159,9 +163,7 @@ net::URLRequestContextGetter* CastContentBrowserClient::CreateRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
   return url_request_context_factory_->CreateMainGetter(
-      browser_context,
-      protocol_handlers,
-      request_interceptors.Pass());
+      browser_context, protocol_handlers, std::move(request_interceptors));
 }
 
 bool CastContentBrowserClient::IsHandledURL(const GURL& url) {

@@ -4,6 +4,8 @@
 
 #include "content/renderer/pepper/plugin_object.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -74,6 +76,8 @@ PP_Var PluginObject::Create(PepperPluginInstanceImpl* instance,
   V8VarConverter var_converter(instance->pp_instance(),
                                V8VarConverter::kAllowObjectVars);
   PepperTryCatchVar try_catch(instance, &var_converter, NULL);
+  // TODO(raymes): Remove this line once crbug.com/560120 is diagnosed.
+  CHECK(!instance->GetMainWorldContext().IsEmpty());
   gin::Handle<PluginObject> object =
       gin::CreateHandle(instance->GetIsolate(),
                         new PluginObject(instance, ppp_class, ppp_class_data));

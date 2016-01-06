@@ -62,6 +62,7 @@ class IntRect;
 class LocalFrame;
 class Node;
 class Page;
+class PaintArtifact;
 class PopupOpeningObserver;
 class WebCompositorAnimationTimeline;
 class WebFrameScheduler;
@@ -90,7 +91,6 @@ public:
     virtual void takeFocus(WebFocusType) = 0;
 
     virtual void focusedNodeChanged(Node*, Node*) = 0;
-    virtual void focusedFrameChanged(LocalFrame*) = 0;
 
     virtual bool hadFormInteraction() const = 0;
 
@@ -145,8 +145,6 @@ public:
     // End methods used by HostWindow.
     virtual Cursor lastSetCursorForTesting() const = 0;
 
-    virtual void scheduleAnimationForFrame(LocalFrame*) { }
-
     virtual void dispatchViewportPropertiesDidChange(const ViewportDescription&) const { }
 
     virtual void contentsSizeChanged(LocalFrame*, const IntSize&) const = 0;
@@ -186,6 +184,10 @@ public:
     // This sets the graphics layer for the LocalFrame's WebWidget, if it has
     // one. Otherwise it sets it for the WebViewImpl.
     virtual void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) = 0;
+
+    // In Slimming Paint v2, called when the paint artifact is updated, to allow
+    // the underlying web widget to composite it.
+    virtual void didPaint(const PaintArtifact&) { }
 
     virtual void attachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) { }
     virtual void detachCompositorAnimationTimeline(WebCompositorAnimationTimeline*, LocalFrame* localRoot) { }

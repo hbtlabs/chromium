@@ -6,6 +6,8 @@
 
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
+#include <stdint.h>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
@@ -222,7 +224,7 @@ scoped_ptr<cc::SurfaceIdAllocator> CompositorImpl::CreateSurfaceIdAllocator() {
   cc::SurfaceManager* manager = GetSurfaceManager();
   DCHECK(manager);
   allocator->RegisterSurfaceIdNamespace(manager);
-  return allocator.Pass();
+  return allocator;
 }
 
 CompositorImpl::CompositorImpl(CompositorClient* client,
@@ -258,6 +260,9 @@ CompositorImpl::~CompositorImpl() {
   root_window_->DetachCompositor();
   // Clean-up any surface references.
   SetSurface(NULL);
+
+  // Explicitly tear down everything cc-related before destroying |this|.
+  host_.reset();
 }
 
 void CompositorImpl::PostComposite(CompositingTrigger trigger) {
@@ -442,10 +447,8 @@ void CompositorImpl::CreateLayerTreeHost() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
-  settings.initial_debug_state.show_fps_counter =
-      command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
-  settings.use_property_trees =
-      command_line->HasSwitch(cc::switches::kEnableCompositorPropertyTrees);
+  if (command_line->HasSwitch(cc::switches::kDisableCompositorPropertyTrees))
+    settings.use_property_trees = false;
   // TODO(enne): Update this this compositor to use the scheduler.
   settings.single_thread_proxy_scheduler = false;
 
@@ -462,6 +465,8 @@ void CompositorImpl::CreateLayerTreeHost() {
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   DCHECK(!host_->visible());
   host_->SetRootLayer(root_layer_);
+  if (surface_id_allocator_)
+    host_->set_surface_id_namespace(surface_id_allocator_->id_namespace());
   host_->SetViewportSize(size_);
   host_->set_has_transparent_background(has_transparent_background_);
   host_->SetDeviceScaleFactor(device_scale_factor_);
@@ -593,9 +598,9 @@ void CompositorImpl::RequestNewOutputSurface() {
 
 #if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
   defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
-  const int64 kGpuChannelTimeoutInSeconds = 40;
+  const int64_t kGpuChannelTimeoutInSeconds = 40;
 #else
-  const int64 kGpuChannelTimeoutInSeconds = 10;
+  const int64_t kGpuChannelTimeoutInSeconds = 10;
 #endif
 
   BrowserGpuChannelHostFactory* factory =
@@ -662,11 +667,12 @@ void CompositorImpl::CreateOutputSurface() {
 
   cc::SurfaceManager* manager = GetSurfaceManager();
   if (manager) {
-    display_client_.reset(new cc::OnscreenDisplayClient(
-        real_output_surface.Pass(), manager, HostSharedBitmapManager::current(),
-        BrowserGpuMemoryBufferManager::current(),
-        host_->settings().renderer_settings,
-        base::ThreadTaskRunnerHandle::Get()));
+    display_client_.reset(
+        new cc::OnscreenDisplayClient(std::move(real_output_surface), manager,
+                                      HostSharedBitmapManager::current(),
+                                      BrowserGpuMemoryBufferManager::current(),
+                                      host_->settings().renderer_settings,
+                                      base::ThreadTaskRunnerHandle::Get()));
     scoped_ptr<cc::SurfaceDisplayOutputSurface> surface_output_surface(
         new cc::SurfaceDisplayOutputSurface(
             manager, surface_id_allocator_.get(), context_provider, nullptr));
@@ -674,9 +680,9 @@ void CompositorImpl::CreateOutputSurface() {
     display_client_->set_surface_output_surface(surface_output_surface.get());
     surface_output_surface->set_display_client(display_client_.get());
     display_client_->display()->Resize(size_);
-    host_->SetOutputSurface(surface_output_surface.Pass());
+    host_->SetOutputSurface(std::move(surface_output_surface));
   } else {
-    host_->SetOutputSurface(real_output_surface.Pass());
+    host_->SetOutputSurface(std::move(real_output_surface));
   }
 }
 
@@ -766,7 +772,7 @@ void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(
     scoped_ptr<cc::CopyOutputRequest> request) {
-  root_layer_->RequestCopyOfOutput(request.Pass());
+  root_layer_->RequestCopyOfOutput(std::move(request));
 }
 
 void CompositorImpl::OnVSync(base::TimeTicks frame_time,

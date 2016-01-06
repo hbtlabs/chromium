@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/frame/VisualViewport.h"
 
 #include "core/frame/FrameHost.h"
@@ -210,7 +209,7 @@ void VisualViewport::setScaleAndLocation(float scale, const FloatPoint& location
 
     if (clampedOffset != m_offset) {
         m_offset = clampedOffset;
-        scrollAnimator()->setCurrentPosition(m_offset);
+        scrollAnimator().setCurrentPosition(m_offset);
 
         // SVG runs with accelerated compositing disabled so no ScrollingCoordinator.
         if (ScrollingCoordinator* coordinator = frameHost().page().scrollingCoordinator())
@@ -253,14 +252,6 @@ bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta, const FloatPoi
     // First try to use the anchor's delta to scroll the FrameView.
     FloatSize anchorDeltaUnusedByScroll = anchorDelta;
 
-    if (!frameHost().settings().invertViewportScrollOrder()) {
-        FrameView* view = mainFrame()->view();
-        DoublePoint oldPosition = view->scrollPositionDouble();
-        view->scrollBy(DoubleSize(anchorDelta.width(), anchorDelta.height()), UserScroll);
-        DoublePoint newPosition = view->scrollPositionDouble();
-        anchorDeltaUnusedByScroll -= toFloatSize(newPosition - oldPosition);
-    }
-
     // Manually bubble any remaining anchor delta up to the visual viewport.
     FloatPoint newLocation(location() + anchorDeltaUnusedByScroll);
     setScaleAndLocation(newPageScale, newLocation);
@@ -273,16 +264,18 @@ bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta, const FloatPoi
 //
 // *rootTransformLayer
 //  +- *innerViewportContainerLayer (fixed pos container)
-//  |   +- *overscrollElasticityLayer
-//  |       +- *pageScaleLayer
-//  |           +- *innerViewportScrollLayer
-//  |               +-- overflowControlsHostLayer (root layer)
-//  |                   +-- outerViewportContainerLayer (fixed pos container) [frame container layer in PaintLayerCompositor]
-//  |                   |   +-- outerViewportScrollLayer [frame scroll layer in PaintLayerCompositor]
-//  |                   |       +-- content layers ...
-//  +- horizontalScrollbarLayer
-//  +- verticalScrollbarLayer
-//  +- scroll corner (non-overlay only)
+//     +- *overscrollElasticityLayer
+//     |   +- *pageScaleLayer
+//     |       +- *innerViewportScrollLayer
+//     |           +-- overflowControlsHostLayer (root layer) [ owned by PaintLayerCompositor ]
+//     |               +-- outerViewportContainerLayer (fixed pos container) [frame container layer in PaintLayerCompositor]
+//     |               |   +-- outerViewportScrollLayer [frame scroll layer in PaintLayerCompositor]
+//     |               |       +-- content layers ...
+//     +- *PageOverlay for InspectorOverlay
+//     +- *PageOverlay for ColorOverlay
+//     +- horizontalScrollbarLayer [ owned by PaintLayerCompositor ]
+//     +- verticalScrollbarLayer [ owned by PaintLayerCompositor ]
+//     +- scroll corner (non-overlay only) [ owned by PaintLayerCompositor ]
 //
 void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot, GraphicsLayerFactory* graphicsLayerFactory)
 {
@@ -364,10 +357,10 @@ void VisualViewport::setupScrollbar(WebScrollbar::Orientation orientation)
     OwnPtr<WebScrollbarLayer>& webScrollbarLayer = isHorizontal ?
         m_webOverlayScrollbarHorizontal : m_webOverlayScrollbarVertical;
 
-    ScrollbarTheme* theme = ScrollbarThemeOverlay::mobileTheme();
-    int thumbThickness = theme->thumbThickness(0);
-    int scrollbarThickness = theme->scrollbarThickness(RegularScrollbar);
-    int scrollbarMargin = theme->scrollbarMargin();
+    ScrollbarThemeOverlay& theme = ScrollbarThemeOverlay::mobileTheme();
+    int thumbThickness = theme.thumbThickness();
+    int scrollbarThickness = theme.scrollbarThickness(RegularScrollbar);
+    int scrollbarMargin = theme.scrollbarMargin();
 
     if (!webScrollbarLayer) {
         ScrollingCoordinator* coordinator = frameHost().page().scrollingCoordinator();
@@ -421,6 +414,11 @@ void VisualViewport::registerLayersWithTreeView(WebLayerTreeView* layerTreeView)
 bool VisualViewport::visualViewportSuppliesScrollbars() const
 {
     return frameHost().settings().viewportMetaEnabled();
+}
+
+bool VisualViewport::scrollAnimatorEnabled() const
+{
+    return frameHost().settings().scrollAnimatorEnabled();
 }
 
 void VisualViewport::clearLayersForTreeView(WebLayerTreeView* layerTreeView) const
@@ -585,6 +583,11 @@ void VisualViewport::paintContents(const GraphicsLayer*, GraphicsContext&, Graph
 LocalFrame* VisualViewport::mainFrame() const
 {
     return frameHost().page().mainFrame() && frameHost().page().mainFrame()->isLocalFrame() ? frameHost().page().deprecatedLocalMainFrame() : 0;
+}
+
+Widget* VisualViewport::widget()
+{
+    return mainFrame()->view();
 }
 
 FloatPoint VisualViewport::clampOffsetToBoundaries(const FloatPoint& offset)

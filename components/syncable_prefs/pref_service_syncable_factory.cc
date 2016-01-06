@@ -14,8 +14,8 @@
 #if defined(ENABLE_CONFIGURATION_POLICY)
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
-#include "components/policy/core/common/policy_service.h"
-#include "components/policy/core/common/policy_types.h"
+#include "components/policy/core/common/policy_service.h"  // nogncheck
+#include "components/policy/core/common/policy_types.h"  // nogncheck
 #endif
 
 namespace syncable_prefs {
@@ -67,7 +67,7 @@ scoped_ptr<PrefServiceSyncable> PrefServiceSyncableFactory::CreateSyncable(
           pref_model_associator_client_,
           read_error_callback_,
           async_));
-  return pref_service.Pass();
+  return pref_service;
 }
 
 }  // namespace syncable_prefs

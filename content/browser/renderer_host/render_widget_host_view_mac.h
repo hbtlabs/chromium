@@ -7,6 +7,8 @@
 
 #import <Cocoa/Cocoa.h>
 #include <IOSurface/IOSurface.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <list>
 #include <map>
 #include <set>
@@ -15,6 +17,7 @@
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -302,7 +305,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       const std::vector<gfx::Rect>& character_bounds) override;
   void RenderProcessGone(base::TerminationStatus status,
                          int error_code) override;
-  void RenderWidgetHostGone() override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override;
   void SelectionChanged(const base::string16& text,
@@ -322,7 +324,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void BeginFrameSubscription(
       scoped_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
-  void OnSwapCompositorFrame(uint32 output_surface_id,
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
                              scoped_ptr<cc::CompositorFrame> frame) override;
   void ClearCompositorFrame() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
@@ -348,6 +350,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   uint32_t GetSurfaceIdNamespace() override;
   uint32_t SurfaceIdNamespaceAtPoint(const gfx::Point& point,
                                      gfx::Point* transformed_point) override;
+  // Returns true when we can do SurfaceHitTesting for the event type.
+  bool ShouldRouteEvent(const blink::WebInputEvent& event) const;
   void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
   void TransformPointToLocalCoordSpace(const gfx::Point& point,

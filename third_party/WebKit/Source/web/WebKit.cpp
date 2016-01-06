@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "public/web/WebKit.h"
 
 #include "bindings/core/v8/ScriptStreamerThread.h"
@@ -47,6 +46,7 @@
 #include "platform/LayoutTestSupport.h"
 #include "platform/Logging.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/fonts/FontCacheMemoryDumpProvider.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/heap/GCTaskRunner.h"
 #include "platform/heap/Heap.h"
@@ -124,6 +124,7 @@ void initialize(Platform* platform)
 
         // Register web cache dump provider for tracing.
         platform->registerMemoryDumpProvider(WebCacheMemoryDumpProvider::instance(), "MemoryCache");
+        platform->registerMemoryDumpProvider(FontCacheMemoryDumpProvider::instance(), "FontCaches");
     }
 }
 
@@ -195,9 +196,25 @@ void initializeWithoutV8(Platform* platform)
 
 void shutdown()
 {
+#if defined(LEAK_SANITIZER)
+    // If LSan is about to perform leak detection, release all the registered
+    // static Persistent<> root references to global caches that Blink keeps,
+    // followed by GCs to clear out all they referred to. A full v8 GC cycle
+    // is needed to flush out all garbage.
+    //
+    // This is not needed for caches over non-Oilpan objects, as they're
+    // not scanned by LSan due to being held in non-global storage
+    // ("static" references inside functions/methods.)
+    if (ThreadState* threadState = ThreadState::current()) {
+        threadState->releaseStaticPersistentNodes();
+        Heap::collectAllGarbage();
+    }
+#endif
+
     // currentThread() is null if we are running on a thread without a message loop.
     if (Platform::current()->currentThread()) {
         Platform::current()->unregisterMemoryDumpProvider(WebCacheMemoryDumpProvider::instance());
+        Platform::current()->unregisterMemoryDumpProvider(FontCacheMemoryDumpProvider::instance());
 
         // We don't need to (cannot) remove s_endOfTaskRunner from the current
         // message loop, because the message loop is already destructed before

@@ -4,7 +4,10 @@
 
 #include "ui/base/resource/resource_bundle.h"
 
+#include <stdint.h>
+
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "base/big_endian.h"
@@ -12,6 +15,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
@@ -177,7 +181,7 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     const base::MemoryMappedFile::Region& region) {
   InitSharedInstance(NULL);
   scoped_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
-  if (!data_pack->LoadFromFileRegion(pak_file.Pass(), region)) {
+  if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     NOTREACHED() << "failed to load pak file";
     return;
   }
@@ -243,8 +247,9 @@ void ResourceBundle::AddOptionalMaterialDesignDataPackFromPath(
 
 void ResourceBundle::AddDataPackFromFile(base::File file,
                                          ScaleFactor scale_factor) {
-  AddDataPackFromFileRegion(
-      file.Pass(), base::MemoryMappedFile::Region::kWholeFile, scale_factor);
+  AddDataPackFromFileRegion(std::move(file),
+                            base::MemoryMappedFile::Region::kWholeFile,
+                            scale_factor);
 }
 
 void ResourceBundle::AddDataPackFromFileRegion(
@@ -253,7 +258,7 @@ void ResourceBundle::AddDataPackFromFileRegion(
     ScaleFactor scale_factor) {
   scoped_ptr<DataPack> data_pack(
       new DataPack(scale_factor));
-  if (data_pack->LoadFromFileRegion(file.Pass(), region)) {
+  if (data_pack->LoadFromFileRegion(std::move(file), region)) {
     AddDataPack(data_pack.release());
   } else {
     LOG(ERROR) << "Failed to load data pack from file."
@@ -465,7 +470,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
   if (scale_factor != ui::SCALE_FACTOR_100P) {
     for (size_t i = 0; i < data_packs_.size(); i++) {
       if (data_packs_[i]->GetScaleFactor() == scale_factor &&
-          data_packs_[i]->GetStringPiece(static_cast<uint16>(resource_id),
+          data_packs_[i]->GetStringPiece(static_cast<uint16_t>(resource_id),
                                          &data))
         return data;
     }
@@ -476,7 +481,7 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_200P ||
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_300P ||
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_NONE) &&
-        data_packs_[i]->GetStringPiece(static_cast<uint16>(resource_id),
+        data_packs_[i]->GetStringPiece(static_cast<uint16_t>(resource_id),
                                        &data))
       return data;
   }
@@ -506,7 +511,7 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   }
 
   base::StringPiece data;
-  if (!locale_resources_data_->GetStringPiece(static_cast<uint16>(message_id),
+  if (!locale_resources_data_->GetStringPiece(static_cast<uint16_t>(message_id),
                                               &data)) {
     // Fall back on the main data pack (shouldn't be any strings here except in
     // unittests).
@@ -651,11 +656,6 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
     supported_scale_factors.push_back(SCALE_FACTOR_100P);
 #endif
   ui::SetSupportedScaleFactors(supported_scale_factors);
-#if defined(OS_WIN)
-  // Must be called _after_ supported scale factors are set since it
-  // uses them.
-  gfx::InitDeviceScaleFactor(gfx::GetDPIScale());
-#endif
 }
 
 void ResourceBundle::FreeImages() {
@@ -825,7 +825,7 @@ bool ResourceBundle::LoadBitmap(const ResourceHandle& data_handle,
                                 bool* fell_back_to_1x) const {
   DCHECK(fell_back_to_1x);
   scoped_refptr<base::RefCountedMemory> memory(
-      data_handle.GetStaticMemory(static_cast<uint16>(resource_id)));
+      data_handle.GetStaticMemory(static_cast<uint16_t>(resource_id)));
   if (!memory.get())
     return false;
 
@@ -896,15 +896,16 @@ bool ResourceBundle::PNGContainsFallbackMarker(const unsigned char* buf,
   for (;;) {
     if (size - pos < kPngChunkMetadataSize)
       break;
-    uint32 length = 0;
+    uint32_t length = 0;
     base::ReadBigEndian(reinterpret_cast<const char*>(buf + pos), &length);
     if (size - pos - kPngChunkMetadataSize < length)
       break;
-    if (length == 0 && memcmp(buf + pos + sizeof(uint32), kPngScaleChunkType,
-                              arraysize(kPngScaleChunkType)) == 0) {
+    if (length == 0 &&
+        memcmp(buf + pos + sizeof(uint32_t), kPngScaleChunkType,
+               arraysize(kPngScaleChunkType)) == 0) {
       return true;
     }
-    if (memcmp(buf + pos + sizeof(uint32), kPngDataChunkType,
+    if (memcmp(buf + pos + sizeof(uint32_t), kPngDataChunkType,
                arraysize(kPngDataChunkType)) == 0) {
       // Stop looking for custom chunks, any custom chunks should be before an
       // IDAT chunk.

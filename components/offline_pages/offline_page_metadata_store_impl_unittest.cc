@@ -4,13 +4,15 @@
 
 #include "components/offline_pages/offline_page_metadata_store_impl.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/test_simple_task_runner.h"
+#include "base/thread_task_runner_handle.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/proto/offline_pages.pb.h"
@@ -23,10 +25,10 @@ namespace offline_pages {
 namespace {
 
 const char kTestURL[] = "https://example.com";
-const int64 kTestBookmarkId = 1234LL;
+const int64_t kTestBookmarkId = 1234LL;
 const base::FilePath::CharType kFilePath[] =
     FILE_PATH_LITERAL("/offline_pages/example_com.mhtml");
-int64 kFileSize = 234567;
+int64_t kFileSize = 234567;
 
 class OfflinePageMetadataStoreImplTest : public testing::Test {
  public:
@@ -36,7 +38,10 @@ class OfflinePageMetadataStoreImplTest : public testing::Test {
   OfflinePageMetadataStoreImplTest();
   ~OfflinePageMetadataStoreImplTest() override;
 
-  void TearDown() override { message_loop_.RunUntilIdle(); }
+  void TearDown() override {
+    // Wait for all the pieces of the store to delete itself properly.
+    PumpLoop();
+  }
 
   scoped_ptr<OfflinePageMetadataStoreImpl> BuildStore();
   void PumpLoop();
@@ -53,12 +58,15 @@ class OfflinePageMetadataStoreImplTest : public testing::Test {
   std::vector<OfflinePageItem> offline_pages_;
 
   base::ScopedTempDir temp_directory_;
-  base::MessageLoop message_loop_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  base::ThreadTaskRunnerHandle task_runner_handle_;
 };
 
 OfflinePageMetadataStoreImplTest::OfflinePageMetadataStoreImplTest()
-    : last_called_callback_(NONE), last_status_(STATUS_NONE) {
+    : last_called_callback_(NONE),
+      last_status_(STATUS_NONE),
+      task_runner_(new base::TestSimpleTaskRunner),
+      task_runner_handle_(task_runner_) {
   EXPECT_TRUE(temp_directory_.CreateUniqueTempDir());
 }
 
@@ -66,18 +74,18 @@ OfflinePageMetadataStoreImplTest::~OfflinePageMetadataStoreImplTest() {
 }
 
 void OfflinePageMetadataStoreImplTest::PumpLoop() {
-  base::RunLoop().RunUntilIdle();
+  task_runner_->RunUntilIdle();
 }
 
 scoped_ptr<OfflinePageMetadataStoreImpl>
 OfflinePageMetadataStoreImplTest::BuildStore() {
   scoped_ptr<OfflinePageMetadataStoreImpl> store(
-      new OfflinePageMetadataStoreImpl(message_loop_.task_runner(),
+      new OfflinePageMetadataStoreImpl(base::ThreadTaskRunnerHandle::Get(),
                                        temp_directory_.path()));
   store->Load(base::Bind(&OfflinePageMetadataStoreImplTest::LoadCallback,
                          base::Unretained(this)));
   PumpLoop();
-  return store.Pass();
+  return store;
 }
 
 void OfflinePageMetadataStoreImplTest::LoadCallback(
@@ -130,7 +138,7 @@ TEST_F(OfflinePageMetadataStoreImplTest, AddOfflinePage) {
 
   // Close the store first to ensure file lock is removed.
   store.reset();
-  store = BuildStore().Pass();
+  store = BuildStore();
   PumpLoop();
 
   EXPECT_EQ(LOAD, last_called_callback_);
@@ -172,7 +180,7 @@ TEST_F(OfflinePageMetadataStoreImplTest, RemoveOfflinePage) {
   EXPECT_EQ(1U, offline_pages_.size());
 
   // Remove the offline page.
-  std::vector<int64> ids_to_remove;
+  std::vector<int64_t> ids_to_remove;
   ids_to_remove.push_back(offline_page.bookmark_id);
   store->RemoveOfflinePages(
       ids_to_remove,
@@ -195,7 +203,7 @@ TEST_F(OfflinePageMetadataStoreImplTest, RemoveOfflinePage) {
 
   // Close and reload the store.
   store.reset();
-  store = BuildStore().Pass();
+  store = BuildStore();
   EXPECT_EQ(LOAD, last_called_callback_);
   EXPECT_EQ(STATUS_TRUE, last_status_);
   EXPECT_EQ(0U, offline_pages_.size());
@@ -243,7 +251,7 @@ TEST_F(OfflinePageMetadataStoreImplTest, AddRemoveMultipleOfflinePages) {
   EXPECT_EQ(2U, offline_pages_.size());
 
   // Remove the offline page.
-  std::vector<int64> ids_to_remove;
+  std::vector<int64_t> ids_to_remove;
   ids_to_remove.push_back(offline_page_1.bookmark_id);
   store->RemoveOfflinePages(
       ids_to_remove,
@@ -257,7 +265,7 @@ TEST_F(OfflinePageMetadataStoreImplTest, AddRemoveMultipleOfflinePages) {
 
   // Close and reload the store.
   store.reset();
-  store = BuildStore().Pass();
+  store = BuildStore();
   store->Load(base::Bind(&OfflinePageMetadataStoreImplTest::LoadCallback,
                          base::Unretained(this)));
   PumpLoop();

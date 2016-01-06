@@ -4,8 +4,6 @@
 
 #include "net/quic/quic_flags.h"
 
-bool FLAGS_quic_allow_oversized_packets_for_test = false;
-
 // When true, the use time based loss detection instead of nack.
 bool FLAGS_quic_use_time_loss_detection = false;
 
@@ -27,7 +25,7 @@ bool FLAGS_quic_allow_bbr = false;
 
 // Time period for which a given connection_id should live in the time-wait
 // state.
-int64 FLAGS_quic_time_wait_list_seconds = 200;
+int64_t FLAGS_quic_time_wait_list_seconds = 200;
 
 // Currently, this number is quite conservative.  The max QPS limit for an
 // individual server silo is currently set to 1000 qps, though the actual max
@@ -38,7 +36,7 @@ int64 FLAGS_quic_time_wait_list_seconds = 200;
 //
 // Maximum number of connections on the time-wait list. A negative value implies
 // no configured limit.
-int64 FLAGS_quic_time_wait_list_max_connections = 600000;
+int64_t FLAGS_quic_time_wait_list_max_connections = 600000;
 
 // Enables server-side support for QUIC stateless rejects.
 bool FLAGS_enable_quic_stateless_reject_support = true;
@@ -50,9 +48,6 @@ bool FLAGS_quic_ack_decimation = true;
 // If true, flow controller may grow the receive window size if necessary.
 bool FLAGS_quic_auto_tune_receive_window = true;
 
-// If true, record received connection options to TransportConnectionStats.
-bool FLAGS_quic_connection_options_to_transport_stats = true;
-
 // Limits QUIC's max CWND to 200 packets.
 bool FLAGS_quic_limit_max_cwnd = true;
 
@@ -60,14 +55,6 @@ bool FLAGS_quic_limit_max_cwnd = true;
 // disabling 0-rtt handshakes.
 // TODO(rtenneti): Enable this flag after CryptoServerTest's are fixed.
 bool FLAGS_quic_require_handshake_confirmation = false;
-
-// If true, after a server silo receives a packet from a migrated QUIC
-// client, a GO_AWAY frame is sent to the client.
-bool FLAGS_send_goaway_after_client_migration = true;
-
-// If true, use an interval set as the internal representation of a packet queue
-// instead of a set.
-bool FLAGS_quic_packet_queue_use_interval_set = true;
 
 // If true, Cubic's epoch is shifted when the sender is application-limited.
 bool FLAGS_shift_quic_cubic_epoch_when_app_limited = true;
@@ -85,13 +72,6 @@ bool FLAGS_quic_disable_pacing = false;
 // TcpLossAlgorithm or TimeLossAlgorithm.
 bool FLAGS_quic_general_loss_algorithm = true;
 
-// Invoke the QuicAckListener directly, instead of going through the AckNotifier
-// and AckNotifierManager.
-bool FLAGS_quic_no_ack_notifier = true;
-
-// If true, use the unrolled prefetch path in QuicPacketCreator::CopyToBuffer.
-bool FLAGS_quic_packet_creator_prefetch = false;
-
 // If true, only migrate QUIC connections when client address changes are
 // considered to be caused by NATs.
 bool FLAGS_quic_disable_non_nat_address_migration = true;
@@ -105,7 +85,7 @@ bool FLAGS_quic_use_new_idle_timeout = true;
 bool FLAGS_quic_use_stream_sequencer_buffer = true;
 
 // If true, don't send QUIC packets if the send alarm is set.
-bool FLAGS_quic_respect_send_alarm = true;
+bool FLAGS_quic_respect_send_alarm2 = true;
 
 // If ture, sets callback pointer to nullptr after calling Cancel() in
 // QuicCryptoServerStream::CancelOutstandingCallbacks.
@@ -118,3 +98,41 @@ bool FLAGS_quic_track_single_retransmission = true;
 // If true, allow each quic stream to write 16k blocks rather than doing a round
 // robin of one packet per session when ack clocked or paced.
 bool FLAGS_quic_batch_writes = true;
+
+// If true, QUIC sessions will write block streams that attempt to write
+// unencrypted data.
+bool FLAGS_quic_block_unencrypted_writes = true;
+
+// If true, Close the connection instead of writing unencrypted stream data.
+bool FLAGS_quic_never_write_unencrypted_data = true;
+
+// If true, reject any incoming QUIC which does not have the FIXD tag.
+bool FLAGS_quic_require_fix = true;
+
+// If true, QUIC supports sending trailers from Server to Client.
+bool FLAGS_quic_supports_trailers = true;
+
+// Fixes a bug in QUIC_VERSION_26 by always using the primary config when
+// getting the proof of possession.
+bool FLAGS_quic_use_primary_config_for_proof = true;
+
+// Enable counters for incoming/outgoing streams which are used as condition
+// check while creating a new stream.
+bool FLAGS_quic_distinguish_incoming_outgoing_streams = true;
+
+// If true, QUIC servers will attempt to validate a client's source
+// address token using the primary config, even if no server config id
+// is present in the client hello.
+bool FLAGS_quic_validate_stk_without_scid = true;
+
+// If true, use the new write blocked list for QUIC.
+bool FLAGS_quic_new_blocked_list = true;
+
+// If true, use inplace encryption for QUIC.
+bool FLAGS_quic_inplace_encryption = true;
+
+// If true, QUIC will support RFC 7539 variants of ChaCha20 Poly1305.
+bool FLAGS_quic_use_rfc7539 = true;
+
+// If true, drop not awaited QUIC packets before decrypting them.
+bool FLAGS_quic_drop_non_awaited_packets = false;

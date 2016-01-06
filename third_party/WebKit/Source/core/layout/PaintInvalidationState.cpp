@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/layout/PaintInvalidationState.h"
 
 #include "core/layout/LayoutInline.h"
@@ -31,7 +30,7 @@ PaintInvalidationState::PaintInvalidationState(const LayoutView& layoutView, Vec
         }
         if (ownerPaintInvalidationState && ownerPaintInvalidationState->m_forcedSubtreeInvalidationWithinContainer)
             m_forcedSubtreeInvalidationWithinContainer = true;
-        FloatPoint point = layoutView.localToContainerPoint(FloatPoint(), &m_paintInvalidationContainer, TraverseDocumentBoundaries);
+        FloatPoint point = layoutView.localToAncestorPoint(FloatPoint(), &m_paintInvalidationContainer, TraverseDocumentBoundaries);
         m_paintOffset = LayoutSize(point.x(), point.y());
     }
     m_clipRect = layoutView.viewRect();
@@ -63,7 +62,7 @@ PaintInvalidationState::PaintInvalidationState(PaintInvalidationState& next, Lay
     } else {
         if (m_cachedOffsetsEnabled) {
             if (fixed) {
-                FloatPoint fixedOffset = layoutObject.localToContainerPoint(FloatPoint(), &m_paintInvalidationContainer, TraverseDocumentBoundaries);
+                FloatPoint fixedOffset = layoutObject.localToAncestorPoint(FloatPoint(), &m_paintInvalidationContainer, TraverseDocumentBoundaries);
                 m_paintOffset = LayoutSize(fixedOffset.x(), fixedOffset.y());
             } else {
                 LayoutSize offset = layoutObject.isBox() && !layoutObject.isTableRow() ? toLayoutBox(layoutObject).locationOffset() : LayoutSize();
@@ -88,7 +87,7 @@ PaintInvalidationState::PaintInvalidationState(PaintInvalidationState& next, Lay
 
     if (m_cachedOffsetsEnabled && layoutObject.isSVGRoot()) {
         const LayoutSVGRoot& svgRoot = toLayoutSVGRoot(layoutObject);
-        m_svgTransform = adoptPtr(new AffineTransform(svgRoot.localToBorderBoxTransform()));
+        m_svgTransform = AffineTransform(svgRoot.localToBorderBoxTransform());
         if (svgRoot.shouldApplyViewportClip())
             addClipRectRelativeToPaintOffset(LayoutSize(svgRoot.pixelSnappedSize()));
     }
@@ -112,7 +111,7 @@ PaintInvalidationState::PaintInvalidationState(PaintInvalidationState& next, con
     ASSERT(layoutObject != m_paintInvalidationContainer);
 
     if (m_cachedOffsetsEnabled)
-        m_svgTransform = adoptPtr(new AffineTransform(next.svgTransform() * layoutObject.localToParentTransform()));
+        m_svgTransform = AffineTransform(next.svgTransform() * layoutObject.localToParentTransform());
 }
 
 void PaintInvalidationState::addClipRectRelativeToPaintOffset(const LayoutSize& clipSize)

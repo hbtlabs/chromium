@@ -26,7 +26,6 @@
 * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "config.h"
 #include "modules/accessibility/AXLayoutObject.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -168,7 +167,7 @@ static inline bool lastChildHasContinuation(LayoutObject* layoutObject)
 static LayoutBoxModelObject* nextContinuation(LayoutObject* layoutObject)
 {
     ASSERT(layoutObject);
-    if (layoutObject->isLayoutInline() && !layoutObject->isReplaced())
+    if (layoutObject->isLayoutInline() && !layoutObject->isAtomicInlineLevel())
         return toLayoutInline(layoutObject)->continuation();
     if (layoutObject->isLayoutBlock())
         return toLayoutBlock(layoutObject)->inlineElementContinuation();
@@ -216,24 +215,11 @@ LayoutRect AXLayoutObject::elementRect() const
     return m_cachedElementRect;
 }
 
-void AXLayoutObject::setLayoutObject(LayoutObject* layoutObject)
-{
-    m_layoutObject = layoutObject;
-    setNode(layoutObject->node());
-}
-
 LayoutBoxModelObject* AXLayoutObject::layoutBoxModelObject() const
 {
     if (!m_layoutObject || !m_layoutObject->isBoxModelObject())
         return 0;
     return toLayoutBoxModelObject(m_layoutObject);
-}
-
-Document* AXLayoutObject::topDocument() const
-{
-    if (!document())
-        return 0;
-    return &document()->topDocument();
 }
 
 bool AXLayoutObject::shouldNotifyActiveDescendant() const
@@ -275,14 +261,8 @@ static bool isImageOrAltText(LayoutBoxModelObject* box, Node* node)
     return false;
 }
 
-AccessibilityRole AXLayoutObject::determineAccessibilityRole()
+AccessibilityRole AXLayoutObject::nativeAccessibilityRoleIgnoringAria() const
 {
-    if (!m_layoutObject)
-        return UnknownRole;
-
-    if ((m_ariaRole = determineAriaRoleAttribute()) != UnknownRole)
-        return m_ariaRole;
-
     Node* node = m_layoutObject->node();
     LayoutBoxModelObject* cssBox = layoutBoxModelObject();
 
@@ -322,7 +302,18 @@ AccessibilityRole AXLayoutObject::determineAccessibilityRole()
     if (m_layoutObject->isHR())
         return SplitterRole;
 
-    AccessibilityRole role = AXNodeObject::determineAccessibilityRoleUtil();
+    return AXNodeObject::nativeAccessibilityRoleIgnoringAria();
+}
+
+AccessibilityRole AXLayoutObject::determineAccessibilityRole()
+{
+    if (!m_layoutObject)
+        return UnknownRole;
+
+    if ((m_ariaRole = determineAriaRoleAttribute()) != UnknownRole)
+        return m_ariaRole;
+
+    AccessibilityRole role = nativeAccessibilityRoleIgnoringAria();
     if (role != UnknownRole)
         return role;
 
@@ -365,7 +356,7 @@ bool AXLayoutObject::isAttachment() const
         return false;
     // Widgets are the replaced elements that we represent to AX as attachments
     bool isLayoutPart = layoutObject->isLayoutPart();
-    ASSERT(!isLayoutPart || (layoutObject->isReplaced() && !isImage()));
+    ASSERT(!isLayoutPart || (layoutObject->isAtomicInlineLevel() && !isImage()));
     return isLayoutPart;
 }
 
@@ -1436,7 +1427,7 @@ void AXLayoutObject::markCachedElementRectDirty() const
 
     // Marks children recursively, if this element changed.
     m_cachedElementRectDirty = true;
-    for (AXObject* child = rawFirstChild(); child; child = child->rawFirstSibling())
+    for (AXObject* child = rawFirstChild(); child; child = child->rawNextSibling())
         child->markCachedElementRectDirty();
 }
 
@@ -1588,7 +1579,7 @@ AXObject* AXLayoutObject::rawFirstChild() const
     return axObjectCache().getOrCreate(firstChild);
 }
 
-AXObject* AXLayoutObject::rawFirstSibling() const
+AXObject* AXLayoutObject::rawNextSibling() const
 {
     if (!m_layoutObject)
         return 0;
@@ -1647,9 +1638,11 @@ void AXLayoutObject::addChildren()
     HeapVector<Member<AXObject>> ownedChildren;
     computeAriaOwnsChildren(ownedChildren);
 
-    for (AXObject* obj = rawFirstChild(); obj; obj = obj->rawFirstSibling()) {
-        if (!axObjectCache().isAriaOwned(obj))
+    for (AXObject* obj = rawFirstChild(); obj; obj = obj->rawNextSibling()) {
+        if (!axObjectCache().isAriaOwned(obj)) {
+            obj->setParent(this);
             addChild(obj);
+        }
     }
 
     addHiddenChildren();
@@ -2174,6 +2167,10 @@ void AXLayoutObject::lineBreaks(Vector<int>& lineBreaks) const
         lineBreaks.append(indexForVisiblePosition(visiblePos));
         prevVisiblePos = visiblePos;
         visiblePos = nextLinePosition(visiblePos, 0, HasEditableAXRole);
+
+        // Make sure we always make forward progress.
+        if (visiblePos.deepEquivalent().compareTo(prevVisiblePos.deepEquivalent()) < 0)
+            break;
     }
 }
 
@@ -2201,18 +2198,6 @@ AXObject* AXLayoutObject::treeAncestorDisallowingChild() const
             return treeAncestor;
     }
     return 0;
-}
-
-bool AXLayoutObject::nodeIsTextControl(const Node* node) const
-{
-    if (!node)
-        return false;
-
-    const AXObject* axObjectForNode = axObjectCache().getOrCreate(const_cast<Node*>(node));
-    if (!axObjectForNode)
-        return false;
-
-    return axObjectForNode->isTextControl();
 }
 
 bool AXLayoutObject::isTabItemSelected() const

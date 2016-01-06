@@ -4,6 +4,8 @@
 
 #include "components/mus/ws/focus_controller.h"
 
+#include "base/macros.h"
+#include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/ws/focus_controller_delegate.h"
 #include "components/mus/ws/focus_controller_observer.h"
 #include "components/mus/ws/server_window.h"
@@ -14,11 +16,44 @@ namespace ws {
 
 namespace {
 
-ServerWindow* GetLeftmostNode(ServerWindow* window) {
+ServerWindow* GetDeepestFirstDescendant(ServerWindow* window) {
   while (!window->children().empty())
     window = window->children()[0];
   return window;
 }
+
+// This can be used to iterate over each node in a rooted tree for the purpose
+// of shifting focus/activation.
+class WindowTreeIterator {
+ public:
+  explicit WindowTreeIterator(ServerWindow* root) : root_(root) {}
+  ~WindowTreeIterator() {}
+
+  ServerWindow* GetNext(ServerWindow* window) const {
+    if (window == root_ || window == nullptr)
+      return GetDeepestFirstDescendant(root_);
+
+    // Return the next sibling.
+    ServerWindow* parent = window->parent();
+    if (parent) {
+      const ServerWindow::Windows& siblings = parent->children();
+      ServerWindow::Windows::const_iterator iter =
+          std::find(siblings.begin(), siblings.end(), window);
+      DCHECK(iter != siblings.end());
+      ++iter;
+      if (iter != siblings.end())
+        return GetDeepestFirstDescendant(*iter);
+    }
+
+    // All children and siblings have been explored. Next is the parent.
+    return parent;
+  }
+
+ private:
+  ServerWindow* root_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowTreeIterator);
+};
 
 }  // namespace
 
@@ -46,12 +81,28 @@ ServerWindow* FocusController::GetFocusedWindow() {
 }
 
 void FocusController::ActivateNextWindow() {
-  ServerWindow* current = active_window_;
-  if (!current)
-    current = GetLeftmostNode(root_);
-  ServerWindow* activate = GetNextActivatableWindow(current);
+  WindowTreeIterator iter(root_);
+  ServerWindow* activate = active_window_;
+  do {
+    activate = iter.GetNext(activate);
+  } while (activate != active_window_ && !CanBeActivated(activate));
   SetActiveWindow(activate);
-  // TODO(sad): This should move focus to a descendant window of |activate|.
+
+  if (active_window_) {
+    // Do not shift focus if the focused window already lives in the active
+    // window.
+    if (focused_window_ && active_window_->Contains(focused_window_))
+      return;
+    // Focus the first focusable window in the tree.
+    WindowTreeIterator iter(active_window_);
+    ServerWindow* focus = nullptr;
+    do {
+      focus = iter.GetNext(focus);
+    } while (focus != active_window_ && !CanBeFocused(focus));
+    SetFocusedWindow(focus);
+  } else {
+    SetFocusedWindow(nullptr);
+  }
 }
 
 void FocusController::AddObserver(FocusControllerObserver* observer) {
@@ -64,6 +115,8 @@ void FocusController::RemoveObserver(FocusControllerObserver* observer) {
 
 void FocusController::SetActiveWindow(ServerWindow* window) {
   DCHECK(!window || CanBeActivated(window));
+  if (active_window_ == window)
+    return;
   ServerWindow* old_active = active_window_;
   active_window_ = window;
   if (old_active != active_window_) {
@@ -87,48 +140,30 @@ bool FocusController::CanBeFocused(ServerWindow* window) const {
 
 bool FocusController::CanBeActivated(ServerWindow* window) const {
   DCHECK(window);
+  // A detached window cannot be activated.
+  if (!root_->Contains(window))
+    return false;
+
   // The parent window must be allowed to have active children.
   if (!delegate_->CanHaveActiveChildren(window->parent()))
     return false;
 
-  // TODO(sad): Implement this.
+  // The window must be drawn, or if it's not drawn, it must be minimized.
+  if (!window->IsDrawn()) {
+    bool is_minimized = false;
+    const ServerWindow::Properties& props = window->properties();
+    if (props.count(mojom::WindowManager::kShowState_Property)) {
+      is_minimized =
+          props.find(mojom::WindowManager::kShowState_Property)->second[0] ==
+          mus::mojom::SHOW_STATE_MINIMIZED;
+    }
+    if (!is_minimized)
+      return false;
+  }
+
+  // TODO(sad): If there's a transient modal window, then this cannot be
+  // activated.
   return true;
-}
-
-ServerWindow* FocusController::GetNextActivatableWindow(
-    ServerWindow* window) const {
-  DCHECK(window);
-  ServerWindow* start = window;
-  while (window) {
-    window = FindNextWindowInTree(window);
-    if (window == start)
-      break;
-    if (window && CanBeActivated(window))
-      return window;
-  }
-  return nullptr;
-}
-
-ServerWindow* FocusController::FindNextWindowInTree(
-    ServerWindow* window) const {
-  DCHECK(window);
-  if (window == root_)
-   return GetLeftmostNode(window);
-
-  // Return the next sibling.
-  ServerWindow* parent = window->parent();
-  if (parent) {
-    const ServerWindow::Windows& siblings = parent->children();
-    ServerWindow::Windows::const_iterator iter =
-        std::find(siblings.begin(), siblings.end(), window);
-    DCHECK(iter != siblings.end());
-    ++iter;
-    if (iter != siblings.end())
-      return GetLeftmostNode(*iter);
-  }
-
-  // All children and siblings have been explored. Next is the parent.
-  return parent;
 }
 
 ServerWindow* FocusController::GetActivatableAncestorOf(
@@ -172,16 +207,63 @@ void FocusController::SetFocusedWindowImpl(
     drawn_tracker_.reset();
 }
 
+void FocusController::OnDrawnStateWillChange(ServerWindow* ancestor,
+                                             ServerWindow* window,
+                                             bool is_drawn) {
+  DCHECK(!is_drawn);
+  DCHECK(root_->Contains(window));
+  drawn_tracker_.reset();
+
+  auto will_be_hidden = [ancestor, window](ServerWindow* w) {
+    return w != ancestor && ancestor->Contains(w) && w->Contains(window);
+  };
+
+  // If |window| is |active_window_|, then activate the next activatable window
+  // that does not belong to the subtree which is getting hidden.
+  if (window == active_window_) {
+    WindowTreeIterator iter(root_);
+    ServerWindow* activate = active_window_;
+    do {
+      activate = iter.GetNext(activate);
+    } while (activate != active_window_ &&
+             (will_be_hidden(activate) || !CanBeActivated(activate)));
+    if (activate == window)
+      activate = nullptr;
+    SetActiveWindow(activate);
+
+    // Now make sure focus is in the active window.
+    ServerWindow* focus = nullptr;
+    if (active_window_) {
+      WindowTreeIterator iter(active_window_);
+      focus = nullptr;
+      do {
+        focus = iter.GetNext(focus);
+      } while (focus != active_window_ &&
+               (will_be_hidden(focus) || !CanBeFocused(focus)));
+      DCHECK(focus && CanBeFocused(focus));
+    }
+    SetFocusedWindowImpl(FocusControllerChangeSource::DRAWN_STATE_CHANGED,
+                         focus);
+    return;
+  }
+
+  // Move focus to the next focusable window in |active_window_|.
+  DCHECK_EQ(focused_window_, window);
+  WindowTreeIterator iter(active_window_);
+  ServerWindow* focus = focused_window_;
+  do {
+    focus = iter.GetNext(focus);
+  } while (focus != focused_window_ &&
+           (will_be_hidden(focus) || !CanBeFocused(focus)));
+  if (focus == window)
+    focus = nullptr;
+  SetFocusedWindowImpl(FocusControllerChangeSource::DRAWN_STATE_CHANGED, focus);
+}
+
 void FocusController::OnDrawnStateChanged(ServerWindow* ancestor,
                                           ServerWindow* window,
                                           bool is_drawn) {
-  DCHECK(!is_drawn);  // We only observe when drawn.
-  // TODO(sad): If |window| is |focused_window_|, then move focus to the next
-  // focusable window in |active_window_|, if |active_window_| is still visible.
-  // If |active_window_| is invisible, or if |window| is |active_window_|, then
-  // activate the next window that can be activated.
-  SetFocusedWindowImpl(FocusControllerChangeSource::DRAWN_STATE_CHANGED,
-                       ancestor);
+  DCHECK(false);
 }
 
 }  // namespace ws

@@ -19,8 +19,11 @@
 #ifndef MEDIA_RENDERERS_AUDIO_RENDERER_IMPL_H_
 #define MEDIA_RENDERERS_AUDIO_RENDERER_IMPL_H_
 
+#include <stdint.h>
+
 #include <deque>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
@@ -151,7 +154,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // timestamp in the pipeline will be ahead of the actual audio playback. In
   // this case |audio_delay_milliseconds| should be used to indicate when in the
   // future should the filled buffer be played.
-  int Render(AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Helper methods that schedule an asynchronous read from the decoder as long

@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
 #include "platform/RuntimeEnabledFeatures.h"
@@ -99,7 +98,19 @@ public:
         return true;
     }
 
-    void waitSyncToken(const WGC3Dbyte* syncToken) override
+    WGC3Duint64 insertFenceSyncCHROMIUM() override
+    {
+        static WGC3Duint64 syncPointGenerator = 0;
+        return ++syncPointGenerator;
+    }
+
+    bool genSyncTokenCHROMIUM(WGC3Duint64 fenceSync, WGC3Dbyte* syncToken) override
+    {
+        memcpy(syncToken, &fenceSync, sizeof(fenceSync));
+        return true;
+    }
+
+    void waitSyncTokenCHROMIUM(const WGC3Dbyte* syncToken) override
     {
         memcpy(&m_mostRecentlyWaitedSyncToken, syncToken, sizeof(m_mostRecentlyWaitedSyncToken));
     }
@@ -598,7 +609,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
         DepthStencilTestCase(true, true, true, 1, "both"),
     };
 
-    for (size_t i = 0; i < arraysize(cases); i++) {
+    for (size_t i = 0; i < WTF_ARRAY_LENGTH(cases); i++) {
         SCOPED_TRACE(cases[i].testCaseName);
         OwnPtr<DepthStencilTrackingContext> context = adoptPtr(new DepthStencilTrackingContext);
         DepthStencilTrackingContext* trackingContext = context.get();

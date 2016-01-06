@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/engagement/site_engagement_service.h"
+
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
@@ -10,7 +15,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_helper.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -86,7 +90,7 @@ scoped_ptr<KeyedService> BuildTestHistoryService(
   scoped_ptr<history::HistoryService> service(new history::HistoryService());
   service->Init(std::string(),
                 history::TestHistoryDatabaseParamsForPath(g_temp_history_dir));
-  return service.Pass();
+  return std::move(service);
 }
 
 }  // namespace
@@ -142,19 +146,19 @@ class SiteEngagementScoreTest : public testing::Test {
 };
 
 // Accumulate score many times on the same day. Ensure each time the score goes
-// up by g_navigation_points, but not more than g_max_points_per_day.
+// up, but not more than the maximum per day.
 TEST_F(SiteEngagementScoreTest, AccumulateOnSameDay) {
   base::Time reference_time = GetReferenceTime();
 
   test_clock_.SetNow(reference_time);
   for (int i = 0; i < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++i) {
-    score_.AddPoints(SiteEngagementScore::g_navigation_points);
-    EXPECT_EQ(std::min(SiteEngagementScore::g_max_points_per_day,
-                       (i + 1) * SiteEngagementScore::g_navigation_points),
+    score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
+    EXPECT_EQ(std::min(SiteEngagementScore::GetMaxPointsPerDay(),
+                       (i + 1) * SiteEngagementScore::GetNavigationPoints()),
               score_.Score());
   }
 
-  EXPECT_EQ(SiteEngagementScore::g_max_points_per_day, score_.Score());
+  EXPECT_EQ(SiteEngagementScore::GetMaxPointsPerDay(), score_.Score());
 }
 
 // Accumulate on the first day to max that day's engagement, then accumulate on
@@ -165,21 +169,21 @@ TEST_F(SiteEngagementScoreTest, AccumulateOnTwoDays) {
 
   test_clock_.SetNow(reference_time);
   for (int i = 0; i < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++i)
-    score_.AddPoints(SiteEngagementScore::g_navigation_points);
+    score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
 
-  EXPECT_EQ(SiteEngagementScore::g_max_points_per_day, score_.Score());
+  EXPECT_EQ(SiteEngagementScore::GetMaxPointsPerDay(), score_.Score());
 
   test_clock_.SetNow(later_date);
   for (int i = 0; i < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++i) {
-    score_.AddPoints(SiteEngagementScore::g_navigation_points);
+    score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
     double day_score =
-        std::min(SiteEngagementScore::g_max_points_per_day,
-                 (i + 1) * SiteEngagementScore::g_navigation_points);
-    EXPECT_EQ(day_score + SiteEngagementScore::g_max_points_per_day,
+        std::min(SiteEngagementScore::GetMaxPointsPerDay(),
+                 (i + 1) * SiteEngagementScore::GetNavigationPoints());
+    EXPECT_EQ(day_score + SiteEngagementScore::GetMaxPointsPerDay(),
               score_.Score());
   }
 
-  EXPECT_EQ(2 * SiteEngagementScore::g_max_points_per_day, score_.Score());
+  EXPECT_EQ(2 * SiteEngagementScore::GetMaxPointsPerDay(), score_.Score());
 }
 
 // Accumulate score on many consecutive days and ensure the score doesn't exceed
@@ -191,10 +195,10 @@ TEST_F(SiteEngagementScoreTest, AccumulateALotOnManyDays) {
     current_day += base::TimeDelta::FromDays(1);
     test_clock_.SetNow(current_day);
     for (int j = 0; j < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++j)
-      score_.AddPoints(SiteEngagementScore::g_navigation_points);
+      score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
 
     EXPECT_EQ(std::min(SiteEngagementScore::kMaxPoints,
-                       (i + 1) * SiteEngagementScore::g_max_points_per_day),
+                       (i + 1) * SiteEngagementScore::GetMaxPointsPerDay()),
               score_.Score());
   }
 
@@ -211,12 +215,12 @@ TEST_F(SiteEngagementScoreTest, AccumulateALittleOnManyDays) {
     test_clock_.SetNow(current_day);
 
     for (int j = 0; j < kLessAccumulationsThanNeededToMaxDailyEngagement; ++j)
-      score_.AddPoints(SiteEngagementScore::g_navigation_points);
+      score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
 
     EXPECT_EQ(
         std::min(SiteEngagementScore::kMaxPoints,
                  (i + 1) * kLessAccumulationsThanNeededToMaxDailyEngagement *
-                     SiteEngagementScore::g_navigation_points),
+                     SiteEngagementScore::GetNavigationPoints()),
         score_.Score());
   }
 
@@ -233,7 +237,7 @@ TEST_F(SiteEngagementScoreTest, ScoresDecayOverTime) {
     test_clock_.SetNow(current_day);
 
     for (int j = 0; j < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++j)
-      score_.AddPoints(SiteEngagementScore::g_navigation_points);
+      score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
   }
 
   EXPECT_EQ(SiteEngagementScore::kMaxPoints, score_.Score());
@@ -242,16 +246,16 @@ TEST_F(SiteEngagementScoreTest, ScoresDecayOverTime) {
   // elapsed.
   test_clock_.SetNow(current_day +
                      base::TimeDelta::FromDays(
-                         SiteEngagementScore::g_decay_period_in_days - 1));
+                         SiteEngagementScore::GetDecayPeriodInDays() - 1));
   EXPECT_EQ(SiteEngagementScore::kMaxPoints, score_.Score());
 
   // The score should have decayed by one chunk after one decay period has
   // elapsed.
   test_clock_.SetNow(
       current_day +
-      base::TimeDelta::FromDays(SiteEngagementScore::g_decay_period_in_days));
+      base::TimeDelta::FromDays(SiteEngagementScore::GetDecayPeriodInDays()));
   EXPECT_EQ(
-      SiteEngagementScore::kMaxPoints - SiteEngagementScore::g_decay_points,
+      SiteEngagementScore::kMaxPoints - SiteEngagementScore::GetDecayPoints(),
       score_.Score());
 
   // The score should have decayed by the right number of chunks after a few
@@ -259,17 +263,17 @@ TEST_F(SiteEngagementScoreTest, ScoresDecayOverTime) {
   test_clock_.SetNow(
       current_day +
       base::TimeDelta::FromDays(kLessPeriodsThanNeededToDecayMaxScore *
-                                SiteEngagementScore::g_decay_period_in_days));
+                                SiteEngagementScore::GetDecayPeriodInDays()));
   EXPECT_EQ(SiteEngagementScore::kMaxPoints -
                 kLessPeriodsThanNeededToDecayMaxScore *
-                    SiteEngagementScore::g_decay_points,
+                    SiteEngagementScore::GetDecayPoints(),
             score_.Score());
 
   // The score should not decay below zero.
   test_clock_.SetNow(
       current_day +
       base::TimeDelta::FromDays(kMorePeriodsThanNeededToDecayMaxScore *
-                                SiteEngagementScore::g_decay_period_in_days));
+                                SiteEngagementScore::GetDecayPeriodInDays()));
   EXPECT_EQ(0, score_.Score());
 }
 
@@ -283,27 +287,27 @@ TEST_F(SiteEngagementScoreTest, DecaysAppliedBeforeAdd) {
     test_clock_.SetNow(current_day);
 
     for (int j = 0; j < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++j)
-      score_.AddPoints(SiteEngagementScore::g_navigation_points);
+      score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
   }
 
   double initial_score = kLessDaysThanNeededToMaxTotalEngagement *
-                         SiteEngagementScore::g_max_points_per_day;
+                         SiteEngagementScore::GetMaxPointsPerDay();
   EXPECT_EQ(initial_score, score_.Score());
 
   // Go forward a few decay periods.
   test_clock_.SetNow(
       current_day +
       base::TimeDelta::FromDays(kLessPeriodsThanNeededToDecayMaxScore *
-                                SiteEngagementScore::g_decay_period_in_days));
+                                SiteEngagementScore::GetDecayPeriodInDays()));
 
   double decayed_score = initial_score -
                          kLessPeriodsThanNeededToDecayMaxScore *
-                             SiteEngagementScore::g_decay_points;
+                             SiteEngagementScore::GetDecayPoints();
   EXPECT_EQ(decayed_score, score_.Score());
 
   // Now add some points.
-  score_.AddPoints(SiteEngagementScore::g_navigation_points);
-  EXPECT_EQ(decayed_score + SiteEngagementScore::g_navigation_points,
+  score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
+  EXPECT_EQ(decayed_score + SiteEngagementScore::GetNavigationPoints(),
             score_.Score());
 }
 
@@ -313,25 +317,25 @@ TEST_F(SiteEngagementScoreTest, GoBackInTime) {
 
   test_clock_.SetNow(current_day);
   for (int i = 0; i < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++i)
-    score_.AddPoints(SiteEngagementScore::g_navigation_points);
+    score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
 
-  EXPECT_EQ(SiteEngagementScore::g_max_points_per_day, score_.Score());
+  EXPECT_EQ(SiteEngagementScore::GetMaxPointsPerDay(), score_.Score());
 
   // Adding to the score on an earlier date should be treated like another day,
   // and should not cause any decay.
   test_clock_.SetNow(current_day - base::TimeDelta::FromDays(
                                        kMorePeriodsThanNeededToDecayMaxScore *
-                                       SiteEngagementScore::g_decay_points));
+                                       SiteEngagementScore::GetDecayPoints()));
   for (int i = 0; i < kMoreAccumulationsThanNeededToMaxDailyEngagement; ++i) {
-    score_.AddPoints(SiteEngagementScore::g_navigation_points);
+    score_.AddPoints(SiteEngagementScore::GetNavigationPoints());
     double day_score =
-        std::min(SiteEngagementScore::g_max_points_per_day,
-                 (i + 1) * SiteEngagementScore::g_navigation_points);
-    EXPECT_EQ(day_score + SiteEngagementScore::g_max_points_per_day,
+        std::min(SiteEngagementScore::GetMaxPointsPerDay(),
+                 (i + 1) * SiteEngagementScore::GetNavigationPoints());
+    EXPECT_EQ(day_score + SiteEngagementScore::GetMaxPointsPerDay(),
               score_.Score());
   }
 
-  EXPECT_EQ(2 * SiteEngagementScore::g_max_points_per_day, score_.Score());
+  EXPECT_EQ(2 * SiteEngagementScore::GetMaxPointsPerDay(), score_.Score());
 }
 
 // Test that scores are read / written correctly from / to empty score
@@ -789,7 +793,7 @@ TEST_F(SiteEngagementServiceTest, CleanupEngagementScores) {
     // will not have decayed at all.
     clock->SetNow(
         GetReferenceTime() +
-        base::TimeDelta::FromDays(SiteEngagementScore::g_decay_period_in_days));
+        base::TimeDelta::FromDays(SiteEngagementScore::GetDecayPeriodInDays()));
 
     std::map<GURL, double> score_map = service->GetScoreMap();
     EXPECT_EQ(2u, score_map.size());
@@ -809,7 +813,7 @@ TEST_F(SiteEngagementServiceTest, CleanupEngagementScores) {
     // engagement score to be cleaned up.
     clock->SetNow(GetReferenceTime() +
                   base::TimeDelta::FromDays(
-                      3 * SiteEngagementScore::g_decay_period_in_days));
+                      3 * SiteEngagementScore::GetDecayPeriodInDays()));
 
     std::map<GURL, double> score_map = service->GetScoreMap();
     EXPECT_EQ(1u, score_map.size());

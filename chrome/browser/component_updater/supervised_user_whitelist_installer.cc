@@ -4,6 +4,9 @@
 
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
@@ -11,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -350,7 +354,7 @@ void SupervisedUserWhitelistInstallerImpl::RegisterComponent(
           base::Bind(&SupervisedUserWhitelistInstallerImpl::OnRawWhitelistReady,
                      weak_ptr_factory_.GetWeakPtr(), crx_id)));
   scoped_refptr<DefaultComponentInstaller> installer(
-      new DefaultComponentInstaller(traits.Pass()));
+      new DefaultComponentInstaller(std::move(traits)));
   installer->Register(cus_, callback);
 }
 

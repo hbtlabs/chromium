@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
@@ -120,17 +121,12 @@ bool BrowserNonClientFrameView::ShouldPaintAsThemed() const {
 }
 
 SkColor BrowserNonClientFrameView::GetFrameColor() const {
-  const bool incognito = browser_view_->IsOffTheRecord();
-  ThemeProperties::OverwritableByUserThemeProperty color_id;
-  if (ShouldPaintAsActive()) {
-    color_id = incognito ? ThemeProperties::COLOR_FRAME_INCOGNITO
-                         : ThemeProperties::COLOR_FRAME;
-  } else {
-    color_id = incognito ? ThemeProperties::COLOR_FRAME_INCOGNITO_INACTIVE
-                         : ThemeProperties::COLOR_FRAME_INACTIVE;
-  }
+  ThemeProperties::OverwritableByUserThemeProperty color_id =
+      ShouldPaintAsActive() ? ThemeProperties::COLOR_FRAME
+                            : ThemeProperties::COLOR_FRAME_INACTIVE;
   return ShouldPaintAsThemed() ? GetThemeProvider()->GetColor(color_id)
-                               : ThemeProperties::GetDefaultColor(color_id);
+                               : ThemeProperties::GetDefaultColor(
+                                     color_id, browser_view_->IsOffTheRecord());
 }
 
 gfx::ImageSkia* BrowserNonClientFrameView::GetFrameImage() const {

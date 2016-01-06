@@ -7,6 +7,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/child/simple_webmimeregistry_impl.h"
@@ -85,9 +87,6 @@ class TestBlinkWebUnitTestSupport : public blink::WebUnitTestSupport,
   blink::WebString webKitRootDir() override;
   blink::WebLayerTreeView* createLayerTreeViewForTesting() override;
   blink::WebData readFromFile(const blink::WebString& path) override;
-  bool getBlobItems(
-      const blink::WebString& uuid,
-      blink::WebVector<blink::WebBlobData::Item*>* items) override;
   blink::WebThread* currentThread() override;
   void enterRunLoop() override;
   void exitRunLoop() override;

@@ -3,14 +3,17 @@
 // found in the LICENSE file.
 
 #include <queue>
+#include <utility>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
 #include "chrome/browser/chrome_content_browser_client.h"
@@ -413,8 +416,7 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
                           base::CompareCase::SENSITIVE))
       return scoped_ptr<net::test_server::HttpResponse>();
 
-    std::map<std::string, std::string>::const_iterator it =
-          request.headers.find("User-Agent");
+    auto it = request.headers.find("User-Agent");
     EXPECT_TRUE(it != request.headers.end());
     if (!base::StartsWith("foobar", it->second,
                           base::CompareCase::SENSITIVE))
@@ -424,7 +426,7 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target.spec());
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // Handles |request| by serving a redirect response.
@@ -440,7 +442,7 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
     http_response->AddCustomHeader("Location", redirect_target.spec());
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // Handles |request| by serving an empty response.
@@ -468,7 +470,7 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
     http_response->AddCustomHeader("Cache-control", "max-age=3600");
     http_response->set_content_type("text/plain");
     http_response->set_content("dummy text");
-    return http_response.Pass();
+    return std::move(http_response);
   }
 
   // Shortcut to return the current MenuManager.
@@ -2804,38 +2806,6 @@ class WebViewFocusTest : public WebViewTest {
   scoped_refptr<content::FrameWatcher> frame_watcher_;
 };
 
-class FocusWaiter : public views::FocusChangeListener {
- public:
-  explicit FocusWaiter(views::View* view_to_wait_for)
-      : view_to_wait_for_(view_to_wait_for) {
-    view_to_wait_for_->GetFocusManager()->AddFocusChangeListener(this);
-  }
-  ~FocusWaiter() override {
-    view_to_wait_for_->GetFocusManager()->RemoveFocusChangeListener(this);
-  }
-
-  void Wait() {
-    if (view_to_wait_for_->HasFocus())
-      return;
-
-    base::MessageLoop::current()->Run();
-  }
-
-  // FocusChangeListener implementation.
-  void OnWillChangeFocus(views::View* focused_before,
-                         views::View* focused_now) override {}
-  void OnDidChangeFocus(views::View* focused_before,
-                        views::View* focused_now) override {
-    if (view_to_wait_for_ == focused_now)
-      base::MessageLoop::current()->QuitWhenIdle();
-  }
-
- private:
-  views::View* view_to_wait_for_;
-
-  DISALLOW_COPY_AND_ASSIGN(FocusWaiter);
-};
-
 // The following test verifies that a views::WebView hosting an embedder
 // gains focus on touchstart.
 IN_PROC_BROWSER_TEST_F(WebViewFocusTest, TouchFocusesEmbedder) {
@@ -2895,13 +2865,9 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusTest, TouchFocusesEmbedder) {
   guest_rect.Offset(-embedder_origin.x(), -embedder_origin.y());
 
   // Generate and send synthetic touch event.
-  FocusWaiter waiter(aura_webview);
   content::SimulateTouchPressAt(GetEmbedderWebContents(),
                                 guest_rect.CenterPoint());
-
-  // Wait for the TouchStart to propagate and restore focus. Test times out
-  // on failure.
-  waiter.Wait();
+  EXPECT_TRUE(aura_webview->HasFocus());
 }
 #endif
 

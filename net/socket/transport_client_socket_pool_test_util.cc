@@ -5,11 +5,12 @@
 #include "net/socket/transport_client_socket_pool_test_util.h"
 
 #include <stdint.h>
-
 #include <string>
+#include <utility>
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -95,8 +96,8 @@ class MockConnectClientSocket : public StreamSocket {
             const CompletionCallback& callback) override {
     return ERR_FAILED;
   }
-  int SetReceiveBufferSize(int32 size) override { return OK; }
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
  private:
   bool connected_;
@@ -163,8 +164,8 @@ class MockFailingClientSocket : public StreamSocket {
             const CompletionCallback& callback) override {
     return ERR_FAILED;
   }
-  int SetReceiveBufferSize(int32 size) override { return OK; }
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
  private:
   const AddressList addrlist_;
@@ -204,7 +205,7 @@ class MockTriggerableClientSocket : public StreamSocket {
         new MockTriggerableClientSocket(addrlist, should_connect, net_log));
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                   socket->GetConnectCallback());
-    return socket.Pass();
+    return std::move(socket);
   }
 
   static scoped_ptr<StreamSocket> MakeMockDelayedClientSocket(
@@ -216,7 +217,7 @@ class MockTriggerableClientSocket : public StreamSocket {
         new MockTriggerableClientSocket(addrlist, should_connect, net_log));
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, socket->GetConnectCallback(), delay);
-    return socket.Pass();
+    return std::move(socket);
   }
 
   static scoped_ptr<StreamSocket> MakeMockStalledClientSocket(
@@ -231,7 +232,7 @@ class MockTriggerableClientSocket : public StreamSocket {
       attempts.push_back(ConnectionAttempt(addrlist[0], ERR_CONNECTION_FAILED));
       socket->AddConnectionAttempts(attempts);
     }
-    return socket.Pass();
+    return std::move(socket);
   }
 
   // StreamSocket implementation.
@@ -293,8 +294,8 @@ class MockTriggerableClientSocket : public StreamSocket {
             const CompletionCallback& callback) override {
     return ERR_FAILED;
   }
-  int SetReceiveBufferSize(int32 size) override { return OK; }
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
  private:
   void DoCallback() {
@@ -424,7 +425,7 @@ MockTransportClientSocketFactory::CreateTransportClientSocket(
       // single-threaded.
       if (!run_loop_quit_closure_.is_null())
         run_loop_quit_closure_.Run();
-      return rv.Pass();
+      return std::move(rv);
     }
     default:
       NOTREACHED();

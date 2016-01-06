@@ -481,7 +481,7 @@ protected:
 
     // Helper to return the size in bytes of OpenGL data types
     // like GL_FLOAT, GL_INT, etc.
-    unsigned sizeInBytes(GLenum type);
+    unsigned sizeInBytes(GLenum type) const;
 
     // Check if each enabled vertex attribute is bound to a buffer.
     bool validateRenderingState(const char*);
@@ -841,8 +841,8 @@ protected:
     void texSubImage2DImpl(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
 
     enum TexImageFunctionType {
-        NotTexSubImage2D,
-        TexSubImage2D
+        NotTexSubImage,
+        TexSubImage
     };
     enum TexImageByGPUType {
         TexImage2DByGPU,
@@ -907,6 +907,9 @@ protected:
     // are valid. Otherwise, generates appropriate error and returns false.
     bool validateReadPixelsFuncParameters(GLsizei width, GLsizei height, GLenum format, GLenum type, long long bufferSize);
 
+    // Helper function to check type and size of vertexAttribPointer. Return true if type and size are valid. Otherwise, generates appropriates error and return false.
+    virtual bool validateVertexAttribPointerTypeAndSize(GLenum type, GLint size);
+
     virtual GLint getMaxTextureLevelForTarget(GLenum target);
 
     // Helper function to check input level for functions {copy}Tex{Sub}Image.
@@ -926,10 +929,10 @@ protected:
         SourceImageBitmap,
     };
 
-    // Helper function for tex{Sub}Image2D to check if the input format/type/level/target/width/height/border/xoffset/yoffset are valid.
+    // Helper function for tex{Sub}Image{2|3}D to check if the input format/type/level/target/width/height/depth/border/xoffset/yoffset/zoffset are valid.
     // Otherwise, it would return quickly without doing other work.
     bool validateTexFunc(const char* functionName, TexImageFunctionType, TexFuncValidationSourceType, GLenum target, GLint level, GLenum internalformat, GLsizei width,
-        GLsizei height, GLint border, GLenum format, GLenum type, GLint xoffset, GLint yoffset);
+        GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset);
 
     // Helper function to check input width and height for functions {copy, compressed}Tex{Sub}Image.
     // Generates GL error and returns false if width or height is invalid.
@@ -960,18 +963,18 @@ protected:
 
     // Helper function to validate compressed texture data is correct size
     // for the given format and dimensions.
-    bool validateCompressedTexFuncData(const char* functionName, GLsizei width, GLsizei height, GLenum format, DOMArrayBufferView* pixels);
+    bool validateCompressedTexFuncData(const char* functionName, GLsizei width, GLsizei height, GLsizei depth, GLenum format, DOMArrayBufferView* pixels);
 
     // Helper function for validating compressed texture formats.
-    bool validateCompressedTexFormat(GLenum format);
+    bool validateCompressedTexFormat(const char* functionName, GLenum format);
 
     // Helper function to validate compressed texture dimensions are valid for
     // the given format.
-    bool validateCompressedTexDimensions(const char* functionName, TexImageFunctionType, GLenum target, GLint level, GLsizei width, GLsizei height, GLenum format);
+    bool validateCompressedTexDimensions(const char* functionName, TexImageFunctionType, GLenum target, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format);
 
     // Helper function to validate compressed texture dimensions are valid for
     // the given format.
-    bool validateCompressedTexSubDimensions(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, WebGLTexture*);
+    bool validateCompressedTexSubDimensions(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, WebGLTexture*);
 
     // Helper function to validate mode for draw{Arrays/Elements}.
     bool validateDrawMode(const char* functionName, GLenum);

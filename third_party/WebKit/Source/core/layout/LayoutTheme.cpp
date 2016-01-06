@@ -19,7 +19,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/LayoutTheme.h"
 
 #include "core/CSSValueKeywords.h"
@@ -815,14 +814,16 @@ Color LayoutTheme::systemColor(CSSValueID cssValueId) const
     return Color();
 }
 
-Color LayoutTheme::platformActiveTextSearchHighlightColor() const
+Color LayoutTheme::platformTextSearchHighlightColor(bool activeMatch) const
 {
-    return Color(255, 150, 50); // Orange.
+    if (activeMatch)
+        return Color(255, 150, 50); // Orange.
+    return Color(255, 255, 0); // Yellow.
 }
 
-Color LayoutTheme::platformInactiveTextSearchHighlightColor() const
+Color LayoutTheme::platformTextSearchColor(bool activeMatch) const
 {
-    return Color(255, 255, 0); // Yellow.
+    return Color::black;
 }
 
 Color LayoutTheme::tapHighlightColor()

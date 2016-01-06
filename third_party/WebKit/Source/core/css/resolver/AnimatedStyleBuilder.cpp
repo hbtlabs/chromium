@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/css/resolver/AnimatedStyleBuilder.h"
 
 #include "core/animation/animatable/AnimatableClipPathOperation.h"
@@ -43,6 +42,7 @@
 #include "core/animation/animatable/AnimatableLengthPoint.h"
 #include "core/animation/animatable/AnimatableLengthPoint3D.h"
 #include "core/animation/animatable/AnimatableLengthSize.h"
+#include "core/animation/animatable/AnimatablePath.h"
 #include "core/animation/animatable/AnimatableRepeatable.h"
 #include "core/animation/animatable/AnimatableSVGPaint.h"
 #include "core/animation/animatable/AnimatableShadow.h"
@@ -680,6 +680,9 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
         return;
     case CSSPropertyZIndex:
         style->setZIndex(clampTo<int>(round(toAnimatableDouble(value)->toDouble())));
+        return;
+    case CSSPropertyD:
+        style->setD(toAnimatablePath(value)->pathValue());
         return;
     case CSSPropertyCx:
         style->setCx(animatableValueToLength(value, state));

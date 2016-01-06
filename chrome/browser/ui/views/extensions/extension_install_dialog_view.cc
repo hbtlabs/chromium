@@ -4,12 +4,16 @@
 
 #include "chrome/browser/ui/views/extensions/extension_install_dialog_view.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -100,15 +104,22 @@ base::string16 PrepareForDisplay(const base::string16& message,
 void ShowExtensionInstallDialogImpl(
     ExtensionInstallPromptShowParams* show_params,
     ExtensionInstallPrompt::Delegate* delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt) {
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ExtensionInstallDialogView* dialog =
-      new ExtensionInstallDialogView(show_params->profile(),
-                                     show_params->GetParentWebContents(),
-                                     delegate,
-                                     prompt);
-  constrained_window::CreateBrowserModalDialogViews(
-      dialog, show_params->GetParentWindow())->Show();
+  bool use_tab_modal_dialog = prompt->ShouldUseTabModalDialog();
+  ExtensionInstallDialogView* dialog = new ExtensionInstallDialogView(
+      show_params->profile(), show_params->GetParentWebContents(), delegate,
+      std::move(prompt));
+  if (use_tab_modal_dialog) {
+    content::WebContents* parent_web_contents =
+        show_params->GetParentWebContents();
+    if (parent_web_contents)
+      constrained_window::ShowWebModalDialogViews(dialog, parent_web_contents);
+  } else {
+    constrained_window::CreateBrowserModalDialogViews(
+        dialog, show_params->GetParentWindow())
+        ->Show();
+  }
 }
 
 // A custom scrollable view implementation for the dialog.
@@ -188,11 +199,11 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
     Profile* profile,
     content::PageNavigator* navigator,
     ExtensionInstallPrompt::Delegate* delegate,
-    scoped_refptr<ExtensionInstallPrompt::Prompt> prompt)
+    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt)
     : profile_(profile),
       navigator_(navigator),
       delegate_(delegate),
-      prompt_(prompt),
+      prompt_(std::move(prompt)),
       container_(NULL),
       scroll_view_(NULL),
       handled_result_(false) {
@@ -412,7 +423,7 @@ void ExtensionInstallDialogView::InitView() {
     scroll_layout->AddView(issue_advice_view);
   }
 
-  DCHECK(prompt_->type() >= 0);
+  DCHECK_GE(prompt_->type(), 0);
   UMA_HISTOGRAM_ENUMERATION("Extensions.InstallPrompt.Type",
                             prompt_->type(),
                             ExtensionInstallPrompt::NUM_PROMPT_TYPES);
@@ -598,7 +609,8 @@ bool ExtensionInstallDialogView::Accept() {
 }
 
 ui::ModalType ExtensionInstallDialogView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
+  return prompt_->ShouldUseTabModalDialog() ? ui::MODAL_TYPE_CHILD
+                                            : ui::MODAL_TYPE_WINDOW;
 }
 
 void ExtensionInstallDialogView::LinkClicked(views::Link* source,

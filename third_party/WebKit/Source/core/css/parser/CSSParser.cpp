@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/css/parser/CSSParser.h"
 
 #include "core/css/CSSColorValue.h"
@@ -32,10 +31,10 @@ void CSSParser::parseDeclarationListForInspector(const CSSParserContext& context
     CSSParserImpl::parseDeclarationListForInspector(declaration, context, observer);
 }
 
-void CSSParser::parseSelector(const CSSParserContext& context, const String& selector, CSSSelectorList& selectorList)
+CSSSelectorList CSSParser::parseSelector(const CSSParserContext& context, const String& selector)
 {
     CSSTokenizer::Scope scope(selector);
-    CSSSelectorParser::parseSelector(scope.tokenRange(), context, nullptr, selectorList);
+    return CSSSelectorParser::parseSelector(scope.tokenRange(), context, nullptr);
 }
 
 PassRefPtrWillBeRawPtr<StyleRuleBase> CSSParser::parseRule(const CSSParserContext& context, StyleSheetContents* styleSheet, const String& rule)

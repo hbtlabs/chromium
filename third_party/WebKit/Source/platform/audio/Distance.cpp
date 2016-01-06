@@ -26,13 +26,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
+#include "platform/audio/Distance.h"
 
 #if ENABLE(WEB_AUDIO)
-
-#include "platform/audio/Distance.h"
 #include "wtf/Assertions.h"
-
 #include <math.h>
 #include <algorithm>
 

@@ -242,8 +242,10 @@ NSMutableURLRequest* requestForCrWebInvokeCommandAndKey(NSString* command,
                                                         NSString* key) {
   NSString* fullCommand =
       [NSString stringWithFormat:@"[{\"command\":\"%@\"}]", command];
+  NSCharacterSet* noCharacters =
+      [NSCharacterSet characterSetWithCharactersInString:@""];
   NSString* escapedCommand = [fullCommand
-      stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+      stringByAddingPercentEncodingWithAllowedCharacters:noCharacters];
   NSString* urlString =
       [NSString stringWithFormat:@"crwebinvoke://%@/#%@", key, escapedCommand];
   return [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
@@ -382,6 +384,7 @@ class CRWWKWebViewWebControllerTest
 
     // Called by resetInjectedWebView
     [[result stub] backForwardList];
+    [[[result stub] andReturn:[NSURL URLWithString:kTestURLString]] URL];
     [[result stub] setNavigationDelegate:OCMOCK_ANY];
     [[result stub] setUIDelegate:OCMOCK_ANY];
     [[result stub] addObserver:webController_
@@ -762,8 +765,7 @@ TEST_F(CRWUIWebViewWebControllerTest, UnicodeEncoding) {
         [NSString stringWithFormat:@"encodeURIComponent('%@');", unicodeString];
     NSString* encodedString =
         [testWebView stringByEvaluatingJavaScriptFromString:encodeJS];
-    NSString* decodedString = [encodedString
-        stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+    NSString* decodedString = [encodedString stringByRemovingPercentEncoding];
     EXPECT_NSEQ(unicodeString, decodedString);
   }
 };
@@ -877,8 +879,6 @@ WEB_TEST_F(CRWUIWebViewWebControllerTest,
   }
 }
 
-// This test requires iOS net stack.
-#if !defined(ENABLE_CHROME_NET_STACK_FOR_WKWEBVIEW)
 // Tests that presentSSLError:forSSLStatus:recoverable:callback: is called with
 // correct arguments if WKWebView fails to load a page with bad SSL cert.
 TEST_F(CRWWKWebViewWebControllerTest, SSLCertError) {
@@ -897,9 +897,14 @@ TEST_F(CRWWKWebViewWebControllerTest, SSLCertError) {
                         web::kNSErrorPeerCertificateChainKey : chain,
                       }];
   WKWebView* webView = static_cast<WKWebView*>([webController_ webView]);
-  [static_cast<id<WKNavigationDelegate>>(webController_.get()) webView:webView
-                                          didFailProvisionalNavigation:nil
-                                                             withError:error];
+  base::scoped_nsobject<NSObject> navigation([[NSObject alloc] init]);
+  [static_cast<id<WKNavigationDelegate>>(webController_.get())
+                            webView:webView
+      didStartProvisionalNavigation:static_cast<WKNavigation*>(navigation)];
+  [static_cast<id<WKNavigationDelegate>>(webController_.get())
+                           webView:webView
+      didFailProvisionalNavigation:static_cast<WKNavigation*>(navigation)
+                         withError:error];
 
   // Verify correctness of delegate's method arguments.
   EXPECT_TRUE([mockDelegate_ SSLInfo].is_valid());
@@ -910,7 +915,6 @@ TEST_F(CRWWKWebViewWebControllerTest, SSLCertError) {
   EXPECT_FALSE([mockDelegate_ recoverable]);
   EXPECT_TRUE([mockDelegate_ shouldContinueCallback]);
 }
-#endif  // !defined(ENABLE_CHROME_NET_STACK_FOR_WKWEBVIEW)
 
 // None of the |CRWUIWebViewWebControllerTest| setup is needed;
 typedef web::WebTestWithUIWebViewWebController
@@ -1526,6 +1530,7 @@ TEST_F(CRWWKWebControllerWebProcessTest, Crash) {
   web::SimulateWKWebViewCrash(webView_);
 
   EXPECT_OCMOCK_VERIFY(delegate);
+  EXPECT_FALSE([this->webController_ isViewAlive]);
   [this->webController_ setDelegate:nil];
 };
 

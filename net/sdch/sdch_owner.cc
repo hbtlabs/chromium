@@ -4,9 +4,12 @@
 
 #include "net/sdch/sdch_owner.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/persistent_pref_store.h"
 #include "base/prefs/value_map_pref_store.h"
@@ -102,7 +105,7 @@ void InitializePrefStore(WriteablePrefStore* store) {
   empty_store->SetInteger(kVersionKey, kVersion);
   empty_store->Set(kDictionariesKey,
                    make_scoped_ptr(new base::DictionaryValue));
-  store->SetValue(kPreferenceName, empty_store.Pass(),
+  store->SetValue(kPreferenceName, std::move(empty_store),
                   WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
 }
 
@@ -280,8 +283,7 @@ SdchOwner::~SdchOwner() {
   if (external_pref_store_)
     external_pref_store_->RemoveObserver(this);
 
-  int64 object_lifetime =
-      (clock_->Now() - creation_time_).InMilliseconds();
+  int64_t object_lifetime = (clock_->Now() - creation_time_).InMilliseconds();
   for (const auto& val : consumed_byte_seconds_) {
     if (object_lifetime > 0) {
       // Objects that are created and immediately destroyed don't add any memory
@@ -444,7 +446,7 @@ void SdchOwner::OnDictionaryFetched(base::Time last_used,
   dictionary_description->SetInteger(kDictionaryUseCountKey, use_count);
   dictionary_description->SetInteger(kDictionarySizeKey,
                                      dictionary_text.size());
-  pref_dictionary_map->Set(server_hash, dictionary_description.Pass());
+  pref_dictionary_map->Set(server_hash, std::move(dictionary_description));
   load_times_[server_hash] = clock_->Now();
 }
 
@@ -489,12 +491,11 @@ void SdchOwner::OnDictionaryUsed(const std::string& server_hash) {
   base::TimeDelta time_since_last_used(now -
       base::Time::FromDoubleT(last_used_seconds_since_epoch));
 
-  // TODO(rdsmith): Distinguish between "Never used" and "Actually not
-  // touched for 48 hours".
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-      "Sdch3.UsageInterval",
-      use_count ? time_since_last_used : base::TimeDelta::FromHours(48),
-      base::TimeDelta(), base::TimeDelta::FromHours(48), 50);
+  if (use_count) {
+    UMA_HISTOGRAM_CUSTOM_TIMES("Sdch3.UsageInterval2", time_since_last_used,
+                               base::TimeDelta(), base::TimeDelta::FromDays(7),
+                               50);
+  }
 
   specific_dictionary_map->SetDouble(kDictionaryLastUsedKey, now.ToDoubleT());
   specific_dictionary_map->SetInteger(kDictionaryUseCountKey, use_count + 1);
@@ -621,7 +622,7 @@ void SdchOwner::OnInitializationCompleted(bool succeeded) {
 }
 
 void SdchOwner::SetClockForTesting(scoped_ptr<base::Clock> clock) {
-  clock_ = clock.Pass();
+  clock_ = std::move(clock);
 }
 
 int SdchOwner::GetDictionaryCountForTesting() const {

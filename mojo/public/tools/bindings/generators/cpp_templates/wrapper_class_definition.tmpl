@@ -9,7 +9,7 @@
 {{struct.name}}Ptr {{struct.name}}::New() {
   {{struct.name}}Ptr rv;
   mojo::internal::StructHelper<{{struct.name}}>::Initialize(&rv);
-  return rv.Pass();
+  return rv;
 }
 
 {{struct.name}}::{{struct.name}}()
@@ -31,14 +31,19 @@
   rv->{{field.name}} = {{field.name}};
 {%-     endif %}
 {%-   endfor %}
-  return rv.Pass();
+  return rv;
 }
 {%  endif %}
 
 bool {{struct.name}}::Equals(const {{struct.name}}& other) const {
 {%-  for field in struct.fields %}
+{%-    if field.kind|is_typemapped_kind %}
+{#     TODO(rockot): Consider adding support for native equality testing. #}
+  NOTREACHED() << "Equality testing not supported with typemapped fields.";
+{%-    else %}
   if (!mojo::internal::ValueTraits<{{field.kind|cpp_wrapper_type}}>::Equals(this->{{field.name}}, other.{{field.name}}))
     return false;
+{%-    endif %}
 {%-  endfor %}
   return true;
 }

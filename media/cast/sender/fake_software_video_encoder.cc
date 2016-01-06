@@ -4,10 +4,12 @@
 
 #include "media/cast/sender/fake_software_video_encoder.h"
 
+#include <stddef.h>
+
 #include "base/json/json_writer.h"
 #include "base/values.h"
 #include "media/base/video_frame.h"
-#include "media/cast/cast_defines.h"
+#include "media/cast/common/rtp_time.h"
 #include "media/cast/constants.h"
 
 #ifndef OFFICIAL_BUILD
@@ -48,7 +50,7 @@ void FakeSoftwareVideoEncoder::Encode(
     encoded_frame->referenced_frame_id = encoded_frame->frame_id - 1;
   }
   encoded_frame->rtp_timestamp =
-      TimeDeltaToRtpDelta(video_frame->timestamp(), kVideoFrequency);
+      RtpTimeTicks::FromTimeDelta(video_frame->timestamp(), kVideoFrequency);
   encoded_frame->reference_time = reference_time;
 
   base::DictionaryValue values;
@@ -70,7 +72,7 @@ void FakeSoftwareVideoEncoder::Encode(
   }
 }
 
-void FakeSoftwareVideoEncoder::UpdateRates(uint32 new_bitrate) {
+void FakeSoftwareVideoEncoder::UpdateRates(uint32_t new_bitrate) {
   frame_size_ = new_bitrate / video_config_.max_frame_rate / 8;
 }
 

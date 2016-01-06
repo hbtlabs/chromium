@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "platform/testing/PaintPrinters.h"
 
 #include "platform/graphics/paint/PaintChunk.h"
@@ -35,8 +34,8 @@ void PrintTo(const ClipPaintPropertyNode& node, std::ostream* os)
 {
     *os << "ClipPaintPropertyNode(clip=";
     PrintTo(node.clipRect(), os);
-    *os << ", base=";
-    PrintPointer(node.base(), *os);
+    *os << ", localTransformSpace=";
+    PrintPointer(node.localTransformSpace(), *os);
     *os << ", parent=";
     PrintPointer(node.parent(), *os);
     *os << ")";

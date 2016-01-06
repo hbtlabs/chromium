@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/system/timezone_util.h"
 
+#include <stddef.h>
+
 #include <string>
 
 #include "base/i18n/rtl.h"
@@ -156,7 +158,7 @@ scoped_ptr<base::ListValue> GetTimezoneList() {
     option->Append(new base::StringValue(GetTimezoneName(*timezone)));
     timezoneList->Append(option);
   }
-  return timezoneList.Pass();
+  return timezoneList;
 }
 
 bool HasSystemTimezonePolicy() {

@@ -6,10 +6,12 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
@@ -388,6 +390,24 @@ void SearchTabHelper::MostVisitedItemsChanged(
   // our metrics get inconsistent. So we'd rather emit stats now.
   InstantTab::EmitNtpStatistics(web_contents_);
   ipc_router_.SendMostVisitedItems(items);
+  LogMostVisitedItemsSource(items);
+}
+
+void SearchTabHelper::LogMostVisitedItemsSource(
+    const std::vector<InstantMostVisitedItem>& items) {
+  for (auto item : items) {
+    NTPLoggingEventType event;
+    if (item.is_server_side_suggestion) {
+      event = NTP_SERVER_SIDE_SUGGESTION;
+    } else {
+      event = NTP_CLIENT_SIDE_SUGGESTION;
+    }
+    // The metrics are emitted for each suggestion as the design requirement
+    // even the ntp_user_data_logger.cc now only supports the scenario:
+    // all suggestions are provided by server OR
+    // all suggestions are provided by client.
+    this->OnLogEvent(event, base::TimeDelta());
+  }
 }
 
 void SearchTabHelper::OmniboxStartMarginChanged(int omnibox_start_margin) {

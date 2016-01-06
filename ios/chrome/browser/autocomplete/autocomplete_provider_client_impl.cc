@@ -7,6 +7,7 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
@@ -20,8 +21,8 @@
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/public/provider/chrome/browser/keyed_service_provider.h"
 
 AutocompleteProviderClientImpl::AutocompleteProviderClientImpl(
     ios::ChromeBrowserState* browser_state)
@@ -104,7 +105,7 @@ AutocompleteProviderClientImpl::GetKeywordExtensionsDelegate(
 }
 
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {
-  return browser_state_->GetPrefs()->GetString(ios::prefs::kAcceptLanguages);
+  return browser_state_->GetPrefs()->GetString(prefs::kAcceptLanguages);
 }
 
 std::string
@@ -128,8 +129,7 @@ bool AutocompleteProviderClientImpl::IsOffTheRecord() const {
 }
 
 bool AutocompleteProviderClientImpl::SearchSuggestEnabled() const {
-  return browser_state_->GetPrefs()->GetBoolean(
-      ios::prefs::kSearchSuggestEnabled);
+  return browser_state_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
 }
 
 bool AutocompleteProviderClientImpl::BookmarkBarIsVisible() const {
@@ -139,8 +139,7 @@ bool AutocompleteProviderClientImpl::BookmarkBarIsVisible() const {
 
 bool AutocompleteProviderClientImpl::TabSyncEnabledAndUnencrypted() const {
   return sync_driver::IsTabSyncEnabledAndUnencrypted(
-      ios::GetKeyedServiceProvider()->GetSyncServiceForBrowserState(
-          browser_state_),
+      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state_),
       browser_state_->GetPrefs());
 }
 

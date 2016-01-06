@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -336,13 +337,6 @@ class ExtensionService
   // Checks for delayed installation for all pending installs.
   void MaybeFinishDelayedInstallations();
 
-  // Promotes an ephemeral app to a regular installed app. Ephemeral apps
-  // are already installed in extension system (albiet transiently) and only
-  // need to be exposed in the UI. Set |is_from_sync| to true if the
-  // install was initiated via sync.
-  void PromoteEphemeralApp(
-      const extensions::Extension* extension, bool is_from_sync);
-
   // ExtensionHost of background page calls this method right after its render
   // view has been created.
   void DidCreateRenderViewForBackgroundPage(extensions::ExtensionHost* host);
@@ -447,7 +441,7 @@ class ExtensionService
   }
 
   void FinishInstallationForTest(const extensions::Extension* extension) {
-    FinishInstallation(extension, false /* not ephemeral */);
+    FinishInstallation(extension);
   }
 #endif
 
@@ -549,10 +543,8 @@ class ExtensionService
       const extensions::Extension* extension,
       extensions::UnloadedExtensionInfo::Reason reason);
 
-  // Common helper to finish installing the given extension. |was_ephemeral|
-  // should be true if the extension was previously installed and ephemeral.
-  void FinishInstallation(const extensions::Extension* extension,
-                          bool was_ephemeral);
+  // Common helper to finish installing the given extension.
+  void FinishInstallation(const extensions::Extension* extension);
 
   // Disables the extension if the privilege level has increased
   // (e.g., due to an upgrade).

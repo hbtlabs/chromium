@@ -7,10 +7,13 @@
 #ifndef CONTENT_CHILD_RESOURCE_DISPATCHER_H_
 #define CONTENT_CHILD_RESOURCE_DISPATCHER_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <string>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
@@ -173,6 +176,9 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     scoped_refptr<SharedMemoryReceivedDataFactory> received_data_factory;
     linked_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
+
+    // Debugging for https://code.google.com/p/chromium/issues/detail?id=527588.
+    int data_offset;
   };
   typedef base::hash_map<int, PendingRequestInfo> PendingRequestList;
 
@@ -184,7 +190,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   void FollowPendingRedirect(int request_id, PendingRequestInfo& request_info);
 
   // Message response handlers, called by the message handler for this process.
-  void OnUploadProgress(int request_id, int64 position, int64 size);
+  void OnUploadProgress(int request_id, int64_t position, int64_t size);
   void OnReceivedResponse(int request_id, const ResourceResponseHead&);
   void OnReceivedCachedMetadata(int request_id, const std::vector<char>& data);
   void OnReceivedRedirect(int request_id,
@@ -194,6 +200,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
                        base::SharedMemoryHandle shm_handle,
                        int shm_size,
                        base::ProcessId renderer_pid);
+  void OnReceivedDataDebug(int request_id, int data_offset);
   void OnReceivedData(int request_id,
                       int data_offset,
                       int data_length,

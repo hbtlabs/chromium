@@ -95,6 +95,12 @@
     ['disable_ftp_support!=1', {
       'sources': ['<@(net_ftp_support_sources)']
     }],
+    ['enable_bidirectional_stream==1', {
+     'defines': [
+        'ENABLE_BIDIRECTIONAL_STREAM',
+      ],
+      'sources': ['<@(net_bidirectional_stream_sources)']
+    }],
     ['enable_built_in_dns==1', {
       'defines': [
         'ENABLE_BUILT_IN_DNS',
@@ -121,6 +127,8 @@
           'quic/crypto/aes_128_gcm_12_encrypter_nss.cc',
           'quic/crypto/chacha20_poly1305_decrypter_nss.cc',
           'quic/crypto/chacha20_poly1305_encrypter_nss.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_decrypter_nss.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_encrypter_nss.cc',
           'quic/crypto/channel_id_nss.cc',
           'quic/crypto/p256_key_exchange_nss.cc',
           'quic/crypto/proof_source_chromium_nss.cc',
@@ -148,6 +156,8 @@
           'quic/crypto/aes_128_gcm_12_encrypter_openssl.cc',
           'quic/crypto/chacha20_poly1305_decrypter_openssl.cc',
           'quic/crypto/chacha20_poly1305_encrypter_openssl.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_decrypter_openssl.cc',
+          'quic/crypto/chacha20_poly1305_rfc7539_encrypter_openssl.cc',
           'quic/crypto/channel_id_openssl.cc',
           'quic/crypto/p256_key_exchange_openssl.cc',
           'quic/crypto/proof_source_chromium_openssl.cc',

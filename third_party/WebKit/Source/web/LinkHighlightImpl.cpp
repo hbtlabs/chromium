@@ -23,7 +23,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/LinkHighlightImpl.h"
 
 #include "core/dom/LayoutTreeBuilderTraversal.h"
@@ -97,7 +96,6 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewImpl* owningWebViewImpl)
     m_contentLayer->layer()->setDrawsContent(true);
     m_contentLayer->layer()->setOpacity(1);
     m_geometryNeedsUpdate = true;
-    updateGeometry();
 }
 
 LinkHighlightImpl::~LinkHighlightImpl()
@@ -270,7 +268,8 @@ void LinkHighlightImpl::paintContents(WebDisplayItemList* webDisplayItemList, We
         return;
 
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(paintableRegion().width(), paintableRegion().height());
+    gfx::Rect visualRect = paintableRegion();
+    SkCanvas* canvas = recorder.beginRecording(visualRect.width(), visualRect.height());
 
     SkPaint paint;
     paint.setStyle(SkPaint::kFill_Style);
@@ -279,8 +278,7 @@ void LinkHighlightImpl::paintContents(WebDisplayItemList* webDisplayItemList, We
     canvas->drawPath(m_path.skPath(), paint);
 
     RefPtr<const SkPicture> picture = adoptRef(recorder.endRecording());
-    // TODO(wkorman): Pass actual visual rect with the drawing item.
-    webDisplayItemList->appendDrawingItem(IntRect(), picture.get());
+    webDisplayItemList->appendDrawingItem(WebRect(visualRect.x(), visualRect.y(), visualRect.width(), visualRect.height()), picture.get());
 }
 
 void LinkHighlightImpl::startHighlightAnimationIfNeeded()

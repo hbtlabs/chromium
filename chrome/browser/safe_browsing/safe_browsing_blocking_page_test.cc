@@ -10,11 +10,13 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/net/url_request_mock_util.h"
@@ -315,9 +317,13 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
 class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
  public:
   TestSafeBrowsingBlockingPage(SafeBrowsingUIManager* manager,
-                                 WebContents* web_contents,
-                                 const UnsafeResourceList& unsafe_resources)
-      : SafeBrowsingBlockingPage(manager, web_contents, unsafe_resources),
+                               WebContents* web_contents,
+                               const GURL& main_frame_url,
+                               const UnsafeResourceList& unsafe_resources)
+      : SafeBrowsingBlockingPage(manager,
+                                 web_contents,
+                                 main_frame_url,
+                                 unsafe_resources),
         wait_for_delete_(false) {
     // Don't wait the whole 3 seconds for the browser test.
     malware_details_proceed_delay_ms_ = 100;
@@ -357,10 +363,11 @@ class TestSafeBrowsingBlockingPageFactory
   SafeBrowsingBlockingPage* CreateSafeBrowsingPage(
       SafeBrowsingUIManager* delegate,
       WebContents* web_contents,
+      const GURL& main_frame_url,
       const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
       override {
     return new TestSafeBrowsingBlockingPage(delegate, web_contents,
-                                            unsafe_resources);
+                                            main_frame_url, unsafe_resources);
   }
 };
 
@@ -1098,25 +1105,29 @@ INSTANTIATE_TEST_CASE_P(SafeBrowsingBlockingPageBrowserTestWithThreatType,
 // displayed.
 class SafeBrowsingBlockingPageIDNTest
     : public SecurityInterstitialIDNTest,
-      public testing::WithParamInterface<SBThreatType> {
+      public testing::WithParamInterface<testing::tuple<bool, SBThreatType>> {
  protected:
   // SecurityInterstitialIDNTest implementation
   SecurityInterstitialPage* CreateInterstitial(
       content::WebContents* contents,
       const GURL& request_url) const override {
+    const bool is_subresource = testing::get<0>(GetParam());
+
     SafeBrowsingService* sb_service =
         g_browser_process->safe_browsing_service();
     SafeBrowsingBlockingPage::UnsafeResource resource;
 
     resource.url = request_url;
-    resource.is_subresource = false;
-    resource.threat_type = GetParam();
+    resource.is_subresource = is_subresource;
+    resource.threat_type = testing::get<1>(GetParam());
     resource.render_process_host_id = contents->GetRenderProcessHost()->GetID();
     resource.render_view_id = contents->GetRenderViewHost()->GetRoutingID();
     resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
 
     return SafeBrowsingBlockingPage::CreateBlockingPage(
-        sb_service->ui_manager().get(), contents, resource);
+        sb_service->ui_manager().get(), contents,
+        is_subresource ? GURL("http://mainframe.example.com/") : request_url,
+        resource);
   }
 };
 
@@ -1125,10 +1136,12 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageIDNTest,
   EXPECT_TRUE(VerifyIDNDecoded());
 }
 
-INSTANTIATE_TEST_CASE_P(SafeBrowsingBlockingPageIDNTestWithThreatType,
-                        SafeBrowsingBlockingPageIDNTest,
-                        testing::Values(SB_THREAT_TYPE_URL_MALWARE,
-                                        SB_THREAT_TYPE_URL_PHISHING,
-                                        SB_THREAT_TYPE_URL_UNWANTED));
+INSTANTIATE_TEST_CASE_P(
+    SafeBrowsingBlockingPageIDNTestWithThreatType,
+    SafeBrowsingBlockingPageIDNTest,
+    testing::Combine(testing::Values(false, true),
+                     testing::Values(SB_THREAT_TYPE_URL_MALWARE,
+                                     SB_THREAT_TYPE_URL_PHISHING,
+                                     SB_THREAT_TYPE_URL_UNWANTED)));
 
 }  // namespace safe_browsing

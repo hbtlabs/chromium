@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -96,6 +98,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestComplex) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_complex.html")) <<
       message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestTypes) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_types.html")) << message_;
 }
 
 // Flaky (sometimes crash): http://crbug.com/140976
@@ -399,14 +406,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, HostedAppRequest) {
           "/extensions/api_test/webrequest_hosted_app/index.html"));
   scoped_refptr<extensions::Extension> hosted_app =
       extensions::ExtensionBuilder()
-      .SetManifest(extensions::DictionaryBuilder()
-          .Set("name", "Some hosted app")
-          .Set("version", "1")
-          .Set("manifest_version", 2)
-          .Set("app", extensions::DictionaryBuilder()
-              .Set("launch", extensions::DictionaryBuilder()
-                  .Set("web_url", hosted_app_url.spec()))))
-      .Build();
+          .SetManifest(std::move(
+              extensions::DictionaryBuilder()
+                  .Set("name", "Some hosted app")
+                  .Set("version", "1")
+                  .Set("manifest_version", 2)
+                  .Set("app", std::move(extensions::DictionaryBuilder().Set(
+                                  "launch",
+                                  std::move(extensions::DictionaryBuilder().Set(
+                                      "web_url", hosted_app_url.spec())))))))
+          .Build();
   extensions::ExtensionSystem::Get(browser()->profile())->extension_service()
       ->AddExtension(hosted_app.get());
 

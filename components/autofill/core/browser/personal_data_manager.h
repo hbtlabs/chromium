@@ -9,13 +9,14 @@
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/prefs/pref_member.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -89,11 +90,16 @@ class PersonalDataManager : public KeyedService,
   virtual void RemoveObserver(PersonalDataManagerObserver* observer);
 
   // Scans the given |form| for importable Autofill data. If the form includes
-  // sufficient address data, it is immediately imported. If the form includes
-  // sufficient credit card data, it is stored into |credit_card|, so that we
-  // can prompt the user whether to save this data.
+  // sufficient address data for a new profile, it is immediately imported. If
+  // the form includes sufficient credit card data for a new credit card, it is
+  // stored into |credit_card| so that we can prompt the user whether to save
+  // this data. If the form contains credit card data already present in a local
+  // credit card entry *and* |should_return_local_card| is true, the data is
+  // stored into |credit_card| so that we can prompt the user whether to upload
+  // it.
   // Returns |true| if sufficient address or credit card data was found.
   bool ImportFormData(const FormStructure& form,
+                      bool should_return_local_card,
                       scoped_ptr<CreditCard>* credit_card);
 
   // Called to indicate |data_model| was used (to fill in a form). Updates
@@ -106,7 +112,7 @@ class PersonalDataManager : public KeyedService,
   virtual std::string SaveImportedProfile(
       const AutofillProfile& imported_profile);
 
-  // Saves a credit card value detected in |ImportedFormData|. Returns the guid
+  // Saves |imported_credit_card| to the WebDB if it exists. Returns the guid of
   // of the new or updated card, or the empty string if no card was saved.
   virtual std::string SaveImportedCreditCard(
       const CreditCard& imported_credit_card);

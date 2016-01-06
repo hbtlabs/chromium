@@ -4,8 +4,12 @@
 
 #include "chrome/browser/ui/webui/signin/user_manager_screen_handler.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
@@ -22,6 +26,7 @@
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
+#include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/local_auth.h"
@@ -39,6 +44,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/proximity_auth/screenlock_bridge.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -71,6 +77,7 @@ const char kKeyIsDesktop[] = "isDesktopUser";
 const char kKeyAvatarUrl[] = "userImage";
 const char kKeyNeedsSignin[] = "needsSignin";
 const char kKeyHasLocalCreds[] = "hasLocalCreds";
+const char kKeyStatistics[] = "statistics";
 const char kKeyIsProfileLoaded[] = "isProfileLoaded";
 
 // JS API callback names.
@@ -313,7 +320,7 @@ void UserManagerScreenHandler::ShowBannerMessage(
 }
 
 void UserManagerScreenHandler::ShowUserPodCustomIcon(
-    const std::string& user_email,
+    const AccountId& account_id,
     const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions&
         icon_options) {
   scoped_ptr<base::DictionaryValue> icon = icon_options.ToDictionaryValue();
@@ -321,15 +328,14 @@ void UserManagerScreenHandler::ShowUserPodCustomIcon(
     return;
   web_ui()->CallJavascriptFunction(
       "login.AccountPickerScreen.showUserPodCustomIcon",
-      base::StringValue(user_email),
-      *icon);
+      base::StringValue(account_id.GetUserEmail()), *icon);
 }
 
 void UserManagerScreenHandler::HideUserPodCustomIcon(
-    const std::string& user_email) {
+    const AccountId& account_id) {
   web_ui()->CallJavascriptFunction(
       "login.AccountPickerScreen.hideUserPodCustomIcon",
-      base::StringValue(user_email));
+      base::StringValue(account_id.GetUserEmail()));
 }
 
 void UserManagerScreenHandler::EnableInput() {
@@ -337,24 +343,23 @@ void UserManagerScreenHandler::EnableInput() {
 }
 
 void UserManagerScreenHandler::SetAuthType(
-    const std::string& user_email,
+    const AccountId& account_id,
     proximity_auth::ScreenlockBridge::LockHandler::AuthType auth_type,
     const base::string16& auth_value) {
-  if (GetAuthType(user_email) ==
+  if (GetAuthType(account_id) ==
       proximity_auth::ScreenlockBridge::LockHandler::FORCE_OFFLINE_PASSWORD)
     return;
 
-  user_auth_type_map_[user_email] = auth_type;
-  web_ui()->CallJavascriptFunction(
-      "login.AccountPickerScreen.setAuthType",
-      base::StringValue(user_email),
-      base::FundamentalValue(auth_type),
-      base::StringValue(auth_value));
+  user_auth_type_map_[account_id.GetUserEmail()] = auth_type;
+  web_ui()->CallJavascriptFunction("login.AccountPickerScreen.setAuthType",
+                                   base::StringValue(account_id.GetUserEmail()),
+                                   base::FundamentalValue(auth_type),
+                                   base::StringValue(auth_value));
 }
 
 proximity_auth::ScreenlockBridge::LockHandler::AuthType
-UserManagerScreenHandler::GetAuthType(const std::string& user_email) const {
-  UserAuthTypeMap::const_iterator it = user_auth_type_map_.find(user_email);
+UserManagerScreenHandler::GetAuthType(const AccountId& account_id) const {
+  const auto it = user_auth_type_map_.find(account_id.GetUserEmail());
   if (it == user_auth_type_map_.end())
     return proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD;
   return it->second;
@@ -365,20 +370,18 @@ UserManagerScreenHandler::GetScreenType() const {
   return proximity_auth::ScreenlockBridge::LockHandler::LOCK_SCREEN;
 }
 
-void UserManagerScreenHandler::Unlock(const std::string& user_email) {
-  base::FilePath path =
-      profiles::GetPathOfProfileWithEmail(g_browser_process->profile_manager(),
-                                          user_email);
+void UserManagerScreenHandler::Unlock(const AccountId& account_id) {
+  const base::FilePath path = profiles::GetPathOfProfileWithEmail(
+      g_browser_process->profile_manager(), account_id.GetUserEmail());
   if (!path.empty()) {
     authenticating_profile_path_ = path;
     ReportAuthenticationResult(true, ProfileMetrics::AUTH_LOCAL);
   }
 }
 
-void UserManagerScreenHandler::AttemptEasySignin(
-    const std::string& user_email,
-    const std::string& secret,
-    const std::string& key_label) {
+void UserManagerScreenHandler::AttemptEasySignin(const AccountId& account_id,
+                                                 const std::string& secret,
+                                                 const std::string& key_label) {
   NOTREACHED();
 }
 
@@ -550,18 +553,20 @@ void UserManagerScreenHandler::HandleAttemptUnlock(
     const base::ListValue* args) {
   std::string email;
   CHECK(args->GetString(0, &email));
-  GetScreenlockRouter(email)->OnAuthAttempted(GetAuthType(email), "");
+  GetScreenlockRouter(email)
+      ->OnAuthAttempted(GetAuthType(AccountId::FromUserEmail(email)), "");
 }
 
 void UserManagerScreenHandler::HandleHardlockUserPod(
     const base::ListValue* args) {
   std::string email;
   CHECK(args->GetString(0, &email));
+  const AccountId account_id = AccountId::FromUserEmail(email);
   SetAuthType(
-      email,
+      account_id,
       proximity_auth::ScreenlockBridge::LockHandler::FORCE_OFFLINE_PASSWORD,
       base::string16());
-  HideUserPodCustomIcon(email);
+  HideUserPodCustomIcon(account_id);
 }
 
 void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
@@ -583,7 +588,32 @@ void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
   if (!profile)
     return;
 
-  profiles::GetProfileStatistics(
+  if (!chrome::FindAnyBrowser(profile, true, desktop_type_)) {
+    // If no windows are open for that profile, the statistics in
+    // ProfileInfoCache are up to date. The statistics in ProfileInfoCache are
+    // returned because the copy in user_pod_row.js may be outdated. However, if
+    // some statistics are missing in ProfileInfoCache (i.e. |item.success| is
+    // false), then the actual statistics are queried instead.
+    base::DictionaryValue return_value;
+    profiles::ProfileCategoryStats stats =
+        profiles::GetProfileStatisticsFromCache(profile_path);
+    bool stats_success = true;
+    for (const auto& item : stats) {
+      scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+      stat->SetIntegerWithoutPathExpansion("count", item.count);
+      stat->SetBooleanWithoutPathExpansion("success", item.success);
+      return_value.SetWithoutPathExpansion(item.category, std::move(stat));
+      stats_success &= item.success;
+    }
+    if (stats_success) {
+      web_ui()->CallJavascriptFunction("updateRemoveWarningDialog",
+                                       base::StringValue(profile_path.value()),
+                                       return_value);
+      return;
+    }
+  }
+
+  profiles::GatherProfileStatistics(
       profile,
       base::Bind(
           &UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
@@ -595,16 +625,16 @@ void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
     base::FilePath profile_path,
     profiles::ProfileCategoryStats result) {
   // Copy result into return_value.
-  base::StringValue return_profile_path(profile_path.value());
   base::DictionaryValue return_value;
   for (const auto& item : result) {
-    base::DictionaryValue* stat = new base::DictionaryValue();
+    scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
     stat->SetIntegerWithoutPathExpansion("count", item.count);
     stat->SetBooleanWithoutPathExpansion("success", item.success);
-    return_value.SetWithoutPathExpansion(item.category, stat);
+    return_value.SetWithoutPathExpansion(item.category, std::move(stat));
   }
   web_ui()->CallJavascriptFunction("updateRemoveWarningDialog",
-                                   return_profile_path, return_value);
+                                   base::StringValue(profile_path.value()),
+                                   return_value);
 }
 
 void UserManagerScreenHandler::HandleGetRemoveWarningDialogMessage(
@@ -876,6 +906,18 @@ void UserManagerScreenHandler::SendUserList() {
     profile_value->SetBoolean(kKeyIsDesktop, true);
     profile_value->SetString(
         kKeyAvatarUrl, GetAvatarImageAtIndex(i, info_cache));
+
+    profiles::ProfileCategoryStats stats =
+        profiles::GetProfileStatisticsFromCache(profile_path);
+    scoped_ptr<base::DictionaryValue> stats_dict(new base::DictionaryValue);
+    for (const auto& item : stats) {
+      scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+      stat->SetIntegerWithoutPathExpansion("count", item.count);
+      stat->SetBooleanWithoutPathExpansion("success", item.success);
+      stats_dict->SetWithoutPathExpansion(item.category, std::move(stat));
+    }
+    profile_value->SetWithoutPathExpansion(kKeyStatistics,
+                                           std::move(stats_dict));
 
     // GetProfileByPath returns a pointer if the profile is fully loaded, NULL
     // otherwise.

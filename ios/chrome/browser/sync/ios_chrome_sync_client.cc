@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "components/autofill/core/browser/webdata/autocomplete_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service.h"
@@ -45,13 +46,13 @@
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
+#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sessions/ios_chrome_local_session_event_router.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/public/provider/chrome/browser/keyed_service_provider.h"
 #include "ios/web/public/web_thread.h"
 #include "sync/internal_api/public/engine/passive_model_worker.h"
 #include "sync/util/extensions_activity.h"
@@ -134,6 +135,14 @@ IOSChromeSyncClient::~IOSChromeSyncClient() {}
 
 void IOSChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
   DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+
+  web_data_service_ =
+      ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
+          browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
+  // TODO(crbug.com/558320) Is EXPLICIT_ACCESS appropriate here?
+  password_store_ = IOSChromePasswordStoreFactory::GetForBrowserState(
+      browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
+
   // Component factory may already be set in tests.
   if (!GetSyncApiComponentFactory()) {
     const GURL sync_service_url = GetSyncServiceURL(
@@ -148,20 +157,17 @@ void IOSChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
         this, ::GetChannel(), ::GetVersionString(),
         ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET,
         *base::CommandLine::ForCurrentProcess(),
-        ios::prefs::kSavingBrowserHistoryDisabled, sync_service_url,
+        prefs::kSavingBrowserHistoryDisabled, sync_service_url,
         web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
         web::WebThread::GetTaskRunnerForThread(web::WebThread::DB),
-        token_service, url_request_context_getter));
+        token_service, url_request_context_getter, web_data_service_,
+        password_store_));
   }
   sync_service_ = sync_service;
-  web_data_service_ = GetWebDataService();
-  password_store_ = GetPasswordStore();
 }
 
 sync_driver::SyncService* IOSChromeSyncClient::GetSyncService() {
-  // TODO(crbug.com/558298): bring back this DCHECK after Typed URLs are
-  // converted to SyncableService.
-  // DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
+  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
   return sync_service_;
 }
 
@@ -192,14 +198,6 @@ autofill::PersonalDataManager* IOSChromeSyncClient::GetPersonalDataManager() {
   return PersonalDataManagerFactory::GetForBrowserState(browser_state_);
 }
 
-scoped_refptr<password_manager::PasswordStore>
-IOSChromeSyncClient::GetPasswordStore() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
-  // TODO(crbug.com/558320) Is EXPLICIT_ACCESS appropriate here?
-  return IOSChromePasswordStoreFactory::GetForBrowserState(
-      browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-}
-
 sync_driver::ClearBrowsingDataCallback
 IOSChromeSyncClient::GetClearBrowsingDataCallback() {
   return base::Bind(&IOSChromeSyncClient::ClearBrowsingData,
@@ -216,13 +214,6 @@ sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod
 IOSChromeSyncClient::GetRegisterPlatformTypesCallback() {
   // The iOS port does not have any platform-specific datatypes.
   return sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod();
-}
-
-scoped_refptr<autofill::AutofillWebDataService>
-IOSChromeSyncClient::GetWebDataService() {
-  DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
-  return ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
-      browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
 BookmarkUndoService* IOSChromeSyncClient::GetBookmarkUndoServiceIfExists() {
@@ -256,9 +247,8 @@ base::WeakPtr<syncer::SyncableService>
 IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
-      return static_cast<ProfileSyncService*>(
-                 ios::GetKeyedServiceProvider()->GetSyncServiceForBrowserState(
-                     browser_state_))
+      return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+                 browser_state_)
           ->GetDeviceInfoSyncableService()
           ->AsWeakPtr();
     case syncer::PREFERENCES:
@@ -299,12 +289,17 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return history ? history->AsWeakPtr()
                      : base::WeakPtr<history::HistoryService>();
     }
+    case syncer::TYPED_URLS: {
+      history::HistoryService* history =
+          ios::HistoryServiceFactory::GetForBrowserState(
+              browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
+      return history ? history->GetTypedUrlSyncableService()->AsWeakPtr()
+                     : base::WeakPtr<syncer::SyncableService>();
+    }
     case syncer::FAVICON_IMAGES:
     case syncer::FAVICON_TRACKING: {
       browser_sync::FaviconCache* favicons =
-          static_cast<ProfileSyncService*>(
-              ios::GetKeyedServiceProvider()->GetSyncServiceForBrowserState(
-                  browser_state_))
+          IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state_)
               ->GetFaviconCache();
       return favicons ? favicons->AsWeakPtr()
                       : base::WeakPtr<syncer::SyncableService>();
@@ -318,9 +313,8 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return base::WeakPtr<syncer::SyncableService>();
     }
     case syncer::SESSIONS: {
-      return static_cast<ProfileSyncService*>(
-                 ios::GetKeyedServiceProvider()->GetSyncServiceForBrowserState(
-                     browser_state_))
+      return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+                 browser_state_)
           ->GetSessionsSyncableService()
           ->AsWeakPtr();
     }
@@ -329,10 +323,6 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
                              : base::WeakPtr<syncer::SyncableService>();
     }
     default:
-      // TODO(crbug.com/562170) The following datatypes still need to be
-      // transitioned to the syncer::SyncableService API:
-      // Bookmarks
-      // Typed URLs
       NOTREACHED();
       return base::WeakPtr<syncer::SyncableService>();
   }
@@ -366,11 +356,9 @@ IOSChromeSyncClient::CreateModelWorkerForGroup(
           web::WebThread::GetTaskRunnerForThread(web::WebThread::UI), observer);
     }
     case syncer::GROUP_PASSWORD: {
-      scoped_refptr<password_manager::PasswordStore> password_store =
-          GetPasswordStore();
-      if (!password_store)
+      if (!password_store_)
         return nullptr;
-      return new browser_sync::PasswordModelWorker(password_store, observer);
+      return new browser_sync::PasswordModelWorker(password_store_, observer);
     }
     default:
       return nullptr;

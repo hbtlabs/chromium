@@ -28,9 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
-
 #include "core/inspector/InjectedScript.h"
 
 #include "bindings/core/v8/ScriptFunctionCall.h"
@@ -118,13 +115,15 @@ static PassRefPtr<TypeBuilder::Debugger::ExceptionDetails> toExceptionDetails(Pa
 
 InjectedScript::InjectedScript()
     : m_inspectedStateAccessCheck(nullptr)
+    , m_contextId(0)
 {
 }
 
-InjectedScript::InjectedScript(ScriptValue injectedScriptObject, InspectedStateAccessCheck accessCheck, PassRefPtr<InjectedScriptNative> injectedScriptNative)
+InjectedScript::InjectedScript(ScriptValue injectedScriptObject, InspectedStateAccessCheck accessCheck, PassRefPtr<InjectedScriptNative> injectedScriptNative, int contextId)
     : m_injectedScriptObject(injectedScriptObject)
     , m_inspectedStateAccessCheck(accessCheck)
     , m_native(injectedScriptNative)
+    , m_contextId(contextId)
 {
 }
 

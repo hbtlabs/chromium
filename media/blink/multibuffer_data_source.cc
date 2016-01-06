@@ -4,9 +4,12 @@
 
 #include "media/blink/multibuffer_data_source.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/media_log.h"
 #include "media/blink/multibuffer_reader.h"
@@ -17,31 +20,31 @@ using blink::WebFrame;
 namespace {
 
 // Minimum preload buffer.
-const int64 kMinBufferPreload = 2 << 20;  // 2 Mb
+const int64_t kMinBufferPreload = 2 << 20;  // 2 Mb
 // Maxmimum preload buffer.
-const int64 kMaxBufferPreload = 20 << 20;  // 20 Mb
+const int64_t kMaxBufferPreload = 20 << 20;  // 20 Mb
 
 // Preload this much extra, then stop preloading until we fall below the
 // kTargetSecondsBufferedAhead.
-const int64 kPreloadHighExtra = 1 << 20;  // 1 Mb
+const int64_t kPreloadHighExtra = 1 << 20;  // 1 Mb
 
 // Total size of the pinned region in the cache.
-const int64 kMaxBufferSize = 25 << 20;  // 25 Mb
+const int64_t kMaxBufferSize = 25 << 20;  // 25 Mb
 
 // If bitrate is not known, use this.
-const int64 kDefaultBitrate = 200 * 8 << 10;  // 200 Kbps.
+const int64_t kDefaultBitrate = 200 * 8 << 10;  // 200 Kbps.
 
 // Maximum bitrate for buffer calculations.
-const int64 kMaxBitrate = 20 * 8 << 20;  // 20 Mbps.
+const int64_t kMaxBitrate = 20 * 8 << 20;  // 20 Mbps.
 
 // Maximum playback rate for buffer calculations.
 const double kMaxPlaybackRate = 25.0;
 
 // Preload this many seconds of data by default.
-const int64 kTargetSecondsBufferedAhead = 10;
+const int64_t kTargetSecondsBufferedAhead = 10;
 
 // Keep this many seconds of data for going back by default.
-const int64 kTargetSecondsBufferedBehind = 2;
+const int64_t kTargetSecondsBufferedBehind = 2;
 
 }  // namespace
 
@@ -54,9 +57,9 @@ T clamp(T value, T min, T max) {
 
 class MultibufferDataSource::ReadOperation {
  public:
-  ReadOperation(int64 position,
+  ReadOperation(int64_t position,
                 int size,
-                uint8* data,
+                uint8_t* data,
                 const DataSource::ReadCB& callback);
   ~ReadOperation();
 
@@ -64,23 +67,23 @@ class MultibufferDataSource::ReadOperation {
   // afterwards.
   static void Run(scoped_ptr<ReadOperation> read_op, int result);
 
-  int64 position() { return position_; }
+  int64_t position() { return position_; }
   int size() { return size_; }
-  uint8* data() { return data_; }
+  uint8_t* data() { return data_; }
 
  private:
-  const int64 position_;
+  const int64_t position_;
   const int size_;
-  uint8* data_;
+  uint8_t* data_;
   DataSource::ReadCB callback_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ReadOperation);
 };
 
 MultibufferDataSource::ReadOperation::ReadOperation(
-    int64 position,
+    int64_t position,
     int size,
-    uint8* data,
+    uint8_t* data,
     const DataSource::ReadCB& callback)
     : position_(position), size_(size), data_(data), callback_(callback) {
   DCHECK(!callback_.is_null());
@@ -115,6 +118,7 @@ MultibufferDataSource::MultibufferDataSource(
       frame_(frame),
       stop_signal_received_(false),
       media_has_played_(false),
+      buffering_strategy_(BUFFERING_STRATEGY_NORMAL),
       single_origin_(true),
       cancel_on_defer_(false),
       preload_(AUTO),
@@ -147,8 +151,8 @@ bool MultibufferDataSource::assume_fully_buffered() {
   return !url_data_->url().SchemeIsHTTPOrHTTPS();
 }
 
-void MultibufferDataSource::CreateResourceLoader(int64 first_byte_position,
-                                                 int64 last_byte_position) {
+void MultibufferDataSource::CreateResourceLoader(int64_t first_byte_position,
+                                                 int64_t last_byte_position) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   reader_.reset(new MultiBufferReader(
@@ -175,7 +179,6 @@ void MultibufferDataSource::Initialize(const InitializeCB& init_cb) {
     reader_->Wait(1,
                   base::Bind(&MultibufferDataSource::StartCallback, weak_ptr_));
   }
-  UpdateLoadingState();
 }
 
 void MultibufferDataSource::OnRedirect(
@@ -229,8 +232,16 @@ void MultibufferDataSource::OnRedirect(
 }
 
 void MultibufferDataSource::SetPreload(Preload preload) {
+  DVLOG(1) << __FUNCTION__ << "(" << preload << ")";
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   preload_ = preload;
+  UpdateBufferSizes();
+}
+
+void MultibufferDataSource::SetBufferingStrategy(
+    BufferingStrategy buffering_strategy) {
+  DCHECK(render_task_runner_->BelongsToCurrentThread());
+  buffering_strategy_ = buffering_strategy;
   UpdateBufferSizes();
 }
 
@@ -279,15 +290,8 @@ void MultibufferDataSource::MediaIsPlaying() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   media_has_played_ = true;
   cancel_on_defer_ = false;
-  paused_ = false;
   // Once we start playing, we need preloading.
   preload_ = AUTO;
-  UpdateBufferSizes();
-}
-
-void MultibufferDataSource::MediaIsPaused() {
-  DCHECK(render_task_runner_->BelongsToCurrentThread());
-  paused_ = true;
   UpdateBufferSizes();
 }
 
@@ -325,9 +329,9 @@ int64_t MultibufferDataSource::GetMemoryUsage() const {
          << url_data_->multibuffer()->block_size_shift();
 }
 
-void MultibufferDataSource::Read(int64 position,
+void MultibufferDataSource::Read(int64_t position,
                                  int size,
-                                 uint8* data,
+                                 uint8_t* data,
                                  const DataSource::ReadCB& read_cb) {
   DVLOG(1) << "Read: " << position << " offset, " << size << " bytes";
   // Reading is not allowed until after initialization.
@@ -351,7 +355,7 @@ void MultibufferDataSource::Read(int64 position,
       base::Bind(&MultibufferDataSource::ReadTask, weak_factory_.GetWeakPtr()));
 }
 
-bool MultibufferDataSource::GetSize(int64* size_out) {
+bool MultibufferDataSource::GetSize(int64_t* size_out) {
   *size_out = url_data_->length();
   return *size_out != kPositionNotSpecified;
 }
@@ -381,18 +385,18 @@ void MultibufferDataSource::ReadTask() {
   int64_t available = reader_->Available();
   if (available < 0) {
     // A failure has occured.
-    ReadOperation::Run(read_op_.Pass(), kReadError);
+    ReadOperation::Run(std::move(read_op_), kReadError);
     return;
   }
   if (available) {
     bytes_read =
         static_cast<int>(std::min<int64_t>(available, read_op_->size()));
     bytes_read = reader_->TryRead(read_op_->data(), bytes_read);
-    ReadOperation::Run(read_op_.Pass(), bytes_read);
+    ReadOperation::Run(std::move(read_op_), bytes_read);
   } else {
     reader_->Wait(1, base::Bind(&MultibufferDataSource::ReadTask,
                                 weak_factory_.GetWeakPtr()));
-    UpdateLoadingState();
+    UpdateLoadingState(false);
   }
 }
 
@@ -408,7 +412,7 @@ void MultibufferDataSource::StopInternal_Locked() {
   init_cb_.Reset();
 
   if (read_op_)
-    ReadOperation::Run(read_op_.Pass(), kReadError);
+    ReadOperation::Run(std::move(read_op_), kReadError);
 }
 
 void MultibufferDataSource::StopLoader() {
@@ -475,12 +479,16 @@ void MultibufferDataSource::StartCallback() {
                                    url_data_->range_supported());
   }
 
-  UpdateLoadingState();
   render_task_runner_->PostTask(
       FROM_HERE, base::Bind(base::ResetAndReturn(&init_cb_), success));
+
+  // Even if data is cached, say that we're loading at this point for
+  // compatibility.
+  UpdateLoadingState(true);
 }
 
-void MultibufferDataSource::ProgressCallback(int64 begin, int64 end) {
+void MultibufferDataSource::ProgressCallback(int64_t begin, int64_t end) {
+  DVLOG(1) << __FUNCTION__ << "(" << begin << ", " << end << ")";
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (assume_fully_buffered())
@@ -496,13 +504,17 @@ void MultibufferDataSource::ProgressCallback(int64 begin, int64 end) {
     host_->AddBufferedByteRange(begin, end);
   }
 
-  UpdateLoadingState();
+  UpdateLoadingState(false);
 }
 
-void MultibufferDataSource::UpdateLoadingState() {
+void MultibufferDataSource::UpdateLoadingState(bool force_loading) {
+  DVLOG(1) << __FUNCTION__;
+  if (assume_fully_buffered())
+    return;
   // Update loading state.
-  if ((!!reader_ && reader_->IsLoading()) != loading_) {
-    loading_ = !loading_;
+  bool is_loading = !!reader_ && reader_->IsLoading();
+  if (force_loading || is_loading != loading_) {
+    loading_ = is_loading || force_loading;
 
     if (!loading_ && cancel_on_defer_) {
       reader_.reset(nullptr);
@@ -514,13 +526,16 @@ void MultibufferDataSource::UpdateLoadingState() {
 }
 
 void MultibufferDataSource::UpdateBufferSizes() {
+  DVLOG(1) << __FUNCTION__;
   if (!reader_)
     return;
 
   if (!assume_fully_buffered()) {
-    // If the playback has started and we're paused, then try to load as much as
-    // possible, assuming that the file is cacheable. (If not, why bother?)
-    if (media_has_played_ && paused_ && url_data_ &&
+    // If the playback has started and the strategy is aggressive, then try to
+    // load as much as possible, assuming that the file is cacheable. (If not,
+    // why bother?)
+    bool aggressive = (buffering_strategy_ == BUFFERING_STRATEGY_AGGRESSIVE);
+    if (media_has_played_ && aggressive && url_data_ &&
         url_data_->range_supported() && url_data_->cacheable()) {
       reader_->SetPreload(1LL << 40, 1LL << 40);  // 1 Tb
       return;
@@ -528,7 +543,7 @@ void MultibufferDataSource::UpdateBufferSizes() {
   }
 
   // Use a default bit rate if unknown and clamp to prevent overflow.
-  int64 bitrate = clamp<int64>(bitrate_, 0, kMaxBitrate);
+  int64_t bitrate = clamp<int64_t>(bitrate_, 0, kMaxBitrate);
   if (bitrate == 0)
     bitrate = kDefaultBitrate;
 
@@ -539,13 +554,13 @@ void MultibufferDataSource::UpdateBufferSizes() {
   playback_rate = std::max(playback_rate, 1.0);
   playback_rate = std::min(playback_rate, kMaxPlaybackRate);
 
-  int64 bytes_per_second = (bitrate / 8.0) * playback_rate;
+  int64_t bytes_per_second = (bitrate / 8.0) * playback_rate;
 
-  int64 preload = clamp(kTargetSecondsBufferedAhead * bytes_per_second,
-                        kMinBufferPreload, kMaxBufferPreload);
-  int64 back_buffer = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
-                            kMinBufferPreload, kMaxBufferPreload);
-  int64 pin_forwards = kMaxBufferSize - back_buffer;
+  int64_t preload = clamp(kTargetSecondsBufferedAhead * bytes_per_second,
+                          kMinBufferPreload, kMaxBufferPreload);
+  int64_t back_buffer = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
+                              kMinBufferPreload, kMaxBufferPreload);
+  int64_t pin_forwards = kMaxBufferSize - back_buffer;
   DCHECK_LE(preload_ + kPreloadHighExtra, pin_forwards);
   reader_->SetMaxBuffer(back_buffer, pin_forwards);
 

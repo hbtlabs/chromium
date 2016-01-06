@@ -27,7 +27,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/graphics/Path.h"
 
 #include <math.h>
@@ -72,9 +71,22 @@ bool Path::operator==(const Path& other) const
     return m_path == other.m_path;
 }
 
+bool Path::contains(const FloatPoint& point) const
+{
+    return m_path.contains(WebCoreFloatToSkScalar(point.x()), WebCoreFloatToSkScalar(point.y()));
+}
+
 bool Path::contains(const FloatPoint& point, WindRule rule) const
 {
-    return SkPathContainsPoint(m_path, point, static_cast<SkPath::FillType>(rule));
+    SkScalar x = WebCoreFloatToSkScalar(point.x());
+    SkScalar y = WebCoreFloatToSkScalar(point.y());
+    SkPath::FillType fillType = WebCoreWindRuleToSkFillType(rule);
+    if (m_path.getFillType() != fillType) {
+        SkPath tmp(m_path);
+        tmp.setFillType(fillType);
+        return tmp.contains(x, y);
+    }
+    return m_path.contains(x, y);
 }
 
 // FIXME: this method ignores the CTM and may yield inaccurate results for large scales.
@@ -95,7 +107,7 @@ SkPath Path::strokePath(const StrokeData& strokeData) const
 
 bool Path::strokeContains(const FloatPoint& point, const StrokeData& strokeData) const
 {
-    return SkPathContainsPoint(strokePath(strokeData), point, SkPath::kWinding_FillType);
+    return strokePath(strokeData).contains(WebCoreFloatToSkScalar(point.x()), WebCoreFloatToSkScalar(point.y()));
 }
 
 FloatRect Path::boundingRect() const

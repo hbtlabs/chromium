@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/imports/HTMLImportLoader.h"
 
 #include "core/dom/Document.h"
@@ -79,7 +78,7 @@ void HTMLImportLoader::responseReceived(Resource* resource, const ResourceRespon
     ASSERT_UNUSED(handle, !handle);
     // Resource may already have been loaded with the import loader
     // being added as a client later & now being notified. Fail early.
-    if (resource->loadFailedOrCanceled() || response.httpStatusCode() >= 400 || !response.httpHeaderField("Content-Disposition").isNull()) {
+    if (resource->loadFailedOrCanceled() || response.httpStatusCode() >= 400 || !response.httpHeaderField(HTTPNames::Content_Disposition).isNull()) {
         setState(StateError);
         return;
     }

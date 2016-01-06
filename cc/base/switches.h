@@ -30,13 +30,11 @@ CC_EXPORT extern const char kEnablePropertyTreeVerification[];
 // Switches for both the renderer and ui compositors.
 CC_EXPORT extern const char kEnableBeginFrameScheduling[];
 CC_EXPORT extern const char kEnableGpuBenchmarking[];
-CC_EXPORT extern const char kEnableCompositorPropertyTrees[];
+CC_EXPORT extern const char kDisableCompositorPropertyTrees[];
 
 // Debug visualizations.
 CC_EXPORT extern const char kShowCompositedLayerBorders[];
 CC_EXPORT extern const char kUIShowCompositedLayerBorders[];
-CC_EXPORT extern const char kShowFPSCounter[];
-CC_EXPORT extern const char kUIShowFPSCounter[];
 CC_EXPORT extern const char kShowLayerAnimationBounds[];
 CC_EXPORT extern const char kUIShowLayerAnimationBounds[];
 CC_EXPORT extern const char kShowPropertyChangedRects[];

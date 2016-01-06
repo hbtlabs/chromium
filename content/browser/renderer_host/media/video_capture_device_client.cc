@@ -5,12 +5,14 @@
 #include "content/browser/renderer_host/media/video_capture_device_client.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/media/video_capture_buffer_pool.h"
 #include "content/browser/renderer_host/media/video_capture_controller.h"
 #include "content/browser/renderer_host/media/video_capture_gpu_jpeg_decoder.h"
@@ -35,7 +37,7 @@ class AutoReleaseBuffer : public media::VideoCaptureDevice::Client::Buffer {
                     int buffer_id)
       : id_(buffer_id),
         pool_(pool),
-        buffer_handle_(pool_->GetBufferHandle(buffer_id).Pass()) {
+        buffer_handle_(pool_->GetBufferHandle(buffer_id)) {
     DCHECK(pool_.get());
   }
   int id() const override { return id_; }
@@ -78,7 +80,7 @@ VideoCaptureDeviceClient::~VideoCaptureDeviceClient() {
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedData(
-    const uint8* data,
+    const uint8_t* data,
     int length,
     const VideoCaptureFormat& frame_format,
     int rotation,
@@ -130,7 +132,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
   const media::VideoPixelStorage output_pixel_storage =
       use_gpu_memory_buffers_ ? media::PIXEL_STORAGE_GPUMEMORYBUFFER
                               : media::PIXEL_STORAGE_CPU;
-  uint8 *y_plane_data, *u_plane_data, *v_plane_data;
+  uint8_t *y_plane_data, *u_plane_data, *v_plane_data;
   scoped_ptr<Buffer> buffer(
       ReserveI420OutputBuffer(dimensions, output_pixel_storage, &y_plane_data,
                               &u_plane_data, &v_plane_data));
@@ -222,7 +224,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
         frame_format.pixel_format == media::PIXEL_FORMAT_MJPEG &&
         rotation == 0 && !flip) {
       external_jpeg_decoder_->DecodeCapturedData(data, length, frame_format,
-                                                 timestamp, buffer.Pass());
+                                                 timestamp, std::move(buffer));
       return;
     }
   }
@@ -251,14 +253,13 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
   const VideoCaptureFormat output_format = VideoCaptureFormat(
       dimensions, frame_format.frame_rate,
       media::PIXEL_FORMAT_I420, output_pixel_storage);
-  OnIncomingCapturedBuffer(buffer.Pass(), output_format, timestamp);
+  OnIncomingCapturedBuffer(std::move(buffer), output_format, timestamp);
 }
 
-void
-VideoCaptureDeviceClient::OnIncomingCapturedYuvData(
-    const uint8* y_data,
-    const uint8* u_data,
-    const uint8* v_data,
+void VideoCaptureDeviceClient::OnIncomingCapturedYuvData(
+    const uint8_t* y_data,
+    const uint8_t* u_data,
+    const uint8_t* v_data,
     size_t y_stride,
     size_t u_stride,
     size_t v_stride,
@@ -270,7 +271,7 @@ VideoCaptureDeviceClient::OnIncomingCapturedYuvData(
   DCHECK_EQ(media::PIXEL_STORAGE_CPU, frame_format.pixel_storage);
   DCHECK_EQ(0, clockwise_rotation) << "Rotation not supported";
 
-  uint8 *y_plane_data, *u_plane_data, *v_plane_data;
+  uint8_t *y_plane_data, *u_plane_data, *v_plane_data;
   scoped_ptr<Buffer> buffer(ReserveI420OutputBuffer(
       frame_format.frame_size, frame_format.pixel_storage, &y_plane_data,
       &u_plane_data, &v_plane_data));
@@ -302,7 +303,7 @@ VideoCaptureDeviceClient::OnIncomingCapturedYuvData(
     return;
   }
 
-  OnIncomingCapturedBuffer(buffer.Pass(), frame_format, timestamp);
+  OnIncomingCapturedBuffer(std::move(buffer), frame_format, timestamp);
 };
 
 scoped_ptr<media::VideoCaptureDevice::Client::Buffer>
@@ -333,7 +334,7 @@ VideoCaptureDeviceClient::ReserveOutputBuffer(
                    controller_, buffer_id_to_drop));
   }
 
-  return output_buffer.Pass();
+  return output_buffer;
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
@@ -351,9 +352,9 @@ void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
       frame = VideoFrame::WrapExternalYuvGpuMemoryBuffers(
           media::PIXEL_FORMAT_I420, frame_format.frame_size,
           gfx::Rect(frame_format.frame_size), frame_format.frame_size, 0, 0, 0,
-          reinterpret_cast<uint8*>(buffer->data(media::VideoFrame::kYPlane)),
-          reinterpret_cast<uint8*>(buffer->data(media::VideoFrame::kUPlane)),
-          reinterpret_cast<uint8*>(buffer->data(media::VideoFrame::kVPlane)),
+          reinterpret_cast<uint8_t*>(buffer->data(media::VideoFrame::kYPlane)),
+          reinterpret_cast<uint8_t*>(buffer->data(media::VideoFrame::kUPlane)),
+          reinterpret_cast<uint8_t*>(buffer->data(media::VideoFrame::kVPlane)),
           handle, handle, handle, base::TimeDelta());
       break;
     }
@@ -361,7 +362,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
       frame = VideoFrame::WrapExternalSharedMemory(
           media::PIXEL_FORMAT_I420, frame_format.frame_size,
           gfx::Rect(frame_format.frame_size), frame_format.frame_size,
-          reinterpret_cast<uint8*>(buffer->data()),
+          reinterpret_cast<uint8_t*>(buffer->data()),
           VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
                                      frame_format.frame_size),
           base::SharedMemory::NULLHandle(), 0u, base::TimeDelta());
@@ -370,7 +371,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
   DCHECK(frame.get());
   frame->metadata()->SetDouble(media::VideoFrameMetadata::FRAME_RATE,
                                frame_format.frame_rate);
-  OnIncomingCapturedVideoFrame(buffer.Pass(), frame, timestamp);
+  OnIncomingCapturedVideoFrame(std::move(buffer), frame, timestamp);
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedVideoFrame(
@@ -419,9 +420,9 @@ scoped_ptr<media::VideoCaptureDevice::Client::Buffer>
 VideoCaptureDeviceClient::ReserveI420OutputBuffer(
     const gfx::Size& dimensions,
     media::VideoPixelStorage storage,
-    uint8** y_plane_data,
-    uint8** u_plane_data,
-    uint8** v_plane_data) {
+    uint8_t** y_plane_data,
+    uint8_t** u_plane_data,
+    uint8_t** v_plane_data) {
   DCHECK(storage == media::PIXEL_STORAGE_GPUMEMORYBUFFER ||
          storage == media::PIXEL_STORAGE_CPU);
   DCHECK(dimensions.height());
@@ -437,7 +438,7 @@ VideoCaptureDeviceClient::ReserveI420OutputBuffer(
     case media::PIXEL_STORAGE_CPU:
       // TODO(emircan): See http://crbug.com/521068, move this pointer
       // arithmetic inside Buffer::data() when this bug is resolved.
-      *y_plane_data = reinterpret_cast<uint8*>(buffer->data());
+      *y_plane_data = reinterpret_cast<uint8_t*>(buffer->data());
       *u_plane_data =
           *y_plane_data +
           VideoFrame::PlaneSize(format, VideoFrame::kYPlane, dimensions)
@@ -446,15 +447,15 @@ VideoCaptureDeviceClient::ReserveI420OutputBuffer(
           *u_plane_data +
           VideoFrame::PlaneSize(format, VideoFrame::kUPlane, dimensions)
               .GetArea();
-      return buffer.Pass();
+      return buffer;
     case media::PIXEL_STORAGE_GPUMEMORYBUFFER:
       *y_plane_data =
-          reinterpret_cast<uint8*>(buffer->data(VideoFrame::kYPlane));
+          reinterpret_cast<uint8_t*>(buffer->data(VideoFrame::kYPlane));
       *u_plane_data =
-          reinterpret_cast<uint8*>(buffer->data(VideoFrame::kUPlane));
+          reinterpret_cast<uint8_t*>(buffer->data(VideoFrame::kUPlane));
       *v_plane_data =
-          reinterpret_cast<uint8*>(buffer->data(VideoFrame::kVPlane));
-      return buffer.Pass();
+          reinterpret_cast<uint8_t*>(buffer->data(VideoFrame::kVPlane));
+      return buffer;
   }
   NOTREACHED();
   return scoped_ptr<Buffer>();

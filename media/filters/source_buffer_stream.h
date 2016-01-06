@@ -10,13 +10,15 @@
 #ifndef MEDIA_FILTERS_SOURCE_BUFFER_STREAM_H_
 #define MEDIA_FILTERS_SOURCE_BUFFER_STREAM_H_
 
+#include <stddef.h>
+
 #include <deque>
 #include <list>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"

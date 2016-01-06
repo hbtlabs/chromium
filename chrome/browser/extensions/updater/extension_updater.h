@@ -14,6 +14,7 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
@@ -221,7 +222,6 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override;
 
   // Send a notification that update checks are starting.

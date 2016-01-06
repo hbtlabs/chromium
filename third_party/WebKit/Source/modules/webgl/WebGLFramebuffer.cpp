@@ -23,8 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "modules/webgl/WebGLFramebuffer.h"
 
 #include "modules/webgl/WebGLRenderbuffer.h"
@@ -48,6 +46,7 @@ private:
 
     GLsizei width() const override;
     GLsizei height() const override;
+    GLsizei depth() const override;
     GLenum format() const override;
     GLenum type() const override;
     bool isCubeComplete() const override;
@@ -85,6 +84,11 @@ GLsizei WebGLRenderbufferAttachment::width() const
 GLsizei WebGLRenderbufferAttachment::height() const
 {
     return m_renderbuffer->height();
+}
+
+GLsizei WebGLRenderbufferAttachment::depth() const
+{
+    return 1;
 }
 
 GLenum WebGLRenderbufferAttachment::format() const
@@ -162,6 +166,7 @@ private:
 
     GLsizei width() const override;
     GLsizei height() const override;
+    GLsizei depth() const override;
     GLenum format() const override;
     GLenum type() const override;
     bool isCubeComplete() const override;
@@ -205,6 +210,11 @@ GLsizei WebGLTextureAttachment::width() const
 GLsizei WebGLTextureAttachment::height() const
 {
     return m_texture->getHeight(m_target, m_level);
+}
+
+GLsizei WebGLTextureAttachment::depth() const
+{
+    return m_texture->getDepth(m_target, m_level);
 }
 
 GLenum WebGLTextureAttachment::format() const
@@ -541,7 +551,7 @@ GLenum WebGLFramebuffer::colorBufferFormat() const
 GLenum WebGLFramebuffer::checkStatus(const char** reason) const
 {
     unsigned count = 0;
-    GLsizei width = 0, height = 0;
+    GLsizei width = 0, height = 0, depth = 0;
     WebGLAttachment* depthAttachment = nullptr;
     WebGLAttachment* stencilAttachment = nullptr;
     WebGLAttachment* depthStencilAttachment = nullptr;
@@ -569,15 +579,18 @@ GLenum WebGLFramebuffer::checkStatus(const char** reason) const
             depthStencilAttachment = attachment;
             break;
         }
-        if (!isWebGL2OrHigher) {
-            if (!count) {
-                width = attachment->width();
-                height = attachment->height();
-            } else {
-                if (width != attachment->width() || height != attachment->height()) {
-                    *reason = "attachments do not have the same dimensions";
-                    return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS;
-                }
+        // Note: In GLES 3, images for a framebuffer need not to have the same dimensions to be framebuffer complete.
+        // However, in Direct3D 11, on top of which OpenGL ES 3 behavior is emulated in Windows, all render targets
+        // must have the same size in all dimensions. In order to have consistent WebGL 2 behaviors across platforms,
+        // we generate FRAMEBUFFER_INCOMPLETE_DIMENSIONS in this situation.
+        if (!count) {
+            width = attachment->width();
+            height = attachment->height();
+            depth = attachment->depth();
+        } else {
+            if (width != attachment->width() || height != attachment->height() || depth != attachment->depth()) {
+                *reason = "attachments do not have the same dimensions";
+                return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS;
             }
         }
         ++count;

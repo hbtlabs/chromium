@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/mojo/mojo_shell_client_host.h"
+
+#include <stdint.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
-#include "components/mus/public/interfaces/gpu.mojom.h"
-#include "content/browser/mojo/mojo_shell_client_host.h"
+#include "build/build_config.h"
 #include "content/common/mojo/mojo_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "ipc/ipc_sender.h"
@@ -73,6 +79,16 @@ void SetMojoPlatformFile(RenderProcessHost* render_process_host,
                                    new InstanceShellHandle(platform_file));
 }
 
+void CallRegisterProcessWithBroker(base::ProcessId pid,
+                                   MojoHandle client_pipe) {
+  mojo::shell::mojom::ApplicationManagerPtr application_manager;
+  MojoShellConnection::Get()->GetApplication()->ConnectToService(
+      "mojo:shell", &application_manager);
+  application_manager->RegisterProcessWithBroker(
+      static_cast<uint32_t>(pid),
+      mojo::ScopedHandle(mojo::Handle(client_pipe)));
+}
+
 }  // namespace
 
 void RegisterChildWithExternalShell(int child_process_id,
@@ -89,7 +105,7 @@ void RegisterChildWithExternalShell(int child_process_id,
   mojo::embedder::ScopedPlatformHandle platform_channel =
       platform_channel_pair.PassServerHandle();
   mojo::ScopedMessagePipeHandle handle(mojo::embedder::CreateChannel(
-      platform_channel.Pass(), base::Bind(&DidCreateChannel),
+      std::move(platform_channel), base::Bind(&DidCreateChannel),
       base::ThreadTaskRunnerHandle::Get()));
   mojo::shell::mojom::ApplicationManagerPtr application_manager;
   MojoShellConnection::Get()->GetApplication()->ConnectToService(
@@ -104,14 +120,10 @@ void RegisterChildWithExternalShell(int child_process_id,
   std::string url =
       base::StringPrintf("exe:chrome_renderer%d", child_process_id);
 
-  mojo::CapabilityFilterPtr filter(mojo::CapabilityFilter::New());
-  mojo::Array<mojo::String> window_manager_interfaces;
-  window_manager_interfaces.push_back(mus::mojom::Gpu::Name_);
-  filter->filter.insert("mojo:mus", window_manager_interfaces.Pass());
   application_manager->CreateInstanceForHandle(
       mojo::ScopedHandle(mojo::Handle(handle.release().value())),
       url,
-      filter.Pass());
+      CreateCapabilityFilterForRenderer());
 
   // Send the other end to the child via Chrome IPC.
   base::PlatformFile client_file = PlatformFileFromScopedPlatformHandle(
@@ -139,6 +151,28 @@ void SendExternalMojoShellHandleToChild(
     return;
   render_process_host->Send(new MojoMsg_BindExternalMojoShellHandle(
       IPC::GetFileHandleForProcess(client_file->get(), process_handle, true)));
+}
+
+mojo::embedder::ScopedPlatformHandle RegisterProcessWithBroker(
+    base::ProcessId pid) {
+  mojo::embedder::PlatformChannelPair platform_channel_pair;
+
+  MojoHandle platform_handle_wrapper;
+  MojoResult rv = mojo::embedder::CreatePlatformHandleWrapper(
+      platform_channel_pair.PassServerHandle(), &platform_handle_wrapper);
+  CHECK_EQ(rv, MOJO_RESULT_OK);
+
+  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    CallRegisterProcessWithBroker(pid, platform_handle_wrapper);
+  } else {
+    BrowserThread::PostTask(
+        BrowserThread::UI,
+        FROM_HERE,
+        base::Bind(CallRegisterProcessWithBroker, pid,
+                   platform_handle_wrapper));
+  }
+
+  return platform_channel_pair.PassClientHandle();
 }
 
 }  // namespace content

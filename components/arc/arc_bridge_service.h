@@ -5,44 +5,47 @@
 #ifndef COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 #define COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 
+#include <string>
+#include <vector>
+
 #include "base/files/scoped_file.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
-#include "components/arc/common/arc_message_types.h"
-#include "components/arc/common/arc_notification_types.h"
+#include "base/values.h"
+#include "components/arc/common/arc_bridge.mojom.h"
 
 namespace base {
 class CommandLine;
-class SequencedTaskRunner;
-class SingleThreadTaskRunner;
 }  // namespace base
 
 namespace arc {
 
+class ArcBridgeBootstrap;
+
 // The Chrome-side service that handles ARC instances and ARC bridge creation.
 // This service handles the lifetime of ARC instances and sets up the
 // communication channel (the ARC bridge) used to send and receive messages.
-class ArcBridgeService {
+class ArcBridgeService : public ArcBridgeHost {
  public:
   // The possible states of the bridge.  In the normal flow, the state changes
   // in the following sequence:
   //
   // STOPPED
-  //   SetAvailable(true) + HandleStartup() -> SocketConnect() ->
+  //   PrerequisitesChanged() ->
   // CONNECTING
-  //   Connect() ->
-  // CONNECTED
-  //   SocketConnectAfterSetSocketPermissions() ->
-  // STARTING
-  //   StartInstance() -> OnInstanceReady() ->
+  //   OnConnectionEstablished() ->
   // READY
   //
-  // When Shutdown() is called, the state changes depending on the state it was
-  // at:
+  // The ArcBridgeBootstrap state machine can be thought of being substates of
+  // ArcBridgeService's CONNECTING state.
   //
-  // CONNECTED/CONNECTING -> STOPPED
-  // STARTING/READY -> STOPPING -> StopInstance() -> STOPPED
+  // *
+  //   StopInstance() ->
+  // STOPPING
+  //   OnStopped() ->
+  // STOPPED
   enum class State {
     // ARC is not currently running.
     STOPPED,
@@ -50,14 +53,10 @@ class ArcBridgeService {
     // The request to connect has been sent.
     CONNECTING,
 
-    // The bridge has connected to the socket, but has not started the ARC
-    // instance.
+    // The instance has started, and the bridge is fully established.
     CONNECTED,
 
-    // The ARC bridge has been set up and ARC is starting up.
-    STARTING,
-
-    // The ARC instance has been fully initialized and is now ready for user
+    // The ARC instance has finished initializing and is now ready for user
     // interaction.
     READY,
 
@@ -71,51 +70,38 @@ class ArcBridgeService {
     // Called whenever the state of the bridge has changed.
     virtual void OnStateChanged(State state) {}
 
-    // Called when the instance has reached a boot phase
-    virtual void OnInstanceBootPhase(InstanceBootPhase phase) {}
-
     // Called whenever ARC's availability has changed for this system.
     virtual void OnAvailableChanged(bool available) {}
+
+    // Called whenever the ARC app interface state changes.
+    virtual void OnAppInstanceReady() {}
+    virtual void OnAppInstanceClosed() {}
+
+    // Called whenever the ARC input interface state changes.
+    virtual void OnInputInstanceReady() {}
+    virtual void OnInputInstanceClosed() {}
+
+    // Called whenever the ARC notification interface state changes.
+    virtual void OnNotificationsInstanceReady() {}
+    virtual void OnNotificationsInstanceClosed() {}
+
+    // Called whenever the ARC power interface state changes.
+    virtual void OnPowerInstanceReady() {}
+    virtual void OnPowerInstanceClosed() {}
+
+    // Called whenever the ARC process interface state changes.
+    virtual void OnProcessInstanceReady() {}
+    virtual void OnProcessInstanceClosed() {}
+
+    // Called whenever the ARC settings interface state changes.
+    virtual void OnSettingsInstanceReady() {}
+    virtual void OnSettingsInstanceClosed() {}
 
    protected:
     virtual ~Observer() {}
   };
 
-  class NotificationObserver {
-   public:
-    // Called whenever a notification has been posted on Android side. This
-    // event is used for both creation and update.
-    virtual void OnNotificationPostedFromAndroid(
-        const ArcNotificationData& data) {}
-    // Called whenever a notification has been removed on Android side.
-    virtual void OnNotificationRemovedFromAndroid(const std::string& key) {}
-
-   protected:
-    virtual ~NotificationObserver() {}
-  };
-
-  // Notifies ARC apps related events.
-  class AppObserver {
-   public:
-    // Called whenever ARC sends information about available apps.
-    virtual void OnAppListRefreshed(const std::vector<AppInfo>& apps) {}
-
-    // Called whenever ARC sends app icon data for specific scale factor.
-    virtual void OnAppIcon(const std::string& package,
-                           const std::string& activity,
-                           ScaleFactor scale_factor,
-                           const std::vector<uint8_t>& icon_png_data) {}
-
-   protected:
-    virtual ~AppObserver() {}
-  };
-
-  virtual ~ArcBridgeService();
-
-  // Creates instance of |ArcBridgeService| for normal use.
-  static scoped_ptr<ArcBridgeService> Create(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
-      const scoped_refptr<base::SequencedTaskRunner>& file_task_runner);
+  ~ArcBridgeService() override;
 
   // Gets the global instance of the ARC Bridge Service. This can only be
   // called on the thread that this class was created on.
@@ -143,45 +129,41 @@ class ArcBridgeService {
   // class was created on.
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
-  void AddNotificationObserver(NotificationObserver* observer);
-  void RemoveNotificationObserver(NotificationObserver* observer);
 
-  // Adds or removes ARC app observers. This can only be called on the thread
-  // that this class was created on.
-  void AddAppObserver(AppObserver* observer);
-  void RemoveAppObserver(AppObserver* observer);
+  // Gets the Mojo interface for all the instance services. This will return
+  // nullptr if that particular service is not ready yet. Use an Observer if
+  // you want to be notified when this is ready. This can only be called on the
+  // thread that this class was created on.
+  AppInstance* app_instance() { return app_ptr_.get(); }
+  InputInstance* input_instance() { return input_ptr_.get(); }
+  NotificationsInstance* notifications_instance() {
+    return notifications_ptr_.get();
+  }
+  PowerInstance* power_instance() { return power_ptr_.get(); }
+  ProcessInstance* process_instance() { return process_ptr_.get(); }
+  SettingsInstance* settings_instance() { return settings_ptr_.get(); }
+
+  int32_t app_version() const { return app_ptr_.version(); }
+  int32_t input_version() const { return input_ptr_.version(); }
+  int32_t notifications_version() const { return notifications_ptr_.version(); }
+  int32_t power_version() const { return power_ptr_.version(); }
+  int32_t process_version() const { return process_ptr_.version(); }
+  int32_t settings_version() const { return settings_ptr_.version(); }
+
+  // ArcHost:
+  void OnAppInstanceReady(AppInstancePtr app_ptr) override;
+  void OnInputInstanceReady(InputInstancePtr input_ptr) override;
+  void OnNotificationsInstanceReady(
+      NotificationsInstancePtr notifications_ptr) override;
+  void OnPowerInstanceReady(PowerInstancePtr power_ptr) override;
+  void OnProcessInstanceReady(ProcessInstancePtr process_ptr) override;
+  void OnSettingsInstanceReady(SettingsInstancePtr process_ptr) override;
 
   // Gets the current state of the bridge service.
   State state() const { return state_; }
 
   // Gets if ARC is available in this system.
   bool available() const { return available_; }
-
-  // Requests registration of an input device on the ARC instance.
-  // TODO(denniskempin): Make this interface more typesafe.
-  // |name| should be the displayable name of the emulated device (e.g. "Chrome
-  // OS Keyboard"), |device_type| the name of the device type (e.g. "keyboard")
-  // and |fd| a file descriptor that emulates the kernel events of the device.
-  // This can only be called on the thread that this class was created on.
-  virtual bool RegisterInputDevice(const std::string& name,
-                                   const std::string& device_type,
-                                   base::ScopedFD fd) = 0;
-
-  // Sends a notification event to Android side.
-  virtual bool SendNotificationEventToAndroid(const std::string& key,
-                                              ArcNotificationEvent event) = 0;
-
-  // Requests to refresh an app list.
-  virtual bool RefreshAppList() = 0;
-
-  // Requests to launch an app.
-  virtual bool LaunchApp(const std::string& package,
-                         const std::string& activity) = 0;
-
-  // Requests to load an icon of specific scale_factor.
-  virtual bool RequestAppIcon(const std::string& package,
-                              const std::string& activity,
-                              ScaleFactor scale_factor) = 0;
 
  protected:
   ArcBridgeService();
@@ -192,32 +174,69 @@ class ArcBridgeService {
   // Changes the current availability and notifies all observers.
   void SetAvailable(bool availability);
 
-  const scoped_refptr<base::SequencedTaskRunner>& origin_task_runner() const {
-    return origin_task_runner_;
-  }
-
   base::ObserverList<Observer>& observer_list() { return observer_list_; }
-  base::ObserverList<NotificationObserver>& notification_observer_list() {
-    return notification_observer_list_;
-  }
 
-  base::ObserverList<AppObserver>& app_observer_list() {
-    return app_observer_list_;
-  }
+  bool CalledOnValidThread();
+
+  // Closes all Mojo channels.
+  void CloseAllChannels();
 
  private:
-  scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
+  friend class ArcBridgeTest;
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Basic);
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Prerequisites);
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, ShutdownMidStartup);
+  FRIEND_TEST_ALL_PREFIXES(ArcBridgeTest, Restart);
+
+  // Called when one of the individual channels is closed.
+  void CloseAppChannel();
+  void CloseInputChannel();
+  void CloseNotificationsChannel();
+  void ClosePowerChannel();
+  void CloseProcessChannel();
+  void CloseSettingsChannel();
+
+  // Callbacks for QueryVersion.
+  void OnAppVersionReady(int32_t version);
+  void OnInputVersionReady(int32_t version);
+  void OnNotificationsVersionReady(int32_t version);
+  void OnPowerVersionReady(int32_t version);
+  void OnProcessVersionReady(int32_t version);
+  void OnSettingsVersionReady(int32_t version);
+
+  // Mojo interfaces.
+  AppInstancePtr app_ptr_;
+  InputInstancePtr input_ptr_;
+  NotificationsInstancePtr notifications_ptr_;
+  PowerInstancePtr power_ptr_;
+  ProcessInstancePtr process_ptr_;
+  SettingsInstancePtr settings_ptr_;
+
+  // Temporary Mojo interfaces.  After a Mojo interface pointer has been
+  // received from the other endpoint, we still need to asynchronously query
+  // its version.  While that is going on, we should still return nullptr on
+  // the xxx_instance() functions.
+  // To keep the xxx_instance() functions being trivial, store the instance
+  // pointer in a temporary variable to avoid losing its reference.
+  AppInstancePtr temporary_app_ptr_;
+  InputInstancePtr temporary_input_ptr_;
+  NotificationsInstancePtr temporary_notifications_ptr_;
+  PowerInstancePtr temporary_power_ptr_;
+  ProcessInstancePtr temporary_process_ptr_;
+  SettingsInstancePtr temporary_settings_ptr_;
 
   base::ObserverList<Observer> observer_list_;
-  base::ObserverList<NotificationObserver> notification_observer_list_;
 
-  base::ObserverList<AppObserver> app_observer_list_;
+  base::ThreadChecker thread_checker_;
 
   // If the ARC instance service is available.
   bool available_;
 
   // The current state of the bridge.
   ArcBridgeService::State state_;
+
+  // WeakPtrFactory to use callbacks.
+  base::WeakPtrFactory<ArcBridgeService> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcBridgeService);
 };

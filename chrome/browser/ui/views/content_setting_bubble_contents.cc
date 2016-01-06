@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/plugins/plugin_finder.h"
@@ -278,8 +279,7 @@ void ContentSettingBubbleContents::Init() {
   }
 
   // Layout code for the media device menus.
-  if (content_setting_bubble_model_->content_type() ==
-      CONTENT_SETTINGS_TYPE_MEDIASTREAM) {
+  if (content_setting_bubble_model_->AsMediaStreamBubbleModel()) {
     const int kMediaMenuColumnSetId = 4;
     views::ColumnSet* menu_column_set =
         layout->AddColumnSet(kMediaMenuColumnSetId);
@@ -337,7 +337,7 @@ void ContentSettingBubbleContents::Init() {
     }
   }
 
-  UpdateMenuButtonSizes(GetNativeTheme());
+  UpdateMenuButtonSizes();
 
   const gfx::FontList& domain_font =
       ui::ResourceBundle::GetSharedInstance().GetFontList(
@@ -409,12 +409,6 @@ void ContentSettingBubbleContents::DidNavigateMainFrame(
   GetWidget()->Close();
 }
 
-void ContentSettingBubbleContents::OnNativeThemeChanged(
-    const ui::NativeTheme* theme) {
-  views::BubbleDelegateView::OnNativeThemeChanged(theme);
-  UpdateMenuButtonSizes(theme);
-}
-
 void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
   RadioGroup::const_iterator i(
@@ -472,9 +466,8 @@ void ContentSettingBubbleContents::OnMenuButtonClicked(
                                 ui::MENU_SOURCE_NONE));
 }
 
-void ContentSettingBubbleContents::UpdateMenuButtonSizes(
-    const ui::NativeTheme* theme) {
-  const views::MenuConfig config = views::MenuConfig(theme);
+void ContentSettingBubbleContents::UpdateMenuButtonSizes() {
+  const views::MenuConfig& config = views::MenuConfig::instance();
   const int margins = config.item_left_margin + config.check_width +
                       config.label_to_arrow_padding + config.arrow_width +
                       config.arrow_to_edge_padding;

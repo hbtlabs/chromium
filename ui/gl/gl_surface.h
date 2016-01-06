@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
@@ -44,7 +45,9 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // Destroys the surface.
   virtual void Destroy() = 0;
 
-  virtual bool Resize(const gfx::Size& size, float scale_factor);
+  virtual bool Resize(const gfx::Size& size,
+                      float scale_factor,
+                      bool has_alpha);
 
   // Recreate the surface without changing the size.
   virtual bool Recreate();
@@ -170,7 +173,10 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
                                const RectF& contents_rect,
                                float opacity,
                                unsigned background_color,
-                               const SizeF& size,
+                               unsigned edge_aa_mask,
+                               const RectF& bounds_rect,
+                               bool is_clipped,
+                               const RectF& clip_rect,
                                const Transform& transform);
 
   virtual bool IsSurfaceless() const;
@@ -224,7 +230,9 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
 
   bool Initialize() override;
   void Destroy() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool Recreate() override;
   bool DeferDraws() override;
   bool IsOffscreen() override;

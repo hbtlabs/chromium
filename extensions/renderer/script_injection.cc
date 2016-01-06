@@ -5,8 +5,10 @@
 #include "extensions/renderer/script_injection.h"
 
 #include <map>
+#include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
@@ -35,10 +37,10 @@ using IsolatedWorldMap = std::map<std::string, int>;
 base::LazyInstance<IsolatedWorldMap> g_isolated_worlds =
     LAZY_INSTANCE_INITIALIZER;
 
-const int64 kInvalidRequestId = -1;
+const int64_t kInvalidRequestId = -1;
 
 // The id of the next pending injection.
-int64 g_next_pending_id = 0;
+int64_t g_next_pending_id = 0;
 
 // Gets the isolated world ID to use for the given |injection_host|
 // in the given |frame|. If no isolated world has been created for that
@@ -113,14 +115,13 @@ void ScriptInjection::RemoveIsolatedWorld(const std::string& host_id) {
   g_isolated_worlds.Get().erase(host_id);
 }
 
-ScriptInjection::ScriptInjection(
-    scoped_ptr<ScriptInjector> injector,
-    content::RenderFrame* render_frame,
-    scoped_ptr<const InjectionHost> injection_host,
-    UserScript::RunLocation run_location)
-    : injector_(injector.Pass()),
+ScriptInjection::ScriptInjection(scoped_ptr<ScriptInjector> injector,
+                                 content::RenderFrame* render_frame,
+                                 scoped_ptr<const InjectionHost> injection_host,
+                                 UserScript::RunLocation run_location)
+    : injector_(std::move(injector)),
       render_frame_(render_frame),
-      injection_host_(injection_host.Pass()),
+      injection_host_(std::move(injection_host)),
       run_location_(run_location),
       request_id_(kInvalidRequestId),
       complete_(false),
@@ -226,7 +227,7 @@ ScriptInjection::InjectionResult ScriptInjection::Inject(
   injector_->GetRunInfo(scripts_run_info, run_location_);
 
   if (complete_) {
-    injector_->OnInjectionComplete(execution_result_.Pass(), run_location_,
+    injector_->OnInjectionComplete(std::move(execution_result_), run_location_,
                                    render_frame_);
   } else {
     ++scripts_run_info->num_blocking_js;
@@ -302,7 +303,7 @@ void ScriptInjection::OnJsInjectionCompleted(
   // If |async_completion_callback_| is set, it means the script finished
   // asynchronously, and we should run it.
   if (!async_completion_callback_.is_null()) {
-    injector_->OnInjectionComplete(execution_result_.Pass(), run_location_,
+    injector_->OnInjectionComplete(std::move(execution_result_), run_location_,
                                    render_frame_);
     // Warning: this object can be destroyed after this line!
     async_completion_callback_.Run(this);

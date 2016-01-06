@@ -5,6 +5,8 @@
 #ifndef CC_TEST_FAKE_OUTPUT_SURFACE_H_
 #define CC_TEST_FAKE_OUTPUT_SURFACE_H_
 
+#include <stddef.h>
+
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/time/time.h"
@@ -52,6 +54,13 @@ class FakeOutputSurface : public OutputSurface {
       scoped_ptr<SoftwareOutputDevice> software_device) {
     return make_scoped_ptr(
         new FakeOutputSurface(std::move(software_device), false));
+  }
+
+  static scoped_ptr<FakeOutputSurface>
+  Create3dWithResourcelessSoftwareSupport() {
+    return make_scoped_ptr(new FakeOutputSurface(
+        TestContextProvider::Create(),
+        make_scoped_ptr(new SoftwareOutputDevice), false));
   }
 
   static scoped_ptr<FakeOutputSurface> CreateDelegating3d() {

@@ -12,7 +12,9 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/dump_accessibility_browsertest_base.h"
@@ -87,13 +89,15 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 
   std::vector<std::string> Dump() override {
+    scoped_ptr<AccessibilityTreeFormatter> formatter(
+        CreateAccessibilityTreeFormatter());
+    formatter->SetFilters(filters_);
+    base::string16 actual_contents_utf16;
     WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
         shell()->web_contents());
-    AccessibilityTreeFormatter formatter(
-        web_contents->GetRootBrowserAccessibilityManager()->GetRoot());
-    formatter.SetFilters(filters_);
-    base::string16 actual_contents_utf16;
-    formatter.FormatAccessibilityTree(&actual_contents_utf16);
+    formatter->FormatAccessibilityTree(
+        web_contents->GetRootBrowserAccessibilityManager()->GetRoot(),
+        &actual_contents_utf16);
     std::string actual_contents = base::UTF16ToUTF8(actual_contents_utf16);
     return base::SplitString(
         actual_contents, "\n",
@@ -948,7 +952,9 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputTel) {
   RunHtmlTest(FILE_PATH_LITERAL("input-tel.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputText) {
+// Fails on Android GN bot, see crbug.com/569542.
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       MAYBE(AccessibilityInputText)) {
   RunHtmlTest(FILE_PATH_LITERAL("input-text.html"));
 }
 

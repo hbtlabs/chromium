@@ -133,8 +133,8 @@ component("gfx") {
     "linux_font_delegate.h",
     "mac/coordinate_conversion.h",
     "mac/coordinate_conversion.mm",
-    "mac/io_surface_manager.cc",
-    "mac/io_surface_manager.h",
+    "mac/io_surface.cc",
+    "mac/io_surface.h",
     "mac/nswindow_frame_controls.h",
     "mac/nswindow_frame_controls.mm",
     "mac/scoped_cocoa_disable_screen_updates.h",
@@ -281,8 +281,8 @@ component("gfx") {
       "harfbuzz_font_skia.h",
       "render_text_harfbuzz.cc",
       "render_text_harfbuzz.h",
-      "render_text_mac.cc",
       "render_text_mac.h",
+      "render_text_mac.mm",
       "text_utils_skia.cc",
     ]
 
@@ -427,7 +427,6 @@ component("gfx") {
 action("aggregate_vector_icons") {
   script = "vector_icons/aggregate_vector_icons.py"
   sources = [
-    "vector_icon_types.h",
     "vector_icons/account_box.icon",
     "vector_icons/account_child_invert.icon",
     "vector_icons/apps.icon",
@@ -487,6 +486,8 @@ action("aggregate_vector_icons") {
     "vector_icons/location_bar_star.icon",
     "vector_icons/location_bar_star_active.icon",
     "vector_icons/location_on.icon",
+    "vector_icons/menu_check.1x.icon",
+    "vector_icons/menu_check.icon",
     "vector_icons/midi.icon",
     "vector_icons/mixed_content.icon",
     "vector_icons/mode_edit.icon",
@@ -520,6 +521,8 @@ action("aggregate_vector_icons") {
     "vector_icons/remove_circle.icon",
     "vector_icons/sad_tab.icon",
     "vector_icons/smartphone.icon",
+    "vector_icons/submenu_arrow.1x.icon",
+    "vector_icons/submenu_arrow.icon",
     "vector_icons/supervisor_account.icon",
     "vector_icons/tab.icon",
     "vector_icons/tab_audio.1x.icon",

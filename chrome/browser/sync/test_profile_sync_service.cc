@@ -4,6 +4,8 @@
 
 #include "chrome/browser/sync/test_profile_sync_service.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -36,6 +38,26 @@ using content::BrowserThread;
 using syncer::InternalComponentsFactory;
 using syncer::TestInternalComponentsFactory;
 using syncer::UserShare;
+
+namespace {
+
+ProfileSyncService::InitParams GetInitParams(
+    Profile* profile,
+    SigninManagerBase* signin,
+    ProfileOAuth2TokenService* oauth2_token_service,
+    browser_sync::ProfileSyncServiceStartBehavior behavior) {
+  ProfileSyncService::InitParams init_params =
+      CreateProfileSyncServiceParamsForTest(profile);
+
+  init_params.signin_wrapper =
+      make_scoped_ptr(new SigninManagerWrapper(signin));
+  init_params.oauth2_token_service = oauth2_token_service;
+  init_params.start_behavior = behavior;
+
+  return init_params;
+}
+
+}  // namespace
 
 namespace browser_sync {
 
@@ -79,7 +101,7 @@ void SyncBackendHostForProfileSyncTest::InitCore(
           factory_switches, InternalComponentsFactory::STORAGE_IN_MEMORY,
           NULL));
 
-  SyncBackendHostImpl::InitCore(options.Pass());
+  SyncBackendHostImpl::InitCore(std::move(options));
 }
 
 void SyncBackendHostForProfileSyncTest::RequestConfigureSyncer(
@@ -127,20 +149,7 @@ TestProfileSyncService::TestProfileSyncService(
     ProfileOAuth2TokenService* oauth2_token_service,
     browser_sync::ProfileSyncServiceStartBehavior behavior)
     : ProfileSyncService(
-          make_scoped_ptr(new browser_sync::ChromeSyncClient(profile)),
-          make_scoped_ptr(new SigninManagerWrapper(signin)),
-          oauth2_token_service,
-          behavior,
-          base::Bind(&EmptyNetworkTimeUpdate),
-          profile->GetPath(),
-          profile->GetRequestContext(),
-          profile->GetDebugName(),
-          chrome::GetChannel(),
-          content::BrowserThread::GetMessageLoopProxyForThread(
-              content::BrowserThread::DB),
-          content::BrowserThread::GetMessageLoopProxyForThread(
-              content::BrowserThread::FILE),
-          content::BrowserThread::GetBlockingPool()) {
+          GetInitParams(profile, signin, oauth2_token_service, behavior)) {
   static_cast<browser_sync::ChromeSyncClient*>(GetSyncClient())
       ->SetSyncApiComponentFactoryForTesting(
           make_scoped_ptr(new SyncApiComponentFactoryMock));

@@ -35,6 +35,7 @@ class ImageResource;
 
 class StyleFetchedImage final : public StyleImage, private ImageResourceClient {
     USING_FAST_MALLOC_WILL_BE_REMOVED(StyleFetchedImage);
+    WILL_BE_USING_PRE_FINALIZER(StyleFetchedImage, dispose);
 public:
     static PassRefPtrWillBeRawPtr<StyleFetchedImage> create(ImageResource* image, Document* document, const KURL& url)
     {
@@ -67,6 +68,8 @@ public:
 
 private:
     StyleFetchedImage(ImageResource*, Document*, const KURL&);
+
+    void dispose();
 
     ResourcePtr<ImageResource> m_image;
     RawPtrWillBeMember<Document> m_document;

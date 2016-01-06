@@ -4,6 +4,8 @@
 
 #include "chrome/browser/profiles/profile_impl.h"
 
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -28,6 +30,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
 #include "chrome/browser/background_sync/background_sync_controller_impl.h"
@@ -317,14 +320,13 @@ Profile* Profile::CreateProfile(const base::FilePath& path,
 }
 
 // static
-const char* const ProfileImpl::kPrefExitTypeNormal = "Normal";
+const char ProfileImpl::kPrefExitTypeNormal[] = "Normal";
 
 // static
 void ProfileImpl::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, false);
   registry->RegisterBooleanPref(prefs::kAllowDeletingBrowserHistory, true);
-  registry->RegisterBooleanPref(prefs::kSigninAllowed, true);
   registry->RegisterBooleanPref(prefs::kForceGoogleSafeSearch, false);
   registry->RegisterBooleanPref(prefs::kForceYouTubeSafetyMode, false);
   registry->RegisterBooleanPref(prefs::kRecordHistory, false);
@@ -455,19 +457,14 @@ ProfileImpl::ProfileImpl(
       g_browser_process->safe_browsing_service());
   if (safe_browsing_service.get()) {
     pref_validation_delegate_ =
-        safe_browsing_service->CreatePreferenceValidationDelegate(this).Pass();
+        safe_browsing_service->CreatePreferenceValidationDelegate(this);
   }
 
   {
     prefs_ = chrome_prefs::CreateProfilePrefs(
-        path_,
-        sequenced_task_runner,
-        pref_validation_delegate_.get(),
-        profile_policy_connector_->policy_service(),
-        supervised_user_settings,
-        CreateExtensionPrefStore(this, false),
-        pref_registry_,
-        async_prefs).Pass();
+        path_, sequenced_task_runner, pref_validation_delegate_.get(),
+        profile_policy_connector_->policy_service(), supervised_user_settings,
+        CreateExtensionPrefStore(this, false), pref_registry_, async_prefs);
     // Register on BrowserContext.
     user_prefs::UserPrefs::Set(this, prefs_.get());
   }
@@ -921,10 +918,10 @@ net::URLRequestContextGetter* ProfileImpl::CreateRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
   return io_data_.CreateMainRequestContextGetter(
-      protocol_handlers,
-      request_interceptors.Pass(),
-      g_browser_process->local_state(),
-      g_browser_process->io_thread()).get();
+                     protocol_handlers, std::move(request_interceptors),
+                     g_browser_process->local_state(),
+                     g_browser_process->io_thread())
+      .get();
 }
 
 net::URLRequestContextGetter* ProfileImpl::GetRequestContext() {
@@ -977,10 +974,9 @@ ProfileImpl::CreateRequestContextForStoragePartition(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
   return io_data_.CreateIsolatedAppRequestContextGetter(
-      partition_path,
-      in_memory,
-      protocol_handlers,
-      request_interceptors.Pass()).get();
+                     partition_path, in_memory, protocol_handlers,
+                     std::move(request_interceptors))
+      .get();
 }
 
 net::SSLConfigService* ProfileImpl::GetSSLConfigService() {

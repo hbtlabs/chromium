@@ -4,9 +4,13 @@
 
 #include "chrome/browser/task_manager/task_manager.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
@@ -298,6 +302,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticePanel) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 
@@ -351,6 +356,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NoticePanelChanges) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
   ASSERT_NO_FATAL_FAILURE(
@@ -398,6 +404,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillPanelViaExtensionResource) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 
@@ -441,6 +448,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillPanelViaPanelResource) {
           last_loaded_extension_id()),
       browser()->profile(),
       url,
+      nullptr,
       gfx::Rect(300, 400),
       PanelManager::CREATE_AS_DOCKED);
 

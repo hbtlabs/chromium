@@ -5,7 +5,9 @@
 // Test application that simulates a cast sender - Data can be either generated
 // or read from a file.
 
+#include <stdint.h>
 #include <queue>
+#include <utility>
 
 #include "base/at_exit.h"
 #include "base/base_paths.h"
@@ -76,7 +78,7 @@ void QuitLoopOnInitializationResult(media::cast::OperationalStatus result) {
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
-net::IPEndPoint CreateUDPAddress(const std::string& ip_str, uint16 port) {
+net::IPEndPoint CreateUDPAddress(const std::string& ip_str, uint16_t port) {
   net::IPAddressNumber ip_number;
   CHECK(net::ParseIPLiteralToNumber(ip_str, &ip_number));
   return net::IPEndPoint(ip_number, port);
@@ -125,19 +127,15 @@ void WriteLogsToFileAndDestroySubscribers(
   video_event_subscriber->GetEventsAndReset(
       &log_metadata, &frame_events, &packet_events);
 
-  DumpLoggingData(log_metadata,
-                  frame_events,
-                  packet_events,
-                  video_log_file.Pass());
+  DumpLoggingData(log_metadata, frame_events, packet_events,
+                  std::move(video_log_file));
 
   VLOG(0) << "Dumping logging data for audio stream.";
   audio_event_subscriber->GetEventsAndReset(
       &log_metadata, &frame_events, &packet_events);
 
-  DumpLoggingData(log_metadata,
-                  frame_events,
-                  packet_events,
-                  audio_log_file.Pass());
+  DumpLoggingData(log_metadata, frame_events, packet_events,
+                  std::move(audio_log_file));
 }
 
 void WriteStatsAndDestroySubscribers(
@@ -202,7 +200,7 @@ int main(int argc, char** argv) {
   // Running transport on the main thread.
   // Setting up transport config.
   net::IPEndPoint remote_endpoint =
-      CreateUDPAddress(remote_ip_address, static_cast<uint16>(remote_port));
+      CreateUDPAddress(remote_ip_address, static_cast<uint16_t>(remote_port));
 
   // Enable raw event and stats logging.
   // Running transport on the main thread.

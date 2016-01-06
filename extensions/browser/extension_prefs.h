@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -451,12 +451,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Returns information about all the extensions that have delayed install
   // information.
   scoped_ptr<ExtensionsInfo> GetAllDelayedInstallInfo() const;
-
-  // Returns true if the extension is an ephemeral app.
-  bool IsEphemeralApp(const std::string& extension_id) const;
-
-  // Promotes an ephemeral app to a regular installed app.
-  void OnEphemeralAppPromoted(const std::string& extension_id);
 
   // Returns true if the user repositioned the app on the app launcher via drag
   // and drop.

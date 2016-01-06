@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/debug/stack_trace.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -64,7 +67,7 @@ class VideoRendererImplTest
 
     renderer_.reset(new VideoRendererImpl(
         message_loop_.task_runner(), message_loop_.task_runner().get(),
-        null_video_sink_.get(), decoders.Pass(), true,
+        null_video_sink_.get(), std::move(decoders), true,
         nullptr,  // gpu_factories
         new MediaLog()));
     renderer_->SetTickClockForTesting(scoped_ptr<base::TickClock>(tick_clock_));
@@ -745,7 +748,8 @@ class VideoRendererImplAsyncAddFrameReadyTest : public VideoRendererImplTest {
   VideoRendererImplAsyncAddFrameReadyTest() {
     scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool(
         new MockGpuMemoryBufferVideoFramePool(&frame_ready_cbs_));
-    renderer_->SetGpuMemoryBufferVideoForTesting(gpu_memory_buffer_pool.Pass());
+    renderer_->SetGpuMemoryBufferVideoForTesting(
+        std::move(gpu_memory_buffer_pool));
   }
 
  protected:

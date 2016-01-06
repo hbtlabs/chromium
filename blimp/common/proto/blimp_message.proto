@@ -23,22 +23,24 @@ syntax = "proto2";
 
 option optimize_for = LITE_RUNTIME;
 
-import "control.proto";
 import "compositor.proto";
 import "input.proto";
 import "navigation.proto";
 import "render_widget.proto";
+import "protocol_control.proto";
+import "tab_control.proto";
 
 package blimp;
 
 message BlimpMessage {
   enum Type {
     UNKNOWN = 0;
-    CONTROL = 1;
+    TAB_CONTROL = 1;
     NAVIGATION = 2;
     RENDER_WIDGET = 3;
     INPUT = 4;
     COMPOSITOR = 5;
+    PROTOCOL_CONTROL = 6;
   }
 
   // Sequence number of this message, used for message acknowledgement.
@@ -64,11 +66,13 @@ message BlimpMessage {
 
   // Feature-specific messages follow.
   // Only one of these fields may be set per BlimpMessage.
-  // TODO(kmarshall): use a 'oneof' union when it's supported in Chromium.
-  optional ControlMessage control = 1000;
+  // TODO(kmarshall): use a 'oneof' union when it's supported in Chromium.  See
+  // crbug.com/570371.
+  optional TabControlMessage tab_control = 1000;
   optional NavigationMessage navigation = 1001;
   optional RenderWidgetMessage render_widget = 1002;
   optional InputMessage input = 1003;
   optional CompositorMessage compositor = 1004;
+  optional ProtocolControlMessage protocol_control = 1005;
 }
 

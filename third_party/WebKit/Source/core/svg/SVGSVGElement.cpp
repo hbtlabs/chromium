@@ -20,8 +20,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/SVGSVGElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
@@ -247,7 +245,7 @@ bool SVGSVGElement::isPresentationAttributeWithSVGDOM(const QualifiedName& attrN
 
 void SVGSVGElement::collectStyleForPresentationAttribute(const QualifiedName& name, const AtomicString& value, MutableStylePropertySet* style)
 {
-    RefPtrWillBeRawPtr<SVGAnimatedPropertyBase> property = propertyFromAttribute(name);
+    SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
     if (property == m_x) {
         addPropertyToPresentationAttributeStyle(style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
     } else if (property == m_y) {
@@ -688,13 +686,6 @@ void SVGSVGElement::setupInitialView(const String& fragmentIdentifier, Element* 
     bool hadUseCurrentView = m_useCurrentView;
     m_useCurrentView = false;
 
-    if (fragmentIdentifier.startsWith("xpointer(")) {
-        // FIXME: XPointer references are ignored (https://bugs.webkit.org/show_bug.cgi?id=17491)
-        if (layoutObject && hadUseCurrentView)
-            markForLayoutAndParentResourceInvalidation(layoutObject);
-        return;
-    }
-
     if (fragmentIdentifier.startsWith("svgView(")) {
         if (!view)
             view = currentView(); // Create the SVGViewSpec.
@@ -756,7 +747,8 @@ void SVGSVGElement::finishParsingChildren()
 {
     SVGGraphicsElement::finishParsingChildren();
 
-    // The outermost SVGSVGElement SVGLoad event is fired through Document::dispatchWindowLoadEvent.
+    // The outermost SVGSVGElement SVGLoad event is fired through
+    // LocalDOMWindow::dispatchWindowLoadEvent.
     if (isOutermostSVGSVGElement())
         return;
 

@@ -6,6 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_registrar.h"
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/after_startup_task_utils_android.h"
 #include "chrome/browser/android/accessibility/font_size_prefs_android.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/android/bookmarks/partner_bookmarks_reader.h"
 #include "chrome/browser/android/bottombar/overlay_panel_content.h"
 #include "chrome/browser/android/chrome_application.h"
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/compositor/compositor_view.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
 #include "chrome/browser/android/compositor/scene_layer/contextual_search_scene_layer.h"
@@ -31,7 +33,7 @@
 #include "chrome/browser/android/contextualsearch/contextual_search_tab_helper.h"
 #include "chrome/browser/android/cookies/cookies_fetcher.h"
 #include "chrome/browser/android/data_usage/data_use_tab_ui_manager_android.h"
-#include "chrome/browser/android/data_usage/external_data_use_observer.h"
+#include "chrome/browser/android/data_usage/external_data_use_observer_bridge.h"
 #include "chrome/browser/android/dev_tools_server.h"
 #include "chrome/browser/android/document/document_web_contents_delegate.h"
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
@@ -104,6 +106,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prerender/external_prerender_handler_android.h"
 #include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/push_messaging/push_messaging_service_observer_android.h"
 #include "chrome/browser/search_engines/template_url_service_android.h"
 #include "chrome/browser/signin/oauth2_token_service_delegate_android.h"
 #include "chrome/browser/speech/tts_android.h"
@@ -111,6 +114,7 @@
 #include "chrome/browser/ssl/security_state_model_android.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_feedback_reporter_android.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_android.h"
+#include "chrome/browser/supervised_user/supervised_user_content_provider_android.h"
 #include "chrome/browser/sync/profile_sync_service_android.h"
 #include "chrome/browser/ui/android/autofill/autofill_dialog_controller_android.h"
 #include "chrome/browser/ui/android/autofill/autofill_dialog_result.h"
@@ -218,6 +222,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"ChromeApplication", ChromeApplication::RegisterBindings},
     {"ChromeBrowserProvider",
      ChromeBrowserProvider::RegisterChromeBrowserProvider},
+    {"ChromeFeatureList", RegisterChromeFeatureListJni},
     {"ChromeHttpAuthHandler",
      ChromeHttpAuthHandler::RegisterChromeHttpAuthHandler},
 #if defined(ENABLE_MEDIA_ROUTER)
@@ -249,7 +254,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"DownloadOverwriteInfoBarDelegate",
      RegisterDownloadOverwriteInfoBarDelegate},
     {"EditBookmarkHelper", RegisterEditBookmarkHelper},
-    {"ExternalDataUseObserver", RegisterExternalDataUseObserver},
+    {"ExternalDataUseObserverBridge", RegisterExternalDataUseObserver},
     {"ExternalPrerenderRequestHandler",
      prerender::ExternalPrerenderHandlerAndroid::
          RegisterExternalPrerenderHandlerAndroid},
@@ -312,6 +317,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"ProfileAndroid", ProfileAndroid::RegisterProfileAndroid},
     {"ProfileDownloader", RegisterProfileDownloader},
     {"ProfileSyncService", ProfileSyncServiceAndroid::Register},
+    {"PushMessagingServiceObserver",
+     PushMessagingServiceObserverAndroid::RegisterJni},
     {"RapporServiceBridge", rappor::RegisterRapporServiceBridge},
     {"RecentlyClosedBridge", RecentlyClosedTabsBridge::Register},
     {"RecordCastAction", remote_media::RegisterRecordCastAction},
@@ -331,6 +338,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"SSLClientCertificateRequest", RegisterSSLClientCertificateRequestAndroid},
     {"StartupMetricUtils", RegisterStartupMetricUtils},
     {"StaticTabSceneLayer", chrome::android::RegisterStaticTabSceneLayer},
+    {"SupervisedUserContentProvider", SupervisedUserContentProvider::Register},
     {"Sync", syncer::RegisterSyncJni},
     {"TabAndroid", TabAndroid::RegisterTabAndroid},
     {"TabContentManager", chrome::android::RegisterTabContentManager},

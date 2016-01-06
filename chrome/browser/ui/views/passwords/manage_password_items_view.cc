@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/grit/generated_resources.h"
@@ -73,7 +74,7 @@ scoped_ptr<views::Label> GenerateUsernameLabel(
   label->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::SmallFont));
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  return label.Pass();
+  return label;
 }
 
 scoped_ptr<views::Label> GeneratePasswordLabel(
@@ -89,7 +90,7 @@ scoped_ptr<views::Label> GeneratePasswordLabel(
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   if (form.federation_url.is_empty())
     label->SetObscured(true);
-  return label.Pass();
+  return label;
 }
 
 scoped_ptr<views::ImageButton> GenerateDeleteButton(
@@ -102,7 +103,7 @@ scoped_ptr<views::ImageButton> GenerateDeleteButton(
                    rb->GetImageNamed(IDR_CLOSE_2_H).ToImageSkia());
   button->SetImage(views::ImageButton::STATE_PRESSED,
                    rb->GetImageNamed(IDR_CLOSE_2_P).ToImageSkia());
-  return button.Pass();
+  return button;
 }
 
 scoped_ptr<views::Label> GenerateDeletedPasswordLabel() {
@@ -111,7 +112,7 @@ scoped_ptr<views::Label> GenerateDeletedPasswordLabel() {
   text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   text->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::SmallFont));
-  return text.Pass();
+  return text;
 }
 
 scoped_ptr<views::Link> GenerateUndoLink(views::LinkListener* listener) {
@@ -122,7 +123,7 @@ scoped_ptr<views::Link> GenerateUndoLink(views::LinkListener* listener) {
   undo_link->SetUnderline(false);
   undo_link->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::SmallFont));
-  return undo_link.Pass();
+  return undo_link;
 }
 
 }  // namespace

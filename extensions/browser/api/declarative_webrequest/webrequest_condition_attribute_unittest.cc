@@ -4,8 +4,10 @@
 
 #include "extensions/browser/api/declarative_webrequest/webrequest_condition_attribute.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
@@ -401,7 +403,7 @@ scoped_ptr<base::DictionaryValue> GetDictionaryFromArray(
       dictionary->SetString(*name, *value);
     }
   }
-  return dictionary.Pass();
+  return dictionary;
 }
 
 // Returns whether the response headers from |url_request| satisfy the match

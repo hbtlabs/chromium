@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "content/browser/message_port_service.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
@@ -11,9 +13,11 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/background_sync_service.mojom.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 // IPC messages for testing ---------------------------------------------------
@@ -68,6 +72,42 @@ class MessageReceiver : public EmbeddedWorkerTestHelper {
   DISALLOW_COPY_AND_ASSIGN(MessageReceiver);
 };
 
+class MockBackgroundSyncServiceClient : public BackgroundSyncServiceClient {
+ public:
+  MockBackgroundSyncServiceClient(
+      mojo::InterfaceRequest<BackgroundSyncServiceClient> request)
+      : binding_(this, std::move(request)) {}
+
+  void RunCallback() {
+    EXPECT_FALSE(callback_.is_null());
+    callback_.Run(SERVICE_WORKER_EVENT_STATUS_ABORTED);
+  }
+
+  void set_notify_sync_called(const base::Closure& closure) {
+    notify_sync_called_ = closure;
+  }
+
+ private:
+  // BackgroundSyncServiceClient overrides
+  void Sync(int64_t handle_id,
+            content::BackgroundSyncEventLastChance last_chance,
+            const SyncCallback& callback) override {
+    EXPECT_TRUE(callback_.is_null());
+
+    if (!notify_sync_called_.is_null()) {
+      notify_sync_called_.Run();
+      notify_sync_called_.Reset();
+    }
+    callback_ = callback;
+  }
+
+  SyncCallback callback_;
+  base::Closure notify_sync_called_;
+  mojo::StrongBinding<BackgroundSyncServiceClient> binding_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockBackgroundSyncServiceClient);
+};
+
 void VerifyCalled(bool* called) {
   *called = true;
 }
@@ -83,6 +123,11 @@ void ReceiveFetchResult(ServiceWorkerStatusCode* status,
                         ServiceWorkerStatusCode actual_status,
                         ServiceWorkerFetchEventResult actual_result,
                         const ServiceWorkerResponse& response) {
+  *status = actual_status;
+}
+
+void ReceiveSyncStatus(ServiceWorkerStatusCode* status,
+                       ServiceWorkerStatusCode actual_status) {
   *status = actual_status;
 }
 
@@ -145,7 +190,8 @@ class ServiceWorkerVersionTest : public testing::Test {
   };
 
   ServiceWorkerVersionTest()
-      : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP) {}
+      : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
+        mock_background_sync_dispatcher_(nullptr) {}
 
   void SetUp() override {
     helper_ = GetMessageReceiver();
@@ -180,6 +226,15 @@ class ServiceWorkerVersionTest : public testing::Test {
                                          helper_->mock_render_process_id());
     ASSERT_TRUE(helper_->context()->process_manager()
         ->PatternHasProcessToRun(pattern_));
+
+    // Create a mock BackgroundSyncServiceClient.
+    mojo::InterfaceRequest<BackgroundSyncServiceClient> service_request =
+        mojo::GetProxy(&version_->background_sync_dispatcher_);
+    // The MockBackgroundSyncServiceClient is bound to the client, and will be
+    // deleted when the client is deleted.
+    mock_background_sync_dispatcher_ =
+        new MockBackgroundSyncServiceClient(std::move(service_request));
+    base::RunLoop().RunUntilIdle();
   }
 
   virtual scoped_ptr<MessageReceiver> GetMessageReceiver() {
@@ -196,6 +251,7 @@ class ServiceWorkerVersionTest : public testing::Test {
   scoped_ptr<MessageReceiver> helper_;
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
+  MockBackgroundSyncServiceClient* mock_background_sync_dispatcher_;
   GURL pattern_;
 
  private:
@@ -209,7 +265,7 @@ class MessageReceiverDisallowStart : public MessageReceiver {
   ~MessageReceiverDisallowStart() override {}
 
   void OnStartWorker(int embedded_worker_id,
-                     int64 service_worker_version_id,
+                     int64_t service_worker_version_id,
                      const GURL& scope,
                      const GURL& script_url) override {
     // Do nothing.
@@ -572,24 +628,6 @@ TEST_F(ServiceWorkerVersionTest, IdleTimeout) {
   EXPECT_LT(idle_time, version_->idle_time_);
 }
 
-// Test that the worker stays alive for some time after
-// receiving a push event.
-// TODO(falken): Remove this test once Facebook doesn't rely on the behavior:
-// crbug.com/519993
-TEST_F(ServiceWorkerVersionTest, StayAliveAfterPush) {
-  const base::TimeDelta kTenSeconds = base::TimeDelta::FromSeconds(10);
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
-  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
-  version_->DispatchPushEvent(CreateReceiverOnCurrentThread(&status),
-                              std::string());
-  base::RunLoop().RunUntilIdle();
-
-  // Pretend we've been idle for 10 seconds and fire the timeout code.
-  version_->idle_time_ = base::TimeTicks::Now() - kTenSeconds;
-  version_->OnTimeoutTimer();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version_->running_status());
-}
-
 TEST_F(ServiceWorkerVersionTest, SetDevToolsAttached) {
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
   version_->StartWorker(CreateReceiverOnCurrentThread(&status));
@@ -771,13 +809,74 @@ TEST_F(ServiceWorkerWaitForeverInFetchTest, RequestTimeout) {
 
   // Simulate timeout.
   EXPECT_TRUE(version_->timeout_timer_.IsRunning());
-  version_->SetAllRequestTimes(
-      base::TimeTicks::Now() -
-      base::TimeDelta::FromMinutes(
-          ServiceWorkerVersion::kRequestTimeoutMinutes + 1));
+  version_->SetAllRequestExpirations(base::TimeTicks::Now());
   version_->timeout_timer_.user_task().Run();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(SERVICE_WORKER_ERROR_TIMEOUT, status);
+  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version_->running_status());
+}
+
+TEST_F(ServiceWorkerVersionTest, RequestCustomizedTimeout) {
+  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_NETWORK;  // dummy value
+  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
+
+  // Create a sync request that should expire Now().
+  version_->DispatchSyncEvent(0 /* sync handle id */,
+                              BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_LAST_CHANCE,
+                              base::TimeDelta(), /* max duration */
+                              base::Bind(&ReceiveSyncStatus, &status));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(version_->timeout_timer_.IsRunning());
+  version_->timeout_timer_.user_task().Run();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(SERVICE_WORKER_ERROR_TIMEOUT, status);
+}
+
+TEST_F(ServiceWorkerWaitForeverInFetchTest, MixedRequestTimeouts) {
+  ServiceWorkerStatusCode sync_status =
+      SERVICE_WORKER_ERROR_NETWORK;  // dummy value
+  ServiceWorkerStatusCode fetch_status =
+      SERVICE_WORKER_ERROR_NETWORK;  // dummy value
+  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
+
+  base::RunLoop run_loop;
+  mock_background_sync_dispatcher_->set_notify_sync_called(
+      run_loop.QuitClosure());
+
+  // Create a fetch request that should expire sometime later.
+  version_->DispatchFetchEvent(ServiceWorkerFetchRequest(),
+                               base::Bind(&base::DoNothing),
+                               base::Bind(&ReceiveFetchResult, &fetch_status));
+  // Create a sync request that should expire Now().
+  version_->DispatchSyncEvent(0 /* sync handle id */,
+                              BACKGROUND_SYNC_EVENT_LAST_CHANCE_IS_LAST_CHANCE,
+                              base::TimeDelta(), /* max duration */
+                              base::Bind(&ReceiveSyncStatus, &sync_status));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(SERVICE_WORKER_ERROR_NETWORK, sync_status);
+
+  // Verify the sync has timed out but not the fetch.
+  EXPECT_TRUE(version_->timeout_timer_.IsRunning());
+  version_->timeout_timer_.user_task().Run();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(SERVICE_WORKER_ERROR_TIMEOUT, sync_status);
+  EXPECT_EQ(SERVICE_WORKER_ERROR_NETWORK, fetch_status);
+
+  // Background sync timeouts don't stop the service worker.
+  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version_->running_status());
+
+  // Gracefully handle the sync event finishing after the timeout.
+  run_loop.Run();  // Wait until Sync() is called on the mojo client.
+  mock_background_sync_dispatcher_->RunCallback();
+  base::RunLoop().RunUntilIdle();
+
+  // Verify that the fetch times out later.
+  version_->SetAllRequestExpirations(base::TimeTicks::Now());
+  version_->timeout_timer_.user_task().Run();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(SERVICE_WORKER_ERROR_TIMEOUT, fetch_status);
+
+  // Other timeouts do stop the service worker.
   EXPECT_EQ(ServiceWorkerVersion::STOPPED, version_->running_status());
 }
 

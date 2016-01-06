@@ -29,7 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "web/WebPluginContainerImpl.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -105,7 +104,6 @@ namespace blink {
 void WebPluginContainerImpl::setFrameRect(const IntRect& frameRect)
 {
     Widget::setFrameRect(frameRect);
-    reportGeometry();
 }
 
 void WebPluginContainerImpl::layoutIfNeeded()
@@ -114,7 +112,7 @@ void WebPluginContainerImpl::layoutIfNeeded()
     m_webPlugin->layoutIfNeeded();
 }
 
-void WebPluginContainerImpl::paint(GraphicsContext* context, const CullRect& cullRect) const
+void WebPluginContainerImpl::paint(GraphicsContext& context, const CullRect& cullRect) const
 {
     if (!parent())
         return;
@@ -123,11 +121,11 @@ void WebPluginContainerImpl::paint(GraphicsContext* context, const CullRect& cul
     if (!cullRect.intersectsCullRect(frameRect()))
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*context, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, LayoutPoint()))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, LayoutPoint()))
         return;
 
-    LayoutObjectDrawingRecorder drawingRecorder(*context, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, cullRect.m_rect, LayoutPoint());
-    context->save();
+    LayoutObjectDrawingRecorder drawingRecorder(context, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, cullRect.m_rect, LayoutPoint());
+    context.save();
 
     ASSERT(parent()->isFrameView());
     FrameView* view =  toFrameView(parent());
@@ -135,14 +133,14 @@ void WebPluginContainerImpl::paint(GraphicsContext* context, const CullRect& cul
     // The plugin is positioned in the root frame's coordinates, so it needs to
     // be painted in them too.
     IntPoint origin = view->contentsToRootFrame(IntPoint(0, 0));
-    context->translate(static_cast<float>(-origin.x()), static_cast<float>(-origin.y()));
+    context.translate(static_cast<float>(-origin.x()), static_cast<float>(-origin.y()));
 
-    WebCanvas* canvas = context->canvas();
+    WebCanvas* canvas = context.canvas();
 
     IntRect windowRect = view->contentsToRootFrame(cullRect.m_rect);
     m_webPlugin->paint(canvas, windowRect);
 
-    context->restore();
+    context.restore();
 }
 
 void WebPluginContainerImpl::invalidateRect(const IntRect& rect)
@@ -221,9 +219,9 @@ void WebPluginContainerImpl::frameRectsChanged()
     reportGeometry();
 }
 
-void WebPluginContainerImpl::widgetPositionsUpdated()
+void WebPluginContainerImpl::widgetGeometryMayHaveChanged()
 {
-    Widget::widgetPositionsUpdated();
+    Widget::widgetGeometryMayHaveChanged();
     reportGeometry();
 }
 
@@ -269,6 +267,7 @@ void WebPluginContainerImpl::setParent(Widget* widget)
 
 void WebPluginContainerImpl::setPlugin(WebPlugin* plugin)
 {
+    RELEASE_ASSERT(!m_inDispose);
     if (plugin != m_webPlugin) {
         m_element->resetInstance();
         m_webPlugin = plugin;
@@ -339,16 +338,16 @@ int WebPluginContainerImpl::printBegin(const WebPrintParams& printParams) const
     return m_webPlugin->printBegin(printParams);
 }
 
-void WebPluginContainerImpl::printPage(int pageNumber, GraphicsContext* gc, const IntRect& printRect)
+void WebPluginContainerImpl::printPage(int pageNumber, GraphicsContext& gc, const IntRect& printRect)
 {
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*gc, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, LayoutPoint()))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(gc, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, LayoutPoint()))
         return;
 
-    LayoutObjectDrawingRecorder drawingRecorder(*gc, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, printRect, LayoutPoint());
-    gc->save();
-    WebCanvas* canvas = gc->canvas();
+    LayoutObjectDrawingRecorder drawingRecorder(gc, *m_element->layoutObject(), DisplayItem::Type::WebPlugin, printRect, LayoutPoint());
+    gc.save();
+    WebCanvas* canvas = gc.canvas();
     m_webPlugin->printPage(pageNumber, canvas);
-    gc->restore();
+    gc.restore();
 }
 
 void WebPluginContainerImpl::printEnd()
@@ -457,7 +456,7 @@ v8::Local<v8::Object> WebPluginContainerImpl::v8ObjectForElement()
         return v8::Local<v8::Object>();
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return v8::Local<v8::Object>();
 
     v8::Local<v8::Value> v8value = toV8(m_element.get(), scriptState->context()->Global(), scriptState->isolate());
@@ -685,17 +684,15 @@ WebPluginContainerImpl::WebPluginContainerImpl(HTMLPlugInElement* element, WebPl
     , m_touchEventRequestType(TouchEventRequestTypeNone)
     , m_wantsWheelEvents(false)
     , m_inDispose(false)
-#if ENABLE(OILPAN)
-    , m_shouldDisposePlugin(false)
-#endif
 {
+#if ENABLE(OILPAN)
+    ThreadState::current()->registerPreFinalizer(this);
+#endif
 }
 
 WebPluginContainerImpl::~WebPluginContainerImpl()
 {
 #if ENABLE(OILPAN)
-    if (m_shouldDisposePlugin)
-        dispose();
     // The plugin container must have been disposed of by now.
     ASSERT(!m_webPlugin);
 #else
@@ -723,21 +720,6 @@ void WebPluginContainerImpl::dispose()
 
     m_element = nullptr;
 }
-
-#if ENABLE(OILPAN)
-void WebPluginContainerImpl::shouldDisposePlugin()
-{
-    // If the LocalFrame is still alive, but the plugin element isn't, the
-    // LocalFrame will set m_shouldDisposePlugin via its weak pointer
-    // callback. This is a signal that the plugin container
-    // must dispose of its plugin when finalizing. The LocalFrame and
-    // all objects accessible from it can safely be accessed, but not
-    // the plugin element itself.
-    ASSERT(!m_shouldDisposePlugin);
-    m_shouldDisposePlugin = true;
-    m_element = nullptr;
-}
-#endif
 
 DEFINE_TRACE(WebPluginContainerImpl)
 {
@@ -819,9 +801,9 @@ void WebPluginContainerImpl::handleKeyboardEvent(KeyboardEvent* event)
 
     if (webEvent.type == WebInputEvent::KeyDown) {
 #if OS(MACOSX)
-        if (webEvent.modifiers == WebInputEvent::MetaKey
+        if ((webEvent.modifiers & WebInputEvent::InputModifiers) == WebInputEvent::MetaKey
 #else
-        if (webEvent.modifiers == WebInputEvent::ControlKey
+        if ((webEvent.modifiers & WebInputEvent::InputModifiers) == WebInputEvent::ControlKey
 #endif
             && (webEvent.windowsKeyCode == VKEY_C || webEvent.windowsKeyCode == VKEY_INSERT)
             // Only copy if there's a selection, so that we only ever do this
@@ -949,10 +931,13 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
     IntRect frameRectInOwnerElementSpace = box->absoluteToLocalQuad(FloatRect(frameRect()), UseTransforms).enclosingBoundingBox();
 
     LayoutRect unclippedAbsoluteRect(frameRectInOwnerElementSpace);
-    box->mapRectToPaintInvalidationBacking(rootView, unclippedAbsoluteRect, nullptr);
+    box->mapToVisibleRectInAncestorSpace(rootView, unclippedAbsoluteRect, nullptr);
 
-    // The frameRect is already in absolute space, except for scrolling of the root frame.
+    // The frameRect is already in absolute space of the local frame to the plugin.
     windowRect = frameRect();
+    // Map up to the root frame.
+    windowRect = enclosingIntRect(m_element->document().view()->layoutView()->localToAbsoluteQuad(FloatQuad(FloatRect(frameRect())), TraverseDocumentBoundaries).boundingBox());
+    // Finally, adjust for scrolling of the root frame, which the above does not take into account.
     windowRect.moveBy(roundedIntPoint(-rootView->viewRect().location()));
 
     clippedLocalRect = enclosingIntRect(unclippedAbsoluteRect);

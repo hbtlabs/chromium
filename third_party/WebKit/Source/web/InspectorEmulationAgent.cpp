@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "web/InspectorEmulationAgent.h"
 
 #include "core/frame/FrameHost.h"
@@ -23,14 +22,15 @@ static const char touchEventEmulationEnabled[] = "touchEventEmulationEnabled";
 static const char emulatedMedia[] = "emulatedMedia";
 }
 
-PassOwnPtrWillBeRawPtr<InspectorEmulationAgent> InspectorEmulationAgent::create(WebLocalFrameImpl* webLocalFrameImpl)
+PassOwnPtrWillBeRawPtr<InspectorEmulationAgent> InspectorEmulationAgent::create(WebLocalFrameImpl* webLocalFrameImpl, Client* client)
 {
-    return adoptPtrWillBeNoop(new InspectorEmulationAgent(webLocalFrameImpl));
+    return adoptPtrWillBeNoop(new InspectorEmulationAgent(webLocalFrameImpl, client));
 }
 
-InspectorEmulationAgent::InspectorEmulationAgent(WebLocalFrameImpl* webLocalFrameImpl)
+InspectorEmulationAgent::InspectorEmulationAgent(WebLocalFrameImpl* webLocalFrameImpl, Client* client)
     : InspectorBaseAgent<InspectorEmulationAgent, InspectorFrontend::Emulation>("Emulation")
     , m_webLocalFrameImpl(webLocalFrameImpl)
+    , m_client(client)
 {
     webViewImpl()->devToolsEmulator()->setEmulationAgent(this);
 }
@@ -97,6 +97,11 @@ void InspectorEmulationAgent::setEmulatedMedia(ErrorString*, const String& media
 {
     m_state->setString(EmulationAgentState::emulatedMedia, media);
     webViewImpl()->page()->settings().setMediaTypeOverride(media);
+}
+
+void InspectorEmulationAgent::setCPUThrottlingRate(ErrorString*, double throttlingRate)
+{
+    m_client->setCPUThrottlingRate(throttlingRate);
 }
 
 void InspectorEmulationAgent::viewportChanged()

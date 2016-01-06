@@ -33,12 +33,14 @@ class BlimpMessagePumpTest : public testing::Test {
   BlimpMessagePumpTest()
       : message1_(new BlimpMessage), message2_(new BlimpMessage) {
     message1_->set_type(BlimpMessage::INPUT);
-    message2_->set_type(BlimpMessage::CONTROL);
+    message2_->set_type(BlimpMessage::TAB_CONTROL);
     message_pump_.reset(new BlimpMessagePump(&reader_));
     message_pump_->set_error_observer(&error_observer_);
   }
 
   ~BlimpMessagePumpTest() override {}
+
+  void NullMessageProcessor() { message_pump_->SetMessageProcessor(nullptr); }
 
  protected:
   scoped_ptr<BlimpMessage> message1_;
@@ -135,6 +137,32 @@ TEST_F(BlimpMessagePumpTest, InvalidPacket) {
   message_pump_->SetMessageProcessor(&receiver_);
   ASSERT_FALSE(read_packet_cb.is_null());
   base::ResetAndReturn(&read_packet_cb).Run(net::OK);
+}
+
+// Outgoing MessageProcessor can be set to NULL if no read is pending.
+// This test NULLs the outgoing processor from within ProcessMessage().
+TEST_F(BlimpMessagePumpTest, NullMessageProcessor) {
+  // Set up a ReadPacket expectation to return one message to process.
+  net::CompletionCallback read_packet_cb;
+  EXPECT_CALL(reader_, ReadPacket(NotNull(), _))
+      .WillOnce(DoAll(FillBufferFromMessage<0>(message1_.get()),
+                      SetBufferOffset<0>(message1_->ByteSize()),
+                      SaveArg<1>(&read_packet_cb)))
+      .RetiresOnSaturation();
+
+  // Set up a ProcessMessage expectation to NULL the outgoing processor.
+  net::CompletionCallback process_msg_cb;
+  EXPECT_CALL(receiver_, MockableProcessMessage(EqualsProto(*message1_), _))
+      .WillOnce(DoAll(
+          InvokeWithoutArgs(this, &BlimpMessagePumpTest::NullMessageProcessor),
+          SaveArg<1>(&process_msg_cb)));
+
+  // Set the outgoing processor to start the MessagePump.
+  message_pump_->SetMessageProcessor(&receiver_);
+  ASSERT_FALSE(read_packet_cb.is_null());
+  base::ResetAndReturn(&read_packet_cb).Run(net::OK);
+  process_msg_cb.Run(net::OK);
+  // Running |process_msg_cb| should NOT trigger another ReadPacket call.
 }
 
 }  // namespace

@@ -8,10 +8,12 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/tab_contents/tab_util.h"
@@ -423,6 +425,7 @@ void ChromeSpeechRecognitionManagerDelegate::CheckRenderViewType(
       view_type == extensions::VIEW_TYPE_APP_WINDOW ||
       view_type == extensions::VIEW_TYPE_LAUNCHER_PAGE ||
       view_type == extensions::VIEW_TYPE_VIRTUAL_KEYBOARD ||
+      view_type == extensions::VIEW_TYPE_EXTENSION_POPUP ||
       view_type == extensions::VIEW_TYPE_EXTENSION_BACKGROUND_PAGE) {
     // If it is a tab, we can check for permission. For apps, this means
     // manifest would be checked for permission.

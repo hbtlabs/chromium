@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/LayerClipRecorder.h"
 
 #include "core/layout/LayoutTestHelper.h"
@@ -25,7 +24,7 @@ public:
 
 protected:
     LayoutView& layoutView() { return *m_layoutView; }
-    PaintController& rootPaintController() { return *layoutView().layer()->graphicsLayerBacking()->paintController(); }
+    PaintController& rootPaintController() { return layoutView().layer()->graphicsLayerBacking()->paintController(); }
 
 private:
     void SetUp() override

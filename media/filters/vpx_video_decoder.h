@@ -6,6 +6,7 @@
 #define MEDIA_FILTERS_VPX_VIDEO_DECODER_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/video_decoder.h"
@@ -66,7 +67,7 @@ class MEDIA_EXPORT VpxVideoDecoder : public VideoDecoder {
   bool VpxDecode(const scoped_refptr<DecoderBuffer>& buffer,
                  scoped_refptr<VideoFrame>* video_frame);
 
-  void CopyVpxImageToVideoFrame(const struct vpx_image* vpx_image,
+  bool CopyVpxImageToVideoFrame(const struct vpx_image* vpx_image,
                                 scoped_refptr<VideoFrame>* video_frame);
 
   base::ThreadChecker thread_checker_;

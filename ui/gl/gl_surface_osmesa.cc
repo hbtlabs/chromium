@@ -33,14 +33,16 @@ GLSurfaceOSMesa::GLSurfaceOSMesa(OSMesaSurfaceFormat format,
 }
 
 bool GLSurfaceOSMesa::Initialize() {
-  return Resize(size_, 1.f);
+  return Resize(size_, 1.f, true);
 }
 
 void GLSurfaceOSMesa::Destroy() {
   buffer_.reset();
 }
 
-bool GLSurfaceOSMesa::Resize(const gfx::Size& new_size, float scale_factor) {
+bool GLSurfaceOSMesa::Resize(const gfx::Size& new_size,
+                             float scale_factor,
+                             bool has_alpha) {
   scoped_ptr<ui::ScopedMakeCurrent> scoped_make_current;
   GLContext* current_context = GLContext::GetCurrent();
   bool was_current =
@@ -52,7 +54,7 @@ bool GLSurfaceOSMesa::Resize(const gfx::Size& new_size, float scale_factor) {
   }
 
   // Preserve the old buffer.
-  scoped_ptr<int32[]> old_buffer(buffer_.release());
+  scoped_ptr<int32_t[]> old_buffer(buffer_.release());
 
   base::CheckedNumeric<int> checked_size = sizeof(buffer_[0]);
   checked_size *= new_size.width();
@@ -61,7 +63,7 @@ bool GLSurfaceOSMesa::Resize(const gfx::Size& new_size, float scale_factor) {
     return false;
 
   // Allocate a new one.
-  buffer_.reset(new int32[new_size.GetArea()]);
+  buffer_.reset(new int32_t[new_size.GetArea()]);
   if (!buffer_.get())
     return false;
 

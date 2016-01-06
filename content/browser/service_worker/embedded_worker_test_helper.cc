@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
@@ -47,26 +48,6 @@ class MockMessagePortMessageFilter : public MessagePortMessageFilter {
 }  // namespace
 
 EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
-    const base::FilePath& user_data_directory,
-    int mock_render_process_id)
-    : wrapper_(new ServiceWorkerContextWrapper(NULL)),
-      next_thread_id_(0),
-      mock_render_process_id_(mock_render_process_id),
-      weak_factory_(this) {
-  scoped_ptr<MockServiceWorkerDatabaseTaskManager> database_task_manager(
-      new MockServiceWorkerDatabaseTaskManager(
-          base::ThreadTaskRunnerHandle::Get()));
-  wrapper_->InitInternal(user_data_directory,
-                         database_task_manager.Pass(),
-                         base::ThreadTaskRunnerHandle::Get(),
-                         NULL,
-                         NULL);
-  wrapper_->process_manager()->SetProcessIdForTest(mock_render_process_id);
-  registry()->AddChildProcessSender(mock_render_process_id, this,
-                                    NewMessagePortMessageFilter());
-}
-
-EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
     const base::FilePath& user_data_directory)
     : browser_context_(new TestBrowserContext),
       render_process_host_(new MockRenderProcessHost(browser_context_.get())),
@@ -77,7 +58,7 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
   scoped_ptr<MockServiceWorkerDatabaseTaskManager> database_task_manager(
       new MockServiceWorkerDatabaseTaskManager(
           base::ThreadTaskRunnerHandle::Get()));
-  wrapper_->InitInternal(user_data_directory, database_task_manager.Pass(),
+  wrapper_->InitInternal(user_data_directory, std::move(database_task_manager),
                          base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr);
   wrapper_->process_manager()->SetProcessIdForTest(mock_render_process_id_);
   registry()->AddChildProcessSender(mock_render_process_id_, this,
@@ -131,7 +112,7 @@ void EmbeddedWorkerTestHelper::ShutdownContext() {
 }
 
 void EmbeddedWorkerTestHelper::OnStartWorker(int embedded_worker_id,
-                                             int64 service_worker_version_id,
+                                             int64_t service_worker_version_id,
                                              const GURL& scope,
                                              const GURL& script_url) {
   embedded_worker_id_service_worker_version_id_map_[embedded_worker_id] =
@@ -217,7 +198,7 @@ void EmbeddedWorkerTestHelper::SimulateWorkerReadyForInspection(
 
 void EmbeddedWorkerTestHelper::SimulateWorkerScriptCached(
     int embedded_worker_id) {
-  int64 version_id =
+  int64_t version_id =
       embedded_worker_id_service_worker_version_id_map_[embedded_worker_id];
   ServiceWorkerVersion* version = context()->GetLiveVersion(version_id);
   if (!version || version->script_cache_map()->size())

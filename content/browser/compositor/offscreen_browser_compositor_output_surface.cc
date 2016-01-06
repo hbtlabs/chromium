@@ -4,7 +4,10 @@
 
 #include "content/browser/compositor/offscreen_browser_compositor_output_surface.h"
 
+#include <utility>
+
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/gl_frame_data.h"
@@ -37,7 +40,7 @@ OffscreenBrowserCompositorOutputSurface::
     : BrowserCompositorOutputSurface(context,
                                      worker_context,
                                      vsync_manager,
-                                     overlay_candidate_validator.Pass()),
+                                     std::move(overlay_candidate_validator)),
       fbo_(0),
       is_backbuffer_discarded_(false),
       weak_ptr_factory_(this) {
@@ -102,7 +105,8 @@ void OffscreenBrowserCompositorOutputSurface::DiscardBackbuffer() {
 }
 
 void OffscreenBrowserCompositorOutputSurface::Reshape(const gfx::Size& size,
-                                                      float scale_factor) {
+                                                      float scale_factor,
+                                                      bool alpha) {
   if (size == surface_size_)
     return;
 

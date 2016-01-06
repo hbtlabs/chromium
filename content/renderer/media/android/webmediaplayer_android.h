@@ -5,10 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_ANDROID_WEBMEDIAPLAYER_ANDROID_H_
 #define CONTENT_RENDERER_MEDIA_ANDROID_WEBMEDIAPLAYER_ANDROID_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -97,44 +99,44 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
       scoped_refptr<StreamTextureFactory> factory,
       int frame_id,
       const media::WebMediaPlayerParams& params);
-  virtual ~WebMediaPlayerAndroid();
+  ~WebMediaPlayerAndroid() override;
 
   // blink::WebMediaPlayer implementation.
-  virtual bool supportsOverlayFullscreenVideo();
-  virtual void enterFullscreen();
+  bool supportsOverlayFullscreenVideo() override;
+  void enterFullscreen() override;
 
   // Resource loading.
-  virtual void load(LoadType load_type,
-                    const blink::WebURL& url,
-                    CORSMode cors_mode);
+  void load(LoadType load_type,
+            const blink::WebURL& url,
+            CORSMode cors_mode) override;
 
   // Playback controls.
-  virtual void play();
-  virtual void pause();
-  virtual void seek(double seconds);
-  virtual bool supportsSave() const;
-  virtual void setRate(double rate);
-  virtual void setVolume(double volume);
-  virtual void setSinkId(const blink::WebString& sink_id,
-                         const blink::WebSecurityOrigin& security_origin,
-                         blink::WebSetSinkIdCallbacks* web_callback);
-  virtual void requestRemotePlayback();
-  virtual void requestRemotePlaybackControl();
-  virtual blink::WebTimeRanges buffered() const;
-  virtual blink::WebTimeRanges seekable() const;
+  void play() override;
+  void pause() override;
+  void seek(double seconds) override;
+  bool supportsSave() const override;
+  void setRate(double rate) override;
+  void setVolume(double volume) override;
+  void setSinkId(const blink::WebString& sink_id,
+                 const blink::WebSecurityOrigin& security_origin,
+                 blink::WebSetSinkIdCallbacks* web_callback) override;
+  void requestRemotePlayback() override;
+  void requestRemotePlaybackControl() override;
+  blink::WebTimeRanges buffered() const override;
+  blink::WebTimeRanges seekable() const override;
 
   // Poster image, as defined in the <video> element.
-  virtual void setPoster(const blink::WebURL& poster) override;
+  void setPoster(const blink::WebURL& poster) override;
 
   // Methods for painting.
   // FIXME: This path "only works" on Android. It is a workaround for the
   // issue that Skia could not handle Android's GL_TEXTURE_EXTERNAL_OES texture
   // internally. It should be removed and replaced by the normal paint path.
   // https://code.google.com/p/skia/issues/detail?id=1189
-  virtual void paint(blink::WebCanvas* canvas,
-                     const blink::WebRect& rect,
-                     unsigned char alpha,
-                     SkXfermode::Mode mode);
+  void paint(blink::WebCanvas* canvas,
+             const blink::WebRect& rect,
+             unsigned char alpha,
+             SkXfermode::Mode mode) override;
 
   bool copyVideoTextureToPlatformTexture(
       blink::WebGraphicsContext3D* web_graphics_context,
@@ -145,37 +147,37 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
       bool flip_y) override;
 
   // True if the loaded media has a playable video/audio track.
-  virtual bool hasVideo() const;
-  virtual bool hasAudio() const;
+  bool hasVideo() const override;
+  bool hasAudio() const override;
 
-  virtual bool isRemote() const;
+  bool isRemote() const override;
 
   // Dimensions of the video.
-  virtual blink::WebSize naturalSize() const;
+  blink::WebSize naturalSize() const override;
 
   // Getters of playback state.
-  virtual bool paused() const;
-  virtual bool seeking() const;
-  virtual double duration() const;
+  bool paused() const override;
+  bool seeking() const override;
+  double duration() const override;
   virtual double timelineOffset() const;
-  virtual double currentTime() const;
+  double currentTime() const override;
 
-  virtual bool didLoadingProgress();
+  bool didLoadingProgress() override;
 
   // Internal states of loading and network.
-  virtual blink::WebMediaPlayer::NetworkState networkState() const;
-  virtual blink::WebMediaPlayer::ReadyState readyState() const;
+  blink::WebMediaPlayer::NetworkState networkState() const override;
+  blink::WebMediaPlayer::ReadyState readyState() const override;
 
-  virtual bool hasSingleSecurityOrigin() const;
-  virtual bool didPassCORSAccessCheck() const;
+  bool hasSingleSecurityOrigin() const override;
+  bool didPassCORSAccessCheck() const override;
 
-  virtual double mediaTimeForTimeValue(double timeValue) const;
+  double mediaTimeForTimeValue(double timeValue) const override;
 
   // Provide statistics.
-  virtual unsigned decodedFrameCount() const;
-  virtual unsigned droppedFrameCount() const;
-  virtual unsigned audioDecodedByteCount() const;
-  virtual unsigned videoDecodedByteCount() const;
+  unsigned decodedFrameCount() const override;
+  unsigned droppedFrameCount() const override;
+  unsigned audioDecodedByteCount() const override;
+  unsigned videoDecodedByteCount() const override;
 
   // cc::VideoFrameProvider implementation. These methods are running on the
   // compositor thread.
@@ -233,37 +235,35 @@ class WebMediaPlayerAndroid : public blink::WebMediaPlayer,
   const gfx::RectF GetBoundaryRectangle();
 #endif  // defined(VIDEO_HOLE)
 
-  virtual MediaKeyException generateKeyRequest(
+  MediaKeyException generateKeyRequest(const blink::WebString& key_system,
+                                       const unsigned char* init_data,
+                                       unsigned init_data_length) override;
+  MediaKeyException addKey(const blink::WebString& key_system,
+                           const unsigned char* key,
+                           unsigned key_length,
+                           const unsigned char* init_data,
+                           unsigned init_data_length,
+                           const blink::WebString& session_id) override;
+  MediaKeyException cancelKeyRequest(
       const blink::WebString& key_system,
-      const unsigned char* init_data,
-      unsigned init_data_length);
-  virtual MediaKeyException addKey(
-      const blink::WebString& key_system,
-      const unsigned char* key,
-      unsigned key_length,
-      const unsigned char* init_data,
-      unsigned init_data_length,
-      const blink::WebString& session_id);
-  virtual MediaKeyException cancelKeyRequest(
-      const blink::WebString& key_system,
-      const blink::WebString& session_id);
+      const blink::WebString& session_id) override;
 
-  virtual void setContentDecryptionModule(
+  void setContentDecryptionModule(
       blink::WebContentDecryptionModule* cdm,
-      blink::WebContentDecryptionModuleResult result);
+      blink::WebContentDecryptionModuleResult result) override;
 
   void OnKeyAdded(const std::string& session_id);
   void OnKeyError(const std::string& session_id,
                   media::MediaKeys::KeyError error_code,
-                  uint32 system_code);
+                  uint32_t system_code);
   void OnKeyMessage(const std::string& session_id,
-                    const std::vector<uint8>& message,
+                    const std::vector<uint8_t>& message,
                     const GURL& destination_url);
 
   void OnMediaSourceOpened(blink::WebMediaSource* web_media_source);
 
   void OnEncryptedMediaInitData(media::EmeInitDataType init_data_type,
-                                const std::vector<uint8>& init_data);
+                                const std::vector<uint8_t>& init_data);
 
   // Called when a decoder detects that the key needed to decrypt the stream
   // is not available.

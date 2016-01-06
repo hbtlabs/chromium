@@ -4,9 +4,17 @@
 
 #include "media/cast/net/cast_transport_sender_impl.h"
 
+#include <stddef.h>
+#include <algorithm>
+#include <string>
+#include <utility>
+
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "media/cast/net/cast_transport_defines.h"
+#include "media/cast/net/rtcp/receiver_rtcp_session.h"
+#include "media/cast/net/rtcp/sender_rtcp_session.h"
 #include "media/cast/net/udp_transport.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
@@ -36,15 +44,16 @@ int LookupOptionWithDefault(const base::DictionaryValue& options,
   } else {
     return default_value;
   }
-};
+}
 
-int32 GetTransportSendBufferSize(const base::DictionaryValue& options) {
+int32_t GetTransportSendBufferSize(const base::DictionaryValue& options) {
   // Socket send buffer size needs to be at least greater than one burst
   // size.
-  int32 max_burst_size =
+  int32_t max_burst_size =
       LookupOptionWithDefault(options, kOptionPacerMaxBurstSize,
-                              kMaxBurstSize) * kMaxIpPacketSize;
-  int32 min_send_buffer_size =
+                              kMaxBurstSize) *
+      kMaxIpPacketSize;
+  int32_t min_send_buffer_size =
       LookupOptionWithDefault(options, kOptionSendBufferMinSize, 0);
   return std::max(max_burst_size, min_send_buffer_size);
 }
@@ -62,18 +71,10 @@ scoped_ptr<CastTransportSender> CastTransportSender::Create(
     base::TimeDelta raw_events_callback_interval,
     const PacketReceiverCallback& packet_callback,
     const scoped_refptr<base::SingleThreadTaskRunner>& transport_task_runner) {
-  return scoped_ptr<CastTransportSender>(
-      new CastTransportSenderImpl(net_log,
-                                  clock,
-                                  local_end_point,
-                                  remote_end_point,
-                                  options.Pass(),
-                                  status_callback,
-                                  raw_events_callback,
-                                  raw_events_callback_interval,
-                                  transport_task_runner.get(),
-                                  packet_callback,
-                                  NULL));
+  return scoped_ptr<CastTransportSender>(new CastTransportSenderImpl(
+      net_log, clock, local_end_point, remote_end_point, std::move(options),
+      status_callback, raw_events_callback, raw_events_callback_interval,
+      transport_task_runner.get(), packet_callback, NULL));
 }
 
 PacketReceiverCallback CastTransportSender::PacketReceiverForTesting() {
@@ -183,17 +184,12 @@ void CastTransportSenderImpl::InitializeAudio(
     return;
   }
 
-  audio_rtcp_session_.reset(
-      new Rtcp(base::Bind(&CastTransportSenderImpl::OnReceivedCastMessage,
-                          weak_factory_.GetWeakPtr(), config.ssrc,
-                          cast_message_cb),
-               rtt_cb,
-               base::Bind(&CastTransportSenderImpl::OnReceivedLogMessage,
-                          weak_factory_.GetWeakPtr(), AUDIO_EVENT),
-               clock_,
-               &pacer_,
-               config.ssrc,
-               config.feedback_ssrc));
+  audio_rtcp_session_.reset(new SenderRtcpSession(
+      base::Bind(&CastTransportSenderImpl::OnReceivedCastMessage,
+                 weak_factory_.GetWeakPtr(), config.ssrc, cast_message_cb),
+      rtt_cb, base::Bind(&CastTransportSenderImpl::OnReceivedLogMessage,
+                         weak_factory_.GetWeakPtr(), AUDIO_EVENT),
+      clock_, &pacer_, config.ssrc, config.feedback_ssrc));
   pacer_.RegisterAudioSsrc(config.ssrc);
   AddValidSsrc(config.feedback_ssrc);
   status_callback_.Run(TRANSPORT_AUDIO_INITIALIZED);
@@ -217,17 +213,12 @@ void CastTransportSenderImpl::InitializeVideo(
     return;
   }
 
-  video_rtcp_session_.reset(
-      new Rtcp(base::Bind(&CastTransportSenderImpl::OnReceivedCastMessage,
-                          weak_factory_.GetWeakPtr(), config.ssrc,
-                          cast_message_cb),
-               rtt_cb,
-               base::Bind(&CastTransportSenderImpl::OnReceivedLogMessage,
-                          weak_factory_.GetWeakPtr(), VIDEO_EVENT),
-               clock_,
-               &pacer_,
-               config.ssrc,
-               config.feedback_ssrc));
+  video_rtcp_session_.reset(new SenderRtcpSession(
+      base::Bind(&CastTransportSenderImpl::OnReceivedCastMessage,
+                 weak_factory_.GetWeakPtr(), config.ssrc, cast_message_cb),
+      rtt_cb, base::Bind(&CastTransportSenderImpl::OnReceivedLogMessage,
+                         weak_factory_.GetWeakPtr(), VIDEO_EVENT),
+      clock_, &pacer_, config.ssrc, config.feedback_ssrc));
   pacer_.RegisterVideoSsrc(config.ssrc);
   AddValidSsrc(config.feedback_ssrc);
   status_callback_.Run(TRANSPORT_VIDEO_INITIALIZED);
@@ -254,7 +245,7 @@ void EncryptAndSendFrame(const EncodedFrame& frame,
 }
 }  // namespace
 
-void CastTransportSenderImpl::InsertFrame(uint32 ssrc,
+void CastTransportSenderImpl::InsertFrame(uint32_t ssrc,
                                           const EncodedFrame& frame) {
   if (audio_sender_ && ssrc == audio_sender_->ssrc()) {
     EncryptAndSendFrame(frame, &audio_encryptor_, audio_sender_.get());
@@ -266,15 +257,15 @@ void CastTransportSenderImpl::InsertFrame(uint32 ssrc,
 }
 
 void CastTransportSenderImpl::SendSenderReport(
-    uint32 ssrc,
+    uint32_t ssrc,
     base::TimeTicks current_time,
-    uint32 current_time_as_rtp_timestamp) {
+    RtpTimeTicks current_time_as_rtp_timestamp) {
   if (audio_sender_ && ssrc == audio_sender_->ssrc()) {
-    audio_rtcp_session_->SendRtcpFromRtpSender(
+    audio_rtcp_session_->SendRtcpReport(
         current_time, current_time_as_rtp_timestamp,
         audio_sender_->send_packet_count(), audio_sender_->send_octet_count());
   } else if (video_sender_ && ssrc == video_sender_->ssrc()) {
-    video_rtcp_session_->SendRtcpFromRtpSender(
+    video_rtcp_session_->SendRtcpReport(
         current_time, current_time_as_rtp_timestamp,
         video_sender_->send_packet_count(), video_sender_->send_octet_count());
   } else {
@@ -283,8 +274,8 @@ void CastTransportSenderImpl::SendSenderReport(
 }
 
 void CastTransportSenderImpl::CancelSendingFrames(
-    uint32 ssrc,
-    const std::vector<uint32>& frame_ids) {
+    uint32_t ssrc,
+    const std::vector<uint32_t>& frame_ids) {
   if (audio_sender_ && ssrc == audio_sender_->ssrc()) {
     audio_sender_->CancelSendingFrames(frame_ids);
   } else if (video_sender_ && ssrc == video_sender_->ssrc()) {
@@ -294,8 +285,8 @@ void CastTransportSenderImpl::CancelSendingFrames(
   }
 }
 
-void CastTransportSenderImpl::ResendFrameForKickstart(uint32 ssrc,
-                                                      uint32 frame_id) {
+void CastTransportSenderImpl::ResendFrameForKickstart(uint32_t ssrc,
+                                                      uint32_t frame_id) {
   if (audio_sender_ && ssrc == audio_sender_->ssrc()) {
     DCHECK(audio_rtcp_session_);
     audio_sender_->ResendFrameForKickstart(
@@ -312,7 +303,7 @@ void CastTransportSenderImpl::ResendFrameForKickstart(uint32 ssrc,
 }
 
 void CastTransportSenderImpl::ResendPackets(
-    uint32 ssrc,
+    uint32_t ssrc,
     const MissingFramesAndPacketsMap& missing_packets,
     bool cancel_rtx_if_not_in_list,
     const DedupInfo& dedup_info) {
@@ -345,7 +336,7 @@ void CastTransportSenderImpl::SendRawEvents() {
     scoped_ptr<std::vector<PacketEvent>> packet_events(
         new std::vector<PacketEvent>());
     packet_events->swap(recent_packet_events_);
-    raw_events_callback_.Run(frame_events.Pass(), packet_events.Pass());
+    raw_events_callback_.Run(std::move(frame_events), std::move(packet_events));
   }
 
   transport_task_runner_->PostDelayedTask(
@@ -358,9 +349,9 @@ void CastTransportSenderImpl::SendRawEvents() {
 bool CastTransportSenderImpl::OnReceivedPacket(scoped_ptr<Packet> packet) {
   const uint8_t* const data = &packet->front();
   const size_t length = packet->size();
-  uint32 ssrc;
-  if (Rtcp::IsRtcpPacket(data, length)) {
-    ssrc = Rtcp::GetSsrcOfSender(data, length);
+  uint32_t ssrc;
+  if (IsRtcpPacket(data, length)) {
+    ssrc = GetSsrcOfSender(data, length);
   } else if (!RtpParser::ParseSsrc(data, length, &ssrc)) {
     VLOG(1) << "Invalid RTP packet.";
     return false;
@@ -382,7 +373,7 @@ bool CastTransportSenderImpl::OnReceivedPacket(scoped_ptr<Packet> packet) {
     VLOG(1) << "Stale packet received.";
     return false;
   }
-  packet_callback_.Run(packet.Pass());
+  packet_callback_.Run(std::move(packet));
   return true;
 }
 
@@ -430,7 +421,7 @@ void CastTransportSenderImpl::OnReceivedLogMessage(
 }
 
 void CastTransportSenderImpl::OnReceivedCastMessage(
-    uint32 ssrc,
+    uint32_t ssrc,
     const RtcpCastMessageCallback& cast_message_cb,
     const RtcpCastMessage& cast_message) {
   if (!cast_message_cb.is_null())
@@ -438,7 +429,7 @@ void CastTransportSenderImpl::OnReceivedCastMessage(
 
   DedupInfo dedup_info;
   if (audio_sender_ && audio_sender_->ssrc() == ssrc) {
-    const int64 acked_bytes =
+    const int64_t acked_bytes =
         audio_sender_->GetLastByteSentForFrame(cast_message.ack_frame_id);
     last_byte_acked_for_audio_ =
         std::max(acked_bytes, last_byte_acked_for_audio_);
@@ -465,30 +456,23 @@ void CastTransportSenderImpl::OnReceivedCastMessage(
                 dedup_info);
 }
 
-void CastTransportSenderImpl::AddValidSsrc(uint32 ssrc) {
+void CastTransportSenderImpl::AddValidSsrc(uint32_t ssrc) {
   valid_ssrcs_.insert(ssrc);
 }
 
+// TODO(isheriff): This interface needs clean up.
+// https://crbug.com/569259
 void CastTransportSenderImpl::SendRtcpFromRtpReceiver(
-    uint32 ssrc,
-    uint32 sender_ssrc,
+    uint32_t ssrc,
+    uint32_t sender_ssrc,
     const RtcpTimeData& time_data,
     const RtcpCastMessage* cast_message,
     base::TimeDelta target_delay,
     const ReceiverRtcpEventSubscriber::RtcpEvents* rtcp_events,
     const RtpReceiverStatistics* rtp_receiver_statistics) {
-  const Rtcp rtcp(RtcpCastMessageCallback(),
-                  RtcpRttCallback(),
-                  RtcpLogMessageCallback(),
-                  clock_,
-                  &pacer_,
-                  ssrc,
-                  sender_ssrc);
-  rtcp.SendRtcpFromRtpReceiver(time_data,
-                               cast_message,
-                               target_delay,
-                               rtcp_events,
-                               rtp_receiver_statistics);
+  const ReceiverRtcpSession rtcp(clock_, &pacer_, ssrc, sender_ssrc);
+  rtcp.SendRtcpReport(time_data, cast_message, target_delay, rtcp_events,
+                      rtp_receiver_statistics);
 }
 
 }  // namespace cast

@@ -4,9 +4,13 @@
 
 #include "components/search_engines/template_url_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
@@ -321,7 +325,7 @@ TEST_F(TemplateURLServiceTest, AddUpdateRemove) {
   base::Time now = base::Time::Now();
   scoped_ptr<base::SimpleTestClock> clock(new base::SimpleTestClock);
   clock->SetNow(now);
-  model()->set_clock(clock.Pass());
+  model()->set_clock(std::move(clock));
 
   // Mutate an element and verify it succeeded.
   model()->ResetTemplateURL(loaded_url, ASCIIToUTF16("a"), ASCIIToUTF16("b"),
@@ -636,7 +640,7 @@ TEST_F(TemplateURLServiceTest, Reset) {
   base::Time now = base::Time::Now();
   scoped_ptr<base::SimpleTestClock> clock(new base::SimpleTestClock);
   clock->SetNow(now);
-  model()->set_clock(clock.Pass());
+  model()->set_clock(std::move(clock));
 
   // Reset the short name, keyword, url and make sure it takes.
   const base::string16 new_short_name(ASCIIToUTF16("a"));
@@ -1413,7 +1417,7 @@ TEST_F(TemplateURLServiceTest, DefaultExtensionEngine) {
       new TemplateURL::AssociatedExtensionInfo(
           TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext"));
   extension_info->wants_to_be_default_engine = true;
-  model()->AddExtensionControlledTURL(ext_dse, extension_info.Pass());
+  model()->AddExtensionControlledTURL(ext_dse, std::move(extension_info));
   EXPECT_EQ(ext_dse, model()->GetDefaultSearchProvider());
 
   model()->RemoveExtensionControlledTURL(
@@ -1439,7 +1443,7 @@ TEST_F(TemplateURLServiceTest, ExtensionEnginesNotPersist) {
       new TemplateURL::AssociatedExtensionInfo(
           TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext1"));
   extension_info->wants_to_be_default_engine = false;
-  model()->AddExtensionControlledTURL(ext_dse, extension_info.Pass());
+  model()->AddExtensionControlledTURL(ext_dse, std::move(extension_info));
   EXPECT_EQ(user_dse, model()->GetDefaultSearchProvider());
 
   ext_dse = CreateKeywordWithDate(
@@ -1449,7 +1453,7 @@ TEST_F(TemplateURLServiceTest, ExtensionEnginesNotPersist) {
   extension_info.reset(new TemplateURL::AssociatedExtensionInfo(
       TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext2"));
   extension_info->wants_to_be_default_engine = true;
-  model()->AddExtensionControlledTURL(ext_dse, extension_info.Pass());
+  model()->AddExtensionControlledTURL(ext_dse, std::move(extension_info));
   EXPECT_EQ(ext_dse, model()->GetDefaultSearchProvider());
 
   test_util()->ResetModel(true);
@@ -1497,7 +1501,7 @@ TEST_F(TemplateURLServiceTest, ExtensionEngineVsPolicy) {
       new TemplateURL::AssociatedExtensionInfo(
           TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION, "ext1"));
   extension_info->wants_to_be_default_engine = true;
-  model()->AddExtensionControlledTURL(ext_dse, extension_info.Pass());
+  model()->AddExtensionControlledTURL(ext_dse, std::move(extension_info));
   EXPECT_EQ(ext_dse, model()->GetTemplateURLForKeyword(ASCIIToUTF16("ext1")));
   EXPECT_TRUE(model()->is_default_search_managed());
   actual_managed_default = model()->GetDefaultSearchProvider();

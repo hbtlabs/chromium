@@ -599,7 +599,7 @@ public:
     bool hasForcedBreakAfter() const;
 
     LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
-    void mapRectToPaintInvalidationBacking(const LayoutBoxModelObject* paintInvalidationContainer, LayoutRect&, const PaintInvalidationState*) const override;
+    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const override;
     virtual void invalidatePaintForOverhangingFloats(bool paintAllDescendants);
 
     LayoutUnit containingBlockLogicalHeightForGetComputedStyle() const;
@@ -798,7 +798,8 @@ public:
     virtual void computeIntrinsicRatioInformation(FloatSize& /* intrinsicSize */, double& /* intrinsicRatio */) const { }
 
     IntSize scrolledContentOffset() const;
-    void applyCachedClipAndScrollOffsetForPaintInvalidation(LayoutRect& paintRect) const;
+    void mapScrollingContentsRectToBoxSpace(LayoutRect&) const;
+    void applyOverflowClip(LayoutRect&) const;
 
     virtual bool hasRelativeLogicalWidth() const;
     virtual bool hasRelativeLogicalHeight() const;
@@ -843,8 +844,10 @@ public:
 
     bool canRenderBorderImage() const;
 
-    void mapLocalToContainer(const LayoutBoxModelObject* paintInvalidationContainer, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const override;
+    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const override;
     void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const override;
+
+    void clearPreviousPaintInvalidationRects() override;
 
 protected:
     void willBeDestroyed() override;
@@ -864,12 +867,14 @@ protected:
     LayoutUnit computeIntrinsicLogicalWidthUsing(const Length& logicalWidthLength, LayoutUnit availableLogicalWidth, LayoutUnit borderAndPadding) const;
     virtual LayoutUnit computeIntrinsicLogicalContentHeightUsing(const Length& logicalHeightLength, LayoutUnit intrinsicContentHeight, LayoutUnit borderAndPadding) const;
 
-    virtual bool shouldComputeSizeAsReplaced() const { return isReplaced() && !isInlineBlockOrInlineTable(); }
+    virtual bool shouldComputeSizeAsReplaced() const { return isAtomicInlineLevel() && !isInlineBlockOrInlineTable(); }
 
     LayoutObject* splitAnonymousBoxesAroundChild(LayoutObject* beforeChild);
 
     void addLayerHitTestRects(LayerHitTestRects&, const PaintLayer* currentCompositedLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const override;
     void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
+
+    bool hitTestClippedOutByRoundedBorder(const HitTestLocation& locationInContainer, const LayoutPoint& borderBoxLocation) const;
 
     PaintInvalidationReason paintInvalidationReason(const LayoutBoxModelObject& paintInvalidationContainer,
         const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
@@ -877,6 +882,7 @@ protected:
     void incrementallyInvalidatePaint(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer) override;
 
     PaintInvalidationReason invalidatePaintIfNeeded(PaintInvalidationState&, const LayoutBoxModelObject& paintInvalidationContainer) override;
+    void invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState& childPaintInvalidationState) override;
 
     bool hasNonCompositedScrollbars() const final;
     void excludeScrollbars(LayoutRect&, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const;
@@ -956,6 +962,8 @@ private:
 
     // Returns true if the box intersects the viewport visible to the user.
     bool intersectsVisibleViewport();
+
+    bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
 
     void updateBackgroundAttachmentFixedStatusAfterStyleChange();
 

@@ -5,17 +5,17 @@
 #include "content/child/child_thread_impl.h"
 
 #include <signal.h>
-
 #include <string>
+#include <utility>
 
 #include "base/base_switches.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/debug/profiler.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/metrics/field_trial.h"
 #include "base/process/process.h"
@@ -28,6 +28,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_local.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 #include "components/tracing/child_trace_message_filter.h"
 #include "content/child/child_discardable_shared_memory_manager.h"
 #include "content/child/child_gpu_memory_buffer_manager.h"
@@ -52,9 +53,11 @@
 #include "content/common/child_process_messages.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/mojo/mojo_messages.h"
+#include "content/common/resource_messages.h"
 #include "content/public/common/content_switches.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_unprivileged.h"
+#include "ipc/ipc_channel.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/ipc_switches.h"
@@ -65,10 +68,6 @@
 
 #if defined(TCMALLOC_TRACE_MEMORY_SUPPORTED)
 #include "third_party/tcmalloc/chromium/src/gperftools/heap-profiler.h"
-#endif
-
-#if defined(OS_MACOSX)
-#include "content/child/child_io_surface_manager_mac.h"
 #endif
 
 #if defined(USE_OZONE)
@@ -175,29 +174,6 @@ class SuicideOnChannelErrorFilter : public IPC::MessageFilter {
 };
 
 #endif  // OS(POSIX)
-
-#if defined(OS_MACOSX)
-class IOSurfaceManagerFilter : public IPC::MessageFilter {
- public:
-  // Overridden from IPC::MessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override {
-    bool handled = true;
-    IPC_BEGIN_MESSAGE_MAP(IOSurfaceManagerFilter, message)
-      IPC_MESSAGE_HANDLER(ChildProcessMsg_SetIOSurfaceManagerToken,
-                          OnSetIOSurfaceManagerToken)
-      IPC_MESSAGE_UNHANDLED(handled = false)
-    IPC_END_MESSAGE_MAP()
-    return handled;
-  }
-
- protected:
-  ~IOSurfaceManagerFilter() override {}
-
-  void OnSetIOSurfaceManagerToken(const IOSurfaceManagerToken& token) {
-    ChildIOSurfaceManager::GetInstance()->set_token(token);
-  }
-};
-#endif
 
 #if defined(USE_OZONE)
 class ClientNativePixmapFactoryFilter : public IPC::MessageFilter {
@@ -413,7 +389,10 @@ void ChildThreadImpl::Init(const Options& options) {
   if (!IsInBrowserProcess())
     IPC::Logging::GetInstance()->SetIPCSender(this);
 #endif
+  // TODO(erikchen): Temporary code to help track http://crbug.com/527588.
+  IPC::Channel::SetMessageVerifier(&content::CheckContentsOfResourceMessage);
 
+  mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(GetIOTaskRunner()));
   mojo_application_.reset(new MojoApplication(GetIOTaskRunner()));
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
@@ -464,8 +443,8 @@ void ChildThreadImpl::Init(const Options& options) {
       new PowerMonitorBroadcastSource());
     channel_->AddFilter(power_monitor_source->GetMessageFilter());
 
-    power_monitor_.reset(new base::PowerMonitor(
-        power_monitor_source.Pass()));
+    power_monitor_.reset(
+        new base::PowerMonitor(std::move(power_monitor_source)));
   }
 
 #if defined(OS_POSIX)
@@ -473,10 +452,6 @@ void ChildThreadImpl::Init(const Options& options) {
   // and single-process mode.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kProcessType))
     channel_->AddFilter(new SuicideOnChannelErrorFilter());
-#endif
-
-#if defined(OS_MACOSX)
-  channel_->AddFilter(new IOSurfaceManagerFilter());
 #endif
 
 #if defined(USE_OZONE)
@@ -553,12 +528,12 @@ void ChildThreadImpl::Shutdown() {
   WebFileSystemImpl::DeleteThreadSpecificInstance();
 }
 
-void ChildThreadImpl::OnChannelConnected(int32 peer_pid) {
+void ChildThreadImpl::OnChannelConnected(int32_t peer_pid) {
   channel_connected_factory_.InvalidateWeakPtrs();
 }
 
 void ChildThreadImpl::OnChannelError() {
-  set_on_channel_error_called(true);
+  on_channel_error_called_ = true;
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
@@ -653,10 +628,8 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnProcessBackgrounded)
     IPC_MESSAGE_HANDLER(MojoMsg_BindExternalMojoShellHandle,
                         OnBindExternalMojoShellHandle)
-#if defined(OS_WIN)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_SetMojoParentPipeHandle,
                         OnSetMojoParentPipeHandle)
-#endif
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -722,7 +695,7 @@ void ChildThreadImpl::OnBindExternalMojoShellHandle(
   mojo::ScopedMessagePipeHandle message_pipe =
       mojo_shell_channel_init_.Init(handle, GetIOTaskRunner());
   DCHECK(message_pipe.is_valid());
-  MojoShellConnectionImpl::Get()->BindToMessagePipe(message_pipe.Pass());
+  MojoShellConnectionImpl::Get()->BindToMessagePipe(std::move(message_pipe));
 #endif  // defined(MOJO_SHELL_CLIENT)
 }
 
@@ -748,10 +721,8 @@ void ChildThreadImpl::ShutdownThread() {
 #endif
 
 void ChildThreadImpl::OnProcessFinalRelease() {
-  if (on_channel_error_called_) {
-    base::MessageLoop::current()->QuitWhenIdle();
+  if (on_channel_error_called_)
     return;
-  }
 
   // The child process shutdown sequence is a request response based mechanism,
   // where we send out an initial feeler request to the child process host

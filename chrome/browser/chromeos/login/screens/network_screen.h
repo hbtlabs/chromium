@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -94,7 +95,9 @@ class NetworkScreen : public NetworkModel,
   // Currently We can only get unsecured Wifi network configuration from shark
   // that can be applied to remora. Returns the network ONC configuration.
   void GetConnectedWifiNetwork(std::string* out_onc_spec);
-  void CreateAndConnectNetworkFromOnc(const std::string& onc_spec);
+  void CreateAndConnectNetworkFromOnc(const std::string& onc_spec,
+                                      const base::Closure& success_callback,
+                                      const base::Closure& failed_callback);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -159,9 +162,6 @@ class NetworkScreen : public NetworkModel,
 
   // Callback when the system timezone settings is changed.
   void OnSystemTimezoneChanged();
-
-  // Called when connection the network from ONC failed.
-  void OnConnectNetworkFromOncFailed();
 
   // True if subscribed to network change notification.
   bool is_network_subscribed_;

@@ -4,19 +4,23 @@
 
 // For WinDDK ATL compatibility, these ATL headers must come first.
 #include "build/build_config.h"
+
 #if defined(OS_WIN)
 #include <atlbase.h>  // NOLINT
 #include <atlwin.h>  // NOLINT
 #endif
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
+
+#include <limits.h>
 
 #include <algorithm>  // NOLINT
 
 #include "base/i18n/bidi_line_iterator.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "chrome/browser/ui/views/layout_constants.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -471,7 +475,7 @@ scoped_ptr<gfx::RenderText> OmniboxResultView::CreateRenderText(
   render_text->SetElideBehavior(gfx::ELIDE_TAIL);
   render_text->SetFontList(font_list_);
   render_text->SetText(text);
-  return render_text.Pass();
+  return render_text;
 }
 
 scoped_ptr<gfx::RenderText> OmniboxResultView::CreateClassifiedRenderText(
@@ -515,7 +519,7 @@ scoped_ptr<gfx::RenderText> OmniboxResultView::CreateClassifiedRenderText(
     }
     render_text->ApplyColor(GetColor(GetState(), color_kind), current_range);
   }
-  return render_text.Pass();
+  return render_text;
 }
 
 int OmniboxResultView::GetMatchContentsWidth() const {
@@ -767,7 +771,7 @@ scoped_ptr<gfx::RenderText> OmniboxResultView::CreateAnswerLine(
     AppendAnswerText(destination.get(), space + text_field->text(),
                      text_field->type());
   }
-  return destination.Pass();
+  return destination;
 }
 
 void OmniboxResultView::AppendAnswerText(gfx::RenderText* destination,

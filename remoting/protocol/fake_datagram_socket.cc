@@ -4,8 +4,11 @@
 
 #include "remoting/protocol/fake_datagram_socket.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/address_list.h"
@@ -174,7 +177,7 @@ void FakeDatagramChannelFactory::CreateChannel(
                    weak_factory_.GetWeakPtr(), base::Passed(&channel),
                    name, callback));
   } else {
-    NotifyChannelCreated(channel.Pass(), name, callback);
+    NotifyChannelCreated(std::move(channel), name, callback);
   }
 }
 
@@ -183,7 +186,7 @@ void FakeDatagramChannelFactory::NotifyChannelCreated(
     const std::string& name,
     const ChannelCreatedCallback& callback) {
   if (channels_.find(name) != channels_.end())
-    callback.Run(owned_socket.Pass());
+    callback.Run(std::move(owned_socket));
 }
 
 void FakeDatagramChannelFactory::CancelChannelCreation(

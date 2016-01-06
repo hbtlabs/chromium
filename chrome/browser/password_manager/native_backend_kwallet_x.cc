@@ -4,6 +4,9 @@
 
 #include "chrome/browser/password_manager/native_backend_kwallet_x.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -148,7 +151,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
     form->signon_realm.assign(signon_realm);
 
     int scheme = 0;
-    int64 date_created = 0;
+    int64_t date_created = 0;
     int type = 0;
     int generation_upload_status = 0;
     // Note that these will be read back in the order listed due to
@@ -181,7 +184,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
     }
 
     if (version > 2) {
-      int64 date_synced = 0;
+      int64_t date_synced = 0;
       if (!iter.ReadInt64(&date_synced)) {
         LogDeserializationWarning(version, signon_realm, false);
         return false;
@@ -220,7 +223,7 @@ bool DeserializeValueSize(const std::string& signon_realm,
       }
     }
 
-    converted_forms.push_back(form.Pass());
+    converted_forms.push_back(std::move(form));
   }
 
   forms->swap(converted_forms);
@@ -939,7 +942,7 @@ ScopedVector<autofill::PasswordForm> NativeBackendKWallet::DeserializeValue(
     success = DeserializeValueSize(
         signon_realm, iter, version, false, false, &forms);
     UMALogDeserializationStatus(success);
-    return forms.Pass();
+    return forms;
   }
 
   const bool size_32 = sizeof(size_t) == sizeof(uint32_t);
@@ -953,7 +956,7 @@ ScopedVector<autofill::PasswordForm> NativeBackendKWallet::DeserializeValue(
         signon_realm, iter, version, !size_32, false, &forms);
   }
   UMALogDeserializationStatus(success);
-  return forms.Pass();
+  return forms;
 }
 
 int NativeBackendKWallet::WalletHandle() {

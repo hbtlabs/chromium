@@ -9,7 +9,9 @@
 #include <mstcpip.h>
 
 #include "base/callback_helpers.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/win/windows_version.h"
 #include "net/base/address_list.h"
@@ -31,7 +33,7 @@ namespace {
 
 const int kTCPKeepAliveSeconds = 45;
 
-int SetSocketReceiveBufferSize(SOCKET socket, int32 size) {
+int SetSocketReceiveBufferSize(SOCKET socket, int32_t size) {
   int rv = setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
                       reinterpret_cast<const char*>(&size), sizeof(size));
   int net_error = (rv == 0) ? OK : MapSystemError(WSAGetLastError());
@@ -39,7 +41,7 @@ int SetSocketReceiveBufferSize(SOCKET socket, int32 size) {
   return net_error;
 }
 
-int SetSocketSendBufferSize(SOCKET socket, int32 size) {
+int SetSocketSendBufferSize(SOCKET socket, int32_t size) {
   int rv = setsockopt(socket, SOL_SOCKET, SO_SNDBUF,
                       reinterpret_cast<const char*>(&size), sizeof(size));
   int net_error = (rv == 0) ? OK : MapSystemError(WSAGetLastError());
@@ -302,7 +304,7 @@ int TCPSocketWin::Open(AddressFamily family) {
     return MapSystemError(WSAGetLastError());
   }
 
-  if (SetNonBlocking(socket_)) {
+  if (!base::SetNonBlocking(socket_)) {
     int result = MapSystemError(WSAGetLastError());
     Close();
     return result;
@@ -319,7 +321,7 @@ int TCPSocketWin::AdoptConnectedSocket(SOCKET socket,
 
   socket_ = socket;
 
-  if (SetNonBlocking(socket_)) {
+  if (!base::SetNonBlocking(socket_)) {
     int result = MapSystemError(WSAGetLastError());
     Close();
     return result;
@@ -337,7 +339,7 @@ int TCPSocketWin::AdoptListenSocket(SOCKET socket) {
 
   socket_ = socket;
 
-  if (SetNonBlocking(socket_)) {
+  if (!base::SetNonBlocking(socket_)) {
     int result = MapSystemError(WSAGetLastError());
     Close();
     return result;
@@ -589,7 +591,7 @@ void TCPSocketWin::SetDefaultOptionsForClient() {
   // Since Vista's auto-tune is better than any static value we can could set,
   // only change these on pre-vista machines.
   if (base::win::GetVersion() < base::win::VERSION_VISTA) {
-    const int32 kSocketBufferSize = 64 * 1024;
+    const int32_t kSocketBufferSize = 64 * 1024;
     SetSocketReceiveBufferSize(socket_, kSocketBufferSize);
     SetSocketSendBufferSize(socket_, kSocketBufferSize);
   }
@@ -624,12 +626,12 @@ int TCPSocketWin::SetExclusiveAddrUse() {
   return OK;
 }
 
-int TCPSocketWin::SetReceiveBufferSize(int32 size) {
+int TCPSocketWin::SetReceiveBufferSize(int32_t size) {
   DCHECK(CalledOnValidThread());
   return SetSocketReceiveBufferSize(socket_, size);
 }
 
-int TCPSocketWin::SetSendBufferSize(int32 size) {
+int TCPSocketWin::SetSendBufferSize(int32_t size) {
   DCHECK(CalledOnValidThread());
   return SetSocketSendBufferSize(socket_, size);
 }

@@ -34,13 +34,14 @@
  * @param {number} startColumn
  * @param {number} endLine
  * @param {number} endColumn
+ * @param {!RuntimeAgent.ExecutionContextId} executionContextId
  * @param {boolean} isContentScript
  * @param {boolean} isInternalScript
  * @param {boolean} isLiveEdit
  * @param {string=} sourceMapURL
  * @param {boolean=} hasSourceURL
  */
-WebInspector.Script = function(debuggerModel, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL)
+WebInspector.Script = function(debuggerModel, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL)
 {
     WebInspector.SDKObject.call(this, debuggerModel.target());
     this.debuggerModel = debuggerModel;
@@ -50,6 +51,7 @@ WebInspector.Script = function(debuggerModel, scriptId, sourceURL, startLine, st
     this.columnOffset = startColumn;
     this.endLine = endLine;
     this.endColumn = endColumn;
+    this._executionContextId = executionContextId;
     this._isContentScript = isContentScript;
     this._isInternalScript = isInternalScript;
     this._isLiveEdit = isLiveEdit;
@@ -62,7 +64,7 @@ WebInspector.Script.Events = {
     SourceMapURLAdded: "SourceMapURLAdded",
 }
 
-WebInspector.Script.sourceURLRegex = /\n[\040\t]*\/\/#\ssourceURL=\s*(\S*?)\s*$/mg;
+WebInspector.Script.sourceURLRegex = /^[\040\t]*\/\/# sourceURL=\s*(\S*?)\s*$/m;
 
 /**
  * @param {string} source
@@ -70,7 +72,16 @@ WebInspector.Script.sourceURLRegex = /\n[\040\t]*\/\/#\ssourceURL=\s*(\S*?)\s*$/
  */
 WebInspector.Script._trimSourceURLComment = function(source)
 {
-    return source.replace(WebInspector.Script.sourceURLRegex, "");
+    var sourceURLIndex = source.lastIndexOf("//# sourceURL=");
+    if (sourceURLIndex === -1)
+        return source;
+    var sourceURLLineIndex = source.lastIndexOf("\n", sourceURLIndex);
+    if (sourceURLLineIndex === -1)
+        return source;
+    var sourceURLLine = source.substr(sourceURLLineIndex + 1).split("\n", 1)[0];
+    if (sourceURLLine.search(WebInspector.Script.sourceURLRegex) === -1)
+        return source;
+    return source.substr(0, sourceURLLineIndex) + source.substr(sourceURLLineIndex + sourceURLLine.length + 1);
 }
 
 
@@ -89,6 +100,14 @@ WebInspector.Script.prototype = {
     isInternalScript: function()
     {
         return this._isInternalScript;
+    },
+
+    /**
+     * @return {?WebInspector.ExecutionContext}
+     */
+    executionContext: function()
+    {
+        return this.target().runtimeModel.executionContext(this._executionContextId);
     },
 
     /**

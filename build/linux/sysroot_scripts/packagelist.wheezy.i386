@@ -78,6 +78,7 @@ main/libn/libnss-db/libnss-db_2.2.3pre1-4_i386.deb
 main/libp/libp11/libp11-2_0.2.8-2_i386.deb
 main/libp/libpng/libpng12-0_1.2.49-1_i386.deb
 main/libp/libpng/libpng12-dev_1.2.49-1_i386.deb
+main/libp/libpthread-stubs/libpthread-stubs0-dev_0.3-3_i386.deb
 main/libs/libselinux/libselinux1_2.1.9-5_i386.deb
 main/libt/libtasn1-3/libtasn1-3_2.13-2+deb7u2_i386.deb
 main/libx/libx11/libx11-6_1.5.0-1+deb7u2_i386.deb
@@ -99,6 +100,7 @@ main/libx/libxcursor/libxcursor-dev_1.1.13-1+deb7u1_i386.deb
 main/libx/libxdamage/libxdamage1_1.1.3-2_i386.deb
 main/libx/libxdamage/libxdamage-dev_1.1.3-2_i386.deb
 main/libx/libxdmcp/libxdmcp6_1.1.1-1_i386.deb
+main/libx/libxdmcp/libxdmcp-dev_1.1.1-1_i386.deb
 main/libx/libxext/libxext6_1.3.1-2+deb7u1_i386.deb
 main/libx/libxext/libxext-dev_1.3.1-2+deb7u1_i386.deb
 main/libx/libxfixes/libxfixes3_5.0-4+deb7u1_i386.deb
@@ -159,5 +161,6 @@ main/x/x11proto-record/x11proto-record-dev_1.14.2-1_all.deb
 main/x/x11proto-render/x11proto-render-dev_0.11.1-2_all.deb
 main/x/x11proto-scrnsaver/x11proto-scrnsaver-dev_1.2.2-1_all.deb
 main/x/x11proto-xext/x11proto-xext-dev_7.2.1-1_all.deb
+main/x/x11proto-xinerama/x11proto-xinerama-dev_1.2.1-2_all.deb
 main/z/zlib/zlib1g_1.2.7.dfsg-13_i386.deb
 main/z/zlib/zlib1g-dev_1.2.7.dfsg-13_i386.deb

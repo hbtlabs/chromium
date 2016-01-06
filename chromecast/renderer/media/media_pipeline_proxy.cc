@@ -4,10 +4,13 @@
 
 #include "chromecast/renderer/media/media_pipeline_proxy.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "chromecast/common/media/cma_messages.h"
 #include "chromecast/media/cma/base/coded_frame_provider.h"
@@ -208,7 +211,7 @@ void MediaPipelineProxy::InitializeAudio(
     const ::media::PipelineStatusCB& status_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   has_audio_ = true;
-  audio_pipeline_->Initialize(config, frame_provider.Pass(), status_cb);
+  audio_pipeline_->Initialize(config, std::move(frame_provider), status_cb);
 }
 
 void MediaPipelineProxy::InitializeVideo(
@@ -217,7 +220,7 @@ void MediaPipelineProxy::InitializeVideo(
     const ::media::PipelineStatusCB& status_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   has_video_ = true;
-  video_pipeline_->Initialize(configs, frame_provider.Pass(), status_cb);
+  video_pipeline_->Initialize(configs, std::move(frame_provider), status_cb);
 }
 
 void MediaPipelineProxy::StartPlayingFrom(base::TimeDelta time) {

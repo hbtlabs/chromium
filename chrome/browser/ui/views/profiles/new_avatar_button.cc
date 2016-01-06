@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/views/profiles/new_avatar_button.h"
 
+#include <utility>
+
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -41,7 +44,7 @@ scoped_ptr<views::Border> CreateBorder(const int normal_image_set[],
   border->set_insets(gfx::Insets(kTopInset, kLeftRightInset,
                                  kBottomInset, kLeftRightInset));
 
-  return border.Pass();
+  return std::move(border);
 }
 
 }  // namespace

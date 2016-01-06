@@ -35,16 +35,32 @@ public:
 #ifndef NDEBUG
         WTF::String originalDebugString = item.asDebugString();
 #endif
-        ASSERT(item.isValid());
+        ASSERT(item.hasValidClient());
         DisplayItem& result = ContiguousContainer::appendByMoving(item, item.derivedSize());
-        // ContiguousContainer::appendByMoving() called in-place constructor on item, which invalidated it.
-        ASSERT(!item.isValid());
+        // ContiguousContainer::appendByMoving() calls an in-place constructor
+        // on item which replaces it with a tombstone/"dead display item" that
+        // can be safely destructed but should never be used.
+        ASSERT(!item.hasValidClient());
 #ifndef NDEBUG
         // Save original debug string in the old item to help debugging.
         item.setClientDebugString(originalDebugString);
 #endif
         return result;
     }
+
+#if ENABLE(ASSERT)
+    void assertDisplayItemClientsAreAlive() const
+    {
+        for (auto& item : *this) {
+#ifdef NDEBUG
+            ASSERT_WITH_MESSAGE(DisplayItemClient::isAlive(item.client()), "Short-lived DisplayItemClient. See crbug.com/570030.");
+#else
+            ASSERT_WITH_MESSAGE(DisplayItemClient::isAlive(item.client()), "Short-lived DisplayItemClient: %s. See crbug.com/570030.", item.clientDebugString().utf8().data());
+#endif
+        }
+    }
+#endif
+
 };
 
 } // namespace blink

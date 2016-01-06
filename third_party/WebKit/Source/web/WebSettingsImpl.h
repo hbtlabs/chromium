@@ -71,6 +71,7 @@ public:
     void setNavigateOnDragDrop(bool) override;
     void setCursiveFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON) override;
     void setDNSPrefetchingEnabled(bool) override;
+    void setDataSaverEnabled(bool) override;
     void setDOMPasteAllowed(bool) override;
     void setDefaultFixedFontSize(int) override;
     void setDefaultFontSize(int) override;
@@ -101,7 +102,6 @@ public:
     void setImageAnimationPolicy(ImageAnimationPolicy) override;
     void setImagesEnabled(bool) override;
     void setInlineTextBoxAccessibilityEnabled(bool) override;
-    void setInvertViewportScrollOrder(bool) override;
     void setJavaScriptCanAccessClipboard(bool) override;
     void setJavaScriptCanOpenWindowsAutomatically(bool) override;
     void setJavaScriptEnabled(bool) override;

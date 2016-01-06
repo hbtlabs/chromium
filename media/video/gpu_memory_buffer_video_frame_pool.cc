@@ -6,6 +6,8 @@
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <list>
@@ -15,6 +17,7 @@
 #include "base/bind.h"
 #include "base/containers/stack_container.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -225,9 +228,9 @@ int RowsPerCopy(size_t plane, VideoPixelFormat format, int width) {
 void CopyRowsToI420Buffer(int first_row,
                           int rows,
                           int bytes_per_row,
-                          const uint8* source,
+                          const uint8_t* source,
                           int source_stride,
-                          uint8* output,
+                          uint8_t* output,
                           int dest_stride,
                           const base::Closure& done) {
   TRACE_EVENT2("media", "CopyRowsToI420Buffer", "bytes_per_row", bytes_per_row,
@@ -248,9 +251,9 @@ void CopyRowsToNV12Buffer(int first_row,
                           int rows,
                           int bytes_per_row,
                           const scoped_refptr<VideoFrame>& source_frame,
-                          uint8* dest_y,
+                          uint8_t* dest_y,
                           int dest_stride_y,
-                          uint8* dest_uv,
+                          uint8_t* dest_uv,
                           int dest_stride_uv,
                           const base::Closure& done) {
   TRACE_EVENT2("media", "CopyRowsToNV12Buffer", "bytes_per_row", bytes_per_row,
@@ -283,7 +286,7 @@ void CopyRowsToUYVYBuffer(int first_row,
                           int rows,
                           int width,
                           const scoped_refptr<VideoFrame>& source_frame,
-                          uint8* output,
+                          uint8_t* output,
                           int dest_stride,
                           const base::Closure& done) {
   TRACE_EVENT2("media", "CopyRowsToUYVYBuffer", "bytes_per_row", width * 2,
@@ -391,7 +394,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
 bool GpuMemoryBufferVideoFramePool::PoolImpl::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  const uint64 tracing_process_id =
+  const uint64_t tracing_process_id =
       base::trace_event::MemoryDumpManager::GetInstance()
           ->GetTracingProcessId();
   const int kImportance = 2;

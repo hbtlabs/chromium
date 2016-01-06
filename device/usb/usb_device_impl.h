@@ -5,10 +5,14 @@
 #ifndef DEVICE_USB_USB_DEVICE_IMPL_H_
 #define DEVICE_USB_USB_DEVICE_IMPL_H_
 
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
+#include "build/build_config.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/webusb_descriptors.h"
@@ -57,7 +61,7 @@ class UsbDeviceImpl : public UsbDevice {
   }
   void set_device_path(const std::string& value) { device_path_ = value; }
   void set_webusb_allowed_origins(scoped_ptr<WebUsbDescriptorSet> descriptors) {
-    webusb_allowed_origins_ = descriptors.Pass();
+    webusb_allowed_origins_ = std::move(descriptors);
   }
   void set_webusb_landing_page(const GURL& url) { webusb_landing_page_ = url; }
 

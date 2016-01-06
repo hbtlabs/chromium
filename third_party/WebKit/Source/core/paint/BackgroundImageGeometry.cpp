@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/BackgroundImageGeometry.h"
 
 #include "core/frame/FrameView.h"
@@ -134,6 +133,20 @@ IntPoint accumulatedScrollOffset(const LayoutBoxModelObject& object, const Layou
     return result;
 }
 
+// When we match the sub-pixel fraction of the destination rect in a dimension, we
+// snap the same way. This commonly occurs when the background is meant to fill the
+// padding box but there's a border (which in Blink is always stored as an integer).
+// Otherwise we floor to avoid growing our tile size. Often these tiles are from a
+// sprite map, and bleeding adjactent sprites is visually worse than clipping the
+// intenteded one.
+LayoutSize applySubPixelHeuristicToImageSize(const LayoutSize& size, const LayoutRect& destination)
+{
+    LayoutSize snappedSize = LayoutSize(
+        size.width().fraction() == destination.width().fraction() ? snapSizeToPixel(size.width(), destination.x()) : size.width().floor(),
+        size.height().fraction() == destination.height().fraction() ? snapSizeToPixel(size.height(), destination.y()) : size.height().floor());
+    return snappedSize;
+}
+
 } // anonymous namespace
 
 void BackgroundImageGeometry::setNoRepeatX(LayoutUnit xOffset)
@@ -159,17 +172,6 @@ void BackgroundImageGeometry::useFixedAttachment(const LayoutPoint& attachmentPo
 void BackgroundImageGeometry::clip(const LayoutRect& clipRect)
 {
     m_destRect.intersect(clipRect);
-}
-
-// When we match the destination rect in a dimension, we snap the same way. Otherwise
-// we floor to avoid growing our tile size. Often these tiles are from a sprite map,
-// and bleeding adjactent sprites is visually worse than clipping the intenteded one.
-static LayoutSize applySubPixelHeuristicToImageSize(const LayoutSize& size, const LayoutRect& destination)
-{
-    LayoutSize snappedSize = LayoutSize(
-        size.width() == destination.width() ? destination.pixelSnappedWidth() : size.width().floor(),
-        size.height() == destination.height() ? destination.pixelSnappedHeight() : size.height().floor());
-    return snappedSize;
 }
 
 void BackgroundImageGeometry::pixelSnapGeometry()
@@ -265,7 +267,10 @@ void BackgroundImageGeometry::calculate(const LayoutBoxModelObject& obj, const L
         positioningAreaSize = destRect().size();
     }
 
-    LayoutSize fillTileSize = calculateFillTileSize(positioningBox, fillLayer, positioningAreaSize);
+    LayoutSize fillTileSize(calculateFillTileSize(positioningBox, fillLayer, positioningAreaSize));
+    // It's necessary to apply the heuristic here prior to any further calculations to avoid
+    // incorrectly using sub-pixel values that won't be present in the painted tile.
+    fillTileSize = applySubPixelHeuristicToImageSize(fillTileSize, m_destRect);
     setTileSize(fillTileSize);
     setImageContainerSize(fillTileSize);
 

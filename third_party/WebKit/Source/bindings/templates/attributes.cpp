@@ -1,5 +1,4 @@
-{% from 'conversions.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
-
+{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_api_experiment %}
 
 {##############################################################################}
 {% macro attribute_getter(attribute, world_suffix) %}
@@ -11,6 +10,9 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %})
 {
+    {% if attribute.is_api_experiment_enabled %}
+    {{check_api_experiment(attribute) | indent}}
+    {% endif %}
     {% if attribute.is_reflect and not attribute.is_url
           and attribute.idl_type == 'DOMString' and is_node
           and not attribute.is_implemented_in_private_script %}
@@ -19,14 +21,11 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {# holder #}
     {% if not attribute.is_static %}
     {% if attribute.is_lenient_this %}
-    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
-    if (holder.IsEmpty())
+    {# Make sure that info.Holder() really points to an instance if [LenientThis]. #}
+    if (!{{v8_class}}::hasInstance(info.Holder(), info.GetIsolate()))
         return; // Return silently because of [LenientThis].
-    // Note that it's okay to use |holder|, but |info.Holder()| is still unsafe
-    // and must not be used.
-    {% else %}
-    v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
+    v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
     {# impl #}
     {% if attribute.cached_attribute_validation_method %}
@@ -34,7 +33,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     if (!impl->{{attribute.cached_attribute_validation_method}}()) {
         v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
-        if (!v8Value.IsEmpty()) {
+        if (!v8Value.IsEmpty() && !v8Value->IsUndefined()) {
             v8SetReturnValue(info, v8Value);
             return;
         }
@@ -181,6 +180,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('AttributeGetter')}});
     {% endif %}
+    {% if attribute.is_api_experiment_enabled %}
+    {{check_api_experiment(attribute) | indent}}
+    {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
     ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
     V8PerContextData* contextData = scriptState->perContextData();
@@ -213,6 +215,9 @@ static void {{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Loca
     {% endif %}
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('ConstructorGetter')}});
+    {% endif %}
+    {% if attribute.is_api_experiment_enabled %}
+    {{check_api_experiment(attribute) | indent}}
     {% endif %}
     v8ConstructorAttributeGetter(property, info);
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
@@ -251,14 +256,11 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
            not attribute.constructor_type) or
           raise_exception %}
     {% if attribute.is_lenient_this %}
-    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
-    if (holder.IsEmpty())
+    {# Make sure that info.Holder() really points to an instance if [LenientThis]. #}
+    if (!{{v8_class}}::hasInstance(info.Holder(), info.GetIsolate()))
         return; // Return silently because of [LenientThis].
-    // Note that it's okay to use |holder|, but |info.Holder()| is still unsafe
-    // and must not be used.
-    {% else %}
-    v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
+    v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
     {% if raise_exception %}
     ExceptionState exceptionState(ExceptionState::SetterContext, "{{attribute.name}}", "{{interface_name}}", holder, info.GetIsolate());
@@ -413,16 +415,20 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeGetter(LocalFrame* 
     v8::HandleScope handleScope(toIsolate(frame));
     ScriptForbiddenScope::AllowUserAgentScript script;
     ScriptState* scriptState = ScriptState::forWorld(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return false;
     ScriptState* scriptStateInUserScript = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptStateInUserScript)
         return false;
 
     ScriptState::Scope scope(scriptState);
     v8::Local<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
     if (holder.IsEmpty())
         return false;
+
+    {% if attribute.is_api_experiment_enabled %}
+    {{check_api_experiment(attribute, "scriptState->isolate()") | indent}}
+    {% endif %}
 
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::Local<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{attribute.name}}", holder);
@@ -444,10 +450,10 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeSetter(LocalFrame* 
     v8::HandleScope handleScope(toIsolate(frame));
     ScriptForbiddenScope::AllowUserAgentScript script;
     ScriptState* scriptState = ScriptState::forWorld(frame, DOMWrapperWorld::privateScriptIsolatedWorld());
-    if (!scriptState->contextIsValid())
+    if (!scriptState)
         return false;
     ScriptState* scriptStateInUserScript = ScriptState::forMainWorld(frame);
-    if (!scriptState->contextIsValid())
+    if (!scriptStateInUserScript)
         return false;
 
     ScriptState::Scope scope(scriptState);
@@ -463,7 +469,7 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeSetter(LocalFrame* 
 
 {##############################################################################}
 {% macro attribute_configuration(attribute) %}
-{% from 'conversions.cpp' import property_location %}
+{% from 'utilities.cpp' import property_location %}
 {% if attribute.constructor_type %}
 {% set getter_callback =
        '%sV8Internal::%sConstructorGetterCallback' % (cpp_class_or_partial, attribute.name)

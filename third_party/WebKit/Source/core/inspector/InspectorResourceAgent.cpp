@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/InspectorResourceAgent.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -67,6 +66,7 @@
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
+#include "platform/network/ResourceLoadTiming.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/network/WebSocketHandshakeRequest.h"
@@ -499,10 +499,10 @@ void InspectorResourceAgent::willSendRequest(LocalFrame* frame, unsigned long id
         request.setShouldResetAppCache(true);
     }
 
+    willSendRequestInternal(frame, identifier, loader, request, redirectResponse, initiatorInfo);
+
     if (!m_hostId.isEmpty())
         request.addHTTPHeaderField(kDevToolsEmulateNetworkConditionsClientId, AtomicString(m_hostId));
-
-    willSendRequestInternal(frame, identifier, loader, request, redirectResponse, initiatorInfo);
 }
 
 void InspectorResourceAgent::markResourceAsCached(unsigned long identifier)
@@ -736,16 +736,14 @@ void InspectorResourceAgent::didFinishEventSourceRequest(ThreadableLoaderClient*
 
 void InspectorResourceAgent::willDestroyResource(Resource* cachedResource)
 {
-    Vector<String> requestIds = m_resourcesData->removeResource(cachedResource);
-    if (!requestIds.size())
-        return;
-
     String content;
     bool base64Encoded;
-    if (!InspectorPageAgent::cachedResourceContent(cachedResource, &content, &base64Encoded))
-        return;
-    for (auto& request : requestIds)
-        m_resourcesData->setResourceContent(request, content, base64Encoded);
+    bool hasContent = InspectorPageAgent::cachedResourceContent(cachedResource, &content, &base64Encoded);
+    Vector<String> requestIds = m_resourcesData->removeResource(cachedResource);
+    if (hasContent) {
+        for (auto& request : requestIds)
+            m_resourcesData->setResourceContent(request, content, base64Encoded);
+    }
 }
 
 void InspectorResourceAgent::applyUserAgentOverride(String* userAgent)
@@ -1025,8 +1023,6 @@ void InspectorResourceAgent::setCacheDisabled(ErrorString*, bool cacheDisabled)
     m_state->setBoolean(ResourceAgentState::cacheDisabled, cacheDisabled);
     if (cacheDisabled)
         memoryCache()->evictResources();
-    for (LocalFrame* frame : *m_inspectedFrames)
-        frame->document()->fetcher()->garbageCollectDocumentResources();
 }
 
 void InspectorResourceAgent::emulateNetworkConditions(ErrorString*, bool, double, double, double)

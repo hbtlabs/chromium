@@ -4,10 +4,13 @@
 
 #include "net/base/file_stream.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -116,7 +119,7 @@ TEST_F(FileStreamTest, UseFileHandle) {
 
   // Seek to the beginning of the file and read.
   scoped_ptr<FileStream> read_stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
   ASSERT_EQ(ERR_IO_PENDING, read_stream->Seek(0, callback64.callback()));
   ASSERT_EQ(0, callback64.WaitForResult());
   // Read into buffer and compare.
@@ -134,7 +137,7 @@ TEST_F(FileStreamTest, UseFileHandle) {
   file.Initialize(temp_file_path(), flags);
 
   scoped_ptr<FileStream> write_stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
   ASSERT_EQ(ERR_IO_PENDING, write_stream->Seek(0, callback64.callback()));
   ASSERT_EQ(0, callback64.WaitForResult());
   scoped_refptr<IOBufferWithSize> write_buffer = CreateTestDataBuffer();
@@ -751,7 +754,7 @@ TEST_F(FileStreamTest, WriteError) {
   ASSERT_TRUE(file.IsValid());
 
   scoped_ptr<FileStream> stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
 
   scoped_refptr<IOBuffer> buf = new IOBuffer(1);
   buf->data()[0] = 0;
@@ -776,7 +779,7 @@ TEST_F(FileStreamTest, ReadError) {
   ASSERT_TRUE(file.IsValid());
 
   scoped_ptr<FileStream> stream(
-      new FileStream(file.Pass(), base::ThreadTaskRunnerHandle::Get()));
+      new FileStream(std::move(file), base::ThreadTaskRunnerHandle::Get()));
 
   scoped_refptr<IOBuffer> buf = new IOBuffer(1);
   TestCompletionCallback callback;

@@ -4,9 +4,12 @@
 
 #include "chrome/browser/devtools/devtools_network_transaction.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "chrome/browser/devtools/devtools_network_controller.h"
 #include "chrome/browser/devtools/devtools_network_interceptor.h"
+#include "chrome/browser/devtools/devtools_network_upload_data_stream.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_progress.h"
@@ -25,7 +28,7 @@ DevToolsNetworkTransaction::DevToolsNetworkTransaction(
     scoped_ptr<net::HttpTransaction> network_transaction)
     : throttled_byte_count_(0),
       controller_(controller),
-      network_transaction_(network_transaction.Pass()),
+      network_transaction_(std::move(network_transaction)),
       request_(nullptr),
       failed_(false) {
   DCHECK(controller);
@@ -64,8 +67,8 @@ int DevToolsNetworkTransaction::Throttle(
 
   throttle_callback_ = base::Bind(&DevToolsNetworkTransaction::ThrottleCallback,
       base::Unretained(this), callback);
-  int rv = interceptor_->StartThrottle(
-      result, throttled_byte_count_, send_end, start, throttle_callback_);
+  int rv = interceptor_->StartThrottle(result, throttled_byte_count_, send_end,
+      start, false, throttle_callback_);
   if (rv != net::ERR_IO_PENDING)
     throttle_callback_.Reset();
   if (rv == net::ERR_INTERNET_DISCONNECTED)
@@ -119,13 +122,23 @@ int DevToolsNetworkTransaction::Start(
         kDevToolsEmulateNetworkConditionsClientId, &client_id);
     custom_request_->extra_headers.RemoveHeader(
         kDevToolsEmulateNetworkConditionsClientId);
+
+    if (request_->upload_data_stream) {
+      custom_upload_data_stream_.reset(
+          new DevToolsNetworkUploadDataStream(request_->upload_data_stream));
+      custom_request_->upload_data_stream = custom_upload_data_stream_.get();
+    }
+
     request_ = custom_request_.get();
   }
 
   DevToolsNetworkInterceptor* interceptor =
       controller_->GetInterceptor(client_id);
-  if (interceptor)
+  if (interceptor) {
     interceptor_ = interceptor->GetWeakPtr();
+    if (custom_upload_data_stream_)
+      custom_upload_data_stream_->SetInterceptor(interceptor);
+  }
 
   if (CheckFailed())
     return net::ERR_INTERNET_DISCONNECTED;
@@ -254,6 +267,11 @@ bool DevToolsNetworkTransaction::GetLoadTimingInfo(
 bool DevToolsNetworkTransaction::GetRemoteEndpoint(
     net::IPEndPoint* endpoint) const {
   return network_transaction_->GetRemoteEndpoint(endpoint);
+}
+
+void DevToolsNetworkTransaction::PopulateNetErrorDetails(
+    net::NetErrorDetails* details) const {
+  return network_transaction_->PopulateNetErrorDetails(details);
 }
 
 void DevToolsNetworkTransaction::SetPriority(net::RequestPriority priority) {

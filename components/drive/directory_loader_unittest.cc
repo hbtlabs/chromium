@@ -6,6 +6,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/testing_pref_service.h"
 #include "base/run_loop.h"
@@ -121,7 +122,7 @@ class DirectoryLoaderTest : public testing::Test {
         google_apis::test_util::CreateCopyResultCallback(&error, &entry));
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(google_apis::HTTP_CREATED, error);
-    return entry.Pass();
+    return entry;
   }
 
   content::TestBrowserThreadBundle thread_bundle_;

@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/svg/animation/SVGSMILElement.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -43,6 +42,7 @@
 #include "wtf/MathExtras.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
+#include <algorithm>
 
 namespace blink {
 
@@ -81,26 +81,26 @@ inline RepeatEvent* toRepeatEvent(Event* event)
 
 static SMILEventSender& smilEndEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::endEvent));
-    return sender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SMILEventSender>, sender, (SMILEventSender::create(EventTypeNames::endEvent)));
+    return *sender;
 }
 
 static SMILEventSender& smilBeginEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::beginEvent));
-    return sender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SMILEventSender>, sender, (SMILEventSender::create(EventTypeNames::beginEvent)));
+    return *sender;
 }
 
 static SMILEventSender& smilRepeatEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (EventTypeNames::repeatEvent));
-    return sender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SMILEventSender>, sender, (SMILEventSender::create(EventTypeNames::repeatEvent)));
+    return *sender;
 }
 
 static SMILEventSender& smilRepeatNEventSender()
 {
-    DEFINE_STATIC_LOCAL(SMILEventSender, sender, (AtomicString("repeatn", AtomicString::ConstructFromLiteral)));
-    return sender;
+    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SMILEventSender>, sender, (SMILEventSender::create(AtomicString("repeatn", AtomicString::ConstructFromLiteral))));
+    return *sender;
 }
 
 // This is used for duration type time values that can't be negative.
@@ -206,12 +206,10 @@ SVGSMILElement::~SVGSMILElement()
 {
 #if !ENABLE(OILPAN)
     clearResourceAndEventBaseReferences();
-#endif
     smilEndEventSender().cancelEvent(this);
     smilBeginEventSender().cancelEvent(this);
     smilRepeatEventSender().cancelEvent(this);
     smilRepeatNEventSender().cancelEvent(this);
-#if !ENABLE(OILPAN)
     clearConditions();
 
     unscheduleIfScheduled();

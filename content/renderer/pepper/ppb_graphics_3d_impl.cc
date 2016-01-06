@@ -20,7 +20,7 @@
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
-#include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "ppapi/c/ppp_graphics_3d.h"
 #include "ppapi/thunk/enter.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -41,8 +41,8 @@ namespace content {
 
 namespace {
 
-const int32 kCommandBufferSize = 1024 * 1024;
-const int32 kTransferBufferSize = 1024 * 1024;
+const int32_t kCommandBufferSize = 1024 * 1024;
+const int32_t kTransferBufferSize = 1024 * 1024;
 
 }  // namespace
 
@@ -171,13 +171,13 @@ gpu::GpuControl* PPB_Graphics3D_Impl::GetGpuControl() {
   return command_buffer_.get();
 }
 
-int32 PPB_Graphics3D_Impl::DoSwapBuffers() {
+int32_t PPB_Graphics3D_Impl::DoSwapBuffers() {
   DCHECK(command_buffer_);
   // We do not have a GLES2 implementation when using an OOP proxy.
   // The plugin-side proxy is responsible for adding the SwapBuffers command
   // to the command buffer in that case.
-  if (gles2_impl())
-    gles2_impl()->SwapBuffers();
+  if (gpu::gles2::GLES2Interface* gl = gles2_interface())
+    gl->SwapBuffers();
 
   // Since the backing texture has been updated, a new sync point should be
   // inserted.
@@ -254,7 +254,7 @@ bool PPB_Graphics3D_Impl::InitRaw(
     return false;
 
   gfx::Size surface_size;
-  std::vector<int32> attribs;
+  std::vector<int32_t> attribs;
   gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
   // TODO(alokp): Change GpuChannelHost::CreateOffscreenCommandBuffer()
   // interface to accept width and height in the attrib_list so that

@@ -128,11 +128,14 @@ enum IPCMessageStart {
   RenderProcessMsgStart,
   PageLoadMetricsMsgStart,
   MemoryMsgStart,
+  MediaSessionMsgStart,
   IPCTestMsgStart,
   ArcInstanceMsgStart,
   ArcInstanceHostMsgStart,
   DistillerMsgStart,
   StartupMetricMsgStart,
+  ArcCameraMsgStart,
+  DWriteFontProxyMsgStart,
   LastIPCMsgStart  // Must come last.
 };
 

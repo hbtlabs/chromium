@@ -4,16 +4,19 @@
 
 #include "chrome/renderer/spellchecker/spellcheck.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/spellcheck_common.h"
@@ -21,7 +24,6 @@
 #include "chrome/common/spellcheck_result.h"
 #include "chrome/renderer/spellchecker/spellcheck_language.h"
 #include "chrome/renderer/spellchecker/spellcheck_provider.h"
-#include "components/version_info/version_info.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_visitor.h"
@@ -63,18 +65,18 @@ class DocumentMarkersCollector : public content::RenderViewVisitor {
  public:
   DocumentMarkersCollector() {}
   ~DocumentMarkersCollector() override {}
-  const std::vector<uint32>& markers() const { return markers_; }
+  const std::vector<uint32_t>& markers() const { return markers_; }
   bool Visit(content::RenderView* render_view) override;
 
  private:
-  std::vector<uint32> markers_;
+  std::vector<uint32_t> markers_;
   DISALLOW_COPY_AND_ASSIGN(DocumentMarkersCollector);
 };
 
 bool DocumentMarkersCollector::Visit(content::RenderView* render_view) {
   if (!render_view || !render_view->GetWebView())
     return true;
-  WebVector<uint32> markers;
+  WebVector<uint32_t> markers;
   render_view->GetWebView()->spellingMarkers(&markers);
   for (size_t i = 0; i < markers.size(); ++i)
     markers_.push_back(markers[i]);
@@ -262,7 +264,7 @@ void SpellCheck::OnRequestDocumentMarkers() {
 void SpellCheck::AddSpellcheckLanguage(base::File file,
                                        const std::string& language) {
   languages_.push_back(new SpellcheckLanguage());
-  languages_.back()->Init(file.Pass(), language);
+  languages_.back()->Init(std::move(file), language);
 }
 
 bool SpellCheck::SpellCheckWord(
@@ -537,14 +539,7 @@ void SpellCheck::CreateTextCheckingResults(
 
 bool SpellCheck::IsSpellcheckEnabled() {
 #if defined(OS_ANDROID)
-  if (base::SysInfo::IsLowEndDevice())
-    return false;
-
-  version_info::Channel channel = chrome::GetChannel();
-  if (channel == version_info::Channel::DEV ||
-      channel == version_info::Channel::CANARY) {
-    return true;
-  } else if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
                  switches::kEnableAndroidSpellChecker)) {
     return false;
   }

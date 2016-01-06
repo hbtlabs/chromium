@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "ui/base/touch/touch_device.h"
 #include "url/gurl.h"
@@ -95,6 +96,9 @@ struct CONTENT_EXPORT WebPreferences {
   // we disable the feature at a lower layer so that we catch non-WebKit uses
   // of DNS prefetch as well.
   bool dns_prefetching_enabled;
+  // Preference to save data. When enabled, requests will contain the header
+  // 'Save-Data: on'.
+  bool data_saver_enabled;
   bool local_storage_enabled;
   bool databases_enabled;
   bool application_cache_enabled;

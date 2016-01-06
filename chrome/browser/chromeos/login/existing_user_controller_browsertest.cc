@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/scoped_user_pref_update.h"
@@ -321,8 +322,7 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerUntrustedTest,
   SupervisedUserCreationScreen supervised_user_creation_screen(
       &mock_base_screen_delegate, &supervised_user_creation_screen_handler);
 
-  supervised_user_creation_screen.AuthenticateManager(
-      account_id_.GetUserEmail(), kPassword);
+  supervised_user_creation_screen.AuthenticateManager(account_id_, kPassword);
 }
 
 MATCHER_P(HasDetails, expected, "") {

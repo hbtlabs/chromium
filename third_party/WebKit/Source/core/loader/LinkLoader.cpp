@@ -29,7 +29,6 @@
  *
  */
 
-#include "config.h"
 #include "core/loader/LinkLoader.h"
 
 #include "core/dom/Document.h"
@@ -211,7 +210,7 @@ static void preloadIfNeeded(const LinkRelAttribute& relAttribute, const KURL& hr
     }
 }
 
-bool LinkLoader::loadLinkFromHeader(const String& headerValue, Document* document, const NetworkHintsInterface& networkHintsInterface)
+bool LinkLoader::loadLinkFromHeader(const String& headerValue, Document* document, const NetworkHintsInterface& networkHintsInterface, CanLoadResources canLoadResources)
 {
     if (!document)
         return false;
@@ -219,20 +218,25 @@ bool LinkLoader::loadLinkFromHeader(const String& headerValue, Document* documen
     for (auto& header : headerSet) {
         if (!header.valid() || header.url().isEmpty() || header.rel().isEmpty())
             return false;
+
         LinkRelAttribute relAttribute(header.rel());
         KURL url = document->completeURL(header.url());
-        if (RuntimeEnabledFeatures::linkHeaderEnabled())
-            dnsPrefetchIfNeeded(relAttribute, url, *document, networkHintsInterface, LinkCalledFromHeader);
+        if (canLoadResources == DoNotLoadResources) {
+            if (RuntimeEnabledFeatures::linkHeaderEnabled())
+                dnsPrefetchIfNeeded(relAttribute, url, *document, networkHintsInterface, LinkCalledFromHeader);
 
-        if (RuntimeEnabledFeatures::linkPreconnectEnabled())
-            preconnectIfNeeded(relAttribute, url, *document, header.crossOrigin(), networkHintsInterface, LinkCalledFromHeader);
-
-        // FIXME: Add more supported headers as needed.
+            if (RuntimeEnabledFeatures::linkPreconnectEnabled())
+                preconnectIfNeeded(relAttribute, url, *document, header.crossOrigin(), networkHintsInterface, LinkCalledFromHeader);
+        } else {
+            if (RuntimeEnabledFeatures::linkPreloadEnabled())
+                preloadIfNeeded(relAttribute, url, *document, header.as());
+        }
+        // TODO(yoav): Add more supported headers as needed.
     }
     return true;
 }
 
-bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, const AtomicString& crossOriginMode, const String& type, const String& as, const KURL& href, Document& document, const NetworkHintsInterface& networkHintsInterface)
+bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttributeValue crossOrigin, const String& type, const String& as, const KURL& href, Document& document, const NetworkHintsInterface& networkHintsInterface)
 {
     // TODO(yoav): Do all links need to load only after they're in document???
 
@@ -240,7 +244,7 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, const AtomicStri
     // FIXME(crbug.com/463266): We're ignoring type here. Maybe we shouldn't.
     dnsPrefetchIfNeeded(relAttribute, href, document, networkHintsInterface, LinkCalledFromMarkup);
 
-    preconnectIfNeeded(relAttribute, href, document, crossOriginAttributeValue(crossOriginMode), networkHintsInterface, LinkCalledFromMarkup);
+    preconnectIfNeeded(relAttribute, href, document, crossOrigin, networkHintsInterface, LinkCalledFromMarkup);
 
     if (m_client->shouldLoadLink())
         preloadIfNeeded(relAttribute, href, document, as);
@@ -258,8 +262,8 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, const AtomicStri
         }
 
         FetchRequest linkRequest(ResourceRequest(document.completeURL(href)), FetchInitiatorTypeNames::link);
-        if (!crossOriginMode.isNull())
-            linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOriginMode);
+        if (crossOrigin != CrossOriginAttributeNotSet)
+            linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOrigin);
         setResource(LinkFetchResource::fetch(type, linkRequest, document.fetcher()));
     }
 

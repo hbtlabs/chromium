@@ -12,6 +12,7 @@
 #include "base/metrics/histogram.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -95,8 +96,10 @@ void CoreTabHelper::UpdateContentRestrictions(int content_restrictions) {
 #endif
 }
 
-void CoreTabHelper::SearchByImageInNewTab(const GURL& src_url) {
+void CoreTabHelper::SearchByImageInNewTab(
+    content::RenderFrameHost* render_frame_host, const GURL& src_url) {
   RequestThumbnailForContextNode(
+      render_frame_host,
       kImageSearchThumbnailMinSize,
       gfx::Size(kImageSearchThumbnailMaxWidth,
                 kImageSearchThumbnailMaxHeight),
@@ -106,14 +109,13 @@ void CoreTabHelper::SearchByImageInNewTab(const GURL& src_url) {
 }
 
 void CoreTabHelper::RequestThumbnailForContextNode(
+    content::RenderFrameHost* render_frame_host,
     int minimum_size,
     gfx::Size maximum_size,
     const ContextNodeThumbnailCallback& callback) {
   int callback_id = thumbnail_callbacks_.Add(
       new ContextNodeThumbnailCallback(callback));
 
-  content::RenderFrameHost* render_frame_host =
-      web_contents()->GetMainFrame();
   render_frame_host->Send(
       new ChromeViewMsg_RequestThumbnailForContextNode(
           render_frame_host->GetRoutingID(),

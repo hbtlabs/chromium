@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "bindings/core/v8/V8Binding.h"
 
 #include "bindings/core/v8/ScriptController.h"
@@ -791,6 +790,8 @@ v8::Local<v8::Context> toV8Context(Frame* frame, DOMWrapperWorld& world)
     if (!frame)
         return v8::Local<v8::Context>();
     v8::Local<v8::Context> context = toV8ContextEvenIfDetached(frame, world);
+    if (context.IsEmpty())
+        return v8::Local<v8::Context>();
     ScriptState* scriptState = ScriptState::from(context);
     if (scriptState->contextIsValid()) {
         ASSERT(toFrameIfNotDetached(context) == frame);
@@ -802,12 +803,12 @@ v8::Local<v8::Context> toV8Context(Frame* frame, DOMWrapperWorld& world)
 v8::Local<v8::Context> toV8ContextEvenIfDetached(Frame* frame, DOMWrapperWorld& world)
 {
     ASSERT(frame);
-    return frame->windowProxy(world)->context();
+    return frame->windowProxy(world)->contextIfInitialized();
 }
 
-void crashIfV8IsDead()
+void crashIfIsolateIsDead(v8::Isolate* isolate)
 {
-    if (v8::V8::IsDead()) {
+    if (isolate->IsDead()) {
         // FIXME: We temporarily deal with V8 internal error situations
         // such as out-of-memory by crashing the renderer.
         CRASH();

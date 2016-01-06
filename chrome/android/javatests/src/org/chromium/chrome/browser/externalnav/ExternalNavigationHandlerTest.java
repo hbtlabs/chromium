@@ -46,6 +46,11 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     private static final int NO_REDIRECT = 0x0;
     private static final int REDIRECT = 0x1;
 
+    private static final String NO_REFERRER = null;
+
+    private static final boolean NORMAL_PROFILE = false;
+    private static final boolean INCOGNITO_PROFILE = true;
+
     private static final String SEARCH_RESULT_URL_FOR_TOM_HANKS =
             "https://www.google.com/search?q=tom+hanks";
     private static final String IMDB_WEBPAGE_FOR_TOM_HANKS = "http://m.imdb.com/name/nm0000158";
@@ -86,13 +91,14 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         mDelegate.setContext(getInstrumentation().getContext());
         CommandLine.init(new String[0]);
         ExternalNavigationHandler.sReportingDisabledForTests = true;
+        mDelegate.mQueryIntentOverride = null;
     }
 
     @SmallTest
     public void testOrdinaryIncognitoUri() {
         check("http://youtube.com/",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -107,7 +113,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // http://crbug.com/159153: Don't override http or https URLs from the NTP or bookmarks.
         check("http://youtube.com/",
                 "chrome://about", /* referrer */
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -117,7 +123,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 IGNORE);
         check("tel:012345678",
                 "chrome://about", /* referrer */
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -132,8 +138,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // http://crbug.com/164194. We shouldn't show the intent picker on
         // forwards or backwards navigations.
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK
                 | PageTransition.FORWARD_BACK,
                 NO_REDIRECT,
@@ -149,8 +155,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // http://crbug.com/181186: We need to show the intent picker when we receive a redirect
         // following a form submit. OAuth of native applications rely on this.
         check("market://1234",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.FORM_SUBMIT,
                 REDIRECT,
                 true,
@@ -159,8 +165,30 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
                 START_ACTIVITY);
         check("http://youtube.com://",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
+                PageTransition.FORM_SUBMIT,
+                REDIRECT,
+                true,
+                false,
+                null,
+                OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
+                START_ACTIVITY);
+        // If the page matches the referrer, then continue loading in Chrome.
+        check("http://youtube.com://",
+                "http://youtube.com", /* referrer */
+                NORMAL_PROFILE,
+                PageTransition.FORM_SUBMIT,
+                REDIRECT,
+                true,
+                false,
+                null,
+                OverrideUrlLoadingResult.NO_OVERRIDE,
+                IGNORE);
+        // If the page does not match the referrer, then prompt an intent.
+        check("http://youtube.com://",
+                "http://google.com", /* referrer */
+                NORMAL_PROFILE,
                 PageTransition.FORM_SUBMIT,
                 REDIRECT,
                 true,
@@ -172,8 +200,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // is not encoded in the intent (although, in theory, it could be passed in as
         // an extra data in the intent).
         check("http://youtube.com://",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.FORM_SUBMIT,
                 NO_REDIRECT,
                 true,
@@ -187,8 +215,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testIgnore() {
         // Ensure about: URLs are not broadcast for external navigation.
         check("about:test",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -197,8 +225,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check("about:test",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -209,8 +237,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         // Ensure content: URLs are not broadcast for external navigation.
         check("content:test",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -219,8 +247,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check("content:test",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -231,8 +259,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         // Ensure chrome: URLs are not broadcast for external navigation.
         check("chrome://history",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -241,8 +269,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check("chrome://history",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -253,8 +281,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         // Ensure chrome-native: URLs are not broadcast for external navigation.
         check("chrome-native://newtab",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -263,8 +291,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check("chrome-native://newtab",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -278,8 +306,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testPageTransitionType() {
         // Non-link page transition type are ignored.
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -288,8 +316,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT,
                 START_ACTIVITY);
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 REDIRECT,
                 true,
@@ -300,8 +328,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // http://crbug.com/143118 - Don't show the picker for directly typed URLs, unless
         // the URL results in a redirect.
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED,
                 NO_REDIRECT,
                 true,
@@ -311,8 +339,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 IGNORE);
         // http://crbug.com/162106 - Don't show the picker on reload.
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.RELOAD,
                 NO_REDIRECT,
                 true,
@@ -326,8 +354,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testWtai() {
         // Start the telephone application with the given number.
         check("wtai://wp/mc;0123456789",
-                null, /* referrer */
-                true, /* incognito */
+                NO_REFERRER,
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -337,8 +365,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 START_ACTIVITY | INTENT_SANITIZATION_EXCEPTION);
         // These two cases are currently unimplemented.
         check("wtai://wp/sd;0123456789",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -347,8 +375,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE | INTENT_SANITIZATION_EXCEPTION);
         check("wtai://wp/ap;0123456789",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -358,8 +386,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 IGNORE | INTENT_SANITIZATION_EXCEPTION);
         // Ignore other WTAI urls.
         check("wtai://wp/invalid",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -372,8 +400,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     @SmallTest
     public void testExternalUri() {
         check("tel:012345678",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -387,8 +415,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testTypedRedirectToExternalProtocol() {
         // http://crbug.com/169549
         check("market://1234",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED,
                 REDIRECT,
                 true,
@@ -398,8 +426,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 START_ACTIVITY);
         // http://crbug.com/143118
         check("market://1234",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED,
                 NO_REDIRECT,
                 true,
@@ -415,8 +443,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 | PageTransition.FROM_API;
         // http://crbug.com/149218
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transitionTypeIncomingIntent,
                 NO_REDIRECT,
                 true,
@@ -426,8 +454,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 IGNORE);
         // http://crbug.com/170925
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transitionTypeIncomingIntent,
                 REDIRECT,
                 true,
@@ -445,8 +473,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 + "component=package/class;end";
 
         check(url,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -457,8 +485,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         // http://crbug.com/370399
         check(urlWithSel,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -476,8 +504,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         // http://crbug/386600 - it makes no sense to switch activities for pairing code URLs.
         check(url,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 REDIRECT,
                 true,
@@ -487,8 +515,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 IGNORE);
 
         check(url,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transitionTypeIncomingIntent,
                 REDIRECT,
                 true,
@@ -512,8 +540,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transTypeLinkFromIntent,
                 REDIRECT,
                 true,
@@ -526,8 +554,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transTypeLinkFromIntent,
                 REDIRECT,
                 true,
@@ -551,8 +579,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transTypeLinkFromIntent,
                 REDIRECT,
                 true,
@@ -566,8 +594,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0);
         check("market://1234",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 transTypeLinkFromIntent,
                 REDIRECT,
                 true,
@@ -584,7 +612,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         check(INTENT_URL_WITH_FALLBACK_URL,
                 SEARCH_RESULT_URL_FOR_TOM_HANKS, /* referrer */
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -610,7 +638,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // the current tab.
         check(INTENT_URL_WITH_FALLBACK_URL,
                 SEARCH_RESULT_URL_FOR_TOM_HANKS, /* referrer */
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -632,7 +660,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // Fallback URL should work even when package name isn't given.
         check(INTENT_URL_WITH_FALLBACK_URL_WITHOUT_PACKAGE_NAME,
                 SEARCH_RESULT_URL_FOR_TOM_HANKS, /* referrer */
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -653,7 +681,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         check(INTENT_URL_WITH_FALLBACK_URL,
                 SEARCH_RESULT_URL_FOR_TOM_HANKS,
-                true, /* incognito */
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -675,7 +703,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // Will be redirected market since package is given.
         check(INTENT_URL_WITH_JAVASCRIPT_FALLBACK_URL,
                 SEARCH_RESULT_URL_FOR_TOM_HANKS,
-                true, /* incognito */
+                INCOGNITO_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -695,21 +723,21 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         TabRedirectHandler redirectHandler = new TabRedirectHandler(null);
 
         redirectHandler.updateNewUrlLoading(PageTransition.TYPED, false, false, 0, 0);
-        check("http://goo.gl/abcdefg", null, /* referrer */
-                false, /* incognito */
+        check("http://goo.gl/abcdefg", NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED, NO_REDIRECT, true, false, redirectHandler,
                 OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 0);
-        check(INTENT_URL_WITH_FALLBACK_URL_WITHOUT_PACKAGE_NAME, null, /* referrer */
-                false, /* incognito */
+        check(INTENT_URL_WITH_FALLBACK_URL_WITHOUT_PACKAGE_NAME, NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK, NO_REDIRECT, true, false, redirectHandler,
                 OverrideUrlLoadingResult.OVERRIDE_WITH_CLOBBERING_TAB, IGNORE);
 
         // Now the user opens a link.
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 1);
-        check("http://m.youtube.com/", null, /* referrer */
-                false, /* incognito */
+        check("http://m.youtube.com/", NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK, NO_REDIRECT, true, false, redirectHandler,
                 OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
     }
@@ -723,8 +751,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
         check(INTENT_URL_WITH_CHAIN_FALLBACK_URL,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -739,8 +767,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         // override URL loading here.
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 0);
         check(INTENT_URL_WITH_FALLBACK_URL,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -758,8 +786,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, lastUserInteractionTimeInMillis, 1);
         check(INTENT_URL_WITH_FALLBACK_URL,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -775,8 +803,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.TYPED, false, false, 0, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED,
                 NO_REDIRECT,
                 true,
@@ -787,8 +815,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.TYPED, true, false, 0, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.TYPED,
                 REDIRECT,
                 true,
@@ -799,8 +827,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -816,8 +844,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -828,8 +856,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, true, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 REDIRECT,
                 true,
@@ -840,8 +868,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 1, 1);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -855,8 +883,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testChromeAppInBackground() {
         mDelegate.setIsChromeAppInForeground(false);
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -870,8 +898,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testNotChromeAppInForegroundRequired() {
         mDelegate.setIsChromeAppInForeground(false);
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 false,
@@ -911,7 +939,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testPlusAppRefresh() {
         check(PLUS_STREAM_URL,
                 PLUS_STREAM_URL,
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -925,7 +953,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testSameDomainDifferentApps() {
         check(CALENDAR_URL,
                 KEEP_URL,
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -939,7 +967,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     public void testFormSubmitSameDomain() {
         check(CALENDAR_URL,
                 KEEP_URL,
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.FORM_SUBMIT,
                 NO_REDIRECT,
                 true,
@@ -952,8 +980,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
     @SmallTest
     public void testBackgroundTabNavigation() {
         check("http://youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -968,7 +996,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         String referrer = "http://www.google.com";
         check("http://youtube.com:90/foo/bar",
                 referrer,
-                false, /* incognito */
+                NORMAL_PROFILE,
                 PageTransition.FORM_SUBMIT,
                 REDIRECT,
                 true,
@@ -988,8 +1016,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.RELOAD, false, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -1000,8 +1028,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, true, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 REDIRECT,
                 true,
@@ -1012,8 +1040,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 1, 1);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -1030,8 +1058,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         redirectHandler.updateNewUrlLoading(
                 PageTransition.FORM_SUBMIT | PageTransition.FORWARD_BACK, false, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -1042,8 +1070,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, true, false, 1, 0);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 REDIRECT,
                 true,
@@ -1054,8 +1082,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
 
         redirectHandler.updateNewUrlLoading(PageTransition.LINK, false, false, 1, 1);
         check("http://m.youtube.com/",
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -1073,8 +1101,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         mDelegate.shouldRequestFileAccess = false;
         // Verify no overrides if file access is allowed (under different load conditions).
         check(fileUrl,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.LINK,
                 NO_REDIRECT,
                 true,
@@ -1083,8 +1111,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check(fileUrl,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.RELOAD,
                 NO_REDIRECT,
                 true,
@@ -1093,8 +1121,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
                 OverrideUrlLoadingResult.NO_OVERRIDE,
                 IGNORE);
         check(fileUrl,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.AUTO_TOPLEVEL,
                 NO_REDIRECT,
                 true,
@@ -1106,8 +1134,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         mDelegate.shouldRequestFileAccess = true;
         // Verify that the file intent action is triggered if file access is not allowed.
         check(fileUrl,
-                null, /* referrer */
-                false, /* incognito */
+                NO_REFERRER,
+                NORMAL_PROFILE,
                 PageTransition.AUTO_TOPLEVEL,
                 NO_REDIRECT,
                 true,
@@ -1127,6 +1155,15 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         @Override
         public List<ComponentName> queryIntentActivities(Intent intent) {
             List<ComponentName> list = new ArrayList<ComponentName>();
+            // TODO(yfriedman): We shouldn't have a separate global override just for tests - we
+            // should mimic the appropriate intent resolution intead.
+            if (mQueryIntentOverride != null) {
+                if (mQueryIntentOverride.booleanValue()) {
+                    list.add(new ComponentName("foo", "foo"));
+                } else {
+                    return list;
+                }
+            }
             if (intent.getDataString().startsWith("http://m.youtube.com")
                     || intent.getDataString().startsWith("http://youtube.com")) {
                 list.add(new ComponentName("youtube", "youtube"));
@@ -1137,13 +1174,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
             } else {
                 list.add(new ComponentName("foo", "foo"));
             }
-
             return list;
-        }
-
-        @Override
-        public boolean canResolveActivity(Intent intent) {
-            return mCanResolveActivity;
         }
 
         @Override
@@ -1220,7 +1251,7 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         }
 
         public void setCanResolveActivity(boolean value) {
-            mCanResolveActivity = value;
+            mQueryIntentOverride = value;
         }
 
         public String getNewUrlAfterClobbering() {
@@ -1239,7 +1270,8 @@ public class ExternalNavigationHandlerTest extends InstrumentationTestCase {
         public boolean startIncognitoIntentCalled = false;
 
         // This should not be reset for every run of check().
-        private boolean mCanResolveActivity = true;
+        private Boolean mQueryIntentOverride;
+
         private String mNewUrlAfterClobbering;
         private String mReferrerUrlForClobbering;
         public boolean mIsChromeAppInForeground = true;

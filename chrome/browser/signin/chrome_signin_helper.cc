@@ -5,6 +5,7 @@
 #include "chrome/browser/signin/chrome_signin_helper.h"
 
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
@@ -74,8 +75,9 @@ void ProcessMirrorHeaderUIThread(int child_id,
     }
     signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
         account_reconcilor->GetState());
-    browser->window()->ShowAvatarBubbleFromAvatarButton(bubble_mode,
-                                                        manage_accounts_params);
+    browser->window()->ShowAvatarBubbleFromAvatarButton(
+        bubble_mode, manage_accounts_params,
+        signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA);
   }
 #else   // BUILDFLAG(ANDROID_JAVA_UI)
   if (service_type == signin::GAIA_SERVICE_TYPE_INCOGNITO) {

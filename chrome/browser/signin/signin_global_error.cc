@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -98,8 +99,8 @@ void SigninGlobalError::ExecuteMenuItem(Browser* browser) {
                             signin_metrics::HISTOGRAM_REAUTH_SHOWN,
                             signin_metrics::HISTOGRAM_REAUTH_MAX);
   browser->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_REAUTH,
-      signin::ManageAccountsParams());
+      BrowserWindow::AVATAR_BUBBLE_MODE_REAUTH, signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_MENU);
 #endif
 }
 

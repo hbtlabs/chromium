@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/views/toolbar/chevron_menu_button.h"
 
+#include <stddef.h>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -386,7 +389,7 @@ scoped_ptr<views::LabelButtonBorder> ChevronMenuButton::CreateDefaultBorder()
   scoped_ptr<views::LabelButtonBorder> border =
       views::MenuButton::CreateDefaultBorder();
   border->set_insets(gfx::Insets());
-  return border.Pass();
+  return border;
 }
 
 bool ChevronMenuButton::GetDropFormats(

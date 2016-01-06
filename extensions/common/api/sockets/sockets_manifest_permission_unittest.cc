@@ -6,6 +6,7 @@
 #include <tuple>
 
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/pickle.h"
 #include "base/values.h"
 #include "extensions/common/api/sockets/sockets_manifest_permission.h"
@@ -42,7 +43,7 @@ static void AssertEmptyPermission(const SocketsManifestPermission* permission) {
 static scoped_ptr<base::Value> ParsePermissionJSON(const std::string& json) {
   scoped_ptr<base::Value> result(base::JSONReader::Read(json));
   EXPECT_TRUE(result) << "Invalid JSON string: " << json;
-  return result.Pass();
+  return result;
 }
 
 static scoped_ptr<SocketsManifestPermission> PermissionFromValue(
@@ -51,7 +52,7 @@ static scoped_ptr<SocketsManifestPermission> PermissionFromValue(
   scoped_ptr<SocketsManifestPermission> permission(
       SocketsManifestPermission::FromValue(value, &error16));
   EXPECT_TRUE(permission) << "Error parsing Value into permission: " << error16;
-  return permission.Pass();
+  return permission;
 }
 
 static scoped_ptr<SocketsManifestPermission> PermissionFromJSON(

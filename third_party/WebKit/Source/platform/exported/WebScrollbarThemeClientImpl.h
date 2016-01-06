@@ -39,7 +39,7 @@ class PLATFORM_EXPORT WebScrollbarThemeClientImpl : public ScrollbarThemeClient 
 public:
     // Caller must retain ownership of this pointer and ensure that its lifetime
     // exceeds this instance.
-    WebScrollbarThemeClientImpl(WebScrollbar*);
+    WebScrollbarThemeClientImpl(WebScrollbar&);
     ~WebScrollbarThemeClientImpl() override;
 
     // Implement ScrollbarThemeClient interface
@@ -75,19 +75,16 @@ public:
     bool enabled() const override;
     void setEnabled(bool) override;
     bool isOverlayScrollbar() const override;
-    bool isAlphaLocked() const override;
-    void setIsAlphaLocked(bool) override;
     float elasticOverscroll() const override;
     void setElasticOverscroll(float) override;
-    bool trackNeedsRepaint() const override;
-    void setTrackNeedsRepaint(bool) override;
-    bool thumbNeedsRepaint() const override;
-    void setThumbNeedsRepaint(bool) override;
-    DisplayItemClient displayItemClient() const override;
-    String debugName() const override;
+
+    // DisplayItemClient methods.
+    String debugName() const final;
+    // TODO(chrishtr): fix this.
+    IntRect visualRect() const override { return IntRect(); }
 
 private:
-    WebScrollbar* m_scrollbar;
+    WebScrollbar& m_scrollbar;
 };
 
 } // namespace blink

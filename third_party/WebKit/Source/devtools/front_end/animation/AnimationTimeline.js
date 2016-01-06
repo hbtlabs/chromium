@@ -21,13 +21,13 @@ WebInspector.AnimationTimeline = function()
     var timelineHint = this.contentElement.createChild("div", "animation-timeline-rows-hint");
     timelineHint.textContent = WebInspector.UIString("Select an effect above to inspect and modify.");
 
-    this._duration = this._defaultDuration();
-    this._timelineControlsWidth = 150;
+    /** @const */ this._defaultDuration = 100;
+    this._duration = this._defaultDuration;
+    /** @const */ this._timelineControlsWidth = 150;
     /** @type {!Map.<!DOMAgent.BackendNodeId, !WebInspector.AnimationTimeline.NodeUI>} */
     this._nodesMap = new Map();
     this._uiAnimations = [];
     this._groupBuffer = [];
-    this._groupBufferSize = 8;
     /** @type {!Map.<!WebInspector.AnimationModel.AnimationGroup, !WebInspector.AnimationGroupPreviewUI>} */
     this._previewMap = new Map();
     this._symbol = Symbol("animationTimeline");
@@ -40,6 +40,13 @@ WebInspector.AnimationTimeline = function()
 
 WebInspector.AnimationTimeline.GlobalPlaybackRates = [1, 0.25, 0.1];
 
+/** @enum {string} */
+WebInspector.AnimationTimeline._ControlState = {
+    Play: "play-outline",
+    Replay: "replay-outline",
+    Pause: "pause-outline"
+}
+
 WebInspector.AnimationTimeline.prototype = {
     wasShown: function()
     {
@@ -51,6 +58,7 @@ WebInspector.AnimationTimeline.prototype = {
     {
         for (var target of WebInspector.targetManager.targets(WebInspector.Target.Type.Page))
             this._removeEventListeners(target);
+        this._popoverHelper.hidePopover();
     },
 
     /**
@@ -141,7 +149,8 @@ WebInspector.AnimationTimeline.prototype = {
         this._currentTime = controls.createChild("div", "animation-timeline-current-time monospace");
 
         var toolbar = new WebInspector.Toolbar("animation-controls-toolbar", controls);
-        this._controlButton = new WebInspector.ToolbarButton(WebInspector.UIString("Replay timeline"), "replay-outline-toolbar-item");
+        this._controlButton = new WebInspector.ToolbarButton(WebInspector.UIString("Replay timeline"), "animation-control-toolbar-item");
+        this._controlButton.setState(WebInspector.AnimationTimeline._ControlState.Replay);
         this._controlButton.addEventListener("click", this._controlButtonToggle.bind(this));
         toolbar.appendToolbarItem(this._controlButton);
 
@@ -215,9 +224,9 @@ WebInspector.AnimationTimeline.prototype = {
 
     _controlButtonToggle: function()
     {
-        if (this._controlButton.element.classList.contains("play-outline-toolbar-item"))
+        if (this._controlButton.state() === WebInspector.AnimationTimeline._ControlState.Play)
             this._togglePause(false);
-        else if (this._controlButton.element.classList.contains("replay-outline-toolbar-item"))
+        else if (this._controlButton.state() === WebInspector.AnimationTimeline._ControlState.Replay)
             this._replay();
         else
             this._togglePause(true);
@@ -226,21 +235,15 @@ WebInspector.AnimationTimeline.prototype = {
     _updateControlButton: function()
     {
         this._controlButton.setEnabled(!!this._selectedGroup);
-        this._controlButton.element.classList.remove("play-outline-toolbar-item");
-        this._controlButton.element.classList.remove("replay-outline-toolbar-item");
-        this._controlButton.element.classList.remove("pause-outline-toolbar-item");
         if (this._selectedGroup && this._selectedGroup.paused()) {
-            this._controlButton.element.classList.add("play-outline-toolbar-item");
+            this._controlButton.setState(WebInspector.AnimationTimeline._ControlState.Play);
             this._controlButton.setTitle(WebInspector.UIString("Play timeline"));
-            this._controlButton.setToggled(true);
         } else if (!this._scrubberPlayer || this._scrubberPlayer.currentTime >= this.duration()) {
-            this._controlButton.element.classList.add("replay-outline-toolbar-item");
+            this._controlButton.setState(WebInspector.AnimationTimeline._ControlState.Replay);
             this._controlButton.setTitle(WebInspector.UIString("Replay timeline"));
-            this._controlButton.setToggled(true);
         } else {
-            this._controlButton.element.classList.add("pause-outline-toolbar-item");
+            this._controlButton.setState(WebInspector.AnimationTimeline._ControlState.Pause);
             this._controlButton.setTitle(WebInspector.UIString("Pause timeline"));
-            this._controlButton.setToggled(false);
         }
     },
 
@@ -292,14 +295,6 @@ WebInspector.AnimationTimeline.prototype = {
     /**
      * @return {number}
      */
-    _defaultDuration: function ()
-    {
-        return 100;
-    },
-
-    /**
-     * @return {number}
-     */
     duration: function()
     {
         return this._duration;
@@ -320,25 +315,27 @@ WebInspector.AnimationTimeline.prototype = {
         this._nodesMap.clear();
         this._animationsMap.clear();
         this._animationsContainer.removeChildren();
-        this._duration = this._defaultDuration();
+        this._duration = this._defaultDuration;
         this._timelineScrubber.classList.add("hidden");
-    },
-
-    _reset: function()
-    {
         delete this._selectedGroup;
-        this._clearTimeline();
-        this._updateAnimationsPlaybackRate();
         if (this._scrubberPlayer)
             this._scrubberPlayer.cancel();
         delete this._scrubberPlayer;
         this._currentTime.textContent = "";
         this._updateControlButton();
+    },
+
+    _reset: function()
+    {
+        this._clearTimeline();
+        this._updateAnimationsPlaybackRate();
         for (var group of this._groupBuffer)
             group.release();
         this._groupBuffer = [];
         this._previewMap.clear();
         this._previewContainer.removeChildren();
+        this._popoverHelper.hidePopover();
+        this._renderGrid();
     },
 
     /**
@@ -370,11 +367,11 @@ WebInspector.AnimationTimeline.prototype = {
                 this._previewMap.get(group).replay();
             return;
         }
-        this._groupBuffer.push(group);
         this._groupBuffer.sort(startTimeComparator);
         // Discard oldest groups from buffer if necessary
         var groupsToDiscard = [];
-        while (this._groupBuffer.length > this._groupBufferSize) {
+        var bufferSize = this.width() / 50;
+        while (this._groupBuffer.length > bufferSize) {
             var toDiscard = this._groupBuffer.splice(this._groupBuffer[0] === this._selectedGroup ? 1 : 0, 1);
             groupsToDiscard.push(toDiscard[0]);
         }
@@ -385,6 +382,7 @@ WebInspector.AnimationTimeline.prototype = {
         }
         // Generate preview
         var preview = new WebInspector.AnimationGroupPreviewUI(group);
+        this._groupBuffer.push(group);
         this._previewMap.set(group, preview);
         this._previewContainer.appendChild(preview.element);
         preview.removeButton().addEventListener("click", this._removeAnimationGroup.bind(this, group));
@@ -405,7 +403,7 @@ WebInspector.AnimationTimeline.prototype = {
 
         if (this._selectedGroup === group) {
             this._clearTimeline();
-            delete this._selectedGroup;
+            this._renderGrid();
         }
     },
 
@@ -429,9 +427,9 @@ WebInspector.AnimationTimeline.prototype = {
             this._replay();
             return;
         }
+        this._clearTimeline();
         this._selectedGroup = group;
         this._previewMap.forEach(applySelectionClass, this);
-        this._clearTimeline();
         this.setDuration(Math.max(500, group.finiteDuration() + 100));
         for (var anim of group.animations())
             this._addAnimation(anim);
@@ -709,6 +707,8 @@ WebInspector.AnimationTimeline.NodeUI.prototype = {
         this._node = node;
         this._nodeChanged();
         this._description.appendChild(WebInspector.DOMPresentationUtils.linkifyNodeReference(node));
+        if (!node.ownerDocument)
+            this.nodeRemoved();
     },
 
     /**
@@ -722,6 +722,7 @@ WebInspector.AnimationTimeline.NodeUI.prototype = {
     nodeRemoved: function()
     {
         this.element.classList.add("animation-node-removed");
+        this._node = null;
     },
 
     _nodeChanged: function()
@@ -753,4 +754,30 @@ WebInspector.AnimationTimeline.StepTimingFunction.parse = function(text) {
     if (match)
         return new WebInspector.AnimationTimeline.StepTimingFunction(parseInt(match[1], 10), match[2]);
     return null;
+}
+
+/**
+ * @constructor
+ * @implements {WebInspector.ToolbarItem.Provider}
+ */
+WebInspector.AnimationTimeline.ButtonProvider = function()
+{
+    this._button = new WebInspector.ToolbarButton(WebInspector.UIString("Animations"), "animation-toolbar-item");
+    this._button.addEventListener("click", this._clicked, this);
+}
+
+WebInspector.AnimationTimeline.ButtonProvider.prototype = {
+    _clicked: function()
+    {
+        WebInspector.inspectorView.showViewInDrawer("animations");
+    },
+
+    /**
+     * @override
+     * @return {!WebInspector.ToolbarItem}
+     */
+    item: function()
+    {
+        return this._button;
+    }
 }

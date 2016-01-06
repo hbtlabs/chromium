@@ -90,6 +90,10 @@ void PPB_Graphics3D_Shared::UnmapTexSubImage2DCHROMIUM(const void* mem) {
   gles2_impl_->UnmapTexSubImage2DCHROMIUM(mem);
 }
 
+gpu::gles2::GLES2Interface* PPB_Graphics3D_Shared::gles2_interface() {
+  return gles2_impl_.get();
+}
+
 void PPB_Graphics3D_Shared::SwapBuffersACK(int32_t pp_error) {
   DCHECK(HasPendingSwap());
   swap_callback_->Run(pp_error);
@@ -100,8 +104,8 @@ bool PPB_Graphics3D_Shared::HasPendingSwap() const {
 }
 
 bool PPB_Graphics3D_Shared::CreateGLES2Impl(
-    int32 command_buffer_size,
-    int32 transfer_buffer_size,
+    int32_t command_buffer_size,
+    int32_t transfer_buffer_size,
     gpu::gles2::GLES2Implementation* share_gles2) {
   gpu::CommandBuffer* command_buffer = GetCommandBuffer();
   DCHECK(command_buffer);
@@ -113,8 +117,8 @@ bool PPB_Graphics3D_Shared::CreateGLES2Impl(
 
   // Create a transfer buffer used to copy resources between the renderer
   // process and the GPU process.
-  const int32 kMinTransferBufferSize = 256 * 1024;
-  const int32 kMaxTransferBufferSize = 16 * 1024 * 1024;
+  const int32_t kMinTransferBufferSize = 256 * 1024;
+  const int32_t kMaxTransferBufferSize = 16 * 1024 * 1024;
   transfer_buffer_.reset(new gpu::TransferBuffer(gles2_helper_.get()));
 
   const bool bind_creates_resources = true;

@@ -4,6 +4,9 @@
 
 #include "media/renderers/skcanvas_video_renderer.h"
 
+#include <limits>
+
+#include "base/macros.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
@@ -119,8 +122,15 @@ skia::RefPtr<SkImage> NewSkImageFromVideoFrameYUVTextures(
       source_textures[i] = texture_copy;
     }
   }
-  GrBackendObject handles[3] = {source_textures[0], source_textures[1],
-                                source_textures[2]};
+  DCHECK_LE(source_textures[0],
+            static_cast<unsigned>(std::numeric_limits<int>::max()));
+  DCHECK_LE(source_textures[1],
+            static_cast<unsigned>(std::numeric_limits<int>::max()));
+  DCHECK_LE(source_textures[2],
+            static_cast<unsigned>(std::numeric_limits<int>::max()));
+  GrBackendObject handles[3] = {static_cast<int>(source_textures[0]),
+                                static_cast<int>(source_textures[1]),
+                                static_cast<int>(source_textures[2])};
 
   SkISize yuvSizes[] = {
       {ya_tex_size.width(), ya_tex_size.height()},
@@ -180,7 +190,9 @@ skia::RefPtr<SkImage> NewSkImageFromVideoFrameNative(
   desc.fWidth = video_frame->coded_size().width();
   desc.fHeight = video_frame->coded_size().height();
   desc.fConfig = kRGBA_8888_GrPixelConfig;
-  desc.fTextureHandle = source_texture;
+  DCHECK_LE(source_texture,
+            static_cast<unsigned>(std::numeric_limits<int>::max()));
+  desc.fTextureHandle = static_cast<int>(source_texture);
   return skia::AdoptRef(
       SkImage::NewFromAdoptedTexture(context_3d.gr_context, desc));
 }
@@ -259,7 +271,7 @@ class VideoImageGenerator : public SkImageGenerator {
         // TODO: Find a way (API change?) to avoid this copy.
         char* out_line = static_cast<char*>(planes[plane]);
         int out_line_stride = row_bytes[plane];
-        uint8* in_line = frame_->data(plane) + offset;
+        uint8_t* in_line = frame_->data(plane) + offset;
         int in_line_stride = frame_->stride(plane);
         int plane_height = sizes[plane].height();
         if (in_line_stride == out_line_stride) {
@@ -300,7 +312,7 @@ SkCanvasVideoRenderer::~SkCanvasVideoRenderer() {
 void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
                                   SkCanvas* canvas,
                                   const gfx::RectF& dest_rect,
-                                  uint8 alpha,
+                                  uint8_t alpha,
                                   SkXfermode::Mode mode,
                                   VideoRotation video_rotation,
                                   const Context3D& context_3d) {
@@ -462,7 +474,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                             video_frame->stride(VideoFrame::kUPlane),
                             video_frame->visible_data(VideoFrame::kVPlane),
                             video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8*>(rgb_pixels), row_bytes,
+                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
                             video_frame->visible_rect().width(),
                             video_frame->visible_rect().height());
       } else if (CheckColorSpace(video_frame, COLOR_SPACE_HD_REC709)) {
@@ -472,7 +484,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                             video_frame->stride(VideoFrame::kUPlane),
                             video_frame->visible_data(VideoFrame::kVPlane),
                             video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8*>(rgb_pixels), row_bytes,
+                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
                             video_frame->visible_rect().width(),
                             video_frame->visible_rect().height());
       } else {
@@ -482,7 +494,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                             video_frame->stride(VideoFrame::kUPlane),
                             video_frame->visible_data(VideoFrame::kVPlane),
                             video_frame->stride(VideoFrame::kVPlane),
-                            static_cast<uint8*>(rgb_pixels), row_bytes,
+                            static_cast<uint8_t*>(rgb_pixels), row_bytes,
                             video_frame->visible_rect().width(),
                             video_frame->visible_rect().height());
       }
@@ -494,7 +506,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                           video_frame->stride(VideoFrame::kUPlane),
                           video_frame->visible_data(VideoFrame::kVPlane),
                           video_frame->stride(VideoFrame::kVPlane),
-                          static_cast<uint8*>(rgb_pixels), row_bytes,
+                          static_cast<uint8_t*>(rgb_pixels), row_bytes,
                           video_frame->visible_rect().width(),
                           video_frame->visible_rect().height());
       break;
@@ -509,7 +521,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
           video_frame->stride(VideoFrame::kVPlane),
           video_frame->visible_data(VideoFrame::kAPlane),
           video_frame->stride(VideoFrame::kAPlane),
-          static_cast<uint8*>(rgb_pixels), row_bytes,
+          static_cast<uint8_t*>(rgb_pixels), row_bytes,
           video_frame->visible_rect().width(),
           video_frame->visible_rect().height(),
           1);  // 1 = enable RGB premultiplication by Alpha.
@@ -522,7 +534,7 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
                           video_frame->stride(VideoFrame::kUPlane),
                           video_frame->visible_data(VideoFrame::kVPlane),
                           video_frame->stride(VideoFrame::kVPlane),
-                          static_cast<uint8*>(rgb_pixels), row_bytes,
+                          static_cast<uint8_t*>(rgb_pixels), row_bytes,
                           video_frame->visible_rect().width(),
                           video_frame->visible_rect().height());
       break;
@@ -561,7 +573,7 @@ void SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
       << mailbox_holder.texture_target;
 
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
-  uint32 source_texture = gl->CreateAndConsumeTextureCHROMIUM(
+  uint32_t source_texture = gl->CreateAndConsumeTextureCHROMIUM(
       mailbox_holder.texture_target, mailbox_holder.mailbox.name);
 
   // The video is stored in a unmultiplied format, so premultiply

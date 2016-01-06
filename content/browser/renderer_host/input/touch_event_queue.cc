@@ -4,7 +4,10 @@
 
 #include "content/browser/renderer_host/input/touch_event_queue.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -490,7 +493,7 @@ void TouchEventQueue::QueueEvent(const TouchEventWithLatencyInfo& event) {
 
 void TouchEventQueue::ProcessTouchAck(InputEventAckState ack_result,
                                       const LatencyInfo& latency_info,
-                                      const uint32 unique_touch_event_id) {
+                                      const uint32_t unique_touch_event_id) {
   TRACE_EVENT0("input", "TouchEventQueue::ProcessTouchAck");
 
   // We receive an ack for async touchmove from render.
@@ -618,7 +621,8 @@ void TouchEventQueue::ForwardNextEventToRenderer() {
 
 void TouchEventQueue::FlushPendingAsyncTouchmove() {
   DCHECK(!dispatching_touch_);
-  scoped_ptr<TouchEventWithLatencyInfo> touch = pending_async_touchmove_.Pass();
+  scoped_ptr<TouchEventWithLatencyInfo> touch =
+      std::move(pending_async_touchmove_);
   touch->event.cancelable = false;
   touch_queue_.push_front(new CoalescedWebTouchEvent(*touch, true));
   SendTouchEventImmediately(touch.get());
@@ -740,7 +744,7 @@ scoped_ptr<CoalescedWebTouchEvent> TouchEventQueue::PopTouchEvent() {
   DCHECK(!touch_queue_.empty());
   scoped_ptr<CoalescedWebTouchEvent> event(touch_queue_.front());
   touch_queue_.pop_front();
-  return event.Pass();
+  return event;
 }
 
 void TouchEventQueue::SendTouchEventImmediately(

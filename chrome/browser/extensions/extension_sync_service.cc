@@ -4,8 +4,9 @@
 
 #include "chrome/browser/extensions/extension_sync_service.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -87,6 +88,14 @@ bool IsCorrectSyncType(const Extension& extension, syncer::ModelType type) {
          (type == syncer::APPS && extension.is_app());
 }
 
+// Predicate for PendingExtensionManager.
+// TODO(treib,devlin): The !is_theme check shouldn't be necessary anymore after
+// all the bad data from crbug.com/558299 has been cleaned up, after M52 or so.
+bool ShouldAllowInstall(const Extension* extension) {
+  return !extension->is_theme() &&
+         extensions::sync_helper::IsSyncable(extension);
+}
+
 syncer::SyncDataList ToSyncerSyncDataList(
     const std::vector<ExtensionSyncData>& data) {
   syncer::SyncDataList result;
@@ -145,7 +154,7 @@ ExtensionSyncService* ExtensionSyncService::Get(
 
 void ExtensionSyncService::SyncExtensionChangeIfNeeded(
     const Extension& extension) {
-  if (ignore_updates_ || !extensions::util::ShouldSync(&extension, profile_))
+  if (ignore_updates_ || !ShouldSync(extension))
     return;
 
   syncer::ModelType type =
@@ -183,7 +192,7 @@ syncer::SyncMergeResult ExtensionSyncService::MergeDataAndStartSyncing(
       << "Got " << type << " ModelType";
 
   SyncBundle* bundle = GetSyncBundle(type);
-  bundle->StartSyncing(sync_processor.Pass());
+  bundle->StartSyncing(std::move(sync_processor));
 
   // Apply the initial sync data, filtering out any items where we have more
   // recent local changes. Also tell the SyncBundle the extension IDs.
@@ -307,6 +316,7 @@ void ExtensionSyncService::ApplySyncData(
   syncer::ModelType type = extension_sync_data.is_app() ? syncer::APPS
                                                         : syncer::EXTENSIONS;
   const std::string& id = extension_sync_data.id();
+  SyncBundle* bundle = GetSyncBundle(type);
   // Note: |extension| may be null if it hasn't been installed yet.
   const Extension* extension =
       ExtensionRegistry::Get(profile_)->GetInstalledExtension(id);
@@ -314,10 +324,20 @@ void ExtensionSyncService::ApplySyncData(
   // case is where an app becomes an extension or vice versa, and we end up with
   // a zombie extension that won't go away.
   // TODO(treib): Is this still true?
-  if (extension && !IsCorrectSyncType(*extension, type))
+  if (extension && !IsCorrectSyncType(*extension, type)) {
+    // Special hack: There was a bug where themes incorrectly ended up in the
+    // syncer::EXTENSIONS type. If we get incoming sync data for a theme, clean
+    // it up. crbug.com/558299
+    // TODO(treib,devlin): Remove this after M52 or so.
+    if (extension->is_theme()) {
+      // First tell the bundle about the extension, so that it won't just ignore
+      // the deletion.
+      bundle->ApplySyncData(extension_sync_data);
+      bundle->PushSyncDeletion(id, extension_sync_data.GetSyncData());
+    }
     return;
+  }
 
-  SyncBundle* bundle = GetSyncBundle(type);
   // Forward to the bundle. This will just update the list of synced extensions.
   bundle->ApplySyncData(extension_sync_data);
 
@@ -438,12 +458,6 @@ void ExtensionSyncService::ApplySyncData(
       extension_prefs->ReplaceDisableReasons(id, disable_reasons);
   }
 
-  // If the target extension has already been installed ephemerally, it can
-  // be promoted to a regular installed extension and downloading from the Web
-  // Store is not necessary.
-  if (extension && extensions::util::IsEphemeralApp(id, profile_))
-    extension_service()->PromoteEphemeralApp(extension, true);
-
   // Update the incognito flag.
   extensions::util::SetIsIncognitoEnabled(
       id, profile_, extension_sync_data.incognito_enabled());
@@ -492,7 +506,7 @@ void ExtensionSyncService::ApplySyncData(
             id,
             extension_sync_data.update_url(),
             extension_sync_data.version(),
-            extensions::sync_helper::IsSyncable,
+            ShouldAllowInstall,
             extension_sync_data.remote_install(),
             extension_sync_data.installed_by_custodian())) {
       LOG(WARNING) << "Could not add pending extension for " << id;
@@ -502,7 +516,7 @@ void ExtensionSyncService::ApplySyncData(
       // extension), so that GetAllSyncData() continues to send it.
     }
     // Track pending extensions so that we can return them in GetAllSyncData().
-    bundle->AddPendingExtensionData(id, extension_sync_data);
+    bundle->AddPendingExtensionData(extension_sync_data);
     check_for_updates = true;
   }
 
@@ -567,6 +581,12 @@ void ExtensionSyncService::SetSyncStartFlareForTesting(
   flare_ = flare;
 }
 
+void ExtensionSyncService::DeleteThemeDoNotUse(const Extension& theme) {
+  DCHECK(theme.is_theme());
+  GetSyncBundle(syncer::EXTENSIONS)->PushSyncDeletion(
+      theme.id(), CreateSyncData(theme).GetSyncData());
+}
+
 ExtensionService* ExtensionSyncService::extension_service() const {
   return ExtensionSystem::Get(profile_)->extension_service();
 }
@@ -595,8 +615,9 @@ void ExtensionSyncService::OnExtensionUninstalled(
   DCHECK_EQ(profile_, browser_context);
   // Don't bother syncing if the extension will be re-installed momentarily.
   if (reason == extensions::UNINSTALL_REASON_REINSTALL ||
-      !extensions::util::ShouldSync(extension, profile_))
+      !ShouldSync(*extension)) {
     return;
+  }
 
   // TODO(tim): If we get here and IsSyncing is false, this will cause
   // "back from the dead" style bugs, because sync will add-back the extension
@@ -681,7 +702,7 @@ void ExtensionSyncService::FillSyncDataList(
     std::vector<ExtensionSyncData>* sync_data_list) const {
   for (const scoped_refptr<const Extension>& extension : extensions) {
     if (IsCorrectSyncType(*extension, type) &&
-        extensions::util::ShouldSync(extension.get(), profile_) &&
+        ShouldSync(*extension) &&
         (include_everything ||
          ExtensionPrefs::Get(profile_)->NeedsSync(extension->id()))) {
       // We should never have pending data for an installed extension.
@@ -689,4 +710,10 @@ void ExtensionSyncService::FillSyncDataList(
       sync_data_list->push_back(CreateSyncData(*extension));
     }
   }
+}
+
+bool ExtensionSyncService::ShouldSync(const Extension& extension) const {
+  // Themes are handled by the ThemeSyncableService.
+  return extensions::util::ShouldSync(&extension, profile_) &&
+         !extension.is_theme();
 }

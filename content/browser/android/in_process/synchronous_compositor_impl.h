@@ -5,10 +5,12 @@
 #ifndef CONTENT_BROWSER_ANDROID_IN_PROCESS_SYNCHRONOUS_COMPOSITOR_IMPL_H_
 #define CONTENT_BROWSER_ANDROID_IN_PROCESS_SYNCHRONOUS_COMPOSITOR_IMPL_H_
 
+#include <stddef.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/android/synchronous_compositor_base.h"
 #include "content/renderer/android/synchronous_compositor_external_begin_frame_source.h"
@@ -58,6 +60,7 @@ class SynchronousCompositorImpl
 
   // SynchronousCompositorOutputSurfaceClient overrides.
   void Invalidate() override;
+  void SwapBuffers(cc::CompositorFrame* frame) override;
 
   // SynchronousCompositor overrides.
   scoped_ptr<cc::CompositorFrame> DemandDrawHw(
@@ -80,6 +83,7 @@ class SynchronousCompositorImpl
   InputEventAckState HandleInputEvent(
       const blink::WebInputEvent& input_event) override;
   bool OnMessageReceived(const IPC::Message& message) override;
+  void DidBecomeCurrent() override;
 
   // SynchronousInputHandler
   void SetNeedsSynchronousAnimateInput() override;
@@ -114,6 +118,7 @@ class SynchronousCompositorImpl
   bool is_active_;
   bool renderer_needs_begin_frames_;
   bool need_animate_input_;
+  scoped_ptr<cc::CompositorFrame> frame_holder_;
 
   base::WeakPtrFactory<SynchronousCompositorImpl> weak_ptr_factory_;
 

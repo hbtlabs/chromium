@@ -5,10 +5,13 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_LOCAL_AUDIO_RENDERER_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_LOCAL_AUDIO_RENDERER_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -97,7 +100,9 @@ class CONTENT_EXPORT WebRtcLocalAudioRenderer
   // media::AudioRendererSink::RenderCallback implementation.
   // Render() is called on the AudioOutputDevice thread and OnRenderError()
   // on the IO thread.
-  int Render(media::AudioBus* audio_bus, int audio_delay_milliseconds) override;
+  int Render(media::AudioBus* audio_bus,
+             uint32_t audio_delay_milliseconds,
+             uint32_t frames_skipped) override;
   void OnRenderError() override;
 
   // Initializes and starts the |sink_| if

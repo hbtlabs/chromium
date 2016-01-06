@@ -4,6 +4,8 @@
 
 #include "chrome/browser/file_select_helper.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <utility>
 
@@ -13,6 +15,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -318,7 +321,7 @@ FileSelectHelper::GetFileTypesFromAcceptType(
   scoped_ptr<ui::SelectFileDialog::FileTypeInfo> base_file_type(
       new ui::SelectFileDialog::FileTypeInfo());
   if (accept_types.empty())
-    return base_file_type.Pass();
+    return base_file_type;
 
   // Create FileTypeInfo and pre-allocate for the first extension list.
   scoped_ptr<ui::SelectFileDialog::FileTypeInfo> file_type(
@@ -359,7 +362,7 @@ FileSelectHelper::GetFileTypesFromAcceptType(
 
   // If no valid extension is added, bail out.
   if (valid_type_count == 0)
-    return base_file_type.Pass();
+    return base_file_type;
 
   // Use a generic description "Custom Files" if either of the following is
   // true:
@@ -377,7 +380,7 @@ FileSelectHelper::GetFileTypesFromAcceptType(
         l10n_util::GetStringUTF16(description_id));
   }
 
-  return file_type.Pass();
+  return file_type;
 }
 
 // static
@@ -467,7 +470,7 @@ void FileSelectHelper::GetSanitizedFilenameOnUIThread(
   }
 #endif
 
-  RunFileChooserOnUIThread(default_file_path, params.Pass());
+  RunFileChooserOnUIThread(default_file_path, std::move(params));
 }
 
 #if defined(FULL_SAFE_BROWSING)
@@ -481,7 +484,7 @@ void FileSelectHelper::ApplyUnverifiedDownloadPolicy(
     return;
   }
 
-  RunFileChooserOnUIThread(default_path, params.Pass());
+  RunFileChooserOnUIThread(default_path, std::move(params));
 }
 #endif
 

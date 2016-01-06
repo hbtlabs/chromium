@@ -4,6 +4,9 @@
 
 #include "cc/trees/layer_tree_host.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/auto_reset.h"
@@ -49,7 +52,6 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
-#include "cc/trees/thread_proxy.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "skia/ext/refptr.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -74,9 +76,9 @@ class LayerTreeHostTestHasImplThreadTest : public LayerTreeHostTest {
  public:
   LayerTreeHostTestHasImplThreadTest() : threaded_(false) {}
 
-  void RunTest(bool threaded, bool delegating_renderer) override {
-    threaded_ = threaded;
-    LayerTreeHostTest::RunTest(threaded, delegating_renderer);
+  void RunTest(CompositorMode mode, bool delegating_renderer) override {
+    threaded_ = mode == CompositorMode::Threaded;
+    LayerTreeHostTest::RunTest(mode, delegating_renderer);
   }
 
   void BeginTest() override {
@@ -1562,65 +1564,6 @@ class LayerTreeHostTestSetVisible : public LayerTreeHostTest {
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestSetVisible);
 
-class TestOpacityChangeLayerDelegate : public ContentLayerClient {
- public:
-  TestOpacityChangeLayerDelegate() : test_layer_(0) {}
-
-  void SetTestLayer(Layer* test_layer) { test_layer_ = test_layer; }
-
-  gfx::Rect PaintableRegion() override {
-    return gfx::Rect(test_layer_->bounds());
-  }
-  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      PaintingControlSetting picture_control) override {
-    // Set layer opacity to 0.
-    if (test_layer_)
-      test_layer_->SetOpacity(0.f);
-
-    // Return a dummy display list.
-    scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    return display_list;
-  }
-  bool FillsBoundsCompletely() const override { return false; }
-  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
-
- private:
-  Layer* test_layer_;
-};
-
-// Layer opacity change during paint should not prevent compositor resources
-// from being updated during commit.
-class LayerTreeHostTestOpacityChange : public LayerTreeHostTest {
- public:
-  LayerTreeHostTestOpacityChange() : test_opacity_change_delegate_() {}
-
-  void SetupTree() override {
-    LayerTreeHostTest::SetupTree();
-
-    update_check_picture_layer_ = FakePictureLayer::Create(
-        layer_settings(), &test_opacity_change_delegate_);
-    test_opacity_change_delegate_.SetTestLayer(
-        update_check_picture_layer_.get());
-    layer_tree_host()->root_layer()->AddChild(update_check_picture_layer_);
-  }
-
-  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override { EndTest(); }
-
-  void AfterTest() override {
-    // Update() should have been called once.
-    EXPECT_EQ(1, update_check_picture_layer_->update_count());
-  }
-
- private:
-  TestOpacityChangeLayerDelegate test_opacity_change_delegate_;
-  scoped_refptr<FakePictureLayer> update_check_picture_layer_;
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestOpacityChange);
-
 class LayerTreeHostTestDeviceScaleFactorScalesViewportAndLayers
     : public LayerTreeHostTest {
  public:
@@ -2121,7 +2064,11 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
   void CallOnDraw() {
     // Synchronous compositor does not draw unless told to do so by the output
     // surface.
-    output_surface()->client()->OnDraw();
+    gfx::Transform identity;
+    gfx::Rect empty_rect;
+    bool resourceless_software_draw = false;
+    output_surface()->client()->OnDraw(identity, empty_rect, empty_rect,
+                                       resourceless_software_draw);
   }
 };
 
@@ -2166,70 +2113,6 @@ class LayerTreeHostTestUninvertibleTransformDoesNotBlockActivation
 
 SINGLE_AND_MULTI_THREAD_TEST_F(
     LayerTreeHostTestUninvertibleTransformDoesNotBlockActivation);
-
-class LayerTreeHostTestChangeLayerPropertiesInPaintContents
-    : public LayerTreeHostTest {
- public:
-  class SetBoundsClient : public ContentLayerClient {
-   public:
-    SetBoundsClient() : layer_(0) {}
-
-    void set_layer(Layer* layer) { layer_ = layer; }
-
-    gfx::Rect PaintableRegion() override { return gfx::Rect(layer_->bounds()); }
-
-    scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-        PaintingControlSetting picture_control) override {
-      layer_->SetBounds(gfx::Size(2, 2));
-
-      // Return a dummy display list.
-      scoped_refptr<DisplayItemList> display_list =
-          DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-      return display_list;
-    }
-
-    bool FillsBoundsCompletely() const override { return false; }
-    size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
-
-   private:
-    Layer* layer_;
-  };
-
-  LayerTreeHostTestChangeLayerPropertiesInPaintContents() : num_commits_(0) {}
-
-  void SetupTree() override {
-    scoped_refptr<PictureLayer> root_layer =
-        PictureLayer::Create(layer_settings(), &client_);
-    root_layer->SetIsDrawable(true);
-    root_layer->SetBounds(gfx::Size(1, 1));
-    client_.set_layer(root_layer.get());
-
-    layer_tree_host()->SetRootLayer(root_layer);
-    LayerTreeHostTest::SetupTree();
-  }
-
-  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
-  void AfterTest() override {}
-
-  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    num_commits_++;
-    if (num_commits_ == 1) {
-      LayerImpl* root_layer = host_impl->active_tree()->root_layer();
-      EXPECT_EQ(gfx::Size(1, 1), root_layer->bounds());
-    } else {
-      LayerImpl* root_layer = host_impl->active_tree()->root_layer();
-      EXPECT_EQ(gfx::Size(2, 2), root_layer->bounds());
-      EndTest();
-    }
-  }
-
- private:
-  SetBoundsClient client_;
-  int num_commits_;
-};
-
-SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostTestChangeLayerPropertiesInPaintContents);
 
 class MockIOSurfaceWebGraphicsContext3D : public TestWebGraphicsContext3D {
  public:
@@ -2423,6 +2306,10 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestNumFramesPending);
 
 class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
  public:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->using_synchronous_renderer_compositor = true;
+  }
+
   void SetupTree() override {
     root_layer_ = FakePictureLayer::Create(layer_settings(), &client_);
     root_layer_->SetIsDrawable(true);
@@ -2460,6 +2347,24 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
     swap_count_ = 0;
   }
 
+  void ScheduledActionInvalidateOutputSurface() override {
+    if (TestEnded())
+      return;
+
+    ImplThreadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::Bind(&LayerTreeHostTestResourcelessSoftwareDraw::CallOnDraw,
+                   base::Unretained(this)));
+  }
+
+  void CallOnDraw() {
+    gfx::Transform identity;
+    gfx::Rect empty_rect;
+    bool resourceless_software_draw = true;
+    output_surface()->client()->OnDraw(identity, empty_rect, empty_rect,
+                                       resourceless_software_draw);
+  }
+
   DrawResult PrepareToDrawOnThread(LayerTreeHostImpl* host_impl,
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
@@ -2482,17 +2387,9 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
   void SwapBuffersCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     swap_count_++;
     switch (swap_count_) {
-      case 1: {
-        gfx::Transform identity;
-        gfx::Rect empty_rect;
-        bool resourceless_software_draw = true;
-        host_impl->SetExternalDrawConstraints(identity, empty_rect, empty_rect,
-                                              empty_rect, identity,
-                                              resourceless_software_draw);
-        host_impl->SetFullRootLayerDamage();
+      case 1:
         host_impl->SetNeedsRedraw();
         break;
-      }
       case 2:
         EndTest();
         break;
@@ -4078,7 +3975,7 @@ class TestSwapPromise : public SwapPromise {
     result_->reason = reason;
   }
 
-  int64 TraceId() const override { return 0; }
+  int64_t TraceId() const override { return 0; }
 
  private:
   // Not owned.

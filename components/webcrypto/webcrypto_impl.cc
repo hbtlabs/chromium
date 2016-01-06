@@ -4,6 +4,9 @@
 
 #include "components/webcrypto/webcrypto_impl.h"
 
+#include <limits.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"

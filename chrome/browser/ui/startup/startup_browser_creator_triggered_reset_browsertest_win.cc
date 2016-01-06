@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -175,7 +177,9 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
 
   GURL expected_first_tab_url =
       signin::ShouldShowPromoAtStartup(browser()->profile(), true)
-          ? signin::GetPromoURL(signin_metrics::SOURCE_START_PAGE, false)
+          ? signin::GetPromoURL(
+                signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+                signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false)
           : GURL(chrome::kChromeUINewTabURL);
   EXPECT_EQ(expected_first_tab_url, tab_strip->GetWebContentsAt(0)->GetURL());
 

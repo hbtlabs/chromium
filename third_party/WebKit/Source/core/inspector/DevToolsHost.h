@@ -57,12 +57,12 @@ public:
 
     float zoomFactor();
 
+    float convertLengthForEmbedder(float length);
+
     void setInjectedScriptForOrigin(const String& origin, const String& script);
 
     void copyText(const String& text);
 
-    // Called from [Custom] implementations.
-    void showContextMenu(Event*, const Vector<ContextMenuItem>& items);
     void showContextMenu(LocalFrame* targetFrame, float x, float y, const Vector<ContextMenuItem>& items);
     void sendMessageToEmbedder(const String& message);
 

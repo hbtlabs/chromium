@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <queue>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -52,18 +53,17 @@ void MDnsSocketFactoryImpl::CreateSockets(
     scoped_ptr<DatagramServerSocket> socket(
         CreateAndBindMDnsSocket(interfaces[i].second, interfaces[i].first));
     if (socket)
-      sockets->push_back(socket.Pass());
+      sockets->push_back(std::move(socket));
   }
 }
 
 MDnsConnection::SocketHandler::SocketHandler(
     scoped_ptr<DatagramServerSocket> socket,
     MDnsConnection* connection)
-    : socket_(socket.Pass()),
+    : socket_(std::move(socket)),
       connection_(connection),
       response_(dns_protocol::kMaxMulticastSize),
-      send_in_progress_(false) {
-}
+      send_in_progress_(false) {}
 
 MDnsConnection::SocketHandler::~SocketHandler() {
 }
@@ -215,7 +215,7 @@ bool MDnsClientImpl::Core::Init(MDnsSocketFactory* socket_factory) {
   return connection_->Init(socket_factory);
 }
 
-bool MDnsClientImpl::Core::SendQuery(uint16 rrtype, const std::string& name) {
+bool MDnsClientImpl::Core::SendQuery(uint16_t rrtype, const std::string& name) {
   std::string name_dns;
   if (!DNSDomainFromDot(name, &name_dns))
     return false;
@@ -271,7 +271,7 @@ void MDnsClientImpl::Core::HandlePacket(DnsResponse* response,
     }
 
     MDnsCache::Key update_key = MDnsCache::Key::CreateFor(record.get());
-    MDnsCache::UpdateType update = cache_.UpdateDnsRecord(record.Pass());
+    MDnsCache::UpdateType update = cache_.UpdateDnsRecord(std::move(record));
 
     // Cleanup time may have changed.
     ScheduleCleanup(cache_.next_expiration());
@@ -421,7 +421,8 @@ void MDnsClientImpl::Core::OnRecordRemoved(
 }
 
 void MDnsClientImpl::Core::QueryCache(
-    uint16 rrtype, const std::string& name,
+    uint16_t rrtype,
+    const std::string& name,
     std::vector<const RecordParsed*>* records) const {
   cache_.FindDnsRecords(rrtype, name, records, clock_->Now());
 }
@@ -433,8 +434,7 @@ MDnsClientImpl::MDnsClientImpl()
 
 MDnsClientImpl::MDnsClientImpl(scoped_ptr<base::Clock> clock,
                                scoped_ptr<base::Timer> timer)
-    : clock_(clock.Pass()), cleanup_timer_(timer.Pass()) {
-}
+    : clock_(std::move(clock)), cleanup_timer_(std::move(timer)) {}
 
 MDnsClientImpl::~MDnsClientImpl() {
 }
@@ -458,7 +458,7 @@ bool MDnsClientImpl::IsListening() const {
 }
 
 scoped_ptr<MDnsListener> MDnsClientImpl::CreateListener(
-    uint16 rrtype,
+    uint16_t rrtype,
     const std::string& name,
     MDnsListener::Delegate* delegate) {
   return scoped_ptr<MDnsListener>(
@@ -466,7 +466,7 @@ scoped_ptr<MDnsListener> MDnsClientImpl::CreateListener(
 }
 
 scoped_ptr<MDnsTransaction> MDnsClientImpl::CreateTransaction(
-    uint16 rrtype,
+    uint16_t rrtype,
     const std::string& name,
     int flags,
     const MDnsTransaction::ResultCallback& callback) {
@@ -474,7 +474,7 @@ scoped_ptr<MDnsTransaction> MDnsClientImpl::CreateTransaction(
       new MDnsTransactionImpl(rrtype, name, flags, callback, this));
 }
 
-MDnsListenerImpl::MDnsListenerImpl(uint16 rrtype,
+MDnsListenerImpl::MDnsListenerImpl(uint16_t rrtype,
                                    const std::string& name,
                                    base::Clock* clock,
                                    MDnsListener::Delegate* delegate,
@@ -485,8 +485,7 @@ MDnsListenerImpl::MDnsListenerImpl(uint16 rrtype,
       client_(client),
       delegate_(delegate),
       started_(false),
-      active_refresh_(false) {
-}
+      active_refresh_(false) {}
 
 MDnsListenerImpl::~MDnsListenerImpl() {
   if (started_) {
@@ -522,7 +521,7 @@ const std::string& MDnsListenerImpl::GetName() const {
   return name_;
 }
 
-uint16 MDnsListenerImpl::GetType() const {
+uint16_t MDnsListenerImpl::GetType() const {
   return rrtype_;
 }
 
@@ -605,13 +604,17 @@ void MDnsListenerImpl::DoRefresh() {
 }
 
 MDnsTransactionImpl::MDnsTransactionImpl(
-    uint16 rrtype,
+    uint16_t rrtype,
     const std::string& name,
     int flags,
     const MDnsTransaction::ResultCallback& callback,
     MDnsClientImpl* client)
-    : rrtype_(rrtype), name_(name), callback_(callback), client_(client),
-      started_(false), flags_(flags) {
+    : rrtype_(rrtype),
+      name_(name),
+      callback_(callback),
+      client_(client),
+      started_(false),
+      flags_(flags) {
   DCHECK((flags_ & MDnsTransaction::FLAG_MASK) == flags_);
   DCHECK(flags_ & MDnsTransaction::QUERY_CACHE ||
          flags_ & MDnsTransaction::QUERY_NETWORK);
@@ -646,7 +649,7 @@ const std::string& MDnsTransactionImpl::GetName() const {
   return name_;
 }
 
-uint16 MDnsTransactionImpl::GetType() const {
+uint16_t MDnsTransactionImpl::GetType() const {
   return rrtype_;
 }
 

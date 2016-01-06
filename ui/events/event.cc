@@ -4,6 +4,8 @@
 
 #include "ui/events/event.h"
 
+#include <utility>
+
 #if defined(USE_X11)
 #include <X11/extensions/XInput2.h>
 #include <X11/keysym.h>
@@ -15,6 +17,7 @@
 
 #include "base/metrics/histogram.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -30,8 +33,8 @@
 #if defined(USE_X11)
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #elif defined(USE_OZONE)
-#include "ui/events/ozone/layout/keyboard_layout_engine.h"
-#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine.h"  // nogncheck
+#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
 #endif
 
 namespace {
@@ -761,7 +764,7 @@ KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
 KeyEvent::~KeyEvent() {}
 
 void KeyEvent::SetExtendedKeyEventData(scoped_ptr<ExtendedKeyEventData> data) {
-  extended_key_event_data_ = data.Pass();
+  extended_key_event_data_ = std::move(data);
 }
 
 void KeyEvent::ApplyLayout() const {
@@ -904,7 +907,7 @@ KeyboardCode KeyEvent::GetLocatedWindowsKeyboardCode() const {
   return NonLocatedToLocatedKeyboardCode(key_code_, code_);
 }
 
-uint16 KeyEvent::GetConflatedWindowsKeyCode() const {
+uint16_t KeyEvent::GetConflatedWindowsKeyCode() const {
   if (is_char_)
     return key_.ToCharacter();
   return key_code_;

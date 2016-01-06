@@ -4,7 +4,10 @@
 
 #include "components/html_viewer/blink_settings_impl.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "components/html_viewer/web_preferences.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebNetworkStateNotifier.h"
@@ -50,9 +53,11 @@ blink::WebConnectionType NetConnectionTypeToWebConnectionType(
     case net::NetworkChangeNotifier::CONNECTION_NONE:
       return blink::WebConnectionTypeNone;
     case net::NetworkChangeNotifier::CONNECTION_2G:
+      return blink::WebConnectionTypeCellular2G;
     case net::NetworkChangeNotifier::CONNECTION_3G:
+      return blink::WebConnectionTypeCellular3G;
     case net::NetworkChangeNotifier::CONNECTION_4G:
-      return blink::WebConnectionTypeCellular;
+      return blink::WebConnectionTypeCellular4G;
     case net::NetworkChangeNotifier::CONNECTION_BLUETOOTH:
       return blink::WebConnectionTypeBluetooth;
   }
@@ -133,7 +138,7 @@ void ApplyFontsFromMap(const ScriptFontFamilyMap& map,
                        blink::WebSettings* settings) {
   for (ScriptFontFamilyMap::const_iterator it = map.begin(); it != map.end();
        ++it) {
-    int32 script = u_getPropertyValueEnum(UCHAR_SCRIPT, (it->first).c_str());
+    int32_t script = u_getPropertyValueEnum(UCHAR_SCRIPT, (it->first).c_str());
     if (script >= 0 && script < USCRIPT_CODE_LIMIT) {
       UScriptCode code = static_cast<UScriptCode>(script);
       (*setter)(settings, it->second, GetScriptForWebSettings(code));
@@ -189,6 +194,7 @@ void BlinkSettingsImpl::ApplySettings(blink::WebView* web_view,
       prefs.slimming_paint_v2_enabled);
   settings->setXSSAuditorEnabled(prefs.xss_auditor_enabled);
   settings->setDNSPrefetchingEnabled(prefs.dns_prefetching_enabled);
+  settings->setDataSaverEnabled(prefs.data_saver_enabled);
   settings->setLocalStorageEnabled(prefs.local_storage_enabled);
   settings->setSyncXHRInDocumentsEnabled(prefs.sync_xhr_in_documents_enabled);
   blink::WebRuntimeFeatures::enableDatabase(prefs.databases_enabled);
@@ -295,9 +301,6 @@ void BlinkSettingsImpl::ApplySettings(blink::WebView* web_view,
       static_cast<blink::WebSettings::EditingBehavior>(prefs.editing_behavior));
 
   settings->setSupportsMultipleWindows(prefs.supports_multiple_windows);
-
-  // TODO(bokan): Remove once Blink side is gone.
-  settings->setInvertViewportScrollOrder(true);
 
   settings->setViewportEnabled(prefs.viewport_enabled);
   settings->setLoadWithOverviewMode(prefs.initialize_at_minimum_page_scale);

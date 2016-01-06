@@ -23,7 +23,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/dom/Element.h"
 
 #include "bindings/core/v8/DOMDataStore.h"
@@ -547,12 +546,11 @@ void Element::callDistributeScroll(ScrollState& scrollState)
         nativeDistributeScroll(scrollState);
         return;
     }
-
-    if (callback->nativeScrollBehavior() != NativeScrollBehavior::PerformAfterNativeScroll)
+    if (callback->nativeScrollBehavior() != WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
-    if (callback->nativeScrollBehavior() != NativeScrollBehavior::DisableNativeScroll)
+    if (callback->nativeScrollBehavior() != WebNativeScrollBehavior::DisableNativeScroll)
         nativeDistributeScroll(scrollState);
-    if (callback->nativeScrollBehavior() == NativeScrollBehavior::PerformAfterNativeScroll)
+    if (callback->nativeScrollBehavior() == WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
 };
 
@@ -614,12 +612,11 @@ void Element::callApplyScroll(ScrollState& scrollState)
         nativeApplyScroll(scrollState);
         return;
     }
-
-    if (callback->nativeScrollBehavior() != NativeScrollBehavior::PerformAfterNativeScroll)
+    if (callback->nativeScrollBehavior() != WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
-    if (callback->nativeScrollBehavior() != NativeScrollBehavior::DisableNativeScroll)
+    if (callback->nativeScrollBehavior() != WebNativeScrollBehavior::DisableNativeScroll)
         nativeApplyScroll(scrollState);
-    if (callback->nativeScrollBehavior() == NativeScrollBehavior::PerformAfterNativeScroll)
+    if (callback->nativeScrollBehavior() == WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
 };
 
@@ -974,16 +971,34 @@ void Element::scrollFrameTo(const ScrollToOptions& scrollToOptions)
     viewport->setScrollPosition(DoublePoint(scaledLeft, scaledTop), ProgrammaticScroll, scrollBehavior);
 }
 
-void Element::incrementProxyCount()
+bool Element::hasCompositorProxy() const
 {
-    if (ensureElementRareData().incrementProxyCount() == 1)
+    return hasRareData() && elementRareData()->proxiedPropertyCounts();
+}
+
+void Element::incrementCompositorProxiedProperties(uint32_t mutableProperties)
+{
+    ElementRareData& rareData = ensureElementRareData();
+    if (!rareData.proxiedPropertyCounts())
+        setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::CompositorProxy));
+    rareData.incrementCompositorProxiedProperties(mutableProperties);
+}
+
+void Element::decrementCompositorProxiedProperties(uint32_t mutableProperties)
+{
+    ElementRareData& rareData = *elementRareData();
+    rareData.decrementCompositorProxiedProperties(mutableProperties);
+    if (!rareData.proxiedPropertyCounts())
         setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::CompositorProxy));
 }
 
-void Element::decrementProxyCount()
+uint32_t Element::compositorMutableProperties() const
 {
-    if (ensureElementRareData().decrementProxyCount() == 0)
-        setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::CompositorProxy));
+    if (!hasRareData())
+        return WebCompositorMutablePropertyNone;
+    if (CompositorProxiedPropertySet* set = elementRareData()->proxiedPropertyCounts())
+        return set->proxiedProperties();
+    return WebCompositorMutablePropertyNone;
 }
 
 bool Element::hasNonEmptyLayoutSize() const
@@ -995,7 +1010,7 @@ bool Element::hasNonEmptyLayoutSize() const
     return false;
 }
 
-IntRect Element::boundsInViewport()
+IntRect Element::boundsInViewport() const
 {
     document().updateLayoutIgnorePendingStylesheets();
 
@@ -1183,15 +1198,12 @@ void Element::attributeChanged(const QualifiedName& name, const AtomicString& ol
 
     document().incDOMTreeVersion();
 
-    StyleResolver* styleResolver = document().styleResolver();
-
     if (name == HTMLNames::idAttr) {
         AtomicString oldId = elementData()->idForStyleResolution();
         AtomicString newId = makeIdForStyleResolution(newValue, document().inQuirksMode());
         if (newId != oldId) {
             elementData()->setIdForStyleResolution(newId);
-            if (inActiveDocument() && styleResolver && styleChangeType() < SubtreeStyleChange)
-                document().styleEngine().idChangedForElement(oldId, newId, *this);
+            document().styleEngine().idChangedForElement(oldId, newId, *this);
         }
     } else if (name == classAttr) {
         classAttributeChanged(newValue);
@@ -1209,7 +1221,7 @@ void Element::attributeChanged(const QualifiedName& name, const AtomicString& ol
     invalidateNodeListCachesInAncestors(&name, this);
 
     // If there is currently no StyleResolver, we can't be sure that this attribute change won't affect style.
-    if (!styleResolver)
+    if (!document().styleResolver())
         setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(name));
 
     if (inDocument()) {
@@ -1269,9 +1281,6 @@ static inline ClassStringContent classStringHasClassName(const AtomicString& new
 
 void Element::classAttributeChanged(const AtomicString& newClassString)
 {
-    StyleResolver* styleResolver = document().styleResolver();
-    bool testShouldInvalidateStyle = inActiveDocument() && styleResolver && styleChangeType() < SubtreeStyleChange;
-
     ASSERT(elementData());
     ClassStringContent classStringContentType = classStringHasClassName(newClassString);
     const bool shouldFoldCase = document().inQuirksMode();
@@ -1279,12 +1288,10 @@ void Element::classAttributeChanged(const AtomicString& newClassString)
         const SpaceSplitString oldClasses = elementData()->classNames();
         elementData()->setClass(newClassString, shouldFoldCase);
         const SpaceSplitString& newClasses = elementData()->classNames();
-        if (testShouldInvalidateStyle)
-            document().styleEngine().classChangedForElement(oldClasses, newClasses, *this);
+        document().styleEngine().classChangedForElement(oldClasses, newClasses, *this);
     } else {
         const SpaceSplitString& oldClasses = elementData()->classNames();
-        if (testShouldInvalidateStyle)
-            document().styleEngine().classChangedForElement(oldClasses, *this);
+        document().styleEngine().classChangedForElement(oldClasses, *this);
         if (classStringContentType == ClassStringContent::WhiteSpaceOnly)
             elementData()->setClass(newClassString, shouldFoldCase);
         else
@@ -1543,7 +1550,7 @@ void Element::attach(const AttachContext& context)
         data->clearComputedStyle();
     }
 
-    if (!isActiveInsertionPoint(*this))
+    if (!isSlotOrActiveInsertionPoint())
         LayoutTreeBuilderForElement(*this, context.resolvedStyle).createLayoutObjectIfNeeded();
 
     addCallbackSelectors();
@@ -1686,9 +1693,6 @@ PassRefPtr<ComputedStyle> Element::styleForLayoutObject()
         if (const StylePropertySet* inlineStyle = this->inlineStyle())
             style->setHasInlineTransform(inlineStyle->hasProperty(CSSPropertyTransform));
     }
-
-    if (hasRareData() && elementRareData()->proxyCount() > 0)
-        style->setHasCompositorProxy(true);
 
     document().didRecalculateStyleForElement();
     return style.release();
@@ -1861,9 +1865,7 @@ void Element::pseudoStateChanged(CSSSelector::PseudoType pseudo)
     // like HTMLSelectElement.
     if (document().inStyleRecalc())
         return;
-    StyleResolver* styleResolver = document().styleResolver();
-    if (inActiveDocument() && styleResolver && styleChangeType() < SubtreeStyleChange)
-        document().styleEngine().pseudoStateChangedForElement(pseudo, *this);
+    document().styleEngine().pseudoStateChangedForElement(pseudo, *this);
 }
 
 void Element::setAnimationStyleChange(bool animationStyleChange)
@@ -1949,15 +1951,10 @@ PassRefPtrWillBeRawPtr<ShadowRoot> Element::attachShadow(const ScriptState* scri
     if (shadowRootInitDict.hasMode())
         type = shadowRootInitDict.mode() == "open" ? ShadowRootType::Open : ShadowRootType::Closed;
 
-    if (type == ShadowRootType::Closed) {
-        if (!RuntimeEnabledFeatures::shadowRootClosedModeEnabled()) {
-            exceptionState.throwDOMException(NotSupportedError, "Closed shadow root is not supported yet.");
-            return nullptr;
-        }
+    if (type == ShadowRootType::Closed)
         UseCounter::count(document(), UseCounter::ElementAttachShadowClosed);
-    } else if (type == ShadowRootType::Open) {
+    else if (type == ShadowRootType::Open)
         UseCounter::count(document(), UseCounter::ElementAttachShadowOpen);
-    }
 
     RefPtrWillBeRawPtr<ShadowRoot> shadowRoot = createShadowRootInternal(type, exceptionState);
 
@@ -2058,8 +2055,6 @@ void Element::checkForEmptyStyleChange()
     const ComputedStyle* style = computedStyle();
 
     if (!style && !styleAffectedByEmpty())
-        return;
-    if (styleChangeType() >= SubtreeStyleChange)
         return;
     if (!inActiveDocument())
         return;
@@ -3118,9 +3113,7 @@ void Element::willModifyAttribute(const QualifiedName& name, const AtomicString&
     }
 
     if (oldValue != newValue) {
-        if (inActiveDocument() && document().styleResolver() && styleChangeType() < SubtreeStyleChange)
-            document().styleEngine().attributeChangedForElement(name, *this);
-
+        document().styleEngine().attributeChangedForElement(name, *this);
         if (isUpgradedCustomElement())
             CustomElement::attributeDidChange(this, name.localName(), oldValue, newValue);
     }
@@ -3570,7 +3563,7 @@ bool Element::supportsStyleSharing() const
     return true;
 }
 
-void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2)
+void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1)
 {
     if (!inDocument())
         return;
@@ -3578,12 +3571,12 @@ void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, cons
     if (!activityLogger)
         return;
     Vector<String, 2> argv;
-    argv.append(arg1);
-    argv.append(arg2);
-    activityLogger->logEvent(eventName, argv.size(), argv.data());
+    argv.append(element);
+    argv.append(fastGetAttribute(attr1));
+    activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
 }
 
-void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3)
+void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2)
 {
     if (!inDocument())
         return;
@@ -3591,13 +3584,13 @@ void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, cons
     if (!activityLogger)
         return;
     Vector<String, 3> argv;
-    argv.append(arg1);
-    argv.append(arg2);
-    argv.append(arg3);
-    activityLogger->logEvent(eventName, argv.size(), argv.data());
+    argv.append(element);
+    argv.append(fastGetAttribute(attr1));
+    argv.append(fastGetAttribute(attr2));
+    activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
 }
 
-void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, const String& arg1, const String& arg2, const String& arg3, const String& arg4)
+void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2, const QualifiedName& attr3)
 {
     if (!inDocument())
         return;
@@ -3605,11 +3598,26 @@ void Element::logEventIfIsolatedWorldAndInDocument(const String& eventName, cons
     if (!activityLogger)
         return;
     Vector<String, 4> argv;
-    argv.append(arg1);
-    argv.append(arg2);
-    argv.append(arg3);
-    argv.append(arg4);
-    activityLogger->logEvent(eventName, argv.size(), argv.data());
+    argv.append(element);
+    argv.append(fastGetAttribute(attr1));
+    argv.append(fastGetAttribute(attr2));
+    argv.append(fastGetAttribute(attr3));
+    activityLogger->logEvent("blinkAddElement", argv.size(), argv.data());
+}
+
+void Element::logUpdateAttributeIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attributeName, const AtomicString& oldValue, const AtomicString& newValue)
+{
+    if (!inDocument())
+        return;
+    V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
+    if (!activityLogger)
+        return;
+    Vector<String, 4> argv;
+    argv.append(element);
+    argv.append(attributeName.toString());
+    argv.append(oldValue);
+    argv.append(newValue);
+    activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
 }
 
 DEFINE_TRACE(Element)

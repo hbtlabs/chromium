@@ -4,6 +4,9 @@
 
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
@@ -12,6 +15,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
@@ -747,7 +751,7 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
       password_form = CreatePasswordFormFromWebForm(
           element.form(), &nonscript_modified_values_, &form_predictions_);
     }
-    ProvisionallySavePassword(password_form.Pass(), RESTRICTION_NONE);
+    ProvisionallySavePassword(std::move(password_form), RESTRICTION_NONE);
 
     PasswordToLoginMap::iterator iter = password_to_username_.find(element);
     if (iter != password_to_username_.end()) {
@@ -1053,16 +1057,10 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
   }
 
   if (only_visible) {
-    bool is_last_load = true;
-    for (blink::WebFrame* frame = render_frame()->GetWebFrame()->top(); frame;
-         frame = frame->traverseNext(false)) {
-      if (frame != render_frame()->GetWebFrame() && frame->isLoading()) {
-        is_last_load = false;
-        break;
-      }
-    }
+    blink::WebFrame* main_frame = render_frame()->GetWebFrame()->top();
+    bool did_stop_loading = !main_frame || !main_frame->isLoading();
     Send(new AutofillHostMsg_PasswordFormsRendered(routing_id(), password_forms,
-                                                   is_last_load));
+                                                   did_stop_loading));
   } else {
     Send(new AutofillHostMsg_PasswordFormsParsed(routing_id(), password_forms));
   }
@@ -1137,7 +1135,7 @@ void PasswordAutofillAgent::WillSendSubmitEvent(
   // already have been updated in TextDidChangeInTextField.
   scoped_ptr<PasswordForm> password_form = CreatePasswordFormFromWebForm(
       form, &nonscript_modified_values_, &form_predictions_);
-  ProvisionallySavePassword(password_form.Pass(),
+  ProvisionallySavePassword(std::move(password_form),
                             RESTRICTION_NON_EMPTY_PASSWORD);
 }
 
@@ -1438,13 +1436,14 @@ bool PasswordAutofillAgent::ShowSuggestionPopup(
       username.isNull() ? base::string16()
                         : static_cast<base::string16>(user_input.value()));
 
-  blink::WebRect bounding_box_in_window = selected_element.boundsInViewport();
-  render_frame()->GetRenderView()->convertViewportToWindow(
-      &bounding_box_in_window);
-
   Send(new AutofillHostMsg_ShowPasswordSuggestions(
-      routing_id(), key_it->second, field.text_direction, username_string,
-      options, gfx::RectF(bounding_box_in_window)));
+           routing_id(),
+           key_it->second,
+           field.text_direction,
+           username_string,
+           options,
+           render_frame()->GetRenderView()->ElementBoundsInWindow(
+               selected_element)));
   username_query_prefix_ = username_string;
   return CanShowSuggestion(fill_data, username_string, show_all);
 }
@@ -1498,7 +1497,7 @@ void PasswordAutofillAgent::ProvisionallySavePassword(
                          password_form->new_password_value.empty())) {
     return;
   }
-  provisionally_saved_form_ = password_form.Pass();
+  provisionally_saved_form_ = std::move(password_form);
 }
 
 bool PasswordAutofillAgent::ProvisionallySavedPasswordIsValid() {

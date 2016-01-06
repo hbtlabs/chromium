@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/loader/FrameFetchContext.h"
 
 #include "core/fetch/FetchInitiatorInfo.h"
@@ -186,7 +185,7 @@ protected:
         fetchContext->upgradeInsecureRequest(fetchRequest);
 
         EXPECT_STREQ(shouldPrefer ? "1" : "",
-            fetchRequest.resourceRequest().httpHeaderField("Upgrade-Insecure-Requests").utf8().data());
+            fetchRequest.resourceRequest().httpHeaderField(HTTPNames::Upgrade_Insecure_Requests).utf8().data());
     }
 
     RefPtr<SecurityOrigin> exampleOrigin;
@@ -402,7 +401,7 @@ TEST_F(FrameFetchContextTest, MainResource)
     // Conditional request
     document->frame()->loader().setLoadType(FrameLoadTypeStandard);
     ResourceRequest conditional("http://www.example.com");
-    conditional.setHTTPHeaderField("If-Modified-Since", "foo");
+    conditional.setHTTPHeaderField(HTTPNames::If_Modified_Since, "foo");
     EXPECT_EQ(ReloadIgnoringCacheData, fetchContext->resourceRequestCachePolicy(conditional, Resource::MainResource));
 
     // Set up a child frame
@@ -513,6 +512,22 @@ TEST_F(FrameFetchContextTest, ModifyPriorityForLowPriorityIframes)
     settings->setLowPriorityIframes(true);
     EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh, Resource::MainResource, request, ResourcePriority::NotVisible));
     EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, request, ResourcePriority::NotVisible));
+}
+
+TEST_F(FrameFetchContextTest, EnableDataSaver)
+{
+    Settings* settings = document->frame()->settings();
+    settings->setDataSaverEnabled(true);
+    ResourceRequest resourceRequest("http://www.example.com");
+    fetchContext->addAdditionalRequestHeaders(resourceRequest, FetchMainResource);
+    EXPECT_STREQ("on", resourceRequest.httpHeaderField("Save-Data").utf8().data());
+}
+
+TEST_F(FrameFetchContextTest, DisabledDataSaver)
+{
+    ResourceRequest resourceRequest("http://www.example.com");
+    fetchContext->addAdditionalRequestHeaders(resourceRequest, FetchMainResource);
+    EXPECT_STREQ("", resourceRequest.httpHeaderField("Save-Data").utf8().data());
 }
 
 } // namespace

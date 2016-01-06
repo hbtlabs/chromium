@@ -4,7 +4,9 @@
 
 #include "content/renderer/pepper/pepper_webplugin_impl.h"
 
+#include <stddef.h>
 #include <cmath>
+#include <utility>
 
 #include "base/debug/crash_logging.h"
 #include "base/message_loop/message_loop.h"
@@ -62,7 +64,7 @@ PepperWebPluginImpl::PepperWebPluginImpl(
     scoped_ptr<PluginInstanceThrottlerImpl> throttler)
     : init_data_(new InitData()),
       full_frame_(params.loadManually),
-      throttler_(throttler.Pass()),
+      throttler_(std::move(throttler)),
       instance_object_(PP_MakeUndefined()),
       container_(NULL),
       weak_factory_(this) {
@@ -101,7 +103,7 @@ bool PepperWebPluginImpl::initialize(WebPluginContainer* container) {
   auto weak_this = weak_factory_.GetWeakPtr();
   bool success =
       instance_->Initialize(init_data_->arg_names, init_data_->arg_values,
-                            full_frame_, throttler_.Pass());
+                            full_frame_, std::move(throttler_));
   // The above call to Initialize can result in re-entrancy and destruction of
   // the plugin instance. In this case it's quite unclear whether this object
   // could also have been destroyed. We could return false here, but it would be
@@ -127,6 +129,9 @@ bool PepperWebPluginImpl::initialize(WebPluginContainer* container) {
     if (!replacement_plugin)
       return false;
 
+    // Since we are setting the container to own the replacement plugin, we must
+    // schedule ourselves for deletion.
+    destroy();
     container->setPlugin(replacement_plugin);
     if (!replacement_plugin->initialize(container)) {
       CHECK(replacement_plugin->container() == nullptr);
@@ -148,6 +153,8 @@ void PepperWebPluginImpl::destroy() {
   // Tell |container_| to clear references to this plugin's script objects.
   if (container_)
     container_->clearScriptObjects();
+
+  container_ = nullptr;
 
   if (instance_.get()) {
     ppapi::PpapiGlobals::Get()->GetVarTracker()->ReleaseVar(instance_object_);

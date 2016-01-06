@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/ssl/security_state_model.h"
 #include "chrome/browser/ui/host_desktop.h"
@@ -99,9 +100,7 @@ void BookmarkCurrentPageAllowingExtensionOverrides(Browser* browser);
 bool CanBookmarkCurrentPage(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
 void SaveCreditCard(Browser* browser);
-#endif
 void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
 #if defined(OS_WIN)

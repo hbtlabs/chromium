@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/permissions_updater.h"
@@ -276,7 +277,6 @@ bool IsAppLaunchableWithoutEnabling(const std::string& extension_id,
 bool ShouldSync(const Extension* extension,
                 content::BrowserContext* context) {
   return sync_helper::IsSyncable(extension) &&
-         !util::IsEphemeralApp(extension->id(), context) &&
          !ExtensionPrefs::Get(context)->DoNotSync(extension->id());
 }
 
@@ -345,7 +345,7 @@ scoped_ptr<base::DictionaryValue> GetExtensionInfo(const Extension* extension) {
       NULL);  // Don't set bool if exists.
   dict->SetString("icon", icon.spec());
 
-  return dict.Pass();
+  return dict;
 }
 
 const gfx::ImageSkia& GetDefaultAppIcon() {

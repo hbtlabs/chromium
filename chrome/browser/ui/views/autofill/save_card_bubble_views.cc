@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/views/autofill/save_card_bubble_views.h"
 
+#include <stddef.h>
+
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_types.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller.h"
 #include "grit/components_strings.h"
@@ -192,12 +195,12 @@ scoped_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
 
   // Create accept button.
   save_button_ = new views::BlueButton(
-      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_BUBBLE_ACCEPT));
+      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT));
   save_button_->SetIsDefault(true);
 
   // Create cancel button.
   cancel_button_ = new views::LabelButton(
-      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_BUBBLE_DENY));
+      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_PROMPT_DENY));
   cancel_button_->SetStyle(views::Button::STYLE_BUTTON);
 
   if (kIsOkButtonOnLeftSide) {

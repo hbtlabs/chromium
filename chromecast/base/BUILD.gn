@@ -6,12 +6,14 @@ import("//chrome/version.gni")  # TODO layering violation!
 import("//chromecast/chromecast.gni")
 import("//testing/test.gni")
 
+# GYP target: chromecast.gyp:cast_base
 source_set("base") {
   sources = [
     "android/dumpstate_writer.cc",
     "android/dumpstate_writer.h",
     "android/system_time_change_notifier_android.cc",
     "android/system_time_change_notifier_android.h",
+    "bind_to_task_runner.h",
     "cast_paths.cc",
     "cast_paths.h",
     "cast_resource.cc",
@@ -27,6 +29,8 @@ source_set("base") {
     "path_utils.h",
     "pref_names.cc",
     "pref_names.h",
+    "pref_service_helper.cc",
+    "pref_service_helper.h",
     "process_utils.cc",
     "process_utils.h",
     "serializers.cc",
@@ -37,6 +41,10 @@ source_set("base") {
     "task_runner_impl.h",
   ]
 
+  if (chromecast_branding == "public") {
+    sources += [ "pref_service_helper_simple.cc" ]
+  }
+
   public_deps = [
     "//chromecast/base/metrics",
     "//chromecast/public",
@@ -44,11 +52,27 @@ source_set("base") {
 
   deps = [
     "//base",
+    "//base:prefs",
   ]
 }
 
+# GYP target: n/a
+source_set("test_support") {
+  sources = [
+    "scoped_temp_file.cc",
+    "scoped_temp_file.h",
+  ]
+
+  public_deps = [
+    ":base",
+    "//base",
+  ]
+}
+
+# GYP target: chromecast_tests.gypi:cast_base_unittests
 test("cast_base_unittests") {
   sources = [
+    "bind_to_task_runner_unittest.cc",
     "device_capabilities_impl_unittest.cc",
     "error_codes_unittest.cc",
     "path_utils_unittest.cc",
@@ -58,8 +82,7 @@ test("cast_base_unittests") {
   ]
 
   deps = [
-    ":base",
-    "//base",
+    ":test_support",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gmock",

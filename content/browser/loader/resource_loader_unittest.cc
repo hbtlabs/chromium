@@ -4,11 +4,16 @@
 
 #include "content/browser/loader/resource_loader.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -147,7 +152,8 @@ class MockClientCertURLRequestJob : public net::URLRequestTestJob {
  public:
   MockClientCertURLRequestJob(net::URLRequest* request,
                               net::NetworkDelegate* network_delegate)
-      : net::URLRequestTestJob(request, network_delegate) {}
+      : net::URLRequestTestJob(request, network_delegate),
+        weak_factory_(this) {}
 
   static std::vector<std::string> test_authorities() {
     return std::vector<std::string>(1, "dummy");
@@ -161,7 +167,7 @@ class MockClientCertURLRequestJob : public net::URLRequestTestJob {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&MockClientCertURLRequestJob::NotifyCertificateRequested,
-                   this, cert_request_info));
+                   weak_factory_.GetWeakPtr(), cert_request_info));
   }
 
   void ContinueWithCertificate(net::X509Certificate* cert,
@@ -171,6 +177,8 @@ class MockClientCertURLRequestJob : public net::URLRequestTestJob {
 
  private:
   ~MockClientCertURLRequestJob() override {}
+
+  base::WeakPtrFactory<MockClientCertURLRequestJob> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MockClientCertURLRequestJob);
 };
@@ -443,7 +451,7 @@ class SelectCertificateBrowserClient : public TestContentBrowserClient {
 
     ++call_count_;
     passed_certs_ = cert_request_info->client_certs;
-    delegate_ = delegate.Pass();
+    delegate_ = std::move(delegate);
     select_certificate_run_loop_.Quit();
   }
 
@@ -473,11 +481,11 @@ class ResourceContextStub : public MockResourceContext {
       : MockResourceContext(test_request_context) {}
 
   scoped_ptr<net::ClientCertStore> CreateClientCertStore() override {
-    return dummy_cert_store_.Pass();
+    return std::move(dummy_cert_store_);
   }
 
   void SetClientCertStore(scoped_ptr<net::ClientCertStore> store) {
-    dummy_cert_store_ = store.Pass();
+    dummy_cert_store_ = std::move(store);
   }
 
  private:
@@ -488,7 +496,7 @@ class ResourceContextStub : public MockResourceContext {
 // progress reporting.
 class NonChunkedUploadDataStream : public net::UploadDataStream {
  public:
-  explicit NonChunkedUploadDataStream(uint64 size)
+  explicit NonChunkedUploadDataStream(uint64_t size)
       : net::UploadDataStream(false, 0), stream_(0), size_(size) {}
 
   void AppendData(const char* data) {
@@ -512,7 +520,7 @@ class NonChunkedUploadDataStream : public net::UploadDataStream {
   void ResetInternal() override { stream_.Reset(); }
 
   net::ChunkedUploadDataStream stream_;
-  uint64 size_;
+  uint64_t size_;
 
   DISALLOW_COPY_AND_ASSIGN(NonChunkedUploadDataStream);
 };
@@ -554,7 +562,7 @@ class ResourceLoaderTest : public testing::Test,
   virtual scoped_ptr<ResourceHandler> WrapResourceHandler(
       scoped_ptr<ResourceHandlerStub> leaf_handler,
       net::URLRequest* request) {
-    return leaf_handler.Pass();
+    return std::move(leaf_handler);
   }
 
   // Replaces loader_ with a new one for |request|.
@@ -572,8 +580,8 @@ class ResourceLoaderTest : public testing::Test,
         new ResourceHandlerStub(request.get()));
     raw_ptr_resource_handler_ = resource_handler.get();
     loader_.reset(new ResourceLoader(
-        request.Pass(),
-        WrapResourceHandler(resource_handler.Pass(), raw_ptr_to_request_),
+        std::move(request),
+        WrapResourceHandler(std::move(resource_handler), raw_ptr_to_request_),
         this));
   }
 
@@ -591,7 +599,7 @@ class ResourceLoaderTest : public testing::Test,
             test_url(),
             net::DEFAULT_PRIORITY,
             nullptr /* delegate */));
-    SetUpResourceLoader(request.Pass());
+    SetUpResourceLoader(std::move(request));
   }
 
   void TearDown() override {
@@ -686,7 +694,7 @@ TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
       new net::X509Certificate("test", "test", base::Time(), base::Time())));
   scoped_ptr<ClientCertStoreStub> test_store(new ClientCertStoreStub(
       dummy_certs, &store_request_count, &store_requested_authorities));
-  resource_context_.SetClientCertStore(test_store.Pass());
+  resource_context_.SetClientCertStore(std::move(test_store));
 
   // Plug in test content browser client.
   SelectCertificateBrowserClient test_client;
@@ -886,7 +894,7 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
 
     // Create mock file streams and a ShareableFileReference.
     scoped_ptr<net::testing::MockFileStream> file_stream(
-        new net::testing::MockFileStream(file.Pass(),
+        new net::testing::MockFileStream(std::move(file),
                                          base::ThreadTaskRunnerHandle::Get()));
     file_stream_ = file_stream.get();
     deletable_file_ = ShareableFileReference::GetOrCreate(
@@ -897,13 +905,13 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
 
     // Inject them into the handler.
     scoped_ptr<RedirectToFileResourceHandler> handler(
-        new RedirectToFileResourceHandler(leaf_handler.Pass(), request));
+        new RedirectToFileResourceHandler(std::move(leaf_handler), request));
     redirect_to_file_resource_handler_ = handler.get();
     handler->SetCreateTemporaryFileStreamFunctionForTesting(
         base::Bind(&ResourceLoaderRedirectToFileTest::PostCallback,
                    base::Unretained(this),
                    base::Passed(&file_stream)));
-    return handler.Pass();
+    return std::move(handler);
   }
 
  private:
@@ -1074,7 +1082,7 @@ TEST_F(HTTPSSecurityInfoResourceLoaderTest, SecurityInfoOnHTTPSResource) {
   scoped_ptr<net::URLRequest> request(
       resource_context_.GetRequestContext()->CreateRequest(
           test_https_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
-  SetUpResourceLoader(request.Pass());
+  SetUpResourceLoader(std::move(request));
 
   // Send the request and wait until it completes.
   loader_->StartRequest();
@@ -1113,7 +1121,7 @@ TEST_F(HTTPSSecurityInfoResourceLoaderTest,
       resource_context_.GetRequestContext()->CreateRequest(
           test_https_redirect_url(), net::DEFAULT_PRIORITY,
           nullptr /* delegate */));
-  SetUpResourceLoader(request.Pass());
+  SetUpResourceLoader(std::move(request));
 
   // Send the request and wait until it completes.
   loader_->StartRequest();

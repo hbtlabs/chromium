@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -463,7 +464,7 @@ void BookmarkModel::AddNonClonedKey(const std::string& key) {
 
 void BookmarkModel::SetNodeSyncTransactionVersion(
     const BookmarkNode* node,
-    int64 sync_transaction_version) {
+    int64_t sync_transaction_version) {
   DCHECK(client_->CanSyncNode(node));
 
   if (sync_transaction_version == node->sync_transaction_version())
@@ -918,7 +919,7 @@ void BookmarkModel::RemoveAndDeleteNode(BookmarkNode* delete_me) {
       observers_,
       BookmarkNodeRemoved(this, parent, index, node.get(), removed_urls));
 
-  undo_delegate()->OnBookmarkNodeRemoved(this, parent, index, node.Pass());
+  undo_delegate()->OnBookmarkNodeRemoved(this, parent, index, std::move(node));
 }
 
 void BookmarkModel::RemoveNodeFromInternalMaps(BookmarkNode* node) {
@@ -1089,7 +1090,7 @@ void BookmarkModel::PopulateNodesByURL(BookmarkNode* node) {
     PopulateNodesByURL(node->GetChild(i));
 }
 
-int64 BookmarkModel::generate_next_node_id() {
+int64_t BookmarkModel::generate_next_node_id() {
   return next_node_id_++;
 }
 

@@ -214,8 +214,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_GETDEVICE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_LAYER_BITMAP_IMAGEFILTERS
-#   define SK_SUPPORT_LEGACY_LAYER_BITMAP_IMAGEFILTERS
+#ifndef    SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
+#   define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
 #endif
 
 #ifndef    SK_IGNORE_ETC1_SUPPORT
@@ -225,6 +225,15 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #ifndef    SK_IGNORE_GPU_DITHER
 #   define SK_IGNORE_GPU_DITHER
 #endif
+
+#ifndef    SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
+#   define SK_SUPPORT_LEGACY_HQ_DOWNSAMPLING
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
+#   define SK_SUPPORT_LEGACY_PATH_MEASURE_TVALUE
+#endif
+
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 
 /* In some places Skia can use static initializers for global initialization,
@@ -232,15 +241,13 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
  */
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 
-/* Forcing the unoptimized path for the offset image filter in skia until
- * all filters used in Blink support the optimized path properly
- */
-#define SK_DISABLE_OFFSETIMAGEFILTER_OPTIMIZATION
-
 /* This flag forces Skia not to use typographic metrics with GDI.
  */
 #define SK_GDI_ALWAYS_USE_TEXTMETRICS_FOR_FONT_METRICS
 
+#ifndef SK_IGNORE_GL_TEXTURE_TARGET
+#   define SK_IGNORE_GL_TEXTURE_TARGET
+#endif
 #define SK_IGNORE_BLURRED_RRECT_OPT
 #define SK_USE_DISCARDABLE_SCALEDIMAGECACHE
 #define SK_WILL_NEVER_DRAW_PERSPECTIVE_TEXT
@@ -251,6 +258,9 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 // Blink layout tests are baselined to Clang optimizing through the UB in SkDivBits.
 #define SK_SUPPORT_LEGACY_DIVBITS_UB
+
+// mtklein's fiddling with Src / SrcOver.  Will rebaseline these only once when done.
+#define SK_SUPPORT_LEGACY_X86_BLITS
 
 // ===== End Chrome-specific definitions =====
 

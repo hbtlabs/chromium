@@ -5,6 +5,9 @@
 #ifndef NET_QUIC_TOOLS_QUIC_SIMPLE_PER_CONNECTION_PACKET_WRITER_H_
 #define NET_QUIC_TOOLS_QUIC_SIMPLE_PER_CONNECTION_PACKET_WRITER_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_packet_writer.h"
@@ -44,7 +47,7 @@ class QuicSimplePerConnectionPacketWriter : public QuicPacketWriter {
   void OnWriteComplete(WriteResult result);
 
   QuicSimpleServerPacketWriter* shared_writer_;  // Not owned.
-  QuicConnection* connection_;  // Not owned.
+  QuicConnection* connection_;                   // Not owned.
 
   base::WeakPtrFactory<QuicSimplePerConnectionPacketWriter> weak_factory_;
 

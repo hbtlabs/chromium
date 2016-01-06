@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_CLIENT_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_CLIENT_H_
 
+#include <utility>
+
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "components/autofill/core/browser/autofill_client.h"
@@ -66,7 +69,7 @@ class TestAutofillClient : public AutofillClient {
     is_context_secure_ = is_context_secure;
   };
 
-  void SetPrefs(scoped_ptr<PrefService> prefs) { prefs_ = prefs.Pass(); }
+  void SetPrefs(scoped_ptr<PrefService> prefs) { prefs_ = std::move(prefs); }
 
   rappor::TestRapporService* test_rappor_service() {
     return rappor_service_.get();

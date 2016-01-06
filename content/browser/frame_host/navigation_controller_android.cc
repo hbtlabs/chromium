@@ -4,6 +4,8 @@
 
 #include "content/browser/frame_host/navigation_controller_android.h"
 
+#include <stdint.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -12,6 +14,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "jni/NavigationControllerImpl_jni.h"
+#include "net/base/data_url.h"
 #include "ui/gfx/android/java_bitmap.h"
 
 using base::android::AttachCurrentThread;
@@ -149,6 +152,13 @@ void NavigationControllerAndroid::Reload(JNIEnv* env,
   navigation_controller_->Reload(check_for_repost);
 }
 
+void NavigationControllerAndroid::ReloadToRefreshContent(
+    JNIEnv* env,
+    jobject obj,
+    jboolean check_for_repost) {
+  navigation_controller_->ReloadToRefreshContent(check_for_repost);
+}
+
 void NavigationControllerAndroid::ReloadIgnoringCache(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -195,6 +205,7 @@ void NavigationControllerAndroid::LoadUrl(
     const JavaParamRef<jbyteArray>& post_data,
     const JavaParamRef<jstring>& base_url_for_data_url,
     const JavaParamRef<jstring>& virtual_url_for_data_url,
+    const JavaParamRef<jstring>& data_url_as_string,
     jboolean can_load_local_resources,
     jboolean is_renderer_initiated,
     jboolean should_replace_current_entry) {
@@ -216,7 +227,7 @@ void NavigationControllerAndroid::LoadUrl(
     params.extra_headers = ConvertJavaStringToUTF8(env, extra_headers);
 
   if (post_data) {
-    std::vector<uint8> http_body_vector;
+    std::vector<uint8_t> http_body_vector;
     base::android::JavaByteArrayToByteVector(env, post_data, &http_body_vector);
     params.browser_initiated_post_data =
         base::RefCountedBytes::TakeVector(&http_body_vector);
@@ -230,6 +241,24 @@ void NavigationControllerAndroid::LoadUrl(
   if (virtual_url_for_data_url) {
     params.virtual_url_for_data_url =
         GURL(ConvertJavaStringToUTF8(env, virtual_url_for_data_url));
+  }
+
+  if (data_url_as_string) {
+    // Treat |data_url_as_string| as if we were intending to put it into a GURL
+    // field. Note that kMaxURLChars is only enforced when serializing URLs
+    // for IPC.
+    GURL data_url = GURL(ConvertJavaStringToUTF8(env, data_url_as_string));
+    DCHECK(data_url.SchemeIs(url::kDataScheme));
+    DCHECK(params.url.SchemeIs(url::kDataScheme));
+#if DCHECK_IS_ON()
+    {
+      std::string mime_type, charset, data;
+      DCHECK(net::DataURL::Parse(params.url, &mime_type, &charset, &data));
+      DCHECK(data.empty());
+    }
+#endif
+    std::string s = data_url.spec();
+    params.data_url_as_string = base::RefCountedString::TakeString(&s);
   }
 
   if (j_referrer_url) {

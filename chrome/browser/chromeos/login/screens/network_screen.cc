@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/screens/network_screen.h"
 
+#include <utility>
+
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/prefs/pref_service.h"
@@ -229,11 +231,11 @@ void NetworkScreen::GetConnectedWifiNetwork(std::string* out_onc_spec) {
 }
 
 void NetworkScreen::CreateAndConnectNetworkFromOnc(
-    const std::string& onc_spec) {
+    const std::string& onc_spec,
+    const base::Closure& success_callback,
+    const base::Closure& failed_callback) {
   network_state_helper_->CreateAndConnectNetworkFromOnc(
-      onc_spec, base::Bind(&base::DoNothing),
-      base::Bind(&NetworkScreen::OnConnectNetworkFromOncFailed,
-                 base::Unretained(this)));
+      onc_spec, success_callback, failed_callback);
 }
 
 void NetworkScreen::AddObserver(Observer* observer) {
@@ -415,7 +417,7 @@ void NetworkScreen::ScheduleResolveLanguageList(
     scoped_ptr<locale_util::LanguageSwitchResult> language_switch_result) {
   UILanguageListResolvedCallback callback = base::Bind(
       &NetworkScreen::OnLanguageListResolved, weak_factory_.GetWeakPtr());
-  ResolveUILanguageList(language_switch_result.Pass(), callback);
+  ResolveUILanguageList(std::move(language_switch_result), callback);
 }
 
 void NetworkScreen::OnLanguageListResolved(
@@ -439,15 +441,6 @@ void NetworkScreen::OnSystemTimezoneChanged() {
   std::string current_timezone_id;
   CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
   GetContextEditor().SetString(kContextKeyTimezone, current_timezone_id);
-}
-
-void NetworkScreen::OnConnectNetworkFromOncFailed() {
-  if (!network_state_helper_->IsConnected() && view_) {
-    // Show error bubble.
-    view_->ShowError(l10n_util::GetStringFUTF16(
-        IDS_NETWORK_SELECTION_ERROR,
-        l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME)));
-  }
 }
 
 }  // namespace chromeos

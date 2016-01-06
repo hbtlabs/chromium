@@ -4,19 +4,23 @@
 
 #include "components/web_view/frame.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
-#include "components/web_view/frame.h"
 #include "components/web_view/frame_connection.h"
 #include "components/web_view/frame_tree.h"
 #include "components/web_view/frame_tree_delegate.h"
@@ -77,7 +81,7 @@ scoped_ptr<FrameConnection> CreateFrameConnection(mojo::ApplicationImpl* app) {
   mojo::URLRequestPtr request(mojo::URLRequest::New());
   request->url = mojo::String::From(app->url());
   base::RunLoop run_loop;
-  frame_connection->Init(app, request.Pass(),
+  frame_connection->Init(app, std::move(request),
                          base::Bind(&OnGotIdCallback, &run_loop));
   run_loop.Run();
   return frame_connection;
@@ -92,10 +96,10 @@ class TestFrameClient : public mojom::FrameClient {
   int connect_count() const { return connect_count_; }
 
   mojo::Array<mojom::FrameDataPtr> connect_frames() {
-    return connect_frames_.Pass();
+    return std::move(connect_frames_);
   }
 
-  mojo::Array<mojom::FrameDataPtr> adds() { return adds_.Pass(); }
+  mojo::Array<mojom::FrameDataPtr> adds() { return std::move(adds_); }
 
   // Sets a callback to run once OnConnect() is received.
   void set_on_connect_callback(const base::Closure& closure) {
@@ -139,9 +143,9 @@ class TestFrameClient : public mojom::FrameClient {
                  int64_t navigation_start_time_ticks,
                  const OnConnectCallback& callback) override {
     connect_count_++;
-    connect_frames_ = frames.Pass();
+    connect_frames_ = std::move(frames);
     if (frame)
-      server_frame_ = frame.Pass();
+      server_frame_ = std::move(frame);
     callback.Run();
     if (!on_connect_callback_.is_null())
       on_connect_callback_.Run();
@@ -150,7 +154,7 @@ class TestFrameClient : public mojom::FrameClient {
         base::TimeTicks::FromInternalValue(navigation_start_time_ticks);
   }
   void OnFrameAdded(uint32_t change_id, mojom::FrameDataPtr frame) override {
-    adds_.push_back(frame.Pass());
+    adds_.push_back(std::move(frame));
   }
   void OnFrameRemoved(uint32_t change_id, uint32_t frame_id) override {}
   void OnFrameClientPropertyChanged(uint32_t frame_id,
@@ -249,14 +253,14 @@ class WindowAndFrame : public mus::WindowTreeDelegate {
   mojom::FrameClientPtr GetFrameClientPtr() {
     mojom::FrameClientPtr client_ptr;
     frame_client_binding_.Bind(GetProxy(&client_ptr));
-    return client_ptr.Pass();
+    return client_ptr;
   }
 
   void Bind(mojo::InterfaceRequest<mojom::FrameClient> request) {
     ASSERT_FALSE(frame_client_binding_.is_bound());
     test_frame_tree_client_.set_on_connect_callback(
         base::Bind(&WindowAndFrame::OnGotConnect, base::Unretained(this)));
-    frame_client_binding_.Bind(request.Pass());
+    frame_client_binding_.Bind(std::move(request));
   }
 
   void OnGotConnect() { QuitRunLoopIfNecessary(); }
@@ -313,7 +317,7 @@ class FrameTest : public mojo::test::ApplicationTestBase,
     request->originating_time_ticks = navigation_start_time.ToInternalValue();
     window_and_frame->server_frame()->RequestNavigate(
         mojom::NAVIGATION_TARGET_TYPE_EXISTING_FRAME,
-        window_and_frame->window()->id(), request.Pass());
+        window_and_frame->window()->id(), std::move(request));
     return WaitForViewAndFrame();
   }
 
@@ -335,9 +339,9 @@ class FrameTest : public mojo::test::ApplicationTestBase,
     parent->server_frame()->OnCreatedFrame(
         window_and_frame->GetServerFrameRequest(),
         window_and_frame->GetFrameClientPtr(), child_frame_window->id(),
-        client_properties.Pass());
+        std::move(client_properties));
     frame_tree_delegate()->WaitForCreateFrame();
-    return HasFatalFailure() ? nullptr : window_and_frame.Pass();
+    return HasFatalFailure() ? nullptr : std::move(window_and_frame);
   }
 
   // Runs a message loop until the data necessary to represent to a client side
@@ -346,7 +350,7 @@ class FrameTest : public mojo::test::ApplicationTestBase,
     DCHECK(!window_and_frame_);
     window_and_frame_.reset(new WindowAndFrame);
     window_and_frame_->WaitForViewAndFrame();
-    return window_and_frame_.Pass();
+    return std::move(window_and_frame_);
   }
 
  private:
@@ -390,8 +394,8 @@ class FrameTest : public mojo::test::ApplicationTestBase,
     mus::Window* frame_root_view = window_manager()->NewWindow();
     window_manager()->GetRoot()->AddChild(frame_root_view);
     frame_tree_.reset(new FrameTree(
-        0u, frame_root_view, window_tree_client.Pass(),
-        frame_tree_delegate_.get(), frame_client, frame_connection.Pass(),
+        0u, frame_root_view, std::move(window_tree_client),
+        frame_tree_delegate_.get(), frame_client, std::move(frame_connection),
         Frame::ClientPropertyMap(), base::TimeTicks::Now()));
     root_window_and_frame_ = WaitForViewAndFrame();
   }
@@ -410,11 +414,11 @@ class FrameTest : public mojo::test::ApplicationTestBase,
       mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request) override {
     if (window_and_frame_) {
       mus::WindowTreeConnection::Create(
-          window_and_frame_.get(), request.Pass(),
+          window_and_frame_.get(), std::move(request),
           mus::WindowTreeConnection::CreateType::DONT_WAIT_FOR_EMBED);
     } else {
       mus::WindowTreeConnection::Create(
-          this, request.Pass(),
+          this, std::move(request),
           mus::WindowTreeConnection::CreateType::DONT_WAIT_FOR_EMBED);
     }
   }
@@ -423,7 +427,7 @@ class FrameTest : public mojo::test::ApplicationTestBase,
   void Create(mojo::ApplicationConnection* connection,
               mojo::InterfaceRequest<mojom::FrameClient> request) override {
     ASSERT_TRUE(window_and_frame_);
-    window_and_frame_->Bind(request.Pass());
+    window_and_frame_->Bind(std::move(request));
   }
 
   scoped_ptr<TestFrameTreeDelegate> frame_tree_delegate_;
@@ -454,7 +458,13 @@ TEST_F(FrameTest, RootFrameClientConnectData) {
 }
 
 // Verifies the FrameData supplied to a child FrameClient::OnConnect().
-TEST_F(FrameTest, ChildFrameClientConnectData) {
+// Crashes on linux_chromium_rel_ng only. http://crbug.com/567337
+#if defined(OS_LINUX)
+#define MAYBE_ChildFrameClientConnectData DISABLED_ChildFrameClientConnectData
+#else
+#define MAYBE_ChildFrameClientConnectData ChildFrameClientConnectData
+#endif
+TEST_F(FrameTest, MAYBE_ChildFrameClientConnectData) {
   scoped_ptr<WindowAndFrame> child_view_and_frame(
       CreateChildWindowAndFrame(root_window_and_frame()));
   ASSERT_TRUE(child_view_and_frame);
@@ -462,7 +472,7 @@ TEST_F(FrameTest, ChildFrameClientConnectData) {
   EXPECT_EQ(0, child_view_and_frame->test_frame_client()->connect_count());
 
   scoped_ptr<WindowAndFrame> navigated_child_view_and_frame =
-      NavigateFrame(child_view_and_frame.get()).Pass();
+      NavigateFrame(child_view_and_frame.get());
 
   mojo::Array<mojom::FrameDataPtr> frames_in_child =
       navigated_child_view_and_frame->test_frame_client()->connect_frames();
@@ -483,7 +493,7 @@ TEST_F(FrameTest, OnViewEmbeddedInFrameDisconnected) {
   ASSERT_TRUE(child_view_and_frame);
 
   scoped_ptr<WindowAndFrame> navigated_child_view_and_frame =
-      NavigateFrame(child_view_and_frame.get()).Pass();
+      NavigateFrame(child_view_and_frame.get());
 
   // Delete the WindowTreeConnection for the child, which should trigger
   // notification.
@@ -568,8 +578,7 @@ TEST_F(FrameTest, PassAlongNavigationStartTime) {
   base::TimeTicks navigation_start_time = base::TimeTicks::FromInternalValue(1);
   scoped_ptr<WindowAndFrame> navigated_child_view_and_frame =
       NavigateFrameWithStartTime(child_view_and_frame.get(),
-                                 navigation_start_time)
-          .Pass();
+                                 navigation_start_time);
   EXPECT_EQ(navigation_start_time,
             navigated_child_view_and_frame->test_frame_client()
                 ->last_navigation_start_time());

@@ -25,7 +25,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/input/EventHandler.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
@@ -33,6 +32,7 @@
 #include "core/InputTypeNames.h"
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
+#include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
 #include "core/dom/TouchList.h"
 #include "core/dom/shadow/ComposedTreeTraversal.h"
@@ -280,7 +280,7 @@ static inline bool shouldRefetchEventTarget(const MouseEventWithHitTestResults& 
 }
 
 void recomputeScrollChain(const LocalFrame& frame, const Node& startNode,
-    WillBeHeapDeque<RefPtrWillBeMember<Element>>& scrollChain)
+    std::deque<int>& scrollChain)
 {
     scrollChain.clear();
 
@@ -295,7 +295,7 @@ void recomputeScrollChain(const LocalFrame& frame, const Node& startNode,
             Element* curElement = toElement(curNode);
             if (curElement == frame.document()->scrollingElement())
                 break;
-            scrollChain.prepend(curElement);
+            scrollChain.push_front(DOMNodeIds::idForNode(curElement));
         }
         curBox = curBox->containingBlock();
     }
@@ -305,7 +305,7 @@ void recomputeScrollChain(const LocalFrame& frame, const Node& startNode,
     // the body, some elements may use the documentElement as their
     // containingBlock, so we ensure the scrollingElement is added
     // here.
-    scrollChain.prepend(frame.document()->scrollingElement());
+    scrollChain.push_front(DOMNodeIds::idForNode(frame.document()->scrollingElement()));
 }
 
 EventHandler::EventHandler(LocalFrame* frame)
@@ -363,7 +363,6 @@ DEFINE_TRACE(EventHandler)
     visitor->trace(m_scrollGestureHandlingNode);
     visitor->trace(m_previousGestureScrolledNode);
     visitor->trace(m_lastDeferredTapElement);
-    visitor->trace(m_currentScrollChain);
     visitor->trace(m_selectionController);
 #endif
 }
@@ -688,9 +687,10 @@ void EventHandler::customizedScroll(const Node& startNode, ScrollState& scrollSt
     if (scrollState.deltaX() || scrollState.deltaY())
         m_frame->document()->updateLayoutIgnorePendingStylesheets();
 
-    if (m_currentScrollChain.isEmpty())
+    if (m_currentScrollChain.empty())
         recomputeScrollChain(*m_frame, startNode, m_currentScrollChain);
     scrollState.setScrollChain(m_currentScrollChain);
+
     scrollState.distributeToScrollChainDescendant();
 }
 
@@ -1050,21 +1050,21 @@ WebInputEventResult EventHandler::handleMousePressEvent(const PlatformMouseEvent
     m_clickCount = mouseEvent.clickCount();
     m_clickNode = mev.innerNode()->isTextNode() ?  ComposedTreeTraversal::parent(*mev.innerNode()) : mev.innerNode();
 
-    if (FrameView* view = m_frame->view()) {
+    m_frame->selection().setCaretBlinkingSuspended(true);
+
+    WebInputEventResult eventResult = updatePointerTargetAndDispatchEvents(EventTypeNames::mousedown, mev.innerNode(), m_clickCount, mouseEvent);
+
+    if (eventResult == WebInputEventResult::NotHandled && m_frame->view()) {
+        FrameView* view = m_frame->view();
         PaintLayer* layer = mev.innerNode()->layoutObject() ? mev.innerNode()->layoutObject()->enclosingLayer() : nullptr;
         IntPoint p = view->rootFrameToContents(mouseEvent.position());
         if (layer && layer->scrollableArea() && layer->scrollableArea()->isPointInResizeControl(p, ResizerForPointer)) {
             m_resizeScrollableArea = layer->scrollableArea();
             m_resizeScrollableArea->setInResizeMode(true);
             m_offsetFromResizeCorner = LayoutSize(m_resizeScrollableArea->offsetFromResizeCorner(p));
-            invalidateClick();
-            return WebInputEventResult::HandledSuppressed;
+            return WebInputEventResult::HandledSystem;
         }
     }
-
-    m_frame->selection().setCaretBlinkingSuspended(true);
-
-    WebInputEventResult eventResult = updatePointerTargetAndDispatchEvents(EventTypeNames::mousedown, mev.innerNode(), m_clickCount, mouseEvent);
 
     // m_selectionInitiationState is initialized after dispatching mousedown
     // event in order not to keep the selection by DOM APIs Because we can't
@@ -1339,7 +1339,7 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const PlatformMouseEve
     if (m_lastScrollbarUnderMouse) {
         invalidateClick();
         m_lastScrollbarUnderMouse->mouseUp(mouseEvent);
-        return dispatchMouseEvent(EventTypeNames::mouseup, m_nodeUnderMouse.get(), m_clickCount, mouseEvent);
+        return updatePointerTargetAndDispatchEvents(EventTypeNames::mouseup, m_nodeUnderMouse.get(), m_clickCount, mouseEvent);
     }
 
     // Mouse events simulated from touch should not hit-test again.
@@ -1785,13 +1785,19 @@ WebInputEventResult EventHandler::updatePointerTargetAndDispatchEvents(const Ato
     if (!m_nodeUnderMouse)
         return WebInputEventResult::NotHandled;
 
-    WebInputEventResult result = dispatchPointerEvent(m_nodeUnderMouse.get(),
-        pointerEventNameForMouseEventName(mouseEventType),
-        mouseEvent);
+    AtomicString pointerEventType = pointerEventNameForMouseEventName(mouseEventType);
+    unsigned short pointerButtonsPressed = MouseEvent::platformModifiersToButtons(mouseEvent.modifiers());
 
-    if (result != WebInputEventResult::NotHandled && mouseEventType == EventTypeNames::mousedown) {
+    // Make sure chorded buttons fire pointermove instead of pointerup/pointerdown.
+    if ((pointerEventType == EventTypeNames::pointerdown && (pointerButtonsPressed & ~MouseEvent::buttonToButtons(mouseEvent.button())) != 0)
+        || (pointerEventType == EventTypeNames::pointerup && pointerButtonsPressed != 0))
+        pointerEventType = EventTypeNames::pointermove;
+
+    WebInputEventResult result = dispatchPointerEvent(
+        m_nodeUnderMouse.get(), pointerEventType, mouseEvent);
+
+    if (result != WebInputEventResult::NotHandled && pointerEventType == EventTypeNames::pointerdown)
         m_preventMouseEventForPointerTypeMouse = true;
-    }
 
     if (!m_preventMouseEventForPointerTypeMouse) {
         RefPtrWillBeRawPtr<MouseEvent> event = MouseEvent::create(mouseEventType, m_nodeUnderMouse->document().domWindow(), mouseEvent, clickCount, nullptr);
@@ -2030,14 +2036,14 @@ WebInputEventResult EventHandler::handleGestureShowPress()
     if (!view)
         return WebInputEventResult::NotHandled;
     if (ScrollAnimatorBase* scrollAnimator = view->existingScrollAnimator())
-        scrollAnimator->cancelAnimations();
+        scrollAnimator->cancelAnimation();
     const FrameView::ScrollableAreaSet* areas = view->scrollableAreas();
     if (!areas)
         return WebInputEventResult::NotHandled;
     for (const ScrollableArea* scrollableArea : *areas) {
         ScrollAnimatorBase* animator = scrollableArea->existingScrollAnimator();
         if (animator)
-            animator->cancelAnimations();
+            animator->cancelAnimation();
     }
     return WebInputEventResult::NotHandled;
 }
@@ -2223,7 +2229,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(),
         NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch, gestureEvent.timestamp());
+        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
     dispatchMouseEvent(EventTypeNames::mousemove, currentHitTest.innerNode(), 0, fakeMouseMove);
 
     // Do a new hit-test in case the mousemove event changed the DOM.
@@ -2252,7 +2258,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     PlatformMouseEvent fakeMouseDown(gestureEvent.position(), gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MousePressed, gestureEvent.tapCount(),
         static_cast<PlatformEvent::Modifiers>(modifiers | PlatformEvent::LeftButtonDown),
-        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp());
+        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
     WebInputEventResult mouseDownEventResult = dispatchMouseEvent(EventTypeNames::mousedown, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseDown);
     selectionController().initializeSelectionState();
     if (mouseDownEventResult == WebInputEventResult::NotHandled)
@@ -2278,7 +2284,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     PlatformMouseEvent fakeMouseUp(gestureEvent.position(), gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MouseReleased, gestureEvent.tapCount(),
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp());
+        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
     WebInputEventResult mouseUpEventResult = dispatchMouseEvent(EventTypeNames::mouseup, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseUp);
 
     WebInputEventResult clickEventResult = WebInputEventResult::NotHandled;
@@ -2325,12 +2331,12 @@ WebInputEventResult EventHandler::handleGestureLongPress(const GestureEventWithH
     if (m_frame->settings() && m_frame->settings()->touchDragDropEnabled() && m_frame->view()) {
         PlatformMouseEvent mouseDownEvent(adjustedPoint, gestureEvent.globalPosition(), LeftButton, PlatformEvent::MousePressed, 1,
             static_cast<PlatformEvent::Modifiers>(modifiers | PlatformEvent::LeftButtonDown),
-            PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime());
+            PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
         m_mouseDown = mouseDownEvent;
 
         PlatformMouseEvent mouseDragEvent(adjustedPoint, gestureEvent.globalPosition(), LeftButton, PlatformEvent::MouseMoved, 1,
             static_cast<PlatformEvent::Modifiers>(modifiers | PlatformEvent::LeftButtonDown),
-            PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime());
+            PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
         HitTestRequest request(HitTestRequest::ReadOnly);
         MouseEventWithHitTestResults mev = prepareMouseEvent(request, mouseDragEvent);
         m_mouseDownMayStartDrag = true;
@@ -2470,7 +2476,7 @@ void EventHandler::resetOverscroll(bool didScrollX, bool didScrollY)
         m_accumulatedRootOverscroll.setHeight(0);
 }
 
-static inline FloatSize adjustOverscoll(FloatSize unusedDelta)
+static inline FloatSize adjustOverscroll(FloatSize unusedDelta)
 {
     if (std::abs(unusedDelta.width()) < minimumOverscrollDelta)
         unusedDelta.setWidth(0);
@@ -2483,7 +2489,7 @@ static inline FloatSize adjustOverscoll(FloatSize unusedDelta)
 void EventHandler::handleOverscroll(const ScrollResult& scrollResult, const FloatPoint& position, const FloatSize& velocity)
 {
     FloatSize unusedDelta(scrollResult.unusedScrollDeltaX, scrollResult.unusedScrollDeltaY);
-    unusedDelta = adjustOverscoll(unusedDelta);
+    unusedDelta = adjustOverscroll(unusedDelta);
     resetOverscroll(scrollResult.didScrollX, scrollResult.didScrollY);
     if (unusedDelta != FloatSize()) {
         m_accumulatedRootOverscroll += unusedDelta;
@@ -2770,7 +2776,7 @@ void EventHandler::updateGestureTargetNodeForMouseEvent(const GestureEventWithHi
     PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(),
         NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch, gestureEvent.timestamp());
+        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
 
     // Update the mouseout/mouseleave event
     size_t indexExitedFrameChain = exitedFrameChain.size();
@@ -2949,9 +2955,6 @@ WebInputEventResult EventHandler::sendContextMenuEventForKey(Element* overrideTa
     if (!doc)
         return WebInputEventResult::NotHandled;
 
-    // Clear mouse press state to avoid initiating a drag while context menu is up.
-    m_mousePressed = false;
-
     static const int kContextMenuMargin = 1;
 
 #if OS(WIN)
@@ -3004,7 +3007,10 @@ WebInputEventResult EventHandler::sendContextMenuEventForKey(Element* overrideTa
     if (m_frame->settings() && m_frame->settings()->showContextMenuOnMouseUp())
         eventType = PlatformEvent::MouseReleased;
 
-    PlatformMouseEvent mouseEvent(locationInRootFrame, globalPosition, RightButton, eventType, 1, PlatformEvent::NoModifiers, PlatformMouseEvent::RealOrIndistinguishable, WTF::monotonicallyIncreasingTime());
+    PlatformMouseEvent mouseEvent(locationInRootFrame, globalPosition,
+        RightButton, eventType, 1,
+        PlatformEvent::NoModifiers, PlatformMouseEvent::RealOrIndistinguishable,
+        WTF::monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
 
     return sendContextMenuEvent(mouseEvent, overrideTargetElement);
 }
@@ -3018,7 +3024,7 @@ WebInputEventResult EventHandler::sendContextMenuEventForGesture(const GestureEv
     PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(),
         NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch, gestureEvent.timestamp());
+        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
     dispatchMouseEvent(EventTypeNames::mousemove, targetedEvent.hitTestResult().innerNode(), 0, fakeMouseMove);
 
     PlatformEvent::Type eventType = PlatformEvent::MousePressed;
@@ -3030,7 +3036,7 @@ WebInputEventResult EventHandler::sendContextMenuEventForGesture(const GestureEv
 
     PlatformMouseEvent mouseEvent(targetedEvent.event().position(), targetedEvent.event().globalPosition(), RightButton, eventType, 1,
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime());
+        PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
     // To simulate right-click behavior, we send a right mouse down and then
     // context menu event.
     // FIXME: Send HitTestResults to avoid redundant hit tests.
@@ -3113,7 +3119,7 @@ void EventHandler::fakeMouseMoveEventTimerFired(Timer<EventHandler>* timer)
     if (!isCursorVisible())
         return;
 
-    PlatformMouseEvent fakeMouseMoveEvent(m_lastKnownMousePosition, m_lastKnownMouseGlobalPosition, NoButton, PlatformEvent::MouseMoved, 0, PlatformKeyboardEvent::getCurrentModifierState(), PlatformMouseEvent::RealOrIndistinguishable, monotonicallyIncreasingTime());
+    PlatformMouseEvent fakeMouseMoveEvent(m_lastKnownMousePosition, m_lastKnownMouseGlobalPosition, NoButton, PlatformEvent::MouseMoved, 0, PlatformKeyboardEvent::getCurrentModifierState(), PlatformMouseEvent::RealOrIndistinguishable, monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
     handleMouseMoveEvent(fakeMouseMoveEvent);
 }
 

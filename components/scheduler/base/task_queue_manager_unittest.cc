@@ -4,6 +4,9 @@
 
 #include "components/scheduler/base/task_queue_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -22,7 +25,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 using testing::ElementsAre;
+using testing::ElementsAreArray;
 using testing::_;
+using scheduler::internal::EnqueueOrder;
 
 namespace scheduler {
 
@@ -30,7 +35,7 @@ class MessageLoopTaskRunner : public TaskQueueManagerDelegateForTest {
  public:
   static scoped_refptr<MessageLoopTaskRunner> Create(
       scoped_ptr<base::TickClock> tick_clock) {
-    return make_scoped_refptr(new MessageLoopTaskRunner(tick_clock.Pass()));
+    return make_scoped_refptr(new MessageLoopTaskRunner(std::move(tick_clock)));
   }
 
   // NestableTaskRunner implementation.
@@ -42,7 +47,7 @@ class MessageLoopTaskRunner : public TaskQueueManagerDelegateForTest {
   explicit MessageLoopTaskRunner(scoped_ptr<base::TickClock> tick_clock)
       : TaskQueueManagerDelegateForTest(base::MessageLoop::current()
                                             ->task_runner(),
-                                        tick_clock.Pass()) {}
+                                        std::move(tick_clock)) {}
   ~MessageLoopTaskRunner() override {}
 };
 
@@ -131,14 +136,14 @@ TEST_F(TaskQueueManagerTest, NowNotCalledWhenThereAreNoDelayedTasks) {
 
 void NullTask() {}
 
-void TestTask(int value, std::vector<int>* out_result) {
+void TestTask(EnqueueOrder value, std::vector<EnqueueOrder>* out_result) {
   out_result->push_back(value);
 }
 
 TEST_F(TaskQueueManagerTest, SingleQueuePosting) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -150,7 +155,7 @@ TEST_F(TaskQueueManagerTest, SingleQueuePosting) {
 TEST_F(TaskQueueManagerTest, MultiQueuePosting) {
   Initialize(3u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -165,7 +170,7 @@ TEST_F(TaskQueueManagerTest, MultiQueuePosting) {
 TEST_F(TaskQueueManagerTest, NonNestableTaskPosting) {
   InitializeWithRealMessageLoop(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostNonNestableTask(FROM_HERE,
                                    base::Bind(&TestTask, 1, &run_order));
 
@@ -176,7 +181,7 @@ TEST_F(TaskQueueManagerTest, NonNestableTaskPosting) {
 TEST_F(TaskQueueManagerTest, NonNestableTaskExecutesInExpectedOrder) {
   InitializeWithRealMessageLoop(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -191,7 +196,7 @@ TEST_F(TaskQueueManagerTest, NonNestableTaskExecutesInExpectedOrder) {
 TEST_F(TaskQueueManagerTest, NonNestableTaskDoesntExecuteInNestedLoop) {
   InitializeWithRealMessageLoop(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
 
@@ -216,7 +221,7 @@ TEST_F(TaskQueueManagerTest, NonNestableTaskDoesntExecuteInNestedLoop) {
 TEST_F(TaskQueueManagerTest, QueuePolling) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   EXPECT_FALSE(runners_[0]->HasPendingImmediateWork());
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   EXPECT_TRUE(runners_[0]->HasPendingImmediateWork());
@@ -228,7 +233,7 @@ TEST_F(TaskQueueManagerTest, QueuePolling) {
 TEST_F(TaskQueueManagerTest, DelayedTaskPosting) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay(base::TimeDelta::FromMilliseconds(10));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                delay);
@@ -266,7 +271,7 @@ TEST_F(TaskQueueManagerTest, DelayedTaskExecutedInOneMessageLoopTask) {
 TEST_F(TaskQueueManagerTest, DelayedTaskPosting_MultipleTasks_DecendingOrder) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(10));
 
@@ -296,7 +301,7 @@ TEST_F(TaskQueueManagerTest, DelayedTaskPosting_MultipleTasks_DecendingOrder) {
 TEST_F(TaskQueueManagerTest, DelayedTaskPosting_MultipleTasks_AscendingOrder) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(1));
 
@@ -326,7 +331,7 @@ TEST_F(TaskQueueManagerTest, DelayedTaskPosting_MultipleTasks_AscendingOrder) {
 TEST_F(TaskQueueManagerTest, PostDelayedTask_SharesUnderlyingDelayedTasks) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay(base::TimeDelta::FromMilliseconds(10));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                delay);
@@ -370,7 +375,7 @@ TEST_F(TaskQueueManagerTest, ManualPumping) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Posting a task when pumping is disabled doesn't result in work getting
   // posted.
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
@@ -390,7 +395,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingToggle) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Posting a task when pumping is disabled doesn't result in work getting
   // posted.
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
@@ -406,7 +411,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingToggle) {
 TEST_F(TaskQueueManagerTest, DenyRunning_BeforePosting) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
 
@@ -421,7 +426,7 @@ TEST_F(TaskQueueManagerTest, DenyRunning_BeforePosting) {
 TEST_F(TaskQueueManagerTest, DenyRunning_AfterPosting) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
 
@@ -436,7 +441,7 @@ TEST_F(TaskQueueManagerTest, DenyRunning_AfterPosting) {
 TEST_F(TaskQueueManagerTest, DenyRunning_ManuallyPumpedTransitionsToAuto) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
   runners_[0]->SetQueuePriority(TaskQueue::DISABLED_PRIORITY);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
@@ -454,7 +459,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithDelayedTask) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Posting a delayed task when pumping will apply the delay, but won't cause
   // work to executed afterwards.
   base::TimeDelta delay(base::TimeDelta::FromMilliseconds(10));
@@ -478,7 +483,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithMultipleDelayedTasks) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Posting a delayed task when pumping will apply the delay, but won't cause
   // work to executed afterwards.
   base::TimeDelta delay1(base::TimeDelta::FromMilliseconds(1));
@@ -505,7 +510,7 @@ TEST_F(TaskQueueManagerTest, DelayedTasksDontAutoRunWithManualPumping) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay(base::TimeDelta::FromMilliseconds(10));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                delay);
@@ -518,7 +523,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithNonEmptyWorkQueue) {
   Initialize(1u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Posting two tasks and pumping twice should result in two tasks in the work
   // queue.
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
@@ -531,7 +536,7 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithNonEmptyWorkQueue) {
 
 void ReentrantTestTask(scoped_refptr<base::SingleThreadTaskRunner> runner,
                        int countdown,
-                       std::vector<int>* out_result) {
+                       std::vector<EnqueueOrder>* out_result) {
   out_result->push_back(countdown);
   if (--countdown) {
     runner->PostTask(FROM_HERE,
@@ -542,7 +547,7 @@ void ReentrantTestTask(scoped_refptr<base::SingleThreadTaskRunner> runner,
 TEST_F(TaskQueueManagerTest, ReentrantPosting) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE,
                         Bind(&ReentrantTestTask, runners_[0], 3, &run_order));
 
@@ -553,7 +558,7 @@ TEST_F(TaskQueueManagerTest, ReentrantPosting) {
 TEST_F(TaskQueueManagerTest, NoTasksAfterShutdown) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   manager_.reset();
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
@@ -563,14 +568,14 @@ TEST_F(TaskQueueManagerTest, NoTasksAfterShutdown) {
 }
 
 void PostTaskToRunner(scoped_refptr<base::SingleThreadTaskRunner> runner,
-                      std::vector<int>* run_order) {
+                      std::vector<EnqueueOrder>* run_order) {
   runner->PostTask(FROM_HERE, base::Bind(&TestTask, 1, run_order));
 }
 
 TEST_F(TaskQueueManagerTest, PostFromThread) {
   InitializeWithRealMessageLoop(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::Thread thread("TestThread");
   thread.Start();
   thread.task_runner()->PostTask(
@@ -605,7 +610,7 @@ TEST_F(TaskQueueManagerTest, DoWorkCantPostItselfMultipleTimes) {
 TEST_F(TaskQueueManagerTest, PostFromNestedRunloop) {
   InitializeWithRealMessageLoop(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   std::vector<std::pair<base::Closure, bool>> tasks_to_post_from_nested_loop;
   tasks_to_post_from_nested_loop.push_back(
       std::make_pair(base::Bind(&TestTask, 1, &run_order), true));
@@ -627,7 +632,7 @@ TEST_F(TaskQueueManagerTest, WorkBatching) {
 
   manager_->SetWorkBatchSize(2);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -649,7 +654,7 @@ TEST_F(TaskQueueManagerTest, AutoPumpAfterWakeup) {
   Initialize(2u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   test_task_runner_->RunUntilIdle();
   EXPECT_TRUE(run_order.empty());  // Shouldn't run - no other task to wake TQM.
@@ -668,7 +673,7 @@ TEST_F(TaskQueueManagerTest, AutoPumpAfterWakeupWhenAlreadyAwake) {
   Initialize(2u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   test_task_runner_->RunUntilIdle();
@@ -681,7 +686,7 @@ TEST_F(TaskQueueManagerTest,
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
   runners_[1]->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   test_task_runner_->RunUntilIdle();
   EXPECT_TRUE(run_order.empty());  // Shouldn't run - no other task to wake TQM.
@@ -706,7 +711,7 @@ TEST_F(TaskQueueManagerTest, AutoPumpAfterWakeupFromTask) {
   Initialize(2u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Check that a task which posts a task to an auto pump after wakeup queue
   // doesn't cause the queue to wake up.
   base::Closure after_wakeup_task = base::Bind(&TestTask, 1, &run_order);
@@ -725,7 +730,7 @@ TEST_F(TaskQueueManagerTest, AutoPumpAfterWakeupFromMultipleTasks) {
   Initialize(2u);
   runners_[0]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   // Check that a task which posts a task to an auto pump after wakeup queue
   // doesn't cause the queue to wake up.
   base::Closure after_wakeup_task_1 = base::Bind(&TestTask, 1, &run_order);
@@ -773,7 +778,7 @@ TEST_F(TaskQueueManagerTest, AutoPumpAfterWakeupWithDontWakeQueue) {
           .SetWakeupPolicy(TaskQueue::WakeupPolicy::DONT_WAKE_OTHER_QUEUES));
   scoped_refptr<internal::TaskQueueImpl> queue2 = runners_[0];
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   queue0->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   queue1->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   test_task_runner_->RunUntilIdle();
@@ -801,7 +806,7 @@ TEST_F(TaskQueueManagerTest, TaskObserverAdding) {
   manager_->SetWorkBatchSize(2);
   manager_->AddTaskObserver(&observer);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
 
@@ -817,7 +822,7 @@ TEST_F(TaskQueueManagerTest, TaskObserverRemoving) {
   manager_->AddTaskObserver(&observer);
   manager_->RemoveTaskObserver(&observer);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
 
   EXPECT_CALL(observer, WillProcessTask(_)).Times(0);
@@ -852,7 +857,7 @@ TEST_F(TaskQueueManagerTest, QueueTaskObserverAdding) {
   manager_->SetWorkBatchSize(2);
   runners_[0]->AddTaskObserver(&observer);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
 
@@ -868,7 +873,7 @@ TEST_F(TaskQueueManagerTest, QueueTaskObserverRemoving) {
   runners_[0]->AddTaskObserver(&observer);
   runners_[0]->RemoveTaskObserver(&observer);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
 
   EXPECT_CALL(observer, WillProcessTask(_)).Times(0);
@@ -1082,51 +1087,47 @@ TEST_F(TaskQueueManagerTest, HasPendingImmediateWorkAndNeedsPumping) {
 
 void ExpensiveTestTask(int value,
                        base::SimpleTestTickClock* clock,
-                       std::vector<int>* out_result) {
+                       std::vector<EnqueueOrder>* out_result) {
   out_result->push_back(value);
   clock->Advance(base::TimeDelta::FromMilliseconds(1));
 }
 
-TEST_F(TaskQueueManagerTest, ImmediateAndDelayedTaskRoundRobbin) {
+TEST_F(TaskQueueManagerTest, ImmediateAndDelayedTaskInterleaving) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
-  runners_[0]->PostDelayedTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 10, now_src_.get(), &run_order),
-      delay);
-  runners_[0]->PostDelayedTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 11, now_src_.get(), &run_order),
-      delay);
-  runners_[0]->PostDelayedTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 12, now_src_.get(), &run_order),
-      delay);
-  runners_[0]->PostDelayedTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 13, now_src_.get(), &run_order),
-      delay);
+  for (int i = 10; i < 19; i++) {
+    runners_[0]->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&ExpensiveTestTask, i, now_src_.get(), &run_order),
+        delay);
+  }
 
   test_task_runner_->RunForPeriod(delay);
 
-  runners_[0]->PostTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 0, now_src_.get(), &run_order));
-  runners_[0]->PostTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 1, now_src_.get(), &run_order));
-  runners_[0]->PostTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 2, now_src_.get(), &run_order));
-  runners_[0]->PostTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, 3, now_src_.get(), &run_order));
+  for (int i = 0; i < 9; i++) {
+    runners_[0]->PostTask(
+        FROM_HERE,
+        base::Bind(&ExpensiveTestTask, i, now_src_.get(), &run_order));
+  }
 
   test_task_runner_->SetAutoAdvanceNowToPendingTasks(true);
   test_task_runner_->RunUntilIdle();
 
-  EXPECT_THAT(run_order, ElementsAre(10, 0, 11, 1, 12, 2, 13, 3));
+  // Delayed tasks are not allowed to starve out immediate work which is why
+  // some of the immediate tasks run out of order.
+  int expected_run_order[] = {
+    10, 11, 12, 13, 0, 14, 15, 16, 1, 17, 18, 2, 3, 4, 5, 6, 7, 8
+  };
+  EXPECT_THAT(run_order, ElementsAreArray(expected_run_order));
 }
 
 TEST_F(TaskQueueManagerTest,
        DelayedTaskDoesNotSkipAHeadOfNonDelayedTask_SameQueue) {
   Initialize(1u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -1143,7 +1144,7 @@ TEST_F(TaskQueueManagerTest,
        DelayedTaskDoesNotSkipAHeadOfNonDelayedTask_DifferentQueues) {
   Initialize(2u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay = base::TimeDelta::FromMilliseconds(10);
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   runners_[1]->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -1159,7 +1160,7 @@ TEST_F(TaskQueueManagerTest,
 TEST_F(TaskQueueManagerTest, DelayedTaskDoesNotSkipAHeadOfShorterDelayedTask) {
   Initialize(2u);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   base::TimeDelta delay1 = base::TimeDelta::FromMilliseconds(10);
   base::TimeDelta delay2 = base::TimeDelta::FromMilliseconds(5);
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
@@ -1213,10 +1214,12 @@ class SequenceNumberCapturingTaskObserver
     sequence_numbers_.push_back(pending_task.sequence_num);
   }
 
-  const std::vector<int>& sequence_numbers() const { return sequence_numbers_; }
+  const std::vector<EnqueueOrder>& sequence_numbers() const {
+    return sequence_numbers_;
+  }
 
  private:
-  std::vector<int> sequence_numbers_;
+  std::vector<EnqueueOrder> sequence_numbers_;
 };
 
 TEST_F(TaskQueueManagerTest, SequenceNumSetWhenTaskIsPosted) {
@@ -1226,7 +1229,7 @@ TEST_F(TaskQueueManagerTest, SequenceNumSetWhenTaskIsPosted) {
   manager_->AddTaskObserver(&observer);
 
   // Register four tasks that will run in reverse order.
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(30));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order),
@@ -1260,7 +1263,7 @@ TEST_F(TaskQueueManagerTest, NewTaskQueues) {
   ASSERT_NE(queue1, queue3);
   ASSERT_NE(queue2, queue3);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   queue1->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   queue2->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   queue3->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -1283,7 +1286,7 @@ TEST_F(TaskQueueManagerTest, UnregisterTaskQueue) {
   ASSERT_NE(queue1, queue3);
   ASSERT_NE(queue2, queue3);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   queue1->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
   queue2->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
   queue3->PostTask(FROM_HERE, base::Bind(&TestTask, 3, &run_order));
@@ -1298,7 +1301,7 @@ TEST_F(TaskQueueManagerTest, UnregisterTaskQueue_WithDelayedTasks) {
   Initialize(2u);
 
   // Register three delayed tasks
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(10));
   runners_[1]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order),
@@ -1317,7 +1320,7 @@ void PostTestTasksFromNestedMessageLoop(
     base::MessageLoop* message_loop,
     scoped_refptr<base::SingleThreadTaskRunner> main_runner,
     scoped_refptr<base::SingleThreadTaskRunner> wake_up_runner,
-    std::vector<int>* run_order) {
+    std::vector<EnqueueOrder>* run_order) {
   base::MessageLoop::ScopedNestableTaskAllower allow(message_loop);
   main_runner->PostNonNestableTask(FROM_HERE,
                                    base::Bind(&TestTask, 1, run_order));
@@ -1332,7 +1335,7 @@ TEST_F(TaskQueueManagerTest, DeferredNonNestableTaskDoesNotTriggerWakeUp) {
   InitializeWithRealMessageLoop(2u);
   runners_[1]->SetPumpPolicy(TaskQueue::PumpPolicy::AFTER_WAKEUP);
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostTask(
       FROM_HERE,
       base::Bind(&PostTestTasksFromNestedMessageLoop, message_loop_.get(),
@@ -1426,7 +1429,7 @@ TEST_F(TaskQueueManagerTest, TimeDomainsAreIndependant) {
   runners_[0]->SetTimeDomain(domain_a.get());
   runners_[1]->SetTimeDomain(domain_b.get());
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(10));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order),
@@ -1466,7 +1469,7 @@ TEST_F(TaskQueueManagerTest, TimeDomainMigration) {
   manager_->RegisterTimeDomain(domain_a.get());
   runners_[0]->SetTimeDomain(domain_a.get());
 
-  std::vector<int> run_order;
+  std::vector<EnqueueOrder> run_order;
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order),
                                base::TimeDelta::FromMilliseconds(10));
   runners_[0]->PostDelayedTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order),
@@ -1593,7 +1596,8 @@ bool ShouldExit(QuadraticTask* quadratic_task, LinearTask* linear_task) {
 
 }  // namespace
 
-TEST_F(TaskQueueManagerTest, DelayedTasksDontStarveNonDelayedWork_SameQueue) {
+TEST_F(TaskQueueManagerTest,
+       DelayedTasksDontBadlyStarveNonDelayedWork_SameQueue) {
   Initialize(1u);
 
   QuadraticTask quadratic_delayed_task(
@@ -1614,7 +1618,7 @@ TEST_F(TaskQueueManagerTest, DelayedTasksDontStarveNonDelayedWork_SameQueue) {
   double ratio = static_cast<double>(linear_immediate_task.count()) /
                  static_cast<double>(quadratic_delayed_task.count());
 
-  EXPECT_GT(ratio, 0.9);
+  EXPECT_GT(ratio, 0.333);
   EXPECT_LT(ratio, 1.1);
 }
 
@@ -1647,7 +1651,7 @@ TEST_F(TaskQueueManagerTest, ImmediateWorkCanStarveDelayedTasks_SameQueue) {
 }
 
 TEST_F(TaskQueueManagerTest,
-       DelayedTasksDontStarveNonDelayedWork_DifferentQueue) {
+       DelayedTasksDontBadlyStarveNonDelayedWork_DifferentQueue) {
   Initialize(2u);
 
   QuadraticTask quadratic_delayed_task(
@@ -1668,7 +1672,7 @@ TEST_F(TaskQueueManagerTest,
   double ratio = static_cast<double>(linear_immediate_task.count()) /
                  static_cast<double>(quadratic_delayed_task.count());
 
-  EXPECT_GT(ratio, 0.9);
+  EXPECT_GT(ratio, 0.333);
   EXPECT_LT(ratio, 1.1);
 }
 

@@ -5,16 +5,21 @@
 // Disable everything on windows only. http://crbug.com/306144
 #ifndef OS_WIN
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
@@ -37,7 +42,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/download_test_observer.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/notification_types.h"
@@ -309,6 +314,12 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   // InProcessBrowserTest
   void SetUpOnMainThread() override {
+    base::FeatureList::ClearInstanceForTesting();
+    scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    feature_list->InitializeFromCommandLine(
+        features::kDownloadResumption.name, std::string());
+    base::FeatureList::SetInstance(std::move(feature_list));
+
     ExtensionApiTest::SetUpOnMainThread();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -1108,7 +1119,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
   int item_id = -1;
   ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32>(item_id));
+  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32_t>(item_id));
 }
 
 // Test the |id| parameter for search().
@@ -1136,7 +1147,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
   int item_id = -1;
   ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(items[0]->GetId(), static_cast<uint32>(item_id));
+  ASSERT_EQ(items[0]->GetId(), static_cast<uint32_t>(item_id));
 }
 
 // Test specifying both the |id| and |filename| parameters for search().
@@ -1227,7 +1238,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
             items[1]->GetTargetFilePath().value());
   // The order of results when orderBy is empty is unspecified. When there are
   // no sorters, DownloadQuery does not call sort(), so the order of the results
-  // depends on the order of the items in base::hash_map<uint32,...>
+  // depends on the order of the items in base::hash_map<uint32_t,...>
   // DownloadManagerImpl::downloads_, which is unspecified and differs between
   // libc++ and libstdc++. http://crbug.com/365334
 }
@@ -3858,8 +3869,6 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
     MAYBE_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDownloadResumption);
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOnTheRecord();

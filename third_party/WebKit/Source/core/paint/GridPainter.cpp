@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/GridPainter.h"
 
 #include "core/layout/LayoutGrid.h"
 #include "core/paint/BlockPainter.h"
 #include "core/paint/PaintInfo.h"
+#include <algorithm>
 
 namespace blink {
 
@@ -25,7 +25,7 @@ static GridSpan dirtiedGridAreas(const Vector<LayoutUnit>& coordinates, LayoutUn
         --endGridAreaIndex;
 
     // GridSpan stores lines' indexes (not tracks' indexes).
-    return GridSpan::definiteGridSpan(startGridAreaIndex, endGridAreaIndex + 1);
+    return GridSpan::translatedDefiniteGridSpan(startGridAreaIndex, endGridAreaIndex + 1);
 }
 
 class GridItemsSorter {
@@ -51,9 +51,9 @@ void GridPainter::paintChildren(const PaintInfo& paintInfo, const LayoutPoint& p
 
     Vector<std::pair<LayoutBox*, size_t>> gridItemsToBePainted;
 
-    for (GridSpan::iterator row = dirtiedRows.begin(); row != dirtiedRows.end(); ++row) {
-        for (GridSpan::iterator column = dirtiedColumns.begin(); column != dirtiedColumns.end(); ++column) {
-            const Vector<LayoutBox*, 1>& children = m_layoutGrid.gridCell(row.toInt(), column.toInt());
+    for (const auto& row : dirtiedRows) {
+        for (const auto& column : dirtiedColumns) {
+            const Vector<LayoutBox*, 1>& children = m_layoutGrid.gridCell(row, column);
             for (auto* child : children)
                 gridItemsToBePainted.append(std::make_pair(child, m_layoutGrid.paintIndexForGridItem(child)));
         }

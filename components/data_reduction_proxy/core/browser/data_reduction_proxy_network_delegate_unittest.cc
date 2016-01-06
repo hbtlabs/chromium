@@ -4,16 +4,19 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 
+#include <stddef.h>
 #include <stdint.h>
-
 #include <string>
+#include <utility>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
@@ -138,7 +141,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
 
     scoped_ptr<TestLoFiDecider> lofi_decider(new TestLoFiDecider());
     lofi_decider_ = lofi_decider.get();
-    io_data()->set_lofi_decider(lofi_decider.Pass());
+    io_data()->set_lofi_decider(std::move(lofi_decider));
   }
 
   const net::ProxyConfig& GetProxyConfig() const { return config_; }
@@ -162,11 +165,11 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
               test_context_->settings()->WasLoFiModeActiveOnMainFrame());
   }
 
-  int64 total_received_bytes() {
+  int64_t total_received_bytes() {
     return data_reduction_proxy_network_delegate_->total_received_bytes_;
   }
 
-  int64 total_original_received_bytes() {
+  int64_t total_original_received_bytes() {
     return data_reduction_proxy_network_delegate_
         ->total_original_received_bytes_;
   }
@@ -203,7 +206,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
     if (!response_headers.empty())
       EXPECT_TRUE(request->response_headers() != NULL);
 
-    return request.Pass();
+    return request;
   }
 
   void set_network_delegate(net::NetworkDelegate* delegate) {
@@ -412,8 +415,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
       "Net.HttpContentLengthCacheable4Hours";
   const std::string kCacheable24HoursHistogramName =
       "Net.HttpContentLengthCacheable24Hours";
-  const int64 kResponseContentLength = 100;
-  const int64 kOriginalContentLength = 200;
+  const int64_t kResponseContentLength = 100;
+  const int64_t kOriginalContentLength = 200;
 
   base::HistogramTester histogram_tester;
 
@@ -648,8 +651,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NullRequest) {
 }
 
 TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternal) {
-  const int64 kResponseContentLength = 140;
-  const int64 kOriginalContentLength = 200;
+  const int64_t kResponseContentLength = 140;
+  const int64_t kOriginalContentLength = 200;
 
   set_network_delegate(data_reduction_proxy_network_delegate_.get());
 

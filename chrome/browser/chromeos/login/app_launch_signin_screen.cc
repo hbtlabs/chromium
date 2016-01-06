@@ -97,8 +97,7 @@ void AppLaunchSigninScreen::MigrateUserData(const std::string& old_password) {
   NOTREACHED();
 }
 
-void AppLaunchSigninScreen::LoadWallpaper(const std::string& username) {
-}
+void AppLaunchSigninScreen::LoadWallpaper(const AccountId& account_id) {}
 
 void AppLaunchSigninScreen::LoadSigninWallpaper() {
 }
@@ -216,7 +215,7 @@ void AppLaunchSigninScreen::HandleGetUsers() {
 
 void AppLaunchSigninScreen::CheckUserStatus(const AccountId& account_id) {}
 
-bool AppLaunchSigninScreen::IsUserWhitelisted(const std::string& user_id) {
+bool AppLaunchSigninScreen::IsUserWhitelisted(const AccountId& account_id) {
   NOTREACHED();
   return true;
 }

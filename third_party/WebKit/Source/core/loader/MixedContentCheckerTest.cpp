@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/loader/MixedContentChecker.h"
 
 #include "core/loader/EmptyClients.h"
@@ -34,7 +33,7 @@ TEST(MixedContentCheckerTest, IsMixedContent)
         {"https://example.com/foo", "ws://google.com/foo", true},
     };
 
-    for (size_t i = 0; i < arraysize(cases); ++i) {
+    for (size_t i = 0; i < WTF_ARRAY_LENGTH(cases); ++i) {
         const char* origin = cases[i].origin;
         const char* target = cases[i].target;
         bool expectation = cases[i].expectation;

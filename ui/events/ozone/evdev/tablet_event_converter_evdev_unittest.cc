@@ -2,14 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/events/ozone/evdev/tablet_event_converter_evdev.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
 #include <unistd.h>
-
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/posix/eintr_wrapper.h"
@@ -21,19 +25,11 @@
 #include "ui/events/ozone/evdev/event_converter_test_util.h"
 #include "ui/events/ozone/evdev/event_device_test_util.h"
 #include "ui/events/ozone/evdev/event_factory_evdev.h"
-#include "ui/events/ozone/evdev/tablet_event_converter_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/events/platform/platform_event_source.h"
 
 namespace {
-
-static int SetNonBlocking(int fd) {
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (flags == -1)
-    flags = 0;
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
 
 const char kTestDevicePath[] = "/dev/input/test-device";
 
@@ -149,7 +145,7 @@ MockTabletEventConverterEvdev::MockTabletEventConverterEvdev(
   if (pipe(fds))
     PLOG(FATAL) << "failed pipe";
 
-  EXPECT_FALSE(SetNonBlocking(fds[0]) || SetNonBlocking(fds[1]))
+  EXPECT_TRUE(base::SetNonBlocking(fds[0]) || base::SetNonBlocking(fds[1]))
     << "failed to set non-blocking: " << strerror(errno);
 
   read_pipe_ = fds[0];
@@ -218,7 +214,7 @@ class TabletEventConverterEvdevTest : public testing::Test {
 
   void DispatchEventForTest(ui::Event* event) {
     scoped_ptr<ui::Event> cloned_event = ui::Event::Clone(*event);
-    dispatched_events_.push_back(cloned_event.Pass());
+    dispatched_events_.push_back(std::move(cloned_event));
   }
 
  private:

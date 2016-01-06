@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <sched.h>
 #include <signal.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
@@ -334,7 +335,7 @@ BPF_DEATH_TEST_C(BaselinePolicy,
   clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
 }
 
-#if defined(__x86_64__)
+#if !defined(__i386__)
 BPF_DEATH_TEST_C(BaselinePolicy,
                  GetSockOptWrongLevelSigsys,
                  DEATH_SEGV_MESSAGE(sandbox::GetErrorMessageContentForTests()),

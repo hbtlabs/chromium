@@ -29,7 +29,6 @@ extern const char kLastProfileResetTimestamp[];
 #endif
 extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
-extern const char kRestoreOnStartupMigrated[];
 extern const char kSessionExitedCleanly[];
 extern const char kSessionExitType[];
 extern const char kSupervisedUserCustodianEmail[];
@@ -141,6 +140,7 @@ extern const char kWebKitFontScaleFactor[];
 extern const char kWebKitForceEnableZoom[];
 extern const char kWebKitPasswordEchoEnabled[];
 #endif
+extern const char kDataSaverEnabled[];
 extern const char kSafeBrowsingEnabled[];
 extern const char kSafeBrowsingExtendedReportingEnabled[];
 extern const char kSafeBrowsingProceedAnywayDisabled[];
@@ -165,6 +165,7 @@ extern const char kHttpServerProperties[];
 extern const char kLastPolicyCheckTime[];
 #endif
 extern const char kInstantUIZeroSuggestUrlPrefix[];
+extern const char kNetworkPredictionEnabled[];
 extern const char kNetworkPredictionOptions[];
 extern const char kDefaultAppsInstallState[];
 extern const char kHideWebStoreIcon[];
@@ -554,9 +555,6 @@ extern const char kWebAppCreateInAppsMenu[];
 extern const char kWebAppCreateInQuickLaunchBar[];
 
 extern const char kGeolocationAccessToken[];
-#if BUILDFLAG(ANDROID_JAVA_UI)
-extern const char kGeolocationEnabled[];
-#endif
 
 #if BUILDFLAG(ENABLE_GOOGLE_NOW)
 extern const char kGoogleGeolocationAccessEnabled[];
@@ -596,10 +594,6 @@ extern const char kHotwordAlwaysOnSearchEnabled[];
 extern const char kHotwordAlwaysOnNotificationSeen[];
 extern const char kHotwordAudioLoggingEnabled[];
 extern const char kHotwordPreviousLanguage[];
-
-#if defined(OS_ANDROID)
-extern const char kProtectedMediaIdentifierEnabled[];
-#endif
 
 #if defined(OS_CHROMEOS)
 extern const char kDeviceSettingsCache[];
@@ -793,6 +787,10 @@ extern const char kAnimationPolicy[];
 extern const char kBackgroundTracingLastUpload[];
 
 extern const char kAllowDinosaurEasterEgg[];
+
+#if defined(OS_ANDROID)
+extern const char kClickedUpdateMenuItem[];
+#endif
 
 }  // namespace prefs
 

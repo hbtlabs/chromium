@@ -25,7 +25,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/css/SelectorChecker.h"
 
 #include "core/HTMLNames.h"
@@ -507,7 +506,7 @@ static bool attributeValueMatches(const Attribute& attributeItem, CSSSelector::M
     case CSSSelector::AttributeExact:
         if (caseSensitivity == TextCaseSensitive)
             return selectorValue == value;
-        return equalIgnoringCase(selectorValue, value);
+        return equalIgnoringASCIICase(selectorValue, value);
     case CSSSelector::AttributeSet:
         return true;
     case CSSSelector::AttributeList:
@@ -571,7 +570,7 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
     element.synchronizeAttribute(selectorAttr.localName());
 
     const AtomicString& selectorValue = selector.value();
-    TextCaseSensitivity caseSensitivity = (selector.attributeMatchType() == CSSSelector::CaseInsensitive) ? TextCaseInsensitive : TextCaseSensitive;
+    TextCaseSensitivity caseSensitivity = (selector.attributeMatchType() == CSSSelector::CaseInsensitive) ? TextCaseASCIIInsensitive : TextCaseSensitive;
 
     AttributeCollection attributes = element.attributesWithoutUpdate();
     for (const auto& attributeItem: attributes) {
@@ -581,7 +580,7 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
         if (attributeValueMatches(attributeItem, match, selectorValue, caseSensitivity))
             return true;
 
-        if (caseSensitivity == TextCaseInsensitive) {
+        if (caseSensitivity == TextCaseASCIIInsensitive) {
             if (selectorAttr.namespaceURI() != starAtom)
                 return false;
             continue;
@@ -594,7 +593,7 @@ static bool anyAttributeMatches(Element& element, CSSSelector::Match match, cons
 
         // If case-insensitive, re-check, and count if result differs.
         // See http://code.google.com/p/chromium/issues/detail?id=327060
-        if (legacyCaseInsensitive && attributeValueMatches(attributeItem, match, selectorValue, TextCaseInsensitive)) {
+        if (legacyCaseInsensitive && attributeValueMatches(attributeItem, match, selectorValue, TextCaseASCIIInsensitive)) {
             UseCounter::count(element.document(), UseCounter::CaseInsensitiveAttrSelectorMatch);
             return true;
         }
@@ -933,7 +932,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
             else
                 value = element.computeInheritedLanguage();
             const AtomicString& argument = selector.argument();
-            if (value.isEmpty() || !startsWithIgnoringASCIICase(value, argument))
+            if (value.isEmpty() || !value.startsWith(argument, TextCaseASCIIInsensitive))
                 break;
             if (value.length() != argument.length() && value[argument.length()] != '-')
                 break;
@@ -964,9 +963,9 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
     case CSSSelector::PseudoScope:
         if (m_mode == SharingRules)
             return true;
-        if (context.scope == element.document())
+        if (context.scope == &element.document())
             return element == element.document().documentElement();
-        return context.scope == element;
+        return context.scope == &element;
     case CSSSelector::PseudoUnresolved:
         return element.isUnresolvedCustomElement();
     case CSSSelector::PseudoHost:
@@ -1160,27 +1159,27 @@ bool SelectorChecker::checkScrollbarPseudoClass(const SelectorCheckingContext& c
         return part == BackButtonEndPart || part == ForwardButtonEndPart || part == ForwardTrackPart;
     case CSSSelector::PseudoDoubleButton:
         {
-            ScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme()->buttonsPlacement();
+            WebScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme().buttonsPlacement();
             if (part == BackButtonStartPart || part == ForwardButtonStartPart || part == BackTrackPart)
-                return buttonsPlacement == ScrollbarButtonsPlacementDoubleStart || buttonsPlacement == ScrollbarButtonsPlacementDoubleBoth;
+                return buttonsPlacement == WebScrollbarButtonsPlacementDoubleStart || buttonsPlacement == WebScrollbarButtonsPlacementDoubleBoth;
             if (part == BackButtonEndPart || part == ForwardButtonEndPart || part == ForwardTrackPart)
-                return buttonsPlacement == ScrollbarButtonsPlacementDoubleEnd || buttonsPlacement == ScrollbarButtonsPlacementDoubleBoth;
+                return buttonsPlacement == WebScrollbarButtonsPlacementDoubleEnd || buttonsPlacement == WebScrollbarButtonsPlacementDoubleBoth;
             return false;
         }
     case CSSSelector::PseudoSingleButton:
         {
-            ScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme()->buttonsPlacement();
+            WebScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme().buttonsPlacement();
             if (part == BackButtonStartPart || part == ForwardButtonEndPart || part == BackTrackPart || part == ForwardTrackPart)
-                return buttonsPlacement == ScrollbarButtonsPlacementSingle;
+                return buttonsPlacement == WebScrollbarButtonsPlacementSingle;
             return false;
         }
     case CSSSelector::PseudoNoButton:
         {
-            ScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme()->buttonsPlacement();
+            WebScrollbarButtonsPlacement buttonsPlacement = scrollbar->theme().buttonsPlacement();
             if (part == BackTrackPart)
-                return buttonsPlacement == ScrollbarButtonsPlacementNone || buttonsPlacement == ScrollbarButtonsPlacementDoubleEnd;
+                return buttonsPlacement == WebScrollbarButtonsPlacementNone || buttonsPlacement == WebScrollbarButtonsPlacementDoubleEnd;
             if (part == ForwardTrackPart)
-                return buttonsPlacement == ScrollbarButtonsPlacementNone || buttonsPlacement == ScrollbarButtonsPlacementDoubleStart;
+                return buttonsPlacement == WebScrollbarButtonsPlacementNone || buttonsPlacement == WebScrollbarButtonsPlacementDoubleStart;
             return false;
         }
     case CSSSelector::PseudoCornerPresent:

@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/loader/MixedContentChecker.h"
 
 #include "core/dom/Document.h"
@@ -312,7 +311,7 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, WebURLRequest::Req
 
     // If we're in strict mode, we'll automagically fail everything, and intentionally skip
     // the client checks in order to prevent degrading the site's security UI.
-    bool strictMode = mixedFrame->document()->shouldEnforceStrictMixedContentChecking() || settings->strictMixedContentChecking();
+    bool strictMode = mixedFrame->securityContext()->shouldEnforceStrictMixedContentChecking() || settings->strictMixedContentChecking();
 
     ContextType contextType = contextTypeFromContext(requestContext, mixedFrame);
 

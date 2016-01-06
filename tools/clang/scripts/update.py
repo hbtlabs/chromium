@@ -8,7 +8,6 @@
 It is also used by package.py to build the prebuilt clang binaries."""
 
 import argparse
-import cStringIO
 import distutils.spawn
 import glob
 import os
@@ -27,7 +26,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://code.google.com/p/chromium/wiki/UpdatingClang
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '254049'
+CLANG_REVISION = '255169'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -82,31 +81,54 @@ def DownloadUrl(url, output_file):
   """Download url into output_file."""
   CHUNK_SIZE = 4096
   TOTAL_DOTS = 10
-  sys.stdout.write('Downloading %s ' % url)
-  sys.stdout.flush()
-  response = urllib2.urlopen(url)
-  total_size = int(response.info().getheader('Content-Length').strip())
-  bytes_done = 0
-  dots_printed = 0
+  num_retries = 3
+  retry_wait_s = 5  # Doubled at each retry.
+
   while True:
-    chunk = response.read(CHUNK_SIZE)
-    if not chunk:
-      break
-    output_file.write(chunk)
-    bytes_done += len(chunk)
-    num_dots = TOTAL_DOTS * bytes_done / total_size
-    sys.stdout.write('.' * (num_dots - dots_printed))
-    sys.stdout.flush()
-    dots_printed = num_dots
-  print ' Done.'
+    try:
+      sys.stdout.write('Downloading %s ' % url)
+      sys.stdout.flush()
+      response = urllib2.urlopen(url)
+      total_size = int(response.info().getheader('Content-Length').strip())
+      bytes_done = 0
+      dots_printed = 0
+      while True:
+        chunk = response.read(CHUNK_SIZE)
+        if not chunk:
+          break
+        output_file.write(chunk)
+        bytes_done += len(chunk)
+        num_dots = TOTAL_DOTS * bytes_done / total_size
+        sys.stdout.write('.' * (num_dots - dots_printed))
+        sys.stdout.flush()
+        dots_printed = num_dots
+      if bytes_done != total_size:
+        raise urllib2.URLError("only got %d of %d bytes" %
+                               (bytes_done, total_size))
+      print ' Done.'
+      return
+    except urllib2.URLError as e:
+      sys.stdout.write('\n')
+      print e
+      if num_retries == 0 or isinstance(e, urllib2.HTTPError) and e.code == 404:
+        raise e
+      num_retries -= 1
+      print 'Retrying in %d s ...' % retry_wait_s
+      time.sleep(retry_wait_s)
+      retry_wait_s *= 2
+
+
+def EnsureDirExists(path):
+  if not os.path.exists(path):
+    print "Creating directory %s" % path
+    os.makedirs(path)
 
 
 def DownloadAndUnpack(url, output_dir):
   with tempfile.TemporaryFile() as f:
     DownloadUrl(url, f)
     f.seek(0)
-    if not os.path.exists(output_dir):
-      os.makedirs(output_dir)
+    EnsureDirExists(output_dir)
     if url.endswith('.zip'):
       zipfile.ZipFile(f).extractall(path=output_dir)
     else:
@@ -124,8 +146,7 @@ def ReadStampFile():
 
 def WriteStampFile(s):
   """Write s to the stamp file."""
-  if not os.path.exists(os.path.dirname(STAMP_FILE)):
-    os.makedirs(os.path.dirname(STAMP_FILE))
+  EnsureDirExists(os.path.dirname(STAMP_FILE))
   with open(STAMP_FILE, 'w') as f:
     f.write(s)
     f.write('\n')
@@ -148,6 +169,13 @@ def RmTree(dir):
     raise
 
   shutil.rmtree(dir, onerror=ChmodAndRetry)
+
+
+def RmCmakeCache(dir):
+  """Delete CMakeCache.txt files under dir recursively."""
+  for dirpath, _, files in os.walk(dir):
+    if 'CMakeCache.txt' in files:
+      os.remove(os.path.join(dirpath, 'CMakeCache.txt'))
 
 
 def RunCommand(command, msvc_arch=None, env=None, fail_hard=True):
@@ -192,8 +220,7 @@ def CopyDirectoryContents(src, dst, filename_filter=None):
   """Copy the files from directory src to dst
   with an optional filename filter."""
   dst = os.path.realpath(dst)  # realpath() in case dst ends in /..
-  if not os.path.exists(dst):
-    os.makedirs(dst)
+  EnsureDirExists(dst)
   for root, _, files in os.walk(src):
     for f in files:
       if filename_filter and not re.match(filename_filter, f):
@@ -255,10 +282,11 @@ def MaybeDownloadHostGcc(args):
 
   if subprocess.check_output(['gcc', '-dumpversion']).rstrip() < '4.7.0':
     # We need a newer gcc version.
-    gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc482')
+    gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc482precise')
     if not os.path.exists(gcc_dir):
       print 'Downloading pre-built GCC 4.8.2...'
-      DownloadAndUnpack(CDS_URL + '/tools/gcc482.tgz', LLVM_BUILD_TOOLS_DIR)
+      DownloadAndUnpack(
+          CDS_URL + '/tools/gcc482precise.tgz', LLVM_BUILD_TOOLS_DIR)
     args.gcc_toolchain = gcc_dir
   else:
     # Always set gcc_toolchain; llvm-symbolizer needs the bundled libstdc++.
@@ -327,14 +355,10 @@ def UpdateClang(args):
       assert sys.platform.startswith('linux')
       cds_full_url = CDS_URL + '/Linux_x64/' + cds_file
 
-    # Check if there's a prebuilt binary and if so just fetch that. That's
-    # faster, and goma relies on having matching binary hashes on client and
-    # server too.
-    print 'Trying to download prebuilt clang'
-
+    print 'Downloading prebuilt clang'
+    if os.path.exists(LLVM_BUILD_DIR):
+      RmTree(LLVM_BUILD_DIR)
     try:
-      if os.path.exists(LLVM_BUILD_DIR):
-        RmTree(LLVM_BUILD_DIR)
       DownloadAndUnpack(cds_full_url, LLVM_BUILD_DIR)
       print 'clang %s unpacked' % PACKAGE_VERSION
       # Download the gold plugin if requested to by an environment variable.
@@ -344,8 +368,11 @@ def UpdateClang(args):
         RunCommand(['python', CHROMIUM_DIR+'/build/download_gold_plugin.py'])
       WriteStampFile(PACKAGE_VERSION)
       return 0
-    except urllib2.HTTPError:
-      print 'Did not find prebuilt clang %s, building locally' % cds_file
+    except urllib2.URLError:
+      print 'Failed to download prebuilt clang %s' % cds_file
+      print 'Use --force-local-build if you want to build locally.'
+      print 'Exiting.'
+      return 1
 
   if args.with_android and not os.path.exists(ANDROID_NDK_DIR):
     print 'Android NDK not found at ' + ANDROID_NDK_DIR
@@ -420,8 +447,7 @@ def UpdateClang(args):
 
   if args.bootstrap:
     print 'Building bootstrap compiler'
-    if not os.path.exists(LLVM_BOOTSTRAP_DIR):
-      os.makedirs(LLVM_BOOTSTRAP_DIR)
+    EnsureDirExists(LLVM_BOOTSTRAP_DIR)
     os.chdir(LLVM_BOOTSTRAP_DIR)
     bootstrap_args = base_cmake_args + [
         '-DLLVM_TARGETS_TO_BUILD=host',
@@ -431,6 +457,7 @@ def UpdateClang(args):
         ]
     if cc is not None:  bootstrap_args.append('-DCMAKE_C_COMPILER=' + cc)
     if cxx is not None: bootstrap_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
+    RmCmakeCache('.')
     RunCommand(['cmake'] + bootstrap_args + [LLVM_DIR], msvc_arch='x64')
     RunCommand(['ninja'], msvc_arch='x64')
     if args.run_tests:
@@ -516,10 +543,6 @@ def UpdateClang(args):
     cflags += ['-DLLVM_FORCE_HEAD_REVISION']
     cxxflags += ['-DLLVM_FORCE_HEAD_REVISION']
 
-  # Pin MSan to the old ABI.
-  # TODO(eugenis): Remove when MSan migrates to new ABI (crbug.com/560589).
-  cxxflags += [ '-DMSAN_LINUX_X86_64_OLD_MAPPING' ]
-
   CreateChromeToolsShim()
 
   deployment_env = None
@@ -545,9 +568,9 @@ def UpdateClang(args):
       '-DCHROMIUM_TOOLS_SRC=%s' % os.path.join(CHROMIUM_DIR, 'tools', 'clang'),
       '-DCHROMIUM_TOOLS=%s' % ';'.join(args.tools)]
 
-  if not os.path.exists(LLVM_BUILD_DIR):
-    os.makedirs(LLVM_BUILD_DIR)
+  EnsureDirExists(LLVM_BUILD_DIR)
   os.chdir(LLVM_BUILD_DIR)
+  RmCmakeCache('.')
   RunCommand(['cmake'] + cmake_args + [LLVM_DIR],
              msvc_arch='x64', env=deployment_env)
 
@@ -559,7 +582,8 @@ def UpdateClang(args):
         [cxx] + cxxflags + ['-print-file-name=libstdc++.so.6']).rstrip()
     CopyFile(libstdcpp, os.path.join(LLVM_BUILD_DIR, 'lib'))
 
-  RunCommand(['ninja'], msvc_arch='x64')
+  # TODO(thakis): Remove "-d explain" once http://crbug.com/569337 is fixed.
+  RunCommand(['ninja', '-d', 'explain'], msvc_arch='x64')
 
   if args.tools:
     # If any Chromium tools were built, install those now.
@@ -597,6 +621,7 @@ def UpdateClang(args):
                         '-DSANITIZER_MIN_OSX_VERSION="10.7"']
   # compiler-rt is part of the llvm checkout on Windows but a stand-alone
   # directory elsewhere, see the TODO above COMPILER_RT_DIR.
+  RmCmakeCache('.')
   RunCommand(['cmake'] + compiler_rt_args +
              [LLVM_DIR if sys.platform == 'win32' else COMPILER_RT_DIR],
              msvc_arch='x86', env=deployment_env)
@@ -631,6 +656,15 @@ def UpdateClang(args):
         os.path.join(LLVM_BUILD_DIR, 'lib/clang', VERSION, 'include/sanitizer'))
   # Static and dynamic libraries:
   CopyDirectoryContents(asan_rt_lib_src_dir, asan_rt_lib_dst_dir)
+  if sys.platform == 'darwin':
+    for dylib in glob.glob(os.path.join(asan_rt_lib_dst_dir, '*.dylib')):
+      # Fix LC_ID_DYLIB for the ASan dynamic libraries to be relative to
+      # @executable_path.
+      # TODO(glider): this is transitional. We'll need to fix the dylib
+      # name either in our build system, or in Clang. See also
+      # http://crbug.com/344836.
+      subprocess.call(['install_name_tool', '-id',
+                       '@executable_path/' + os.path.basename(dylib), dylib])
 
 
   if sys.platform == 'win32':
@@ -641,8 +675,7 @@ def UpdateClang(args):
     aux_sanitizer_include_dir = os.path.join(LLVM_BUILD_DIR, 'lib', 'clang',
                                              VERSION, 'include_sanitizer',
                                              'sanitizer')
-    if not os.path.exists(aux_sanitizer_include_dir):
-      os.makedirs(aux_sanitizer_include_dir)
+    EnsureDirExists(aux_sanitizer_include_dir)
     for _, _, files in os.walk(sanitizer_include_dir):
       for f in files:
         CopyFile(os.path.join(sanitizer_include_dir, f),
@@ -676,9 +709,6 @@ def UpdateClang(args):
       if not os.path.exists(build_dir):
         os.mkdir(os.path.join(build_dir))
       os.chdir(build_dir)
-      if os.path.exists('CMakeCache.txt'):
-        os.remove('CMakeCache.txt')
-
       cflags = ['--target=%s-linux-androideabi' % target_arch,
                 '--sysroot=%s/sysroot' % toolchain_dir,
                 '-B%s' % toolchain_dir]
@@ -689,6 +719,7 @@ def UpdateClang(args):
         '-DCMAKE_C_FLAGS=' + ' '.join(cflags),
         '-DCMAKE_CXX_FLAGS=' + ' '.join(cflags),
         '-DANDROID=1']
+      RmCmakeCache('.')
       RunCommand(['cmake'] + android_args + [COMPILER_RT_DIR])
       RunCommand(['ninja', 'libclang_rt.asan-%s-android.so' % target_arch])
 
@@ -732,7 +763,7 @@ def main():
                       help='select which chrome tools to build',
                       default=['plugins', 'blink_gc_plugin'])
   parser.add_argument('--without-android', action='store_false',
-                      help='don\tt build Android ASan runtime (linux only)',
+                      help='don\'t build Android ASan runtime (linux only)',
                       dest='with_android',
                       default=sys.platform.startswith('linux'))
   args = parser.parse_args()

@@ -5,6 +5,7 @@
 #include "ui/compositor/layer.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
@@ -120,7 +121,6 @@ Layer::~Layer() {
   for (size_t i = 0; i < children_.size(); ++i)
     children_[i]->parent_ = NULL;
 
-  cc_layer_->RemoveLayerAnimationEventObserver(this);
   cc_layer_->RemoveFromParent();
 }
 
@@ -132,8 +132,9 @@ const cc::LayerSettings& Layer::UILayerSettings() {
 // static
 void Layer::InitializeUILayerSettings() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kUIEnableCompositorAnimationTimelines))
-    g_ui_layer_settings.Get().use_compositor_animation_timelines = true;
+  g_ui_layer_settings.Get().use_compositor_animation_timelines =
+      !command_line->HasSwitch(
+          switches::kUIDisableCompositorAnimationTimelines);
 }
 
 const Compositor* Layer::GetCompositor() const {
@@ -155,18 +156,18 @@ void Layer::SetCompositor(Compositor* compositor,
 
   compositor_ = compositor;
   OnDeviceScaleFactorChanged(compositor->device_scale_factor());
-  AddAnimatorsInTreeToCollection(compositor_->layer_animator_collection());
 
   root_layer->AddChild(cc_layer_);
+  SetCompositorForAnimatorsInTree(compositor);
   SendPendingThreadedAnimations();
 }
 
 void Layer::ResetCompositor() {
   DCHECK(!parent_);
-  if (compositor_)
-    RemoveAnimatorsInTreeFromCollection(
-        compositor_->layer_animator_collection());
-  compositor_ = nullptr;
+  if (compositor_) {
+    ResetCompositorForAnimatorsInTree(compositor_);
+    compositor_ = nullptr;
+  }
 }
 
 void Layer::Add(Layer* child) {
@@ -177,11 +178,11 @@ void Layer::Add(Layer* child) {
   children_.push_back(child);
   cc_layer_->AddChild(child->cc_layer_);
   child->OnDeviceScaleFactorChanged(device_scale_factor_);
-  if (GetCompositor())
+  Compositor* compositor = GetCompositor();
+  if (compositor) {
+    child->SetCompositorForAnimatorsInTree(compositor);
     child->SendPendingThreadedAnimations();
-  LayerAnimatorCollection* collection = GetLayerAnimatorCollection();
-  if (collection)
-    child->AddAnimatorsInTreeToCollection(collection);
+  }
 }
 
 void Layer::Remove(Layer* child) {
@@ -190,9 +191,10 @@ void Layer::Remove(Layer* child) {
   LayerAnimator* child_animator = child->animator_.get();
   if (child_animator)
     child_animator->StopAnimatingProperty(ui::LayerAnimationElement::BOUNDS);
-  LayerAnimatorCollection* collection = GetLayerAnimatorCollection();
-  if (collection)
-    child->RemoveAnimatorsInTreeFromCollection(collection);
+
+  Compositor* compositor = GetCompositor();
+  if (compositor)
+    child->ResetCompositorForAnimatorsInTree(compositor);
 
   std::vector<Layer*>::iterator i =
       std::find(children_.begin(), children_.end(), child);
@@ -364,7 +366,7 @@ void Layer::SetBackgroundZoom(float zoom, int inset) {
 }
 
 void Layer::SetAlphaShape(scoped_ptr<SkRegion> region) {
-  alpha_shape_ = region.Pass();
+  alpha_shape_ = std::move(region);
 
   SetLayerFilters();
 }
@@ -488,6 +490,7 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   if (animator_.get()) {
     animator_->StopAnimatingProperty(LayerAnimationElement::TRANSFORM);
     animator_->StopAnimatingProperty(LayerAnimationElement::OPACITY);
+    animator_->SwitchToLayer(new_layer);
   }
 
   if (texture_layer_.get())
@@ -499,7 +502,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
     cc_layer_->parent()->ReplaceChild(cc_layer_, new_layer);
   }
   cc_layer_->SetLayerClient(NULL);
-  cc_layer_->RemoveLayerAnimationEventObserver(this);
   new_layer->SetOpacity(cc_layer_->opacity());
   new_layer->SetTransform(cc_layer_->transform());
   new_layer->SetPosition(cc_layer_->position());
@@ -512,7 +514,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   delegated_renderer_layer_ = NULL;
   surface_layer_ = NULL;
 
-  cc_layer_->AddLayerAnimationEventObserver(this);
   for (size_t i = 0; i < children_.size(); ++i) {
     DCHECK(children_[i]->cc_layer_);
     cc_layer_->AddChild(children_[i]->cc_layer_);
@@ -554,7 +555,7 @@ void Layer::SetTextureMailbox(
   }
   if (mailbox_release_callback_)
     mailbox_release_callback_->Run(gpu::SyncToken(), false);
-  mailbox_release_callback_ = release_callback.Pass();
+  mailbox_release_callback_ = std::move(release_callback);
   mailbox_ = mailbox;
   SetTextureSize(texture_size_in_dip);
 }
@@ -747,7 +748,7 @@ void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
 }
 
 void Layer::RequestCopyOfOutput(scoped_ptr<cc::CopyOutputRequest> request) {
-  cc_layer_->RequestCopyOfOutput(request.Pass());
+  cc_layer_->RequestCopyOfOutput(std::move(request));
 }
 
 gfx::Rect Layer::PaintableRegion() {
@@ -788,7 +789,7 @@ bool Layer::PrepareTextureMailbox(
   if (!mailbox_release_callback_)
     return false;
   *mailbox = mailbox_;
-  *release_callback = mailbox_release_callback_.Pass();
+  *release_callback = std::move(mailbox_release_callback_);
   return true;
 }
 
@@ -819,14 +820,9 @@ scoped_refptr<base::trace_event::ConvertableToTraceFormat> Layer::TakeDebugInfo(
   return new LayerDebugInfo(name_);
 }
 
-void Layer::OnAnimationStarted(const cc::AnimationEvent& event) {
-  if (animator_.get())
-    animator_->OnThreadedAnimationStarted(event);
-}
-
 void Layer::CollectAnimators(
     std::vector<scoped_refptr<LayerAnimator>>* animators) {
-  if (IsAnimating())
+  if (animator_ && animator_->is_animating())
     animators->push_back(animator_);
   for (auto* child : children_)
     child->CollectAnimators(animators);
@@ -979,16 +975,27 @@ void Layer::AddThreadedAnimation(scoped_ptr<cc::Animation> animation) {
   DCHECK(cc_layer_);
   // Until this layer has a compositor (and hence cc_layer_ has a
   // LayerTreeHost), addAnimation will fail.
-  if (GetCompositor())
-    cc_layer_->AddAnimation(animation.Pass());
-  else
-    pending_threaded_animations_.push_back(animation.Pass());
+  if (GetCompositor()) {
+    if (UILayerSettings().use_compositor_animation_timelines) {
+      DCHECK(animator_);
+      animator_->AddThreadedAnimation(std::move(animation));
+    } else {
+      cc_layer_->AddAnimation(std::move(animation));
+    }
+  } else {
+    pending_threaded_animations_.push_back(std::move(animation));
+  }
 }
 
 void Layer::RemoveThreadedAnimation(int animation_id) {
   DCHECK(cc_layer_);
   if (pending_threaded_animations_.size() == 0) {
-    cc_layer_->RemoveAnimation(animation_id);
+    if (UILayerSettings().use_compositor_animation_timelines) {
+      DCHECK(animator_);
+      animator_->RemoveThreadedAnimation(animation_id);
+    } else {
+      cc_layer_->RemoveAnimation(animation_id);
+    }
     return;
   }
 
@@ -1007,9 +1014,19 @@ LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
   return compositor ? compositor->layer_animator_collection() : NULL;
 }
 
+cc::Layer* Layer::GetCcLayer() const {
+  return cc_layer_;
+}
+
 void Layer::SendPendingThreadedAnimations() {
-  for (auto& animation : pending_threaded_animations_)
-    cc_layer_->AddAnimation(std::move(animation));
+  for (auto& animation : pending_threaded_animations_) {
+    if (UILayerSettings().use_compositor_animation_timelines) {
+      DCHECK(animator_);
+      animator_->AddThreadedAnimation(std::move(animation));
+    } else {
+      cc_layer_->AddAnimation(std::move(animation));
+    }
+  }
   pending_threaded_animations_.clear();
 
   for (auto* child : children_)
@@ -1030,7 +1047,6 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(true);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
-  cc_layer_->AddLayerAnimationEventObserver(this);
   cc_layer_->SetLayerClient(this);
   RecomputePosition();
 }
@@ -1060,26 +1076,32 @@ void Layer::RecomputePosition() {
                          subpixel_position_offset_);
 }
 
-void Layer::AddAnimatorsInTreeToCollection(
-    LayerAnimatorCollection* collection) {
-  DCHECK(collection);
-  if (IsAnimating())
-    animator_->AddToCollection(collection);
+void Layer::SetCompositorForAnimatorsInTree(Compositor* compositor) {
+  DCHECK(compositor);
+  LayerAnimatorCollection* collection = compositor->layer_animator_collection();
+
+  if (animator_) {
+    if (animator_->is_animating())
+      animator_->AddToCollection(collection);
+    animator_->SetCompositor(compositor);
+  }
+
   for (auto* child : children_)
-    child->AddAnimatorsInTreeToCollection(collection);
+    child->SetCompositorForAnimatorsInTree(compositor);
 }
 
-void Layer::RemoveAnimatorsInTreeFromCollection(
-    LayerAnimatorCollection* collection) {
-  DCHECK(collection);
-  if (IsAnimating())
-    animator_->RemoveFromCollection(collection);
-  for (auto* child : children_)
-    child->RemoveAnimatorsInTreeFromCollection(collection);
-}
+void Layer::ResetCompositorForAnimatorsInTree(Compositor* compositor) {
+  DCHECK(compositor);
+  LayerAnimatorCollection* collection = compositor->layer_animator_collection();
 
-bool Layer::IsAnimating() const {
-  return animator_.get() && animator_->is_animating();
+  if (animator_) {
+    animator_->ResetCompositor(compositor);
+    if (animator_->is_animating())
+      animator_->RemoveFromCollection(collection);
+  }
+
+  for (auto* child : children_)
+    child->ResetCompositorForAnimatorsInTree(compositor);
 }
 
 }  // namespace ui

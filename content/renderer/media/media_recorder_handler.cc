@@ -4,17 +4,23 @@
 
 #include "content/renderer/media/media_recorder_handler.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "content/renderer/media/audio_track_recorder.h"
+#include "content/renderer/media/media_stream_audio_track.h"
+#include "content/renderer/media/media_stream_track.h"
 #include "content/renderer/media/video_track_recorder.h"
 #include "content/renderer/media/webrtc_uma_histograms.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/audio_bus.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/mime_util.h"
 #include "media/base/video_frame.h"
 #include "media/capture/webm_muxer.h"
 #include "third_party/WebKit/public/platform/WebMediaRecorderHandlerClient.h"
@@ -39,42 +45,57 @@ MediaRecorderHandler::~MediaRecorderHandler() {
 }
 
 bool MediaRecorderHandler::canSupportMimeType(
-    const blink::WebString& mimeType) {
+    const blink::WebString& web_type, const blink::WebString& web_codecs) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  // Ensure we can support each passed MIME type.
-  const std::string input = mimeType.utf8();  // Must outlive tokenizer!
-  base::StringTokenizer tokenizer(input, ",");
-  while (tokenizer.GetNext()) {
-    // Strip whitespace.
-    const std::string token(base::CollapseWhitespaceASCII(
-        tokenizer.token(), true /* trim sequences with line breaks*/));
-    if (!token.empty() &&
-        !base::EqualsCaseInsensitiveASCII(token, "video/vp8") &&
-        !base::EqualsCaseInsensitiveASCII(token, "video/vp9") &&
-        !base::EqualsCaseInsensitiveASCII(token, "audio/opus") &&
-        !base::EqualsCaseInsensitiveASCII(token, "video/webm") &&
-        !base::EqualsCaseInsensitiveASCII(token, "audio/webm")) {
-      return false;
-    }
-  }
+  // An empty |web_type| means MediaRecorderHandler can choose its preferred
+  // codecs.
+  if (web_type.isEmpty())
+    return true;
 
+  const std::string type(web_type.utf8());
+  const bool video = base::EqualsCaseInsensitiveASCII(type, "video/webm");
+  const bool audio =
+      video ? false : base::EqualsCaseInsensitiveASCII(type, "audio/webm");
+  if (!video && !audio)
+    return false;
+
+  // Both |video| and |audio| support empty |codecs|; |type| == "video" supports
+  // vp8, vp9 or opus; |type| = "audio", supports only opus.
+  // http://www.webmproject.org/docs/container Sec:"HTML5 Video Type Parameters"
+  static const char* kVideoCodecs[] = { "vp8", "vp9", "opus" };
+  static const char* kAudioCodecs[] = { "opus" };
+  const char** codecs = video ? &kVideoCodecs[0] : &kAudioCodecs[0];
+  int codecs_count =  video ? arraysize(kVideoCodecs) : arraysize(kAudioCodecs);
+
+  std::vector<std::string> codecs_list;
+  media::ParseCodecString(web_codecs.utf8(), &codecs_list, true /* strip */);
+  for (const auto& codec : codecs_list) {
+    const auto found = std::find_if(
+        &codecs[0], &codecs[codecs_count], [&codec](const char* name) {
+          return base::EqualsCaseInsensitiveASCII(codec, name);
+        });
+    if (found == &codecs[codecs_count])
+      return false;
+  }
   return true;
 }
 
 bool MediaRecorderHandler::initialize(
     blink::WebMediaRecorderHandlerClient* client,
     const blink::WebMediaStream& media_stream,
-    const blink::WebString& mimeType) {
+    const blink::WebString& type,
+    const blink::WebString& codecs) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   // Save histogram data so we can see how much MediaStream Recorder is used.
   // The histogram counts the number of calls to the JS API.
   UpdateWebRTCMethodCount(WEBKIT_MEDIA_STREAM_RECORDER);
 
-  if (!canSupportMimeType(mimeType)) {
-    DLOG(ERROR) << "Can't support type " << mimeType.utf8();
+  if (!canSupportMimeType(type, codecs)) {
+    DLOG(ERROR) << "Can't support " << type.utf8()
+                << ";codecs=" << codecs.utf8();
     return false;
   }
-  use_vp9_ = mimeType.utf8().compare("video/vp9") == 0;
+  use_vp9_ = base::ToLowerASCII(codecs.utf8()).find("vp9") != std::string::npos;
   media_stream_ = media_stream;
   DCHECK(client);
   client_ = client;
@@ -93,6 +114,7 @@ bool MediaRecorderHandler::start(int timeslice) {
   DCHECK(!recording_);
   DCHECK(!media_stream_.isNull());
   DCHECK(timeslice_.is_zero());
+  DCHECK(!webm_muxer_);
 
   timeslice_ = TimeDelta::FromMilliseconds(timeslice);
   slice_origin_timestamp_ = TimeTicks::Now();
@@ -101,21 +123,18 @@ bool MediaRecorderHandler::start(int timeslice) {
   media_stream_.videoTracks(video_tracks);
   media_stream_.audioTracks(audio_tracks);
 
-#if defined(MEDIA_DISABLE_LIBWEBM)
-  LOG(WARNING) << "No muxer available";
-  return false;
-#endif
-
-  DCHECK(!webm_muxer_);
-
   if (video_tracks.isEmpty() && audio_tracks.isEmpty()) {
     LOG(WARNING) << __FUNCTION__ << ": no media tracks.";
     return false;
   }
 
+  const bool use_audio_tracks =
+      !audio_tracks.isEmpty() &&
+      MediaStreamAudioTrack::GetTrack(audio_tracks[0]);
+
   webm_muxer_.reset(new media::WebmMuxer(
       use_vp9_ ? media::kCodecVP9 : media::kCodecVP8,
-      video_tracks.size() > 0, audio_tracks.size() > 0,
+      video_tracks.size() > 0, use_audio_tracks,
       base::Bind(&MediaRecorderHandler::WriteData,
                  weak_factory_.GetWeakPtr())));
 
@@ -137,7 +156,7 @@ bool MediaRecorderHandler::start(int timeslice) {
         new VideoTrackRecorder(use_vp9_, video_track, on_encoded_video_cb));
   }
 
-  if (!audio_tracks.isEmpty()) {
+  if (use_audio_tracks) {
     // TODO(ajose): The muxer API supports only one audio track. Extend it to
     // several tracks.
     LOG_IF(WARNING, audio_tracks.size() > 1u)
@@ -161,15 +180,13 @@ bool MediaRecorderHandler::start(int timeslice) {
 
 void MediaRecorderHandler::stop() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  DCHECK(recording_);
+  // Don't check |recording_| since we can go directly from pause() to stop().
 
   recording_ = false;
   timeslice_ = TimeDelta::FromMilliseconds(0);
   video_recorders_.clear();
   audio_recorders_.clear();
-#if !defined(MEDIA_DISABLE_LIBWEBM)
   webm_muxer_.reset();
-#endif
 }
 
 void MediaRecorderHandler::pause() {
@@ -194,12 +211,10 @@ void MediaRecorderHandler::OnEncodedVideo(
     TimeTicks timestamp,
     bool is_key_frame) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-#if !defined(MEDIA_DISABLE_LIBWEBM)
   if (!webm_muxer_)
     return;
-  webm_muxer_->OnEncodedVideo(video_frame, encoded_data.Pass(), timestamp,
+  webm_muxer_->OnEncodedVideo(video_frame, std::move(encoded_data), timestamp,
                               is_key_frame);
-#endif
 }
 
 void MediaRecorderHandler::OnEncodedAudio(const media::AudioParameters& params,
@@ -207,7 +222,7 @@ void MediaRecorderHandler::OnEncodedAudio(const media::AudioParameters& params,
                                           base::TimeTicks timestamp) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   if (webm_muxer_)
-    webm_muxer_->OnEncodedAudio(params, encoded_data.Pass(), timestamp);
+    webm_muxer_->OnEncodedAudio(params, std::move(encoded_data), timestamp);
 }
 
 void MediaRecorderHandler::WriteData(base::StringPiece data) {

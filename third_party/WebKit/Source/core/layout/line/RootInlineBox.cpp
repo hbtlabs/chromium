@@ -17,7 +17,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/layout/line/RootInlineBox.h"
 
 #include "core/dom/Document.h"
@@ -318,7 +317,7 @@ GapRects RootInlineBox::lineSelectionGap(const LayoutBlock* rootBlock, const Lay
                 LayoutRect gapRect = rootBlock->logicalRectToPhysicalRect(rootBlockPhysicalPosition, logicalRect);
                 if (isPreviousBoxSelected && gapRect.width() > 0 && gapRect.height() > 0) {
                     if (paintInfo && box->parent()->lineLayoutItem().style()->visibility() == VISIBLE)
-                        paintInfo->context->fillRect(FloatRect(gapRect), box->parent()->lineLayoutItem().selectionBackgroundColor());
+                        paintInfo->context.fillRect(FloatRect(gapRect), box->parent()->lineLayoutItem().selectionBackgroundColor());
                     // VisibleSelection may be non-contiguous, see comment above.
                     result.uniteCenter(gapRect);
                 }
@@ -596,7 +595,7 @@ void RootInlineBox::ascentAndDescentForBox(InlineBox* box, GlyphOverflowAndFallb
 {
     bool ascentDescentSet = false;
 
-    if (box->layoutObject().isReplaced()) {
+    if (box->layoutObject().isAtomicInlineLevel()) {
         ascent = box->baselinePosition(baselineType());
         descent = box->lineHeight() - ascent;
 
@@ -700,7 +699,7 @@ LayoutUnit RootInlineBox::verticalPositionForBox(InlineBox* box, VerticalPositio
         } else if (verticalAlign == TEXT_BOTTOM) {
             verticalPosition += fontMetrics.descent(baselineType());
             // lineHeight - baselinePosition is always 0 for replaced elements (except inline blocks), so don't bother wasting time in that case.
-            if (!boxModel.isReplaced() || boxModel.isInlineBlockOrInlineTable())
+            if (!boxModel.isAtomicInlineLevel() || boxModel.isInlineBlockOrInlineTable())
                 verticalPosition -= (boxModel.lineHeight(firstLine, lineDirection) - boxModel.baselinePosition(baselineType(), firstLine, lineDirection));
         } else if (verticalAlign == BASELINE_MIDDLE) {
             verticalPosition += -boxModel.lineHeight(firstLine, lineDirection) / 2 + boxModel.baselinePosition(baselineType(), firstLine, lineDirection);
@@ -724,7 +723,7 @@ LayoutUnit RootInlineBox::verticalPositionForBox(InlineBox* box, VerticalPositio
 
 bool RootInlineBox::includeLeadingForBox(InlineBox* box) const
 {
-    return !(box->lineLayoutItem().isReplaced() || (box->lineLayoutItem().isText() && !box->isText()));
+    return !(box->lineLayoutItem().isAtomicInlineLevel() || (box->lineLayoutItem().isText() && !box->isText()));
 }
 
 Node* RootInlineBox::getLogicalStartBoxWithNode(InlineBox*& startBox) const

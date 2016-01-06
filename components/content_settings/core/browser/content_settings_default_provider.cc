@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
@@ -30,16 +29,13 @@ namespace content_settings {
 namespace {
 
 // Obsolete prefs to be removed from the pref file.
-// TODO(msramek): Remove this cleanup code after two releases (i.e. in M48).
-const char kObsoleteDefaultContentSettings[] =
-    "profile.default_content_settings";
-const char kObsoleteMigratedDefaultContentSettings[] =
-    "profile.migrated_default_content_settings";
-const char kObsoleteMigratedDefaultMediaStreamSetting[] =
-    "profile.migrated_default_media_stream_content_settings";
 // TODO(msramek): Remove this cleanup code after two releases (i.e. in M50).
 const char kObsoleteMetroSwitchToDesktopSetting[] =
     "profile.default_content_setting_values.metro_switch_to_desktop";
+
+// TODO(msramek): Remove this cleanup code after two releases (i.e. in M51).
+const char kObsoleteMediaStreamSetting[] =
+    "profile.default_content_setting_values.media_stream";
 
 ContentSetting GetDefaultValue(const WebsiteSettingsInfo* info) {
   const base::Value* initial_default = info->initial_default_value();
@@ -97,29 +93,14 @@ void DefaultProvider::RegisterProfilePrefs(
 
   // Obsolete prefs -------------------------------------------------------
 
-  // The deprecated dictionary preference.
-  registry->RegisterDictionaryPref(
-      kObsoleteDefaultContentSettings,
-      new base::DictionaryValue(),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-
-  // Whether the deprecated dictionary preference has already been migrated
-  // into the individual preferences in this profile.
-  registry->RegisterBooleanPref(
-      kObsoleteMigratedDefaultContentSettings,
-      false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-
-  // Whether the deprecated mediastream default setting has already been
-  // migrated into microphone and camera default settings.
-  registry->RegisterBooleanPref(kObsoleteMigratedDefaultMediaStreamSetting,
-                                false);
-
   // The removed content settings type METRO_SWITCH_TO_DESKTOP.
   registry->RegisterIntegerPref(
       kObsoleteMetroSwitchToDesktopSetting,
       0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  // The removed content settings type MEDIASTREAM.
+  registry->RegisterIntegerPref(kObsoleteMediaStreamSetting, 0);
 }
 
 DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
@@ -260,6 +241,10 @@ scoped_ptr<RuleIterator> DefaultProvider::GetRuleIterator(
     ContentSettingsType content_type,
     const ResourceIdentifier& resource_identifier,
     bool incognito) const {
+  // The default provider never has incognito-specific settings.
+  if (incognito)
+    return scoped_ptr<RuleIterator>(new EmptyRuleIterator());
+
   base::AutoLock lock(lock_);
   if (resource_identifier.empty()) {
     auto it(default_settings_.find(content_type));
@@ -366,14 +351,12 @@ void DefaultProvider::OnPreferenceChanged(const std::string& name) {
 scoped_ptr<base::Value> DefaultProvider::ReadFromPref(
     ContentSettingsType content_type) {
   int int_value = prefs_->GetInteger(GetPrefName(content_type));
-  return ContentSettingToValue(IntToContentSetting(int_value)).Pass();
+  return ContentSettingToValue(IntToContentSetting(int_value));
 }
 
 void DefaultProvider::DiscardObsoletePreferences() {
-  prefs_->ClearPref(kObsoleteDefaultContentSettings);
-  prefs_->ClearPref(kObsoleteMigratedDefaultContentSettings);
-  prefs_->ClearPref(kObsoleteMigratedDefaultMediaStreamSetting);
   prefs_->ClearPref(kObsoleteMetroSwitchToDesktopSetting);
+  prefs_->ClearPref(kObsoleteMediaStreamSetting);
 }
 
 }  // namespace content_settings

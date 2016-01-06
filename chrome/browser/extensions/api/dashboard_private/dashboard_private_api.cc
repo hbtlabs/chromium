@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/dashboard_private/dashboard_private_api.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
@@ -138,9 +140,15 @@ void DashboardPrivateShowPermissionPromptForDelegatedInstallFunction::
     Release();
     return;
   }
+  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
+      new ExtensionInstallPrompt::Prompt(
+          ExtensionInstallPrompt::DELEGATED_PERMISSIONS_PROMPT));
+  prompt->set_delegated_username(details().delegated_user);
+
   install_prompt_.reset(new ExtensionInstallPrompt(web_contents));
-  install_prompt_->ConfirmPermissionsForDelegatedInstall(
-      this, dummy_extension_.get(), details().delegated_user, &icon);
+  install_prompt_->ShowDialog(
+      this, dummy_extension_.get(), &icon, std::move(prompt),
+      ExtensionInstallPrompt::GetDefaultShowDialogCallback());
   // Control flow finishes up in InstallUIProceed or InstallUIAbort.
 }
 

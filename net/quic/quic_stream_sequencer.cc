@@ -33,7 +33,6 @@ QuicStreamSequencer::QuicStreamSequencer(ReliableQuicStream* quic_stream,
       clock_(clock),
       ignore_read_data_(false) {
   if (FLAGS_quic_use_stream_sequencer_buffer) {
-    DVLOG(1) << "Use StreamSequencerBuffer for stream: " << stream_->id();
     buffered_frames_.reset(
         new StreamSequencerBuffer(kStreamReceiveWindowLimit));
   } else {
@@ -46,7 +45,7 @@ QuicStreamSequencer::~QuicStreamSequencer() {}
 void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
   ++num_frames_received_;
   const QuicStreamOffset byte_offset = frame.offset;
-  const size_t data_len = frame.data.length();
+  const size_t data_len = frame.frame_length;
   if (data_len == 0 && !frame.fin) {
     // Stream frames must have data or a fin flag.
     stream_->CloseConnectionWithDetails(QUIC_INVALID_STREAM_FRAME,
@@ -62,7 +61,8 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
   }
   size_t bytes_written;
   QuicErrorCode result = buffered_frames_->OnStreamData(
-      byte_offset, frame.data, clock_->ApproximateNow(), &bytes_written);
+      byte_offset, StringPiece(frame.frame_buffer, frame.frame_length),
+      clock_->ApproximateNow(), &bytes_written);
 
   if (result == QUIC_INVALID_STREAM_DATA) {
     stream_->CloseConnectionWithDetails(

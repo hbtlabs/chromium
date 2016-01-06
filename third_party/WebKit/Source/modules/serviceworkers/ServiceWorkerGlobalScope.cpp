@@ -27,8 +27,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "config.h"
-#include "ServiceWorkerGlobalScope.h"
+
+#include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
@@ -184,7 +184,7 @@ bool ServiceWorkerGlobalScope::dispatchEventInternal(PassRefPtrWillBeRawPtr<Even
 {
     m_eventNestingLevel++;
     bool result = WorkerGlobalScope::dispatchEventInternal(event.get());
-    if (event->interfaceName() == EventNames::ErrorEvent && m_eventNestingLevel == 2 && !event->defaultPrevented())
+    if (event->interfaceName() == EventNames::ErrorEvent && m_eventNestingLevel == 2)
         m_hadErrorInTopLevelEventHandler = true;
     m_eventNestingLevel--;
     return result;

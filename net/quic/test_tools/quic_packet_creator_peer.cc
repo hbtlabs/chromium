@@ -117,5 +117,16 @@ float QuicPacketCreatorPeer::GetRttMultiplierForFecTimeout(
   return creator->rtt_multiplier_for_fec_timeout_;
 }
 
+// static
+EncryptionLevel QuicPacketCreatorPeer::GetEncryptionLevel(
+    QuicPacketCreator* creator) {
+  return creator->encryption_level_;
+}
+
+// static
+QuicPathId QuicPacketCreatorPeer::GetCurrentPath(QuicPacketCreator* creator) {
+  return creator->current_path_;
+}
+
 }  // namespace test
 }  // namespace net

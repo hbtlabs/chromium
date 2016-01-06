@@ -4,6 +4,11 @@
             "group_name": "Disabled"
         }
     ],
+    "AutodetectEncoding": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "AutofillClassifier": [
         {
             "group_name": "Enabled"
@@ -164,6 +169,15 @@
             }
         }
     ],
+    "NTPPopularSites": [
+        {
+            "group_name": "Enabled",
+            "params": {
+                "country": "IN",
+                "version": "4"
+            }
+        }
+    ],
     "NetworkQualityEstimator": [
         {
             "group_name": "Enabled",
@@ -186,6 +200,11 @@
                 "WiFi.DefaultMedianKbps": "2736",
                 "WiFi.DefaultMedianRTTMsec": "168"
             }
+        }
+    ],
+    "PasswordBranding": [
+        {
+            "group_name": "SmartLockBrandingSavePromptOnly"
         }
     ],
     "Precache": [
@@ -297,6 +316,11 @@
             "group_name": "v=1:Prefetching=Learning"
         }
     ],
+    "StrictSecureCookies": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SyncHttpContentCompression": [
         {
             "group_name": "Enabled"
@@ -317,6 +341,50 @@
                 "Enabled": "true",
                 "Optimize": "true",
                 "Sample_Probability": "50"
+            }
+        }
+    ],
+    "UpdateMenuItem": [
+        {
+            "group_name": "Enabled",
+            "params": {
+                "enable_update_menu_item": "true"
+            }
+        },
+        {
+            "group_name": "EnabledWithBadge",
+            "params": {
+                "enable_update_badge": "true",
+                "enable_update_menu_item": "true"
+            }
+        },
+        {
+            "group_name": "EnabledWithSummary",
+            "params": {
+                "enable_update_menu_item": "true",
+                "show_summary": "true"
+            }
+        },
+        {
+            "group_name": "EnabledWithCustomSummary",
+            "params": {
+                "custom_summary": "Custom update summary",
+                "enable_update_menu_item": "true",
+                "show_summary": "true"
+            }
+        },
+        {
+            "group_name": "EnabledWithSummaryAndBadge",
+            "params": {
+                "enable_update_badge": "true",
+                "enable_update_menu_item": "true",
+                "show_summary": "true"
+            }
+        },
+        {
+            "group_name": "Default",
+            "params": {
+                "enable_update_menu_item": "false"
             }
         }
     ],

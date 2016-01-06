@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/accessibility/AXObject.h"
 
 #include "core/editing/EditingUtilities.h"
@@ -711,6 +710,7 @@ String AXObject::name(AXNameFrom& nameFrom, AXObject::AXObjectVector* nameObject
         for (size_t i = 0; i < relatedObjects.size(); i++)
             nameObjects->append(relatedObjects[i]->object);
     }
+
     return text;
 }
 
@@ -1034,18 +1034,6 @@ int AXObject::indexInParent() const
         }
     }
     return 0;
-}
-
-void AXObject::ariaTreeRows(AXObjectVector& result)
-{
-    for (const auto& child : children()) {
-        // Add tree items as the rows.
-        if (child->roleValue() == TreeItemRole)
-            result.append(child);
-
-        // Now see if this item also has rows hiding inside of it.
-        child->ariaTreeRows(result);
-    }
 }
 
 bool AXObject::isLiveRegion() const

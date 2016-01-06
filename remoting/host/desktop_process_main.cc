@@ -5,12 +5,15 @@
 // This file implements the Windows service controlling Me2Me host processes
 // running within user sessions.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "remoting/base/auto_thread.h"
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/host/desktop_process.h"
@@ -63,7 +66,7 @@ int DesktopProcessMain() {
       ui_task_runner));
 #endif  // !defined(OS_WIN)
 
-  if (!desktop_process.Start(desktop_environment_factory.Pass()))
+  if (!desktop_process.Start(std::move(desktop_environment_factory)))
     return kInitializationFailed;
 
   // Run the UI message loop.

@@ -4,10 +4,12 @@
 
 #include "media/mojo/services/mojo_media_client.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/audio_output_stream_sink.h"
 #include "media/audio/fake_audio_log_factory.h"
+#include "media/base/audio_hardware_config.h"
 #include "media/base/media.h"
 #include "media/base/null_video_sink.h"
 #include "media/cdm/default_cdm_factory.h"
@@ -15,13 +17,15 @@
 #include "media/renderers/gpu_video_accelerator_factories.h"
 
 namespace media {
-namespace internal {
 
-class DefaultMojoMediaClient : public PlatformMojoMediaClient {
+namespace {
+class DefaultMojoMediaClient : public MojoMediaClient {
  public:
-  DefaultMojoMediaClient() {
-    InitializeMediaLibrary();
+  DefaultMojoMediaClient() {}
 
+  // MojoMediaClient overrides.
+  void Initialize() override {
+    InitializeMediaLibrary();
     // TODO(dalecurtis): We should find a single owner per process for the audio
     // manager or make it a lazy instance.  It's not safe to call Get()/Create()
     // across multiple threads...
@@ -55,10 +59,6 @@ class DefaultMojoMediaClient : public PlatformMojoMediaClient {
                           NullVideoSink::NewFrameCB(), task_runner));
   }
 
-  const AudioHardwareConfig* GetAudioHardwareConfig() override {
-    return audio_hardware_config_.get();
-  }
-
   scoped_ptr<CdmFactory> CreateCdmFactory(
       mojo::ServiceProvider* /* service_provider */) override {
     return make_scoped_ptr(new DefaultCdmFactory());
@@ -71,9 +71,10 @@ class DefaultMojoMediaClient : public PlatformMojoMediaClient {
   DISALLOW_COPY_AND_ASSIGN(DefaultMojoMediaClient);
 };
 
-scoped_ptr<PlatformMojoMediaClient> CreatePlatformMojoMediaClient() {
+}  // namespace (anonymous)
+
+scoped_ptr<MojoMediaClient> MojoMediaClient::Create() {
   return make_scoped_ptr(new DefaultMojoMediaClient());
 }
 
-}  // namespace internal
 }  // namespace media

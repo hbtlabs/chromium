@@ -20,7 +20,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/events/MouseRelatedEvent.h"
 
 #include "core/dom/Document.h"
@@ -146,9 +145,17 @@ void MouseRelatedEvent::computeRelativePosition()
     // Must have an updated layout tree for this math to work correctly.
     targetNode->document().updateLayoutIgnorePendingStylesheets();
 
-    // Adjust offsetLocation to be relative to the target's position.
+    // Adjust offsetLocation to be relative to the target's padding box.
     if (LayoutObject* r = targetNode->layoutObject()) {
         FloatPoint localPos = r->absoluteToLocal(FloatPoint(absoluteLocation()), UseTransforms);
+
+        // Adding this here to address crbug.com/570666. Basically we'd like to
+        // find the local coordinates relative to the padding box not the border box.
+        if (r->isBoxModelObject()) {
+            LayoutBoxModelObject* layoutBox = toLayoutBoxModelObject(r);
+            localPos.move(-layoutBox->borderLeft(), -layoutBox->borderTop());
+        }
+
         m_offsetLocation = roundedLayoutPoint(localPos);
         float scaleFactor = 1 / pageZoomFactor(this);
         if (scaleFactor != 1.0f)

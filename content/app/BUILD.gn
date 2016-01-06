@@ -29,7 +29,7 @@ content_app_deps = [
 
   # This is needed by app/content_main_runner.cc
   # TODO(brettw) this shouldn't be here, only final executables should be
-  # picking the allocator.
+  # picking the allocator. http://crbug.com/571731
   "//base/allocator",
   "//content:export",
   "//content:sandbox_helper_win",
@@ -73,6 +73,7 @@ if (is_ios) {
 content_app_extra_configs = [
   "//build/config/compiler:wexit_time_destructors",
   "//content:content_implementation",
+  "//content/public/common:mojo_shell_client",
   "//v8:external_startup_data",
 ]
 

@@ -4,8 +4,14 @@
 
 #include "chrome/browser/site_details.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
@@ -119,15 +125,17 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
     manifest.Set("name", name)
         .Set("version", "1.0")
         .Set("manifest_version", 2)
-        .Set("web_accessible_resources", ListBuilder()
-                                             .Append("blank_iframe.html")
-                                             .Append("http_iframe.html")
-                                             .Append("two_http_iframes.html"));
+        .Set("web_accessible_resources",
+             std::move(ListBuilder()
+                           .Append("blank_iframe.html")
+                           .Append("http_iframe.html")
+                           .Append("two_http_iframes.html")));
 
     if (has_background_process) {
-      manifest.Set("background",
-                   DictionaryBuilder().Set("scripts",
-                                           ListBuilder().Append("script.js")));
+      manifest.Set(
+          "background",
+          std::move(DictionaryBuilder().Set(
+              "scripts", std::move(ListBuilder().Append("script.js")))));
       dir->WriteFile(FILE_PATH_LITERAL("script.js"),
                      "console.log('" + name + " running');");
     }
@@ -174,10 +182,12 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
     manifest.Set("name", name)
         .Set("version", "1.0")
         .Set("manifest_version", 2)
-        .Set("app", DictionaryBuilder()
-                        .Set("urls", ListBuilder().Append(app_url.spec()))
-                        .Set("launch", DictionaryBuilder().Set(
-                                           "web_url", app_url.spec())));
+        .Set("app",
+             std::move(DictionaryBuilder()
+                           .Set("urls",
+                                std::move(ListBuilder().Append(app_url.spec())))
+                           .Set("launch", std::move(DictionaryBuilder().Set(
+                                              "web_url", app_url.spec())))));
     dir->WriteManifest(manifest.ToJSON());
 
     const Extension* extension = LoadExtension(dir->unpacked_path());
@@ -1148,7 +1158,7 @@ IN_PROC_BROWSER_TEST_F(
   } else if (extensions::IsIsolateExtensionsEnabled()) {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),
-                ElementsAre(Bucket(1, 2)));
+                ElementsAre(Bucket(2, 1)));
   } else {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),
@@ -1167,7 +1177,7 @@ IN_PROC_BROWSER_TEST_F(
   } else if (extensions::IsIsolateExtensionsEnabled()) {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),
-                ElementsAre(Bucket(1, 3)));
+                ElementsAre(Bucket(1, 1), Bucket(2, 1)));
   } else {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),
@@ -1187,7 +1197,7 @@ IN_PROC_BROWSER_TEST_F(
   } else if (extensions::IsIsolateExtensionsEnabled()) {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),
-                ElementsAre(Bucket(1, 4)));
+                ElementsAre(Bucket(1, 1), Bucket(3, 1)));
   } else {
     EXPECT_THAT(details->uma()->GetAllSamples(
                     "SiteIsolation.SiteInstancesPerBrowsingInstance"),

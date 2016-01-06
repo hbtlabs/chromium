@@ -4,10 +4,11 @@
 
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 
-#include "base/basictypes.h"
-#include "base/command_line.h"
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
@@ -32,7 +33,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 #if defined(OS_ANDROID)
 #include "content/browser/power_save_blocker_impl.h"
@@ -351,8 +352,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
       pending_handle_(nullptr),
       in_navigation_(0),
       frame_tree_node_(host->frame_tree_node()) {
-  browser_side_navigation = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation);
+  browser_side_navigation = IsBrowserSideNavigationEnabled();
   DevToolsProtocolDispatcher* dispatcher = protocol_handler_->dispatcher();
   dispatcher->SetDOMHandler(dom_handler_.get());
   dispatcher->SetInputHandler(input_handler_.get());
@@ -405,7 +405,7 @@ void RenderFrameDevToolsAgentHost::CommitPending() {
     return;
   }
 
-  current_ = pending_.Pass();
+  current_ = std::move(pending_);
   UpdateProtocolHandlers(current_->host());
   current_->Resume();
 }
@@ -760,7 +760,7 @@ void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
   if (pending_)
     DiscardPending();
   UpdateProtocolHandlers(nullptr);
-  disconnected_ = current_.Pass();
+  disconnected_ = std::move(current_);
   disconnected_->Detach();
   frame_tree_node_ = nullptr;
   in_navigation_protocol_message_buffer_.clear();
@@ -776,7 +776,7 @@ void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
       static_cast<RenderFrameHostImpl*>(wc->GetMainFrame());
   DCHECK(host);
   frame_tree_node_ = host->frame_tree_node();
-  current_ = disconnected_.Pass();
+  current_ = std::move(disconnected_);
   SetPending(host);
   CommitPending();
   WebContentsObserver::Observe(WebContents::FromRenderFrameHost(host));

@@ -42,7 +42,7 @@ class LayoutBox;
 class SVGImageChromeClient;
 class SVGImageForContainer;
 
-class SVGImage final : public Image {
+class SVGImage final : public Image, public DisplayItemClient {
 public:
     static PassRefPtr<SVGImage> create(ImageObserver* observer)
     {
@@ -77,8 +77,9 @@ public:
 
     void updateUseCounters(Document&) const;
 
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
-    String debugName() const { return "SVGImage"; }
+    // DisplayItemClient methods.
+    String debugName() const final { return "SVGImage"; }
+    IntRect visualRect() const override;
 
 private:
     friend class AXLayoutObject;
@@ -89,7 +90,7 @@ private:
 
     String filenameExtension() const override;
 
-    void setContainerSize(const IntSize&) override;
+    void setContainerSize(const IntSize&);
     IntSize containerSize() const;
     bool usesContainerSize() const override { return true; }
     void computeIntrinsicDimensions(Length& intrinsicWidth, Length& intrinsicHeight, FloatSize& intrinsicRatio) override;
@@ -106,8 +107,9 @@ private:
     SVGImage(ImageObserver*);
     void draw(SkCanvas*, const SkPaint&, const FloatRect& fromRect, const FloatRect& toRect, RespectImageOrientationEnum, ImageClampingMode) override;
     void drawForContainer(SkCanvas*, const SkPaint&, const FloatSize, float, const FloatRect&, const FloatRect&, const KURL&);
-    void drawPatternForContainer(GraphicsContext*, const FloatSize, float, const FloatRect&, const FloatSize&, const FloatPoint&,
+    void drawPatternForContainer(GraphicsContext&, const FloatSize, float, const FloatRect&, const FloatSize&, const FloatPoint&,
         SkXfermode::Mode, const FloatRect&, const FloatSize& repeatSpacing, const KURL&);
+    PassRefPtr<SkImage> imageForCurrentFrameForContainer(const KURL&);
     void drawInternal(SkCanvas*, const SkPaint&, const FloatRect& fromRect, const FloatRect& toRect, RespectImageOrientationEnum,
         ImageClampingMode, const KURL&);
 

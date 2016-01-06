@@ -4,18 +4,23 @@
 
 #include "blimp/engine/browser/blimp_engine_session.h"
 
-#include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
-#include "blimp/common/proto/blimp_message.pb.h"
-#include "blimp/common/proto/control.pb.h"
+#include "blimp/common/create_blimp_message.h"
+#include "blimp/common/proto/tab_control.pb.h"
 #include "blimp/engine/browser/blimp_browser_context.h"
 #include "blimp/engine/ui/blimp_layout_manager.h"
 #include "blimp/engine/ui/blimp_screen.h"
 #include "blimp/engine/ui/blimp_ui_context_factory.h"
 #include "blimp/net/blimp_connection.h"
 #include "blimp/net/blimp_message_multiplexer.h"
+#include "blimp/net/browser_connection_handler.h"
+#include "blimp/net/common.h"
+#include "blimp/net/engine_authentication_handler.h"
+#include "blimp/net/engine_connection_manager.h"
 #include "blimp/net/null_blimp_message_processor.h"
+#include "blimp/net/tcp_engine_transport.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
@@ -40,9 +45,10 @@ namespace engine {
 namespace {
 
 const int kDummyTabId = 0;
-
-base::LazyInstance<blimp::NullBlimpMessageProcessor> g_blimp_message_processor =
-    LAZY_INSTANCE_INITIALIZER;
+const float kDefaultScaleFactor = 1.f;
+const int kDefaultDisplayWidth = 800;
+const int kDefaultDisplayHeight = 600;
+const uint16_t kDefaultPort = 25467;
 
 // Focus rules that support activating an child window.
 class FocusRulesImpl : public wm::BaseFocusRules {
@@ -58,20 +64,79 @@ class FocusRulesImpl : public wm::BaseFocusRules {
   DISALLOW_COPY_AND_ASSIGN(FocusRulesImpl);
 };
 
+net::IPAddressNumber GetIPv4AnyAddress() {
+  net::IPAddressNumber output;
+  output.push_back(0);
+  output.push_back(0);
+  output.push_back(0);
+  output.push_back(0);
+  return output;
+}
+
 }  // namespace
 
+// This class's functions and destruction are all invoked on the IO thread by
+// the BlimpEngineSession.
+class EngineNetworkComponents {
+ public:
+  explicit EngineNetworkComponents(net::NetLog* net_log);
+  ~EngineNetworkComponents();
+
+  void Initialize();
+
+ private:
+  net::NetLog* net_log_;
+  scoped_ptr<BrowserConnectionHandler> connection_handler_;
+  scoped_ptr<EngineAuthenticationHandler> authentication_handler_;
+  scoped_ptr<EngineConnectionManager> connection_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(EngineNetworkComponents);
+};
+
+EngineNetworkComponents::EngineNetworkComponents(net::NetLog* net_log)
+    : net_log_(net_log) {}
+
+EngineNetworkComponents::~EngineNetworkComponents() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+}
+
+void EngineNetworkComponents::Initialize() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK(!connection_handler_);
+
+  // Creates and connects net components.
+  // A BlimpConnection flows from
+  // connection_manager_ --> authentication_handler_ --> connection_handler_
+  connection_handler_.reset(new BrowserConnectionHandler);
+  authentication_handler_.reset(
+      new EngineAuthenticationHandler(connection_handler_.get()));
+  connection_manager_.reset(
+      new EngineConnectionManager(authentication_handler_.get()));
+
+  // Adds BlimpTransports to connection_manager_.
+  net::IPEndPoint address(GetIPv4AnyAddress(), kDefaultPort);
+  connection_manager_->AddTransport(
+      make_scoped_ptr(new TCPEngineTransport(address, net_log_)));
+}
+
 BlimpEngineSession::BlimpEngineSession(
-    scoped_ptr<BlimpBrowserContext> browser_context)
+    scoped_ptr<BlimpBrowserContext> browser_context,
+    net::NetLog* net_log)
     : browser_context_(std::move(browser_context)),
       screen_(new BlimpScreen),
-      // TODO(dtrainor, haibinlu): Properly pull these from the BlimpMessageMux.
-      render_widget_processor_(g_blimp_message_processor.Pointer(),
-                               g_blimp_message_processor.Pointer()) {
-  render_widget_processor_.SetDelegate(kDummyTabId, this);
+      net_components_(new EngineNetworkComponents(net_log)) {
+  screen_->UpdateDisplayScaleAndSize(kDefaultScaleFactor,
+                                     gfx::Size(kDefaultDisplayWidth,
+                                               kDefaultDisplayHeight));
+  render_widget_feature_.SetDelegate(kDummyTabId, this);
 }
 
 BlimpEngineSession::~BlimpEngineSession() {
-  render_widget_processor_.RemoveDelegate(kDummyTabId);
+  render_widget_feature_.RemoveDelegate(kDummyTabId);
+
+  // Safely delete network components on the IO thread.
+  content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
+                                     net_components_.release());
 }
 
 void BlimpEngineSession::Initialize() {
@@ -103,6 +168,30 @@ void BlimpEngineSession::Initialize() {
 #endif
 
   window_tree_host_->SetBounds(gfx::Rect(screen_->GetPrimaryDisplay().size()));
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&EngineNetworkComponents::Initialize,
+                 base::Unretained(net_components_.get())));
+
+  // Register features' message senders and receivers.
+  tab_control_message_sender_ =
+      RegisterFeature(BlimpMessage::TAB_CONTROL, this);
+  navigation_message_sender_ = RegisterFeature(BlimpMessage::NAVIGATION, this);
+  render_widget_feature_.set_render_widget_message_sender(
+      RegisterFeature(BlimpMessage::RENDER_WIDGET, &render_widget_feature_));
+  render_widget_feature_.set_input_message_sender(
+      RegisterFeature(BlimpMessage::INPUT, &render_widget_feature_));
+  render_widget_feature_.set_compositor_message_sender(
+      RegisterFeature(BlimpMessage::COMPOSITOR, &render_widget_feature_));
+}
+
+scoped_ptr<BlimpMessageProcessor> BlimpEngineSession::RegisterFeature(
+    BlimpMessage::Type type,
+    BlimpMessageProcessor* incoming_processor) {
+  // TODO(haibinlu): implement this once thread hopping message processing is
+  // done.
+  return make_scoped_ptr(new NullBlimpMessageProcessor);
 }
 
 void BlimpEngineSession::CreateWebContents(const int target_tab_id) {
@@ -120,9 +209,13 @@ void BlimpEngineSession::CloseWebContents(const int target_tab_id) {
   web_contents_->Close();
 }
 
-void BlimpEngineSession::HandleResize(const gfx::Size& size) {
-  // TODO(dtrainor, haibinlu): Set the proper size on the WebContents/save for
-  // future WebContents objects.
+void BlimpEngineSession::HandleResize(float device_pixel_ratio,
+                                      const gfx::Size& size) {
+  screen_->UpdateDisplayScaleAndSize(device_pixel_ratio, size);
+  if (web_contents_ && web_contents_->GetRenderViewHost() &&
+      web_contents_->GetRenderViewHost()->GetWidget()) {
+    web_contents_->GetRenderViewHost()->GetWidget()->WasResized();
+  }
 }
 
 void BlimpEngineSession::LoadUrl(const int target_tab_id, const GURL& url) {
@@ -186,19 +279,20 @@ void BlimpEngineSession::OnCompositorMessageReceived(
 void BlimpEngineSession::ProcessMessage(
     scoped_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
-  DCHECK(message->type() == BlimpMessage::CONTROL ||
-      message->type() == BlimpMessage::NAVIGATION);
+  DCHECK(message->type() == BlimpMessage::TAB_CONTROL ||
+         message->type() == BlimpMessage::NAVIGATION);
 
-  if (message->type() == BlimpMessage::CONTROL) {
-    switch (message->control().type()) {
-      case ControlMessage::CREATE_TAB:
+  if (message->type() == BlimpMessage::TAB_CONTROL) {
+    switch (message->tab_control().type()) {
+      case TabControlMessage::CREATE_TAB:
         CreateWebContents(message->target_tab_id());
         break;
-      case ControlMessage::CLOSE_TAB:
+      case TabControlMessage::CLOSE_TAB:
         CloseWebContents(message->target_tab_id());
-      case ControlMessage::SIZE:
-        HandleResize(gfx::Size(message->control().resize().width(),
-                               message->control().resize().height()));
+      case TabControlMessage::SIZE:
+        HandleResize(message->tab_control().size().device_pixel_ratio(),
+                     gfx::Size(message->tab_control().size().width(),
+                               message->tab_control().size().height()));
         break;
       default:
         NOTIMPLEMENTED();
@@ -290,7 +384,7 @@ void BlimpEngineSession::ActivateContents(content::WebContents* contents) {
 
 void BlimpEngineSession::ForwardCompositorProto(
     const std::vector<uint8_t>& proto) {
-  render_widget_processor_.SendCompositorMessage(kDummyTabId, proto);
+  render_widget_feature_.SendCompositorMessage(kDummyTabId, proto);
 }
 
 void BlimpEngineSession::NavigationStateChanged(
@@ -299,11 +393,9 @@ void BlimpEngineSession::NavigationStateChanged(
   if (source != web_contents_.get() || !changed_flags)
     return;
 
-  scoped_ptr<BlimpMessage> message(new BlimpMessage);
-  message->set_type(BlimpMessage::NAVIGATION);
-  message->set_target_tab_id(kDummyTabId);
-
-  NavigationMessage* navigation_message = message->mutable_navigation();
+  NavigationMessage* navigation_message;
+  scoped_ptr<BlimpMessage> message =
+      CreateBlimpMessage(&navigation_message, kDummyTabId);
   navigation_message->set_type(NavigationMessage::NAVIGATION_STATE_CHANGED);
   NavigationStateChangeMessage* details =
       navigation_message->mutable_navigation_state_change();
@@ -322,16 +414,14 @@ void BlimpEngineSession::NavigationStateChanged(
   if (changed_flags & content::InvalidateTypes::INVALIDATE_TYPE_LOAD)
     details->set_loading(source->IsLoading());
 
-  // TODO(dtrainor, haibinlu): Send to the right BlimpMessageProcessor.
-  g_blimp_message_processor.Pointer()->ProcessMessage(
-      std::move(message),
-      net::CompletionCallback());
+  navigation_message_sender_->ProcessMessage(std::move(message),
+                                             net::CompletionCallback());
 }
 
 void BlimpEngineSession::RenderViewHostChanged(
     content::RenderViewHost* old_host,
     content::RenderViewHost* new_host) {
-  render_widget_processor_.OnRenderWidgetInitialized(kDummyTabId);
+  render_widget_feature_.OnRenderWidgetInitialized(kDummyTabId);
 }
 
 void BlimpEngineSession::PlatformSetContents(

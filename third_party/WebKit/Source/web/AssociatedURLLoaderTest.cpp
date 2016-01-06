@@ -28,8 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
@@ -96,7 +94,7 @@ public:
             "visible_iframe.html",
             "zero_sized_iframe.html",
         };
-        for (size_t i = 0; i < arraysize(iframeSupportFiles); ++i) {
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(iframeSupportFiles); ++i) {
             RegisterMockedUrl(urlRoot, iframeSupportFiles[i]);
         }
 

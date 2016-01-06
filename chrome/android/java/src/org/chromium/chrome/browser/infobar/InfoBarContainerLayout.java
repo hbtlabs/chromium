@@ -9,6 +9,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -239,7 +240,7 @@ class InfoBarContainerLayout extends FrameLayout {
         void prepareAnimation() {
             mFrontView = (ViewGroup) LayoutInflater.from(getContext()).inflate(
                     R.layout.infobar_wrapper, InfoBarContainerLayout.this, false);
-            mFrontView.addView(mFrontInnerView);
+            addInnerView(mFrontView, mFrontInnerView);
             addView(mFrontView);
             updateLayoutParams();
         }
@@ -315,7 +316,7 @@ class InfoBarContainerLayout extends FrameLayout {
         void prepareAnimation() {
             mOldFrontView = (ViewGroup) getChildAt(0);
             mNewFrontView = (ViewGroup) getChildAt(1);
-            mNewFrontView.addView(mNewFrontInnerView);
+            addInnerView(mNewFrontView, mNewFrontInnerView);
         }
 
         @Override
@@ -414,7 +415,7 @@ class InfoBarContainerLayout extends FrameLayout {
         void prepareAnimation() {
             mFrontView = (ViewGroup) getChildAt(0);
             mOldInnerView = mFrontView.getChildAt(0);
-            mFrontView.addView(mNewInnerView);
+            addInnerView(mFrontView, mNewInnerView);
         }
 
         @Override
@@ -472,6 +473,10 @@ class InfoBarContainerLayout extends FrameLayout {
      */
     private int mBackInfobarHeight;
 
+    /**
+     * Determines whether any animations need to run in order to make the visible views match the
+     * current list of Items in mItems. If so, kicks off the next animation that's needed.
+     */
     private void processPendingAnimations() {
         // If an animation is running, wait until it finishes before beginning the next animation.
         if (mAnimation != null) return;
@@ -487,7 +492,7 @@ class InfoBarContainerLayout extends FrameLayout {
         // First, check if we can remove any back infobars.
         if (childCount > desiredChildCount + 1
                 || (childCount == desiredChildCount + 1 && !shouldRemoveFrontView)) {
-            scheduleAnimation(new InfoBarDisappearingAnimation());
+            runAnimation(new InfoBarDisappearingAnimation());
             return;
         }
 
@@ -496,12 +501,12 @@ class InfoBarContainerLayout extends FrameLayout {
             // The second to front infobar, if any, will become the new front infobar.
             if (!mItems.isEmpty() && childCount >= 2) {
                 mFrontItem = mItems.get(0);
-                scheduleAnimation(new FrontInfoBarDisappearingAndRevealingAnimation(
+                runAnimation(new FrontInfoBarDisappearingAndRevealingAnimation(
                         mFrontItem.getView()));
                 return;
             } else {
                 mFrontItem = null;
-                scheduleAnimation(new InfoBarDisappearingAnimation());
+                runAnimation(new InfoBarDisappearingAnimation());
                 return;
             }
         }
@@ -510,7 +515,7 @@ class InfoBarContainerLayout extends FrameLayout {
         if (mFrontItem != null && mItems.contains(mFrontItem)) {
             View frontInnerView = ((ViewGroup) getChildAt(0)).getChildAt(0);
             if (frontInnerView != mFrontItem.getView()) {
-                scheduleAnimation(new FrontInfoBarSwapContentsAnimation(mFrontItem.getView()));
+                runAnimation(new FrontInfoBarSwapContentsAnimation(mFrontItem.getView()));
                 return;
             }
         }
@@ -519,20 +524,31 @@ class InfoBarContainerLayout extends FrameLayout {
         if (childCount < desiredChildCount) {
             if (childCount == 0) {
                 mFrontItem = mItems.get(0);
-                scheduleAnimation(new FrontInfoBarAppearingAnimation(mFrontItem.getView()));
+                runAnimation(new FrontInfoBarAppearingAnimation(mFrontItem.getView()));
                 return;
             } else {
-                scheduleAnimation(new BackInfoBarAppearingAnimation());
+                runAnimation(new BackInfoBarAppearingAnimation());
                 return;
             }
         }
     }
 
-    private void scheduleAnimation(InfoBarAnimation animation) {
+    private void runAnimation(InfoBarAnimation animation) {
         mAnimation = animation;
         mAnimation.prepareAnimation();
-        // Trigger a layout. onLayout() will call mAnimation.start().
-        requestLayout();
+        if (isLayoutRequested()) {
+            // onLayout() will call mAnimation.start().
+        } else {
+            mAnimation.start();
+        }
+    }
+
+    /**
+     * Adds an infobar view to a wrapper view, with suitable LayoutParams.
+     */
+    private void addInnerView(ViewGroup wrapperView, View innerView) {
+        wrapperView.addView(innerView, new LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP));
     }
 
     private void updateLayoutParams() {

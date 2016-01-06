@@ -4,12 +4,15 @@
 
 #include "cc/trees/layer_tree_host_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <limits>
 #include <map>
 #include <set>
 
-#include "base/basictypes.h"
+#include "base/auto_reset.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/small_map.h"
 #include "base/json/json_writer.h"
@@ -43,6 +46,7 @@
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
+#include "cc/layers/surface_layer_impl.h"
 #include "cc/layers/viewport.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/copy_output_request.h"
@@ -821,7 +825,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
   TRACE_EVENT_BEGIN2(
       "cc", "LayerTreeHostImpl::CalculateRenderPasses",
       "render_surface_layer_list.size()",
-      static_cast<uint64>(frame->render_surface_layer_list->size()),
+      static_cast<uint64_t>(frame->render_surface_layer_list->size()),
       "RequiresHighResToDraw", RequiresHighResToDraw());
 
   // Create the render passes in dependency order.
@@ -883,8 +887,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
 
   int num_missing_tiles = 0;
   int num_incomplete_tiles = 0;
-  int64 checkerboarded_no_recording_content_area = 0;
-  int64 checkerboarded_needs_raster_content_area = 0;
+  int64_t checkerboarded_no_recording_content_area = 0;
+  int64_t checkerboarded_needs_raster_content_area = 0;
   bool have_copy_request = false;
   bool have_missing_animated_tiles = false;
 
@@ -1267,7 +1271,7 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
     global_tile_state_.hard_memory_limit_in_bytes =
         policy.bytes_limit_when_visible;
     global_tile_state_.soft_memory_limit_in_bytes =
-        (static_cast<int64>(global_tile_state_.hard_memory_limit_in_bytes) *
+        (static_cast<int64_t>(global_tile_state_.hard_memory_limit_in_bytes) *
          settings_.max_memory_for_prepaint_percentage) /
         100;
   }
@@ -1452,59 +1456,31 @@ void LayerTreeHostImpl::SetManagedMemoryPolicy(
     client_->SetNeedsCommitOnImplThread();
 }
 
-void LayerTreeHostImpl::SetExternalDrawConstraints(
-    const gfx::Transform& transform,
-    const gfx::Rect& viewport,
-    const gfx::Rect& clip,
-    const gfx::Rect& viewport_rect_for_tile_priority,
-    const gfx::Transform& transform_for_tile_priority,
-    bool resourceless_software_draw) {
+void LayerTreeHostImpl::SetExternalTilePriorityConstraints(
+    const gfx::Rect& viewport_rect,
+    const gfx::Transform& transform) {
   gfx::Rect viewport_rect_for_tile_priority_in_view_space;
-  if (!resourceless_software_draw) {
-    gfx::Transform screen_to_view(gfx::Transform::kSkipInitialization);
-    if (transform_for_tile_priority.GetInverse(&screen_to_view)) {
-      // Convert from screen space to view space.
-      viewport_rect_for_tile_priority_in_view_space =
-          MathUtil::ProjectEnclosingClippedRect(
-              screen_to_view, viewport_rect_for_tile_priority);
-    }
+  gfx::Transform screen_to_view(gfx::Transform::kSkipInitialization);
+  if (transform.GetInverse(&screen_to_view)) {
+    // Convert from screen space to view space.
+    viewport_rect_for_tile_priority_in_view_space =
+        MathUtil::ProjectEnclosingClippedRect(screen_to_view, viewport_rect);
   }
 
-  const bool transform_changed = external_transform_ != transform;
-  const bool viewport_changed = external_viewport_ != viewport;
-  const bool clip_changed = external_clip_ != clip;
-  const bool resourceless_software_draw_changed =
-      resourceless_software_draw_ != resourceless_software_draw;
   const bool tile_priority_params_changed =
       viewport_rect_for_tile_priority_ !=
       viewport_rect_for_tile_priority_in_view_space;
 
-  // UpdateDrawProperties does not depend on clip.
-  if (transform_changed || viewport_changed ||
-      resourceless_software_draw_changed || tile_priority_params_changed) {
-    active_tree_->set_needs_update_draw_properties();
-  }
-
-  external_transform_ = transform;
-  external_viewport_ = viewport;
-  external_clip_ = clip;
   viewport_rect_for_tile_priority_ =
       viewport_rect_for_tile_priority_in_view_space;
-  resourceless_software_draw_ = resourceless_software_draw;
 
-  // When not toggling resourceless software draw, need to set redraw for
-  // all changes to draw parameters. Damage will be set externally by Android
-  // WebView for resourceless software draw toggles, so ignored here.
-  const bool draw_params_changed = transform_changed || viewport_changed ||
-                                   clip_changed || tile_priority_params_changed;
-  if (!resourceless_software_draw_changed && draw_params_changed) {
+  if (tile_priority_params_changed) {
+    active_tree_->set_needs_update_draw_properties();
+
+    // Compositor, not OutputSurface, is responsible for setting damage and
+    // triggering redraw for constraint changes.
     SetFullRootLayerDamage();
     SetNeedsRedraw();
-  }
-
-  if (resourceless_software_draw_changed) {
-    client_->OnResourcelessSoftareDrawStateChanged(resourceless_software_draw);
-    client_->OnCanDrawStateChanged(CanDraw());
   }
 }
 
@@ -1555,8 +1531,53 @@ void LayerTreeHostImpl::ReclaimResources(const CompositorFrameAck* ack) {
   }
 }
 
-void LayerTreeHostImpl::OnDraw() {
-  client_->OnDrawForOutputSurface();
+void LayerTreeHostImpl::OnDraw(const gfx::Transform& transform,
+                               const gfx::Rect& viewport,
+                               const gfx::Rect& clip,
+                               bool resourceless_software_draw) {
+  DCHECK(!resourceless_software_draw_);
+  const bool transform_changed = external_transform_ != transform;
+  const bool viewport_changed = external_viewport_ != viewport;
+  const bool clip_changed = external_clip_ != clip;
+
+  external_transform_ = transform;
+  external_viewport_ = viewport;
+  external_clip_ = clip;
+
+  {
+    base::AutoReset<bool> resourceless_software_draw_reset(
+        &resourceless_software_draw_, resourceless_software_draw);
+
+    // For resourceless software draw, always set full damage to ensure they
+    // always swap. Otherwise, need to set redraw for any changes to draw
+    // parameters.
+    const bool draw_params_changed =
+        transform_changed || viewport_changed || clip_changed;
+    if (resourceless_software_draw_ || draw_params_changed) {
+      SetFullRootLayerDamage();
+      SetNeedsRedraw();
+    }
+
+    // UpdateDrawProperties does not depend on clip.
+    if (transform_changed || viewport_changed || resourceless_software_draw_) {
+      active_tree_->set_needs_update_draw_properties();
+    }
+
+    if (resourceless_software_draw) {
+      client_->OnCanDrawStateChanged(CanDraw());
+    }
+
+    client_->OnDrawForOutputSurface(resourceless_software_draw_);
+  }
+
+  if (resourceless_software_draw) {
+    active_tree_->set_needs_update_draw_properties();
+    client_->OnCanDrawStateChanged(CanDraw());
+    // This draw may have reset all damage, which would lead to subsequent
+    // incorrect hardware draw, so explicitly set damage for next hardware
+    // draw as well.
+    SetFullRootLayerDamage();
+  }
 }
 
 void LayerTreeHostImpl::OnCanDrawStateChangedForTree() {
@@ -1588,6 +1609,10 @@ CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() const {
         !OuterViewportScrollLayer()->user_scrollable_vertical();
   }
 
+  for (LayerImpl* surface_layer : active_tree_->SurfaceLayers()) {
+    metadata.referenced_surfaces.push_back(
+        static_cast<SurfaceLayerImpl*>(surface_layer)->surface_id());
+  }
   if (!InnerViewportScrollLayer())
     return metadata;
 
@@ -3664,6 +3689,13 @@ void LayerTreeHostImpl::TreeLayerTransformIsPotentiallyAnimatingChanged(
   LayerAnimationValueObserver* layer = tree->LayerById(layer_id);
   if (layer)
     layer->OnTransformIsPotentiallyAnimatingChanged(is_animating);
+}
+
+bool LayerTreeHostImpl::AnimationsPreserveAxisAlignment(
+    const LayerImpl* layer) const {
+  return animation_host_
+             ? animation_host_->AnimationsPreserveAxisAlignment(layer->id())
+             : true;
 }
 
 void LayerTreeHostImpl::SetLayerFilterMutated(int layer_id,

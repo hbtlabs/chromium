@@ -4,6 +4,11 @@
 
 #include "mojo/services/tracing/tracing_app.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
@@ -33,32 +38,33 @@ bool TracingApp::ConfigureIncomingConnection(
     TraceRecorderPtr recorder_ptr;
     recorder_impls_.push_back(
         new TraceRecorderImpl(GetProxy(&recorder_ptr), sink_.get()));
-    provider_ptr->StartTracing(tracing_categories_, recorder_ptr.Pass());
+    provider_ptr->StartTracing(tracing_categories_, std::move(recorder_ptr));
   }
-  provider_ptrs_.AddInterfacePtr(provider_ptr.Pass());
+  provider_ptrs_.AddInterfacePtr(std::move(provider_ptr));
   return true;
 }
 
 void TracingApp::Create(mojo::ApplicationConnection* connection,
                         mojo::InterfaceRequest<TraceCollector> request) {
-  collector_binding_.Bind(request.Pass());
+  collector_binding_.Bind(std::move(request));
 }
 
 void TracingApp::Create(
     mojo::ApplicationConnection* connection,
     mojo::InterfaceRequest<StartupPerformanceDataCollector> request) {
-  startup_performance_data_collector_bindings_.AddBinding(this, request.Pass());
+  startup_performance_data_collector_bindings_.AddBinding(this,
+                                                          std::move(request));
 }
 
 void TracingApp::Start(mojo::ScopedDataPipeProducerHandle stream,
                        const mojo::String& categories) {
   tracing_categories_ = categories;
-  sink_.reset(new TraceDataSink(stream.Pass()));
+  sink_.reset(new TraceDataSink(std::move(stream)));
   provider_ptrs_.ForAllPtrs([categories, this](TraceProvider* controller) {
     TraceRecorderPtr ptr;
     recorder_impls_.push_back(
         new TraceRecorderImpl(GetProxy(&ptr), sink_.get()));
-    controller->StartTracing(categories, ptr.Pass());
+    controller->StartTracing(categories, std::move(ptr));
   });
   tracing_active_ = true;
 }
@@ -126,37 +132,37 @@ void TracingApp::StopAndFlush() {
   AllDataCollected();
 }
 
-void TracingApp::SetShellProcessCreationTime(int64 time) {
+void TracingApp::SetShellProcessCreationTime(int64_t time) {
   if (startup_performance_times_.shell_process_creation_time == 0)
     startup_performance_times_.shell_process_creation_time = time;
 }
 
-void TracingApp::SetShellMainEntryPointTime(int64 time) {
+void TracingApp::SetShellMainEntryPointTime(int64_t time) {
   if (startup_performance_times_.shell_main_entry_point_time == 0)
     startup_performance_times_.shell_main_entry_point_time = time;
 }
 
-void TracingApp::SetBrowserMessageLoopStartTicks(int64 ticks) {
+void TracingApp::SetBrowserMessageLoopStartTicks(int64_t ticks) {
   if (startup_performance_times_.browser_message_loop_start_ticks == 0)
     startup_performance_times_.browser_message_loop_start_ticks = ticks;
 }
 
-void TracingApp::SetBrowserWindowDisplayTicks(int64 ticks) {
+void TracingApp::SetBrowserWindowDisplayTicks(int64_t ticks) {
   if (startup_performance_times_.browser_window_display_ticks == 0)
     startup_performance_times_.browser_window_display_ticks = ticks;
 }
 
-void TracingApp::SetBrowserOpenTabsTimeDelta(int64 delta) {
+void TracingApp::SetBrowserOpenTabsTimeDelta(int64_t delta) {
   if (startup_performance_times_.browser_open_tabs_time_delta == 0)
     startup_performance_times_.browser_open_tabs_time_delta = delta;
 }
 
-void TracingApp::SetFirstWebContentsMainFrameLoadTicks(int64 ticks) {
+void TracingApp::SetFirstWebContentsMainFrameLoadTicks(int64_t ticks) {
   if (startup_performance_times_.first_web_contents_main_frame_load_ticks == 0)
     startup_performance_times_.first_web_contents_main_frame_load_ticks = ticks;
 }
 
-void TracingApp::SetFirstVisuallyNonEmptyLayoutTicks(int64 ticks) {
+void TracingApp::SetFirstVisuallyNonEmptyLayoutTicks(int64_t ticks) {
   if (startup_performance_times_.first_visually_non_empty_layout_ticks == 0)
     startup_performance_times_.first_visually_non_empty_layout_ticks = ticks;
 }

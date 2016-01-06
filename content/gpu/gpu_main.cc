@@ -2,12 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdlib.h>
-
-#if defined(OS_WIN)
-#include <dwmapi.h>
-#include <windows.h>
-#endif
 
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
@@ -46,6 +42,11 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
+
+#if defined(OS_WIN)
+#include <dwmapi.h>
+#include <windows.h>
+#endif
 
 #if defined(OS_ANDROID)
 #include "base/trace_event/memory_dump_manager.h"
@@ -364,8 +365,8 @@ int GpuMain(const MainFunctionParams& parameters) {
     gpu_info.sandboxed = Sandbox::SandboxIsCurrentlyActive();
 #endif
 
-    gpu_info.video_decode_accelerator_supported_profiles =
-        content::GpuVideoDecodeAccelerator::GetSupportedProfiles();
+    gpu_info.video_decode_accelerator_capabilities =
+        content::GpuVideoDecodeAccelerator::GetCapabilities();
     gpu_info.video_encode_accelerator_supported_profiles =
         content::GpuVideoEncodeAccelerator::GetSupportedProfiles();
     gpu_info.jpeg_decode_accelerator_supported =

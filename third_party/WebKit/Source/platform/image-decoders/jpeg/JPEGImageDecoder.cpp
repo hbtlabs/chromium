@@ -35,7 +35,6 @@
  * version of this file under any of the LGPL, the MPL or the GPL.
  */
 
-#include "config.h"
 #include "platform/image-decoders/jpeg/JPEGImageDecoder.h"
 
 #include "platform/PlatformInstrumentation.h"
@@ -650,11 +649,19 @@ public:
         qcms_profile* inputProfile = qcms_profile_from_memory(colorProfile.data(), colorProfile.size());
         if (!inputProfile)
             return;
+
         // We currently only support color profiles for RGB profiled images.
         ASSERT(rgbData == qcms_profile_get_color_space(inputProfile));
-        qcms_data_type dataFormat = hasAlpha ? QCMS_DATA_RGBA_8 : QCMS_DATA_RGB_8;
+
+        if (qcms_profile_match(inputProfile, deviceProfile)) {
+            qcms_profile_release(inputProfile);
+            return;
+        }
+
         // FIXME: Don't force perceptual intent if the image profile contains an intent.
+        qcms_data_type dataFormat = hasAlpha ? QCMS_DATA_RGBA_8 : QCMS_DATA_RGB_8;
         m_transform = qcms_transform_create(inputProfile, dataFormat, deviceProfile, dataFormat, QCMS_INTENT_PERCEPTUAL);
+
         qcms_profile_release(inputProfile);
     }
 #endif
@@ -839,7 +846,7 @@ bool JPEGImageDecoder::decodeToYUV()
 
 void JPEGImageDecoder::setImagePlanes(PassOwnPtr<ImagePlanes> imagePlanes)
 {
-    m_imagePlanes = imagePlanes;
+    m_imagePlanes = std::move(imagePlanes);
 }
 
 template <J_COLOR_SPACE colorSpace> void setPixel(ImageFrame& buffer, ImageFrame::PixelData* pixel, JSAMPARRAY samples, int column)

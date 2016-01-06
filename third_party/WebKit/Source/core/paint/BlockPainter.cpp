@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/paint/BlockPainter.h"
 
 #include "core/editing/DragCaretController.h"
@@ -78,7 +77,7 @@ void BlockPainter::paintOverflowControlsIfNeeded(const PaintInfo& paintInfo, con
         if (!m_layoutBlock.layer()->isSelfPaintingLayer()) {
             LayoutRect clipRect = m_layoutBlock.borderBoxRect();
             clipRect.moveBy(paintOffset);
-            clipRecorder.emplace(*paintInfo.context, m_layoutBlock, DisplayItem::ClipScrollbarsToBoxBounds, clipRect);
+            clipRecorder.emplace(paintInfo.context, m_layoutBlock, DisplayItem::ClipScrollbarsToBoxBounds, clipRect);
         }
         ScrollableAreaPainter(*m_layoutBlock.layer()->scrollableArea()).paintOverflowControls(paintInfo.context, roundedIntPoint(paintOffset), paintInfo.cullRect(), false /* paintingOverlayControls */);
     }
@@ -149,10 +148,10 @@ void BlockPainter::paintAsInlineBlock(const LayoutObject& layoutObject, const Pa
 
 void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (RuntimeEnabledFeatures::slimmingPaintOffsetCachingEnabled() && m_layoutBlock.childrenInline() && !paintInfo.context->paintController().skippingCache()) {
+    if (RuntimeEnabledFeatures::slimmingPaintOffsetCachingEnabled() && m_layoutBlock.childrenInline() && !paintInfo.context.paintController().skippingCache()) {
         if (m_layoutBlock.paintOffsetChanged(paintOffset)) {
             LineBoxListPainter(m_layoutBlock.lineBoxes()).invalidateLineBoxPaintOffsets(paintInfo);
-            paintInfo.context->paintController().invalidatePaintOffset(m_layoutBlock);
+            paintInfo.context.paintController().invalidatePaintOffset(m_layoutBlock);
         }
         // Set previousPaintOffset here in case that m_layoutBlock paints nothing and no
         // LayoutObjectDrawingRecorder updates its previousPaintOffset.
@@ -188,7 +187,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
         if (m_layoutBlock.hasOverflowClip()) {
             IntSize scrollOffset = m_layoutBlock.scrolledContentOffset();
             if (m_layoutBlock.layer()->scrollsOverflow() || !scrollOffset.isZero()) {
-                scrollRecorder.emplace(*paintInfo.context, m_layoutBlock, paintPhase, scrollOffset);
+                scrollRecorder.emplace(paintInfo.context, m_layoutBlock, paintPhase, scrollOffset);
                 scrolledPaintInfo.emplace(paintInfo);
                 AffineTransform transform;
                 transform.translate(-scrollOffset.width(), -scrollOffset.height());
@@ -217,10 +216,10 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
 
     // If the caret's node's layout object's containing block is this block, and the paint action is PaintPhaseForeground,
     // then paint the caret.
-    if (paintPhase == PaintPhaseForeground && m_layoutBlock.hasCaret() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(*paintInfo.context, m_layoutBlock, DisplayItem::Caret, paintOffset)) {
+    if (paintPhase == PaintPhaseForeground && m_layoutBlock.hasCaret() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutBlock, DisplayItem::Caret, paintOffset)) {
         LayoutRect bounds = m_layoutBlock.visualOverflowRect();
         bounds.moveBy(paintOffset);
-        LayoutObjectDrawingRecorder recorder(*paintInfo.context, m_layoutBlock, DisplayItem::Caret, bounds, paintOffset);
+        LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutBlock, DisplayItem::Caret, bounds, paintOffset);
         paintCarets(paintInfo, paintOffset);
     }
 }

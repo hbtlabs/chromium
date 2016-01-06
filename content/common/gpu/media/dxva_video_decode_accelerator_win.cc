@@ -14,6 +14,8 @@
 #include <mfapi.h>
 #include <mferror.h>
 #include <ntverp.h>
+#include <stddef.h>
+#include <string.h>
 #include <wmcodecdsp.h>
 
 #include "base/base_paths_win.h"
@@ -24,12 +26,14 @@
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/win/mf_initializer.h"
 #include "media/video/video_decode_accelerator.h"
@@ -204,8 +208,10 @@ static IMFSample* CreateEmptySampleWithBuffer(int buffer_length, int align) {
 // If duration and sample time are not known, provide 0.
 // |min_size| specifies the minimum size of the buffer (might be required by
 // the decoder for input). If no alignment is required, provide 0.
-static IMFSample* CreateInputSample(const uint8* stream, int size,
-                                    int min_size, int alignment) {
+static IMFSample* CreateInputSample(const uint8_t* stream,
+                                    int size,
+                                    int min_size,
+                                    int alignment) {
   CHECK(stream);
   CHECK_GT(size, 0);
   base::win::ScopedComPtr<IMFSample> sample;
@@ -219,7 +225,7 @@ static IMFSample* CreateInputSample(const uint8* stream, int size,
 
   DWORD max_length = 0;
   DWORD current_length = 0;
-  uint8* destination = NULL;
+  uint8_t* destination = NULL;
   hr = buffer->Lock(&destination, &max_length, &current_length);
   RETURN_ON_HR_FAILURE(hr, "Failed to lock buffer", NULL);
 
@@ -244,10 +250,8 @@ static IMFSample* CreateSampleFromInputBuffer(
   RETURN_ON_FAILURE(shm.Map(bitstream_buffer.size()),
                     "Failed in base::SharedMemory::Map", NULL);
 
-  return CreateInputSample(reinterpret_cast<const uint8*>(shm.memory()),
-                           bitstream_buffer.size(),
-                           stream_size,
-                           alignment);
+  return CreateInputSample(reinterpret_cast<const uint8_t*>(shm.memory()),
+                           bitstream_buffer.size(), stream_size, alignment);
 }
 
 // Helper function to create a COM object instance from a DLL. The alternative
@@ -595,9 +599,9 @@ void DXVAVideoDecodeAccelerator::DXVAPictureBuffer::CopySurfaceComplete(
 }
 
 DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
-    int32 buffer_id, IMFSample* sample)
-    : input_buffer_id(buffer_id),
-      picture_buffer_id(-1) {
+    int32_t buffer_id,
+    IMFSample* sample)
+    : input_buffer_id(buffer_id), picture_buffer_id(-1) {
   output_sample.Attach(sample);
 }
 
@@ -785,26 +789,43 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
                                            d3d11_device_manager_.Receive());
   RETURN_ON_HR_FAILURE(hr, "MFCreateDXGIDeviceManager failed", false);
 
-  base::win::ScopedComPtr<ID3D11Device> angle_device =
-      QueryDeviceObjectFromANGLE<ID3D11Device>(EGL_D3D11_DEVICE_ANGLE);
-  RETURN_ON_FAILURE(
-      angle_device.get(),
-      "Failed to query DX11 device object from ANGLE",
-      false);
+  // This array defines the set of DirectX hardware feature levels we support.
+  // The ordering MUST be preserved. All applications are assumed to support
+  // 9.1 unless otherwise stated by the application.
+  D3D_FEATURE_LEVEL feature_levels[] = {
+    D3D_FEATURE_LEVEL_11_1,
+    D3D_FEATURE_LEVEL_11_0,
+    D3D_FEATURE_LEVEL_10_1,
+    D3D_FEATURE_LEVEL_10_0,
+    D3D_FEATURE_LEVEL_9_3,
+    D3D_FEATURE_LEVEL_9_2,
+    D3D_FEATURE_LEVEL_9_1
+  };
 
-  using_angle_device_ = true;
-  d3d11_device_ = angle_device;
-  d3d11_device_->GetImmediateContext(d3d11_device_context_.Receive());
-  RETURN_ON_FAILURE(
-      d3d11_device_context_.get(),
-      "Failed to query DX11 device context from ANGLE device",
-      false);
+  UINT flags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+
+#if defined _DEBUG
+  flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+  D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_0;
+  hr = D3D11CreateDevice(NULL,
+                         D3D_DRIVER_TYPE_HARDWARE,
+                         NULL,
+                         flags,
+                         feature_levels,
+                         arraysize(feature_levels),
+                         D3D11_SDK_VERSION,
+                         d3d11_device_.Receive(),
+                         &feature_level_out,
+                         d3d11_device_context_.Receive());
+  RETURN_ON_HR_FAILURE(hr, "Failed to create DX11 device", false);
 
   // Enable multithreaded mode on the device. This ensures that accesses to
   // context are synchronized across threads. We have multiple threads
   // accessing the context, the media foundation decoder threads and the
   // decoder thread via the video format conversion transform.
-  hr = multi_threaded_.QueryFrom(angle_device.get());
+  hr = multi_threaded_.QueryFrom(d3d11_device_.get());
   RETURN_ON_HR_FAILURE(hr, "Failed to query ID3D10Multithread", false);
   multi_threaded_->SetMultithreadProtected(TRUE);
 
@@ -900,8 +921,7 @@ void DXVAVideoDecodeAccelerator::AssignPictureBuffers(
   }
 }
 
-void DXVAVideoDecodeAccelerator::ReusePictureBuffer(
-    int32 picture_buffer_id) {
+void DXVAVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
   State state = GetState();
@@ -1250,9 +1270,8 @@ bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
     const GUID& subtype) {
   base::win::ScopedComPtr<IMFMediaType> out_media_type;
 
-  for (uint32 i = 0;
-       SUCCEEDED(decoder_->GetOutputAvailableType(0, i,
-                                                  out_media_type.Receive()));
+  for (uint32_t i = 0; SUCCEEDED(
+           decoder_->GetOutputAvailableType(0, i, out_media_type.Receive()));
        ++i) {
     GUID out_subtype = {0};
     HRESULT hr = out_media_type->GetGUID(MF_MT_SUBTYPE, &out_subtype);
@@ -1269,7 +1288,7 @@ bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
 }
 
 bool DXVAVideoDecodeAccelerator::SendMFTMessage(MFT_MESSAGE_TYPE msg,
-                                                int32 param) {
+                                                int32_t param) {
   HRESULT hr = decoder_->ProcessMessage(msg, param);
   return SUCCEEDED(hr);
 }
@@ -1800,7 +1819,7 @@ void DXVAVideoDecodeAccelerator::DismissStaleBuffers() {
 }
 
 void DXVAVideoDecodeAccelerator::DeferredDismissStaleBuffer(
-    int32 picture_buffer_id) {
+    int32_t picture_buffer_id) {
   OutputBuffers::iterator it = stale_output_picture_buffers_.find(
       picture_buffer_id);
   DCHECK(it != stale_output_picture_buffers_.end());
@@ -2003,15 +2022,6 @@ void DXVAVideoDecodeAccelerator::CopyTexture(ID3D11Texture2D* src_texture,
 
   DCHECK(video_format_converter_mft_.get());
 
-  // d3d11_device_context_->Begin(d3d11_query_.get());
-
-  hr = video_format_converter_mft_->ProcessInput(0, video_frame, 0);
-  if (FAILED(hr)) {
-    DCHECK(false);
-    RETURN_AND_NOTIFY_ON_HR_FAILURE(hr,
-        "Failed to convert output sample format.", PLATFORM_FAILURE,);
-  }
-
   // The video processor MFT requires output samples to be allocated by the
   // caller. We create a sample with a buffer backed with the ID3D11Texture2D
   // interface exposed by ANGLE. This works nicely as this ensures that the
@@ -2040,9 +2050,12 @@ void DXVAVideoDecodeAccelerator::CopyTexture(ID3D11Texture2D* src_texture,
 
   output_sample->AddBuffer(output_buffer.get());
 
-  // Lock the device here as we are accessing the destination texture created
-  // on the main thread.
-  multi_threaded_->Enter();
+  hr = video_format_converter_mft_->ProcessInput(0, video_frame, 0);
+  if (FAILED(hr)) {
+    DCHECK(false);
+    RETURN_AND_NOTIFY_ON_HR_FAILURE(hr,
+        "Failed to convert output sample format.", PLATFORM_FAILURE,);
+  }
 
   DWORD status = 0;
   MFT_OUTPUT_DATA_BUFFER format_converter_output = {};
@@ -2052,11 +2065,6 @@ void DXVAVideoDecodeAccelerator::CopyTexture(ID3D11Texture2D* src_texture,
         1,  // # of out streams to pull from
         &format_converter_output,
         &status);
-
-  d3d11_device_context_->Flush();
-  d3d11_device_context_->End(d3d11_query_.get());
-
-  multi_threaded_->Leave();
 
   if (FAILED(hr)) {
     base::debug::Alias(&hr);
@@ -2068,14 +2076,18 @@ void DXVAVideoDecodeAccelerator::CopyTexture(ID3D11Texture2D* src_texture,
         "Failed to convert output sample format.", PLATFORM_FAILURE,);
   }
 
-  main_thread_task_runner_->PostTask(
+  d3d11_device_context_->Flush();
+  d3d11_device_context_->End(d3d11_query_.get());
+
+  decoder_thread_task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&DXVAVideoDecodeAccelerator::CopySurfaceComplete,
-                 weak_this_factory_.GetWeakPtr(),
-                 nullptr,
-                 nullptr,
-                 picture_buffer_id,
-                 input_buffer_id));
+      base::Bind(&DXVAVideoDecodeAccelerator::FlushDecoder,
+                 base::Unretained(this), 0,
+                 reinterpret_cast<IDirect3DSurface9*>(NULL),
+                 reinterpret_cast<IDirect3DSurface9*>(NULL),
+                 picture_buffer_id, input_buffer_id),
+                 base::TimeDelta::FromMilliseconds(
+                    kFlushDecoderSurfaceTimeoutMs));
 }
 
 void DXVAVideoDecodeAccelerator::FlushDecoder(
@@ -2099,11 +2111,22 @@ void DXVAVideoDecodeAccelerator::FlushDecoder(
   // infinite loop.
   // Workaround is to have an upper limit of 4 on the number of iterations to
   // wait for the Flush to finish.
-  DCHECK(!use_dx11_);
 
   HRESULT hr = E_FAIL;
-
-  hr = query_->GetData(NULL, 0, D3DGETDATA_FLUSH);
+  if (use_dx11_) {
+    BOOL query_data = 0;
+    hr = d3d11_device_context_->GetData(d3d11_query_.get(), &query_data,
+                                        sizeof(BOOL), 0);
+    if (FAILED(hr)) {
+      base::debug::Alias(&hr);
+      // TODO(ananta)
+      // Remove this CHECK when the change to use DX11 for H/W decoding
+      // stablizes.
+      CHECK(false);
+    }
+  } else {
+    hr = query_->GetData(NULL, 0, D3DGETDATA_FLUSH);
+  }
 
   if ((hr == S_FALSE) && (++iterations < kMaxIterationsForD3DFlush)) {
     decoder_thread_task_runner_->PostDelayedTask(
@@ -2203,10 +2226,10 @@ bool DXVAVideoDecodeAccelerator::InitializeDX11VideoFormatConverterMediaType(
 
   base::win::ScopedComPtr<IMFMediaType> out_media_type;
 
-  for (uint32 i = 0;
-        SUCCEEDED(video_format_converter_mft_->GetOutputAvailableType(0, i,
-                                                  out_media_type.Receive()));
-        ++i) {
+  for (uint32_t i = 0;
+       SUCCEEDED(video_format_converter_mft_->GetOutputAvailableType(
+           0, i, out_media_type.Receive()));
+       ++i) {
     GUID out_subtype = {0};
     hr = out_media_type->GetGUID(MF_MT_SUBTYPE, &out_subtype);
     RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to get output major type",
@@ -2239,16 +2262,6 @@ bool DXVAVideoDecodeAccelerator::InitializeDX11VideoFormatConverterMediaType(
       RETURN_AND_NOTIFY_ON_HR_FAILURE(hr,
           "Failed to set converter output type", PLATFORM_FAILURE, false);
 
-      hr = video_format_converter_mft_->ProcessMessage(
-          MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-      if (FAILED(hr)) {
-        // TODO(ananta)
-        // Remove this CHECK when the change to use DX11 for H/W decoding
-        // stablizes.
-        RETURN_AND_NOTIFY_ON_FAILURE(
-            false, "Failed to initialize video converter.", PLATFORM_FAILURE,
-            false);
-      }
       dx11_video_format_converter_media_type_needs_init_ = false;
       return true;
     }

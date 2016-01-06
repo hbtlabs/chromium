@@ -4,8 +4,13 @@
 
 #include "chrome/browser/profiles/profile_window.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -69,7 +74,7 @@ void WaitForHistoryBackendToRun(Profile* profile) {
   scoped_ptr<history::HistoryDBTask> task(new WaitForHistoryTask());
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
-  history->ScheduleDBTask(task.Pass(), &task_tracker);
+  history->ScheduleDBTask(std::move(task), &task_tracker);
   content::RunMessageLoop();
 }
 

@@ -56,24 +56,7 @@ var TrackInfo;
      * element is ready.
      */
     ready: function() {
-      this.observeTrackList();
-
       window.addEventListener('resize', this.onWindowResize_.bind(this));
-    },
-
-    observeTrackList: function() {
-      // Unobserve the previous track list.
-      if (this.unobserveTrackList_)
-        this.unobserveTrackList_();
-
-      // Observe the new track list.
-      var observer = this.tracksValueChanged_.bind(this);
-      Array.observe(this.tracks, observer);
-
-      // Set the function to unobserve it.
-      this.unobserveTrackList_ = function(tracks, observer) {
-        Array.unobserve(tracks, observer);
-      }.bind(null, this.tracks, observer);
     },
 
     /**
@@ -130,9 +113,6 @@ var TrackInfo;
       // Note: Sometimes both oldValue and newValue are null though the actual
       // values are not null. Maybe it's a bug of Polymer.
 
-      // Re-register the observer of 'this.tracks'.
-      this.observeTrackList();
-
       if (this.tracks.length !== 0) {
         // Restore the active track.
         if (this.currentTrackIndex !== -1 &&
@@ -149,32 +129,14 @@ var TrackInfo;
     },
 
     /**
-     * Invoked when the value in the 'tracks' is changed.
-     * @param {Array<Object>} changes The detail of the change.
-     */
-    tracksValueChanged_: function(changes) {
-      if (this.tracks.length === 0)
-        this.currentTrackIndex = -1;
-      else
-        this.set('tracks.' + this.currentTrackIndex + '.active', true);
-    },
-
-    /**
      * Invoked when the track element is clicked.
      * @param {Event} event Click event.
      */
     trackClicked: function(event) {
       var index = ~~event.currentTarget.getAttribute('index');
       var track = this.tracks[index];
-      if (track) {
-        if (event.target.classList.contains('icon')) {
-          // If the play icon on the track is clicked, change the current track
-          // and start playing it regardless of current play state.
-          this.selectTrack(track, true /* force to play */);
-        } else {
-          this.selectTrack(track, false /* force to play */);
-        }
-      }
+      if (track)
+        this.selectTrack(track);
     },
 
     /**
@@ -191,8 +153,7 @@ var TrackInfo;
      * @private
      */
     ensureTrackInViewport_: function(trackIndex) {
-      var trackSelector = '::shadow .track[index="' + trackIndex + '"]';
-      var trackElement = this.querySelector(trackSelector);
+      var trackElement = this.$$('.track[index="' + trackIndex + '"]');
       if (trackElement) {
         var viewTop = this.scrollTop;
         var viewHeight = this.clientHeight;
@@ -257,10 +218,8 @@ var TrackInfo;
      * Sets the current track.
      * @param {!TrackInfo} track TrackInfo to be set as the current
      *     track.
-     * @param {boolean} forceToPlay True if the track should be played
-     *     regardless of the current play state (paused/played).
      */
-    selectTrack: function(track, forceToPlay) {
+    selectTrack: function(track) {
       var index = -1;
       for (var i = 0; i < this.tracks.length; i++) {
         if (this.tracks[i].url === track.url) {
@@ -269,22 +228,13 @@ var TrackInfo;
         }
       }
       if (index >= 0) {
-        // TODO(yoshiki): Clean up the flow and the code around here.
         if (this.currentTrackIndex === index) {
-          this.replayCurrentTrack();
+          this.fire('replay');
         } else {
           this.currentTrackIndex = index;
-          if (forceToPlay)
-            this.fire('play');
+          this.fire('play');
         }
       }
-    },
-
-    /**
-     * Request to replay the current music.
-     */
-    replayCurrentTrack: function() {
-      this.fire('replay');
     },
 
     /**

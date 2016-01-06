@@ -7,11 +7,12 @@
 
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/AudioHardware.h>
+#include <stddef.h>
 #include <list>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/audio/mac/audio_device_listener_mac.h"
 
@@ -79,16 +80,16 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerBase {
   enum { kStartDelayInSecsForPowerEvents = 2 };
   bool ShouldDeferStreamStart();
 
-  // Changes the buffer size for |device_id| if there are no active input or
-  // output streams on the device or |desired_buffer_size| is lower than the
-  // current device buffer size.
-  //
-  // Returns false if an error occurred. There is no indication if the buffer
-  // size was changed or not.
-  // |element| is 0 for output streams and 1 for input streams.
+  // Tries to change the IO buffer size to |desired_buffer_size| for |device_id|
+  // on the input scope if |is_input| is true and output scope otherwise.
+  // See comments in the implementation regarding the conditions under which
+  // a change in buffer size can take place. In short, a decrease in buffer
+  // size will always take place while an increase requires additional
+  // conditions to be fulfilled.
+  // The output parameter |size_was_changed| will be set to true only if the IO
+  // buffer size was successfully modified.
   bool MaybeChangeBufferSize(AudioDeviceID device_id,
-                             AudioUnit audio_unit,
-                             AudioUnitElement element,
+                             bool is_input,
                              size_t desired_buffer_size,
                              bool* size_was_changed);
 

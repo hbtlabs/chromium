@@ -28,10 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "wtf/Partitions.h"
 
-#include "wtf/Alias.h"
+#include "base/debug/alias.h"
 #include "wtf/MainThread.h"
 #include "wtf/PartitionAllocator.h"
 
@@ -39,7 +38,7 @@ namespace WTF {
 
 const char* const Partitions::kAllocatedObjectPoolName = "partition_alloc/allocated_objects";
 
-int Partitions::s_initializationLock = 0;
+SpinLock Partitions::s_initializationLock;
 bool Partitions::s_initialized = false;
 
 PartitionAllocatorGeneric Partitions::m_fastMallocAllocator;
@@ -50,7 +49,7 @@ HistogramEnumerationFunction Partitions::m_histogramEnumeration = nullptr;
 
 void Partitions::initialize(HistogramEnumerationFunction histogramEnumeration)
 {
-    spinLockLock(&s_initializationLock);
+    SpinLock::Guard guard(s_initializationLock);
 
     if (!s_initialized) {
         partitionAllocGlobalInit(&Partitions::handleOutOfMemory);
@@ -61,13 +60,11 @@ void Partitions::initialize(HistogramEnumerationFunction histogramEnumeration)
         m_histogramEnumeration = histogramEnumeration;
         s_initialized = true;
     }
-
-    spinLockUnlock(&s_initializationLock);
 }
 
 void Partitions::shutdown()
 {
-    spinLockLock(&s_initializationLock);
+    SpinLock::Guard guard(s_initializationLock);
 
     // We could ASSERT here for a memory leak within the partition, but it leads
     // to very hard to diagnose ASSERTs, so it's best to leave leak checking for
@@ -78,8 +75,6 @@ void Partitions::shutdown()
         (void) m_bufferAllocator.shutdown();
         (void) m_fastMallocAllocator.shutdown();
     }
-
-    spinLockUnlock(&s_initializationLock);
 }
 
 void Partitions::decommitFreeableMemory()
@@ -132,63 +127,63 @@ void Partitions::dumpMemoryStats(bool isLightDump, PartitionStatsDumper* partiti
 static NEVER_INLINE void partitionsOutOfMemoryUsing2G()
 {
     size_t signature = 2UL * 1024 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing1G()
 {
     size_t signature = 1UL * 1024 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing512M()
 {
     size_t signature = 512 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing256M()
 {
     size_t signature = 256 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing128M()
 {
     size_t signature = 128 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing64M()
 {
     size_t signature = 64 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing32M()
 {
     size_t signature = 32 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsing16M()
 {
     size_t signature = 16 * 1024 * 1024;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 
 static NEVER_INLINE void partitionsOutOfMemoryUsingLessThan16M()
 {
     size_t signature = 16 * 1024 * 1024 - 1;
-    alias(&signature);
+    base::debug::Alias(&signature);
     IMMEDIATE_CRASH();
 }
 

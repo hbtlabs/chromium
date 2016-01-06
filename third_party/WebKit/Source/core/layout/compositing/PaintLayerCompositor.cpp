@@ -23,8 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-
 #include "core/layout/compositing/PaintLayerCompositor.h"
 
 #include "core/animation/AnimationTimeline.h"
@@ -63,6 +61,7 @@
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCompositorMutableProperties.h"
 
 namespace blink {
 
@@ -332,11 +331,11 @@ void PaintLayerCompositor::updateWithoutAcceleratedCompositing(CompositingUpdate
 
 static void forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(LayoutObject* layoutObject)
 {
-    // We clear the previous paint invalidation rect as it's wrong (paint invaliation container
+    // We clear the previous paint invalidation rect as it's wrong (paint invalidation container
     // changed, ...). Forcing a full invalidation will make us recompute it. Also we are not
     // changing the previous position from our paint invalidation container, which is fine as
     // we want a full paint invalidation anyway.
-    layoutObject->setPreviousPaintInvalidationRect(LayoutRect());
+    layoutObject->clearPreviousPaintInvalidationRects();
     layoutObject->setShouldDoFullPaintInvalidation();
 
     for (LayoutObject* child = layoutObject->slowFirstChild(); child; child = child->nextSibling()) {
@@ -391,6 +390,19 @@ void PaintLayerCompositor::updateIfNeeded()
     }
 
     if (updateType != CompositingUpdateNone) {
+        if (RuntimeEnabledFeatures::compositorWorkerEnabled() && m_scrollLayer) {
+            if (Element* scrollingElement = m_layoutView.document().scrollingElement()) {
+                uint64_t elementId = 0;
+                uint32_t mutableProperties = WebCompositorMutablePropertyNone;
+                if (scrollingElement->hasCompositorProxy()) {
+                    elementId = DOMNodeIds::idForNode(scrollingElement);
+                    mutableProperties = (WebCompositorMutablePropertyScrollLeft | WebCompositorMutablePropertyScrollTop) & scrollingElement->compositorMutableProperties();
+                }
+                m_scrollLayer->setElementId(elementId);
+                m_scrollLayer->setCompositorMutableProperties(mutableProperties);
+            }
+        }
+
         GraphicsLayerUpdater updater;
         updater.update(*updateRoot, layersNeedingPaintInvalidation);
 
@@ -685,9 +697,7 @@ PaintLayer* PaintLayerCompositor::rootLayer() const
 
 GraphicsLayer* PaintLayerCompositor::rootGraphicsLayer() const
 {
-    if (m_overflowControlsHostLayer)
-        return m_overflowControlsHostLayer.get();
-    return m_rootContentLayer.get();
+    return m_overflowControlsHostLayer.get();
 }
 
 GraphicsLayer* PaintLayerCompositor::frameScrollLayer() const
@@ -763,7 +773,7 @@ bool PaintLayerCompositor::canBeComposited(const PaintLayer* layer) const
 // into the hierarchy between this layer and its children in the z-order hierarchy.
 bool PaintLayerCompositor::clipsCompositingDescendants(const PaintLayer* layer) const
 {
-    return layer->hasCompositingDescendant() && layer->layoutObject()->hasClipOrOverflowClip();
+    return layer->hasCompositingDescendant() && layer->layoutObject()->hasClipRelatedProperty();
 }
 
 // If an element has composited negative z-index children, those children paint in front of the
@@ -790,7 +800,7 @@ static void paintScrollbar(const Scrollbar* scrollbar, GraphicsContext& context,
     translation.translate(-paintOffset.x(), -paintOffset.y());
     TransformRecorder transformRecorder(context, *scrollbar, translation);
 
-    scrollbar->paint(&context, CullRect(transformedClip));
+    scrollbar->paint(context, CullRect(transformedClip));
 }
 
 IntRect PaintLayerCompositor::computeInterestRect(const GraphicsLayer* graphicsLayer, const IntRect&) const
@@ -805,7 +815,7 @@ void PaintLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, Gra
     else if (graphicsLayer == layerForVerticalScrollbar())
         paintScrollbar(m_layoutView.frameView()->verticalScrollbar(), context, interestRect);
     else if (graphicsLayer == layerForScrollCorner())
-        FramePainter(*m_layoutView.frameView()).paintScrollCorner(&context, interestRect);
+        FramePainter(*m_layoutView.frameView()).paintScrollCorner(context, interestRect);
 }
 
 bool PaintLayerCompositor::supportsFixedRootBackgroundCompositing() const
@@ -1030,8 +1040,7 @@ void PaintLayerCompositor::destroyRootLayer()
         m_layerForHorizontalScrollbar = nullptr;
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->scrollableAreaScrollbarLayerDidChange(m_layoutView.frameView(), HorizontalScrollbar);
-        if (Scrollbar* horizontalScrollbar = m_layoutView.frameView()->horizontalScrollbar())
-            m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(horizontalScrollbar);
+        m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
     }
 
     if (m_layerForVerticalScrollbar) {
@@ -1039,8 +1048,7 @@ void PaintLayerCompositor::destroyRootLayer()
         m_layerForVerticalScrollbar = nullptr;
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->scrollableAreaScrollbarLayerDidChange(m_layoutView.frameView(), VerticalScrollbar);
-        if (Scrollbar* verticalScrollbar = m_layoutView.frameView()->verticalScrollbar())
-            m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(verticalScrollbar);
+        m_layoutView.frameView()->setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
     }
 
     if (m_layerForScrollCorner) {
@@ -1060,6 +1068,11 @@ void PaintLayerCompositor::destroyRootLayer()
 void PaintLayerCompositor::attachRootLayer(RootLayerAttachment attachment)
 {
     if (!m_rootContentLayer)
+        return;
+
+    // In Slimming Paint v2, PaintArtifactCompositor is responsible for the root
+    // layer.
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
         return;
 
     switch (attachment) {

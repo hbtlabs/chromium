@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "platform/mhtml/MHTMLArchive.h"
 
 #include "platform/DateComponents.h"
@@ -50,26 +49,6 @@ namespace blink {
 const char* const quotedPrintable = "quoted-printable";
 const char* const base64 = "base64";
 const char* const binary = "binary";
-
-String MHTMLArchive::generateMHTMLBoundary()
-{
-    // Trying to generate random boundaries similar to IE/UnMHT
-    // (ex: ----=_NextPart_000_001B_01CC157B.96F808A0).
-    const size_t randomValuesLength = 10;
-    char randomValues[randomValuesLength];
-    cryptographicallyRandomValues(&randomValues, randomValuesLength);
-    StringBuilder stringBuilder;
-    stringBuilder.appendLiteral("----=_NextPart_000_");
-    for (size_t i = 0; i < randomValuesLength; ++i) {
-        if (i == 2)
-            stringBuilder.append('_');
-        else if (i == 6)
-            stringBuilder.append('.');
-        stringBuilder.append(lowerNibbleToASCIIHexDigit(randomValues[i]));
-        stringBuilder.append(upperNibbleToASCIIHexDigit(randomValues[i]));
-    }
-    return stringBuilder.toString();
-}
 
 static String replaceNonPrintableCharacters(const String& text)
 {

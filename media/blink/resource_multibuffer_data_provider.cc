@@ -4,6 +4,9 @@
 
 #include "media/blink/resource_multibuffer_data_provider.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/callback_helpers.h"
@@ -32,6 +35,10 @@ namespace media {
 // The number of milliseconds to wait before retrying a failed load.
 const int kLoaderFailedRetryDelayMs = 250;
 
+// The number of milliseconds to wait before retrying when the server
+// decides to not give us all the data at once.
+const int kLoaderPartialRetryDelayMs = 25;
+
 const int kHttpOK = 200;
 const int kHttpPartialContent = 206;
 const int kHttpRangeNotSatisfiable = 416;
@@ -51,12 +58,15 @@ ResourceMultiBufferDataProvider::ResourceMultiBufferDataProvider(
 }
 
 void ResourceMultiBufferDataProvider::Start() {
-  // In the case of a re-start, throw away any half-finished blocks.
-  fifo_.clear();
   // Prepare the request.
   WebURLRequest request(url_data_->url());
   // TODO(mkwst): Split this into video/audio.
   request.setRequestContext(WebURLRequest::RequestContextVideo);
+
+  DVLOG(1) << __FUNCTION__ << " @ " << byte_pos();
+  if (url_data_->length() > 0) {
+    DCHECK_LT(byte_pos(), url_data_->length()) << " " << url_data_->url();
+  }
 
   request.setHTTPHeaderField(
       WebString::fromUTF8(net::HttpRequestHeaders::kRange),
@@ -73,7 +83,7 @@ void ResourceMultiBufferDataProvider::Start() {
   // Check for our test WebURLLoader.
   scoped_ptr<WebURLLoader> loader;
   if (test_loader_) {
-    loader = test_loader_.Pass();
+    loader = std::move(test_loader_);
   } else {
     WebURLLoaderOptions options;
     if (url_data_->cors_mode() == UrlData::CORS_UNSPECIFIED) {
@@ -94,7 +104,7 @@ void ResourceMultiBufferDataProvider::Start() {
 
   // Start the resource loading.
   loader->loadAsynchronously(request, this);
-  active_loader_.reset(new ActiveLoader(loader.Pass()));
+  active_loader_.reset(new ActiveLoader(std::move(loader)));
 }
 
 ResourceMultiBufferDataProvider::~ResourceMultiBufferDataProvider() {}
@@ -142,7 +152,13 @@ void ResourceMultiBufferDataProvider::willFollowRedirect(
 
   // This test is vital for security!
   if (cors_mode_ == UrlData::CORS_UNSPECIFIED) {
+    // We allow the redirect if the origin is the same.
     if (origin_ != redirects_to_.GetOrigin()) {
+      // We also allow the redirect if we don't have any data in the
+      // cache, as that means that no dangerous data mixing can occur.
+      if (url_data_->multibuffer()->map().empty() && fifo_.empty())
+        return;
+
       url_data_->Fail();
     }
   }
@@ -204,7 +220,7 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
   destination_url_data->set_valid_until(base::Time::Now() +
                                         GetCacheValidUntil(response));
 
-  uint32 reasons = GetReasonsForUncacheability(response);
+  uint32_t reasons = GetReasonsForUncacheability(response);
   destination_url_data->set_cacheable(reasons == 0);
   UMA_HISTOGRAM_BOOLEAN("Media.CacheUseful", reasons == 0);
   int shift = 0;
@@ -222,7 +238,7 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
 
   // Expected content length can be |kPositionNotSpecified|, in that case
   // |content_length_| is not specified and this is a streaming response.
-  int64 content_length = response.expectedContentLength();
+  int64_t content_length = response.expectedContentLength();
 
   // We make a strong assumption that when we reach here we have either
   // received a response from HTTP/HTTPS protocol or the request was
@@ -283,7 +299,7 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
         url_data_->multibuffer()->RemoveProvider(this));
     url_data_ = destination_url_data.get();
     // Give the ownership to our new owner.
-    url_data_->multibuffer()->AddProvider(self.Pass());
+    url_data_->multibuffer()->AddProvider(std::move(self));
 
     // Call callback to let upstream users know about the transfer.
     // This will merge the data from the two multibuffers and
@@ -358,15 +374,15 @@ void ResourceMultiBufferDataProvider::didFinishLoading(
   if (url_data_->length() != kPositionNotSpecified &&
       size < url_data_->length()) {
     if (retries_ < kMaxRetries) {
-      fifo_.clear();
+      DVLOG(1) << " Partial data received.... @ pos = " << size;
       retries_++;
       base::MessageLoop::current()->PostDelayedTask(
           FROM_HERE, base::Bind(&ResourceMultiBufferDataProvider::Start,
                                 weak_factory_.GetWeakPtr()),
-          base::TimeDelta::FromMilliseconds(kLoaderFailedRetryDelayMs));
+          base::TimeDelta::FromMilliseconds(kLoaderPartialRetryDelayMs));
       return;
     } else {
-      scoped_ptr<ActiveLoader> active_loader = active_loader_.Pass();
+      scoped_ptr<ActiveLoader> active_loader = std::move(active_loader_);
       url_data_->Fail();
       return;
     }
@@ -390,7 +406,7 @@ void ResourceMultiBufferDataProvider::didFail(WebURLLoader* loader,
            << error.localizedDescription.utf8().data();
   DCHECK(active_loader_.get());
 
-  if (retries_ < kMaxRetries) {
+  if (retries_ < kMaxRetries && pos_ != 0) {
     retries_++;
     base::MessageLoop::current()->PostDelayedTask(
         FROM_HERE, base::Bind(&ResourceMultiBufferDataProvider::Start,
@@ -400,16 +416,16 @@ void ResourceMultiBufferDataProvider::didFail(WebURLLoader* loader,
     // We don't need to continue loading after failure.
     //
     // Keep it alive until we exit this method so that |error| remains valid.
-    scoped_ptr<ActiveLoader> active_loader = active_loader_.Pass();
+    scoped_ptr<ActiveLoader> active_loader = std::move(active_loader_);
     url_data_->Fail();
   }
 }
 
 bool ResourceMultiBufferDataProvider::ParseContentRange(
     const std::string& content_range_str,
-    int64* first_byte_position,
-    int64* last_byte_position,
-    int64* instance_size) {
+    int64_t* first_byte_position,
+    int64_t* last_byte_position,
+    int64_t* instance_size) {
   const std::string kUpThroughBytesUnit = "bytes ";
   if (content_range_str.find(kUpThroughBytesUnit) != 0)
     return false;
@@ -449,7 +465,12 @@ bool ResourceMultiBufferDataProvider::ParseContentRange(
 
 int64_t ResourceMultiBufferDataProvider::byte_pos() const {
   int64_t ret = pos_;
-  return ret << url_data_->multibuffer()->block_size_shift();
+  ret += fifo_.size();
+  ret = ret << url_data_->multibuffer()->block_size_shift();
+  if (!fifo_.empty()) {
+    ret += fifo_.back()->data_size() - block_size();
+  }
+  return ret;
 }
 
 int64_t ResourceMultiBufferDataProvider::block_size() const {
@@ -459,7 +480,7 @@ int64_t ResourceMultiBufferDataProvider::block_size() const {
 
 bool ResourceMultiBufferDataProvider::VerifyPartialResponse(
     const WebURLResponse& response) {
-  int64 first_byte_position, last_byte_position, instance_size;
+  int64_t first_byte_position, last_byte_position, instance_size;
   if (!ParseContentRange(response.httpHeaderField("Content-Range").utf8(),
                          &first_byte_position, &last_byte_position,
                          &instance_size)) {

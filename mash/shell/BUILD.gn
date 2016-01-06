@@ -24,6 +24,7 @@ mojo_native_application("shell") {
   ]
 
   data_deps = [
+    "//mash/browser_driver",
     "//mash/system_ui",
     "//mash/wm",
   ]

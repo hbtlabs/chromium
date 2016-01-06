@@ -5,7 +5,9 @@
 #ifndef COMPONENTS_MUS_WS_DEFAULT_ACCESS_POLICY_H_
 #define COMPONENTS_MUS_WS_DEFAULT_ACCESS_POLICY_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "components/mus/ws/access_policy.h"
 
 namespace mus {
@@ -53,6 +55,7 @@ class DefaultAccessPolicy : public AccessPolicy {
       const ServerWindow** old_parent) const override;
   const ServerWindow* GetWindowForFocusChange(
       const ServerWindow* focused) override;
+  bool CanSetWindowManagerInternal() const override;
 
  private:
   bool WasCreatedByThisConnection(const ServerWindow* window) const;

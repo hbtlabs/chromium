@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "mojo/services/test_service/test_time_service_impl.h"
+
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/time/time.h"
 #include "mojo/application/public/cpp/application_impl.h"
 #include "mojo/services/test_service/test_request_tracker.mojom.h"
-#include "mojo/services/test_service/test_time_service_impl.h"
 #include "mojo/services/test_service/tracked_service.h"
 
 namespace mojo {
@@ -14,8 +19,7 @@ namespace test {
 TestTimeServiceImpl::TestTimeServiceImpl(
     ApplicationImpl* app_impl,
     InterfaceRequest<TestTimeService> request)
-    : app_impl_(app_impl), binding_(this, request.Pass()) {
-}
+    : app_impl_(app_impl), binding_(this, std::move(request)) {}
 
 TestTimeServiceImpl::~TestTimeServiceImpl() {
 }
@@ -24,7 +28,7 @@ void TestTimeServiceImpl::StartTrackingRequests(
     const mojo::Callback<void()>& callback) {
   TestRequestTrackerPtr tracker;
   app_impl_->ConnectToService("mojo:test_request_tracker_app", &tracker);
-  tracking_.reset(new TrackedService(tracker.Pass(), Name_, callback));
+  tracking_.reset(new TrackedService(std::move(tracker), Name_, callback));
 }
 
 void TestTimeServiceImpl::GetPartyTime(
@@ -35,7 +39,7 @@ void TestTimeServiceImpl::GetPartyTime(
       + base::TimeDelta::FromDays(10957)
       + base::TimeDelta::FromHours(7)
       + base::TimeDelta::FromMinutes(59));
-  int64 time(frozen_time.ToInternalValue());
+  int64_t time(frozen_time.ToInternalValue());
   callback.Run(time);
 }
 

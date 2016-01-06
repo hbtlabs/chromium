@@ -26,8 +26,8 @@ CursorsTest.prototype = {
   /** @override */
   setUp: function() {
     // Various aliases.
-    window.BACKWARD = AutomationUtil.Dir.BACKWARD;
-    window.FORWARD = AutomationUtil.Dir.FORWARD;
+    window.BACKWARD = constants.Dir.BACKWARD;
+    window.FORWARD = constants.Dir.FORWARD;
     window.CHARACTER = cursors.Unit.CHARACTER;
     window.WORD = cursors.Unit.WORD;
     window.LINE = cursors.Unit.LINE;
@@ -42,7 +42,7 @@ CursorsTest.prototype = {
    * @param {!Array<Array<
    *     cursors.Unit|
    *     cursors.Movement|
-   *     automationUtil.Dir|
+   *     constants.Dir|
    *     Object>>}
    *     moves An array of arrays. Each inner array contains 4 items: unit,
    *     movement, direction, and assertions object. See example below.
@@ -62,7 +62,7 @@ CursorsTest.prototype = {
    * @param {!Array<Array<
    *          cursors.Unit|
    *          cursors.Movement|
-   *          automationUtil.Dir|
+   *          constants.Dir|
    *          Object>>}
    *     moves An array of arrays. Each inner array contains 4 items: unit,
    *     direction, start and end assertions objects. See example below.
@@ -277,7 +277,7 @@ TEST_F('CursorsTest', 'DontSplitOnNodeNavigation', function() {
   this.runWithLoadedTree(this.multiInlineDoc, function(root) {
     var para = root.firstChild;
     assertEquals('paragraph', para.role);
-    var cursor = new cursors.Cursor(para, 0);
+    var cursor = new cursors.Cursor(para.firstChild, 0);
     cursor = cursor.move(DOM_NODE, DIRECTIONAL, FORWARD);
     assertEquals('staticText', cursor.node.role);
     assertEquals('end', cursor.node.name);
@@ -301,5 +301,15 @@ TEST_F('CursorsTest', 'WrappingCursors', function() {
     assertEquals(root.lastChild.firstChild, cursor.node);
     cursor = cursor.move(DOM_NODE, DIRECTIONAL, FORWARD);
     assertEquals(root.firstChild.firstChild, cursor.node);
+  });
+});
+
+TEST_F('CursorsTest', 'IsInWebRange', function() {
+  this.runWithLoadedTree(this.simpleDoc, function(root) {
+    var para = root.firstChild;
+    var webRange = new cursors.Range.fromNode(para);
+    var auraRange = cursors.Range.fromNode(root.parent);
+    assertFalse(auraRange.isWebRange());
+    assertTrue(webRange.isWebRange());
   });
 });

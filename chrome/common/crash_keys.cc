@@ -8,9 +8,11 @@
 #include "base/command_line.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/flags_ui/flags_ui_switches.h"
 #include "content/public/common/content_switches.h"
@@ -45,6 +47,10 @@ const char kGPUGLVersion[] = "gpu-glver";
 #elif defined(OS_POSIX)
 const char kGPUVendor[] = "gpu-gl-vendor";
 const char kGPURenderer[] = "gpu-gl-renderer";
+#endif
+
+#if defined(OS_WIN)
+const char kHungAudioThreadDetails[] = "hung-audio-thread-details";
 #endif
 
 const char kPrinterInfo[] = "prn-info-%" PRIuS;
@@ -141,6 +147,11 @@ size_t RegisterChromeCrashKeys() {
 #endif
     { kBug464926CrashKey, kSmallSize },
     { kViewCount, kSmallSize },
+
+    // media/:
+#if defined(OS_WIN)
+    { kHungAudioThreadDetails, kSmallSize },
+#endif
     { kZeroEncodeDetails, kSmallSize },
   };
 

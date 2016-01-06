@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/process/process_handle.h"
 #include "mojo/application/public/interfaces/application.mojom.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 
@@ -28,16 +29,13 @@ class NativeRunner {
   virtual ~NativeRunner() {}
 
   // Loads the app in the file at |app_path| and runs it on some other
-  // thread/process. If |cleanup| is |DELETE|, this takes ownership of the file.
-  // |app_completed_callback| is posted (to the thread on which |Start()| was
-  // called) after |MojoMain()| completes.
-  // TODO(vtl): |app_path| and |cleanup| should probably be moved to the
-  // factory's Create(). Rationale: The factory may need information from the
-  // file to decide what kind of NativeRunner to make.
-  virtual void Start(const base::FilePath& app_path,
-                     bool start_sandboxed,
-                     InterfaceRequest<Application> application_request,
-                     const base::Closure& app_completed_callback) = 0;
+  // thread/process.
+  virtual void Start(
+      const base::FilePath& app_path,
+      bool start_sandboxed,
+      InterfaceRequest<Application> application_request,
+      const base::Callback<void(base::ProcessId)>& pid_available_callback,
+      const base::Closure& app_completed_callback) = 0;
 
   // Like Start(), but used to initialize the host for a child process started
   // by someone else. Provides |application_request| via |channel|.

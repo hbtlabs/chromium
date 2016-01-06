@@ -4,19 +4,23 @@
 
 #include "chrome/browser/ui/webui/options/content_settings_handler.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -377,7 +381,7 @@ scoped_ptr<base::DictionaryValue> GetChooserExceptionForPage(
     exception->SetString(kObjectName, name);
     exception->Set(kObject, object->CreateDeepCopy());
   }
-  return exception.Pass();
+  return exception;
 }
 
 // Returns true whenever the |extension| is hosted and has |permission|.
@@ -737,21 +741,6 @@ void ContentSettingsHandler::InitializeHandler() {
               base::Bind(&ContentSettingsHandler::OnZoomLevelChanged,
                          base::Unretained(this)));
 
-  if (!switches::IsEnableWebviewBasedSignin()) {
-    // The legacy signin page uses a different storage partition, so we need to
-    // add a subscription for its HostZoomMap separately.
-    GURL signin_url(chrome::kChromeUIChromeSigninURL);
-    content::StoragePartition* signin_partition =
-        content::BrowserContext::GetStoragePartitionForSite(
-            GetBrowserContext(web_ui()), signin_url);
-    content::HostZoomMap* signin_host_zoom_map =
-        signin_partition->GetHostZoomMap();
-    signin_host_zoom_map_subscription_ =
-        signin_host_zoom_map->AddZoomLevelChangedCallback(
-            base::Bind(&ContentSettingsHandler::OnZoomLevelChanged,
-                       base::Unretained(this)));
-  }
-
   flash_settings_manager_.reset(new PepperFlashSettingsManager(this, context));
 
   Profile* profile = Profile::FromWebUI(web_ui());
@@ -832,7 +821,7 @@ void ContentSettingsHandler::Observe(
 }
 
 void ContentSettingsHandler::OnGetPermissionSettingsCompleted(
-    uint32 request_id,
+    uint32_t request_id,
     bool success,
     PP_Flash_BrowserOperations_Permission default_permission,
     const ppapi::FlashSiteSettings& sites) {
@@ -1195,48 +1184,12 @@ void ContentSettingsHandler::UpdateChooserExceptionsViewFromModel(
   base::ListValue exceptions;
   for (auto& one_provider_exceptions : all_provider_exceptions) {
     for (auto& exception : one_provider_exceptions)
-      exceptions.Append(exception.Pass());
+      exceptions.Append(std::move(exception));
   }
 
   base::StringValue type_string(chooser_type.name);
   web_ui()->CallJavascriptFunction("ContentSettings.setExceptions", type_string,
                                    exceptions);
-}
-
-void ContentSettingsHandler::AdjustZoomLevelsListForSigninPageIfNecessary(
-    content::HostZoomMap::ZoomLevelVector* zoom_levels) {
-  if (switches::IsEnableWebviewBasedSignin())
-    return;
-
-  GURL signin_url(chrome::kChromeUIChromeSigninURL);
-  content::HostZoomMap* signin_host_zoom_map =
-      content::BrowserContext::GetStoragePartitionForSite(
-          GetBrowserContext(web_ui()), signin_url)->GetHostZoomMap();
-
-  // Since zoom levels set for scheme + host are not persisted, and since the
-  // signin page zoom levels need to be persisted, they are stored without
-  // a scheme. We use an empty scheme string to indicate this.
-  std::string scheme;
-  std::string host = signin_url.host();
-
-  // If there's a WebView signin zoom level, remove it.
-  content::HostZoomMap::ZoomLevelVector::iterator it =
-      std::find_if(zoom_levels->begin(), zoom_levels->end(),
-                   [&host](content::HostZoomMap::ZoomLevelChange change) {
-                     return change.host == host;
-                   });
-  if (it != zoom_levels->end())
-    zoom_levels->erase(it);
-
-  // If there's a non-WebView signin zoom level, add it.
-  if (signin_host_zoom_map->HasZoomLevel(scheme, host)) {
-    content::HostZoomMap::ZoomLevelChange change = {
-        content::HostZoomMap::ZOOM_CHANGED_FOR_HOST,
-        host,
-        scheme,
-        signin_host_zoom_map->GetZoomLevelForHostAndScheme(scheme, host)};
-    zoom_levels->push_back(change);
-  }
 }
 
 void ContentSettingsHandler::UpdateZoomLevelsExceptionsView() {
@@ -1247,8 +1200,6 @@ void ContentSettingsHandler::UpdateZoomLevelsExceptionsView() {
           GetBrowserContext(web_ui()));
   content::HostZoomMap::ZoomLevelVector zoom_levels(
       host_zoom_map->GetAllZoomLevels());
-
-  AdjustZoomLevelsListForSigninPageIfNecessary(&zoom_levels);
 
   // Sort ZoomLevelChanges by host and scheme
   // (a.com < http://a.com < https://a.com < b.com).
@@ -1473,7 +1424,7 @@ void ContentSettingsHandler::GetExceptionsFromHostContentSettingsMap(
 
   for (auto& one_provider_exceptions : all_provider_exceptions) {
     for (auto& exception : one_provider_exceptions)
-      exceptions->Append(exception.Pass());
+      exceptions->Append(std::move(exception));
   }
 }
 
@@ -1524,17 +1475,9 @@ void ContentSettingsHandler::RemoveZoomLevelException(
   }
 
   content::HostZoomMap* host_zoom_map;
-  if (switches::IsEnableWebviewBasedSignin() ||
-      pattern != chrome::kChromeUIChromeSigninHost) {
-    host_zoom_map =
-      content::HostZoomMap::GetDefaultForBrowserContext(
-          GetBrowserContext(web_ui()));
-  } else {
-    host_zoom_map =
-        content::BrowserContext::GetStoragePartitionForSite(
-            GetBrowserContext(web_ui()), GURL(chrome::kChromeUIChromeSigninURL))
-            ->GetHostZoomMap();
-  }
+  host_zoom_map =
+    content::HostZoomMap::GetDefaultForBrowserContext(
+        GetBrowserContext(web_ui()));
   double default_level = host_zoom_map->GetDefaultZoomLevel();
   host_zoom_map->SetZoomLevelForHost(pattern, default_level);
 }
@@ -1613,9 +1556,6 @@ void ContentSettingsHandler::SetContentFilter(const base::ListValue* args) {
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-
-  // The MEDIASTREAM setting is deprecated and has no UI.
-  DCHECK_NE(CONTENT_SETTINGS_TYPE_MEDIASTREAM, content_type);
   map->SetDefaultContentSetting(content_type, default_setting);
 
   const ExceptionsInfoMap& exceptions_info_map = GetExceptionsInfoMap();
@@ -1661,9 +1601,6 @@ void ContentSettingsHandler::SetException(const base::ListValue* args) {
   CHECK(args->GetString(3, &setting));
 
   ContentSettingsType type = ContentSettingsTypeFromGroupName(type_string);
-
-  // The MEDIASTREAM setting is deprecated and has no UI.
-  DCHECK_NE(CONTENT_SETTINGS_TYPE_MEDIASTREAM, type);
 
   if (type == CONTENT_SETTINGS_TYPE_GEOLOCATION ||
       type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||

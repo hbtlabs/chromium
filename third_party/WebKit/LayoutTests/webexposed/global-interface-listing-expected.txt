@@ -468,6 +468,10 @@ interface CacheStorage
     method keys
     method match
     method open
+interface CanvasCaptureMediaStreamTrack : MediaStreamTrack
+    getter canvas
+    method constructor
+    method requestFrame
 interface CanvasGradient
     method addColorStop
     method constructor
@@ -571,6 +575,7 @@ interface ChannelMergerNode : AudioNode
 interface ChannelSplitterNode : AudioNode
     method constructor
 interface CharacterData : Node
+    getter assignedSlot
     getter data
     getter length
     getter nextElementSibling
@@ -856,6 +861,7 @@ interface DOMTokenList
     method item
     method keys
     method remove
+    method supports
     method toString
     method toggle
     method values
@@ -1236,6 +1242,7 @@ interface DynamicsCompressorNode : AudioNode
     getter threshold
     method constructor
 interface Element : Node
+    getter assignedSlot
     getter attributes
     getter childElementCount
     getter children
@@ -1273,6 +1280,7 @@ interface Element : Node
     getter scrollTop
     getter scrollWidth
     getter shadowRoot
+    getter slot
     getter tagName
     method animate
     method attachShadow
@@ -1334,6 +1342,7 @@ interface Element : Node
     setter outerHTML
     setter scrollLeft
     setter scrollTop
+    setter slot
 interface ErrorEvent : Event
     getter colno
     getter error
@@ -1700,6 +1709,7 @@ interface HTMLButtonElement : HTMLElement
 interface HTMLCanvasElement : HTMLElement
     getter height
     getter width
+    method captureStream
     method constructor
     method getContext
     method toBlob
@@ -2316,6 +2326,7 @@ interface HTMLLinkElement : HTMLElement
     getter integrity
     getter media
     getter rel
+    getter relList
     getter rev
     getter sheet
     getter sizes
@@ -2385,6 +2396,7 @@ interface HTMLMediaElement : HTMLElement
     getter currentTime
     getter defaultMuted
     getter defaultPlaybackRate
+    getter disableRemotePlayback
     getter duration
     getter ended
     getter error
@@ -2428,6 +2440,7 @@ interface HTMLMediaElement : HTMLElement
     setter currentTime
     setter defaultMuted
     setter defaultPlaybackRate
+    setter disableRemotePlayback
     setter loop
     setter muted
     setter onencrypted
@@ -2694,6 +2707,8 @@ interface HTMLShadowElement : HTMLElement
 interface HTMLSlotElement : HTMLElement
     getter name
     method constructor
+    method getAssignedNodes
+    method getDistributedNodes
     setter name
 interface HTMLSourceElement : HTMLElement
     getter media
@@ -3127,6 +3142,13 @@ interface KeyframeEffect : AnimationEffectReadOnly
 interface KeywordValue : StyleValue
     getter keywordValue
     method constructor
+interface LengthValue : StyleValue
+    static method fromValue
+    method add
+    method constructor
+    method divide
+    method multiply
+    method subtract
 interface Location
     method constructor
 interface MIDIAccess : EventTarget
@@ -3272,7 +3294,7 @@ interface MediaQueryListEvent : Event
     getter media
     method constructor
 interface MediaRecorder : EventTarget
-    static method canRecordMimeType
+    static method isTypeSupported
     getter ignoreMutedMedia
     getter mimeType
     getter ondataavailable
@@ -3610,6 +3632,12 @@ interface NumberValue : StyleValue
     getter value
     method constructor
     setter value
+interface OffScreenCanvas
+    getter height
+    getter width
+    method constructor
+    setter height
+    setter width
 interface OfflineAudioCompletionEvent : Event
     getter renderedBuffer
     method constructor
@@ -3853,6 +3881,7 @@ interface PushSubscription
     method toJSON
     method unsubscribe
 interface RTCCertificate
+    getter expires
     method constructor
 interface RTCIceCandidate
     getter candidate
@@ -6472,7 +6501,6 @@ interface webkitSpeechRecognition : EventTarget
     getter onspeechend
     getter onspeechstart
     getter onstart
-    getter serviceURI
     method abort
     method constructor
     method start
@@ -6494,7 +6522,6 @@ interface webkitSpeechRecognition : EventTarget
     setter onspeechend
     setter onspeechstart
     setter onstart
-    setter serviceURI
 interface webkitSpeechRecognitionError : Event
     getter error
     getter message

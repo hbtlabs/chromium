@@ -4,18 +4,24 @@
 
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 
+#include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/guid.h"
+#include "base/i18n/string_compare.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/create_presentation_connection_request.h"
 #include "chrome/browser/media/router/issue.h"
 #include "chrome/browser/media/router/issues_observer.h"
 #include "chrome/browser/media/router/media_route.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/media/router/media_router_mojo_impl.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sink.h"
@@ -36,6 +42,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 
@@ -203,7 +210,7 @@ void MediaRouterUI::InitWithPresentationSessionRequest(
   DCHECK(!create_session_request_);
   DCHECK(!query_result_manager_);
 
-  create_session_request_ = create_session_request.Pass();
+  create_session_request_ = std::move(create_session_request);
   presentation_service_delegate_ = delegate;
   InitCommon(initiator);
   OnDefaultPresentationChanged(create_session_request_->presentation_request());
@@ -219,6 +226,17 @@ void MediaRouterUI::InitCommon(content::WebContents* initiator) {
   routes_observer_.reset(new UIMediaRoutesObserver(
       router_,
       base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
+
+  // Create |collator_| before |query_result_manager_| so that |collator_| is
+  // already set up when we get a callback from |query_result_manager_|.
+  UErrorCode error = U_ZERO_ERROR;
+  const std::string& locale = g_browser_process->GetApplicationLocale();
+  collator_.reset(
+      icu::Collator::createInstance(icu::Locale(locale.c_str()), error));
+  if (U_FAILURE(error)) {
+    DLOG(ERROR) << "Failed to create collator for locale " << locale;
+    collator_.reset();
+  }
 
   query_result_manager_.reset(new QueryResultManager(router_));
   query_result_manager_->AddObserver(this);
@@ -287,7 +305,8 @@ bool MediaRouterUI::CreateRoute(const MediaSink::Id& sink_id,
   // for now.
   MediaSource source = query_result_manager_->GetSourceForCastMode(cast_mode);
   if (source.Empty()) {
-    LOG(ERROR) << "No corresponding MediaSource for cast mode " << cast_mode;
+    LOG(ERROR) << "No corresponding MediaSource for cast mode "
+               << static_cast<int>(cast_mode);
     return false;
   }
 
@@ -350,7 +369,7 @@ bool MediaRouterUI::CreateRoute(const MediaSink::Id& sink_id,
 }
 
 void MediaRouterUI::CloseRoute(const MediaRoute::Id& route_id) {
-  router_->CloseRoute(route_id);
+  router_->TerminateRoute(route_id);
 }
 
 void MediaRouterUI::AddIssue(const Issue& issue) { router_->AddIssue(issue); }
@@ -362,6 +381,30 @@ void MediaRouterUI::ClearIssue(const std::string& issue_id) {
 void MediaRouterUI::OnResultsUpdated(
     const std::vector<MediaSinkWithCastModes>& sinks) {
   sinks_ = sinks;
+
+  const icu::Collator* collator_ptr = collator_.get();
+  std::sort(
+      sinks_.begin(), sinks_.end(),
+      [collator_ptr](const MediaSinkWithCastModes& sink1,
+                     const MediaSinkWithCastModes& sink2) {
+        if (collator_ptr) {
+          base::string16 sink1_name = base::UTF8ToUTF16(sink1.sink.name());
+          base::string16 sink2_name = base::UTF8ToUTF16(sink2.sink.name());
+          UCollationResult result = base::i18n::CompareString16WithCollator(
+              *collator_ptr, sink1_name, sink2_name);
+          if (result != UCOL_EQUAL)
+            return result == UCOL_LESS;
+        } else {
+          // Fall back to simple string comparison if collator is not
+          // available.
+          int val = sink1.sink.name().compare(sink2.sink.name());
+          if (val)
+            return val < 0;
+        }
+
+        return sink1.sink.id() < sink2.sink.id();
+      });
+
   if (ui_initialized_) handler_->UpdateSinks(sinks_);
 }
 
@@ -439,6 +482,26 @@ std::string MediaRouterUI::GetTruncatedPresentationRequestSourceName() const {
 
 const std::string& MediaRouterUI::GetRouteProviderExtensionId() const {
   return router_->media_route_provider_extension_id();
+}
+
+void MediaRouterUI::SetUIInitializationTimer(const base::Time& start_time) {
+  DCHECK(!start_time.is_null());
+  start_time_ = start_time;
+}
+
+void MediaRouterUI::OnUIInitiallyLoaded() {
+  if (!start_time_.is_null()) {
+    MediaRouterMetrics::RecordMediaRouterDialogPaint(
+        base::Time::Now() - start_time_);
+  }
+}
+
+void MediaRouterUI::OnUIInitialDataReceived() {
+  if (!start_time_.is_null()) {
+    MediaRouterMetrics::RecordMediaRouterDialogLoaded(
+        base::Time::Now() - start_time_);
+    start_time_ = base::Time();
+  }
 }
 
 }  // namespace media_router

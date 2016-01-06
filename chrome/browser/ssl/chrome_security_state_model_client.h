@@ -25,8 +25,11 @@ class ChromeSecurityStateModelClient
   const SecurityStateModel::SecurityInfo& GetSecurityInfo() const;
 
   // SecurityStateModelClient:
+  void GetVisibleSecurityState(
+      SecurityStateModel::VisibleSecurityState* state) override;
   bool RetrieveCert(scoped_refptr<net::X509Certificate>* cert) override;
   bool UsedPolicyInstalledCertificate() override;
+  bool IsOriginSecure(const GURL& url) override;
 
  private:
   explicit ChromeSecurityStateModelClient(content::WebContents* web_contents);

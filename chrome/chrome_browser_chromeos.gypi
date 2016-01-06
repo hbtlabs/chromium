@@ -52,6 +52,8 @@
         'browser/chromeos/app_mode/kiosk_session_plugin_handler_delegate.h',
         'browser/chromeos/app_mode/startup_app_launcher.cc',
         'browser/chromeos/app_mode/startup_app_launcher.h',
+        'browser/chromeos/arc/arc_settings_bridge_impl.cc',
+        'browser/chromeos/arc/arc_settings_bridge_impl.h',
         'browser/chromeos/attestation/attestation_ca_client.cc',
         'browser/chromeos/attestation/attestation_ca_client.h',
         'browser/chromeos/attestation/attestation_policy_observer.cc',
@@ -1132,7 +1134,7 @@
         # transitively via the common target because the proto sources need to
         # be generated before code in this target can start building.
         '../components/components.gyp:variations',
-        '../components/components.gyp:variations_http_provider',
+        '../components/components.gyp:variations_net',
         '../components/components.gyp:wallpaper',
         '../components/components.gyp:wifi_sync',
         '../components/components_strings.gyp:components_strings',

@@ -189,7 +189,7 @@ class TestDecrypter : public QuicDecrypter {
   StringPiece GetNoncePrefix() const override { return StringPiece(); }
   const char* cipher_name() const override { return "Test"; }
   // Use a distinct value starting with 0xFFFFFF, which is never used by TLS.
-  uint32 cipher_id() const override { return 0xFFFFFFF2; }
+  uint32_t cipher_id() const override { return 0xFFFFFFF2; }
   QuicPacketNumber packet_number_;
   string associated_data_;
   string ciphertext_;
@@ -263,10 +263,11 @@ class TestQuicVisitor : public QuicFramerVisitorInterface {
     ++frame_count_;
     // Save a copy of the data so it is valid after the packet is processed.
     string* string_data = new string();
-    frame.data.AppendToString(string_data);
+    StringPiece(frame.frame_buffer, frame.frame_length)
+        .AppendToString(string_data);
     stream_data_.push_back(string_data);
-    stream_frames_.push_back(new QuicStreamFrame(
-        frame.stream_id, frame.fin, frame.offset, StringPiece(*string_data)));
+    stream_frames_.push_back(new QuicStreamFrame(frame.stream_id, frame.fin,
+                                                 frame.offset, *string_data));
     return true;
   }
 
@@ -444,7 +445,7 @@ class QuicFramerTest : public ::testing::TestWithParam<QuicVersion> {
 
   // Checks if the supplied string matches data in the supplied StreamFrame.
   void CheckStreamFrameData(string str, QuicStreamFrame* frame) {
-    EXPECT_EQ(str, frame->data);
+    EXPECT_EQ(str, string(frame->frame_buffer, frame->frame_length));
   }
 
   void CheckStreamFrameBoundaries(unsigned char* packet,
@@ -513,14 +514,14 @@ TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearEpochStart) {
   CheckCalculatePacketNumber(kEpoch, kMask);
 
   // Cases where the last number was close to the start of the range.
-  for (uint64 last = 0; last < 10; last++) {
+  for (uint64_t last = 0; last < 10; last++) {
     // Small numbers should not wrap (even if they're out of order).
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(j, last);
     }
 
     // Large numbers should not wrap either (because we're near 0 already).
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(kEpoch - 1 - j, last);
     }
   }
@@ -528,16 +529,16 @@ TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearEpochStart) {
 
 TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearEpochEnd) {
   // Cases where the last number was close to the end of the range
-  for (uint64 i = 0; i < 10; i++) {
+  for (uint64_t i = 0; i < 10; i++) {
     QuicPacketNumber last = kEpoch - i;
 
     // Small numbers should wrap.
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(kEpoch + j, last);
     }
 
     // Large numbers should not (even if they're out of order).
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(kEpoch - 1 - j, last);
     }
   }
@@ -546,62 +547,62 @@ TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearEpochEnd) {
 // Next check where we're in a non-zero epoch to verify we handle
 // reverse wrapping, too.
 TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearPrevEpoch) {
-  const uint64 prev_epoch = 1 * kEpoch;
-  const uint64 cur_epoch = 2 * kEpoch;
+  const uint64_t prev_epoch = 1 * kEpoch;
+  const uint64_t cur_epoch = 2 * kEpoch;
   // Cases where the last number was close to the start of the range
-  for (uint64 i = 0; i < 10; i++) {
-    uint64 last = cur_epoch + i;
+  for (uint64_t i = 0; i < 10; i++) {
+    uint64_t last = cur_epoch + i;
     // Small number should not wrap (even if they're out of order).
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(cur_epoch + j, last);
     }
 
     // But large numbers should reverse wrap.
-    for (uint64 j = 0; j < 10; j++) {
-      uint64 num = kEpoch - 1 - j;
+    for (uint64_t j = 0; j < 10; j++) {
+      uint64_t num = kEpoch - 1 - j;
       CheckCalculatePacketNumber(prev_epoch + num, last);
     }
   }
 }
 
 TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearNextEpoch) {
-  const uint64 cur_epoch = 2 * kEpoch;
-  const uint64 next_epoch = 3 * kEpoch;
+  const uint64_t cur_epoch = 2 * kEpoch;
+  const uint64_t next_epoch = 3 * kEpoch;
   // Cases where the last number was close to the end of the range
-  for (uint64 i = 0; i < 10; i++) {
+  for (uint64_t i = 0; i < 10; i++) {
     QuicPacketNumber last = next_epoch - 1 - i;
 
     // Small numbers should wrap.
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(next_epoch + j, last);
     }
 
     // but large numbers should not (even if they're out of order).
-    for (uint64 j = 0; j < 10; j++) {
-      uint64 num = kEpoch - 1 - j;
+    for (uint64_t j = 0; j < 10; j++) {
+      uint64_t num = kEpoch - 1 - j;
       CheckCalculatePacketNumber(cur_epoch + num, last);
     }
   }
 }
 
 TEST_P(QuicFramerTest, CalculatePacketNumberFromWireNearNextMax) {
-  const uint64 max_number = numeric_limits<uint64>::max();
-  const uint64 max_epoch = max_number & ~kMask;
+  const uint64_t max_number = numeric_limits<uint64_t>::max();
+  const uint64_t max_epoch = max_number & ~kMask;
 
   // Cases where the last number was close to the end of the range
-  for (uint64 i = 0; i < 10; i++) {
+  for (uint64_t i = 0; i < 10; i++) {
     // Subtract 1, because the expected next packet number is 1 more than the
     // last packet number.
     QuicPacketNumber last = max_number - i - 1;
 
     // Small numbers should not wrap, because they have nowhere to go.
-    for (uint64 j = 0; j < 10; j++) {
+    for (uint64_t j = 0; j < 10; j++) {
       CheckCalculatePacketNumber(max_epoch + j, last);
     }
 
     // Large numbers should not wrap either.
-    for (uint64 j = 0; j < 10; j++) {
-      uint64 num = kEpoch - 1 - j;
+    for (uint64_t j = 0; j < 10; j++) {
+      uint64_t num = kEpoch - 1 - j;
       CheckCalculatePacketNumber(max_epoch + num, last);
     }
   }
@@ -636,7 +637,7 @@ TEST_P(QuicFramerTest, LargePacket) {
   // clang-format on
 
   QuicEncryptedPacket encrypted(AsChars(packet), arraysize(packet), false);
-  EXPECT_FALSE(framer_.ProcessPacket(encrypted));
+  EXPECT_DFATAL(framer_.ProcessPacket(encrypted), "Packet too large:1");
 
   ASSERT_TRUE(visitor_.header_.get());
   // Make sure we've parsed the packet header, so we can send an error.
@@ -2867,8 +2868,8 @@ TEST_P(QuicFramerTest, PublicResetPacketWithClientAddress) {
   EXPECT_EQ(kPacketNumber,
             visitor_.public_reset_packet_->rejected_packet_number);
   EXPECT_EQ("4.31.198.44",
-            IPAddressToString(visitor_.public_reset_packet_->
-                client_address.address()));
+            IPAddressToString(
+                visitor_.public_reset_packet_->client_address.address()));
   EXPECT_EQ(443, visitor_.public_reset_packet_->client_address.port());
 
   // Now test framing boundaries.
@@ -3000,7 +3001,7 @@ TEST_P(QuicFramerTest, BuildPaddingFramePacket) {
   };
   // clang-format on
 
-  uint64 header_size = GetPacketHeaderSize(
+  uint64_t header_size = GetPacketHeaderSize(
       PACKET_8BYTE_CONNECTION_ID, !kIncludeVersion, !kIncludePathId,
       PACKET_6BYTE_PACKET_NUMBER, NOT_IN_FEC_GROUP);
   memset(packet + header_size + 1, 0x00, kMaxPacketSize - header_size - 1);
@@ -3047,7 +3048,7 @@ TEST_P(QuicFramerTest, Build4ByteSequenceNumberPaddingFramePacket) {
   };
   // clang-format on
 
-  uint64 header_size = GetPacketHeaderSize(
+  uint64_t header_size = GetPacketHeaderSize(
       PACKET_8BYTE_CONNECTION_ID, !kIncludeVersion, !kIncludePathId,
       PACKET_4BYTE_PACKET_NUMBER, NOT_IN_FEC_GROUP);
   memset(packet + header_size + 1, 0x00, kMaxPacketSize - header_size - 1);
@@ -3094,7 +3095,7 @@ TEST_P(QuicFramerTest, Build2ByteSequenceNumberPaddingFramePacket) {
   };
   // clang-format on
 
-  uint64 header_size = GetPacketHeaderSize(
+  uint64_t header_size = GetPacketHeaderSize(
       PACKET_8BYTE_CONNECTION_ID, !kIncludeVersion, !kIncludePathId,
       PACKET_2BYTE_PACKET_NUMBER, NOT_IN_FEC_GROUP);
   memset(packet + header_size + 1, 0x00, kMaxPacketSize - header_size - 1);
@@ -3141,7 +3142,7 @@ TEST_P(QuicFramerTest, Build1ByteSequenceNumberPaddingFramePacket) {
   };
   // clang-format on
 
-  uint64 header_size = GetPacketHeaderSize(
+  uint64_t header_size = GetPacketHeaderSize(
       PACKET_8BYTE_CONNECTION_ID, !kIncludeVersion, !kIncludePathId,
       PACKET_1BYTE_PACKET_NUMBER, NOT_IN_FEC_GROUP);
   memset(packet + header_size + 1, 0x00, kMaxPacketSize - header_size - 1);
@@ -4540,7 +4541,8 @@ static char kTestString[] = "At least 20 characters.";
 static QuicStreamId kTestQuicStreamId = 1;
 static bool ExpectedStreamFrame(const QuicStreamFrame& frame) {
   return frame.stream_id == kTestQuicStreamId && !frame.fin &&
-         frame.offset == 0 && frame.data == kTestString;
+         frame.offset == 0 &&
+         string(frame.frame_buffer, frame.frame_length) == kTestString;
   // FIN is hard-coded false in ConstructEncryptedPacket.
   // Offset 0 is hard-coded in ConstructEncryptedPacket.
 }
@@ -4608,6 +4610,67 @@ TEST_P(QuicFramerTest, ConstructMisFramedEncryptedPacket) {
 
   EXPECT_FALSE(framer_.ProcessPacket(*packet));
   EXPECT_EQ(QUIC_INVALID_PACKET_HEADER, framer_.error());
+}
+
+// Tests for fuzzing with Dr. Fuzz
+// Xref http://www.chromium.org/developers/testing/dr-fuzz for more details.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// target function to be fuzzed by Dr. Fuzz
+void QuicFramerFuzzFunc(unsigned char* data, size_t size) {
+  QuicFramer framer(QuicSupportedVersions(), QuicTime::Zero(),
+                    Perspective::IS_SERVER);
+  const char* const packet_bytes = reinterpret_cast<const char*>(data);
+
+  // Test the CryptoFramer.
+  StringPiece crypto_input(packet_bytes, size);
+  std::unique_ptr<CryptoHandshakeMessage> handshake_message(
+      CryptoFramer::ParseMessage(crypto_input));
+
+  // Test the regular QuicFramer with the same input.
+  NoOpFramerVisitor visitor;
+  framer.set_visitor(&visitor);
+  QuicEncryptedPacket packet(packet_bytes, size);
+  framer.ProcessPacket(packet);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+TEST_P(QuicFramerTest, FramerFuzzTest) {
+  // clang-format off
+  unsigned char packet[] = {
+    // public flags (8 byte connection_id)
+    0x3C,
+    // connection_id
+    0x10, 0x32, 0x54, 0x76,
+    0x98, 0xBA, 0xDC, 0xFE,
+    // packet number
+    0xBC, 0x9A, 0x78, 0x56,
+    0x34, 0x12,
+    // private flags
+    0x00,
+
+    // frame type (stream frame with fin)
+    0xFF,
+    // stream id
+    0x04, 0x03, 0x02, 0x01,
+    // offset
+    0x54, 0x76, 0x10, 0x32,
+    0xDC, 0xFE, 0x98, 0xBA,
+    // data length
+    0x0c, 0x00,
+    // data
+    'h',  'e',  'l',  'l',
+    'o',  ' ',  'w',  'o',
+    'r',  'l',  'd',  '!',
+  };
+  // clang-format on
+
+  QuicFramerFuzzFunc(packet, arraysize(packet));
 }
 
 }  // namespace test

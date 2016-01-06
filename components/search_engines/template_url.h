@@ -5,11 +5,14 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 #define COMPONENTS_SEARCH_ENGINES_TEMPLATE_URL_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -616,7 +619,7 @@ class TemplateURL {
   // This setter shouldn't be used except by TemplateURLService and
   // TemplateURLServiceClient implementations.
   void set_extension_info(scoped_ptr<AssociatedExtensionInfo> extension_info) {
-    extension_info_ = extension_info.Pass();
+    extension_info_ = std::move(extension_info);
   }
 
   // Returns true if |url| supports replacement.

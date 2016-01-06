@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_CHROME_BROWSER_MAIN_H_
 #define CHROME_BROWSER_CHROME_BROWSER_MAIN_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_process_singleton.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -164,10 +165,7 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
 
   scoped_ptr<BrowserProcessImpl> browser_process_;
   scoped_refptr<metrics::TrackingSynchronizer> tracking_synchronizer_;
-
-  // TODO(bshe): Use !defined(ANDROID_JAVA_UI) once
-  // codereview.chromium.org/1459793002 landed.
-#if !defined(OS_ANDROID) || defined(USE_AURA)
+#if !defined(OS_ANDROID)
   // Browser creation happens on the Java side in Android.
   scoped_ptr<StartupBrowserCreator> browser_creator_;
 
@@ -177,7 +175,7 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
 
   // Android's first run is done in Java instead of native.
   scoped_ptr<first_run::MasterPrefs> master_prefs_;
-#endif  // !defined(OS_ANDROID) || defined(USE_AURA)
+#endif
   Profile* profile_;
   bool run_message_loop_;
   ProcessSingleton::NotifyResult notify_result_;

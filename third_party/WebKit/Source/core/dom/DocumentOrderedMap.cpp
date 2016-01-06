@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/dom/DocumentOrderedMap.h"
 
 #include "core/HTMLNames.h"
@@ -40,6 +39,20 @@
 namespace blink {
 
 using namespace HTMLNames;
+
+
+PassOwnPtrWillBeRawPtr<DocumentOrderedMap> DocumentOrderedMap::create()
+{
+    return adoptPtrWillBeNoop(new DocumentOrderedMap);
+}
+
+DocumentOrderedMap::DocumentOrderedMap()
+{
+}
+
+DocumentOrderedMap::~DocumentOrderedMap()
+{
+}
 
 inline bool keyMatchesId(const AtomicString& key, const Element& element)
 {
@@ -59,11 +72,6 @@ inline bool keyMatchesLowercasedMapName(const AtomicString& key, const Element& 
 inline bool keyMatchesLabelForAttribute(const AtomicString& key, const Element& element)
 {
     return isHTMLLabelElement(element) && element.getAttribute(forAttr) == key;
-}
-
-PassOwnPtrWillBeRawPtr<DocumentOrderedMap> DocumentOrderedMap::create()
-{
-    return adoptPtrWillBeNoop(new DocumentOrderedMap());
 }
 
 void DocumentOrderedMap::add(const AtomicString& key, Element* element)
@@ -106,6 +114,14 @@ void DocumentOrderedMap::remove(const AtomicString& key, Element* element)
     }
 }
 
+#if ENABLE(ASSERT)
+void DocumentOrderedMap::willRemoveId(const AtomicString& key)
+{
+    ASSERT(m_removingId.isNull() || key.isNull());
+    m_removingId = key;
+}
+#endif
+
 template<bool keyMatches(const AtomicString&, const Element&)>
 inline Element* DocumentOrderedMap::get(const AtomicString& key, const TreeScope* scope) const
 {
@@ -120,14 +136,22 @@ inline Element* DocumentOrderedMap::get(const AtomicString& key, const TreeScope
     if (entry->element)
         return entry->element;
 
-    // We know there's at least one node that matches; iterate to find the first one.
+    // Iterate to find the node that matches. Nothing will match iff an element
+    // with children having duplicate IDs is being removed -- the tree traversal
+    // will be over an updated tree not having that element. In all other cases,
+    // a match is expected.
+    //
+    // Such calls to get()/getElementById() while handling element removals will
+    // legitimately happen when e.g., adjusting form ID associations. Quietly
+    // allow those lookups to (expectedly) fail by having the tree scope removal
+    // register the element ID it is in the process of removing.
     for (Element& element : ElementTraversal::startsAfter(scope->rootNode())) {
         if (!keyMatches(key, element))
             continue;
         entry->element = &element;
         return &element;
     }
-    ASSERT_NOT_REACHED();
+    ASSERT(key == m_removingId);
     return 0;
 }
 

@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/fetch/FetchUtils.h"
 
 #include "platform/network/HTTPHeaderMap.h"
@@ -70,7 +69,7 @@ ForbiddenHeaderNames::ForbiddenHeaderNames()
 
 const ForbiddenHeaderNames& ForbiddenHeaderNames::get()
 {
-    AtomicallyInitializedStaticReference(const ForbiddenHeaderNames, instance, new ForbiddenHeaderNames);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const ForbiddenHeaderNames, instance, new ForbiddenHeaderNames);
     return instance;
 }
 

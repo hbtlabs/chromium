@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "bindings/core/v8/RejectedPromises.h"
 
 #include "bindings/core/v8/ScopedPersistent.h"
@@ -54,7 +53,7 @@ public:
         if (!m_scriptState->contextIsValid())
             return;
         // If execution termination has been triggered, quietly bail out.
-        if (v8::V8::IsExecutionTerminating(m_scriptState->isolate()))
+        if (m_scriptState->isolate()->IsExecutionTerminating())
             return;
         ExecutionContext* executionContext = m_scriptState->executionContext();
         if (!executionContext)
@@ -148,8 +147,7 @@ public:
 
     bool hasHandler()
     {
-        if (isCollected())
-            return false;
+        ASSERT(!isCollected());
         ScriptState::Scope scope(m_scriptState);
         v8::Local<v8::Value> value = m_promise.newLocal(m_scriptState->isolate());
         return v8::Local<v8::Promise>::Cast(value)->HasHandler();
@@ -275,6 +273,8 @@ void RejectedPromises::processQueueNow(PassOwnPtrWillBeRawPtr<MessageQueue> queu
 
     while (!queue->isEmpty()) {
         OwnPtrWillBeRawPtr<Message> message = queue->takeFirst();
+        if (message->isCollected())
+            continue;
         if (!message->hasHandler()) {
             message->report();
             message->makePromiseWeak();

@@ -4,13 +4,19 @@
 
 #include "extensions/browser/extension_prefs.h"
 
-#include <iterator>
+#include <stddef.h>
+#include <stdint.h>
 
+#include <iterator>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "extensions/browser/app_sorting.h"
@@ -168,9 +174,6 @@ const char kPrefGeometryCache[] = "geometry_cache";
 
 // A preference that indicates when an extension is last launched.
 const char kPrefLastLaunchTime[] = "last_launch_time";
-
-// A preference indicating whether the extension is an ephemeral app.
-const char kPrefEphemeralApp[] = "ephemeral_app";
 
 // Am installation parameter bundled with an extension.
 const char kPrefInstallParam[] = "install_parameter";
@@ -352,7 +355,7 @@ ExtensionPrefs* ExtensionPrefs::Create(
     const std::vector<ExtensionPrefsObserver*>& early_observers,
     scoped_ptr<TimeProvider> time_provider) {
   return new ExtensionPrefs(browser_context, pref_service, root_dir,
-                            extension_pref_value_map, time_provider.Pass(),
+                            extension_pref_value_map, std::move(time_provider),
                             extensions_disabled, early_observers);
 }
 
@@ -854,7 +857,7 @@ namespace {
 // Serializes a 64bit integer as a string value.
 void SaveInt64(base::DictionaryValue* dictionary,
                const char* key,
-               const int64 value) {
+               const int64_t value) {
   if (!dictionary)
     return;
 
@@ -865,7 +868,7 @@ void SaveInt64(base::DictionaryValue* dictionary,
 // Deserializes a 64bit integer stored as a string value.
 bool ReadInt64(const base::DictionaryValue* dictionary,
                const char* key,
-               int64* value) {
+               int64_t* value) {
   if (!dictionary)
     return false;
 
@@ -886,7 +889,7 @@ void SaveTime(base::DictionaryValue* dictionary,
 // The opposite of SaveTime. If |key| is not found, this returns an empty Time
 // (is_null() will return true).
 base::Time ReadTime(const base::DictionaryValue* dictionary, const char* key) {
-  int64 value;
+  int64_t value;
   if (ReadInt64(dictionary, key, &value))
     return base::Time::FromInternalValue(value);
 
@@ -1173,12 +1176,8 @@ void ExtensionPrefs::OnExtensionInstalled(
                              install_parameter,
                              extension_dict);
 
-  bool requires_sort_ordinal = extension->RequiresSortOrdinal() &&
-                               (install_flags & kInstallFlagIsEphemeral) == 0;
-  FinishExtensionInfoPrefs(extension->id(),
-                           install_time,
-                           requires_sort_ordinal,
-                           page_ordinal,
+  FinishExtensionInfoPrefs(extension->id(), install_time,
+                           extension->RequiresSortOrdinal(), page_ordinal,
                            extension_dict);
 }
 
@@ -1354,7 +1353,7 @@ ExtensionPrefs::GetInstalledExtensionsInfo() const {
       extensions_info->push_back(linked_ptr<ExtensionInfo>(info.release()));
   }
 
-  return extensions_info.Pass();
+  return extensions_info;
 }
 
 scoped_ptr<ExtensionPrefs::ExtensionsInfo>
@@ -1377,7 +1376,7 @@ ExtensionPrefs::GetUninstalledExtensionsInfo() const {
       extensions_info->push_back(linked_ptr<ExtensionInfo>(info.release()));
   }
 
-  return extensions_info.Pass();
+  return extensions_info;
 }
 
 void ExtensionPrefs::SetDelayedInstallInfo(
@@ -1398,8 +1397,7 @@ void ExtensionPrefs::SetDelayedInstallInfo(
   // Add transient data that is needed by FinishDelayedInstallInfo(), but
   // should not be in the final extension prefs. All entries here should have
   // a corresponding Remove() call in FinishDelayedInstallInfo().
-  if (extension->RequiresSortOrdinal() &&
-      (install_flags & kInstallFlagIsEphemeral) == 0) {
+  if (extension->RequiresSortOrdinal()) {
     extension_dict->SetString(
         kPrefSuggestedPageOrdinal,
         page_ordinal.IsValid() ? page_ordinal.ToInternalValue()
@@ -1449,11 +1447,6 @@ bool ExtensionPrefs::FinishDelayedInstallInfo(
       kPrefInstallTime,
       new base::StringValue(
           base::Int64ToString(install_time.ToInternalValue())));
-
-  // Some extension pref values are written conditionally. If they are not
-  // present in the delayed install data, they should be removed when the
-  // delayed install is committed.
-  extension_dict->Remove(kPrefEphemeralApp, NULL);
 
   // Commit the delayed install data.
   for (base::DictionaryValue::Iterator it(*pending_install_dict); !it.IsAtEnd();
@@ -1513,34 +1506,7 @@ scoped_ptr<ExtensionPrefs::ExtensionsInfo> ExtensionPrefs::
       extensions_info->push_back(linked_ptr<ExtensionInfo>(info.release()));
   }
 
-  return extensions_info.Pass();
-}
-
-bool ExtensionPrefs::IsEphemeralApp(const std::string& extension_id) const {
-  if (ReadPrefAsBooleanAndReturn(extension_id, kPrefEphemeralApp))
-    return true;
-
-  // Ephemerality was previously stored in the creation flags, so we must also
-  // check it for backcompatibility.
-  return (GetCreationFlags(extension_id) & Extension::IS_EPHEMERAL) != 0;
-}
-
-void ExtensionPrefs::OnEphemeralAppPromoted(const std::string& extension_id) {
-  DCHECK(IsEphemeralApp(extension_id));
-
-  UpdateExtensionPref(extension_id, kPrefEphemeralApp, NULL);
-
-  // Ephemerality was previously stored in the creation flags, so ensure the bit
-  // is cleared.
-  int creation_flags = Extension::NO_FLAGS;
-  if (ReadPrefAsInteger(extension_id, kPrefCreationFlags, &creation_flags)) {
-    if (creation_flags & Extension::IS_EPHEMERAL) {
-      creation_flags &= ~static_cast<int>(Extension::IS_EPHEMERAL);
-      UpdateExtensionPref(extension_id,
-                          kPrefCreationFlags,
-                          new base::FundamentalValue(creation_flags));
-    }
-  }
+  return extensions_info;
 }
 
 bool ExtensionPrefs::WasAppDraggedByUser(
@@ -1626,7 +1592,7 @@ base::Time ExtensionPrefs::GetInstallTime(
   std::string install_time_str;
   if (!extension->GetString(kPrefInstallTime, &install_time_str))
     return base::Time();
-  int64 install_time_i64 = 0;
+  int64_t install_time_i64 = 0;
   if (!base::StringToInt64(install_time_str, &install_time_i64))
     return base::Time();
   return base::Time::FromInternalValue(install_time_i64);
@@ -1649,7 +1615,7 @@ base::Time ExtensionPrefs::GetLastLaunchTime(
   std::string launch_time_str;
   if (!extension->GetString(kPrefLastLaunchTime, &launch_time_str))
     return base::Time();
-  int64 launch_time_i64 = 0;
+  int64_t launch_time_i64 = 0;
   if (!base::StringToInt64(launch_time_str, &launch_time_i64))
     return base::Time();
   return base::Time::FromInternalValue(launch_time_i64);
@@ -1871,7 +1837,7 @@ ExtensionPrefs::ExtensionPrefs(
       prefs_(prefs),
       install_directory_(root_dir),
       extension_pref_value_map_(extension_pref_value_map),
-      time_provider_(time_provider.Pass()),
+      time_provider_(std::move(time_provider)),
       extensions_disabled_(extensions_disabled) {
   MakePathsRelative();
 
@@ -1993,11 +1959,6 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
                           base::Int64ToString(install_time.ToInternalValue())));
   if (install_flags & kInstallFlagIsBlacklistedForMalware)
     extension_dict->Set(kPrefBlacklist, new base::FundamentalValue(true));
-
-  if (install_flags & kInstallFlagIsEphemeral)
-    extension_dict->Set(kPrefEphemeralApp, new base::FundamentalValue(true));
-  else
-    extension_dict->Remove(kPrefEphemeralApp, NULL);
 
   base::FilePath::StringType path = MakePathRelative(install_directory_,
                                                      extension->path());

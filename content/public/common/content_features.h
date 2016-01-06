@@ -8,20 +8,25 @@
 #ifndef CONTENT_PUBLIC_COMMON_CONTENT_FEATURES_H_
 #define CONTENT_PUBLIC_COMMON_CONTENT_FEATURES_H_
 
-#include "build/build_config.h"
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 
-namespace content {
+namespace features {
+
+// All features in alphabetical order. The features should be documented
+// alongside the definition of their values in the .cc file.
+CONTENT_EXPORT extern const base::Feature kBrotliEncoding;
+CONTENT_EXPORT extern const base::Feature kDownloadResumption;
+CONTENT_EXPORT extern const base::Feature kExperimentalFramework;
 
 #if defined(OS_ANDROID)
-// FeatureList definition for the Seccomp field trial.
-CONTENT_EXPORT extern const base::Feature kSeccompSandboxAndroidFeature;
+CONTENT_EXPORT extern const base::Feature kSeccompSandboxAndroid;
 #endif  // defined(OS_ANDROID)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in
 // alphabetical order, or in one of the ifdefs (also in order in each section).
 
-}  // namespace content
+}  // namespace features
 
 #endif  // CONTENT_PUBLIC_COMMON_CONTENT_FEATURES_H_

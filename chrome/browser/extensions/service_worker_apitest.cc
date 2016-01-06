@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -24,6 +27,7 @@
 #include "content/public/test/background_sync_test_util.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_host.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/test/background_page_watcher.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -38,6 +42,43 @@ namespace {
 std::string* const kExpectSuccess = nullptr;
 
 void DoNothingWithBool(bool b) {}
+
+// Returns the newly added WebContents.
+content::WebContents* AddTab(Browser* browser, const GURL& url) {
+  int starting_tab_count = browser->tab_strip_model()->count();
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser, url, NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  int tab_count = browser->tab_strip_model()->count();
+  EXPECT_EQ(starting_tab_count + 1, tab_count);
+  return browser->tab_strip_model()->GetActiveWebContents();
+}
+
+class WebContentsLoadStopObserver : content::WebContentsObserver {
+ public:
+  explicit WebContentsLoadStopObserver(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents),
+        load_stop_observed_(false) {}
+
+  void WaitForLoadStop() {
+    if (load_stop_observed_)
+      return;
+    message_loop_runner_ = new content::MessageLoopRunner;
+    message_loop_runner_->Run();
+  }
+
+ private:
+  void DidStopLoading() override {
+    load_stop_observed_ = true;
+    if (message_loop_runner_)
+      message_loop_runner_->Quit();
+  }
+
+  bool load_stop_observed_;
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebContentsLoadStopObserver);
+};
 
 }  // namespace
 
@@ -159,7 +200,7 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
   }
 
   PushMessagingAppIdentifier GetAppIdentifierForServiceWorkerRegistration(
-      int64 service_worker_registration_id,
+      int64_t service_worker_registration_id,
       const GURL& origin) {
     PushMessagingAppIdentifier app_identifier =
         PushMessagingAppIdentifier::FindByServiceWorker(
@@ -212,6 +253,113 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, RegisterFailsOnDev) {
       "origin ('chrome-extension://" +
           extension->id() + "') is not supported.",
       error);
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateRefreshesServiceWorker) {
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+  base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
+                                .AppendASCII("update")
+                                .AppendASCII("service_worker.pem");
+  base::FilePath path_v1 = PackExtensionWithOptions(
+      test_data_dir_.AppendASCII("service_worker")
+          .AppendASCII("update")
+          .AppendASCII("v1"),
+      scoped_temp_dir.path().AppendASCII("v1.crx"), pem_path, base::FilePath());
+  base::FilePath path_v2 = PackExtensionWithOptions(
+      test_data_dir_.AppendASCII("service_worker")
+          .AppendASCII("update")
+          .AppendASCII("v2"),
+      scoped_temp_dir.path().AppendASCII("v2.crx"), pem_path, base::FilePath());
+  const char* kId = "hfaanndiiilofhfokeanhddpkfffchdi";
+
+  ExtensionTestMessageListener listener_v1("Pong from version 1", false);
+  listener_v1.set_failure_message("FAILURE_V1");
+  // Install version 1.0 of the extension.
+  ASSERT_TRUE(InstallExtension(path_v1, 1));
+  EXPECT_TRUE(extensions::ExtensionRegistry::Get(profile())
+                  ->enabled_extensions()
+                  .GetByID(kId));
+  EXPECT_TRUE(listener_v1.WaitUntilSatisfied());
+
+  ExtensionTestMessageListener listener_v2("Pong from version 2", false);
+  listener_v2.set_failure_message("FAILURE_V2");
+
+  // Update to version 2.0.
+  EXPECT_TRUE(UpdateExtension(kId, path_v2, 0));
+  EXPECT_TRUE(extensions::ExtensionRegistry::Get(profile())
+                  ->enabled_extensions()
+                  .GetByID(kId));
+  EXPECT_TRUE(listener_v2.WaitUntilSatisfied());
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateWithoutSkipWaiting) {
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+  base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
+                                .AppendASCII("update_without_skip_waiting")
+                                .AppendASCII("update_without_skip_waiting.pem");
+  base::FilePath path_v1 = PackExtensionWithOptions(
+      test_data_dir_.AppendASCII("service_worker")
+          .AppendASCII("update_without_skip_waiting")
+          .AppendASCII("v1"),
+      scoped_temp_dir.path().AppendASCII("v1.crx"), pem_path, base::FilePath());
+  base::FilePath path_v2 = PackExtensionWithOptions(
+      test_data_dir_.AppendASCII("service_worker")
+          .AppendASCII("update_without_skip_waiting")
+          .AppendASCII("v2"),
+      scoped_temp_dir.path().AppendASCII("v2.crx"), pem_path, base::FilePath());
+  const char* kId = "mhnnnflgagdakldgjpfcofkiocpdmogl";
+
+  // Install version 1.0 of the extension.
+  ASSERT_TRUE(InstallExtension(path_v1, 1));
+  EXPECT_TRUE(extensions::ExtensionRegistry::Get(profile())
+                  ->enabled_extensions()
+                  .GetByID(kId));
+  const Extension* extension = extensions::ExtensionRegistry::Get(profile())
+                                   ->enabled_extensions()
+                                   .GetByID(kId);
+
+  ExtensionTestMessageListener listener1("Pong from version 1", false);
+  listener1.set_failure_message("FAILURE");
+  content::WebContents* web_contents =
+      AddTab(browser(), extension->GetResourceURL("page.html"));
+  EXPECT_TRUE(listener1.WaitUntilSatisfied());
+
+  // Update to version 2.0.
+  EXPECT_TRUE(UpdateExtension(kId, path_v2, 0));
+  EXPECT_TRUE(extensions::ExtensionRegistry::Get(profile())
+                  ->enabled_extensions()
+                  .GetByID(kId));
+  const Extension* extension_after_update =
+      extensions::ExtensionRegistry::Get(profile())
+          ->enabled_extensions()
+          .GetByID(kId);
+
+  // Service worker version 2 would be installed but it won't be controlling
+  // the extension page yet.
+  ExtensionTestMessageListener listener2("Pong from version 1", false);
+  listener2.set_failure_message("FAILURE");
+  web_contents =
+      AddTab(browser(), extension_after_update->GetResourceURL("page.html"));
+  EXPECT_TRUE(listener2.WaitUntilSatisfied());
+
+  // Navigate the tab away from the extension page so that no clients are
+  // using the service worker.
+  // Note that just closing the tab with WebContentsDestroyedWatcher doesn't
+  // seem to be enough because it returns too early.
+  WebContentsLoadStopObserver navigate_away_observer(web_contents);
+  web_contents->GetController().LoadURL(
+      GURL(url::kAboutBlankURL), content::Referrer(), ui::PAGE_TRANSITION_TYPED,
+      std::string());
+  navigate_away_observer.WaitForLoadStop();
+
+  // Now expect service worker version 2 to control the extension page.
+  ExtensionTestMessageListener listener3("Pong from version 2", false);
+  listener3.set_failure_message("FAILURE");
+  web_contents =
+      AddTab(browser(), extension_after_update->GetResourceURL("page.html"));
+  EXPECT_TRUE(listener3.WaitUntilSatisfied());
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, FetchArbitraryPaths) {
@@ -422,6 +570,69 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
 IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, NotificationAPI) {
   EXPECT_TRUE(RunExtensionSubtest("service_worker/notifications/has_permission",
                                   "page.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesFetch) {
+  EXPECT_TRUE(RunExtensionSubtest(
+      "service_worker/web_accessible_resources/fetch/", "page.html"));
+}
+
+// This test loads a web page that has an iframe pointing to a
+// chrome-extension:// URL. The URL is listed in the extension's
+// web_accessible_resources. Initially the iframe is served from the extension's
+// resource file. After verifying that, we register a Service Worker that
+// controls the extension. Further requests to the same resource as before
+// should now be served by the Service Worker.
+// This test also verifies that if the requested resource exists in the manifest
+// but is not present in the extension directory, the Service Worker can still
+// serve the resource file.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
+  const Extension* extension = LoadExtensionWithFlags(
+      test_data_dir_.AppendASCII(
+          "service_worker/web_accessible_resources/iframe_src"),
+      kFlagNone);
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  GURL page_url = embedded_test_server()->GetURL(
+      "/extensions/api_test/service_worker/web_accessible_resources/"
+      "webpage.html");
+
+  content::WebContents* web_contents = AddTab(browser(), page_url);
+  std::string result;
+  // webpage.html will create an iframe pointing to a resource from |extension|.
+  // Expect the resource to be served by the extension.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, base::StringPrintf("window.testIframe('%s', 'iframe.html')",
+                                       extension->id().c_str()),
+      &result));
+  EXPECT_EQ("FROM_EXTENSION_RESOURCE", result);
+
+  ExtensionTestMessageListener service_worker_ready_listener("SW_READY", false);
+  EXPECT_TRUE(ExecuteScriptInBackgroundPageNoWait(
+      extension->id(), "window.registerServiceWorker()"));
+  EXPECT_TRUE(service_worker_ready_listener.WaitUntilSatisfied());
+
+  result.clear();
+  // webpage.html will create another iframe pointing to a resource from
+  // |extension| as before. But this time, the resource should be be served
+  // from the Service Worker.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, base::StringPrintf("window.testIframe('%s', 'iframe.html')",
+                                       extension->id().c_str()),
+      &result));
+  EXPECT_EQ("FROM_SW_RESOURCE", result);
+
+  result.clear();
+  // webpage.html will create yet another iframe pointing to a resource that
+  // exists in the extension manifest's web_accessible_resources, but is not
+  // present in the extension directory. Expect the resources of the iframe to
+  // be served by the Service Worker.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents,
+      base::StringPrintf("window.testIframe('%s', 'iframe_non_existent.html')",
+                         extension->id().c_str()),
+      &result));
+  EXPECT_EQ("FROM_SW_RESOURCE", result);
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {

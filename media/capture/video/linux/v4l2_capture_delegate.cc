@@ -8,11 +8,13 @@
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video/linux/v4l2_capture_delegate_multi_plane.h"
 #include "media/capture/video/linux/v4l2_capture_delegate_single_plane.h"
@@ -24,7 +26,7 @@ namespace media {
 // buffers by v4l2 driver can be higher or lower than this number.
 // kNumVideoBuffers should not be too small, or Chrome may not return enough
 // buffers back to driver in time.
-const uint32 kNumVideoBuffers = 4;
+const uint32_t kNumVideoBuffers = 4;
 // Timeout in milliseconds v4l2_thread_ blocks waiting for a frame from the hw.
 const int kCaptureTimeoutMs = 200;
 // The number of continuous timeouts tolerated before treated as error.
@@ -175,7 +177,7 @@ void V4L2CaptureDelegate::AllocateAndStart(
     scoped_ptr<VideoCaptureDevice::Client> client) {
   DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
   DCHECK(client);
-  client_ = client.Pass();
+  client_ = std::move(client);
 
   // Need to open camera with O_RDWR after Linux kernel 3.3.
   device_fd_.reset(HANDLE_EINTR(open(device_name_.id().c_str(), O_RDWR)));

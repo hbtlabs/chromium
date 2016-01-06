@@ -26,11 +26,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
+#include "platform/audio/HRTFDatabase.h"
 
 #if ENABLE(WEB_AUDIO)
 
-#include "platform/audio/HRTFDatabase.h"
+#include "wtf/MathExtras.h"
 
 namespace blink {
 
@@ -108,8 +108,7 @@ void HRTFDatabase::getKernelsFromAzimuthElevation(double azimuthBlend, unsigned 
 unsigned HRTFDatabase::indexFromElevationAngle(double elevationAngle)
 {
     // Clamp to allowed range.
-    elevationAngle = std::max(static_cast<double>(MinElevation), elevationAngle);
-    elevationAngle = std::min(static_cast<double>(MaxElevation), elevationAngle);
+    elevationAngle = clampTo<double, double>(elevationAngle, MinElevation, MaxElevation);
 
     unsigned elevationIndex = static_cast<int>(InterpolationFactor * (elevationAngle - MinElevation) / RawElevationAngleSpacing);
     return elevationIndex;

@@ -17,7 +17,7 @@
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/common/gpu/media/gpu_video_accelerator_util.h"
 #include "content/renderer/render_thread_impl.h"
-#include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
@@ -106,11 +106,11 @@ RendererGpuVideoAcceleratorFactories::CreateVideoEncodeAccelerator() {
 }
 
 bool RendererGpuVideoAcceleratorFactories::CreateTextures(
-    int32 count,
+    int32_t count,
     const gfx::Size& size,
-    std::vector<uint32>* texture_ids,
+    std::vector<uint32_t>* texture_ids,
     std::vector<gpu::Mailbox>* texture_mailboxes,
-    uint32 texture_target) {
+    uint32_t texture_target) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(texture_target);
 
@@ -123,7 +123,7 @@ bool RendererGpuVideoAcceleratorFactories::CreateTextures(
   gles2->GenTextures(count, &texture_ids->at(0));
   for (int i = 0; i < count; ++i) {
     gles2->ActiveTexture(GL_TEXTURE0);
-    uint32 texture_id = texture_ids->at(i);
+    uint32_t texture_id = texture_ids->at(i);
     gles2->BindTexture(texture_target, texture_id);
     gles2->TexParameteri(texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gles2->TexParameteri(texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -154,7 +154,7 @@ bool RendererGpuVideoAcceleratorFactories::CreateTextures(
   return true;
 }
 
-void RendererGpuVideoAcceleratorFactories::DeleteTexture(uint32 texture_id) {
+void RendererGpuVideoAcceleratorFactories::DeleteTexture(uint32_t texture_id) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (CheckContextLost())
     return;
@@ -187,7 +187,7 @@ RendererGpuVideoAcceleratorFactories::AllocateGpuMemoryBuffer(
     gfx::BufferUsage usage) {
   scoped_ptr<gfx::GpuMemoryBuffer> buffer =
       gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(size, format, usage);
-  return buffer.Pass();
+  return buffer;
 }
 bool RendererGpuVideoAcceleratorFactories::
     ShouldUseGpuMemoryBuffersForVideoFrames() const {
@@ -246,12 +246,10 @@ RendererGpuVideoAcceleratorFactories::GetTaskRunner() {
   return task_runner_;
 }
 
-media::VideoDecodeAccelerator::SupportedProfiles
-RendererGpuVideoAcceleratorFactories::
-    GetVideoDecodeAcceleratorSupportedProfiles() {
-  return GpuVideoAcceleratorUtil::ConvertGpuToMediaDecodeProfiles(
-      gpu_channel_host_->gpu_info()
-          .video_decode_accelerator_supported_profiles);
+media::VideoDecodeAccelerator::Capabilities
+RendererGpuVideoAcceleratorFactories::GetVideoDecodeAcceleratorCapabilities() {
+  return GpuVideoAcceleratorUtil::ConvertGpuToMediaDecodeCapabilities(
+      gpu_channel_host_->gpu_info().video_decode_accelerator_capabilities);
 }
 
 media::VideoEncodeAccelerator::SupportedProfiles

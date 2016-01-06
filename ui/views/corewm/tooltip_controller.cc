@@ -4,10 +4,14 @@
 
 #include "ui/views/corewm/tooltip_controller.h"
 
+#include <stddef.h>
+
+#include <utility>
 #include <vector>
 
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -124,7 +128,7 @@ TooltipController::TooltipController(scoped_ptr<Tooltip> tooltip)
     : tooltip_window_(NULL),
       tooltip_id_(NULL),
       tooltip_window_at_mouse_press_(NULL),
-      tooltip_(tooltip.Pass()),
+      tooltip_(std::move(tooltip)),
       tooltips_enabled_(true) {
   tooltip_timer_.Start(FROM_HERE,
       base::TimeDelta::FromMilliseconds(kTooltipTimeoutMs),

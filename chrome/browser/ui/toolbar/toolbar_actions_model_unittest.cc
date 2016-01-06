@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -1194,10 +1196,10 @@ TEST_F(ToolbarActionsModelUnitTest, ComponentExtensionsAddedToEnd) {
       .Set("description", "An extension")
       .Set("manifest_version", 2)
       .Set("version", "1.0.0")
-      .Set("browser_action", extensions::DictionaryBuilder().Pass());
+      .Set("browser_action", extensions::DictionaryBuilder());
   scoped_refptr<const extensions::Extension> component_extension =
       extensions::ExtensionBuilder()
-          .SetManifest(manifest.Pass())
+          .SetManifest(std::move(manifest))
           .SetID(crx_file::id_util::GenerateId(kName))
           .SetLocation(extensions::Manifest::COMPONENT)
           .Build();

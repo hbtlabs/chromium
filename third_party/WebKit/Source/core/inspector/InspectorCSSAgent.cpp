@@ -22,7 +22,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/inspector/InspectorCSSAgent.h"
 
 #include "bindings/core/v8/ExceptionState.h"
@@ -175,6 +174,10 @@ void addColorsFromImageStyle(const ComputedStyle& style, WillBeHeapVector<Color>
         return;
 
     StyleImage* styleImage = backgroundLayers.image();
+    // hasImage() does not always indicate that this is non-null
+    if (!styleImage)
+        return;
+
     if (!styleImage->isGeneratedImage()) {
         // Make no assertions about the colors in non-generated images
         colors.clear();
@@ -984,6 +987,20 @@ void InspectorCSSAgent::getComputedStyleForNode(ErrorString* errorString, int no
     RefPtrWillBeRawPtr<CSSComputedStyleDeclaration> computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
     RefPtrWillBeRawPtr<InspectorStyle> inspectorStyle = InspectorStyle::create(computedStyleInfo, nullptr, nullptr);
     style = inspectorStyle->buildArrayForComputedStyle();
+
+    if (!RuntimeEnabledFeatures::cssVariablesEnabled())
+        return;
+
+    const HashMap<AtomicString, RefPtr<CSSVariableData>>* variables = computedStyleInfo->getVariables();
+
+    if (variables && !variables->isEmpty()) {
+        for (const auto& it : *variables) {
+            RefPtr<TypeBuilder::CSS::CSSComputedStyleProperty> entry = TypeBuilder::CSS::CSSComputedStyleProperty::create()
+                .setName(it.key)
+                .setValue(it.value->tokenRange().serialize());
+            style->addItem(entry);
+        }
+    }
 }
 
 void InspectorCSSAgent::collectPlatformFontsForLayoutObject(LayoutObject* layoutObject, HashCountedSet<String>* fontStats)
@@ -1285,7 +1302,7 @@ PassRefPtr<TypeBuilder::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const
         if (Document* document = parentStyleSheet->ownerDocument())
             frame = document->frame();
     }
-    OwnPtr<MediaQueryEvaluator> mediaEvaluator = adoptPtr(new MediaQueryEvaluator(frame));
+    OwnPtrWillBeRawPtr<MediaQueryEvaluator> mediaEvaluator = adoptPtrWillBeNoop(new MediaQueryEvaluator(frame));
 
     InspectorStyleSheet* inspectorStyleSheet = parentStyleSheet ? m_cssStyleSheetToInspectorStyleSheet.get(parentStyleSheet) : nullptr;
     RefPtr<TypeBuilder::Array<TypeBuilder::CSS::MediaQuery> > mediaListArray = TypeBuilder::Array<TypeBuilder::CSS::MediaQuery>::create();

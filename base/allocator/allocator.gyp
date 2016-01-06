@@ -32,9 +32,7 @@
       # (crbug.com/564618) bring this file to a saner state (fewer conditions).
       'type': 'static_library',
       'conditions': [
-        # TODO(primiano): in next CL this should check win_use_allocator_shim.
-        # Right now that would produce a non-zero ninja diff for asan=1.
-        ['OS=="win" and component!="shared_library"', {
+        ['OS=="win" and win_use_allocator_shim==1', {
           'msvs_settings': {
             # TODO(sgk):  merge this with build/common.gypi settings
             'VCLibrarianTool': {
@@ -46,12 +44,8 @@
           },
           'dependencies': [
             'libcmt',
-
-            # TODO(primiano): remove in next CL, not really needed.
-            '../third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
           ],
           'include_dirs': [
-            '.',  # TODO(primiano): remove in next CL, not really needed.
             '../..',
           ],
           'sources': [
@@ -64,15 +58,6 @@
                   'RuntimeLibrary': '0',
                 },
               },
-              # TODO(primiano): remove this 'conditions' section soon. This is
-              # only for tc-malloc, which is not supported on windows. The only
-              # reason os it is to make the initial refactoring easier and
-              # a zero-diff ninja w.r.t. the current situation.
-              'conditions': [
-                ['disable_debugallocation==0', {
-                  'defines': [ 'TCMALLOC_FOR_DEBUGALLOCATION' ],
-                }],
-              ],
             },
           },
           'direct_dependent_settings': {
@@ -88,9 +73,6 @@
                 },
               },
             },
-            'defines': [
-              'PERFTOOLS_DLL_DECL=',
-            ],
           },
         }],  # OS=="win"
         ['use_allocator=="tcmalloc"', {
@@ -130,7 +112,6 @@
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.cc',
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.h',
             '<(tcmalloc_dir)/src/base/atomicops.h',
-            '<(tcmalloc_dir)/src/base/basictypes.h',
             '<(tcmalloc_dir)/src/base/commandlineflags.h',
             '<(tcmalloc_dir)/src/base/cycleclock.h',
             # We don't list dynamic_annotations.c since its copy is already
@@ -254,7 +235,6 @@
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86-msvc.h',
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.h',
             '<(tcmalloc_dir)/src/base/atomicops.h',
-            '<(tcmalloc_dir)/src/base/basictypes.h',
             '<(tcmalloc_dir)/src/base/commandlineflags.h',
             '<(tcmalloc_dir)/src/base/cycleclock.h',
             '<(tcmalloc_dir)/src/base/elf_mem_image.h',
@@ -304,6 +284,20 @@
             '<(tcmalloc_dir)/src/debugallocation.cc',
             '<(tcmalloc_dir)/src/tcmalloc.cc',
           ],
+          'variables': {
+            'clang_warning_flags': [
+              # tcmalloc initializes some fields in the wrong order.
+              '-Wno-reorder',
+              # tcmalloc contains some unused local template specializations.
+              '-Wno-unused-function',
+              # tcmalloc uses COMPILE_ASSERT without static_assert but with
+              # typedefs.
+              '-Wno-unused-local-typedefs',
+              # for magic2_ in debugallocation.cc (only built in Debug builds)
+              # typedefs.
+              '-Wno-unused-private-field',
+            ],
+          },
           'conditions': [
             ['OS=="linux" or OS=="freebsd" or OS=="solaris" or OS=="android"', {
               'sources!': [
@@ -376,19 +370,7 @@
         }],
       ],  # conditions of 'allocator' target.
     },  # 'allocator' target.
-    {
-      'target_name': 'allocator_extension_thunks',
-      'type': 'static_library',
-      'sources': [
-        'allocator_extension_thunks.cc',
-        'allocator_extension_thunks.h',
-      ],
-      'toolsets': ['host', 'target'],
-      'include_dirs': [
-        '../../'
-      ],
-    },
-   ],
+  ],  # targets.
   'conditions': [
     ['OS=="win" and component!="shared_library"', {
       'targets': [
@@ -413,27 +395,6 @@
               ],
             },
           ],
-        },
-      ],
-    }],
-    ['OS=="win" and target_arch=="ia32"', {
-      'targets': [
-        {
-          'target_name': 'allocator_extension_thunks_win64',
-          'type': 'static_library',
-          'sources': [
-            'allocator_extension_thunks.cc',
-            'allocator_extension_thunks.h',
-          ],
-          'toolsets': ['host', 'target'],
-          'include_dirs': [
-            '../../'
-          ],
-          'configurations': {
-            'Common_Base': {
-              'msvs_target_platform': 'x64',
-            },
-          },
         },
       ],
     }],

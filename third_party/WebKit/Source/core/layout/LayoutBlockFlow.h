@@ -93,7 +93,7 @@ public:
 
     void layoutBlock(bool relayoutChildren) override;
 
-    void computeOverflow(LayoutUnit oldClientAfterEdge) override;
+    void computeOverflow(LayoutUnit oldClientAfterEdge, bool recomputeFloats = false) override;
 
     void deleteLineBoxTree() final;
 
@@ -293,6 +293,8 @@ public:
         return containsFloats() ? m_floatingObjects->set().last().get() : nullptr;
     }
 
+    void invalidateDisplayItemClientsOfFirstLine();
+
 protected:
     void rebuildFloatsFromIntruding();
     void layoutInlineChildren(bool relayoutChildren, LayoutUnit& paintInvalidationLogicalTop, LayoutUnit& paintInvalidationLogicalBottom, LayoutUnit afterEdge);
@@ -322,6 +324,8 @@ protected:
     void setLogicalLeftForChild(LayoutBox& child, LayoutUnit logicalLeft);
     void setLogicalTopForChild(LayoutBox& child, LayoutUnit logicalTop);
     void determineLogicalLeftPositionForChild(LayoutBox& child);
+
+    PaintInvalidationReason invalidatePaintIfNeeded(PaintInvalidationState&, const LayoutBoxModelObject& paintInvalidationContainer) override;
 
 private:
     bool layoutBlockFlow(bool relayoutChildren, LayoutUnit& pageLogicalHeight, SubtreeLayoutScope&);

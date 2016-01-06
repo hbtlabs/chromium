@@ -5,11 +5,14 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_FIELD_TRIAL_H_
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_FIELD_TRIAL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 
@@ -123,7 +126,7 @@ class OmniboxFieldTrial {
   // Populates |field_trial_hash| with hashes of the active suggest field trial
   // names, if any.
   static void GetActiveSuggestFieldTrialHashes(
-      std::vector<uint32>* field_trial_hash);
+      std::vector<uint32_t>* field_trial_hash);
 
   // ---------------------------------------------------------
   // For the AutocompleteController "stop timer" field trial.
@@ -352,6 +355,16 @@ class OmniboxFieldTrial {
   static int KeywordScoreForSufficientlyCompleteMatch();
 
   // ---------------------------------------------------------
+  // For the HQPAllowDupMatchesForScoring experiment that's part of the
+  // bundled omnibox field trial.
+
+  // Returns true if HistoryQuick provider should allow overlapping term hits
+  // to count when scoring and only remove overlaps/duplicates later (which
+  // is necessary for highlighting).  Returns false if the experiment isn't
+  // active.
+  static bool HQPAllowDupMatchesForScoring();
+
+  // ---------------------------------------------------------
   // Exposed publicly for the sake of unittests.
   static const char kBundledExperimentFieldTrialName[];
   // Rule names used by the bundled experiment.
@@ -378,6 +391,7 @@ class OmniboxFieldTrial {
   static const char kKeywordRequiresRegistryRule[];
   static const char kKeywordRequiresPrefixMatchRule[];
   static const char kKeywordScoreForSufficientlyCompleteMatchRule[];
+  static const char kHQPAllowDupMatchesForScoringRule[];
 
   // Parameter names used by the HUP new scoring experiments.
   static const char kHUPNewScoringEnabledParam[];

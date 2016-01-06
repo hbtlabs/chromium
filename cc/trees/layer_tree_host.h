@@ -5,14 +5,17 @@
 #ifndef CC_TREES_LAYER_TREE_HOST_H_
 #define CC_TREES_LAYER_TREE_HOST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <limits>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/cancelable_callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -33,6 +36,7 @@
 #include "cc/resources/resource_format.h"
 #include "cc/resources/scoped_ui_resource.h"
 #include "cc/surfaces/surface_sequence.h"
+#include "cc/trees/compositor_mode.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
@@ -140,6 +144,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   int meta_information_sequence_number() {
     return meta_information_sequence_number_;
+  }
+
+  bool gpu_rasterization_histogram_recorded() const {
+    return gpu_rasterization_histogram_recorded_;
   }
 
   void IncrementMetaInformationSequenceNumber() {
@@ -359,7 +367,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool HasActiveAnimation(const Layer* layer) const;
 
  protected:
-  explicit LayerTreeHost(InitParams* params);
+  LayerTreeHost(InitParams* params, CompositorMode mode);
   void InitializeThreaded(
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
@@ -368,11 +376,15 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       LayerTreeHostSingleThreadClient* single_thread_client,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       scoped_ptr<BeginFrameSource> external_begin_frame_source);
-  void InitializeForTesting(scoped_ptr<TaskRunnerProvider> task_runner_provider,
-                            scoped_ptr<Proxy> proxy_for_testing);
+  void InitializeForTesting(
+      scoped_ptr<TaskRunnerProvider> task_runner_provider,
+      scoped_ptr<Proxy> proxy_for_testing,
+      scoped_ptr<BeginFrameSource> external_begin_frame_source);
   void SetOutputSurfaceLostForTesting(bool is_lost) {
     output_surface_lost_ = is_lost;
   }
+  void SetTaskRunnerProviderForTesting(
+      scoped_ptr<TaskRunnerProvider> task_runner_provider);
 
   // shared_bitmap_manager(), gpu_memory_buffer_manager(), and
   // task_graph_runner() return valid values only until the LayerTreeHostImpl is
@@ -389,13 +401,20 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void OnCommitForSwapPromises();
 
+  void RecordGpuRasterizationHistogram();
+
  private:
-  void InitializeProxy(scoped_ptr<Proxy> proxy);
+  void InitializeProxy(
+      scoped_ptr<Proxy> proxy,
+      scoped_ptr<BeginFrameSource> external_begin_frame_source);
 
   bool DoUpdateLayers(Layer* root_layer);
   void UpdateHudLayer();
 
   bool AnimateLayersRecursive(Layer* current, base::TimeTicks time);
+
+  bool IsSingleThreaded() const;
+  bool IsThreaded() const;
 
   struct UIResourceClientData {
     UIResourceClient* client;
@@ -410,12 +429,13 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   typedef std::vector<UIResourceRequest> UIResourceRequestQueue;
   UIResourceRequestQueue ui_resource_request_queue_;
 
-  void RecordGpuRasterizationHistogram();
   void CalculateLCDTextMetricsCallback(Layer* layer);
 
   void NotifySwapPromiseMonitorsOfSetNeedsCommit();
 
   void SetPropertyTreesNeedRebuild();
+
+  const CompositorMode compositor_mode_;
 
   bool needs_full_tree_sync_;
   bool needs_meta_info_recomputation_;

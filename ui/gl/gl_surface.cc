@@ -97,7 +97,9 @@ bool GLSurface::Initialize() {
   return true;
 }
 
-bool GLSurface::Resize(const gfx::Size& size, float scale_factor) {
+bool GLSurface::Resize(const gfx::Size& size,
+                       float scale_factor,
+                       bool has_alpha) {
   NOTIMPLEMENTED();
   return false;
 }
@@ -204,8 +206,11 @@ bool GLSurface::ScheduleCALayer(gl::GLImage* contents_image,
                                 const RectF& contents_rect,
                                 float opacity,
                                 unsigned background_color,
-                                const SizeF& bounds_size,
-                                const gfx::Transform& transform) {
+                                unsigned edge_aa_mask,
+                                const RectF& bounds_rect,
+                                bool is_clipped,
+                                const RectF& clip_rect,
+                                const Transform& transform) {
   NOTIMPLEMENTED();
   return false;
 }
@@ -253,8 +258,10 @@ void GLSurfaceAdapter::Destroy() {
   surface_->Destroy();
 }
 
-bool GLSurfaceAdapter::Resize(const gfx::Size& size, float scale_factor) {
-  return surface_->Resize(size, scale_factor);
+bool GLSurfaceAdapter::Resize(const gfx::Size& size,
+                              float scale_factor,
+                              bool has_alpha) {
+  return surface_->Resize(size, scale_factor, has_alpha);
 }
 
 bool GLSurfaceAdapter::Recreate() {

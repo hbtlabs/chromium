@@ -18,8 +18,7 @@ from telemetry.internal.platform import system_info
 from telemetry.internal.util import path
 from telemetry.testing import browser_test_case
 from telemetry.testing import options_for_unittests
-from telemetry.timeline import tracing_category_filter
-from telemetry.timeline import tracing_options
+from telemetry.timeline import tracing_config
 
 import mock
 
@@ -115,15 +114,15 @@ class BrowserTest(browser_test_case.BrowserTestCase):
     self.assertTrue(self._browser.memory_stats['SystemTotalPhysicalMemory'] > 0)
 
   @decorators.Disabled('mac', 'linux', 'chromeos')  # crbug.com/499208.
+  @decorators.Disabled('win')  # crbug.com/570955.
   def testIsTracingRunning(self):
     tracing_controller = self._browser.platform.tracing_controller
     if not tracing_controller.IsChromeTracingSupported():
       return
     self.assertFalse(tracing_controller.is_tracing_running)
-    options = tracing_options.TracingOptions()
-    options.enable_chrome_trace = True
-    category_filter = tracing_category_filter.TracingCategoryFilter()
-    tracing_controller.Start(options, category_filter)
+    config = tracing_config.TracingConfig()
+    config.tracing_options.enable_chrome_trace = True
+    tracing_controller.Start(config)
     self.assertTrue(tracing_controller.is_tracing_running)
     tracing_controller.Stop()
     self.assertFalse(tracing_controller.is_tracing_running)

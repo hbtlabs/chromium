@@ -4,7 +4,8 @@
 
 #include "remoting/host/setup/daemon_controller_delegate_win.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -179,8 +180,7 @@ bool WriteConfig(const std::string& content) {
 
   // Extract the unprivileged fields from the configuration.
   base::DictionaryValue unprivileged_config_dict;
-  for (int i = 0; i < arraysize(kUnprivilegedConfigKeys); ++i) {
-    const char* key = kUnprivilegedConfigKeys[i];
+  for (const char* key : kUnprivilegedConfigKeys) {
     base::string16 value;
     if (config_dict->GetString(key, &value)) {
       unprivileged_config_dict.SetString(key, value);
@@ -256,7 +256,7 @@ ScopedScHandle OpenService(DWORD access) {
                 << "' service";
   }
 
-  return service.Pass();
+  return service;
 }
 
 void InvokeCompletionCallback(
@@ -382,7 +382,7 @@ void DaemonControllerDelegateWin::UpdateConfig(
     scoped_ptr<base::DictionaryValue> config,
     const DaemonController::CompletionCallback& done) {
   // Check for bad keys.
-  for (int i = 0; i < arraysize(kReadonlyKeys); ++i) {
+  for (size_t i = 0; i < arraysize(kReadonlyKeys); ++i) {
     if (config->HasKey(kReadonlyKeys[i])) {
       LOG(ERROR) << "Cannot update config: '" << kReadonlyKeys[i]
                  << "' is read only.";
@@ -468,9 +468,8 @@ void DaemonControllerDelegateWin::SetConfigAndStart(
 }
 
 scoped_refptr<DaemonController> DaemonController::Create() {
-  scoped_ptr<DaemonController::Delegate> delegate(
-      new DaemonControllerDelegateWin());
-  return new DaemonController(delegate.Pass());
+  return new DaemonController(
+      make_scoped_ptr(new DaemonControllerDelegateWin()));
 }
 
 }  // namespace remoting

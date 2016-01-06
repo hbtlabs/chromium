@@ -96,6 +96,7 @@ source_set("test_support") {
       "//mojo/environment:chromium",
       "//storage/browser",
       "//storage/common",
+      "//third_party/mojo/src/mojo/edk/test:test_support",
       "//ui/compositor:test_support",
       "//ui/surface",
       "//v8",
@@ -245,6 +246,7 @@ if (!is_ios) {
       "//components/test_runner:test_runner",
       "//content/public/common",
       "//skia",
+      "//third_party/mojo/src/mojo/edk/test:test_support",
       "//ui/accessibility:ax_gen",
       "//v8",
     ]
@@ -434,11 +436,6 @@ test("content_browsertests") {
     ]
 
     libs = [ "oleacc.lib" ]
-  }
-
-  if (is_linux) {
-    sources -=
-        [ "../browser/accessibility/dump_accessibility_tree_browsertest.cc" ]
   }
 
   if (is_android) {
@@ -661,7 +658,7 @@ test("content_unittests") {
           [ "../browser/media/capture/desktop_capture_device_aura_unittest.cc" ]
     }
 
-    if (is_android) {
+    if (is_android || is_chromecast) {
       sources -= [
         "../renderer/media/audio_track_recorder_unittest.cc",
         "../renderer/media/media_recorder_handler_unittest.cc",

@@ -5,8 +5,9 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 
 #include <queue>
+#include <utility>
 
-#include "base/command_line.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -17,7 +18,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 
@@ -25,9 +26,9 @@ namespace {
 
 // This is a global map between frame_tree_node_ids and pointers to
 // FrameTreeNodes.
-typedef base::hash_map<int, FrameTreeNode*> FrameTreeNodeIDMap;
+typedef base::hash_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
 
-base::LazyInstance<FrameTreeNodeIDMap> g_frame_tree_node_id_map =
+base::LazyInstance<FrameTreeNodeIdMap> g_frame_tree_node_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
 // These values indicate the loading progress status. The minimum progress
@@ -62,8 +63,8 @@ int FrameTreeNode::next_frame_tree_node_id_ = 1;
 // static
 FrameTreeNode* FrameTreeNode::GloballyFindByID(int frame_tree_node_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  FrameTreeNodeIDMap* nodes = g_frame_tree_node_id_map.Pointer();
-  FrameTreeNodeIDMap::iterator it = nodes->find(frame_tree_node_id);
+  FrameTreeNodeIdMap* nodes = g_frame_tree_node_id_map.Pointer();
+  FrameTreeNodeIdMap::iterator it = nodes->find(frame_tree_node_id);
   return it == nodes->end() ? nullptr : it->second;
 }
 
@@ -90,19 +91,24 @@ FrameTreeNode::FrameTreeNode(
       opener_(nullptr),
       opener_observer_(nullptr),
       has_committed_real_load_(false),
-      replication_state_(scope, name, sandbox_flags),
+      replication_state_(
+          scope,
+          name,
+          sandbox_flags,
+          false /* should enforce strict mixed content checking */),
       // Effective sandbox flags also need to be set, since initial sandbox
       // flags should apply to the initial empty document in the frame.
       effective_sandbox_flags_(sandbox_flags),
       frame_owner_properties_(frame_owner_properties),
       loading_progress_(kLoadingProgressNotStarted) {
-  std::pair<FrameTreeNodeIDMap::iterator, bool> result =
+  std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
 }
 
 FrameTreeNode::~FrameTreeNode() {
+  children_.clear();
   frame_tree_->FrameRemoved(this);
   FOR_EACH_OBSERVER(Observer, observers_, OnFrameTreeNodeDestroyed(this));
 
@@ -124,9 +130,9 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-void FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
-                             int process_id,
-                             int frame_routing_id) {
+FrameTreeNode* FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
+                                       int process_id,
+                                       int frame_routing_id) {
   // Child frame must always be created in the same process as the parent.
   CHECK_EQ(process_id, render_manager_.current_host()->GetProcess()->GetID());
   child->set_parent(this);
@@ -147,7 +153,8 @@ void FrameTreeNode::AddChild(scoped_ptr<FrameTreeNode> child,
   if (SiteIsolationPolicy::AreCrossProcessFramesPossible())
     render_manager_.CreateProxiesForChildFrame(child.get());
 
-  children_.push_back(child.Pass());
+  children_.push_back(std::move(child));
+  return children_.back().get();
 }
 
 void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
@@ -155,7 +162,7 @@ void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
     if (iter->get() == child) {
       // Subtle: we need to make sure the node is gone from the tree before
       // observers are notified of its deletion.
-      scoped_ptr<FrameTreeNode> node_to_delete(iter->Pass());
+      scoped_ptr<FrameTreeNode> node_to_delete(std::move(*iter));
       children_.erase(iter);
       node_to_delete.reset();
       return;
@@ -204,6 +211,16 @@ void FrameTreeNode::SetFrameName(const std::string& name) {
   replication_state_.name = name;
 }
 
+void FrameTreeNode::SetEnforceStrictMixedContentChecking(bool should_enforce) {
+  if (should_enforce ==
+      replication_state_.should_enforce_strict_mixed_content_checking) {
+    return;
+  }
+  render_manager_.OnEnforceStrictMixedContentChecking(should_enforce);
+  replication_state_.should_enforce_strict_mixed_content_checking =
+      should_enforce;
+}
+
 bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
   if (!other || !other->child_count())
     return false;
@@ -237,8 +254,7 @@ bool FrameTreeNode::IsLoading() const {
 
   DCHECK(current_frame_host);
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled()) {
     if (navigation_request_)
       return true;
 
@@ -262,8 +278,7 @@ bool FrameTreeNode::CommitPendingSandboxFlags() {
 
 void FrameTreeNode::CreatedNavigationRequest(
     scoped_ptr<NavigationRequest> navigation_request) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   ResetNavigationRequest(false);
 
   // Force the throbber to start to keep it in sync with what is happening in
@@ -276,14 +291,13 @@ void FrameTreeNode::CreatedNavigationRequest(
     DidStartLoading(true);
   }
 
-  navigation_request_ = navigation_request.Pass();
+  navigation_request_ = std::move(navigation_request);
 
   render_manager()->DidCreateNavigationRequest(*navigation_request_);
 }
 
 void FrameTreeNode::ResetNavigationRequest(bool is_commit) {
-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableBrowserSideNavigation));
+  CHECK(IsBrowserSideNavigationEnabled());
   if (!navigation_request_)
     return;
   navigation_request_.reset();
@@ -367,10 +381,8 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 }
 
 bool FrameTreeNode::StopLoading() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableBrowserSideNavigation)) {
+  if (IsBrowserSideNavigationEnabled())
     ResetNavigationRequest(false);
-  }
 
   // TODO(nasko): see if child frames should send IPCs in site-per-process
   // mode.

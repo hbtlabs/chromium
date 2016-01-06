@@ -4,10 +4,13 @@
 
 #include "ui/gl/gl_surface.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -47,7 +50,9 @@ class GL_EXPORT GLSurfaceOzoneEGL : public NativeViewGLSurfaceEGL {
 
   // GLSurface:
   bool Initialize() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   gfx::SwapResult SwapBuffers() override;
   bool ScheduleOverlayPlane(int z_order,
                             OverlayTransform transform,
@@ -73,21 +78,23 @@ GLSurfaceOzoneEGL::GLSurfaceOzoneEGL(
     scoped_ptr<ui::SurfaceOzoneEGL> ozone_surface,
     AcceleratedWidget widget)
     : NativeViewGLSurfaceEGL(ozone_surface->GetNativeWindow()),
-      ozone_surface_(ozone_surface.Pass()),
+      ozone_surface_(std::move(ozone_surface)),
       widget_(widget) {}
 
 bool GLSurfaceOzoneEGL::Initialize() {
   return Initialize(ozone_surface_->CreateVSyncProvider());
 }
 
-bool GLSurfaceOzoneEGL::Resize(const gfx::Size& size, float scale_factor) {
+bool GLSurfaceOzoneEGL::Resize(const gfx::Size& size,
+                               float scale_factor,
+                               bool has_alpha) {
   if (!ozone_surface_->ResizeNativeWindow(size)) {
     if (!ReinitializeNativeSurface() ||
         !ozone_surface_->ResizeNativeWindow(size))
       return false;
   }
 
-  return NativeViewGLSurfaceEGL::Resize(size, scale_factor);
+  return NativeViewGLSurfaceEGL::Resize(size, scale_factor, has_alpha);
 }
 
 gfx::SwapResult GLSurfaceOzoneEGL::SwapBuffers() {
@@ -145,7 +152,9 @@ class GL_EXPORT GLSurfaceOzoneSurfaceless : public SurfacelessEGL {
 
   // GLSurface:
   bool Initialize() override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   gfx::SwapResult SwapBuffers() override;
   bool ScheduleOverlayPlane(int z_order,
                             OverlayTransform transform,
@@ -213,7 +222,7 @@ GLSurfaceOzoneSurfaceless::GLSurfaceOzoneSurfaceless(
     scoped_ptr<ui::SurfaceOzoneEGL> ozone_surface,
     AcceleratedWidget widget)
     : SurfacelessEGL(gfx::Size()),
-      ozone_surface_(ozone_surface.Pass()),
+      ozone_surface_(std::move(ozone_surface)),
       widget_(widget),
       has_implicit_external_sync_(
           HasEGLExtension("EGL_ARM_implicit_external_sync")),
@@ -233,11 +242,12 @@ bool GLSurfaceOzoneSurfaceless::Initialize() {
 }
 
 bool GLSurfaceOzoneSurfaceless::Resize(const gfx::Size& size,
-                                       float scale_factor) {
+                                       float scale_factor,
+                                       bool has_alpha) {
   if (!ozone_surface_->ResizeNativeWindow(size))
     return false;
 
-  return SurfacelessEGL::Resize(size, scale_factor);
+  return SurfacelessEGL::Resize(size, scale_factor, has_alpha);
 }
 
 gfx::SwapResult GLSurfaceOzoneSurfaceless::SwapBuffers() {
@@ -416,7 +426,9 @@ class GL_EXPORT GLSurfaceOzoneSurfacelessSurfaceImpl
   // GLSurface:
   unsigned int GetBackingFrameBufferObject() override;
   bool OnMakeCurrent(GLContext* context) override;
-  bool Resize(const gfx::Size& size, float scale_factor) override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
   bool SupportsPostSubBuffer() override;
   gfx::SwapResult SwapBuffers() override;
   void SwapBuffersAsync(const SwapCompletionCallback& callback) override;
@@ -440,7 +452,7 @@ class GL_EXPORT GLSurfaceOzoneSurfacelessSurfaceImpl
 GLSurfaceOzoneSurfacelessSurfaceImpl::GLSurfaceOzoneSurfacelessSurfaceImpl(
     scoped_ptr<ui::SurfaceOzoneEGL> ozone_surface,
     AcceleratedWidget widget)
-    : GLSurfaceOzoneSurfaceless(ozone_surface.Pass(), widget),
+    : GLSurfaceOzoneSurfaceless(std::move(ozone_surface), widget),
       context_(nullptr),
       fbo_(0),
       current_surface_(0) {
@@ -470,10 +482,13 @@ bool GLSurfaceOzoneSurfacelessSurfaceImpl::OnMakeCurrent(GLContext* context) {
 }
 
 bool GLSurfaceOzoneSurfacelessSurfaceImpl::Resize(const gfx::Size& size,
-                                                  float scale_factor) {
+                                                  float scale_factor,
+                                                  bool has_alpha) {
   if (size == GetSize())
     return true;
-  return GLSurfaceOzoneSurfaceless::Resize(size, scale_factor) &&
+  // Alpha value isn't actually used in allocating buffers yet, so always use
+  // true instead.
+  return GLSurfaceOzoneSurfaceless::Resize(size, scale_factor, true) &&
          CreatePixmaps();
 }
 
@@ -582,7 +597,7 @@ scoped_refptr<GLSurface> CreateViewGLSurfaceOzone(
   if (!surface_ozone)
     return nullptr;
   scoped_refptr<GLSurface> surface =
-      new GLSurfaceOzoneEGL(surface_ozone.Pass(), window);
+      new GLSurfaceOzoneEGL(std::move(surface_ozone), window);
   if (!surface->Initialize())
     return nullptr;
   return surface;
@@ -596,8 +611,8 @@ scoped_refptr<GLSurface> CreateViewGLSurfaceOzoneSurfacelessSurfaceImpl(
           ->CreateSurfacelessEGLSurfaceForWidget(window);
   if (!surface_ozone)
     return nullptr;
-  scoped_refptr<GLSurface> surface =
-      new GLSurfaceOzoneSurfacelessSurfaceImpl(surface_ozone.Pass(), window);
+  scoped_refptr<GLSurface> surface = new GLSurfaceOzoneSurfacelessSurfaceImpl(
+      std::move(surface_ozone), window);
   if (!surface->Initialize())
     return nullptr;
   return surface;
@@ -636,7 +651,7 @@ scoped_refptr<GLSurface> GLSurface::CreateSurfacelessViewGLSurface(
     if (!surface_ozone)
       return nullptr;
     scoped_refptr<GLSurface> surface;
-    surface = new GLSurfaceOzoneSurfaceless(surface_ozone.Pass(), window);
+    surface = new GLSurfaceOzoneSurfaceless(std::move(surface_ozone), window);
     if (surface->Initialize())
       return surface;
   }

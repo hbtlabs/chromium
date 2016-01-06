@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/input/EventHandler.h"
 
 #include "core/dom/Document.h"
@@ -78,7 +77,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll)
         LeftButton,
         PlatformEvent::MousePressed,
         1,
-        static_cast<PlatformEvent::Modifiers>(0),
+        PlatformEvent::Modifiers::LeftButtonDown,
         WTF::monotonicallyIncreasingTime());
     document().frame()->eventHandler().handleMousePressEvent(mouseDownEvent);
 
@@ -88,7 +87,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll)
         LeftButton,
         PlatformEvent::MouseMoved,
         1,
-        static_cast<PlatformEvent::Modifiers>(0),
+        PlatformEvent::Modifiers::LeftButtonDown,
         WTF::monotonicallyIncreasingTime());
     document().frame()->eventHandler().handleMouseMoveEvent(mouseMoveEvent);
 

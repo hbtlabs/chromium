@@ -5,6 +5,8 @@
 #include "mojo/edk/system/raw_channel.h"
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
@@ -655,7 +657,7 @@ class RawChannelWin final : public RawChannel {
                   &io_handler_->write_context_no_lock()->overlapped);
     if (!result) {
       DWORD error = GetLastError();
-      if (error == ERROR_BROKEN_PIPE)
+      if (error == ERROR_BROKEN_PIPE || error == ERROR_NO_DATA)
         return IO_FAILED_SHUTDOWN;
       if (error != ERROR_IO_PENDING) {
         LOG(WARNING) << "WriteFile: "

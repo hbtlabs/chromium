@@ -45,6 +45,10 @@ namespace rappor {
 class RapporService;
 }
 
+namespace safe_browsing {
+class SafeBrowsingService;
+}
+
 namespace variations {
 class VariationsService;
 }
@@ -54,6 +58,7 @@ class PromoResourceService;
 }
 
 class ApplicationContext;
+class CRLSetFetcher;
 class IOSChromeIOThread;
 class PrefService;
 
@@ -122,6 +127,12 @@ class ApplicationContext {
   // Gets the ComponentUpdateService.
   virtual component_updater::ComponentUpdateService*
   GetComponentUpdateService() = 0;
+
+  // Gets the CRLSetFetcher.
+  virtual CRLSetFetcher* GetCRLSetFetcher() = 0;
+
+  // Gets the SafeBrowsingService.
+  virtual safe_browsing::SafeBrowsingService* GetSafeBrowsingService() = 0;
 
  protected:
   // Sets the global ApplicationContext instance.

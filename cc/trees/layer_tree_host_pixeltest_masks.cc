@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "build/build_config.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_image_layer.h"
@@ -58,12 +60,8 @@ class MaskContentLayerClient : public ContentLayerClient {
 
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion());
-
-    skia::RefPtr<SkPicture> picture =
-        skia::AdoptRef(recorder.endRecordingAsPicture());
-    item->SetNew(std::move(picture));
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
 
     display_list->Finalize();
     return display_list;
@@ -337,12 +335,8 @@ class CheckerContentLayerClient : public ContentLayerClient {
 
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion());
-
-    skia::RefPtr<SkPicture> picture =
-        skia::AdoptRef(recorder.endRecordingAsPicture());
-    item->SetNew(std::move(picture));
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
 
     display_list->Finalize();
     return display_list;
@@ -379,11 +373,8 @@ class CircleContentLayerClient : public ContentLayerClient {
 
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion());
-    skia::RefPtr<SkPicture> picture =
-        skia::AdoptRef(recorder.endRecordingAsPicture());
-    item->SetNew(std::move(picture));
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
 
     display_list->Finalize();
     return display_list;

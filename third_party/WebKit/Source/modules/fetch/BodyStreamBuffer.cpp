@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 
 #include "core/dom/DOMArrayBuffer.h"
@@ -143,6 +142,12 @@ void BodyStreamBuffer::startLoading(ExecutionContext* executionContext, FetchDat
 bool BodyStreamBuffer::hasPendingActivity() const
 {
     return m_loader || (m_stream->isLocked() && m_stream->stateInternal() == ReadableStream::Readable);
+}
+
+void BodyStreamBuffer::stop()
+{
+    m_reader = nullptr;
+    m_handle = nullptr;
 }
 
 void BodyStreamBuffer::pullSource()

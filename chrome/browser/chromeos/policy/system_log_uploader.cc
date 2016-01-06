@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/policy/system_log_uploader.h"
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/policy/system_log_uploader.h"
 #include "chrome/browser/chromeos/policy/upload_job_impl.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
@@ -22,7 +26,7 @@
 #include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/http/http_request_headers.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace {
 // The maximum number of successive retries.
@@ -84,7 +88,7 @@ scoped_ptr<policy::SystemLogUploader::SystemLogs> ReadFiles() {
     system_logs->push_back(std::make_pair(
         file_path, policy::SystemLogUploader::RemoveSensitiveData(data)));
   }
-  return system_logs.Pass();
+  return system_logs;
 }
 
 // An implementation of the |SystemLogUploader::Delegate|, that is used to
@@ -166,12 +170,13 @@ std::string GetUploadUrl() {
 namespace policy {
 
 // Determines the time between log uploads.
-const int64 SystemLogUploader::kDefaultUploadDelayMs =
+const int64_t SystemLogUploader::kDefaultUploadDelayMs =
     12 * 60 * 60 * 1000;  // 12 hours
 
 // Determines the time, measured from the time of last failed upload,
 // after which the log upload is retried.
-const int64 SystemLogUploader::kErrorUploadDelayMs = 120 * 1000;  // 120 seconds
+const int64_t SystemLogUploader::kErrorUploadDelayMs =
+    120 * 1000;  // 120 seconds
 
 // String constant identifying the header field which stores the file type.
 const char* const SystemLogUploader::kFileTypeHeaderName = "File-Type";
@@ -191,7 +196,7 @@ SystemLogUploader::SystemLogUploader(
     : retry_count_(0),
       upload_frequency_(GetUploadFrequency()),
       task_runner_(task_runner),
-      syslog_delegate_(syslog_delegate.Pass()),
+      syslog_delegate_(std::move(syslog_delegate)),
       upload_enabled_(false),
       weak_factory_(this) {
   if (!syslog_delegate_)
@@ -324,7 +329,7 @@ void SystemLogUploader::UploadSystemLogs(scoped_ptr<SystemLogs> system_logs) {
                                         kContentTypePlainText));
     upload_job_->AddDataSegment(
         base::StringPrintf(kNameFieldTemplate, file_number), syslog_entry.first,
-        header_fields, data.Pass());
+        header_fields, std::move(data));
     ++file_number;
   }
   upload_job_->Start();

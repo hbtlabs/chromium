@@ -43,6 +43,7 @@ buildflag_header("features") {
   flags = [
     "ENABLE_GOOGLE_NOW=$enable_google_now",
     "ANDROID_JAVA_UI=$android_java_ui",
+    "USE_VULCANIZE=$use_vulcanize",
   ]
 }
 
@@ -68,7 +69,7 @@ static_library("common") {
     "//chrome/common:constants",
     "//chrome/common/safe_browsing:proto",
     "//chrome/common/variations:fieldtrial_testing_config",
-    "//chrome/installer/util",
+    "//chrome/installer/util:with_no_strings",
     "//components/cloud_devices/common",
     "//components/component_updater",
     "//components/content_settings/core/common",
@@ -83,6 +84,7 @@ static_library("common") {
     "//components/metrics",
     "//components/metrics:net",
     "//components/nacl/common:process_type",
+    "//components/nacl/common:switches",
     "//components/omnibox/common",
     "//components/policy:policy_component_common",
     "//components/strings",
@@ -190,7 +192,7 @@ static_library("common") {
   }
 
   if (enable_nacl) {
-    public_deps += [ "//components/nacl:nacl_common" ]
+    public_deps += [ "//components/nacl/common" ]
   }
 
   # Printing.
@@ -333,12 +335,9 @@ static_library("constants") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//components/bookmarks/common",
+    "//components/nacl/common:switches",
     "//third_party/widevine/cdm:version_h",
   ]
-
-  if (enable_nacl) {
-    deps += [ "//components/nacl:nacl_switches" ]
-  }
 
   if (is_android) {
     # This dependency must only be added for Android.

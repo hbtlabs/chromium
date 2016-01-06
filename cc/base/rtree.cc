@@ -4,6 +4,9 @@
 
 #include "cc/base/rtree.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <cmath>
 
 #include "base/logging.h"
@@ -105,6 +108,10 @@ void RTree::SearchRecursive(Node* node,
         SearchRecursive(node->children[i].subtree, query, results);
     }
   }
+}
+
+gfx::Rect RTree::GetBounds() const {
+  return root_.bounds;
 }
 
 }  // namespace cc

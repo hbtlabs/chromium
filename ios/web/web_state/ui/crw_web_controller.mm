@@ -5,6 +5,7 @@
 #import "ios/web/web_state/ui/crw_web_controller.h"
 
 #import <objc/runtime.h>
+#include <stddef.h>
 #include <cmath>
 
 #include "base/ios/block_types.h"
@@ -208,6 +209,8 @@ void CancelAllTouches(UIScrollView* web_scroll_view) {
   // Whether or not the page has zoomed since the current navigation has been
   // committed, either by user interaction or via |-restoreStateFromHistory|.
   BOOL _pageHasZoomed;
+  // Whether a PageDisplayState is currently being applied.
+  BOOL _applyingPageState;
   // Actions to execute once the page load is complete.
   base::scoped_nsobject<NSMutableArray> _pendingLoadCompleteActions;
   // UIGestureRecognizers to add to the web view.
@@ -691,6 +694,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   if (!self.webView)
     return;
 
+  SEL cancelDialogsSelector =
+      @selector(cancelDialogsForWebController:);
+  if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
+    [self.UIDelegate cancelDialogsForWebController:self];
+
   if (allowCache)
     _expectedReconstructionURL = [self currentNavigationURL];
   else
@@ -1051,6 +1059,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                                     stateObject:stateObject
                                      transition:transition];
   [self didUpdateHistoryStateWithPageURL:pageURL];
+  self.userInteractionRegistered = NO;
 }
 
 - (void)replaceStateWithPageURL:(const GURL&)pageUrl
@@ -1556,7 +1565,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     // processed.
     _containerView.reset(
         [[CRWWebControllerContainerView alloc] initWithDelegate:self]);
-    self.containerView.frame = [[UIScreen mainScreen] bounds];
+    self.containerView.frame =
+        [UIApplication sharedApplication].keyWindow.bounds;
     [self.containerView addGestureRecognizer:[self touchTrackingRecognizer]];
     [self.containerView setAccessibilityIdentifier:web::kContainerViewID];
     // Is |currentUrl| a web scheme or native chrome scheme.
@@ -1804,20 +1814,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
       ![_webStateImpl->GetNavigationManagerImpl().GetSessionController()
           isPushStateNavigationBetweenEntry:fromEntry
                                    andEntry:self.currentSessionEntry];
-  // Set the serialized state if necessary.  State must be set if:
-  // - the transition between |fromEntry| and the current session entry is a
-  //   history.pushState, or
-  // - the current session entry has a serialized state object (occurs after a
-  //   history.replaceState).
   web::NavigationItemImpl* currentItem =
       self.currentSessionEntry.navigationItemImpl;
-  NSString* stateObject = currentItem->GetSerializedStateObject();
-  if (!shouldLoadURL || stateObject.length) {
-    [self setPushedOrReplacedURL:currentItem->GetURL() stateObject:stateObject];
-  }
+  GURL endURL = [self URLForHistoryNavigationFromItem:fromEntry.navigationItem
+                                               toItem:currentItem];
   if (shouldLoadURL) {
-    GURL endURL = [self URLForHistoryNavigationFromItem:fromEntry.navigationItem
-                                                 toItem:currentItem];
     ui::PageTransition transition = ui::PageTransitionFromInt(
         ui::PAGE_TRANSITION_RELOAD | ui::PAGE_TRANSITION_FORWARD_BACK);
 
@@ -1827,6 +1828,19 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     }
     params.transition_type = transition;
     [self loadWithParams:params];
+  }
+  // Set the serialized state if necessary.  State must be set if the document
+  // objects are the same. This can happen if:
+  // - The navigation is a pushState (i.e., shouldLoadURL is NO).
+  // - The navigation is a hash change.
+  // TODO(crbug.com/566157): This misses some edge cases (e.g., a mixed series
+  // of hash changes and push/replaceState calls will likely end up dispatching
+  // this in cases where it shouldn't.
+  if (!shouldLoadURL ||
+      (web::GURLByRemovingRefFromGURL(endURL) ==
+       web::GURLByRemovingRefFromGURL(fromEntry.navigationItem->GetURL()))) {
+    NSString* stateObject = currentItem->GetSerializedStateObject();
+    [self setPushedOrReplacedURL:currentItem->GetURL() stateObject:stateObject];
   }
 }
 
@@ -2447,6 +2461,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (BOOL)handleWindowHistoryDidPushStateMessage:(base::DictionaryValue*)message
                                        context:(NSDictionary*)context {
+  // If there is a pending entry, a new navigation has been registered but
+  // hasn't begun loading.  Since the pushState message is coming from the
+  // previous page, ignore it and allow the previously registered navigation to
+  // continue.  This can ocur if a pushState is issued from an anchor tag
+  // onClick event, as the click would have already been registered.
+  if ([self sessionController].pendingEntry)
+    return NO;
+
   std::string pageURL;
   std::string baseURL;
   if (!message->GetString("pageUrl", &pageURL) ||
@@ -2461,13 +2483,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   pushURL = URLEscapedForHistory(pushURL);
   if (!pushURL.is_valid())
     return YES;
-  const NavigationManagerImpl& navigationManager =
-      _webStateImpl->GetNavigationManagerImpl();
   web::NavigationItem* navItem = [self currentNavItem];
-  // PushState happened before first navigation entry or called right after
-  // window.open when the url is empty.
-  if (!navItem ||
-      (navigationManager.GetEntryCount() <= 1 && navItem->GetURL().is_empty()))
+  // PushState happened before first navigation entry or called when the
+  // navigation entry does not contain a valid URL.
+  if (!navItem || !navItem->GetURL().is_valid())
     return YES;
   if (!web::history_state_util::IsHistoryStateChangeValid(navItem->GetURL(),
                                                           pushURL)) {
@@ -2496,11 +2515,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // If the user interacted with the page, categorize it as a link navigation.
   // If not, categorize it is a client redirect as it occurred without user
   // input and should not be added to the history stack.
-  // TODO(ios): Improve transition detection.
-  ui::PageTransition transition =
-      [context[web::kUserIsInteractingKey] boolValue]
-          ? ui::PAGE_TRANSITION_LINK
-          : ui::PAGE_TRANSITION_CLIENT_REDIRECT;
+  // TODO(crbug.com/549301): Improve transition detection.
+  ui::PageTransition transition = self.userInteractionRegistered
+                                      ? ui::PAGE_TRANSITION_LINK
+                                      : ui::PAGE_TRANSITION_CLIENT_REDIRECT;
   [self pushStateWithPageURL:pushURL
                  stateObject:stateObject
                   transition:transition];
@@ -2544,7 +2562,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // ReplaceState happened before first navigation entry or called right
   // after window.open when the url is empty/not valid.
   if (!navItem ||
-      (navigationManager.GetEntryCount() <= 1 && navItem->GetURL().is_empty()))
+      (navigationManager.GetItemCount() <= 1 && navItem->GetURL().is_empty()))
     return YES;
   if (!web::history_state_util::IsHistoryStateChangeValid(navItem->GetURL(),
                                                           replaceURL)) {
@@ -3123,7 +3141,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     const web::NavigationManagerImpl& navigationManager =
         self.webStateImpl->GetNavigationManagerImpl();
     GURL mainDocumentURL =
-        navigationManager.GetEntryCount()
+        navigationManager.GetItemCount()
             ? navigationManager.GetLastCommittedItem()->GetURL()
             : [self currentURL];
     _lastUserInteraction.reset(new web::UserInteractionEvent(mainDocumentURL));
@@ -3315,6 +3333,24 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   _pageHasZoomed = YES;
 }
 
+- (void)webViewScrollViewDidResetContentSize:
+    (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
+  web::NavigationItem* currentItem = [self currentNavItem];
+  if (webViewScrollViewProxy.isZooming || _applyingPageState || !currentItem)
+    return;
+  CGSize contentSize = webViewScrollViewProxy.contentSize;
+  if (contentSize.width < CGRectGetWidth(webViewScrollViewProxy.frame)) {
+    // The renderer incorrectly resized the content area.  Resetting the scroll
+    // view's zoom scale will force a re-rendering.  rdar://23963992
+    _applyingPageState = YES;
+    web::PageZoomState zoomState =
+        currentItem->GetPageDisplayState().zoom_state();
+    if (!zoomState.IsValid() || zoomState.IsLegacyFormat())
+      zoomState = web::PageZoomState(1.0, 1.0, 1.0);
+    [self applyWebViewScrollZoomScaleFromZoomState:zoomState];
+    _applyingPageState = NO;
+  }
+}
 #pragma mark -
 #pragma mark Page State
 
@@ -3423,12 +3459,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   if (currentItem && currentItem->GetPageDisplayState() != displayState)
     return;
   DCHECK(displayState.IsValid());
+  _applyingPageState = YES;
   if (isUserScalable) {
     [self prepareToApplyWebViewScrollZoomScale];
     [self applyWebViewScrollZoomScaleFromZoomState:displayState.zoom_state()];
     [self finishApplyingWebViewScrollZoomScale];
   }
   [self applyWebViewScrollOffsetFromScrollState:displayState.scroll_state()];
+  _applyingPageState = NO;
 }
 
 - (void)prepareToApplyWebViewScrollZoomScale {

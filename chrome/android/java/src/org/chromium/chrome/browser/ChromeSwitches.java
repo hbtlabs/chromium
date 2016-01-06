@@ -12,9 +12,6 @@ public abstract class ChromeSwitches {
     // Switches used from Java.  Please continue switch style used Chrome where
     // options-have-hypens and are_not_split_with_underscores.
 
-    /** Testing: pretend that the switch value is the name of a child account. */
-    public static final String CHILD_ACCOUNT = "child-account";
-
     /** Mimic a low end device */
     public static final String ENABLE_ACCESSIBILITY_TAB_SWITCHER =
             "enable-accessibility-tab-switcher";
@@ -96,15 +93,29 @@ public abstract class ChromeSwitches {
      */
     public static final String ENABLE_NTP_SNIPPETS = "enable-ntp-snippets";
 
+    /**
+     * Enable interests on the NTP
+     */
+    public static final String ENABLE_INTERESTS = "enable-interests";
+
+    /**
+     * Forces the update menu item to show.
+     */
+    public static final String FORCE_SHOW_UPDATE_MENU_ITEM = "force-show-update-menu-item";
+
+    /**
+     * Forces the update menu badge to show.
+     */
+    public static final String FORCE_SHOW_UPDATE_MENU_BADGE = "force-show-update-menu-badge";
+
+    /**
+     * Sets the market URL for Chrome for use in testing.
+     */
+    public static final String MARKET_URL_FOR_TESTING = "market-url-for-testing";
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Native Switches
     ///////////////////////////////////////////////////////////////////////////////////////////////
-
-    /**
-     * Enable enhanced bookmarks feature.
-     * Native switch - switches::kEnhancedBookmarksExperiment
-     */
-    public static final String ENABLE_ENHANCED_BOOKMARKS = "enhanced-bookmarks-experiment";
 
     /** Enable the DOM Distiller. */
     public static final String ENABLE_DOM_DISTILLER = "enable-dom-distiller";
@@ -161,6 +172,14 @@ public abstract class ChromeSwitches {
     public static final String PROGRESS_BAR_ANIMATION = "progress-bar-animation";
 
     /**
+     * Specifies Android NTP behaviour on clicking a Most{Visited/Likely} tile.
+     * Specifically whether to refocus an existing tab with the same url or host or to load the url
+     * in the current tab.
+     * Native switch - switches::kNtpSwitchToExistingTab
+     */
+    public static final String NTP_SWITCH_TO_EXISTING_TAB = "ntp-switch-to-existing-tab";
+
+    /**
      * Enable offline pages.
      */
     public static final String ENABLE_OFFLINE_PAGES = "enable-offline-pages";
@@ -177,12 +196,6 @@ public abstract class ChromeSwitches {
      * Native switch - switches::kEnableHungRendererInfoBar
      */
     public static final String ENABLE_HUNG_RENDERER_INFOBAR = "enable-hung-renderer-infobar";
-
-    /**
-     * Enable Physical Web feature.
-     * Native switch - switches::kEnablePhysicalWeb
-     */
-    public static final String ENABLE_PHYSICAL_WEB = "enable-physical-web";
 
     /**
      * Enables Web Notification custom layouts.

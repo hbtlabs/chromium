@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ssl/cert_report_helper.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
@@ -11,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/common/pref_names.h"
@@ -38,7 +41,7 @@ CertReportHelper::CertReportHelper(
     certificate_reporting::ErrorReport::InterstitialReason interstitial_reason,
     bool overridable,
     security_interstitials::MetricsHelper* metrics_helper)
-    : ssl_cert_reporter_(ssl_cert_reporter.Pass()),
+    : ssl_cert_reporter_(std::move(ssl_cert_reporter)),
       web_contents_(web_contents),
       request_url_(request_url),
       ssl_info_(ssl_info),
@@ -110,7 +113,7 @@ void CertReportHelper::FinishCertCollection(
 
 void CertReportHelper::SetSSLCertReporterForTesting(
     scoped_ptr<SSLCertReporter> ssl_cert_reporter) {
-  ssl_cert_reporter_ = ssl_cert_reporter.Pass();
+  ssl_cert_reporter_ = std::move(ssl_cert_reporter);
 }
 
 bool CertReportHelper::ShouldShowCertificateReporterCheckbox() {

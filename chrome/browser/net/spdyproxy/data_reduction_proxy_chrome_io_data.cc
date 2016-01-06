@@ -4,15 +4,18 @@
 
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_io_data.h"
 
+#include <utility>
+
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/content/browser/content_lofi_decider.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_retrieval_params.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_experiments_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -54,8 +57,7 @@ CreateDataReductionProxyChromeIOData(
 #endif
 
   bool enabled =
-      prefs->GetBoolean(
-          data_reduction_proxy::prefs::kDataReductionProxyEnabled) ||
+      prefs->GetBoolean(prefs::kDataSaverEnabled) ||
       data_reduction_proxy::params::ShouldForceEnableDataReductionProxy();
   scoped_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data(
@@ -81,8 +83,8 @@ CreateDataReductionProxyChromeIOData(
               ui_task_runner, io_task_runner,
               g_browser_process->GetApplicationLocale()));
   data_reduction_proxy_io_data->set_debug_ui_service(
-      data_reduction_proxy_ui_service.Pass());
+      std::move(data_reduction_proxy_ui_service));
 #endif
 
-  return data_reduction_proxy_io_data.Pass();
+  return data_reduction_proxy_io_data;
 }

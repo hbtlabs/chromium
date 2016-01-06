@@ -5,7 +5,9 @@
 #include "chrome/browser/ui/extensions/extension_install_ui_default.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/theme_installed_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -84,6 +86,7 @@ class ErrorInfoBarDelegate : public ConfirmInfoBarDelegate {
   ~ErrorInfoBarDelegate() override;
 
   // ConfirmInfoBarDelegate:
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetLinkText() const override;
@@ -107,6 +110,11 @@ ErrorInfoBarDelegate::ErrorInfoBarDelegate(
 }
 
 ErrorInfoBarDelegate::~ErrorInfoBarDelegate() {
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+ErrorInfoBarDelegate::GetIdentifier() const {
+  return INSTALLATION_ERROR_INFOBAR_DELEGATE;
 }
 
 base::string16 ErrorInfoBarDelegate::GetMessageText() const {

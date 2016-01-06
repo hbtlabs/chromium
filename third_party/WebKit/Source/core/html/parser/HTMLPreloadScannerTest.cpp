@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "config.h"
 #include "core/html/parser/HTMLPreloadScanner.h"
 
 #include "core/MediaTypeNames.h"
@@ -73,8 +72,7 @@ public:
         if (!host.isNull()) {
             EXPECT_TRUE(m_preloadRequest->isPreconnect());
             EXPECT_STREQ(m_preloadRequest->resourceURL().ascii().data(), host.ascii().data());
-            EXPECT_EQ(m_preloadRequest->isCORS(), crossOrigin != CrossOriginAttributeNotSet);
-            EXPECT_EQ(m_preloadRequest->isAllowCredentials(), crossOrigin == CrossOriginAttributeUseCredentials);
+            EXPECT_EQ(m_preloadRequest->crossOrigin(), crossOrigin);
         }
     }
 

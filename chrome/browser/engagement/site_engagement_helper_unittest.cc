@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/engagement/site_engagement_helper.h"
+
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/test/histogram_tester.h"
 #include "base/timer/mock_timer.h"
 #include "base/values.h"
-#include "chrome/browser/engagement/site_engagement_helper.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,7 +29,7 @@ class SiteEngagementHelperTest : public BrowserWithTestWindowTest {
         new SiteEngagementHelper(web_contents));
     DCHECK(helper.get());
 
-    return helper.Pass();
+    return helper;
   }
 
   void TrackingStarted(SiteEngagementHelper* helper) {
@@ -53,23 +56,25 @@ class SiteEngagementHelperTest : public BrowserWithTestWindowTest {
   }
 
   void MediaStartedPlaying(SiteEngagementHelper* helper) {
-    helper->media_tracker_.MediaStartedPlaying();
+    helper->media_tracker_.MediaStartedPlaying(
+        content::WebContentsObserver::MediaPlayerId(nullptr, 1));
   }
 
-  void MediaPaused(SiteEngagementHelper* helper) {
-    helper->media_tracker_.MediaPaused();
+  void MediaStoppedPlaying(SiteEngagementHelper* helper) {
+    helper->media_tracker_.MediaStoppedPlaying(
+        content::WebContentsObserver::MediaPlayerId(nullptr, 1));
   }
 
   // Set a pause timer on the input tracker for test purposes.
   void SetInputTrackerPauseTimer(SiteEngagementHelper* helper,
                                  scoped_ptr<base::Timer> timer) {
-    helper->input_tracker_.SetPauseTimerForTesting(timer.Pass());
+    helper->input_tracker_.SetPauseTimerForTesting(std::move(timer));
   }
 
   // Set a pause timer on the input tracker for test purposes.
   void SetMediaTrackerPauseTimer(SiteEngagementHelper* helper,
                                  scoped_ptr<base::Timer> timer) {
-    helper->media_tracker_.SetPauseTimerForTesting(timer.Pass());
+    helper->media_tracker_.SetPauseTimerForTesting(std::move(timer));
   }
 
   bool IsTrackingInput(SiteEngagementHelper* helper) {
@@ -235,7 +240,7 @@ TEST_F(SiteEngagementHelperTest, MediaEngagement) {
   EXPECT_EQ(0, service->GetScore(url2));
   EXPECT_TRUE(media_tracker_timer->IsRunning());
 
-  MediaPaused(helper.get());
+  MediaStoppedPlaying(helper.get());
   media_tracker_timer->Fire();
   EXPECT_DOUBLE_EQ(0.53, service->GetScore(url1));
   EXPECT_EQ(0, service->GetScore(url2));
@@ -270,7 +275,7 @@ TEST_F(SiteEngagementHelperTest, MediaEngagement) {
   EXPECT_EQ(0.53, service->GetScore(url2));
   EXPECT_TRUE(media_tracker_timer->IsRunning());
 
-  MediaPaused(helper.get());
+  MediaStoppedPlaying(helper.get());
   web_contents->WasShown();
   media_tracker_timer->Fire();
   EXPECT_DOUBLE_EQ(0.55, service->GetScore(url1));

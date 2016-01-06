@@ -25,7 +25,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
 #include "core/dom/Document.h"
 
 #include "bindings/core/v8/CustomElementConstructorBuilder.h"
@@ -339,6 +338,13 @@ static bool acceptsEditingFocus(const Element& element)
     ASSERT(element.hasEditableStyle());
 
     return element.document().frame() && element.rootEditableElement();
+}
+
+static bool isOriginPotentiallyTrustworthy(SecurityOrigin* origin, String* errorMessage)
+{
+    if (errorMessage)
+        return origin->isPotentiallyTrustworthy(*errorMessage);
+    return origin->isPotentiallyTrustworthy();
 }
 
 uint64_t Document::s_globalTreeVersion = 0;
@@ -1127,11 +1133,6 @@ void Document::setXMLStandalone(bool standalone, ExceptionState& exceptionState)
     m_xmlStandalone = standalone ? Standalone : NotStandalone;
 }
 
-KURL Document::baseURI() const
-{
-    return m_baseURL;
-}
-
 void Document::setContent(const String& content)
 {
     open();
@@ -1462,15 +1463,15 @@ PassRefPtrWillBeRawPtr<Range> Document::createRange()
     return Range::create(*this);
 }
 
-PassRefPtrWillBeRawPtr<NodeIterator> Document::createNodeIterator(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter> filter, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<NodeIterator> Document::createNodeIterator(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter> filter)
 {
-    // FIXME: It might be a good idea to emit a warning if |whatToShow| contains a bit that is not defined in
-    // NodeFilter.
+    ASSERT(root);
     return NodeIterator::create(root, whatToShow, filter);
 }
 
-PassRefPtrWillBeRawPtr<TreeWalker> Document::createTreeWalker(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter> filter, ExceptionState& exceptionState)
+PassRefPtrWillBeRawPtr<TreeWalker> Document::createTreeWalker(Node* root, unsigned whatToShow, PassRefPtrWillBeRawPtr<NodeFilter> filter)
 {
+    ASSERT(root);
     return TreeWalker::create(root, whatToShow, filter);
 }
 
@@ -1530,7 +1531,7 @@ void Document::scheduleLayoutTreeUpdate()
     ASSERT(needsLayoutTreeUpdate());
 
     if (!view()->shouldThrottleRendering())
-        page()->animator().scheduleVisualUpdate();
+        page()->animator().scheduleVisualUpdate(frame());
     m_lifecycle.ensureStateAtMost(DocumentLifecycle::VisualUpdatePending);
 
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "ScheduleStyleRecalculation", TRACE_EVENT_SCOPE_THREAD, "data", InspectorRecalculateStylesEvent::data(frame()));
@@ -1554,6 +1555,16 @@ void Document::updateStyleInvalidationIfNeeded()
         return;
     TRACE_EVENT0("blink", "Document::updateStyleInvalidationIfNeeded");
     styleEngine().styleInvalidator().invalidate(*this);
+}
+
+bool Document::attemptedToDetermineEncodingFromContentSniffing() const
+{
+    return m_encodingData.attemptedToDetermineEncodingFromContentSniffing();
+}
+
+bool Document::encodingWasDetectedFromContentSniffing() const
+{
+    return m_encodingData.encodingWasDetectedFromContentSniffing();
 }
 
 void Document::setupFontBuilder(ComputedStyle& documentStyle)
@@ -2295,12 +2306,31 @@ void Document::removeAllEventListeners()
 
 Document& Document::axObjectCacheOwner() const
 {
-    Document& top = topDocument();
-    if (top.frame() && top.frame()->pagePopupOwner()) {
-        ASSERT(!top.m_axObjectCache);
-        return top.frame()->pagePopupOwner()->document().axObjectCacheOwner();
+    // FIXME(dmazzoni): Currently there's one AXObjectCache per page, owned
+    // by the top document, but with --site-isolation the top document may
+    // be a remote frame. As a quick fix we're making the local root the owner
+    // of the AXObjectCache (http://crbug.com/510410), but the proper fix
+    // will be for each Document to  have its own AXObjectCache
+    // (http://crbug.com/532249).
+    Document* top = const_cast<Document*>(this);
+    LocalFrame* frame = this->frame();
+    if (!frame)
+        return *top;
+
+    // This loop is more efficient than calling localFrameRoot.
+    while (frame && frame->owner() && frame->owner()->isLocal()) {
+        HTMLFrameOwnerElement* owner = toHTMLFrameOwnerElement(frame->owner());
+        top = &owner->document();
+        frame = top->frame();
     }
-    return top;
+
+    if (top->frame() && top->frame()->pagePopupOwner()) {
+        ASSERT(!top->m_axObjectCache);
+        return top->frame()->pagePopupOwner()->document().axObjectCacheOwner();
+    }
+
+    ASSERT(top);
+    return *top;
 }
 
 void Document::clearAXObjectCache()
@@ -2594,8 +2624,9 @@ void Document::implicitClose()
         return;
     }
 
-    // The call to dispatchWindowLoadEvent can detach the LocalDOMWindow and cause it (and its
-    // attached Document) to be destroyed.
+    // The call to dispatchWindowLoadEvent (from documentWasClosed()) can detach
+    // the LocalDOMWindow and cause it (and its attached Document) to be
+    // destroyed.
     RefPtrWillBeRawPtr<LocalDOMWindow> protectedWindow(this->domWindow());
 
     m_loadEventProgress = LoadEventInProgress;
@@ -3117,7 +3148,7 @@ void Document::processReferrerPolicy(const String& policy)
     setReferrerPolicy(referrerPolicy);
 }
 
-String Document::outgoingReferrer()
+String Document::outgoingReferrer() const
 {
     if (securityOrigin()->isUnique()) {
         // Return |no-referrer|.
@@ -3126,7 +3157,7 @@ String Document::outgoingReferrer()
 
     // See http://www.whatwg.org/specs/web-apps/current-work/#fetching-resources
     // for why we walk the parent chain for srcdoc documents.
-    Document* referrerDocument = this;
+    const Document* referrerDocument = this;
     if (LocalFrame* frame = m_frame) {
         while (frame->document()->isSrcdocDocument()) {
             // Srcdoc documents must be local within the containing frame.
@@ -3301,6 +3332,70 @@ void Document::cloneDataFromDocument(const Document& other)
     setContextFeatures(other.contextFeatures());
     setSecurityOrigin(other.securityOrigin()->isolatedCopy());
     setMimeType(other.contentType());
+}
+
+bool Document::isSecureContextImpl(String* errorMessage, const SecureContextCheck privilegeContextCheck) const
+{
+    // There may be exceptions for the secure context check defined for certain
+    // schemes. The exceptions are applied only to the special scheme and to
+    // sandboxed URLs from those origins, but *not* to any children.
+    //
+    // For example:
+    //   <iframe src="http://host">
+    //     <iframe src="scheme-has-exception://host"></iframe>
+    //     <iframe sandbox src="scheme-has-exception://host"></iframe>
+    //   </iframe>
+    // both inner iframes pass this check, assuming that the scheme
+    // "scheme-has-exception:" is granted an exception.
+    //
+    // However,
+    //   <iframe src="http://host">
+    //     <iframe sandbox src="http://host"></iframe>
+    //   </iframe>
+    // would fail the check (that is, sandbox does not grant an exception itself).
+    //
+    // Additionally, with
+    //   <iframe src="scheme-has-exception://host">
+    //     <iframe src="http://host"></iframe>
+    //     <iframe sandbox src="http://host"></iframe>
+    //   </iframe>
+    // both inner iframes would fail the check, even though the outermost iframe
+    // passes.
+    //
+    // In all cases, a frame must be potentially trustworthy in addition to
+    // having an exception listed in order for the exception to be granted.
+    if (SecurityContext::isSandboxed(SandboxOrigin)) {
+        RefPtr<SecurityOrigin> origin = SecurityOrigin::create(url());
+        if (!isOriginPotentiallyTrustworthy(origin.get(), errorMessage))
+            return false;
+        if (SchemeRegistry::schemeShouldBypassSecureContextCheck(origin->protocol()))
+            return true;
+    } else {
+        if (!isOriginPotentiallyTrustworthy(securityOrigin(), errorMessage))
+            return false;
+        if (SchemeRegistry::schemeShouldBypassSecureContextCheck(securityOrigin()->protocol()))
+            return true;
+    }
+
+    if (privilegeContextCheck == StandardSecureContextCheck) {
+        Document* context = parentDocument();
+        while (context) {
+            // Skip to the next ancestor if it's a srcdoc.
+            if (!context->isSrcdocDocument()) {
+                if (context->securityContext().isSandboxed(SandboxOrigin)) {
+                    // For a sandboxed origin, use the document's URL.
+                    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(context->url());
+                    if (!isOriginPotentiallyTrustworthy(origin.get(), errorMessage))
+                        return false;
+                } else {
+                    if (!isOriginPotentiallyTrustworthy(context->securityOrigin(), errorMessage))
+                        return false;
+                }
+            }
+            context = context->parentDocument();
+        }
+    }
+    return true;
 }
 
 StyleSheetList* Document::styleSheets()
@@ -3612,7 +3707,7 @@ void Document::registerNodeList(const LiveNodeListBase* list)
 #else
     m_nodeListCounts[list->invalidationType()]++;
 #endif
-    if (list->isRootedAtDocument())
+    if (list->isRootedAtTreeScope())
         m_listsInvalidatedAtDocument.add(list);
 }
 
@@ -3624,7 +3719,7 @@ void Document::unregisterNodeList(const LiveNodeListBase* list)
 #else
     m_nodeListCounts[list->invalidationType()]--;
 #endif
-    if (list->isRootedAtDocument()) {
+    if (list->isRootedAtTreeScope()) {
         ASSERT(m_listsInvalidatedAtDocument.contains(list));
         m_listsInvalidatedAtDocument.remove(list);
     }
@@ -4026,7 +4121,7 @@ String Document::lastModified() const
     bool foundDate = false;
     if (m_frame) {
         if (DocumentLoader* documentLoader = loader()) {
-            const AtomicString& httpLastModified = documentLoader->response().httpHeaderField("Last-Modified");
+            const AtomicString& httpLastModified = documentLoader->response().httpHeaderField(HTTPNames::Last_Modified);
             if (!httpLastModified.isEmpty()) {
                 date.setMillisecondsSinceEpochForDateTime(convertToLocalTime(parseDate(httpLastModified)));
                 foundDate = true;
@@ -4286,6 +4381,15 @@ KURL Document::completeURLWithOverride(const String& url, const KURL& baseURLOve
     if (url.isNull())
         return KURL();
     // This logic is deliberately spread over many statements in an attempt to track down http://crbug.com/312410.
+    const KURL& baseURL = baseURLForOverride(baseURLOverride);
+    if (!encoding().isValid())
+        return KURL(baseURL, url);
+    return KURL(baseURL, url, encoding());
+}
+
+const KURL& Document::baseURLForOverride(const KURL& baseURLOverride) const
+{
+    // This logic is deliberately spread over many statements in an attempt to track down http://crbug.com/312410.
     const KURL* baseURLFromParent = 0;
     bool shouldUseParentBaseURL = baseURLOverride.isEmpty();
     if (!shouldUseParentBaseURL) {
@@ -4296,10 +4400,7 @@ KURL Document::completeURLWithOverride(const String& url, const KURL& baseURLOve
         if (Document* parent = parentDocument())
             baseURLFromParent = &parent->baseURL();
     }
-    const KURL& baseURL = baseURLFromParent ? *baseURLFromParent : baseURLOverride;
-    if (!encoding().isValid())
-        return KURL(baseURL, url);
-    return KURL(baseURL, url, encoding());
+    return baseURLFromParent ? *baseURLFromParent : baseURLOverride;
 }
 
 // Support for Javascript execCommand, and related methods
@@ -5673,66 +5774,12 @@ v8::Local<v8::Object> Document::associateWithWrapper(v8::Isolate* isolate, const
 
 bool Document::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
 {
-    // There may be exceptions for the secure context check defined for certain
-    // schemes. The exceptions are applied only to the special scheme and to
-    // sandboxed URLs from those origins, but *not* to any children.
-    //
-    // For example:
-    //   <iframe src="http://host">
-    //     <iframe src="scheme-has-exception://host"></iframe>
-    //     <iframe sandbox src="scheme-has-exception://host"></iframe>
-    //   </iframe>
-    // both inner iframes pass this check, assuming that the scheme
-    // "scheme-has-exception:" is granted an exception.
-    //
-    // However,
-    //   <iframe src="http://host">
-    //     <iframe sandbox src="http://host"></iframe>
-    //   </iframe>
-    // would fail the check (that is, sandbox does not grant an exception itself).
-    //
-    // Additionally, with
-    //   <iframe src="scheme-has-exception://host">
-    //     <iframe src="http://host"></iframe>
-    //     <iframe sandbox src="http://host"></iframe>
-    //   </iframe>
-    // both inner iframes would fail the check, even though the outermost iframe
-    // passes.
-    //
-    // In all cases, a frame must be potentially trustworthy in addition to
-    // having an exception listed in order for the exception to be granted.
-    if (SecurityContext::isSandboxed(SandboxOrigin)) {
-        RefPtr<SecurityOrigin> origin = SecurityOrigin::create(url());
-        if (!origin->isPotentiallyTrustworthy(errorMessage))
-            return false;
-        if (SchemeRegistry::schemeShouldBypassSecureContextCheck(origin->protocol()))
-            return true;
-    } else {
-        if (!securityOrigin()->isPotentiallyTrustworthy(errorMessage))
-            return false;
-        if (SchemeRegistry::schemeShouldBypassSecureContextCheck(securityOrigin()->protocol()))
-            return true;
-    }
+    return isSecureContextImpl(&errorMessage, privilegeContextCheck);
+}
 
-    if (privilegeContextCheck == StandardSecureContextCheck) {
-        Document* context = parentDocument();
-        while (context) {
-            // Skip to the next ancestor if it's a srcdoc.
-            if (!context->isSrcdocDocument()) {
-                if (context->securityContext().isSandboxed(SandboxOrigin)) {
-                    // For a sandboxed origin, use the document's URL.
-                    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(context->url());
-                    if (!origin->isPotentiallyTrustworthy(errorMessage))
-                        return false;
-                } else {
-                    if (!context->securityOrigin()->isPotentiallyTrustworthy(errorMessage))
-                        return false;
-                }
-            }
-            context = context->parentDocument();
-        }
-    }
-    return true;
+bool Document::isSecureContext(const SecureContextCheck privilegeContextCheck) const
+{
+    return isSecureContextImpl(nullptr, privilegeContextCheck);
 }
 
 WebTaskRunner* Document::loadingTaskRunner() const
@@ -5755,6 +5802,13 @@ WebTaskRunner* Document::timerTaskRunner() const
     if (m_contextDocument)
         return m_contextDocument->timerTaskRunner();
     return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
+}
+
+void Document::enforceStrictMixedContentChecking()
+{
+    securityContext().setShouldEnforceStrictMixedContentChecking(true);
+    if (frame())
+        frame()->loader().client()->didEnforceStrictMixedContentChecking();
 }
 
 DEFINE_TRACE(Document)

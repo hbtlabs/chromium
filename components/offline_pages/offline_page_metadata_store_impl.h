@@ -5,9 +5,12 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_METADATA_STORE_IMPL_H_
 #define COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_METADATA_STORE_IMPL_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "components/leveldb_proto/proto_database.h"
@@ -38,7 +41,7 @@ class OfflinePageMetadataStoreImpl : public OfflinePageMetadataStore {
   void Load(const LoadCallback& callback) override;
   void AddOrUpdateOfflinePage(const OfflinePageItem& offline_page_record,
                               const UpdateCallback& callback) override;
-  void RemoveOfflinePages(const std::vector<int64>& bookmark_ids,
+  void RemoveOfflinePages(const std::vector<int64_t>& bookmark_ids,
                           const UpdateCallback& callback) override;
   void Reset(const ResetCallback& callback) override;
 

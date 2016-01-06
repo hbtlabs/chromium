@@ -4,6 +4,9 @@
 
 #include "components/html_viewer/media_factory.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -29,6 +32,7 @@
 #include "mojo/application/public/cpp/connect.h"
 #include "mojo/application/public/interfaces/shell.mojom.h"
 #include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "v8/include/v8.h"
 
 namespace html_viewer {
@@ -105,9 +109,13 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       GetMediaPermission(), initial_cdm);
   base::WeakPtr<media::WebMediaPlayerDelegate> delegate;
 
-  return new media::WebMediaPlayerImpl(frame, client, encrypted_client,
-                                       delegate, media_renderer_factory.Pass(),
-                                       GetCdmFactory(), params);
+  if (!url_index_.get() || url_index_->frame() != frame) {
+    url_index_.reset(new media::UrlIndex(frame));
+  }
+
+  return new media::WebMediaPlayerImpl(
+      frame, client, encrypted_client, delegate,
+      std::move(media_renderer_factory), GetCdmFactory(), url_index_, params);
 #endif  // defined(OS_ANDROID)
 }
 
@@ -125,8 +133,8 @@ media::interfaces::ServiceFactory* MediaFactory::GetMediaServiceFactory() {
     mojo::ServiceProviderPtr service_provider;
     mojo::URLRequestPtr request(mojo::URLRequest::New());
     request->url = mojo::String::From("mojo:media");
-    shell_->ConnectToApplication(request.Pass(), GetProxy(&service_provider),
-                                 nullptr, nullptr,
+    shell_->ConnectToApplication(std::move(request),
+                                 GetProxy(&service_provider), nullptr, nullptr,
                                  base::Bind(&OnGotContentHandlerID));
     mojo::ConnectToService(service_provider.get(), &media_service_factory_);
   }

@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import json
 import logging
 import StringIO
 import unittest
@@ -20,15 +19,17 @@ class TrybotBrowserFinderTest(unittest.TestCase):
     self.stream_handler = logging.StreamHandler(self.log_output)
     logging.getLogger().addHandler(self.stream_handler)
     self._real_subprocess = trybot_browser_finder.subprocess
-    self._real_urllib2 = trybot_browser_finder.urllib2
     self._stubs = system_stub.Override(trybot_browser_finder,
                                        ['sys', 'open', 'os'])
+    self._builder_list = ""
+    trybot_browser_finder.raw_input = lambda _: 'c'
 
   def tearDown(self):
+    trybot_browser_finder.raw_input = raw_input
     logging.getLogger().removeHandler(self.stream_handler)
     self.log_output.close()
     trybot_browser_finder.subprocess = self._real_subprocess
-    trybot_browser_finder.urllib2 = self._real_urllib2
+    self._builder_list = ""
     self._stubs.Restore()
 
   def _ExpectProcesses(self, args):
@@ -42,11 +43,14 @@ class TrybotBrowserFinderTest(unittest.TestCase):
           'Popen').WithArgs(arg[0]).WillReturn(mock_popen)
     trybot_browser_finder.subprocess = mock_subprocess
 
+  def _MockBuilderList(self):
+    ExcludedBots = trybot_browser_finder.EXCLUDED_BOTS
+    builders = [bot for bot in self._builder_list if bot not in ExcludedBots]
+    return builders
+
   def _MockTryserverJson(self, bots_dict):
-    trybot_browser_finder.urllib2 = simple_mock.MockObject()
-    trybot_browser_finder.urllib2.ExpectCall('urlopen').WithArgs(
-        'http://build.chromium.org/p/tryserver.chromium.perf/json').WillReturn(
-            StringIO.StringIO(json.dumps({'builders': bots_dict})))
+    trybot_browser_finder._GetBuilderList = self._MockBuilderList
+    self._builder_list = bots_dict
 
   def test_find_all_browser_types_list(self):
     finder_options = browser_options.BrowserFinderOptions(browser_type='list')
@@ -500,4 +504,3 @@ class TrybotBrowserFinderTest(unittest.TestCase):
     self._stubs.open.files = {cfg_filename: cfg}
     self.assertEquals((0, 'https://codereview.chromium.org/12345'),
         browser._UpdateConfigAndRunTryjob('android', cfg_filename))
-

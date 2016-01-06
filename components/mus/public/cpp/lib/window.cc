@@ -4,10 +4,14 @@
 
 #include "components/mus/public/cpp/window.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "components/mus/common/transient_window_utils.h"
 #include "components/mus/public/cpp/lib/window_private.h"
 #include "components/mus/public/cpp/lib/window_tree_client_impl.h"
@@ -349,14 +353,14 @@ Window* Window::GetChildById(Id id) {
 
 void Window::SetTextInputState(mojo::TextInputStatePtr state) {
   if (connection_)
-    tree_client()->SetWindowTextInputState(id_, state.Pass());
+    tree_client()->SetWindowTextInputState(id_, std::move(state));
 }
 
 void Window::SetImeVisibility(bool visible, mojo::TextInputStatePtr state) {
   // SetImeVisibility() shouldn't be used if the window is not editable.
   DCHECK(state.is_null() || state->type != mojo::TEXT_INPUT_TYPE_NONE);
   if (connection_)
-    tree_client()->SetImeVisibility(id_, visible, state.Pass());
+    tree_client()->SetImeVisibility(id_, visible, std::move(state));
 }
 
 void Window::SetFocus() {
@@ -374,7 +378,7 @@ void Window::SetCanFocus(bool can_focus) {
 }
 
 void Window::Embed(mus::mojom::WindowTreeClientPtr client) {
-  Embed(client.Pass(), mus::mojom::WindowTree::ACCESS_POLICY_DEFAULT,
+  Embed(std::move(client), mus::mojom::WindowTree::ACCESS_POLICY_DEFAULT,
         base::Bind(&EmptyEmbedCallback));
 }
 
@@ -382,9 +386,14 @@ void Window::Embed(mus::mojom::WindowTreeClientPtr client,
                    uint32_t policy_bitmask,
                    const EmbedCallback& callback) {
   if (PrepareForEmbed())
-    tree_client()->Embed(id_, client.Pass(), policy_bitmask, callback);
+    tree_client()->Embed(id_, std::move(client), policy_bitmask, callback);
   else
     callback.Run(false, 0);
+}
+
+void Window::RequestClose() {
+  if (tree_client())
+    tree_client()->RequestClose(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -395,25 +404,23 @@ namespace {
 mojom::ViewportMetricsPtr CreateEmptyViewportMetrics() {
   mojom::ViewportMetricsPtr metrics = mojom::ViewportMetrics::New();
   metrics->size_in_pixels = mojo::Size::New();
-  // TODO(vtl): The |.Pass()| below is only needed due to an MSVS bug; remove it
-  // once that's fixed.
-  return metrics.Pass();
+  return metrics;
 }
 
 }  // namespace
 
-Window::Window()
-    : connection_(nullptr),
-      id_(static_cast<Id>(-1)),
-      parent_(nullptr),
-      stacking_target_(nullptr),
-      transient_parent_(nullptr),
-      viewport_metrics_(CreateEmptyViewportMetrics()),
-      visible_(true),
-      drawn_(false) {}
+Window::Window() : Window(nullptr, static_cast<Id>(-1)) {}
 
 Window::~Window() {
   FOR_EACH_OBSERVER(WindowObserver, observers_, OnWindowDestroying(this));
+
+  if (HasFocus()) {
+    // The focused window is being removed. When this happens the server
+    // advances focus. We don't want to randomly pick a Window to get focus, so
+    // we update local state only, and wait for the next focus change from the
+    // server.
+    tree_client()->LocalSetFocus(nullptr);
+  }
 
   // Remove from transient parent.
   if (transient_parent_)
@@ -439,11 +446,6 @@ Window::~Window() {
     DCHECK(children_.empty() || children_.front() != child);
   }
 
-  // TODO(beng): It'd be better to do this via a destruction observer in the
-  //             WindowTreeClientImpl.
-  if (connection_)
-    tree_client()->RemoveWindow(id_);
-
   // Clear properties.
   for (auto& pair : prop_map_) {
     if (pair.second.deallocator)
@@ -453,8 +455,10 @@ Window::~Window() {
 
   FOR_EACH_OBSERVER(WindowObserver, observers_, OnWindowDestroyed(this));
 
-  if (connection_ && connection_->GetRoot() == this)
-    tree_client()->OnRootDestroyed(this);
+  // Invoke after observers so that can clean up any internal state observers
+  // may have changed.
+  if (tree_client())
+    tree_client()->OnWindowDestroyed(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -466,8 +470,10 @@ Window::Window(WindowTreeConnection* connection, Id id)
       parent_(nullptr),
       stacking_target_(nullptr),
       transient_parent_(nullptr),
+      input_event_handler_(nullptr),
       viewport_metrics_(CreateEmptyViewportMetrics()),
       visible_(false),
+      cursor_id_(mojom::CURSOR_NULL),
       drawn_(false) {}
 
 WindowTreeClientImpl* Window::tree_client() {
@@ -487,17 +493,17 @@ void Window::SetSharedPropertyInternal(const std::string& name,
         memcpy(&transport_value.front(), &(value->front()), value->size());
     }
     // TODO: add test coverage of this (450303).
-    tree_client()->SetProperty(this, name, transport_value.Pass());
+    tree_client()->SetProperty(this, name, std::move(transport_value));
   }
   LocalSetSharedProperty(name, value);
 }
 
-int64 Window::SetLocalPropertyInternal(const void* key,
-                                       const char* name,
-                                       PropertyDeallocator deallocator,
-                                       int64 value,
-                                       int64 default_value) {
-  int64 old = GetLocalPropertyInternal(key, default_value);
+int64_t Window::SetLocalPropertyInternal(const void* key,
+                                         const char* name,
+                                         PropertyDeallocator deallocator,
+                                         int64_t value,
+                                         int64_t default_value) {
+  int64_t old = GetLocalPropertyInternal(key, default_value);
   if (value == default_value) {
     prop_map_.erase(key);
   } else {
@@ -512,8 +518,8 @@ int64 Window::SetLocalPropertyInternal(const void* key,
   return old;
 }
 
-int64 Window::GetLocalPropertyInternal(const void* key,
-                                       int64 default_value) const {
+int64_t Window::GetLocalPropertyInternal(const void* key,
+                                         int64_t default_value) const {
   std::map<const void*, Value>::const_iterator iter = prop_map_.find(key);
   if (iter == prop_map_.end())
     return default_value;

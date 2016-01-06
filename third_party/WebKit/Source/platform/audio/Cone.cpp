@@ -26,11 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
+#include "platform/audio/Cone.h"
 
 #if ENABLE(WEB_AUDIO)
-
-#include "platform/audio/Cone.h"
 #include "wtf/MathExtras.h"
 
 namespace blink {

@@ -6,10 +6,12 @@
 #define CHROME_BROWSER_MEDIA_ANDROID_ROUTER_MEDIA_ROUTER_ANDROID_H_
 
 #include <jni.h>
+#include <stdint.h>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/media/router/media_router_base.h"
@@ -27,6 +29,8 @@ class MediaRouterAndroid : public MediaRouterBase {
 
   static bool Register(JNIEnv* env);
 
+  const MediaRoute* FindRouteBySource(const MediaSource::Id& source_id) const;
+
   // MediaRouter implementation.
   void CreateRoute(
       const MediaSource::Id& source_id,
@@ -40,52 +44,61 @@ class MediaRouterAndroid : public MediaRouterBase {
       const GURL& origin,
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks) override;
-  void CloseRoute(const MediaRoute::Id& route_id) override;
+  void DetachRoute(const MediaRoute::Id& route_id) override;
+  void TerminateRoute(const MediaRoute::Id& route_id) override;
   void SendRouteMessage(const MediaRoute::Id& route_id,
                         const std::string& message,
                         const SendRouteMessageCallback& callback) override;
   void SendRouteBinaryMessage(
       const MediaRoute::Id& route_id,
-      scoped_ptr<std::vector<uint8>> data,
+      scoped_ptr<std::vector<uint8_t>> data,
       const SendRouteMessageCallback& callback) override;
   void AddIssue(const Issue& issue) override;
   void ClearIssue(const Issue::Id& issue_id) override;
-  void OnPresentationSessionDetached(const MediaRoute::Id& route_id) override;
   bool HasLocalDisplayRoute() const override;
 
   // The methods called by the Java counterpart.
 
   // Notifies the media router that information about sinks is received for
   // a specific source URN.
-  void OnSinksReceived(
-      JNIEnv* env, jobject obj, jstring jsource_urn, jint jcount);
+  void OnSinksReceived(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       const base::android::JavaParamRef<jstring>& jsource_urn,
+                       jint jcount);
 
   // Notifies the media router about a successful route creation.
   void OnRouteCreated(
       JNIEnv* env,
-      jobject obj,
-      jstring jmedia_route_id,
-      jstring jmedia_sink_id,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jmedia_route_id,
+      const base::android::JavaParamRef<jstring>& jmedia_sink_id,
       jint jroute_request_id,
       jboolean jis_local);
 
   // Notifies the media router that route creation or joining failed.
   void OnRouteRequestError(
       JNIEnv* env,
-      jobject obj,
-      jstring jerror_text,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jerror_text,
       jint jroute_request_id);
 
   // Notifies the media router when the route was closed.
-  void OnRouteClosed(JNIEnv* env, jobject obj, jstring jmedia_route_id);
+  void OnRouteClosed(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jmedia_route_id);
 
   // Notifies the media router about the result of sending a message.
-  void OnMessageSentResult(
-      JNIEnv* env, jobject obj, jboolean jsuccess, jint jcallback_id);
+  void OnMessageSentResult(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj,
+                           jboolean jsuccess,
+                           jint jcallback_id);
 
   // Notifies the media router about a message received from the media route.
-  void OnMessage(
-      JNIEnv* env, jobject obj, jstring jmedia_route_id, jstring jmessage);
+  void OnMessage(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 const base::android::JavaParamRef<jstring>& jmedia_route_id,
+                 const base::android::JavaParamRef<jstring>& jmessage);
 
  private:
   friend class MediaRouterFactory;

@@ -23,7 +23,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/html/parser/HTMLScriptRunner.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
@@ -287,7 +286,7 @@ void HTMLScriptRunner::requestParsingBlockingScript(Element* element)
     if (!m_parserBlockingScript.isReady()) {
         if (m_document->frame()) {
             ScriptState* scriptState = ScriptState::forMainWorld(m_document->frame());
-            if (scriptState->contextIsValid())
+            if (scriptState)
                 ScriptStreamer::startStreaming(m_parserBlockingScript, PendingScript::ParsingBlocking, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
         }
 
@@ -303,7 +302,7 @@ void HTMLScriptRunner::requestDeferredScript(Element* element)
 
     if (m_document->frame() && !pendingScript.isReady()) {
         ScriptState* scriptState = ScriptState::forMainWorld(m_document->frame());
-        if (scriptState->contextIsValid())
+        if (scriptState)
             ScriptStreamer::startStreaming(pendingScript, PendingScript::Deferred, m_document->frame()->settings(), scriptState, m_document->loadingTaskRunner());
     }
 

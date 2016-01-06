@@ -26,7 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "modules/accessibility/AXNodeObject.h"
 
 #include "core/InputTypeNames.h"
@@ -315,10 +314,11 @@ bool AXNodeObject::isDescendantOfElementType(const HTMLQualifiedName& tagName) c
     return false;
 }
 
-AccessibilityRole AXNodeObject::determineAccessibilityRoleUtil()
+AccessibilityRole AXNodeObject::nativeAccessibilityRoleIgnoringAria() const
 {
     if (!node())
         return UnknownRole;
+
     // HTMLAnchorElement sets isLink only when it has hrefAttr.
     // We assume that it is also LinkRole if it has event listners even though it doesn't have hrefAttr.
     if (node()->isLink() || (isHTMLAnchorElement(*node()) && isClickable()))
@@ -509,7 +509,7 @@ AccessibilityRole AXNodeObject::determineAccessibilityRole()
     if (node()->isTextNode())
         return StaticTextRole;
 
-    AccessibilityRole role = determineAccessibilityRoleUtil();
+    AccessibilityRole role = nativeAccessibilityRoleIgnoringAria();
     if (role != UnknownRole)
         return role;
     if (node()->isElementNode()) {
@@ -1471,16 +1471,6 @@ static bool isInSameNonInlineBlockFlow(LayoutObject* r1, LayoutObject* r2)
     return b1 && b2 && b1 == b2;
 }
 
-AXObject* AXNodeObject::findChildWithTagName(const HTMLQualifiedName& tagName) const
-{
-    for (AXObject* child = rawFirstChild(); child; child = child->rawFirstSibling()) {
-        Node* childNode = child->node();
-        if (childNode && childNode->hasTagName(tagName))
-            return child;
-    }
-    return 0;
-}
-
 bool AXNodeObject::isNativeCheckboxInMixedState() const
 {
     if (!isHTMLInputElement(m_node))
@@ -1516,7 +1506,7 @@ String AXNodeObject::textAlternative(bool recursive, bool inAriaLabelledByTraver
         return textAlternative;
 
     // Step 2E from: http://www.w3.org/TR/accname-aam-1.1
-    if (recursive && !inAriaLabelledByTraversal && isControl()) {
+    if (recursive && !inAriaLabelledByTraversal && isControl() && !isButton()) {
         // No need to set any name source info in a recursive call.
         if (isRange()) {
             const AtomicString& ariaValuetext = getAttribute(aria_valuetextAttr);
@@ -1542,7 +1532,7 @@ String AXNodeObject::textAlternative(bool recursive, bool inAriaLabelledByTraver
         else if (isHTMLBRElement(node))
             textAlternative = String("\n");
         else
-            textAlternative = textFromDescendants(visited);
+            textAlternative = textFromDescendants(visited, false);
 
         if (!textAlternative.isEmpty()) {
             if (nameSources) {
@@ -1588,11 +1578,26 @@ String AXNodeObject::textAlternative(bool recursive, bool inAriaLabelledByTraver
     return String();
 }
 
-String AXNodeObject::textFromDescendants(AXObjectSet& visited) const
+String AXNodeObject::textFromDescendants(AXObjectSet& visited, bool recursive) const
 {
+    if (!canHaveChildren() && recursive)
+        return String();
+
     StringBuilder accumulatedText;
     AXObject* previous = nullptr;
-    for (AXObject* child = rawFirstChild(); child; child = child->rawFirstSibling()) {
+
+    AXObjectVector children;
+
+    HeapVector<Member<AXObject>> ownedChildren;
+    computeAriaOwnsChildren(ownedChildren);
+    for (AXObject* obj = rawFirstChild(); obj; obj = obj->rawNextSibling()) {
+        if (!axObjectCache().isAriaOwned(obj))
+            children.append(obj);
+    }
+    for (const auto& ownedChild : ownedChildren)
+        children.append(ownedChild);
+
+    for (AXObject* child : children) {
         // Skip hidden children
         if (child->isInertOrAriaHidden())
             continue;
@@ -1607,7 +1612,11 @@ String AXNodeObject::textFromDescendants(AXObjectSet& visited) const
                 accumulatedText.append(' ');
         }
 
-        String result = recursiveTextAlternative(*child, false, visited);
+        String result;
+        if (child->isPresentational())
+            result = child->textFromDescendants(visited, true);
+        else
+            result = recursiveTextAlternative(*child, false, visited);
         accumulatedText.append(result);
         previous = child;
     }
@@ -1744,7 +1753,7 @@ AXObject* AXNodeObject::rawFirstChild() const
     return axObjectCache().getOrCreate(firstChild);
 }
 
-AXObject* AXNodeObject::rawFirstSibling() const
+AXObject* AXNodeObject::rawNextSibling() const
 {
     if (!node())
         return 0;
@@ -1825,8 +1834,15 @@ bool AXNodeObject::canHaveChildren() const
     if (node() && isHTMLMapElement(node()))
         return false;
 
-    // Elements that should not have children
-    switch (roleValue()) {
+    AccessibilityRole role = roleValue();
+
+    // If an element has an ARIA role of presentation, we need to consider the native
+    // role when deciding whether it can have children or not - otherwise giving something
+    // a role of presentation could expose inner implementation details.
+    if (isPresentational())
+        role = nativeAccessibilityRoleIgnoringAria();
+
+    switch (role) {
     case ImageRole:
     case ButtonRole:
     case PopUpButtonRole:
@@ -2073,7 +2089,7 @@ void AXNodeObject::updateAccessibilityRole()
         childrenChanged();
 }
 
-void AXNodeObject::computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedChildren)
+void AXNodeObject::computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedChildren) const
 {
     if (!hasAttribute(aria_ownsAttr))
         return;
@@ -2598,7 +2614,7 @@ String AXNodeObject::description(AXNameFrom nameFrom, AXDescriptionFrom& descrip
         }
 
         AXObjectSet visited;
-        description = textFromDescendants(visited);
+        description = textFromDescendants(visited, false);
 
         if (!description.isEmpty()) {
             if (descriptionSources) {

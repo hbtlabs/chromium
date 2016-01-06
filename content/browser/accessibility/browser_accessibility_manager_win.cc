@@ -4,6 +4,9 @@
 
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/command_line.h"
@@ -16,6 +19,10 @@
 #include "ui/base/win/atl_module.h"
 
 namespace content {
+
+// Map from unique_id_win to BrowserAccessibility
+using UniqueIDWinMap = base::hash_map<LONG, BrowserAccessibility*>;
+base::LazyInstance<UniqueIDWinMap> g_unique_id_map = LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
@@ -43,6 +50,11 @@ BrowserAccessibilityManagerWin::BrowserAccessibilityManagerWin(
 }
 
 BrowserAccessibilityManagerWin::~BrowserAccessibilityManagerWin() {
+  // Destroy the tree in the subclass, rather than in the inherited
+  // destructor, otherwise our overrides of functions like
+  // OnNodeWillBeDeleted won't be called.
+  tree_.reset(NULL);
+
   if (tracked_scroll_object_) {
     tracked_scroll_object_->Release();
     tracked_scroll_object_ = NULL;
@@ -66,15 +78,17 @@ ui::AXTreeUpdate
 }
 
 HWND BrowserAccessibilityManagerWin::GetParentHWND() {
-  if (!delegate_)
+  BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
+  if (!delegate)
     return NULL;
-  return delegate_->AccessibilityGetAcceleratedWidget();
+  return delegate->AccessibilityGetAcceleratedWidget();
 }
 
 IAccessible* BrowserAccessibilityManagerWin::GetParentIAccessible() {
-  if (!delegate_)
+  BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
+  if (!delegate)
     return NULL;
-  return delegate_->AccessibilityGetNativeViewAccessible();
+  return delegate->AccessibilityGetNativeViewAccessible();
 }
 
 void BrowserAccessibilityManagerWin::MaybeCallNotifyWinEvent(
@@ -112,7 +126,7 @@ void BrowserAccessibilityManagerWin::MaybeCallNotifyWinEvent(
   // entering their "browse" mode.
   if ((event == EVENT_OBJECT_FOCUS ||
        event == IA2_EVENT_DOCUMENT_LOAD_COMPLETE) &&
-      (!delegate_->AccessibilityViewHasFocus())) {
+      !NativeViewHasFocus()) {
     return;
   }
 
@@ -152,7 +166,7 @@ void BrowserAccessibilityManagerWin::OnWindowFocused() {
   // if they're not successful this time.
   focus_event_on_root_needed_ = true;
 
-  if (!delegate_ || !delegate_->AccessibilityViewHasFocus()) {
+  if (!NativeViewHasFocus()) {
     inside_on_window_focused_ = false;
     return;
   }
@@ -195,7 +209,7 @@ void BrowserAccessibilityManagerWin::NotifyAccessibilityEvent(
   if ((event_type == ui::AX_EVENT_FOCUS ||
        event_type == ui::AX_EVENT_BLUR ||
        event_type == ui::AX_EVENT_LOAD_COMPLETE) &&
-      !root_delegate->AccessibilityViewHasFocus()) {
+      !NativeViewHasFocus()) {
     return;
   }
 
@@ -257,7 +271,7 @@ void BrowserAccessibilityManagerWin::NotifyAccessibilityEvent(
       break;
     case ui::AX_EVENT_DOCUMENT_SELECTION_CHANGED: {
       // Fire the event on the object where the focus of the selection is.
-      int32 focus_id = GetTreeData().sel_focus_object_id;
+      int32_t focus_id = GetTreeData().sel_focus_object_id;
       BrowserAccessibility* focus_object = GetFromID(focus_id);
       if (focus_object)
         node = focus_object;
@@ -304,27 +318,25 @@ void BrowserAccessibilityManagerWin::OnNodeCreated(ui::AXTree* tree,
   if (!obj->IsNative())
     return;
   LONG unique_id_win = obj->ToBrowserAccessibilityWin()->unique_id_win();
-  unique_id_to_ax_id_map_[unique_id_win] = obj->GetId();
-  unique_id_to_ax_tree_id_map_[unique_id_win] = ax_tree_id_;
+  g_unique_id_map.Get()[unique_id_win] = obj;
 }
 
 void BrowserAccessibilityManagerWin::OnNodeWillBeDeleted(ui::AXTree* tree,
                                                          ui::AXNode* node) {
   DCHECK(node);
-  BrowserAccessibilityManager::OnNodeWillBeDeleted(tree, node);
   BrowserAccessibility* obj = GetFromAXNode(node);
-  if (!obj)
-    return;
-  if (!obj->IsNative())
-    return;
-  unique_id_to_ax_id_map_.erase(
-      obj->ToBrowserAccessibilityWin()->unique_id_win());
-  unique_id_to_ax_tree_id_map_.erase(
-      obj->ToBrowserAccessibilityWin()->unique_id_win());
-  if (obj == tracked_scroll_object_) {
-    tracked_scroll_object_->Release();
-    tracked_scroll_object_ = NULL;
+  if (obj && obj->IsNative()) {
+    g_unique_id_map.Get().erase(
+        obj->ToBrowserAccessibilityWin()->unique_id_win());
+    if (obj == tracked_scroll_object_) {
+      tracked_scroll_object_->Release();
+      tracked_scroll_object_ = NULL;
+    }
   }
+
+  // Call the inherited function at the bottom, otherwise our call to
+  // |GetFromAXNode|, above, will fail!
+  BrowserAccessibilityManager::OnNodeWillBeDeleted(tree, node);
 }
 
 void BrowserAccessibilityManagerWin::OnAtomicUpdateFinished(
@@ -392,31 +404,11 @@ void BrowserAccessibilityManagerWin::TrackScrollingObject(
 
 BrowserAccessibilityWin* BrowserAccessibilityManagerWin::GetFromUniqueIdWin(
     LONG unique_id_win) {
-  auto tree_iter = unique_id_to_ax_tree_id_map_.find(unique_id_win);
-  if (tree_iter == unique_id_to_ax_tree_id_map_.end())
+  auto iter = g_unique_id_map.Get().find(unique_id_win);
+  if (iter == g_unique_id_map.Get().end())
     return nullptr;
 
-  int tree_id = tree_iter->second;
-  if (tree_id != ax_tree_id_) {
-    BrowserAccessibilityManagerWin* manager =
-        BrowserAccessibilityManager::FromID(tree_id)
-            ->ToBrowserAccessibilityManagerWin();
-    if (!manager)
-      return nullptr;
-    if (manager != this)
-      return manager->GetFromUniqueIdWin(unique_id_win);
-    return nullptr;
-  }
-
-  auto iter = unique_id_to_ax_id_map_.find(unique_id_win);
-  if (iter == unique_id_to_ax_id_map_.end())
-    return nullptr;
-
-  BrowserAccessibility* result = GetFromID(iter->second);
-  if (result && result->IsNative())
-    return result->ToBrowserAccessibilityWin();
-
-  return nullptr;
+  return iter->second->ToBrowserAccessibilityWin();
 }
 
 }  // namespace content

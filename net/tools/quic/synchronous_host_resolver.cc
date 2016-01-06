@@ -6,6 +6,7 @@
 
 #include "base/at_exit.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -64,12 +65,11 @@ void ResolverThread::Run() {
   SingleRequestHostResolver resolver(resolver_impl.get());
 
   HostPortPair host_port_pair(host_, 80);
-  rv_ = resolver.Resolve(
-      HostResolver::RequestInfo(host_port_pair), DEFAULT_PRIORITY,
-      addresses_,
-      base::Bind(&ResolverThread::OnResolutionComplete,
-                 weak_factory_.GetWeakPtr()),
-      BoundNetLog());
+  rv_ = resolver.Resolve(HostResolver::RequestInfo(host_port_pair),
+                         DEFAULT_PRIORITY, addresses_,
+                         base::Bind(&ResolverThread::OnResolutionComplete,
+                                    weak_factory_.GetWeakPtr()),
+                         BoundNetLog());
 
   if (rv_ != ERR_IO_PENDING)
     return;

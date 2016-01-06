@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/panels/panel.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -514,6 +517,7 @@ panel::Resizability Panel::CanResizeByMouse() const {
 }
 
 void Panel::Initialize(const GURL& url,
+                       content::SiteInstance* source_site_instance,
                        const gfx::Rect& bounds,
                        bool always_on_top) {
   DCHECK(!initialized_);
@@ -531,7 +535,7 @@ void Panel::Initialize(const GURL& url,
 
   // Set up hosting for web contents.
   panel_host_.reset(new PanelHost(this, profile_));
-  panel_host_->Init(url);
+  panel_host_->Init(url, source_site_instance);
   content::WebContents* web_contents = GetWebContents();
   // The contents might be NULL for most of our tests.
   if (web_contents) {

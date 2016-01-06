@@ -4,32 +4,21 @@
 
 #include "chrome/browser/ssl/security_state_model.h"
 
+#include <stdint.h>
+
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/prefs/pref_service.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ssl/chrome_security_state_model_client.h"
-#include "chrome/common/chrome_constants.h"
+#include "chrome/browser/ssl/security_state_model_client.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
-#include "chrome/common/pref_names.h"
-#include "content/public/browser/cert_store.h"
-#include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/web_contents.h"
-#include "content/public/common/origin_util.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/policy/policy_cert_service.h"
-#include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
-#endif
 
 namespace {
 
 SecurityStateModel::SecurityLevel GetSecurityLevelForNonSecureFieldTrial() {
+  // TODO(estark): componentize switches::kMarkNonSecureAs.
+  // https://crbug.com/515071
   std::string choice =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kMarkNonSecureAs);
@@ -65,8 +54,10 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForNonSecureFieldTrial() {
 
 SecurityStateModel::SHA1DeprecationStatus GetSHA1DeprecationStatus(
     scoped_refptr<net::X509Certificate> cert,
-    const content::SSLStatus& ssl) {
-  if (!cert || !(ssl.cert_status & net::CERT_STATUS_SHA1_SIGNATURE_PRESENT))
+    const SecurityStateModel::VisibleSecurityState& visible_security_state) {
+  if (!cert ||
+      !(visible_security_state.cert_status &
+        net::CERT_STATUS_SHA1_SIGNATURE_PRESENT))
     return SecurityStateModel::NO_DEPRECATED_SHA1;
 
   // The internal representation of the dates for UI treatment of SHA-1.
@@ -82,14 +73,10 @@ SecurityStateModel::SHA1DeprecationStatus GetSHA1DeprecationStatus(
 }
 
 SecurityStateModel::MixedContentStatus GetMixedContentStatus(
-    const content::SSLStatus& ssl) {
-  bool ran_insecure_content = false;
-  bool displayed_insecure_content = false;
-  if (ssl.content_status & content::SSLStatus::RAN_INSECURE_CONTENT)
-    ran_insecure_content = true;
-  if (ssl.content_status & content::SSLStatus::DISPLAYED_INSECURE_CONTENT)
-    displayed_insecure_content = true;
-
+    const SecurityStateModel::VisibleSecurityState& visible_security_state) {
+  bool ran_insecure_content = visible_security_state.ran_mixed_content;
+  bool displayed_insecure_content =
+      visible_security_state.displayed_mixed_content;
   if (ran_insecure_content && displayed_insecure_content)
     return SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
   if (ran_insecure_content)
@@ -101,37 +88,49 @@ SecurityStateModel::MixedContentStatus GetMixedContentStatus(
 }
 
 SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
-    const GURL& url,
-    const content::SSLStatus& ssl,
-    Profile* profile,
-    scoped_refptr<net::X509Certificate> cert,
+    const SecurityStateModel::VisibleSecurityState& visible_security_state,
+    SecurityStateModelClient* client,
+    const scoped_refptr<net::X509Certificate>& cert,
     SecurityStateModel::SHA1DeprecationStatus sha1_status,
-    SecurityStateModel::MixedContentStatus mixed_content_status,
-    bool used_policy_installed_certificate) {
-  switch (ssl.security_style) {
-    case content::SECURITY_STYLE_UNKNOWN:
-      return SecurityStateModel::NONE;
-
-    case content::SECURITY_STYLE_UNAUTHENTICATED: {
-      if (!content::IsOriginSecure(url) && url.IsStandard())
+    SecurityStateModel::MixedContentStatus mixed_content_status) {
+  DCHECK(visible_security_state.initialized);
+  GURL url = visible_security_state.url;
+  switch (visible_security_state.initial_security_level) {
+    case SecurityStateModel::NONE: {
+      if (!client->IsOriginSecure(url) && url.IsStandard())
         return GetSecurityLevelForNonSecureFieldTrial();
       return SecurityStateModel::NONE;
     }
 
-    case content::SECURITY_STYLE_AUTHENTICATION_BROKEN:
+    case SecurityStateModel::SECURITY_ERROR:
       return SecurityStateModel::SECURITY_ERROR;
 
-    case content::SECURITY_STYLE_WARNING:
-      NOTREACHED();
-      return SecurityStateModel::SECURITY_WARNING;
+    case SecurityStateModel::SECURITY_WARNING:
+    case SecurityStateModel::SECURITY_POLICY_WARNING:
+      return visible_security_state.initial_security_level;
 
-    case content::SECURITY_STYLE_AUTHENTICATED: {
+    case SecurityStateModel::SECURE:
+    case SecurityStateModel::EV_SECURE: {
+      // Major cert errors and active mixed content will generally be
+      // downgraded by the embedder to SECURITY_ERROR and handled above,
+      // but downgrade here just in case.
+      net::CertStatus cert_status = visible_security_state.cert_status;
+      if (net::IsCertStatusError(cert_status) &&
+          !net::IsCertStatusMinorError(cert_status)) {
+        return SecurityStateModel::SECURITY_ERROR;
+      }
+      if (mixed_content_status == SecurityStateModel::RAN_MIXED_CONTENT ||
+          mixed_content_status ==
+              SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT) {
+        return SecurityStateModel::kRanInsecureContentLevel;
+      }
+
       // Report if there is a policy cert first, before reporting any other
       // authenticated-but-with-errors cases. A policy cert is a strong
       // indicator of a MITM being present (the enterprise), while the
       // other authenticated-but-with-errors indicate something may
       // be wrong, or may be wrong in the future, but is unclear now.
-      if (used_policy_installed_certificate)
+      if (client->UsedPolicyInstalledCertificate())
         return SecurityStateModel::SECURITY_POLICY_WARNING;
 
       if (sha1_status == SecurityStateModel::DEPRECATED_SHA1_MAJOR)
@@ -139,30 +138,25 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
       if (sha1_status == SecurityStateModel::DEPRECATED_SHA1_MINOR)
         return SecurityStateModel::NONE;
 
-      // Active mixed content is downgraded to the BROKEN style and
-      // handled above.
+      // Active mixed content is handled above.
       DCHECK_NE(SecurityStateModel::RAN_MIXED_CONTENT, mixed_content_status);
       DCHECK_NE(SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT,
                 mixed_content_status);
-      // This should be kept in sync with
-      // |kDisplayedInsecureContentStyle|. That is: the treatment
-      // given to passive mixed content here should be expressed by
-      // |kDisplayedInsecureContentStyle|, which is used to coordinate
-      // the treatment of passive mixed content with other security UI
-      // elements outside of //chrome.
       if (mixed_content_status == SecurityStateModel::DISPLAYED_MIXED_CONTENT)
-        return SecurityStateModel::NONE;
+        return SecurityStateModel::kDisplayedInsecureContentLevel;
 
-      if (net::IsCertStatusError(ssl.cert_status)) {
-        DCHECK(net::IsCertStatusMinorError(ssl.cert_status));
+      if (net::IsCertStatusError(cert_status)) {
+        // Major cert errors are handled above.
+        DCHECK(net::IsCertStatusMinorError(cert_status));
         return SecurityStateModel::NONE;
       }
-      if (net::SSLConnectionStatusToVersion(ssl.connection_status) ==
+      if (net::SSLConnectionStatusToVersion(
+              visible_security_state.connection_status) ==
           net::SSL_CONNECTION_VERSION_SSL3) {
         // SSLv3 will be removed in the future.
         return SecurityStateModel::SECURITY_WARNING;
       }
-      if ((ssl.cert_status & net::CERT_STATUS_IS_EV) && cert)
+      if ((cert_status & net::CERT_STATUS_IS_EV) && cert)
         return SecurityStateModel::EV_SECURE;
       return SecurityStateModel::SECURE;
     }
@@ -171,13 +165,48 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
   return SecurityStateModel::NONE;
 }
 
+void SecurityInfoForRequest(
+    SecurityStateModelClient* client,
+    const SecurityStateModel::VisibleSecurityState& visible_security_state,
+    const scoped_refptr<net::X509Certificate>& cert,
+    SecurityStateModel::SecurityInfo* security_info) {
+  if (!visible_security_state.initialized) {
+    *security_info = SecurityStateModel::SecurityInfo();
+    return;
+  }
+  security_info->cert_id = visible_security_state.cert_id;
+  security_info->sha1_deprecation_status =
+      GetSHA1DeprecationStatus(cert, visible_security_state);
+  security_info->mixed_content_status =
+      GetMixedContentStatus(visible_security_state);
+  security_info->security_bits = visible_security_state.security_bits;
+  security_info->connection_status = visible_security_state.connection_status;
+  security_info->cert_status = visible_security_state.cert_status;
+  security_info->scheme_is_cryptographic =
+      visible_security_state.url.SchemeIsCryptographic();
+  security_info->is_secure_protocol_and_ciphersuite =
+      (net::SSLConnectionStatusToVersion(security_info->connection_status) >=
+           net::SSL_CONNECTION_VERSION_TLS1_2 &&
+       net::IsSecureTLSCipherSuite(net::SSLConnectionStatusToCipherSuite(
+           security_info->connection_status)));
+
+  security_info->sct_verify_statuses =
+      visible_security_state.sct_verify_statuses;
+
+  security_info->security_level =
+      GetSecurityLevelForRequest(visible_security_state, client, cert,
+                                 security_info->sha1_deprecation_status,
+                                 security_info->mixed_content_status);
+}
+
 }  // namespace
 
-const content::SecurityStyle
-    SecurityStateModel::kDisplayedInsecureContentStyle =
-        content::SECURITY_STYLE_UNAUTHENTICATED;
-const content::SecurityStyle SecurityStateModel::kRanInsecureContentStyle =
-    content::SECURITY_STYLE_AUTHENTICATION_BROKEN;
+const SecurityStateModel::SecurityLevel
+    SecurityStateModel::kDisplayedInsecureContentLevel =
+        SecurityStateModel::NONE;
+const SecurityStateModel::SecurityLevel
+    SecurityStateModel::kRanInsecureContentLevel =
+        SecurityStateModel::SECURITY_ERROR;
 
 SecurityStateModel::SecurityInfo::SecurityInfo()
     : security_level(SecurityStateModel::NONE),
@@ -192,42 +221,33 @@ SecurityStateModel::SecurityInfo::SecurityInfo()
 
 SecurityStateModel::SecurityInfo::~SecurityInfo() {}
 
-SecurityStateModel::SecurityStateModel(content::WebContents* web_contents)
-    : web_contents_(web_contents) {}
+SecurityStateModel::SecurityStateModel() {}
 
 SecurityStateModel::~SecurityStateModel() {}
 
 const SecurityStateModel::SecurityInfo& SecurityStateModel::GetSecurityInfo()
     const {
-  content::NavigationEntry* entry =
-      web_contents_->GetController().GetVisibleEntry();
-  if (!entry) {
-    security_info_ = SecurityInfo();
-    visible_url_ = GURL();
-    visible_ssl_status_ = content::SSLStatus();
-    return security_info_;
-  }
-
   scoped_refptr<net::X509Certificate> cert = nullptr;
   client_->RetrieveCert(&cert);
 
-  if (entry->GetURL() == visible_url_ &&
-      entry->GetSSL().Equals(visible_ssl_status_)) {
-    // A cert must be present in the CertStore in order for the site to
-    // be considered EV_SECURE, and the cert might have been removed
-    // since the security level was last computed.
+  // Check if the cached |security_info_| must be recomputed.
+  VisibleSecurityState new_visible_state;
+  client_->GetVisibleSecurityState(&new_visible_state);
+  bool visible_security_state_changed =
+      !(visible_security_state_ == new_visible_state);
+  if (!visible_security_state_changed) {
+    // A cert must be present in order for the site to be considered
+    // EV_SECURE, and the cert might have been removed since the
+    // security level was last computed.
     if (security_info_.security_level == EV_SECURE && !cert) {
       security_info_.security_level = SECURE;
     }
     return security_info_;
   }
 
-  SecurityInfoForRequest(
-      entry->GetURL(), entry->GetSSL(),
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext()), cert,
-      client_->UsedPolicyInstalledCertificate(), &security_info_);
-  visible_url_ = entry->GetURL();
-  visible_ssl_status_ = entry->GetSSL();
+  visible_security_state_ = new_visible_state;
+  SecurityInfoForRequest(client_, visible_security_state_, cert,
+                         &security_info_);
   return security_info_;
 }
 
@@ -235,33 +255,26 @@ void SecurityStateModel::SetClient(SecurityStateModelClient* client) {
   client_ = client;
 }
 
-// static
-void SecurityStateModel::SecurityInfoForRequest(
-    const GURL& url,
-    const content::SSLStatus& ssl,
-    Profile* profile,
-    const scoped_refptr<net::X509Certificate>& cert,
-    bool used_policy_installed_certificate,
-    SecurityInfo* security_info) {
-  security_info->cert_id = ssl.cert_id;
-  security_info->sha1_deprecation_status = GetSHA1DeprecationStatus(cert, ssl);
-  security_info->mixed_content_status = GetMixedContentStatus(ssl);
-  security_info->security_bits = ssl.security_bits;
-  security_info->connection_status = ssl.connection_status;
-  security_info->cert_status = ssl.cert_status;
-  security_info->scheme_is_cryptographic = url.SchemeIsCryptographic();
-  security_info->is_secure_protocol_and_ciphersuite =
-      (net::SSLConnectionStatusToVersion(ssl.connection_status) >=
-           net::SSL_CONNECTION_VERSION_TLS1_2 &&
-       net::IsSecureTLSCipherSuite(
-           net::SSLConnectionStatusToCipherSuite(ssl.connection_status)));
+SecurityStateModel::VisibleSecurityState::VisibleSecurityState()
+    : initialized(false),
+      initial_security_level(SecurityStateModel::NONE),
+      cert_id(0),
+      cert_status(0),
+      connection_status(0),
+      security_bits(-1),
+      displayed_mixed_content(false),
+      ran_mixed_content(false) {}
 
-  security_info->sct_verify_statuses.clear();
-  for (const auto& sct : ssl.signed_certificate_timestamp_ids) {
-    security_info->sct_verify_statuses.push_back(sct.status);
-  }
+SecurityStateModel::VisibleSecurityState::~VisibleSecurityState() {}
 
-  security_info->security_level = GetSecurityLevelForRequest(
-      url, ssl, profile, cert, security_info->sha1_deprecation_status,
-      security_info->mixed_content_status, used_policy_installed_certificate);
+bool SecurityStateModel::VisibleSecurityState::operator==(
+    const SecurityStateModel::VisibleSecurityState& other) const {
+  return (url == other.url &&
+          initial_security_level == other.initial_security_level &&
+          cert_id == other.cert_id && cert_status == other.cert_status &&
+          connection_status == other.connection_status &&
+          security_bits == other.security_bits &&
+          sct_verify_statuses == other.sct_verify_statuses &&
+          displayed_mixed_content == other.displayed_mixed_content &&
+          ran_mixed_content == other.ran_mixed_content);
 }

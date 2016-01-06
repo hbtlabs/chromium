@@ -82,7 +82,6 @@
 // The client is expected to be set whenever the WebLocalFrameImpl is attached to
 // the DOM.
 
-#include "config.h"
 #include "web/WebLocalFrameImpl.h"
 
 #include "bindings/core/v8/BindingSecurity.h"
@@ -335,7 +334,7 @@ WebPluginContainerImpl* WebLocalFrameImpl::pluginContainerFromNode(LocalFrame* f
 
 // Simple class to override some of PrintContext behavior. Some of the methods
 // made virtual so that they can be overridden by ChromePluginPrintContext.
-class ChromePrintContext : public PrintContext {
+class ChromePrintContext : public PrintContext, public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(ChromePrintContext);
 public:
     ChromePrintContext(LocalFrame* frame)
@@ -375,7 +374,6 @@ public:
 
         float scale = spoolPage(pictureBuilder.context(), pageNumber);
         pictureBuilder.endRecording()->playback(canvas);
-        outputLinkedDestinations(canvas, pageRect);
         return scale;
     }
 
@@ -403,7 +401,7 @@ public:
         GraphicsContext& context = pictureBuilder.context();
 
         // Fill the whole background by white.
-        if (!DrawingRecorder::useCachedDrawingIfPossible(context, *this, DisplayItem::PrintedContentBackground)) {
+        {
             DrawingRecorder backgroundRecorder(context, *this, DisplayItem::PrintedContentBackground, allPagesRect);
             context.fillRect(FloatRect(0, 0, pageWidth, totalHeight), Color::white);
         }
@@ -412,7 +410,7 @@ public:
         for (size_t pageIndex = 0; pageIndex < numPages; pageIndex++) {
             ScopeRecorder scopeRecorder(context);
             // Draw a line for a page boundary if this isn't the first page.
-            if (pageIndex > 0 && !DrawingRecorder::useCachedDrawingIfPossible(context, *this, DisplayItem::PrintedContentLineBoundary)) {
+            if (pageIndex > 0) {
                 DrawingRecorder lineBoundaryRecorder(context, *this, DisplayItem::PrintedContentLineBoundary, allPagesRect);
                 context.save();
                 context.setStrokeColor(Color(0, 0, 255));
@@ -435,12 +433,11 @@ public:
             currentHeight += pageSizeInPixels.height() + 1;
         }
         pictureBuilder.endRecording()->playback(canvas);
-        outputLinkedDestinations(canvas, allPagesRect);
     }
 
-    DisplayItemClient displayItemClient() const { return toDisplayItemClient(this); }
-
-    String debugName() const { return "ChromePrintContext"; }
+    // DisplayItemClient methods
+    String debugName() const final { return "ChromePrintContext"; }
+    IntRect visualRect() const override { ASSERT_NOT_REACHED(); return IntRect(); }
 
 protected:
     // Spools the printed page, a subrect of frame(). Skip the scale step.
@@ -462,7 +459,12 @@ protected:
 
         ClipRecorder clipRecorder(context, *this, DisplayItem::ClipPrintedPage, LayoutRect(pageRect));
 
-        frame()->view()->paintContents(&context, GlobalPaintNormalPhase, pageRect);
+        frame()->view()->paintContents(context, GlobalPaintNormalPhase, pageRect);
+
+        {
+            DrawingRecorder lineBoundaryRecorder(context, *this, DisplayItem::PrintedContentDestinationLocations, pageRect);
+            outputLinkedDestinations(context, pageRect);
+        }
 
         return scale;
     }
@@ -535,7 +537,7 @@ protected:
     float spoolPage(GraphicsContext& context, int pageNumber) override
     {
         IntRect pageRect = m_pageRects[pageNumber];
-        m_plugin->printPage(pageNumber, &context, pageRect);
+        m_plugin->printPage(pageNumber, context, pageRect);
 
         return 1.0;
     }
@@ -939,7 +941,7 @@ v8::Local<v8::Value> WebLocalFrameImpl::callFunctionEvenIfScriptDisabled(v8::Loc
 v8::Local<v8::Context> WebLocalFrameImpl::mainWorldScriptContext() const
 {
     ScriptState* scriptState = ScriptState::forMainWorld(frame());
-    ASSERT(scriptState->contextIsValid());
+    ASSERT(scriptState);
     return scriptState->context();
 }
 
@@ -1057,7 +1059,7 @@ bool WebLocalFrameImpl::isViewSourceModeEnabled() const
 
 void WebLocalFrameImpl::setReferrerForRequest(WebURLRequest& request, const WebURL& referrerURL)
 {
-    String referrer = referrerURL.isEmpty() ? frame()->document()->outgoingReferrer() : String(referrerURL.spec().utf16());
+    String referrer = referrerURL.isEmpty() ? frame()->document()->outgoingReferrer() : String(referrerURL.string());
     request.toMutableResourceRequest().setHTTPReferrer(SecurityPolicy::generateReferrer(frame()->document()->referrerPolicy(), request.url(), referrer));
 }
 
@@ -1845,7 +1847,8 @@ void WebLocalFrameImpl::createFrameView()
 
     WebViewImpl* webView = viewImpl();
 
-    IntSize initialSize = frameWidget() ? (IntSize)frameWidget()->size() : webView->mainFrameSize();
+    bool isMainFrame = !parent();
+    IntSize initialSize = (isMainFrame || !frameWidget()) ? webView->mainFrameSize() : (IntSize)frameWidget()->size();
 
     frame()->createView(initialSize, webView->baseBackgroundColor(), webView->isTransparent());
     if (webView->shouldAutoResize() && frame()->isLocalRoot())
@@ -2080,6 +2083,17 @@ void WebLocalFrameImpl::setFrameOwnerProperties(const WebFrameOwnerProperties& f
     toRemoteBridgeFrameOwner(owner)->setScrollingMode(frameOwnerProperties.scrollingMode);
     toRemoteBridgeFrameOwner(owner)->setMarginWidth(frameOwnerProperties.marginWidth);
     toRemoteBridgeFrameOwner(owner)->setMarginHeight(frameOwnerProperties.marginHeight);
+}
+
+WebLocalFrameImpl* WebLocalFrameImpl::localRoot()
+{
+    // This can't use the LocalFrame::localFrameRoot, since it may be called
+    // when the WebLocalFrame exists but the core LocalFrame does not.
+    // TODO(alexmos, dcheng): Clean this up to only calculate this in one place.
+    WebLocalFrameImpl* localRoot = this;
+    while (!localRoot->frameWidget())
+        localRoot = toWebLocalFrameImpl(localRoot->parent());
+    return localRoot;
 }
 
 void WebLocalFrameImpl::sendPings(const WebNode& contextNode, const WebURL& destinationURL)

@@ -16,25 +16,15 @@
 #include <windows.h>
 #include <iphlpapi.h>
 #include <winsock2.h>
-#include <ws2bth.h>
 #pragma comment(lib, "iphlpapi.lib")
 #elif defined(OS_POSIX)
 #include <fcntl.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <unistd.h>
-#if !defined(OS_NACL)
-#include <net/if.h>
-#if !defined(OS_ANDROID)
-#include <ifaddrs.h>
-#endif  // !defined(OS_NACL)
-#endif  // !defined(OS_ANDROID)
 #endif  // defined(OS_POSIX)
 
-#include "base/basictypes.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -42,20 +32,17 @@
 #include "base/sys_byteorder.h"
 #include "base/values.h"
 #include "net/base/address_list.h"
+#include "net/base/escape.h"
 #include "net/base/ip_address_number.h"
 #include "net/base/net_module.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
 #include "net/grit/net_resources.h"
-#include "net/http/http_content_disposition.h"
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_canon.h"
 #include "url/url_canon_ip.h"
 
-#if defined(OS_ANDROID)
-#include "net/android/network_library.h"
-#endif
 #if defined(OS_WIN)
 #include "net/base/winsock_init.h"
 #endif
@@ -158,18 +145,6 @@ bool IsCanonicalizedHostCompliant(const std::string& host) {
   }
 
   return most_recent_component_started_alphanumeric;
-}
-
-int SetNonBlocking(int fd) {
-#if defined(OS_WIN)
-  unsigned long no_block = 1;
-  return ioctlsocket(fd, FIONBIO, &no_block);
-#elif defined(OS_POSIX)
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (-1 == flags)
-    return flags;
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-#endif
 }
 
 bool ParseHostAndPort(std::string::const_iterator host_and_port_begin,
@@ -316,78 +291,6 @@ void SockaddrStorage::operator=(const SockaddrStorage& other) {
   memcpy(addr, other.addr, addr_len);
 }
 
-// Extracts the address and port portions of a sockaddr.
-bool GetIPAddressFromSockAddr(const struct sockaddr* sock_addr,
-                              socklen_t sock_addr_len,
-                              const uint8_t** address,
-                              size_t* address_len,
-                              uint16_t* port) {
-  if (sock_addr->sa_family == AF_INET) {
-    if (sock_addr_len < static_cast<socklen_t>(sizeof(struct sockaddr_in)))
-      return false;
-    const struct sockaddr_in* addr =
-        reinterpret_cast<const struct sockaddr_in*>(sock_addr);
-    *address = reinterpret_cast<const uint8_t*>(&addr->sin_addr);
-    *address_len = kIPv4AddressSize;
-    if (port)
-      *port = base::NetToHost16(addr->sin_port);
-    return true;
-  }
-
-  if (sock_addr->sa_family == AF_INET6) {
-    if (sock_addr_len < static_cast<socklen_t>(sizeof(struct sockaddr_in6)))
-      return false;
-    const struct sockaddr_in6* addr =
-        reinterpret_cast<const struct sockaddr_in6*>(sock_addr);
-    *address = reinterpret_cast<const uint8_t*>(&addr->sin6_addr);
-    *address_len = kIPv6AddressSize;
-    if (port)
-      *port = base::NetToHost16(addr->sin6_port);
-    return true;
-  }
-
-#if defined(OS_WIN)
-  if (sock_addr->sa_family == AF_BTH) {
-    if (sock_addr_len < static_cast<socklen_t>(sizeof(SOCKADDR_BTH)))
-      return false;
-    const SOCKADDR_BTH* addr =
-        reinterpret_cast<const SOCKADDR_BTH*>(sock_addr);
-    *address = reinterpret_cast<const uint8_t*>(&addr->btAddr);
-    *address_len = kBluetoothAddressSize;
-    if (port)
-      *port = static_cast<uint16_t>(addr->port);
-    return true;
-  }
-#endif
-
-  return false;  // Unrecognized |sa_family|.
-}
-
-std::string NetAddressToString(const struct sockaddr* sa,
-                               socklen_t sock_addr_len) {
-  const uint8_t* address;
-  size_t address_len;
-  if (!GetIPAddressFromSockAddr(sa, sock_addr_len, &address,
-                                &address_len, NULL)) {
-    NOTREACHED();
-    return std::string();
-  }
-  return IPAddressToString(address, address_len);
-}
-
-std::string NetAddressToStringWithPort(const struct sockaddr* sa,
-                                       socklen_t sock_addr_len) {
-  const uint8_t* address;
-  size_t address_len;
-  uint16_t port;
-  if (!GetIPAddressFromSockAddr(sa, sock_addr_len, &address,
-                                &address_len, &port)) {
-    NOTREACHED();
-    return std::string();
-  }
-  return IPAddressToStringWithPort(address, address_len, port);
-}
-
 std::string GetHostName() {
 #if defined(OS_NACL)
   NOTIMPLEMENTED();
@@ -428,82 +331,6 @@ GURL SimplifyUrlForRequest(const GURL& url) {
   replacements.ClearPassword();
   replacements.ClearRef();
   return url.ReplaceComponents(replacements);
-}
-
-bool HaveOnlyLoopbackAddresses() {
-#if defined(OS_ANDROID)
-  return android::HaveOnlyLoopbackAddresses();
-#elif defined(OS_NACL)
-  NOTIMPLEMENTED();
-  return false;
-#elif defined(OS_POSIX)
-  struct ifaddrs* interface_addr = NULL;
-  int rv = getifaddrs(&interface_addr);
-  if (rv != 0) {
-    DVLOG(1) << "getifaddrs() failed with errno = " << errno;
-    return false;
-  }
-
-  bool result = true;
-  for (struct ifaddrs* interface = interface_addr;
-       interface != NULL;
-       interface = interface->ifa_next) {
-    if (!(IFF_UP & interface->ifa_flags))
-      continue;
-    if (IFF_LOOPBACK & interface->ifa_flags)
-      continue;
-    const struct sockaddr* addr = interface->ifa_addr;
-    if (!addr)
-      continue;
-    if (addr->sa_family == AF_INET6) {
-      // Safe cast since this is AF_INET6.
-      const struct sockaddr_in6* addr_in6 =
-          reinterpret_cast<const struct sockaddr_in6*>(addr);
-      const struct in6_addr* sin6_addr = &addr_in6->sin6_addr;
-      if (IN6_IS_ADDR_LOOPBACK(sin6_addr) || IN6_IS_ADDR_LINKLOCAL(sin6_addr))
-        continue;
-    }
-    if (addr->sa_family != AF_INET6 && addr->sa_family != AF_INET)
-      continue;
-
-    result = false;
-    break;
-  }
-  freeifaddrs(interface_addr);
-  return result;
-#elif defined(OS_WIN)
-  // TODO(wtc): implement with the GetAdaptersAddresses function.
-  NOTIMPLEMENTED();
-  return false;
-#else
-  NOTIMPLEMENTED();
-  return false;
-#endif  // defined(various platforms)
-}
-
-const uint16_t* GetPortFieldFromSockaddr(const struct sockaddr* address,
-                                         socklen_t address_len) {
-  if (address->sa_family == AF_INET) {
-    DCHECK_LE(sizeof(sockaddr_in), static_cast<size_t>(address_len));
-    const struct sockaddr_in* sockaddr =
-        reinterpret_cast<const struct sockaddr_in*>(address);
-    return &sockaddr->sin_port;
-  } else if (address->sa_family == AF_INET6) {
-    DCHECK_LE(sizeof(sockaddr_in6), static_cast<size_t>(address_len));
-    const struct sockaddr_in6* sockaddr =
-        reinterpret_cast<const struct sockaddr_in6*>(address);
-    return &sockaddr->sin6_port;
-  } else {
-    NOTREACHED();
-    return NULL;
-  }
-}
-
-int GetPortFromSockaddr(const struct sockaddr* address, socklen_t address_len) {
-  const uint16_t* port_field = GetPortFieldFromSockaddr(address, address_len);
-  if (!port_field)
-    return -1;
-  return base::NetToHost16(*port_field);
 }
 
 bool ResolveLocalHostname(base::StringPiece host,

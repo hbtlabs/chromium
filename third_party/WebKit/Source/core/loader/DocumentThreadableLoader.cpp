@@ -29,7 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "core/loader/DocumentThreadableLoader.h"
 
 #include "core/dom/Document.h"
@@ -162,7 +161,7 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
     for (const auto& header : headerMap) {
         if (FetchUtils::isSimpleHeader(header.key, header.value)) {
             m_simpleRequestHeaders.add(header.key, header.value);
-        } else if (equalIgnoringCase(header.key, "range") && m_options.crossOriginRequestPolicy == UseAccessControl && m_options.preflightPolicy == PreventPreflight) {
+        } else if (equalIgnoringCase(header.key, HTTPNames::Range) && m_options.crossOriginRequestPolicy == UseAccessControl && m_options.preflightPolicy == PreventPreflight) {
             // Allow an exception for the "range" header for when CORS callers request no preflight, this ensures cross-origin
             // redirects work correctly for crossOrigin enabled WebURLRequest::RequestContextVideo type requests.
             m_simpleRequestHeaders.add(header.key, header.value);
@@ -182,7 +181,7 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
     //   initiated fetch.
     //   - Some non-script initiated fetches such as WorkerScriptLoader also use
     //     ThreadableLoader, but they are guaranteed to use GET method.
-    if (request.httpMethod() != "GET") {
+    if (request.httpMethod() != HTTPNames::GET) {
         if (Page* page = document.page())
             page->chromeClient().didObserveNonGetFetchFromScript();
     }
@@ -193,9 +192,9 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
     // return a opaque response which is from the other origin site and the
     // script in the page can read the content.
     //
-    // We assume that ServiceWorker is skipped for sync requests and non-HTTP
-    // familiy requests by content/ code.
-    if (m_async && !request.skipServiceWorker() && request.url().protocolIsInHTTPFamily() && document.fetcher()->isControlledByServiceWorker()) {
+    // We assume that ServiceWorker is skipped for sync requests and unsupported
+    // protocol requests by content/ code.
+    if (m_async && !request.skipServiceWorker() && SchemeRegistry::shouldTreatURLSchemeAsAllowingServiceWorkers(request.url().protocol()) && document.fetcher()->isControlledByServiceWorker()) {
         ResourceRequest newRequest(request);
         // FetchRequestMode should be set by the caller. But the expected value
         // of FetchRequestMode is not speced yet except for XHR. So we set here.
@@ -206,8 +205,8 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document& document, Threadabl
         else
             newRequest.setFetchRequestMode(WebURLRequest::FetchRequestModeCORS);
 
-        m_fallbackRequestForServiceWorker = adoptPtr(new ResourceRequest(request));
-        m_fallbackRequestForServiceWorker->setSkipServiceWorker(true);
+        m_fallbackRequestForServiceWorker = ResourceRequest(request);
+        m_fallbackRequestForServiceWorker.setSkipServiceWorker(true);
 
         loadRequest(newRequest, m_resourceLoaderOptions);
         return;
@@ -256,25 +255,31 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(const ResourceReques
         ResourceRequest crossOriginRequest(request);
         ResourceLoaderOptions crossOriginOptions(m_resourceLoaderOptions);
         updateRequestForAccessControl(crossOriginRequest, securityOrigin(), effectiveAllowCredentials());
+        // We update the credentials mode according to effectiveAllowCredentials() here for backward compatibility. But this is not correct.
+        // FIXME: We should set it in the caller of DocumentThreadableLoader.
+        crossOriginRequest.setFetchCredentialsMode(effectiveAllowCredentials() == AllowStoredCredentials ? WebURLRequest::FetchCredentialsModeInclude : WebURLRequest::FetchCredentialsModeOmit);
         loadRequest(crossOriginRequest, crossOriginOptions);
     } else {
         m_crossOriginNonSimpleRequest = true;
 
-        OwnPtr<ResourceRequest> crossOriginRequest = adoptPtr(new ResourceRequest(request));
-        OwnPtr<ResourceLoaderOptions> crossOriginOptions = adoptPtr(new ResourceLoaderOptions(m_resourceLoaderOptions));
+        ResourceRequest crossOriginRequest(request);
+        ResourceLoaderOptions crossOriginOptions(m_resourceLoaderOptions);
         // Do not set the Origin header for preflight requests.
-        updateRequestForAccessControl(*crossOriginRequest, 0, effectiveAllowCredentials());
-        m_actualRequest = crossOriginRequest.release();
-        m_actualOptions = crossOriginOptions.release();
+        updateRequestForAccessControl(crossOriginRequest, 0, effectiveAllowCredentials());
+        // We update the credentials mode according to effectiveAllowCredentials() here for backward compatibility. But this is not correct.
+        // FIXME: We should set it in the caller of DocumentThreadableLoader.
+        crossOriginRequest.setFetchCredentialsMode(effectiveAllowCredentials() == AllowStoredCredentials ? WebURLRequest::FetchCredentialsModeInclude : WebURLRequest::FetchCredentialsModeOmit);
+        m_actualRequest = crossOriginRequest;
+        m_actualOptions = crossOriginOptions;
 
         bool shouldForcePreflight = InspectorInstrumentation::shouldForceCORSPreflight(m_document);
-        bool canSkipPreflight = CrossOriginPreflightResultCache::shared().canSkipPreflight(securityOrigin()->toString(), m_actualRequest->url(), effectiveAllowCredentials(), m_actualRequest->httpMethod(), m_actualRequest->httpHeaderFields());
+        bool canSkipPreflight = CrossOriginPreflightResultCache::shared().canSkipPreflight(securityOrigin()->toString(), m_actualRequest.url(), effectiveAllowCredentials(), m_actualRequest.httpMethod(), m_actualRequest.httpHeaderFields());
         if (canSkipPreflight && !shouldForcePreflight) {
             loadActualRequest();
         } else {
-            ResourceRequest preflightRequest = createAccessControlPreflightRequest(*m_actualRequest, securityOrigin());
+            ResourceRequest preflightRequest = createAccessControlPreflightRequest(m_actualRequest, securityOrigin());
             // Create a ResourceLoaderOptions for preflight.
-            ResourceLoaderOptions preflightOptions = *m_actualOptions;
+            ResourceLoaderOptions preflightOptions = m_actualOptions;
             preflightOptions.allowCredentials = DoNotAllowStoredCredentials;
             loadRequest(preflightRequest, preflightOptions);
         }
@@ -368,7 +373,7 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
     ASSERT_UNUSED(resource, resource == this->resource());
     ASSERT(m_async);
 
-    if (m_actualRequest) {
+    if (!m_actualRequest.isNull()) {
         reportResponseReceived(resource->identifier(), redirectResponse);
 
         handlePreflightFailure(redirectResponse.url().string(), "Response for preflight is invalid (redirect)");
@@ -397,7 +402,7 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
         responseReceived(resource, redirectResponse, adoptPtr(new EmptyDataHandle()));
 
         if (m_client) {
-            ASSERT(!m_actualRequest);
+            ASSERT(m_actualRequest.isNull());
             notifyFinished(resource);
         }
 
@@ -508,7 +513,7 @@ void DocumentThreadableLoader::dataDownloaded(Resource* resource, int dataLength
 {
     ASSERT(m_client);
     ASSERT_UNUSED(resource, resource == this->resource());
-    ASSERT(!m_actualRequest);
+    ASSERT(m_actualRequest.isNull());
     ASSERT(m_async);
 
     m_client->didDownloadData(dataLength);
@@ -555,14 +560,14 @@ void DocumentThreadableLoader::handlePreflightResponse(const ResourceResponse& r
 
     OwnPtr<CrossOriginPreflightResultCacheItem> preflightResult = adoptPtr(new CrossOriginPreflightResultCacheItem(effectiveAllowCredentials()));
     if (!preflightResult->parse(response, accessControlErrorDescription)
-        || !preflightResult->allowsCrossOriginMethod(m_actualRequest->httpMethod(), accessControlErrorDescription)
-        || !preflightResult->allowsCrossOriginHeaders(m_actualRequest->httpHeaderFields(), accessControlErrorDescription)) {
+        || !preflightResult->allowsCrossOriginMethod(m_actualRequest.httpMethod(), accessControlErrorDescription)
+        || !preflightResult->allowsCrossOriginHeaders(m_actualRequest.httpHeaderFields(), accessControlErrorDescription)) {
         handlePreflightFailure(response.url().string(), accessControlErrorDescription);
         // |this| may be dead here in async mode.
         return;
     }
 
-    CrossOriginPreflightResultCache::shared().appendEntry(securityOrigin()->toString(), m_actualRequest->url(), preflightResult.release());
+    CrossOriginPreflightResultCache::shared().appendEntry(securityOrigin()->toString(), m_actualRequest.url(), preflightResult.release());
 }
 
 void DocumentThreadableLoader::reportResponseReceived(unsigned long identifier, const ResourceResponse& response)
@@ -578,7 +583,7 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
 {
     ASSERT(m_client);
 
-    if (m_actualRequest) {
+    if (!m_actualRequest.isNull()) {
         reportResponseReceived(identifier, response);
         handlePreflightResponse(response);
         // |this| may be dead here in async mode.
@@ -589,19 +594,19 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
         // It's still possible to reach here with null m_fallbackRequestForServiceWorker
         // if the request was for main resource loading (i.e. for SharedWorker), for which
         // we create DocumentLoader before the controller ServiceWorker is set.
-        ASSERT(m_fallbackRequestForServiceWorker || m_requestContext == WebURLRequest::RequestContextSharedWorker);
+        ASSERT(!m_fallbackRequestForServiceWorker.isNull() || m_requestContext == WebURLRequest::RequestContextSharedWorker);
         if (response.wasFallbackRequiredByServiceWorker()) {
             // At this point we must have m_fallbackRequestForServiceWorker.
             // (For SharedWorker the request won't be CORS or CORS-with-preflight,
             // therefore fallback-to-network is handled in the browser process
             // when the ServiceWorker does not call respondWith().)
-            ASSERT(m_fallbackRequestForServiceWorker);
+            ASSERT(!m_fallbackRequestForServiceWorker.isNull());
             reportResponseReceived(identifier, response);
             loadFallbackRequestForServiceWorker();
             // |this| may be dead here in async mode.
             return;
         }
-        m_fallbackRequestForServiceWorker = nullptr;
+        m_fallbackRequestForServiceWorker = ResourceRequest();
         m_client->didReceiveResponse(identifier, response, handle);
         return;
     }
@@ -615,8 +620,8 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
     // loadFallbackRequestForServiceWorker().
     // FIXME: We should use |m_sameOriginRequest| when we will support
     // Suborigins (crbug.com/336894) for Service Worker.
-    ASSERT(!m_fallbackRequestForServiceWorker || securityOrigin()->canRequest(m_fallbackRequestForServiceWorker->url()));
-    m_fallbackRequestForServiceWorker = nullptr;
+    ASSERT(m_fallbackRequestForServiceWorker.isNull() || securityOrigin()->canRequest(m_fallbackRequestForServiceWorker.url()));
+    m_fallbackRequestForServiceWorker = ResourceRequest();
 
     if (!m_sameOriginRequest && m_options.crossOriginRequestPolicy == UseAccessControl) {
         String accessControlErrorDescription;
@@ -636,7 +641,7 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
 
 void DocumentThreadableLoader::setSerializedCachedMetadata(Resource*, const char* data, size_t size)
 {
-    if (m_actualRequest)
+    if (!m_actualRequest.isNull())
         return;
     m_client->didReceiveCachedMetadata(data, size);
     // |this| may be dead here.
@@ -659,10 +664,10 @@ void DocumentThreadableLoader::handleReceivedData(const char* data, unsigned dat
     ASSERT(m_client);
 
     // Preflight data should be invisible to clients.
-    if (m_actualRequest)
+    if (!m_actualRequest.isNull())
         return;
 
-    ASSERT(!m_fallbackRequestForServiceWorker);
+    ASSERT(m_fallbackRequestForServiceWorker.isNull());
 
     m_client->didReceiveData(data, dataLength);
     // |this| may be dead here in async mode.
@@ -685,9 +690,9 @@ void DocumentThreadableLoader::notifyFinished(Resource* resource)
 
 void DocumentThreadableLoader::handleSuccessfulFinish(unsigned long identifier, double finishTime)
 {
-    ASSERT(!m_fallbackRequestForServiceWorker);
+    ASSERT(m_fallbackRequestForServiceWorker.isNull());
 
-    if (m_actualRequest) {
+    if (!m_actualRequest.isNull()) {
         // FIXME: Timeout should be applied to whole fetch, not for each of
         // preflight and actual request.
         m_timeoutTimer.stop();
@@ -725,23 +730,24 @@ void DocumentThreadableLoader::didTimeout(Timer<DocumentThreadableLoader>* timer
 void DocumentThreadableLoader::loadFallbackRequestForServiceWorker()
 {
     clearResource();
-    OwnPtr<ResourceRequest> fallbackRequest(m_fallbackRequestForServiceWorker.release());
-    dispatchInitialRequest(*fallbackRequest);
+    ResourceRequest fallbackRequest(m_fallbackRequestForServiceWorker);
+    m_fallbackRequestForServiceWorker = ResourceRequest();
+    dispatchInitialRequest(fallbackRequest);
     // |this| may be dead here in async mode.
 }
 
 void DocumentThreadableLoader::loadActualRequest()
 {
-    OwnPtr<ResourceRequest> actualRequest;
-    actualRequest.swap(m_actualRequest);
-    OwnPtr<ResourceLoaderOptions> actualOptions;
-    actualOptions.swap(m_actualOptions);
+    ResourceRequest actualRequest = m_actualRequest;
+    ResourceLoaderOptions actualOptions = m_actualOptions;
+    m_actualRequest = ResourceRequest();
+    m_actualOptions = ResourceLoaderOptions();
 
-    actualRequest->setHTTPOrigin(securityOrigin());
+    actualRequest.setHTTPOrigin(securityOrigin());
 
     clearResource();
 
-    loadRequest(*actualRequest, *actualOptions);
+    loadRequest(actualRequest, actualOptions);
 }
 
 void DocumentThreadableLoader::handlePreflightFailure(const String& url, const String& errorDescription)
@@ -749,7 +755,7 @@ void DocumentThreadableLoader::handlePreflightFailure(const String& url, const S
     ResourceError error(errorDomainBlinkInternal, 0, url, errorDescription);
 
     // Prevent handleSuccessfulFinish() from bypassing access check.
-    m_actualRequest = nullptr;
+    m_actualRequest = ResourceRequest();
 
     ThreadableLoaderClient* client = m_client;
     clear();
@@ -782,7 +788,7 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Resou
         resourceLoaderOptions.allowCredentials = DoNotAllowStoredCredentials;
     resourceLoaderOptions.securityOrigin = m_securityOrigin;
     if (m_async) {
-        if (m_actualRequest)
+        if (!m_actualRequest.isNull())
             resourceLoaderOptions.dataBufferingPolicy = BufferData;
 
         if (m_options.timeoutMilliseconds > 0)

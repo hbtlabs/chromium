@@ -17,6 +17,7 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller_private.h"
 #include "chrome/browser/ui/toolbar/encoding_menu_controller.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -179,13 +180,15 @@ Browser* FindBrowserForSender(id sender, NSWindow* window) {
       [AppController updateSigninItem:item
                            shouldShow:enable
                        currentProfile:original_profile];
+      content::RecordAction(
+          base::UserMetricsAction("Signin_Impression_FromMenu"));
       break;
     }
     case IDC_BOOKMARK_PAGE: {
       // Extensions have the ability to hide the bookmark page menu item.
       // This only affects the bookmark page menu item under the main menu.
-      // The bookmark page menu item under the wrench menu has its
-      // visibility controlled by AppMenuModel.
+      // The bookmark page menu item under the app menu has its visibility
+      // controlled by AppMenuModel.
       bool shouldHide =
           chrome::ShouldRemoveBookmarkThisPageUI(browser->profile());
       NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item);
@@ -195,7 +198,7 @@ Browser* FindBrowserForSender(id sender, NSWindow* window) {
     case IDC_BOOKMARK_ALL_TABS: {
       // Extensions have the ability to hide the bookmark all tabs menu
       // item.  This only affects the bookmark page menu item under the main
-      // menu.  The bookmark page menu item under the wrench menu has its
+      // menu.  The bookmark page menu item under the app menu has its
       // visibility controlled by AppMenuModel.
       bool shouldHide =
           chrome::ShouldRemoveBookmarkOpenPagesUI(browser->profile());

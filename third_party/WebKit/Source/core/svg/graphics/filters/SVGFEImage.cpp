@@ -21,8 +21,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "config.h"
-
 #include "core/svg/graphics/filters/SVGFEImage.h"
 
 #include "core/layout/LayoutObject.h"
@@ -177,7 +175,7 @@ PassRefPtr<SkImageFilter> FEImage::createImageFilterForLayoutObject(const Layout
     SkPictureBuilder filterPicture(dstRect);
     {
         TransformRecorder transformRecorder(filterPicture.context(), layoutObject, transform);
-        SVGPaintContext::paintSubtree(&filterPicture.context(), &layoutObject);
+        SVGPaintContext::paintSubtree(filterPicture.context(), &layoutObject);
     }
     RefPtr<const SkPicture> recording = filterPicture.endRecording();
 

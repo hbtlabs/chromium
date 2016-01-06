@@ -1,13 +1,16 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="1012876632442809908">USB-C-enhet (främre port)</translation>
 <translation id="1013923882670373915">Bluetooth-enheten <ph name="DEVICE_NAME" /> har begärt tillstånd för koppling. Ange den här pinkoden på den enheten: <ph name="PINCODE" /></translation>
 <translation id="1021311941847921177">Kortkommandot för att byta till nästa inmatningsmetod har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="112308213915226829">Dölj hyllan automatiskt</translation>
 <translation id="1195412055398077112">överskanning</translation>
+<translation id="1252999807265626933">Laddar från <ph name="POWER_SOURCE" /></translation>
 <translation id="1270290102613614947">Skärmen på tangentbordet har inaktiverats</translation>
 <translation id="1272079795634619415">Stopp</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
+<translation id="1293264513303784526">USB-C-enhet (vänster port)</translation>
 <translation id="1330145147221172764">Aktivera skärmtangentbordet</translation>
 <translation id="1343000272198685031">Mikrofonuttag</translation>
 <translation id="1346748346194534595">Höger</translation>
@@ -18,6 +21,7 @@
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">Startprogram</translation>
 <translation id="15373452373711364">Stor muspekare</translation>
+<translation id="1550523713251050646">Klicka här för fler alternativ</translation>
 <translation id="1602076796624386989">Aktivera mobildata</translation>
 <translation id="1621499497873603021">Tid som återstår tills batteriet är tomt: <ph name="TIME_LEFT" /></translation>
 <translation id="164969095109328410">Chrome-enhet</translation>
@@ -25,6 +29,7 @@
 <translation id="1747827819627189109">Skärmen på tangentbordet har aktiverats</translation>
 <translation id="1812696562331527143">Inmatningsmetoden har ändrats till <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />tredje part<ph name="END_LINK" />).
         Tryck på Skift + Alt om du vill byta.</translation>
+<translation id="1864454756846565995">USB-C-enhet (bakre port)</translation>
 <translation id="1882897271359938046">Spegling av <ph name="DISPLAY_NAME" /></translation>
 <translation id="1919743966458266018">Kortkommandot för att öppna aktivitetshanteraren har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="1923539912171292317">Automatiska klick</translation>
@@ -55,6 +60,7 @@
 <translation id="2805756323405976993">Appar</translation>
 <translation id="2819276065543622893">Du loggas nu ut.</translation>
 <translation id="2825619548187458965">Hylla</translation>
+<translation id="2844169650293029770">USB-C-enhet (främre porten på vänster sida)</translation>
 <translation id="2872961005593481000">Stäng av</translation>
 <translation id="2942516765047364088">Hyllposition</translation>
 <translation id="2946640296642327832">Aktivera Bluetooth</translation>
@@ -73,6 +79,8 @@
 <translation id="3147142846278915599">Översikt (appar synkroniseras …)</translation>
 <translation id="3157169093162779309">Aktivera rotationslås</translation>
 <translation id="3294437725009624529">Gäst</translation>
+<translation id="3371140690572404006">USB-C-enhet (främre porten på högra sidan)</translation>
+<translation id="3445925074670675829">USB-C-enhet</translation>
 <translation id="3473479545200714844">Skärmförstorare</translation>
 <translation id="3573179567135747900">Byt tillbaka till "<ph name="FROM_LOCALE" />" (kräver omstart)</translation>
 <translation id="3595596368722241419">Batteriet är fulladdat</translation>
@@ -98,6 +106,7 @@
 <translation id="3963445509666917109">Högtalare (inbyggd)</translation>
 <translation id="3967919079500697218">Möjligheten att ta skärmdumpar har inaktiverats av administratören.</translation>
 <translation id="397105322502079400">Beräknar ...</translation>
+<translation id="3995138139523574647">USB-C-enhet (bakre porten på högra sidan)</translation>
 <translation id="4053612967614057854">Inaktivera skärmtangentbord</translation>
 <translation id="412065659894267608"><ph name="HOUR" /> h <ph name="MINUTE" /> m till fulladdat</translation>
 <translation id="4250680216510889253">Nej</translation>
@@ -124,6 +133,7 @@
 <translation id="5222676887888702881">Logga ut</translation>
 <translation id="5238774010593222950">Det går inte att logga in på ett annat konto.</translation>
 <translation id="532063867737390965">Den här nätverksinställningen har inaktiverats av administratören.</translation>
+<translation id="5331975486040154427">USB-C-enhet (bakre porten på vänster sida)</translation>
 <translation id="544691375626129091">Alla tillgängliga användare har redan lagts till i den här sessionen.</translation>
 <translation id="5507786745520522457">Konfigurera mobildata</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -150,8 +160,10 @@
 <translation id="6047696787498798094">Skärmdelningen avbryts när du byter till en annan användare. Vill du fortsätta?</translation>
 <translation id="6062360702481658777">Du loggas ut automatiskt om <ph name="LOGOUT_TIME_LEFT" />.</translation>
 <translation id="607652042414456612">Din dator kan upptäckas av Bluetooth-enheter som finns i närheten och den visas som <ph name="NAME" /> med adressen <ph name="ADDRESS" /></translation>
+<translation id="6106745654298855237">Laddar <ph name="POWER_SOURCE" /></translation>
 <translation id="615957422585914272">Visa skärmtangentbordet</translation>
 <translation id="6165508094623778733">Läs mer</translation>
+<translation id="6203030746557259519">Virtuell skärm</translation>
 <translation id="6247708409970142803"><ph name="PERCENTAGE" /> %</translation>
 <translation id="6248847161401822652">Avsluta genom att trycka på Ctrl + Skift + Q två gånger.</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> byttes till <ph name="ROTATION" /></translation>
@@ -161,6 +173,7 @@
 <translation id="6426039856985689743">Inaktivera mobildata</translation>
 <translation id="6452181791372256707">Avvisa</translation>
 <translation id="6459472438155181876">Utökar skärmen till <ph name="DISPLAY_NAME" /></translation>
+<translation id="6490471652906364588">USB-C-enhet (höger port)</translation>
 <translation id="6501401484702599040">Skärmen castas till <ph name="RECEIVER_NAME" /></translation>
 <translation id="6550675742724504774">Alternativ</translation>
 <translation id="6585808820553845416">Sessionen upphör om <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -181,6 +194,7 @@
 <translation id="7052914147756339792">Ange bakgrund ...</translation>
 <translation id="7097613348211027502">ChromeVox (talad feedback) har aktiverats.
 Inaktivera funktionen genom att trycka på Ctrl+Alt+Z.</translation>
+<translation id="7098389117866926363">USB-C-enhet (vänstra porten på baksidan)</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7168224885072002358">Återgår till den gamla upplösningen om <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7209101170223508707">CAPS LOCK är på. Avbryt genom att trycka på Alt + Sök eller Skift.</translation>
@@ -193,6 +207,7 @@ Inaktivera funktionen genom att trycka på Ctrl+Alt+Z.</translation>
 <translation id="7573962313813535744">Dockat läge</translation>
 <translation id="7593891976182323525">Sök eller Skift</translation>
 <translation id="7649070708921625228">Hjälp</translation>
+<translation id="7692480393933218409">Laddar anslutna USB-C-enheter</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> och <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">Chromes språk har ändrats från <ph name="FROM_LOCALE" /> till <ph name="TO_LOCALE" /> efter synkronisering av dina inställningar.</translation>
 <translation id="785750925697875037">Visa mobilkonto</translation>
@@ -218,6 +233,7 @@ Inaktivera funktionen genom att trycka på Ctrl+Alt+Z.</translation>
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Sök+Escape</translation>
 <translation id="8878886163241303700">Utökad skärm</translation>
+<translation id="8938800817013097409">USB-C-enhet (högra porten på baksidan)</translation>
 <translation id="8940956008527784070">Låg batterinivå (<ph name="PERCENTAGE" /> %)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Mikrofonen används.</translation>

@@ -61,14 +61,15 @@ class CustomPacketWriterFactory : public QuicDispatcher::PacketWriterFactory {
   QuicSimpleServerPacketWriter* shared_writer_;  // Not owned.
 };
 
-} // namespace
+}  // namespace
 
 QuicSimpleServer::QuicSimpleServer(ProofSource* proof_source,
                                    const QuicConfig& config,
                                    const QuicVersionVector& supported_versions)
-    : helper_(base::ThreadTaskRunnerHandle::Get().get(),
-              &clock_,
-              QuicRandom::GetInstance()),
+    : helper_(
+          new QuicConnectionHelper(base::ThreadTaskRunnerHandle::Get().get(),
+                                   &clock_,
+                                   QuicRandom::GetInstance())),
       config_(config),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
@@ -88,8 +89,8 @@ void QuicSimpleServer::Initialize() {
 
   // If an initial flow control window has not explicitly been set, then use a
   // sensible value for a server: 1 MB for session, 64 KB for each stream.
-  const uint32 kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
-  const uint32 kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
+  const uint32_t kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
+  const uint32_t kInitialStreamFlowControlWindow = 64 * 1024;         // 64 KB
   if (config_.GetInitialStreamFlowControlWindowToSend() ==
       kMinimumFlowControlSendWindow) {
     config_.SetInitialStreamFlowControlWindowToSend(
@@ -101,14 +102,12 @@ void QuicSimpleServer::Initialize() {
         kInitialSessionFlowControlWindow);
   }
 
-  scoped_ptr<CryptoHandshakeMessage> scfg(
-      crypto_config_.AddDefaultConfig(
-          helper_.GetRandomGenerator(), helper_.GetClock(),
-          QuicCryptoServerConfig::ConfigOptions()));
+  scoped_ptr<CryptoHandshakeMessage> scfg(crypto_config_.AddDefaultConfig(
+      helper_->GetRandomGenerator(), helper_->GetClock(),
+      QuicCryptoServerConfig::ConfigOptions()));
 }
 
-QuicSimpleServer::~QuicSimpleServer() {
-}
+QuicSimpleServer::~QuicSimpleServer() {}
 
 int QuicSimpleServer::Listen(const IPEndPoint& address) {
   scoped_ptr<UDPServerSocket> socket(
@@ -126,7 +125,7 @@ int QuicSimpleServer::Listen(const IPEndPoint& address) {
   // because the default usage of QuicSimpleServer is as a test server with
   // one or two clients.  Adjust higher for use with many clients.
   rc = socket->SetReceiveBufferSize(
-      static_cast<int32>(kDefaultSocketReceiveBuffer));
+      static_cast<int32_t>(kDefaultSocketReceiveBuffer));
   if (rc < 0) {
     LOG(ERROR) << "SetReceiveBufferSize() failed: " << ErrorToString(rc);
     return rc;
@@ -149,15 +148,10 @@ int QuicSimpleServer::Listen(const IPEndPoint& address) {
   socket_.swap(socket);
 
   CustomPacketWriterFactory* factory = new CustomPacketWriterFactory();
-  dispatcher_.reset(
-      new QuicDispatcher(config_,
-                         &crypto_config_,
-                         supported_versions_,
-                         factory,
-                         &helper_));
-  QuicSimpleServerPacketWriter* writer = new QuicSimpleServerPacketWriter(
-      socket_.get(),
-      dispatcher_.get());
+  dispatcher_.reset(new QuicDispatcher(config_, &crypto_config_,
+                                       supported_versions_, factory, helper_));
+  QuicSimpleServerPacketWriter* writer =
+      new QuicSimpleServerPacketWriter(socket_.get(), dispatcher_.get());
   factory->set_shared_writer(writer);
   dispatcher_->InitializeWithWriter(writer);
 
@@ -182,9 +176,7 @@ void QuicSimpleServer::StartReading() {
   read_pending_ = true;
 
   int result = socket_->RecvFrom(
-      read_buffer_.get(),
-      read_buffer_->size(),
-      &client_address_,
+      read_buffer_.get(), read_buffer_->size(), &client_address_,
       base::Bind(&QuicSimpleServer::OnReadComplete, base::Unretained(this)));
 
   if (result == ERR_IO_PENDING) {

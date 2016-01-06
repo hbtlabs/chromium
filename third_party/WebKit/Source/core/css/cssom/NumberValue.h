@@ -1,3 +1,7 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
 #ifndef NumberValue_h
 #define NumberValue_h
 
@@ -25,7 +29,7 @@ public:
 
     String cssString() const override { return String::number(m_value); }
 
-    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() override
+    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() const override
     {
         return cssValuePool().createValue(m_value, CSSPrimitiveValue::UnitType::
 Number);

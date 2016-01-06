@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
@@ -100,6 +101,11 @@ OutdatedPluginInfoBarDelegate::OutdatedPluginInfoBarDelegate(
 
 OutdatedPluginInfoBarDelegate::~OutdatedPluginInfoBarDelegate() {
   content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Closed"));
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+OutdatedPluginInfoBarDelegate::GetIdentifier() const {
+  return OUTDATED_PLUGIN_INFOBAR_DELEGATE;
 }
 
 void OutdatedPluginInfoBarDelegate::InfoBarDismissed() {
@@ -231,6 +237,11 @@ PluginMetroModeInfoBarDelegate::PluginMetroModeInfoBarDelegate(
 }
 
 PluginMetroModeInfoBarDelegate::~PluginMetroModeInfoBarDelegate() {
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+PluginMetroModeInfoBarDelegate::GetIdentifier() const {
+  return PLUGIN_METRO_MODE_INFOBAR_DELEGATE;
 }
 
 int PluginMetroModeInfoBarDelegate::GetIconId() const {

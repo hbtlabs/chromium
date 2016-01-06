@@ -5,10 +5,13 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_FRAME_TREE_H_
 #define CONTENT_BROWSER_FRAME_HOST_FRAME_TREE_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/common/content_export.h"
@@ -73,19 +76,20 @@ class CONTENT_EXPORT FrameTree {
   // it safe to remove children during the callback.
   void ForEach(const base::Callback<bool(FrameTreeNode*)>& on_node) const;
 
-  // Frame tree manipulation routines.
-  // |process_id| is required to disambiguate |new_routing_id|, and it must
-  // match the process of the |parent| node.  Otherwise this method returns
-  // nullptr.  Passing MSG_ROUTING_NONE for |new_routing_id| will allocate a new
-  // routing ID for the new frame.
-  RenderFrameHostImpl* AddFrame(
-      FrameTreeNode* parent,
-      int process_id,
-      int new_routing_id,
-      blink::WebTreeScopeType scope,
-      const std::string& frame_name,
-      blink::WebSandboxFlags sandbox_flags,
-      const blink::WebFrameOwnerProperties& frame_owner_properties);
+  // Adds a new child frame to the frame tree. |process_id| is required to
+  // disambiguate |new_routing_id|, and it must match the process of the
+  // |parent| node. Otherwise no child is added and this method returns false.
+  bool AddFrame(FrameTreeNode* parent,
+                int process_id,
+                int new_routing_id,
+                blink::WebTreeScopeType scope,
+                const std::string& frame_name,
+                blink::WebSandboxFlags sandbox_flags,
+                const blink::WebFrameOwnerProperties& frame_owner_properties);
+
+  // Removes a frame from the frame tree. |child|, its children, and objects
+  // owned by their RenderFrameHostManagers are immediately deleted. The root
+  // node cannot be removed this way.
   void RemoveFrame(FrameTreeNode* child);
 
   // This method walks the entire frame tree and creates a RenderFrameProxyHost
@@ -103,8 +107,12 @@ class CONTENT_EXPORT FrameTree {
   // Returns the focused frame.
   FrameTreeNode* GetFocusedFrame();
 
-  // Sets the focused frame.
-  void SetFocusedFrame(FrameTreeNode* node);
+  // Sets the focused frame to |node|.  |source| identifies the SiteInstance
+  // that initiated this focus change.  If this FrameTree has SiteInstances
+  // other than |source|, those SiteInstances will be notified about the new
+  // focused frame.   Note that |source| may differ from |node|'s current
+  // SiteInstance (e.g., this happens for cross-process window.focus() calls).
+  void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source);
 
   // Allows a client to listen for frame removal.  The listener should expect
   // to receive the RenderViewHostImpl containing the frame and the renderer-
@@ -116,8 +124,8 @@ class CONTENT_EXPORT FrameTree {
   // |site_instance|.  The RenderViewHost will have its Shutdown method called
   // when all of the RenderFrameHosts using it are deleted.
   RenderViewHostImpl* CreateRenderViewHost(SiteInstance* site_instance,
-                                           int32 routing_id,
-                                           int32 main_frame_routing_id,
+                                           int32_t routing_id,
+                                           int32_t main_frame_routing_id,
                                            bool swapped_out,
                                            bool hidden);
 

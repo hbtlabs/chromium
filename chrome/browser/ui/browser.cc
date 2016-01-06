@@ -4,19 +4,18 @@
 
 #include "chrome/browser/ui/browser.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#include <shellapi.h>
-#endif  // defined(OS_WIN)
+#include <stddef.h>
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/process_info.h"
@@ -30,6 +29,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -88,6 +88,8 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
+#include "chrome/browser/ui/bluetooth/bluetooth_chooser_bubble_delegate.h"
+#include "chrome/browser/ui/bluetooth/bluetooth_chooser_desktop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -106,6 +108,7 @@
 #include "chrome/browser/ui/browser_toolbar_model_delegate.h"
 #include "chrome/browser/ui/browser_ui_prefs.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_bubble_manager.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -159,6 +162,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/bubble/bubble_controller.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/history/core/browser/top_sites.h"
@@ -208,6 +212,8 @@
 #include "ui/shell_dialogs/selected_file_info.h"
 
 #if defined(OS_WIN)
+#include <windows.h>
+#include <shellapi.h>
 #include "base/win/metro.h"
 #include "chrome/browser/task_manager/task_manager.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -1238,12 +1244,12 @@ void Browser::SetFocusToLocationBar(bool select_all) {
 bool Browser::PreHandleKeyboardEvent(content::WebContents* source,
                                      const NativeWebKeyboardEvent& event,
                                      bool* is_keyboard_shortcut) {
-  // Escape exits tabbed fullscreen mode and mouse lock, and possibly others.
+  // Forward keyboard events to the manager for fullscreen / mouse lock. This
+  // may consume the event (e.g., Esc exits fullscreen mode).
   // TODO(koz): Write a test for this http://crbug.com/100441.
-  if (event.windowsKeyCode == 27 &&
-      exclusive_access_manager_->HandleUserPressedEscape()) {
+  if (exclusive_access_manager_->HandleUserKeyPress(event))
     return true;
-  }
+
   return window()->PreHandleKeyboardEvent(event, is_keyboard_shortcut);
 }
 
@@ -1325,9 +1331,11 @@ content::SecurityStyle Browser::GetSecurityStyle(
       SecurityLevelToSecurityStyle(security_info.security_level);
 
   security_style_explanations->ran_insecure_content_style =
-      SecurityStateModel::kRanInsecureContentStyle;
+      SecurityLevelToSecurityStyle(
+          SecurityStateModel::kRanInsecureContentLevel);
   security_style_explanations->displayed_insecure_content_style =
-      SecurityStateModel::kDisplayedInsecureContentStyle;
+      SecurityLevelToSecurityStyle(
+          SecurityStateModel::kDisplayedInsecureContentLevel);
 
   // Check if the page is HTTP; if so, no explanations are needed. Note
   // that SECURITY_STYLE_UNAUTHENTICATED does not necessarily mean that
@@ -1416,6 +1424,29 @@ void Browser::ShowCertificateViewerInDevTools(
       DevToolsWindow::GetInstanceForInspectedWebContents(web_contents);
   if (devtools_window)
     devtools_window->ShowCertificateViewer(cert_id);
+}
+
+scoped_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
+    content::WebContents* web_contents,
+    const content::BluetoothChooser::EventHandler& event_handler,
+    const GURL& origin) {
+  scoped_ptr<BluetoothChooserDesktop> bluetooth_chooser_desktop(
+      new BluetoothChooserDesktop(event_handler));
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  scoped_ptr<BluetoothChooserBubbleDelegate> bubble_delegate(
+      new BluetoothChooserBubbleDelegate(browser));
+  BluetoothChooserBubbleDelegate* bubble_delegate_ptr = bubble_delegate.get();
+
+  // Wire the ChooserBubbleDelegate to the BluetoothChooser.
+  bluetooth_chooser_desktop->set_bluetooth_chooser_bubble_delegate(
+      bubble_delegate_ptr);
+  bubble_delegate->set_bluetooth_chooser(bluetooth_chooser_desktop.get());
+
+  BubbleReference bubble_controller =
+      browser->GetBubbleManager()->ShowBubble(std::move(bubble_delegate));
+  bubble_delegate_ptr->set_bubble_controller(bubble_controller);
+
+  return std::move(bluetooth_chooser_desktop);
 }
 
 bool Browser::IsMouseLocked() const {

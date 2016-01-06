@@ -72,8 +72,8 @@ extern const char kDisableComponentExtensionsWithBackgroundPages[];
 extern const char kDisableComponentUpdate[];
 extern const char kDisableDefaultApps[];
 extern const char kDisableDeviceDiscoveryNotifications[];
-extern const char kDisableDinosaurEasterEgg[];
 extern const char kDisableDomainReliability[];
+extern const char kDisableDownloadNotification[];
 extern const char kDisableExtensionsFileAccessCheck[];
 extern const char kDisableExtensionsHttpThrottling[];
 extern const char kDisableExtensions[];
@@ -87,7 +87,6 @@ extern const char kDisableOfflineAutoReload[];
 extern const char kDisableOfflineAutoReloadVisibleOnly[];
 extern const char kDisableOutOfProcessPac[];
 extern const char kDisablePasswordManagerReauthentication[];
-extern const char kDisablePdfMaterialUI[];
 extern const char kDisablePermissionsBlacklist[];
 extern const char kDisablePopupBlocking[];
 extern const char kDisablePreconnect[];
@@ -109,6 +108,7 @@ extern const char kDumpBrowserHistograms[];
 extern const char kEasyUnlockAppPath[];
 extern const char kEnableAddToShelf[];
 extern const char kEnableAppsFileAssociations[];
+extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
 extern const char kEnableBookmarkUndo[];
 extern const char kEnableChildAccountDetection[];
@@ -116,7 +116,6 @@ extern const char kEnableClearBrowsingDataCounters[];
 extern const char kEnableCloudPrintProxy[];
 extern const char kEnableDevToolsExperiments[];
 extern const char kEnableDeviceDiscoveryNotifications[];
-extern const char kEnableDownloadNotification[];
 extern const char kEnableDomainReliability[];
 extern const char kEnableExperimentalHotwordHardware[];
 extern const char kEnableExtensionActivityLogging[];
@@ -135,7 +134,7 @@ extern const char kEnableNTPSearchEngineCountryDetection[];
 extern const char kEnableOfflineAutoReload[];
 extern const char kEnableOfflineAutoReloadVisibleOnly[];
 extern const char kEnablePanels[];
-extern const char kEnablePdfMaterialUI[];
+extern const char kDisablePanels[];
 extern const char kEnablePermissionsBlacklist[];
 extern const char kEnablePotentiallyAnnoyingSecurityFeatures[];
 extern const char kEnablePowerOverlay[];
@@ -150,7 +149,6 @@ extern const char kEnableSettingsWindow[];
 extern const char kDisableSettingsWindow[];
 extern const char kEnableSimplifiedFullscreenUI[];
 extern const char kDisableSimplifiedFullscreenUI[];
-extern const char kEnableSiteEngagementAppBanner[];
 extern const char kEnableSiteEngagementEvictionPolicy[];
 extern const char kEnableSiteEngagementService[];
 extern const char kEnableSupervisedUserManagedBookmarksFolder[];
@@ -159,7 +157,6 @@ extern const char kEnableThumbnailRetargeting[];
 extern const char kEnableUserAlternateProtocolPorts[];
 extern const char kEnableWebAppFrame[];
 extern const char kEnableWebNotificationCustomLayouts[];
-extern const char kEnableWebUsbOnAnyOrigin[];
 extern const char kExtensionContentVerificationBootstrap[];
 extern const char kExtensionContentVerificationEnforceStrict[];
 extern const char kExtensionContentVerificationEnforce[];
@@ -257,11 +254,7 @@ extern const char kServiceProcess[];
 extern const char kSilentDebuggerExtensionAPI[];
 extern const char kSilentLaunch[];
 extern const char kShowAppList[];
-extern const char kShowSavedCopy[];
 extern const char kSSLKeyLogFile[];
-extern const char kEnableShowSavedCopyPrimary[];
-extern const char kEnableShowSavedCopySecondary[];
-extern const char kDisableShowSavedCopy[];
 extern const char kSimulateElevatedRecovery[];
 extern const char kSimulateUpgrade[];
 extern const char kSimulateCriticalUpdate[];
@@ -312,11 +305,16 @@ extern const char kEnableContextualSearch[];
 extern const char kEnableDomDistillerButtonAnimation[];
 extern const char kEnableHostedMode[];
 extern const char kEnableHungRendererInfoBar[];
-extern const char kEnablePhysicalWeb[];
 extern const char kProgressBarAnimation[];
 extern const char kEnableThemeColorInTabbedMode[];
 extern const char kDisableAutoHidingToolbarThreshold[];
 extern const char kEnableTabSwitcherInDocumentMode[];
+extern const char kNtpSwitchToExistingTab[];
+extern const char kForceShowUpdateMenuItem[];
+extern const char kForceShowUpdateMenuItemSummary[];
+extern const char kForceShowUpdateMenuItemCustomSummary[];
+extern const char kForceShowUpdateMenuBadge[];
+extern const char kMarketUrlForTesting[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -396,6 +394,11 @@ extern const char kDisableNewTaskManager[];
 
 #if defined(ENABLE_WAYLAND_SERVER)
 extern const char kEnableWaylandServer[];
+#endif
+
+#if defined(OS_WIN) || defined(OS_LINUX)
+extern const char kEnableInputImeAPI[];
+extern const char kDisableInputImeAPI[];
 #endif
 
 bool AboutInSettingsEnabled();

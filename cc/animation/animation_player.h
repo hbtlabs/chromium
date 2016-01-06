@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/containers/linked_list.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
@@ -67,6 +68,7 @@ class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer>,
   void AddAnimation(scoped_ptr<Animation> animation);
   void PauseAnimation(int animation_id, double time_offset);
   void RemoveAnimation(int animation_id);
+  void AbortAnimation(int animation_id);
 
   void PushPropertiesTo(AnimationPlayer* player_impl);
 

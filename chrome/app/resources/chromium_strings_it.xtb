@@ -41,13 +41,13 @@
 <translation id="225614027745146050">Benvenuto</translation>
 <translation id="2316129865977710310">No, grazie</translation>
 <translation id="2347108572062610441">Questa estensione ha cambiato la pagina mostrata all'avvio di Chromium.</translation>
+<translation id="2372704305038231957">Chromium a 32 bit potrebbe non funzionare correttamente perché non è più supportato su questo sistema Linux. Esegui l'upgrade a Chromium a 64 bit.</translation>
 <translation id="2389622953163669926">{NUM_DOWNLOAD,plural, =1{È in corso un download. Vuoi annullare il download e uscire da Chromium?}other{Sono in corso # download. Vuoi annullare i download e uscire da Chromium?}}</translation>
 <translation id="2396765026452590966">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata all'avvio di Chromium.</translation>
 <translation id="2485422356828889247">Disinstalla</translation>
 <translation id="2486653164587200256">Chromium potrebbe non funzionare correttamente perché non è più supportato su Windows XP o Windows Vista.</translation>
 <translation id="2535480412977113886">Impossibile sincronizzare i dati in Chromium OS perché i dati di accesso dell'account sono obsoleti.</translation>
 <translation id="2558641060352364164">Questo sito utilizza il plug-in Chromium Frame che a breve non sarà più supportato. Disinstallalo ed esegui l'upgrade a un browser recente.</translation>
-<translation id="2565260267992448464">Impossibile visualizzare la pagina web in Chromium perché il computer non è connesso a Internet.</translation>
 <translation id="2572494885440352020">Supporto Chromium</translation>
 <translation id="2602806952220118310">Chromium - Notifiche</translation>
 <translation id="2636877269779209383">Chromium deve avere accesso alla fotocamera per condividerla con questo sito.</translation>
@@ -61,8 +61,6 @@
 <translation id="2886012850691518054">Facoltativo: aiutaci a migliorare Chromium inviando automaticamente a Google statistiche sull'utilizzo e rapporti sugli arresti anomali.</translation>
 <translation id="2910007522516064972">Informazioni su &amp;Chromium</translation>
 <translation id="2966088006374919794">Chromium deve avviare un'applicazione esterna per poter gestire i link <ph name="SCHEME" />. Il link richiesto è <ph name="PROTOLINK" />.</translation>
-<translation id="3017978164171051358"><ph name="SITE" /> in genere utilizza la crittografia per proteggere le tue informazioni. Questa volta, quando Chromium ha provato a connettersi a <ph name="SITE" />, il sito web ha restituito credenziali
-insolite e sbagliate. È possibile che un malintenzionato stia cercando di spacciarsi per il sito <ph name="SITE" /> oppure che una schermata di accesso alla rete Wi-Fi abbia interrotto la connessione. Le tue informazioni sono ancora al sicuro perché Chromium ha interrotto la connessione prima che avvenissero scambi di dati.</translation>
 <translation id="3032787606318309379">Aggiunta a Chromium in corso...</translation>
 <translation id="3046695367536568084">Per poter utilizzare le app, devi eseguire l'accesso su Chromium. Chromium potrà così sincronizzare app, Preferiti, cronologia, password e altre impostazioni tra dispositivi.</translation>
 <translation id="3068515742935458733">Aiutaci a migliorare Chromium inviando a Google rapporti sugli arresti anomali e <ph name="UMA_LINK" /></translation>
@@ -88,7 +86,6 @@ insolite e sbagliate. È possibile che un malintenzionato stia cercando di spacc
 <translation id="358997566136285270">Logo di Chromium</translation>
 <translation id="3595526210123705352">Il riavvio in modalità Windows 8 comporterà la chiusura e il riavvio delle tue app di Chromium.</translation>
 <translation id="3738139272394829648">Tocca per cercare</translation>
-<translation id="3744899669254331632">Al momento non puoi visitare il sito <ph name="SITE" /> perché tale sito web ha inviato credenziali criptate che Chromium non è riuscito a elaborare. Gli attacchi e gli errori di rete in genere sono temporanei, pertanto è possibile che questa pagina funzioni più tardi.</translation>
 <translation id="3748537968684000502">È visualizzata una pagina sicura di Chromium.</translation>
 <translation id="378917192836375108">Chromium ti consente di fare clic su un numero di telefono sul Web e di chiamarlo con Skype.</translation>
 <translation id="3848258323044014972"><ph name="PAGE_TITLE" /> - Chromium</translation>
@@ -110,16 +107,6 @@ insolite e sbagliate. È possibile che un malintenzionato stia cercando di spacc
 <translation id="4458285410772214805">Esci ed esegui di nuovo l'accesso per applicare la modifica.</translation>
 <translation id="4488676065623537541">I tuoi dettagli di fatturazione sono stati salvati in Chromium.</translation>
 <translation id="4549794359424059447">Le versioni future di Chromium non supporteranno più Windows XP o Windows Vista.</translation>
-<translation id="4559775032954821361">Seleziona
-          il menu Chromium &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Impostazioni LAN
-          e deseleziona la casella di controllo "Utilizza un server proxy per le connessioni LAN".</translation>
 <translation id="4567424176335768812">Hai eseguito l'accesso come <ph name="USER_EMAIL_ADDRESS" />. Ora puoi accedere ai tuoi Preferiti, alla tua cronologia e ad altre impostazioni su tutti i tuoi dispositivi su cui esegui l'accesso.</translation>
 <translation id="457845228957001925">Informazioni importanti relative ai tuoi dati Chromium</translation>
 <translation id="459535195905078186">Applicazioni Chromium</translation>
@@ -141,16 +128,9 @@ insolite e sbagliate. È possibile che un malintenzionato stia cercando di spacc
 <translation id="5680901439334282664">accedi a Chromium</translation>
 <translation id="5772805321386874569">(è necessario <ph name="BEGIN_BUTTON" />riavviare<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium è quasi pronto.</translation>
-<translation id="580822234363523061">Seleziona
-          il menu Chromium &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          e verifica che la configurazione sia impostata su "nessun proxy" o "diretta".</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5823381412099532241">Chromium non è riuscito ad aggiornarsi all'ultima versione, quindi ti stai perdendo le nuove funzioni e correzioni per la sicurezza. Devi aggiornare Chromium.</translation>
+<translation id="5859963531214966875">Le versioni future di Chromium non supporteranno più questo sistema Linux.</translation>
 <translation id="5862307444128926510">Benvenuto in Chromium</translation>
 <translation id="5877064549588274448">Canale cambiato. Riavvia il dispositivo per applicare le modifiche.</translation>
 <translation id="5909170354645388250">Non utilizzato in Chromium. Segnaposto per tenere sincronizzate le mappe delle risorse. Prevede un argomento: $1.</translation>
@@ -170,6 +150,8 @@ insolite e sbagliate. È possibile che un malintenzionato stia cercando di spacc
 <translation id="6485906693002546646">Stai utilizzando <ph name="PROFILE_EMAIL" /> per sincronizzare i tuoi contenuti di Chromium. Per aggiornare la tua preferenza di sincronizzazione o per utilizzare Chromium senza un account Google, accedi alla pagina <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6510925080656968729">Disinstalla Chromium</translation>
 <translation id="6526111688217511984">Chromium deve avere accesso allo spazio di archiviazione per poter scaricare file.</translation>
+<translation id="6584627348340620412">Le versioni future di Chromium a 32 bit non supporteranno più questo sistema Linux. Esegui l'upgrade a Chromium a 64 bit.</translation>
+<translation id="6593914713218535185">Chromium potrebbe non funzionare correttamente perché non è più supportato su questo sistema Linux.</translation>
 <translation id="6637001341228460105">Chromium deve avere accesso al microfono per condividerlo con questo sito.</translation>
 <translation id="6638567566961868659">Trova i tuoi Preferiti nel menu Chromium o sulla barra dei Preferiti.</translation>
 <translation id="6676384891291319759">Accesso a Internet</translation>
@@ -225,9 +207,6 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="8033665941300843262">Chromium deve avere accesso alle autorizzazioni per condividerle con questo sito.</translation>
 <translation id="805745970029938373">Qui puoi visualizzare tutte le tue notifiche da parte delle estensioni e app Chromium e di siti web.</translation>
 <translation id="8134284582177628525">Se condividi questo computer con <ph name="PROFILE_NAME" />, aggiungiti a Chromium per navigare separatamente. In caso contrario scollega l'account Google della persona.</translation>
-<translation id="8187289872471304532">Seleziona
-          Applicazioni &gt; Preferenze di Sistema &gt; Network &gt; Avanzate &gt; Proxy
-          e deseleziona i proxy selezionati.</translation>
 <translation id="8269379391216269538">Contribuisci a migliorare Chromium</translation>
 <translation id="8453117565092476964">L'archivio di installazione è danneggiato o non valido. Scarica di nuovo Chromium.</translation>
 <translation id="8493179195440786826">Chromium non è aggiornato</translation>
@@ -235,8 +214,6 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="85843667276690461">Ricevi assistenza per l'utilizzo di Chromium</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. Tutti i diritti riservati.</translation>
 <translation id="8605166112420372522">&amp;Riavvia Chromium sul desktop</translation>
-<translation id="8610831143142469229">Consenti a Chromium di accedere alla rete nelle impostazioni del firewall o del software
-         antivirus.</translation>
 <translation id="8621669128220841554">Installazione non riuscita a causa di un errore imprecisato. Scarica di nuovo Chromium.</translation>
 <translation id="8628626585870903697">Chromium non include il visualizzatore PDF necessario per la funzione Anteprima di stampa.</translation>
 <translation id="8684913864886094367">Chromium non si è chiuso correttamente.</translation>
@@ -255,7 +232,6 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="8985587603644336029">Qualcuno ha già eseguito l'accesso a Chromium su questo computer come <ph name="ACCOUNT_EMAIL_LAST" />. Se non si tratta del tuo account, crea un nuovo utente Chromium per tenere separate le tue informazioni.
 
 Se esegui comunque l'accesso, le informazioni di Chromium come Preferiti, cronologia e altre impostazioni verranno unite a quelle di <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
-<translation id="8987477933582888019">Browser web</translation>
 <translation id="9013087743919948559">Aggiungi a Chromium</translation>
 <translation id="9013262824292842194">Chromium richiede Windows Vista o Windows XP con SP2 o versioni successive.</translation>
 <translation id="9019929317751753759">Per rendere Chromium più sicuro, abbiamo disattivato la seguente estensione non presente nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> che potrebbe essere stata aggiunta a tua insaputa.</translation>
@@ -265,7 +241,6 @@ Se esegui comunque l'accesso, le informazioni di Chromium come Preferiti, cronol
 <translation id="911206726377975832">Eliminare anche i tuoi dati di navigazione?</translation>
 <translation id="918373042641772655">Se ti disconnetti da <ph name="USERNAME" /> verranno cancellati la cronologia, i Preferiti, le impostazioni e gli altri dati di Chromium memorizzati sul dispositivo. I dati memorizzati nel tuo account Google non verranno cancellati e potrai gestirli su <ph name="GOOGLE_DASHBOARD_LINK" />Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK" />.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
-<translation id="9191268552238695869">Un amministratore ha installato Chromium sul sistema ed è a disposizione di tutti gli utenti. Chromium a livello di sistema sostituirà l'installazione a livello di utente.</translation>
 <translation id="9197815481970649201">Hai eseguito l'accesso a Chromium</translation>
 <translation id="95514773681268843"><ph name="DOMAIN" /> richiede di leggere e accettare i seguenti Termini di servizio prima di utilizzare il dispositivo. Questi termini non ampliano, modificano o limitano i Termini di Chromium OS.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>

@@ -5,6 +5,8 @@
 #ifndef CC_TEST_FAKE_DISPLAY_LIST_RECORDING_SOURCE_H_
 #define CC_TEST_FAKE_DISPLAY_LIST_RECORDING_SOURCE_H_
 
+#include <stddef.h>
+
 #include "cc/base/region.h"
 #include "cc/playback/display_list_recording_source.h"
 #include "cc/test/fake_content_layer_client.h"
@@ -47,6 +49,10 @@ class FakeDisplayListRecordingSource : public DisplayListRecordingSource {
   scoped_refptr<DisplayListRasterSource> CreateRasterSource(
       bool can_use_lcd) const override;
   bool IsSuitableForGpuRasterization() const override;
+
+  void SetDisplayListUsesCachedPicture(bool use_cached_picture) {
+    client_.set_display_list_use_cached_picture(use_cached_picture);
+  }
 
   void SetRecordedViewport(const gfx::Rect& recorded_viewport) {
     recorded_viewport_ = recorded_viewport;
@@ -118,6 +124,11 @@ class FakeDisplayListRecordingSource : public DisplayListRecordingSource {
   }
 
   DisplayItemList* display_list() const { return display_list_.get(); }
+
+  // Checks that the basic properties of the |other| match |this|.  For the
+  // DisplayItemList, it checks that the painted result matches the painted
+  // result of |other|.
+  bool EqualsTo(const FakeDisplayListRecordingSource& other);
 
  private:
   FakeContentLayerClient client_;

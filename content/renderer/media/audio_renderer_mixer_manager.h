@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
 #include "media/audio/audio_parameters.h"
@@ -91,8 +92,6 @@ class CONTENT_EXPORT AudioRendererMixerManager {
     bool operator()(const MixerKey& a, const MixerKey& b) const {
       if (a.source_render_frame_id != b.source_render_frame_id)
         return a.source_render_frame_id < b.source_render_frame_id;
-      if (a.params.sample_rate() != b.params.sample_rate())
-        return a.params.sample_rate() < b.params.sample_rate();
       if (a.params.channels() != b.params.channels())
         return a.params.channels() < b.params.channels();
 

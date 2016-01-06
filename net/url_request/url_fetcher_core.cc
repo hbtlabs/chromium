@@ -5,6 +5,7 @@
 #include "net/url_request/url_fetcher_core.h"
 
 #include <stdint.h>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/logging.h"
@@ -155,8 +156,8 @@ void URLFetcherCore::SetUploadData(const std::string& upload_content_type,
 void URLFetcherCore::SetUploadFilePath(
     const std::string& upload_content_type,
     const base::FilePath& file_path,
-    uint64 range_offset,
-    uint64 range_length,
+    uint64_t range_offset,
+    uint64_t range_length,
     scoped_refptr<base::TaskRunner> file_task_runner) {
   AssertHasNoUploadData();
   DCHECK(!is_chunked_upload_);
@@ -301,7 +302,7 @@ void URLFetcherCore::SaveResponseToTemporaryFile(
 void URLFetcherCore::SaveResponseWithWriter(
     scoped_ptr<URLFetcherResponseWriter> response_writer) {
   DCHECK(delegate_task_runner_->BelongsToCurrentThread());
-  response_writer_ = response_writer.Pass();
+  response_writer_ = std::move(response_writer);
 }
 
 HttpResponseHeaders* URLFetcherCore::GetResponseHeaders() const {
@@ -583,7 +584,7 @@ void URLFetcherCore::StartURLRequest() {
         scoped_ptr<UploadElementReader> reader(new UploadBytesElementReader(
             upload_content_.data(), upload_content_.size()));
         request_->set_upload(
-            ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+            ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
       } else if (!upload_file_path_.empty()) {
         scoped_ptr<UploadElementReader> reader(
             new UploadFileElementReader(upload_file_task_runner_.get(),
@@ -592,11 +593,11 @@ void URLFetcherCore::StartURLRequest() {
                                         upload_range_length_,
                                         base::Time()));
         request_->set_upload(
-            ElementsUploadDataStream::CreateWithReader(reader.Pass(), 0));
+            ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
       } else if (!upload_stream_factory_.is_null()) {
         scoped_ptr<UploadDataStream> stream = upload_stream_factory_.Run();
         DCHECK(stream);
-        request_->set_upload(stream.Pass());
+        request_->set_upload(std::move(stream));
       }
 
       current_upload_bytes_ = -1;
@@ -659,7 +660,7 @@ void URLFetcherCore::StartURLRequestWhenAppropriate() {
     }
 
     if (original_url_throttler_entry_.get()) {
-      int64 delay =
+      int64_t delay =
           original_url_throttler_entry_->ReserveSendingTimeForNextRequest(
               GetBackoffReleaseTime());
       if (delay != 0) {
@@ -899,12 +900,12 @@ void URLFetcherCore::ReadResponse() {
 void URLFetcherCore::InformDelegateUploadProgress() {
   DCHECK(network_task_runner_->BelongsToCurrentThread());
   if (request_.get()) {
-    int64 current = request_->GetUploadProgress().position();
+    int64_t current = request_->GetUploadProgress().position();
     if (current_upload_bytes_ != current) {
       current_upload_bytes_ = current;
-      int64 total = -1;
+      int64_t total = -1;
       if (!is_chunked_upload_) {
-        total = static_cast<int64>(request_->GetUploadProgress().size());
+        total = static_cast<int64_t>(request_->GetUploadProgress().size());
         // Total may be zero if the UploadDataStream::Init has not been called
         // yet. Don't send the upload progress until the size is initialized.
         if (!total)
@@ -920,7 +921,8 @@ void URLFetcherCore::InformDelegateUploadProgress() {
 }
 
 void URLFetcherCore::InformDelegateUploadProgressInDelegateThread(
-    int64 current, int64 total) {
+    int64_t current,
+    int64_t total) {
   DCHECK(delegate_task_runner_->BelongsToCurrentThread());
   if (delegate_)
     delegate_->OnURLFetchUploadProgress(fetcher_, current, total);
@@ -942,7 +944,8 @@ void URLFetcherCore::InformDelegateDownloadProgress() {
 }
 
 void URLFetcherCore::InformDelegateDownloadProgressInDelegateThread(
-    int64 current, int64 total) {
+    int64_t current,
+    int64_t total) {
   DCHECK(delegate_task_runner_->BelongsToCurrentThread());
   if (delegate_)
     delegate_->OnURLFetchDownloadProgress(fetcher_, current, total);

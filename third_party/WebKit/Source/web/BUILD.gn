@@ -97,6 +97,29 @@ source_set("test_support") {
   }
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("webkit_unit_tests_run") {
+  testonly = true
+  deps = [
+    ":webkit_unit_tests",
+  ]
+}
+
+group("webkit_unit_tests_data") {
+  data = [
+    "tests/data/",
+    "../core/paint/test_data/",
+
+    # Required by some image decoder tests.
+    "../platform/image-decoders/testing/",
+    "../../LayoutTests/fast/images/resources/",
+
+    # Required by some font tests.
+    "../platform/testing/data/",
+  ]
+}
+
 # GYP version: WebKit/Source/web/web_tests.gyp:webkit_unit_tests
 test("webkit_unit_tests") {
   visibility = []  # Allow re-assignment of list.
@@ -118,6 +141,11 @@ test("webkit_unit_tests") {
     "//third_party/zlib",
     "//url",
     "//v8",
+  ]
+
+  data_deps = [
+    "//content/shell:pak",
+    ":webkit_unit_tests_data",
   ]
 
   sources = [

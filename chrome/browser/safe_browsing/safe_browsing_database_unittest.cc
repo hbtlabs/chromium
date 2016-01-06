@@ -6,6 +6,9 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
@@ -77,7 +80,7 @@ scoped_ptr<SBChunkData> BuildChunk(int chunk_number,
     raw_data->add_add_numbers(add_chunk_numbers[i]);
   }
 
-  return make_scoped_ptr(new SBChunkData(raw_data.Pass()));
+  return make_scoped_ptr(new SBChunkData(std::move(raw_data)));
 }
 
 // Create add chunk with a single prefix.

@@ -5,6 +5,9 @@
 #ifndef CONTENT_BROWSER_ANDROID_SYNCHRONOUS_COMPOSITOR_HOST_H_
 #define CONTENT_BROWSER_ANDROID_SYNCHRONOUS_COMPOSITOR_HOST_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -50,9 +53,14 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
       const blink::WebInputEvent& input_event) override;
   void BeginFrame(const cc::BeginFrameArgs& args) override;
   bool OnMessageReceived(const IPC::Message& message) override;
+  void DidBecomeCurrent() override;
 
  private:
+  class ScopedSendZeroMemory;
+  struct SharedMemoryWithSize;
+  friend class ScopedSetZeroMemory;
   friend class SynchronousCompositorBase;
+
   SynchronousCompositorHost(RenderWidgetHostViewAndroid* rwhva,
                             SynchronousCompositorClient* client);
   void PopulateCommonParams(SyncCompositorCommonBrowserParams* params);
@@ -63,6 +71,8 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
                     const DidOverscrollParams& over_scroll_params);
   void SendAsyncCompositorStateIfNeeded();
   void UpdateStateTask();
+  void SetSoftwareDrawSharedMemoryIfNeeded(size_t stride, size_t buffer_size);
+  void SendZeroMemory();
 
   RenderWidgetHostViewAndroid* const rwhva_;
   SynchronousCompositorClient* const client_;
@@ -73,9 +83,11 @@ class SynchronousCompositorHost : public SynchronousCompositorBase {
   bool is_active_;
   size_t bytes_limit_;
   cc::ReturnedResourceArray returned_resources_;
+  scoped_ptr<SharedMemoryWithSize> software_draw_shm_;
 
   // Updated by both renderer and browser.
   gfx::ScrollOffset root_scroll_offset_;
+  bool root_scroll_offset_updated_by_browser_;
 
   // From renderer.
   uint32_t renderer_param_version_;

@@ -31,7 +31,6 @@
     flex: 1 1;
     overflow: auto;
     padding: 2px 0 0 0;
-    transform: translateZ(0);
 }
 
 #elements-content:not(.elements-wrap) > div {
@@ -597,8 +596,7 @@
 
 .styles-sidebar-pane-toolbar-container {
     flex-shrink: 0;
-    box-shadow: 0 1px 10px rgba(0, 0, 0, 0.14);
-    border-bottom: 1px solid #DDD;
+    overflow: hidden;
 }
 
 .styles-sidebar-pane-toolbar {

@@ -4,10 +4,11 @@
 
 #include "chrome/browser/extensions/webstore_installer.h"
 
+#include <stddef.h>
 #include <stdint.h>
-
 #include <limits>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -23,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_crx_util.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -250,7 +252,7 @@ scoped_ptr<WebstoreInstaller::Approval>
 WebstoreInstaller::Approval::CreateWithInstallPrompt(Profile* profile) {
   scoped_ptr<Approval> result(new Approval());
   result->profile = profile;
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<WebstoreInstaller::Approval>
@@ -260,7 +262,7 @@ WebstoreInstaller::Approval::CreateForSharedModule(Profile* profile) {
   result->skip_install_dialog = true;
   result->skip_post_install_ui = true;
   result->manifest_check_level = MANIFEST_CHECK_LEVEL_NONE;
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<WebstoreInstaller::Approval>
@@ -279,7 +281,7 @@ WebstoreInstaller::Approval::CreateWithNoInstallPrompt(
   result->skip_install_dialog = true;
   result->manifest_check_level = strict_manifest_check ?
     MANIFEST_CHECK_LEVEL_STRICT : MANIFEST_CHECK_LEVEL_LOOSE;
-  return result.Pass();
+  return result;
 }
 
 WebstoreInstaller::Approval::~Approval() {}
@@ -526,25 +528,29 @@ void WebstoreInstaller::OnDownloadUpdated(DownloadItem* download) {
           FAILURE_REASON_OTHER);
       break;
     case DownloadItem::COMPLETE:
-      // Wait for other notifications if the download is really an extension.
-      if (!download_crx_util::IsExtensionDownload(*download)) {
-        ReportFailure(kInvalidDownloadError, FAILURE_REASON_OTHER);
-      } else {
-        if (crx_installer_.get())
-          return;  // DownloadItemImpl calls the observer twice, ignore it.
-        StartCrxInstaller(*download);
-
-        if (pending_modules_.size() == 1) {
-          // The download is the last module - the extension main module.
-          if (delegate_)
-            delegate_->OnExtensionDownloadProgress(id_, download);
-          extensions::InstallTracker* tracker =
-              extensions::InstallTrackerFactory::GetForBrowserContext(profile_);
-          tracker->OnDownloadProgress(id_, 100);
-        }
-      }
       // Stop the progress timer if it's running.
       download_progress_timer_.Stop();
+
+      // Only wait for other notifications if the download is really
+      // an extension.
+      if (!download_crx_util::IsExtensionDownload(*download)) {
+        ReportFailure(kInvalidDownloadError, FAILURE_REASON_OTHER);
+        return;
+      }
+
+      if (crx_installer_.get())
+        return;  // DownloadItemImpl calls the observer twice, ignore it.
+
+      StartCrxInstaller(*download);
+
+      if (pending_modules_.size() == 1) {
+        // The download is the last module - the extension main module.
+        if (delegate_)
+          delegate_->OnExtensionDownloadProgress(id_, download);
+        extensions::InstallTracker* tracker =
+            extensions::InstallTrackerFactory::GetForBrowserContext(profile_);
+        tracker->OnDownloadProgress(id_, 100);
+      }
       break;
     case DownloadItem::IN_PROGRESS: {
       if (delegate_ && pending_modules_.size() == 1) {
@@ -674,7 +680,7 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   params->set_callback(base::Bind(&WebstoreInstaller::OnDownloadStarted,
                                   this,
                                   extension_id));
-  download_manager->DownloadUrl(params.Pass());
+  download_manager->DownloadUrl(std::move(params));
 }
 
 void WebstoreInstaller::UpdateDownloadProgress() {

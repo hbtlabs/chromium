@@ -17,6 +17,8 @@
 #define NET_QUIC_QUIC_CONNECTION_H_
 
 #include <stddef.h>
+#include <stdint.h>
+
 #include <deque>
 #include <list>
 #include <map>
@@ -24,8 +26,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/ip_endpoint.h"
@@ -148,7 +150,7 @@ class NET_EXPORT_PRIVATE QuicConnectionVisitorInterface {
 // points.  Implementations must not mutate the state of the connection
 // as a result of these callbacks.
 class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
-    : public QuicPacketGenerator::DebugDelegate,
+    : public QuicPacketCreator::DebugDelegate,
       public QuicSentPacketManager::DebugDelegate {
  public:
   ~QuicConnectionDebugVisitor() override {}
@@ -156,7 +158,6 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
   // Called when a packet has been sent.
   virtual void OnPacketSent(const SerializedPacket& serialized_packet,
                             QuicPacketNumber original_packet_number,
-                            EncryptionLevel level,
                             TransmissionType transmission_type,
                             size_t encrypted_length,
                             QuicTime sent_time) {}
@@ -172,8 +173,7 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
 
   // Called when a packet is received with a connection id that does not
   // match the ID of this connection.
-  virtual void OnIncorrectConnectionId(
-      QuicConnectionId connection_id) {}
+  virtual void OnIncorrectConnectionId(QuicConnectionId connection_id) {}
 
   // Called when an undecryptable packet has been received.
   virtual void OnUndecryptablePacket() {}
@@ -207,8 +207,7 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
   virtual void OnRstStreamFrame(const QuicRstStreamFrame& frame) {}
 
   // Called when a ConnectionCloseFrame has been parsed.
-  virtual void OnConnectionCloseFrame(
-      const QuicConnectionCloseFrame& frame) {}
+  virtual void OnConnectionCloseFrame(const QuicConnectionCloseFrame& frame) {}
 
   // Called when a WindowUpdate has been parsed.
   virtual void OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) {}
@@ -265,6 +264,9 @@ class NET_EXPORT_PRIVATE QuicConnectionHelperInterface {
   // notify |delegate| when the alarm fires.  Caller takes ownership
   // of the new alarm, which will not yet be "set" to fire.
   virtual QuicAlarm* CreateAlarm(QuicAlarm::Delegate* delegate) = 0;
+
+  // Returns a QuicBufferAllocator to be used for all stream frame buffers.
+  virtual QuicBufferAllocator* GetBufferAllocator() = 0;
 };
 
 class NET_EXPORT_PRIVATE QuicConnection
@@ -341,8 +343,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   virtual void SendBlocked(QuicStreamId id);
 
   // Send a WINDOW_UPDATE frame to the peer.
-  virtual void SendWindowUpdate(QuicStreamId id,
-                                QuicStreamOffset byte_offset);
+  virtual void SendWindowUpdate(QuicStreamId id, QuicStreamOffset byte_offset);
 
   // Sends the connection close packet without affecting the state of the
   // connection.  This should only be called if the session is actively being
@@ -435,7 +436,9 @@ class NET_EXPORT_PRIVATE QuicConnection
                             IsHandshake handshake) override;
   void PopulateAckFrame(QuicAckFrame* ack) override;
   void PopulateStopWaitingFrame(QuicStopWaitingFrame* stop_waiting) override;
-  void OnSerializedPacket(const SerializedPacket& packet) override;
+
+  // QuicPacketCreator::DelegateInterface
+  void OnSerializedPacket(SerializedPacket* packet) override;
   void OnResetFecGroup() override;
 
   // QuicSentPacketManager::NetworkChangeVisitor
@@ -576,7 +579,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   // as densely as possible into packets.  In addition, this bundler
   // can be configured to ensure that an ACK frame is included in the
   // first packet created, if there's new ack information to be sent.
-  class ScopedPacketBundler {
+  class NET_EXPORT_PRIVATE ScopedPacketBundler {
    public:
     // In addition to all outgoing frames being bundled when the
     // bundler is in scope, setting |include_ack| to true ensures that
@@ -624,25 +627,23 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Return the name of the cipher of the primary decrypter of the framer.
   const char* cipher_name() const { return framer_.decrypter()->cipher_name(); }
   // Return the id of the cipher of the primary decrypter of the framer.
-  uint32 cipher_id() const { return framer_.decrypter()->cipher_id(); }
+  uint32_t cipher_id() const { return framer_.decrypter()->cipher_id(); }
 
   std::vector<QuicEncryptedPacket*>* termination_packets() {
     return termination_packets_.get();
   }
 
+  bool ack_frame_updated() const;
+
  protected:
   // Packets which have not been written to the wire.
-  // Owns the QuicPacket* packet.
   struct QueuedPacket {
+    explicit QueuedPacket(SerializedPacket packet);
     QueuedPacket(SerializedPacket packet,
-                 EncryptionLevel level);
-    QueuedPacket(SerializedPacket packet,
-                 EncryptionLevel level,
                  TransmissionType transmission_type,
                  QuicPacketNumber original_packet_number);
 
     SerializedPacket serialized_packet;
-    const EncryptionLevel encryption_level;
     TransmissionType transmission_type;
     // The packet's original packet number if it is a retransmission.
     // Otherwise it must be 0.
@@ -698,10 +699,14 @@ class NET_EXPORT_PRIVATE QuicConnection
   bool WritePacketInner(QueuedPacket* packet);
 
   // Make sure an ack we got from our peer is sane.
-  bool ValidateAckFrame(const QuicAckFrame& incoming_ack);
+  // Returns nullptr for valid acks or an error std::string if it was invalid.
+  const char* ValidateAckFrame(const QuicAckFrame& incoming_ack);
 
   // Make sure a stop waiting we got from our peer is sane.
-  bool ValidateStopWaitingFrame(const QuicStopWaitingFrame& stop_waiting);
+  // Returns nullptr if the frame is valid or an error std::string if it was
+  // invalid.
+  const char* ValidateStopWaitingFrame(
+      const QuicStopWaitingFrame& stop_waiting);
 
   // Sends a version negotiation packet to the peer.
   void SendVersionNegotiationPacket();
@@ -811,13 +816,13 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Used to store latest peer IP address for IP address migration.
   IPAddressNumber migrating_peer_ip_;
   // Used to store latest peer port to possibly migrate to later.
-  uint16 migrating_peer_port_;
+  uint16_t migrating_peer_port_;
 
   // True if the last packet has gotten far enough in the framer to be
   // decrypted.
   bool last_packet_decrypted_;
   bool last_packet_revived_;  // True if the last packet was revived from FEC.
-  QuicByteCount last_size_;  // Size of the last received packet.
+  QuicByteCount last_size_;   // Size of the last received packet.
   EncryptionLevel last_decrypted_packet_level_;
   QuicPacketHeader last_header_;
   QuicStopWaitingFrame last_stop_waiting_frame_;

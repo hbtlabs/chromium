@@ -4,6 +4,9 @@
 
 #include "content/renderer/media/cdm/renderer_cdm_manager.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/stl_util.h"
 #include "content/common/media/cdm_messages.h"
 #include "content/renderer/media/cdm/proxy_media_keys.h"
@@ -130,7 +133,7 @@ void RendererCdmManager::OnSessionMessage(
     int cdm_id,
     const std::string& session_id,
     media::MediaKeys::MessageType message_type,
-    const std::vector<uint8>& message,
+    const std::vector<uint8_t>& message,
     const GURL& legacy_destination_url) {
   if (message.size() > kMaxSessionMessageLength) {
     NOTREACHED();
@@ -155,7 +158,7 @@ void RendererCdmManager::OnLegacySessionError(
     int cdm_id,
     const std::string& session_id,
     MediaKeys::Exception exception,
-    uint32 system_code,
+    uint32_t system_code,
     const std::string& error_message) {
   ProxyMediaKeys* media_keys = GetMediaKeys(cdm_id);
   if (media_keys)
@@ -178,7 +181,7 @@ void RendererCdmManager::OnSessionKeysChange(
     keys_info.push_back(new media::CdmKeyInformation(key_info));
 
   media_keys->OnSessionKeysChange(session_id, has_additional_usable_key,
-                                  keys_info.Pass());
+                                  std::move(keys_info));
 }
 
 void RendererCdmManager::OnSessionExpirationUpdate(
