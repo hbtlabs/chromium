@@ -488,8 +488,8 @@ scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetFailingConnectionsAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
 
-  for (int error = BluetoothDevice::ERROR_UNKNOWN;
-       error <= BluetoothDevice::ERROR_UNSUPPORTED_DEVICE; error++) {
+  for (int error = 0; error <= BluetoothDevice::NUM_CONNECT_ERROR_CODES;
+       error++) {
     adapter->AddMockDevice(GetUnconnectableDevice(
         adapter.get(), static_cast<BluetoothDevice::ConnectErrorCode>(error)));
   }
@@ -631,7 +631,7 @@ LayoutTestBluetoothAdapterProvider::GetUnconnectableDevice(
     BluetoothDevice::ConnectErrorCode error_code,
     const std::string& device_name) {
   BluetoothDevice::UUIDList uuids;
-  uuids.push_back(BluetoothUUID(errorUUID(error_code)));
+  uuids.push_back(BluetoothUUID(connectErrorUUID(error_code)));
 
   scoped_ptr<NiceMockBluetoothDevice> device(
       GetBaseDevice(adapter, device_name, uuids, makeMACAddress(error_code)));
@@ -829,6 +829,25 @@ LayoutTestBluetoothAdapterProvider::GetBaseGATTNotifySession(
 // static
 std::string LayoutTestBluetoothAdapterProvider::errorUUID(uint32_t alias) {
   return base::StringPrintf("%08x-97e5-4cd7-b9f1-f5a427670c59", alias);
+}
+
+// static
+BluetoothUUID LayoutTestBluetoothAdapterProvider::connectErrorUUID(
+    BluetoothDevice::ConnectErrorCode error_code) {
+  // Case values listed in alphabetical order.
+  // Associated UUIDs are defined in layout tests and should remain stable
+  // even if BluetoothDevice enum values change.
+  switch (error_code) {
+    case BluetoothDevice::ERROR_ATTRIBUTE_LENGTH_INVALID:
+      return BluetoothUUID("0008");
+    case BluetoothDevice::ERROR_AUTH_CANCELED:
+      return BluetoothUUID("0004");
+      ... fill in the rest... case BluetoothDevice::NUM_CONNECT_ERROR_CODES
+          : NOTREACHED();
+      return BluetoothUUID();
+  }
+  NOTREACHED();
+  return BluetoothUUID();
 }
 
 // static

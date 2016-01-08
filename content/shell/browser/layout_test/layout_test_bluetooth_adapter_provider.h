@@ -525,12 +525,21 @@ class LayoutTestBluetoothAdapterProvider {
 
   // Helper functions:
 
+  // DEPRECATED: This is a poor practice as it exposes the specific
+  //             enum values of this code base into the UUIDs used
+  //             by the test data. Prefer methods such as
+  //             connectErrorUUID.
   // errorUUID(alias) returns a UUID with the top 32 bits of
   // "00000000-97e5-4cd7-b9f1-f5a427670c59" replaced with the bits of |alias|.
   // For example, errorUUID(0xDEADBEEF) returns
   // "deadbeef-97e5-4cd7-b9f1-f5a427670c59". The bottom 96 bits of error UUIDs
   // were generated as a type 4 (random) UUID.
   static std::string errorUUID(uint32_t alias);
+
+  // Returns a stable test data UUID associated with a given
+  // BluetoothDevice::ConnectErrorCode.
+  static BluetoothUUID connectErrorUUID(
+      BluetoothDevice::ConnectErrorCode error_code);
 
   // Function to turn an integer into an MAC address of the form
   // XX:XX:XX:XX:XX:XX. For example makeMACAddress(0xdeadbeef)
