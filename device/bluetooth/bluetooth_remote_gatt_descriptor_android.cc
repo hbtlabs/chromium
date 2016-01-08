@@ -60,8 +60,8 @@ std::string BluetoothRemoteGattDescriptorAndroid::GetIdentifier() const {
 }
 
 BluetoothUUID BluetoothRemoteGattDescriptorAndroid::GetUUID() const {
-  return device::BluetoothUUID(ConvertJavaStringToUTF8(
-      Java_ChromeBluetoothRemoteGattDescriptor_getUUID(
+  return device::BluetoothUUID(
+      ConvertJavaStringToUTF8(Java_ChromeBluetoothRemoteGattDescriptor_getUUID(
           AttachCurrentThread(), j_descriptor_.obj())));
 }
 

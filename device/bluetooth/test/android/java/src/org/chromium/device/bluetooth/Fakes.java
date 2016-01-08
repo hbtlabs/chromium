@@ -627,8 +627,7 @@ class Fakes {
         @CalledByNative("FakeBluetoothGattDescriptor")
         private static void RememberDescriptorForSubsequentAction(
                 ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
-            sRememberedDescriptor =
-                    (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+            sRememberedDescriptor = (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
         }
 
         // Simulate a value being written to a descriptor.
@@ -636,8 +635,7 @@ class Fakes {
         private static void valueWrite(
                 ChromeBluetoothRemoteGattDescriptor chromeDescriptor, int status) {
             if (chromeDescriptor == null && sRememberedDescriptor == null)
-                throw new IllegalArgumentException(
-                        "rememberDescriptor wasn't called previously.");
+                throw new IllegalArgumentException("rememberDescriptor wasn't called previously.");
 
             FakeBluetoothGattDescriptor fakeDescriptor = (chromeDescriptor == null)
                     ? sRememberedDescriptor

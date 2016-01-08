@@ -32,8 +32,7 @@ final class ChromeBluetoothRemoteGattDescriptor {
         mDescriptor = descriptorWrapper;
         mChromeDevice = chromeDevice;
 
-        mChromeDevice.mWrapperToChromeDescriptorsMap.put(
-                descriptorWrapper, this);
+        mChromeDevice.mWrapperToChromeDescriptorsMap.put(descriptorWrapper, this);
 
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor created.");
     }
@@ -45,8 +44,7 @@ final class ChromeBluetoothRemoteGattDescriptor {
     private void onBluetoothRemoteGattDescriptorAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor Destroyed.");
         mNativeBluetoothRemoteGattDescriptorAndroid = 0;
-        mChromeDevice.mWrapperToChromeDescriptorsMap.remove(
-                mDescriptor);
+        mChromeDevice.mWrapperToChromeDescriptorsMap.remove(mDescriptor);
     }
 
     // ---------------------------------------------------------------------------------------------

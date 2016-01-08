@@ -89,8 +89,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     @CalledByNative
     private static ChromeBluetoothRemoteGattCharacteristic create(
             long nativeBluetoothRemoteGattCharacteristicAndroid,
-            Object bluetoothGattCharacteristicWrapper, String instanceId,
-            Object chromeDevice) {
+            Object bluetoothGattCharacteristicWrapper, String instanceId, Object chromeDevice) {
         return new ChromeBluetoothRemoteGattCharacteristic(
                 nativeBluetoothRemoteGattCharacteristicAndroid,
                 (Wrappers.BluetoothGattCharacteristicWrapper) bluetoothGattCharacteristicWrapper,
@@ -144,7 +143,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         }
 
         if (!mChromeDevice.mBluetoothGatt.writeDescriptor(
-                clientCharacteristicConfigurationDescriptor)) {
+                    clientCharacteristicConfigurationDescriptor)) {
             Log.i(TAG, "startNotifySession writeDescriptor failed!");
             return false;
         }
