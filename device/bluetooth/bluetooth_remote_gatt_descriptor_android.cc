@@ -68,10 +68,10 @@ bool BluetoothRemoteGattDescriptorAndroid::IsLocal() const {
   return false;
 }
 
-const std::vector<uint8>& BluetoothRemoteGattDescriptorAndroid::GetValue()
+const std::vector<uint8_t>& BluetoothRemoteGattDescriptorAndroid::GetValue()
     const {
   NOTIMPLEMENTED();
-  static std::vector<uint8> empty_value;
+  static std::vector<uint8_t> empty_value;
   return empty_value;
 }
 
@@ -97,7 +97,7 @@ void BluetoothRemoteGattDescriptorAndroid::ReadRemoteDescriptor(
 }
 
 void BluetoothRemoteGattDescriptorAndroid::WriteRemoteDescriptor(
-    const std::vector<uint8>& new_value,
+    const std::vector<uint8_t>& new_value,
     const base::Closure& callback,
     const ErrorCallback& error_callback) {
   NOTIMPLEMENTED();

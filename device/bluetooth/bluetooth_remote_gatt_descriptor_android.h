@@ -45,12 +45,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
   std::string GetIdentifier() const override;
   BluetoothUUID GetUUID() const override;
   bool IsLocal() const override;
-  const std::vector<uint8>& GetValue() const override;
+  const std::vector<uint8_t>& GetValue() const override;
   BluetoothGattCharacteristic* GetCharacteristic() const override;
   BluetoothGattCharacteristic::Permissions GetPermissions() const override;
   void ReadRemoteDescriptor(const ValueCallback& callback,
                             const ErrorCallback& error_callback) override;
-  void WriteRemoteDescriptor(const std::vector<uint8>& new_value,
+  void WriteRemoteDescriptor(const std::vector<uint8_t>& new_value,
                              const base::Closure& callback,
                              const ErrorCallback& error_callback) override;
 
