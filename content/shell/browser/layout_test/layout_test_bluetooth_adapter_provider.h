@@ -234,6 +234,20 @@ class LayoutTestBluetoothAdapterProvider {
   //  - UnconnectableDevice(BluetoothDevice::ERROR_AUTH_TIMEOUT)  errorUUID(0x6)
   //  - UnconnectableDevice(BluetoothDevice::ERROR_UNSUPPORTED_DEVICE)
   //    errorUUID(0x7)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_ATTRIBUTE_LENGTH_INVALID)
+  //    errorUUID(0x8)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_CONNECTION_CONGESTED)
+  //    errorUUID(0x9)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_INSUFFICIENT_ENCRYPTION)
+  //    errorUUID(0xa)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_OFFSET_INVALID)
+  //    errorUUID(0xb)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_READ_NOT_PERMITTED)
+  //    errorUUID(0xc)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_REQUEST_NOT_SUPPORTED)
+  //    errorUUID(0xd)
+  //  - UnconnectableDevice(BluetoothDevice::ERROR_WRITE_NOT_PERMITTED)
+  //    errorUUID(0xe)
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetFailingConnectionsAdapter();
 
