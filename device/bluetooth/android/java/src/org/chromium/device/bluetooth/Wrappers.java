@@ -536,6 +536,10 @@ class Wrappers {
             return mDescriptor.getUuid();
         }
 
+        public byte[] getValue() {
+            return mDescriptor.getValue();
+        }
+
         public boolean setValue(byte[] value) {
             return mDescriptor.setValue(value);
         }

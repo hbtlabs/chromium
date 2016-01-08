@@ -67,6 +67,8 @@ class BluetoothTestAndroid : public BluetoothTestBase {
       BluetoothGattCharacteristic* characteristic) override;
   void SimulateGattDescriptor(BluetoothGattCharacteristic* characteristic,
                                   const std::string& uuid) override;
+  void RememberDescriptorForSubsequentAction(
+      BluetoothGattDescriptor* descriptor) override;
   void SimulateGattDescriptorWrite(
       BluetoothGattDescriptor* descriptor) override;
   void SimulateGattDescriptorWriteError(

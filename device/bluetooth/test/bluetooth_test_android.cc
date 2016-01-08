@@ -15,6 +15,7 @@
 #include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_device_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic_android.h"
+#include "device/bluetooth/bluetooth_remote_gatt_descriptor_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
 #include "jni/Fakes_jni.h"
@@ -168,7 +169,7 @@ void BluetoothTestAndroid::RememberCharacteristicForSubsequentAction(
   BluetoothRemoteGattCharacteristicAndroid* characteristic_android =
       static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
 
-  Java_FakeBluetoothGattCharacteristic_rememberCharacteristic(
+  Java_FakeBluetoothGattCharacteristic_RememberCharacteristicForSubsequentAction(
       base::android::AttachCurrentThread(),
       characteristic_android->GetJavaObject().obj());
 }
@@ -286,6 +287,16 @@ void BluetoothTestAndroid::SimulateGattDescriptor(
   Java_FakeBluetoothGattCharacteristic_addDescriptor(
       env, characteristic_android->GetJavaObject().obj(),
       base::android::ConvertUTF8ToJavaString(env, uuid).obj());
+}
+
+void BluetoothTestAndroid::RememberDescriptorForSubsequentAction(
+    BluetoothGattDescriptor* descriptor) {
+  BluetoothRemoteGattDescriptorAndroid* descriptor_android =
+      static_cast<BluetoothRemoteGattDescriptorAndroid*>(descriptor);
+
+  Java_FakeBluetoothGattDescriptor_RememberDescriptorForSubsequentAction(
+      base::android::AttachCurrentThread(),
+      descriptor_android->GetJavaObject().obj());
 }
 
 void BluetoothTestAndroid::SimulateGattDescriptorWrite(

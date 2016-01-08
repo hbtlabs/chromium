@@ -114,7 +114,7 @@ TEST_F(BluetoothGattDescriptorTest, GetUUID) {
                              /* properties */ 0);
   ASSERT_EQ(1u, service->GetCharacteristics().size());
   BluetoothGattCharacteristic* characteristic =
-      service_->GetCharacteristics()[0];
+      service->GetCharacteristics()[0];
 
   // Create 2 descriptors. Two of them are duplicates.
   std::string uuid_str1("11111111-0000-1000-8000-00805f9b34fb");
@@ -124,8 +124,8 @@ TEST_F(BluetoothGattDescriptorTest, GetUUID) {
   SimulateGattDescriptor(characteristic, uuid_str1);
   SimulateGattDescriptor(characteristic, uuid_str2);
   ASSERT_EQ(1u, characteristic->GetDescriptors().size());
-  BluetoothGattDescriptor* descriptor1 = service->GetDescriptors()[0];
-  BluetoothGattDescriptor* descriptor2 = service->GetDescriptors()[1];
+  BluetoothGattDescriptor* descriptor1 = characteristic->GetDescriptors()[0];
+  BluetoothGattDescriptor* descriptor2 = characteristic->GetDescriptors()[1];
 
   // Swap as needed to have descriptor1 be the one with uuid1.
   if (descriptor2->GetUUID() == uuid1)
