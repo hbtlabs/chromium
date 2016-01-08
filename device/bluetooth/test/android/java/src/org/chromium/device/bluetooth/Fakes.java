@@ -600,25 +600,18 @@ class Fakes {
     static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
-        final int mProperties;
         byte[] mValue;
 
         public FakeBluetoothGattDescriptor(
-                FakeBluetoothGattCharacteristic characteristic, UUID uuid, int properties) {
+                FakeBluetoothGattCharacteristic characteristic, UUID uuid) {
             super(null);
             mCharacteristic = characteristic;
             mUuid = uuid;
-            mProperties = properties;
             mValue = new byte[0];
         }
 
         // -----------------------------------------------------------------------------------------
         // Wrappers.BluetoothGattDescriptorWrapper overrides:
-
-        @Override
-        public int getProperties() {
-            return mProperties;
-        }
 
         @Override
         public UUID getUuid() {
