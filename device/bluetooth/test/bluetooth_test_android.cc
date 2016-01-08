@@ -194,7 +194,7 @@ void BluetoothTestAndroid::
 
 void BluetoothTestAndroid::SimulateGattCharacteristicChanged(
     BluetoothGattCharacteristic* characteristic,
-    const std::vector<uint8>& value) {
+    const std::vector<uint8_t>& value) {
   BluetoothRemoteGattCharacteristicAndroid* characteristic_android =
       static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
   JNIEnv* env = base::android::AttachCurrentThread();

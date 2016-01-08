@@ -49,7 +49,7 @@ class BluetoothTestAndroid : public BluetoothTestBase {
       BluetoothGattCharacteristic* characteristic) override;
   void SimulateGattCharacteristicChanged(
       BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8>& value) override;
+      const std::vector<uint8_t>& value) override;
   void SimulateGattCharacteristicRead(
       BluetoothGattCharacteristic* characteristic,
       const std::vector<uint8_t>& value) override;

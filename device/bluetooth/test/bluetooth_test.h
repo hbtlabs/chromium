@@ -141,7 +141,7 @@ class BluetoothTestBase : public testing::Test {
   // Simulates a Characteristic Changed operation with updated |value|.
   virtual void SimulateGattCharacteristicChanged(
       BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8>& value) {}
+      const std::vector<uint8_t>& value) {}
 
   // Simulates a Characteristic Read operation succeeding, returning |value|.
   // If |characteristic| is null, acts upon the characteristic provided to
