@@ -26,15 +26,15 @@ BluetoothRemoteGattDescriptorAndroid::Create(
     const std::string& instance_id,
     jobject /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
-    jobject /* ChromeBluetoothCharacteristic */
-    chrome_bluetooth_characteristic) {
+    jobject /* chromeBluetoothDevice */
+    chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattDescriptorAndroid> descriptor(
       new BluetoothRemoteGattDescriptorAndroid(adapter, instance_id));
 
   descriptor->j_descriptor_.Reset(
       Java_ChromeBluetoothRemoteGattDescriptor_create(
           AttachCurrentThread(), reinterpret_cast<intptr_t>(descriptor.get()),
-          bluetooth_gatt_descriptor_wrapper, chrome_bluetooth_characteristic));
+          bluetooth_gatt_descriptor_wrapper, chrome_bluetooth_device));
 
   return descriptor;
 }
@@ -60,8 +60,9 @@ std::string BluetoothRemoteGattDescriptorAndroid::GetIdentifier() const {
 }
 
 BluetoothUUID BluetoothRemoteGattDescriptorAndroid::GetUUID() const {
-  NOTIMPLEMENTED();
-  return device::BluetoothUUID();
+  return device::BluetoothUUID(ConvertJavaStringToUTF8(
+      Java_ChromeBluetoothRemoteGattDescriptor_getUUID(
+          AttachCurrentThread(), j_descriptor_.obj())));
 }
 
 bool BluetoothRemoteGattDescriptorAndroid::IsLocal() const {

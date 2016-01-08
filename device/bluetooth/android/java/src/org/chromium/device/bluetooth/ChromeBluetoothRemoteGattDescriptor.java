@@ -23,16 +23,16 @@ final class ChromeBluetoothRemoteGattDescriptor {
 
     private long mNativeBluetoothRemoteGattDescriptorAndroid;
     final Wrappers.BluetoothGattDescriptorWrapper mDescriptor;
-    final ChromeBluetoothRemoteGattCharacteristic mChromeCharacteristic;
+    final ChromeBluetoothDevice mChromeDevice;
 
     private ChromeBluetoothRemoteGattDescriptor(long nativeBluetoothRemoteGattDescriptorAndroid,
             Wrappers.BluetoothGattDescriptorWrapper descriptorWrapper,
-            ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic) {
+            ChromeBluetoothDevice chromeDevice) {
         mNativeBluetoothRemoteGattDescriptorAndroid = nativeBluetoothRemoteGattDescriptorAndroid;
         mDescriptor = descriptorWrapper;
-        mChromeCharacteristic = chromeCharacteristic;
+        mChromeDevice = chromeDevice;
 
-        mChromeCharacteristic.mChromeBluetoothDevice.mWrapperToChromeDescriptorsMap.put(
+        mChromeDevice.mWrapperToChromeDescriptorsMap.put(
                 descriptorWrapper, this);
 
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor created.");
@@ -45,7 +45,7 @@ final class ChromeBluetoothRemoteGattDescriptor {
     private void onBluetoothRemoteGattDescriptorAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor Destroyed.");
         mNativeBluetoothRemoteGattDescriptorAndroid = 0;
-        mChromeCharacteristic.mChromeBluetoothDevice.mWrapperToChromeDescriptorsMap.remove(
+        mChromeDevice.mWrapperToChromeDescriptorsMap.remove(
                 mDescriptor);
     }
 
@@ -57,10 +57,16 @@ final class ChromeBluetoothRemoteGattDescriptor {
     @CalledByNative
     private static ChromeBluetoothRemoteGattDescriptor create(
             long nativeBluetoothRemoteGattDescriptorAndroid, Object bluetoothGattDescriptorWrapper,
-            Object chromeCharacteristic) {
+            Object chromeDevice) {
         return new ChromeBluetoothRemoteGattDescriptor(nativeBluetoothRemoteGattDescriptorAndroid,
                 (Wrappers.BluetoothGattDescriptorWrapper) bluetoothGattDescriptorWrapper,
-                (ChromeBluetoothRemoteGattCharacteristic) chromeCharacteristic);
+                (ChromeBluetoothDevice) chromeDevice);
+    }
+
+    // Implements BluetoothRemoteGattDescriptorAndroid::GetUUID.
+    @CalledByNative
+    private String getUUID() {
+        return mDescriptor.getUuid().toString();
     }
 
     // ---------------------------------------------------------------------------------------------
