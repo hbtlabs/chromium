@@ -123,7 +123,7 @@ TEST_F(BluetoothGattDescriptorTest, GetUUID) {
   BluetoothUUID uuid2(uuid_str2);
   SimulateGattDescriptor(characteristic, uuid_str1);
   SimulateGattDescriptor(characteristic, uuid_str2);
-  ASSERT_EQ(1u, characteristic->GetDescriptors().size());
+  ASSERT_EQ(2u, characteristic->GetDescriptors().size());
   BluetoothGattDescriptor* descriptor1 = characteristic->GetDescriptors()[0];
   BluetoothGattDescriptor* descriptor2 = characteristic->GetDescriptors()[1];
 
