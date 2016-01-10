@@ -115,7 +115,7 @@ TEST_F(BluetoothGattDescriptorTest, GetUUID) {
   BluetoothGattCharacteristic* characteristic =
       service->GetCharacteristics()[0];
 
-  // Create 2 descriptors. Two of them are duplicates.
+  // Create 2 descriptors.
   std::string uuid_str1("11111111-0000-1000-8000-00805f9b34fb");
   std::string uuid_str2("22222222-0000-1000-8000-00805f9b34fb");
   BluetoothUUID uuid1(uuid_str1);
