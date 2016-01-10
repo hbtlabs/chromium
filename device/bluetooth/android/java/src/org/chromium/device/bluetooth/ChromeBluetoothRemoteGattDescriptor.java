@@ -4,8 +4,6 @@
 
 package org.chromium.device.bluetooth;
 
-import android.bluetooth.BluetoothGattDescriptor;
-
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
