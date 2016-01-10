@@ -121,6 +121,10 @@ final class ChromeBluetoothRemoteGattCharacteristic {
                 mCharacteristic.getDescriptor(UUID.fromString(
                         "00002902-0000-1000-8000-00805F9B34FB" /* Config's standard UUID*/));
 
+        if (clientCharacteristicConfigurationDescriptor == null) {
+            Log.v(TAG, "startNotifySession config descriptor failed!");
+            return false;
+        }
         if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
             if (!clientCharacteristicConfigurationDescriptor.setValue(
                         BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
