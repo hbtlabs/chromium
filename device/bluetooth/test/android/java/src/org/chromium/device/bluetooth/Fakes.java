@@ -565,16 +565,6 @@ class Fakes {
         // Wrappers.BluetoothGattCharacteristicWrapper overrides:
 
         @Override
-        public Wrappers.BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
-            for (Wrappers.BluetoothGattDescriptorWrapper descriptor : mDescriptors) {
-                if (descriptor.getUuid().equals(uuid)) {
-                    return descriptor;
-                }
-            }
-            return null;
-        }
-
-        @Override
         public List<Wrappers.BluetoothGattDescriptorWrapper> getDescriptors() {
             return mDescriptors;
         }

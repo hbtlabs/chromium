@@ -421,8 +421,8 @@ class Wrappers {
      * Wraps android.bluetooth.BluetoothGattService.
      */
     static class BluetoothGattServiceWrapper {
-        final BluetoothGattService mService;
-        final BluetoothDeviceWrapper mDeviceWrapper;
+        private final BluetoothGattService mService;
+        private final BluetoothDeviceWrapper mDeviceWrapper;
 
         public BluetoothGattServiceWrapper(
                 BluetoothGattService service, BluetoothDeviceWrapper deviceWrapper) {
@@ -469,19 +469,6 @@ class Wrappers {
                 BluetoothGattCharacteristic characteristic, BluetoothDeviceWrapper deviceWrapper) {
             mCharacteristic = characteristic;
             mDeviceWrapper = deviceWrapper;
-        }
-
-        public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
-            BluetoothGattDescriptor descriptor = mCharacteristic.getDescriptor(uuid);
-
-            BluetoothGattDescriptorWrapper descriptorWrapper =
-                    mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
-
-            if (descriptorWrapper == null) {
-                descriptorWrapper = new BluetoothGattDescriptorWrapper(descriptor);
-                mDeviceWrapper.mDescriptorsToWrappers.put(descriptor, descriptorWrapper);
-            }
-            return descriptorWrapper;
         }
 
         public List<BluetoothGattDescriptorWrapper> getDescriptors() {
