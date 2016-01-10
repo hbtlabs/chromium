@@ -461,19 +461,6 @@ class Wrappers {
             mDeviceWrapper = deviceWrapper;
         }
 
-        public BluetoothGattDescriptorWrapper getDescriptor(UUID uuid) {
-            BluetoothGattDescriptor descriptor = mCharacteristic.getDescriptor(uuid);
-
-            BluetoothGattDescriptorWrapper descriptorWrapper =
-                    mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
-
-            if (descriptorWrapper == null) {
-                descriptorWrapper = new BluetoothGattDescriptorWrapper(descriptor);
-                mDeviceWrapper.mDescriptorsToWrappers.put(descriptor, descriptorWrapper);
-            }
-            return descriptorWrapper;
-        }
-
         public List<BluetoothGattDescriptorWrapper> getDescriptors() {
             List<BluetoothGattDescriptor> descriptors = mCharacteristic.getDescriptors();
 
