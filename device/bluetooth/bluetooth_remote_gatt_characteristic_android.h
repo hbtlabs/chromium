@@ -92,7 +92,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
           jobject>& /* BluetoothGattDescriptorWrapper */
       bluetooth_gatt_descriptor_wrapper,
       const base::android::JavaParamRef<
-          jobject>& /* ChromeBluetoothCharacteristic */ chrome_bluetooth_characteristic);
+          jobject>& /* ChromeBluetoothCharacteristic */
+      chrome_bluetooth_characteristic);
 
  private:
   BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
