@@ -2814,10 +2814,9 @@ TEST_F(GLES2ImplementationTest, CopyTextureCHROMIUM) {
     cmds::CopyTextureCHROMIUM cmd;
   };
   Cmds expected;
-  expected.cmd.Init(1, 2, 3, GL_ALPHA, GL_UNSIGNED_BYTE, true, true, true);
+  expected.cmd.Init(1, 2, GL_ALPHA, GL_UNSIGNED_BYTE, true, true, true);
 
-  gl_->CopyTextureCHROMIUM(1, 2, 3, GL_ALPHA, GL_UNSIGNED_BYTE, true, true,
-                           true);
+  gl_->CopyTextureCHROMIUM(1, 2, GL_ALPHA, GL_UNSIGNED_BYTE, true, true, true);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
@@ -2826,9 +2825,9 @@ TEST_F(GLES2ImplementationTest, CopySubTextureCHROMIUM) {
     cmds::CopySubTextureCHROMIUM cmd;
   };
   Cmds expected;
-  expected.cmd.Init(1, 2, 3, 4, 5, 6, 7, 8, 9, true, true, true);
+  expected.cmd.Init(1, 2, 3, 4, 5, 6, 7, 8, true, true, true);
 
-  gl_->CopySubTextureCHROMIUM(1, 2, 3, 4, 5, 6, 7, 8, 9, true, true, true);
+  gl_->CopySubTextureCHROMIUM(1, 2, 3, 4, 5, 6, 7, 8, true, true, true);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
@@ -2837,20 +2836,9 @@ TEST_F(GLES2ImplementationTest, CompressedCopyTextureCHROMIUM) {
     cmds::CompressedCopyTextureCHROMIUM cmd;
   };
   Cmds expected;
-  expected.cmd.Init(1, 2, 3);
+  expected.cmd.Init(1, 2);
 
-  gl_->CompressedCopyTextureCHROMIUM(1, 2, 3);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
-TEST_F(GLES2ImplementationTest, CompressedCopySubTextureCHROMIUM) {
-  struct Cmds {
-    cmds::CompressedCopySubTextureCHROMIUM cmd;
-  };
-  Cmds expected;
-  expected.cmd.Init(1, 2, 3, 4, 5, 6, 7, 8, 9);
-
-  gl_->CompressedCopySubTextureCHROMIUM(1, 2, 3, 4, 5, 6, 7, 8, 9);
+  gl_->CompressedCopyTextureCHROMIUM(1, 2);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 

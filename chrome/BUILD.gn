@@ -125,8 +125,6 @@ if (!is_android) {
         "app/kasko_client.h",
         "app/main_dll_loader_win.cc",
         "app/main_dll_loader_win.h",
-        "app/signature_validator_win.cc",
-        "app/signature_validator_win.h",
         "common/crash_keys.cc",
         "common/crash_keys.h",
       ]
@@ -164,10 +162,6 @@ if (!is_android) {
         "//chrome/app/version_assembly:version_assembly_manifest",
       ]
 
-      libs = [
-        "wintrust.lib",
-        "crypt32.lib",
-      ]
       if (win_console_app) {
         defines += [ "WIN_CONSOLE_APP" ]
       } else {
@@ -304,8 +298,6 @@ if (is_mac || is_win) {
       "app/chrome_main_delegate.h",
       "app/chrome_main_mac.h",
       "app/chrome_main_mac.mm",
-      "app/close_handle_hook_win.cc",
-      "app/close_handle_hook_win.h",
       "app/delay_load_hook_win.cc",
       "app/delay_load_hook_win.h",
     ]
@@ -324,6 +316,7 @@ if (is_mac || is_win) {
         "//base/trace_event/etw_manifest:chrome_events_win",
         "//chrome/app/theme:chrome_unscaled_resources",
         "//chrome_elf",
+        "//components/crash/content/app",
         "//content/app/resources",
         "//crypto",
         "//net:net_resources",
@@ -403,8 +396,6 @@ if (is_mac || is_win) {
         "app/chrome_main.cc",
         "app/chrome_main_delegate.cc",
         "app/chrome_main_delegate.h",
-        "app/close_handle_hook_win.cc",
-        "app/close_handle_hook_win.h",
       ]
 
       configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -961,8 +952,14 @@ if (is_android) {
     ]
   }
 
+  # Some android targets still depend on --gc-sections to link.
+  # TODO: remove --gc-sections for Debug builds (crbug.com/159847).
+  config("gc_sections") {
+    ldflags = [ "-Wl,--gc-sections" ]
+  }
+
   # GYP: //chrome/chrome_android.gypi:chrome_android_core
-  static_library("chrome_android_core") {
+  source_set("chrome_android_core") {
     sources = [
       "app/android/chrome_android_initializer.cc",
       "app/android/chrome_android_initializer.h",
@@ -973,6 +970,7 @@ if (is_android) {
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
     ]
+    public_configs = [ ":gc_sections" ]
 
     include_dirs = [ android_ndk_include_dir ]
 

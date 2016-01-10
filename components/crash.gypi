@@ -213,6 +213,7 @@
             'crash_component_non_mac_win',
             'crash_component_lib',
             '../base/base.gyp:base',
+            '../third_party/kasko/kasko.gyp:kasko',
           ],
           'defines': ['CRASH_IMPLEMENTATION'],
           'conditions': [
@@ -408,6 +409,8 @@
                 'crash/content/browser/crash_dump_manager_android.h',
                 'crash/content/browser/crash_handler_host_linux.cc',
                 'crash/content/browser/crash_handler_host_linux.h',
+                'crash/content/browser/crash_micro_dump_manager_android.cc',
+                'crash/content/browser/crash_micro_dump_manager_android.h',
               ],
               'include_dirs': [
                 '../breakpad/src',

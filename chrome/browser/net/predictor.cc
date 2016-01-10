@@ -188,7 +188,6 @@ void Predictor::RegisterProfilePrefs(
 // --------------------- Start UI methods. ------------------------------------
 
 void Predictor::InitNetworkPredictor(PrefService* user_prefs,
-                                     PrefService* local_state,
                                      IOThread* io_thread,
                                      net::URLRequestContextGetter* getter,
                                      ProfileIOData* profile_io_data) {
@@ -198,7 +197,7 @@ void Predictor::InitNetworkPredictor(PrefService* user_prefs,
   url_request_context_getter_ = getter;
 
   // Gather the list of hostnames to prefetch on startup.
-  UrlList urls = GetPredictedUrlListAtStartup(user_prefs, local_state);
+  UrlList urls = GetPredictedUrlListAtStartup(user_prefs);
 
   base::ListValue* referral_list =
       static_cast<base::ListValue*>(user_prefs->GetList(
@@ -314,9 +313,7 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
   PredictFrameSubresources(url.GetWithEmptyPath(), first_party_for_cookies);
 }
 
-UrlList Predictor::GetPredictedUrlListAtStartup(
-    PrefService* user_prefs,
-    PrefService* local_state) {
+UrlList Predictor::GetPredictedUrlListAtStartup(PrefService* user_prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   UrlList urls;
   // Recall list of URLs we learned about during last session.
@@ -902,12 +899,14 @@ void Predictor::PredictFrameSubresources(const GURL& url,
 }
 
 bool Predictor::CanPrefetchAndPrerender() const {
+  chrome_browser_net::NetworkPredictionStatus status;
   if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    return chrome_browser_net::CanPrefetchAndPrerenderUI(user_prefs_);
+    status = chrome_browser_net::CanPrefetchAndPrerenderUI(user_prefs_);
   } else {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    return chrome_browser_net::CanPrefetchAndPrerenderIO(profile_io_data_);
+    status = chrome_browser_net::CanPrefetchAndPrerenderIO(profile_io_data_);
   }
+  return status == chrome_browser_net::NetworkPredictionStatus::ENABLED;
 }
 
 bool Predictor::CanPreresolveAndPreconnect() const {
@@ -1299,7 +1298,6 @@ GURL Predictor::CanonicalizeUrl(const GURL& url) {
 
 void SimplePredictor::InitNetworkPredictor(
     PrefService* user_prefs,
-    PrefService* local_state,
     IOThread* io_thread,
     net::URLRequestContextGetter* getter,
     ProfileIOData* profile_io_data) {

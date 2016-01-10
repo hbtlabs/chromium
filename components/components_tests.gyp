@@ -136,6 +136,7 @@
     ],
     'data_reduction_proxy_unittest_sources': [
       'data_reduction_proxy/content/browser/content_lofi_decider_unittest.cc',
+      'data_reduction_proxy/content/browser/content_lofi_ui_service_unittest.cc',
       'data_reduction_proxy/content/browser/data_reduction_proxy_message_filter_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_bypass_protocol_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats_unittest.cc',
@@ -247,6 +248,7 @@
       'error_page/renderer/net_error_helper_core_unittest.cc',
     ],
     'feedback_unittest_sources': [
+      'feedback/anonymizer_tool_unittest.cc',
       'feedback/feedback_common_unittest.cc',
       'feedback/feedback_data_unittest.cc',
       'feedback/feedback_uploader_chrome_unittest.cc',

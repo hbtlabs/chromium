@@ -19,9 +19,11 @@ import android.view.View;
 import android.widget.TextView;
 
 import org.chromium.base.Callback;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
@@ -38,6 +40,7 @@ public class ConfirmAccountChangeFragment extends DialogFragment
     private static final String KEY_NEW_ACCOUNT_NAME = "newAccountName";
 
     public static void confirmSyncAccount(String syncAccountName, Activity activity) {
+        // TODO(skym): Use last account id for equality check, crbug.com/571698.
         String lastSyncAccountName = PrefServiceBridge.getInstance().getSyncLastAccountName();
         if (lastSyncAccountName != null && !lastSyncAccountName.isEmpty()
                 && !lastSyncAccountName.equals(syncAccountName)) {
@@ -82,6 +85,7 @@ public class ConfirmAccountChangeFragment extends DialogFragment
                     }
                 }));
 
+        RecordUserAction.record("Signin_Show_ImportDataPrompt");
         textView.setText(messageWithLink);
         textView.setMovementMethod(LinkMovementMethod.getInstance());
         return new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
@@ -94,7 +98,10 @@ public class ConfirmAccountChangeFragment extends DialogFragment
     @Override
     public void onClick(DialogInterface dialog, int which) {
         if (which == AlertDialog.BUTTON_POSITIVE) {
+            RecordUserAction.record("Signin_ImportDataPrompt_ImportData");
             signIn(getActivity(), mAccountName);
+        } else if (which == AlertDialog.BUTTON_NEGATIVE) {
+            RecordUserAction.record("Signin_ImportDataPrompt_Cancel");
         }
     }
 
@@ -103,6 +110,7 @@ public class ConfirmAccountChangeFragment extends DialogFragment
         dialogFragment.show(getFragmentManager(), null);
         // Dismiss the confirmation dialog.
         dismiss();
+        RecordUserAction.record("Signin_ImportDataPrompt_DontImport");
     }
 
     private static void signIn(final Activity activity, String accountName) {
@@ -112,8 +120,14 @@ public class ConfirmAccountChangeFragment extends DialogFragment
             public void onResult(Account account) {
                 if (account == null) return;
                 SigninManager.get(activity).signInToSelectedAccount(activity, account,
-                        SigninManager.SIGNIN_TYPE_INTERACTIVE,
-                        SigninManager.SIGNIN_SYNC_IMMEDIATELY, null);
+                        SigninManager.SIGNIN_TYPE_INTERACTIVE, new SignInFlowObserver() {
+                            @Override
+                            public void onSigninComplete() {
+                                RecordUserAction.record("Signin_Signin_Succeed");
+                            }
+                            @Override
+                            public void onSigninCancelled() {}
+                        });
             }
         });
     }

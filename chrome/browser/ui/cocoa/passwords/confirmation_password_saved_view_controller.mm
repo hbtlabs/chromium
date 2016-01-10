@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/chrome_style.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_utils.h"
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
+#include "grit/components_strings.h"
 #include "grit/generated_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/controls/hyperlink_text_view.h"
@@ -81,7 +82,7 @@
       skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
   [confirmationText_
       addLinkRange:model_->save_confirmation_link_range().ToNSRange()
-           withURL:@"about:blank"  // using a link here is bad ui
+           withURL:nil
          linkColor:linkColor];
   [confirmationText_ setDelegate:self];
   [[confirmationText_ textContainer] setLineFragmentPadding:0.0f];

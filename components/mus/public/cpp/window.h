@@ -44,8 +44,7 @@ template <typename T>
 struct WindowProperty;
 
 // Windows are owned by the WindowTreeConnection. See WindowTreeDelegate for
-// details
-// on ownership.
+// details on ownership.
 //
 // TODO(beng): Right now, you'll have to implement a WindowObserver to track
 //             destruction and NULL any pointers you have.
@@ -58,9 +57,9 @@ class Window {
   using SharedProperties = std::map<std::string, std::vector<uint8_t>>;
 
   // Destroys this window and all its children. Destruction is allowed for
-  // windows that were created by this connection, or the root window. For
-  // windows from other connections (except the root), Destroy() does nothing.
-  // If the destruction is allowed observers are notified and the Window is
+  // windows that were created by this connection, or the roots. For windows
+  // from other connections (except the roots), Destroy() does nothing. If the
+  // destruction is allowed observers are notified and the Window is
   // immediately deleted.
   void Destroy();
 
@@ -69,9 +68,12 @@ class Window {
   // Configuration.
   Id id() const { return id_; }
 
-  // Geometric disposition.
+  // Geometric disposition relative to parent window.
   const gfx::Rect& bounds() const { return bounds_; }
   void SetBounds(const gfx::Rect& bounds);
+
+  // Geometric disposition relative to root window.
+  gfx::Rect GetBoundsInRoot() const;
 
   const gfx::Insets& client_area() const { return client_area_; }
   const std::vector<gfx::Rect>& additional_client_areas() {

@@ -147,6 +147,7 @@ public:
     WebGLActiveInfo* getTransformFeedbackVarying(WebGLProgram*, GLuint);
     void pauseTransformFeedback();
     void resumeTransformFeedback();
+    bool validateTransformFeedbackPrimitiveMode(const char* functionName, GLenum primitiveMode);
 
     /* Uniform Buffer Objects and Transform Feedback Buffers */
     void bindBufferBase(GLenum, GLuint, WebGLBuffer*);
@@ -211,8 +212,8 @@ protected:
     bool validateBufferBaseTarget(const char* functionName, GLenum target);
     bool validateAndUpdateBufferBindBaseTarget(const char* functionName, GLenum, GLuint, WebGLBuffer*);
 
-    void vertexAttribIivImpl(const char*, GLuint, const GLint*, GLsizei);
-    void vertexAttribIuivImpl(const char*, GLuint, const GLuint*, GLsizei);
+    WebGLImageConversion::PixelStoreParams getPackPixelStoreParams() override;
+    WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams() override;
 
     bool checkAndTranslateAttachments(const char* functionName, GLenum, const Vector<GLenum>&, Vector<GLenum>&);
 
@@ -224,7 +225,6 @@ protected:
     WebGLTexture* validateTextureBinding(const char* functionName, GLenum target, bool useSixEnumsForCubeMap) override;
     bool validateFramebufferTarget(GLenum target) override;
     bool validateReadPixelsFormatAndType(GLenum format, GLenum type) override;
-    bool validateVertexAttribPointerTypeAndSize(GLenum type, GLint size) override;
 
     DOMArrayBufferView::ViewType readPixelsExpectedArrayBufferViewType(GLenum type) override;
     WebGLFramebuffer* getFramebufferBinding(GLenum target) override;
@@ -243,6 +243,11 @@ protected:
 
     void resetUnpackParameters() override;
     void restoreUnpackParameters() override;
+
+    bool transformFeedbackActive() const override;
+    bool transformFeedbackPaused() const override;
+    void setTransformFeedbackActive(bool);
+    void setTransformFeedbackPaused(bool);
 
     PersistentWillBeMember<WebGLFramebuffer> m_readFramebufferBinding;
     PersistentWillBeMember<WebGLTransformFeedback> m_transformFeedbackBinding;

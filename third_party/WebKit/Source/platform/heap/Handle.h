@@ -52,6 +52,14 @@
 
 namespace blink {
 
+// Marker used to annotate persistent objects and collections with,
+// so as to enable reliable testing for persistent references via
+// a type trait (see TypeTraits.h's IsPersistentReferenceType<>.)
+#define IS_PERSISTENT_REFERENCE_TYPE()               \
+    public:                                          \
+        using IsPersistentReferenceTypeMarker = int; \
+    private:
+
 enum WeaknessPersistentConfiguration {
     NonWeakPersistentConfiguration,
     WeakPersistentConfiguration
@@ -64,6 +72,7 @@ enum CrossThreadnessPersistentConfiguration {
 
 template<typename T, WeaknessPersistentConfiguration weaknessConfiguration, CrossThreadnessPersistentConfiguration crossThreadnessConfiguration>
 class PersistentBase {
+    IS_PERSISTENT_REFERENCE_TYPE();
 public:
     PersistentBase() : m_raw(nullptr)
     {
@@ -223,7 +232,7 @@ private:
 
         TraceCallback traceCallback = TraceMethodDelegate<PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>, &PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>::trace>::trampoline;
         if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
-            m_persistentNode = ThreadState::crossThreadPersistentRegion().allocatePersistentNode(this, traceCallback);
+            m_persistentNode = Heap::crossThreadPersistentRegion().allocatePersistentNode(this, traceCallback);
         } else {
             ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
             ASSERT(state->checkThread());
@@ -240,7 +249,7 @@ private:
             return;
 
         if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
-            ThreadState::crossThreadPersistentRegion().freePersistentNode(m_persistentNode);
+            Heap::crossThreadPersistentRegion().freePersistentNode(m_persistentNode);
         } else {
             ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
             ASSERT(state->checkThread());
@@ -531,6 +540,7 @@ class PersistentHeapCollectionBase : public Collection {
     // heap collections are always allocated off-heap. This allows persistent collections to be used in
     // DEFINE_STATIC_LOCAL et. al.
     WTF_USE_ALLOCATOR(PersistentHeapCollectionBase, WTF::PartitionAllocator);
+    IS_PERSISTENT_REFERENCE_TYPE();
 public:
     PersistentHeapCollectionBase()
     {

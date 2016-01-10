@@ -4,7 +4,8 @@
 
 {
   'variables': {
-    'chromium_code': 1
+    'chromium_code': 1,
+    'use_alsa%': 0,
   },
   'targets': [
     {
@@ -186,6 +187,15 @@
               'cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1',
             ],
           },
+          'conditions': [
+            # TODO(slan): Reenable this test for Desktop x86 when CQ supports it.
+            # (b/26429268)
+            ['use_alsa==1 and is_cast_desktop_build==0', {
+              'dependencies': [
+                'media/media.gyp:alsa_cma_backend_unittests',
+              ],
+            }],
+          ],
         }],
         ['disable_display==1', {
           'variables': {

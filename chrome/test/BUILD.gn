@@ -675,16 +675,10 @@ if (!is_android) {
 
   group("telemetry_perf_unittests") {
     deps = [
-      "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+      "//tools/perf:perf",
     ]
 
     data = [
-      "//tools/perf/",
-
-      # Field trial config
-      "//tools/variations/",
-      "//testing/variations/",
-
       # For isolate contract.
       "//testing/scripts/common.py",
       "//testing/xvfb.py",
@@ -1234,6 +1228,12 @@ if (!is_android) {
               ".",
               "//chrome")
     }
+    if (enable_service_discovery) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_service_discovery_sources,
+              ".",
+              "//chrome")
+    }
     if (enable_supervised_users) {
       sources += rebase_path(
               chrome_tests_gypi_values.chrome_browser_tests_supervised_user_sources,
@@ -1361,7 +1361,6 @@ if (!is_android) {
     if (is_mac) {
       # Dictionary sync is disabled on Mac.
       sources -= [
-        "../browser/sync/test/integration/multiple_client_dictionary_sync_test.cc",
         "../browser/sync/test/integration/single_client_dictionary_sync_test.cc",
         "../browser/sync/test/integration/two_client_dictionary_sync_test.cc",
       ]
@@ -1719,6 +1718,12 @@ test("unit_tests") {
               ".",
               "//chrome")
     }
+    if (enable_service_discovery) {
+      sources += rebase_path(
+              chrome_tests_unit_gypi_values.chrome_unit_tests_extensions_service_discovery_sources,
+              ".",
+              "//chrome")
+    }
     if (!is_chromeos) {
       sources += rebase_path(
               chrome_tests_unit_gypi_values.chrome_unit_tests_extensions_non_chromeos_sources,
@@ -2034,7 +2039,6 @@ test("unit_tests") {
   }
   if (is_android || is_ios) {
     sources -= [
-      "../browser/devtools/device/cast_device_provider_unittest.cc",
       "../browser/ui/bookmarks/bookmark_ui_utils_desktop_unittest.cc",
       "../browser/ui/sync/sync_promo_ui_unittest.cc",
     ]
@@ -2133,9 +2137,6 @@ if (is_win || (is_linux && !is_chromeos)) {
       "../app/delay_load_hook_win.cc",
       "../app/delay_load_hook_win.h",
       "../app/resources/resources_unittest.cc",
-      "../app/signature_validator_win.cc",
-      "../app/signature_validator_win.h",
-      "../app/signature_validator_win_unittest.cc",
       "../common/crash_keys.cc",
       "../common/crash_keys.h",
     ]
@@ -2149,6 +2150,7 @@ if (is_win || (is_linux && !is_chromeos)) {
       "//chrome/child",
       "//components/crash/core/common",
       "//components/flags_ui:switches",
+      "//third_party/kasko:kasko_features",
     ]
     if (cld_version == 2) {
       # Use whatever CLD2 data access mode that the

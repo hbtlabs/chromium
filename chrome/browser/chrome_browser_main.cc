@@ -95,6 +95,7 @@
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
@@ -143,7 +144,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "grit/platform_locale_settings.h"
-#include "media/audio/audio_manager.h"
 #include "net/base/net_module.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_network_layer.h"
@@ -743,14 +743,6 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
 
   const version_info::Channel channel = chrome::GetChannel();
 
-  // TODO(dalecurtis): Remove these checks and enable for all channels once we
-  // track down the root causes of crbug.com/422522 and crbug.com/478932.
-  if (channel == version_info::Channel::UNKNOWN ||
-      channel == version_info::Channel::CANARY ||
-      channel == version_info::Channel::DEV) {
-    media::AudioManager::EnableCrashKeyLoggingForAudioThreadHangs();
-  }
-
   // Enable profiler instrumentation depending on the channel.
   switch (channel) {
     case version_info::Channel::UNKNOWN:
@@ -802,6 +794,9 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
   // Record collected startup metrics.
   startup_metric_utils::RecordBrowserMainMessageLoopStart(
       base::TimeTicks::Now(), is_first_run);
+
+  startup_metric_utils::RecordTimeSinceLastStartup(
+      g_browser_process->local_state());
 }
 
 // -----------------------------------------------------------------------------
@@ -1196,12 +1191,9 @@ void ChromeBrowserMainParts::PreBrowserStart() {
 #if defined(OS_CHROMEOS)
   g_browser_process->GetTabManager()->Start(false);
 #elif defined(OS_WIN) || defined(OS_MACOSX)
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("AutomaticTabDiscarding");
-  if (base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE)) {
-    bool enabled_once = base::StartsWith(group_name, "Enabled_Once",
-                                         base::CompareCase::SENSITIVE);
-    g_browser_process->GetTabManager()->Start(enabled_once);
+  if (base::FeatureList::IsEnabled(features::kAutomaticTabDiscarding)) {
+    // The default behavior is to only discard once (for now).
+    g_browser_process->GetTabManager()->Start(true);
   }
 #endif
 }

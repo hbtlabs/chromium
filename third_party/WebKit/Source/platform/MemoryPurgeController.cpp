@@ -4,18 +4,28 @@
 
 #include "platform/MemoryPurgeController.h"
 
+#include "base/sys_info.h"
 #include "platform/TraceEvent.h"
+#include "platform/graphics/ImageDecodingStore.h"
 #include "public/platform/Platform.h"
 #include "wtf/Partitions.h"
 
 namespace blink {
+
+void MemoryPurgeController::onMemoryPressure(WebMemoryPressureLevel level)
+{
+    if (level == WebMemoryPressureLevelCritical) {
+        // Clear the image cache.
+        ImageDecodingStore::instance().clear();
+    }
+}
 
 DEFINE_TRACE(MemoryPurgeClient)
 {
 }
 
 MemoryPurgeController::MemoryPurgeController()
-    : m_deviceKind(Platform::current()->isLowEndDeviceMode() ? DeviceKind::LowEnd : DeviceKind::NotSpecified)
+    : m_deviceKind(base::SysInfo::IsLowEndDevice() ? DeviceKind::LowEnd : DeviceKind::NotSpecified)
 {
 }
 

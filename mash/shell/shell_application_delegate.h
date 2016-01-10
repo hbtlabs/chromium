@@ -31,8 +31,10 @@ class ShellApplicationDelegate : public mojo::ApplicationDelegate {
       mojo::ApplicationConnection* connection) override;
 
   void StartWindowManager();
+  void StartWallpaper();
   void StartSystemUI();
   void StartBrowserDriver();
+  void StartQuickLaunch();
 
   // Starts the application at |url|, running |restart_callback| if the
   // connection to the application is closed.

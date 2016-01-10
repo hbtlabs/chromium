@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/android/build_info.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -89,6 +90,57 @@ static inline const base::TimeDelta IdleTimerTimeOut() {
   return base::TimeDelta::FromSeconds(1);
 }
 
+// Handle OnFrameAvailable callbacks safely.  Since they occur asynchronously,
+// we take care that the AVDA that wants them still exists.  A WeakPtr to
+// the AVDA would be preferable, except that OnFrameAvailable callbacks can
+// occur off the gpu main thread.  We also can't guarantee when the
+// SurfaceTexture will quit sending callbacks to coordinate with the
+// destruction of the AVDA, so we have a separate object that the cb can own.
+class AndroidVideoDecodeAccelerator::OnFrameAvailableHandler
+    : public base::RefCountedThreadSafe<OnFrameAvailableHandler> {
+ public:
+  // We do not retain ownership of |owner|.  It must remain valid until
+  // after ClearOwner() is called.  This will register with
+  // |surface_texture| to receive OnFrameAvailable callbacks.
+  OnFrameAvailableHandler(
+      AndroidVideoDecodeAccelerator* owner,
+      const scoped_refptr<gfx::SurfaceTexture>& surface_texture)
+      : owner_(owner) {
+    // Note that the callback owns a strong ref to us.
+    surface_texture->SetFrameAvailableCallbackOnAnyThread(
+        base::Bind(&OnFrameAvailableHandler::OnFrameAvailable,
+                   scoped_refptr<OnFrameAvailableHandler>(this)));
+  }
+
+  // Forget about our owner, which is required before one deletes it.
+  // No further callbacks will happen once this completes.
+  void ClearOwner() {
+    base::AutoLock lock(lock_);
+    // No callback can happen until we release the lock.
+    owner_ = nullptr;
+  }
+
+  // Call back into our owner if it hasn't been deleted.
+  void OnFrameAvailable() {
+    base::AutoLock auto_lock(lock_);
+    // |owner_| can't be deleted while we have the lock.
+    if (owner_)
+      owner_->OnFrameAvailable();
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<OnFrameAvailableHandler>;
+  virtual ~OnFrameAvailableHandler() {}
+
+  // Protects changes to owner_.
+  base::Lock lock_;
+
+  // AVDA that wants the OnFrameAvailable callback.
+  AndroidVideoDecodeAccelerator* owner_;
+
+  DISALLOW_COPY_AND_ASSIGN(OnFrameAvailableHandler);
+};
+
 AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
     const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder,
     const base::Callback<bool(void)>& make_context_current)
@@ -155,6 +207,8 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
   strategy_->Initialize(this);
 
   surface_texture_ = strategy_->CreateSurfaceTexture();
+  on_frame_available_handler_ =
+      new OnFrameAvailableHandler(this, surface_texture_);
 
   if (!ConfigureMediaCodec()) {
     LOG(ERROR) << "Failed to create MediaCodec instance.";
@@ -300,15 +354,15 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
     size_t offset = 0;
     size_t size = 0;
 
-    TRACE_EVENT_BEGIN0("media", "AVDA::DequeueOutputBuffer");
+    TRACE_EVENT_BEGIN0("media", "AVDA::DequeueOutput");
     media::MediaCodecStatus status = media_codec_->DequeueOutputBuffer(
         NoWaitTimeOut(), &buf_index, &offset, &size, &presentation_timestamp,
         &eos, NULL);
-    TRACE_EVENT_END2("media", "AVDA::DequeueOutputBuffer", "status", status,
+    TRACE_EVENT_END2("media", "AVDA::DequeueOutput", "status", status,
                      "presentation_timestamp (ms)",
                      presentation_timestamp.InMilliseconds());
 
-    DVLOG(3) << "AVDA::DequeueOutputBuffer: pts:" << presentation_timestamp
+    DVLOG(3) << "AVDA::DequeueOutput: pts:" << presentation_timestamp
              << " buf_index:" << buf_index << " offset:" << offset
              << " size:" << size << " eos:" << eos;
 
@@ -332,8 +386,8 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
           // Dynamic resolution change support is not specified by the Android
           // platform at and before JB-MR1, so it's not possible to smoothly
           // continue playback at this point.  Instead, error out immediately,
-          // expecting clients to Reset() as appropriate to avoid this.
-          // b/7093648
+          // expecting clients to Flush() or Reset() as appropriate to avoid
+          // this. b/7093648
           RETURN_ON_FAILURE(this, size_ == gfx::Size(width, height),
                             "Dynamic resolution change is not supported.",
                             PLATFORM_FAILURE, false);
@@ -367,13 +421,15 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
   auto it = eos ? bitstream_buffers_in_decoder_.end()
                 : bitstream_buffers_in_decoder_.find(presentation_timestamp);
 
-  if (it == bitstream_buffers_in_decoder_.end()) {
-    media_codec_->ReleaseOutputBuffer(buf_index, false);
+  if (eos) {
+    DVLOG(3) << "AVDA::DequeueOutput: Resetting output state after EOS";
+    ResetCodecState();
+
     base::MessageLoop::current()->PostTask(
         FROM_HERE,
         base::Bind(&AndroidVideoDecodeAccelerator::NotifyFlushDone,
                    weak_this_factory_.GetWeakPtr()));
-  } else {
+  } else if (it != bitstream_buffers_in_decoder_.end()) {
     const int32_t bitstream_buffer_id = it->second;
     bitstream_buffers_in_decoder_.erase(bitstream_buffers_in_decoder_.begin(),
                                         ++it);
@@ -395,6 +451,11 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
         break;
       }
     }
+  } else {
+    DVLOG(3) << "AVDA::DequeueOutput: Releasing buffer with unexpected PTS: "
+             << presentation_timestamp;
+    media_codec_->ReleaseOutputBuffer(buf_index, false);
+    should_try_again = true;
   }
 
   return should_try_again;
@@ -537,6 +598,42 @@ bool AndroidVideoDecodeAccelerator::ConfigureMediaCodec() {
   return true;
 }
 
+void AndroidVideoDecodeAccelerator::ResetCodecState() {
+  // TODO(chcunningham): This will likely dismiss a handful of decoded frames
+  // that have not yet been drawn and returned to us for re-use. Consider
+  // a more complicated design that would wait for these to be drawn before
+  // dismissing.
+  for (const auto& it : output_picture_buffers_) {
+    strategy_->DismissOnePictureBuffer(it.second);
+    client_->DismissPictureBuffer(it.first);
+    dismissed_picture_ids_.insert(it.first);
+  }
+  output_picture_buffers_.clear();
+  std::queue<int32_t> empty;
+  std::swap(free_picture_ids_, empty);
+  CHECK(free_picture_ids_.empty());
+  picturebuffers_requested_ = false;
+  bitstream_buffers_in_decoder_.clear();
+
+  // When codec is not in error state we can quickly reset (internally calls
+  // flush()) for JB-MR2 and beyond. Prior to JB-MR2, flush() had several bugs
+  // (b/8125974, b/8347958) so we must stop() and reconfigure MediaCodec. The
+  // full reconfigure is much slower and may cause visible freezing if done
+  // mid-stream.
+  if (state_ == NO_ERROR &&
+      base::android::BuildInfo::GetInstance()->sdk_int() >= 18) {
+    DVLOG(3) << __FUNCTION__ << " Doing fast MediaCodec reset (flush).";
+    media_codec_->Reset();
+  } else {
+    DVLOG(3) << __FUNCTION__
+             << " Doing slow MediaCodec reset (stop/re-configure).";
+    io_timer_.Stop();
+    media_codec_->Stop();
+    ConfigureMediaCodec();
+    state_ = NO_ERROR;
+  }
+}
+
 void AndroidVideoDecodeAccelerator::Reset() {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("media", "AVDA::Reset");
@@ -555,28 +652,7 @@ void AndroidVideoDecodeAccelerator::Reset() {
   TRACE_COUNTER1("media", "AVDA::PendingBitstreamBufferCount", 0);
   bitstreams_notified_in_advance_.clear();
 
-  for (OutputBufferMap::iterator it = output_picture_buffers_.begin();
-       it != output_picture_buffers_.end();
-       ++it) {
-    strategy_->DismissOnePictureBuffer(it->second);
-    client_->DismissPictureBuffer(it->first);
-    dismissed_picture_ids_.insert(it->first);
-  }
-  output_picture_buffers_.clear();
-  std::queue<int32_t> empty;
-  std::swap(free_picture_ids_, empty);
-  CHECK(free_picture_ids_.empty());
-  picturebuffers_requested_ = false;
-  bitstream_buffers_in_decoder_.clear();
-
-  // On some devices, and up to at least JB-MR1,
-  // - flush() can fail after EOS (b/8125974); and
-  // - mid-stream resolution change is unsupported (b/7093648).
-  // To cope with these facts, we always stop & restart the codec on Reset().
-  io_timer_.Stop();
-  media_codec_->Stop();
-  ConfigureMediaCodec();
-  state_ = NO_ERROR;
+  ResetCodecState();
 
   base::MessageLoop::current()->PostTask(
       FROM_HERE,
@@ -588,6 +664,13 @@ void AndroidVideoDecodeAccelerator::Destroy() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   strategy_->Cleanup(output_picture_buffers_);
+
+  // If we have an OnFrameAvailable handler, tell it that we're going away.
+  if (on_frame_available_handler_) {
+    on_frame_available_handler_->ClearOwner();
+    on_frame_available_handler_ = nullptr;
+  }
+
   weak_this_factory_.InvalidateWeakPtrs();
   if (media_codec_) {
     io_timer_.Stop();
@@ -612,6 +695,12 @@ const base::ThreadChecker& AndroidVideoDecodeAccelerator::ThreadChecker()
 base::WeakPtr<gpu::gles2::GLES2Decoder>
 AndroidVideoDecodeAccelerator::GetGlDecoder() const {
   return gl_decoder_;
+}
+
+void AndroidVideoDecodeAccelerator::OnFrameAvailable() {
+  // Remember: this may be on any thread.
+  DCHECK(strategy_);
+  strategy_->OnFrameAvailable();
 }
 
 void AndroidVideoDecodeAccelerator::PostError(

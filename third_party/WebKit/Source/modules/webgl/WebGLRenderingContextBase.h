@@ -291,18 +291,18 @@ public:
     void stencilOp(GLenum fail, GLenum zfail, GLenum zpass);
     void stencilOpSeparate(GLenum face, GLenum fail, GLenum zfail, GLenum zpass);
 
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLsizei width, GLsizei height, GLint border,
         GLenum format, GLenum type, DOMArrayBufferView*);
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, ImageData*);
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, HTMLImageElement*, ExceptionState&);
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, HTMLCanvasElement*, ExceptionState&);
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
-    void texImage2D(GLenum target, GLint level, GLenum internalformat,
+    void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>);
 
     void texParameterf(GLenum target, GLenum pname, GLfloat param);
@@ -552,36 +552,9 @@ protected:
         Uint32ArrayType,
     };
 
-    class VertexAttribValue {
-    public:
-        VertexAttribValue()
-            : type(Float32ArrayType)
-        {
-            initValue();
-        }
-
-        void initValue()
-        {
-            value.floatValue[0] = 0.0f;
-            value.floatValue[1] = 0.0f;
-            value.floatValue[2] = 0.0f;
-            value.floatValue[3] = 1.0f;
-        }
-
-        VertexAttribValueType type;
-        union {
-            GLfloat floatValue[4];
-            GLint intValue[4];
-            GLuint uintValue[4];
-        } value;
-    };
-    Vector<VertexAttribValue> m_vertexAttribValue;
+    Vector<VertexAttribValueType> m_vertexAttribType;
     unsigned m_maxVertexAttribs;
-    PersistentWillBeMember<WebGLBuffer> m_vertexAttrib0Buffer;
-    long m_vertexAttrib0BufferSize;
-    GLfloat m_vertexAttrib0BufferValue[4];
-    bool m_forceAttrib0BufferRefill;
-    bool m_vertexAttrib0UsedBefore;
+    void setVertexAttribType(GLuint index, VertexAttribValueType);
 
     PersistentWillBeMember<WebGLProgram> m_currentProgram;
     PersistentWillBeMember<WebGLFramebuffer> m_framebufferBinding;
@@ -835,14 +808,16 @@ protected:
     // Convert texture internal format.
     GLenum convertTexInternalFormat(GLenum internalformat, GLenum type);
 
-    void texImage2DBase(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels);
-    void texImage2DImpl(GLenum target, GLint level, GLenum internalformat, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
+    void texImage2DBase(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels);
+    void texImage2DImpl(GLenum target, GLint level, GLint internalformat, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
     void texSubImage2DBase(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels);
     void texSubImage2DImpl(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
 
     enum TexImageFunctionType {
-        NotTexSubImage,
-        TexSubImage
+        TexImage,
+        TexSubImage,
+        CopyTexImage,
+        CompressedTexImage
     };
     enum TexImageByGPUType {
         TexImage2DByGPU,
@@ -851,11 +826,14 @@ protected:
     };
     // Copy from the canvas element directly to the texture via the GPU, without a read-back to system memory.
     void texImageCanvasByGPU(TexImageByGPUType, WebGLTexture*, GLenum target, GLint level,
-        GLenum internalformat, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, HTMLCanvasElement*);
-    bool canUseTexImageCanvasByGPU(GLenum internalformat, GLenum type);
+        GLint internalformat, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, HTMLCanvasElement*);
+    bool canUseTexImageCanvasByGPU(GLint internalformat, GLenum type);
 
     void handleTextureCompleteness(const char*, bool);
     void createFallbackBlackTextures1x1();
+
+    virtual WebGLImageConversion::PixelStoreParams getPackPixelStoreParams();
+    virtual WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams();
 
     // Helper function for copyTex{Sub}Image, check whether the internalformat
     // and the color buffer format of the current bound framebuffer combination
@@ -884,7 +862,7 @@ protected:
 
     // Helper function to check input internalformat/format/type for functions {copy}Tex{Sub}Image.
     // Generates GL error and returns false if parameters are invalid.
-    bool validateTexFuncFormatAndType(const char* functionName, GLenum internalformat, GLenum format, GLenum type, GLint level);
+    bool validateTexFuncFormatAndType(const char* functionName, TexImageFunctionType, GLenum internalformat, GLenum format, GLenum type, GLint level);
 
     // Helper function to check readbuffer validity for readPixels and copyTex{Sub}Image.
     // If yes, obtains the readbuffer's format, type, the bound read framebuffer, returns true.
@@ -906,9 +884,6 @@ protected:
     // Helper function to check parameters of readPixels. Returns true if all parameters
     // are valid. Otherwise, generates appropriate error and returns false.
     bool validateReadPixelsFuncParameters(GLsizei width, GLsizei height, GLenum format, GLenum type, long long bufferSize);
-
-    // Helper function to check type and size of vertexAttribPointer. Return true if type and size are valid. Otherwise, generates appropriates error and return false.
-    virtual bool validateVertexAttribPointerTypeAndSize(GLenum type, GLint size);
 
     virtual GLint getMaxTextureLevelForTarget(GLenum target);
 
@@ -975,9 +950,6 @@ protected:
     // Helper function to validate compressed texture dimensions are valid for
     // the given format.
     bool validateCompressedTexSubDimensions(const char* functionName, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, WebGLTexture*);
-
-    // Helper function to validate mode for draw{Arrays/Elements}.
-    bool validateDrawMode(const char* functionName, GLenum);
 
     // Helper function to validate if front/back stencilMask and stencilFunc settings are the same.
     bool validateStencilSettings(const char* functionName);
@@ -1059,14 +1031,6 @@ protected:
     // Helper function to validate drawElements(Instanced) calls
     bool validateDrawElements(const char* functionName, GLenum mode, GLsizei count, GLenum type, long long offset);
 
-    // Helper function to validate draw*Instanced calls
-    bool validateDrawInstanced(const char* functionName, GLsizei primcount);
-
-    // Helper functions for vertexAttribNf{v}.
-    void vertexAttribfImpl(const char* functionName, GLuint index, GLsizei expectedSize, GLfloat, GLfloat, GLfloat, GLfloat);
-    void vertexAttribfvImpl(const char* functionName, GLuint index, const DOMFloat32Array*, GLsizei expectedSize);
-    void vertexAttribfvImpl(const char* functionName, GLuint index, const GLfloat*, GLsizei, GLsizei expectedSize);
-
     // Helper functions to bufferData() and bufferSubData().
     void bufferDataImpl(GLenum target, long long size, const void* data, GLenum usage);
     void bufferSubDataImpl(GLenum target, long long offset, GLsizeiptr, const void* data);
@@ -1132,6 +1096,9 @@ protected:
     // during calls to bindBuffer and vertexAttribPointer (from
     // JavaScript).
     void maybePreserveDefaultVAOObjectWrapper(ScriptState*);
+
+    virtual bool transformFeedbackActive() const { return false; }
+    virtual bool transformFeedbackPaused() const { return false; }
 
     friend class WebGLStateRestorer;
     friend class WebGLRenderingContextEvictionManager;

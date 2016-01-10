@@ -169,23 +169,23 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControl) {
   KeyTestCase pc_keyboard_tests[] = {
       // VKEY_A, Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::UNIDENTIFIED}},
 
       // VKEY_A, Win modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED}},
 
       // VKEY_A, Alt+Win modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED}},
 
       // VKEY_LWIN (left Windows key), Alt modifier.
@@ -214,23 +214,23 @@ TEST_F(EventRewriterTest, TestRewriteCommandToControl) {
   KeyTestCase apple_keyboard_tests[] = {
       // VKEY_A, Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::UNIDENTIFIED}},
 
       // VKEY_A, Win modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
 
       // VKEY_A, Alt+Win modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::UNIDENTIFIED},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
 
       // VKEY_LWIN (left Windows key), Alt modifier.
@@ -612,24 +612,24 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemapMultipleKeys) {
       // Press Search with Caps Lock mask. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
-        ui::EF_CAPS_LOCK_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::OS},
+        ui::EF_CAPS_LOCK_ON | ui::EF_COMMAND_DOWN, ui::DomKey::OS},
        {ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
-        ui::EF_CAPS_LOCK_DOWN | ui::EF_COMMAND_DOWN, ui::DomKey::OS}},
+        ui::EF_CAPS_LOCK_ON | ui::EF_COMMAND_DOWN, ui::DomKey::OS}},
 
       // Release Search with Caps Lock mask. Confirm the event is not rewritten.
       {ui::ET_KEY_RELEASED,
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_ON,
         ui::DomKey::OS},
-       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_DOWN,
+       {ui::VKEY_LWIN, ui::DomCode::OS_LEFT, ui::EF_CAPS_LOCK_ON,
         ui::DomKey::OS}},
 
       // Press Shift+Ctrl+Alt+Search+A. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_B, ui::DomCode::KEY_B,
+       {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'B'>::Character},
-       {ui::VKEY_B, ui::DomCode::KEY_B,
+       {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'B'>::Character}},
@@ -688,17 +688,17 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
       // Press Control+Search+a. Confirm the event is now VKEY_A without any
       // modifiers.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_NONE,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE,
         ui::DomKey::Constant<'a'>::Character}},
 
       // Press Control+Search+Alt+a. Confirm the event is now VKEY_A only with
       // the Alt modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
   };
 
@@ -722,9 +722,9 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
       // Press Alt+a. Confirm the event is now Control+a even though the Control
       // key itself is disabled.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
   };
 
@@ -798,11 +798,11 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToControl) {
       // Press Shift+Control+Alt+Search+B. Confirm the event is now B with Shift
       // and Control modifiers.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_B, ui::DomCode::KEY_B,
+       {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'B'>::Character},
-       {ui::VKEY_B, ui::DomCode::KEY_B, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN,
+       {ui::VKEY_B, ui::DomCode::US_B, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'B'>::Character}},
   };
 
@@ -927,11 +927,11 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
 
       // Press Shift+Control+Alt+Search+B
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_B, ui::DomCode::KEY_B,
+       {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'B'>::Character},
-       {ui::VKEY_B, ui::DomCode::KEY_B,
+       {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::Constant<'B'>::Character}},
@@ -958,10 +958,9 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
   EXPECT_FALSE(ime_keyboard.caps_lock_is_enabled_);
 
   // Press Search.
-  EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL,
-                                      ui::DomCode::CAPS_LOCK,
-                                      ui::EF_MOD3_DOWN | ui::EF_CAPS_LOCK_DOWN,
-                                      ui::DomKey::CAPS_LOCK),
+  EXPECT_EQ(GetExpectedResultAsString(
+                ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
+                ui::EF_MOD3_DOWN | ui::EF_CAPS_LOCK_ON, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
                                       ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
                                       ui::EF_COMMAND_DOWN, ui::DomKey::OS));
@@ -979,13 +978,13 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
   EXPECT_TRUE(ime_keyboard.caps_lock_is_enabled_);
 
   // Press Search.
-  EXPECT_EQ(
-      GetExpectedResultAsString(
-          ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
-          ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
-      GetRewrittenEventAsString(
-          &rewriter, ui::ET_KEY_PRESSED, ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
-          ui::EF_COMMAND_DOWN | ui::EF_CAPS_LOCK_DOWN, ui::DomKey::OS));
+  EXPECT_EQ(GetExpectedResultAsString(
+                ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
+                ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
+            GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
+                                      ui::VKEY_LWIN, ui::DomCode::OS_LEFT,
+                                      ui::EF_COMMAND_DOWN | ui::EF_CAPS_LOCK_ON,
+                                      ui::DomKey::OS));
   // Confirm that the Caps Lock status is changed.
   EXPECT_FALSE(ime_keyboard.caps_lock_is_enabled_);
 
@@ -1000,13 +999,12 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToCapsLock) {
   EXPECT_FALSE(ime_keyboard.caps_lock_is_enabled_);
 
   // Press Caps Lock (on an external keyboard).
-  EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL,
-                                      ui::DomCode::CAPS_LOCK,
-                                      ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN,
-                                      ui::DomKey::CAPS_LOCK),
+  EXPECT_EQ(GetExpectedResultAsString(
+                ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
+                ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
                                       ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
-                                      ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN,
+                                      ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN,
                                       ui::DomKey::CAPS_LOCK));
 
 #if defined(USE_X11)
@@ -1047,10 +1045,9 @@ TEST_F(EventRewriterTest, TestRewriteCapsLock) {
   EXPECT_FALSE(ime_keyboard.caps_lock_is_enabled_);
 
   // On Chrome OS, CapsLock is mapped to F16 with Mod3Mask.
-  EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL,
-                                      ui::DomCode::CAPS_LOCK,
-                                      ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN,
-                                      ui::DomKey::CAPS_LOCK),
+  EXPECT_EQ(GetExpectedResultAsString(
+                ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
+                ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
                                       ui::VKEY_F16, ui::DomCode::F16,
                                       ui::EF_MOD3_DOWN, ui::DomKey::F16));
@@ -1083,9 +1080,9 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKey) {
       // However, Mod2Mask should not be rewritten to CtrlMask when
       // --has-chromeos-diamond-key is not specified.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_NONE,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_NONE,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE,
         ui::DomKey::Constant<'a'>::Character}},
   };
 
@@ -1117,10 +1114,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Control is applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+                                      ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
   // Release F15
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_RELEASED, ui::VKEY_CONTROL,
@@ -1131,10 +1128,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Control is no longer applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   IntegerPrefMember diamond;
@@ -1149,10 +1146,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that no modifier is applied to another key.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   diamond.SetValue(chromeos::input_method::kControlKey);
@@ -1165,10 +1162,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Control is applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+                                      ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
   // Release F15
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_RELEASED, ui::VKEY_CONTROL,
@@ -1179,10 +1176,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Control is no longer applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   diamond.SetValue(chromeos::input_method::kAltKey);
@@ -1195,10 +1192,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Alt is applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_ALT_DOWN,
+                                      ui::DomCode::US_A, ui::EF_ALT_DOWN,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
   // Release F15
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_RELEASED, ui::VKEY_MENU,
@@ -1209,28 +1206,27 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Alt is no longer applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   diamond.SetValue(chromeos::input_method::kCapsLockKey);
 
-  EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL,
-                                      ui::DomCode::CAPS_LOCK,
-                                      ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN,
-                                      ui::DomKey::CAPS_LOCK),
+  EXPECT_EQ(GetExpectedResultAsString(
+                ui::ET_KEY_PRESSED, ui::VKEY_CAPITAL, ui::DomCode::CAPS_LOCK,
+                ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN, ui::DomKey::CAPS_LOCK),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED,
                                       ui::VKEY_F15, ui::DomCode::F15,
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Caps is applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A,
-                                      ui::EF_CAPS_LOCK_DOWN | ui::EF_MOD3_DOWN,
+                                      ui::DomCode::US_A,
+                                      ui::EF_CAPS_LOCK_ON | ui::EF_MOD3_DOWN,
                                       ui::DomKey::Constant<'A'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
   // Release F15
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_RELEASED, ui::VKEY_CAPITAL,
@@ -1241,10 +1237,10 @@ TEST_F(EventRewriterTest, TestRewriteDiamondKeyWithFlag) {
                                       ui::EF_NONE, ui::DomKey::F15));
   // Check that Control is no longer applied to a subsequent key press.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   *base::CommandLine::ForCurrentProcess() = original_cl;
@@ -1266,25 +1262,25 @@ TEST_F(EventRewriterTest, TestRewriteCapsLockToControl) {
       // Press CapsLock+a. Confirm that Mod3Mask is rewritten to ControlMask.
       // On Chrome OS, CapsLock works as a Mod3 modifier.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_MOD3_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_MOD3_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
 
       // Press Control+CapsLock+a. Confirm that Mod3Mask is rewritten to
       // ControlMask
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN | ui::EF_MOD3_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN | ui::EF_MOD3_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
 
       // Press Alt+CapsLock+a. Confirm that Mod3Mask is rewritten to
       // ControlMask.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_MOD3_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_MOD3_DOWN,
         ui::DomKey::Constant<'a'>::Character},
-       {ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN,
+       {ui::VKEY_A, ui::DomCode::US_A, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN,
         ui::DomKey::Constant<'a'>::Character}},
   };
 
@@ -1309,10 +1305,10 @@ TEST_F(EventRewriterTest, TestRewriteCapsLockMod3InUse) {
   // Press CapsLock+a. Confirm that Mod3Mask is NOT rewritten to ControlMask
   // when Mod3Mask is already in use by the current XKB layout.
   EXPECT_EQ(GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character),
             GetRewrittenEventAsString(&rewriter, ui::ET_KEY_PRESSED, ui::VKEY_A,
-                                      ui::DomCode::KEY_A, ui::EF_NONE,
+                                      ui::DomCode::US_A, ui::EF_NONE,
                                       ui::DomKey::Constant<'a'>::Character));
 
   input_method_manager_mock_->set_mod3_used(false);
@@ -2308,7 +2304,7 @@ TEST_F(EventRewriterAshTest, StickyKeyEventDispatchImpl) {
 
   // Test key press event is correctly modified and modifier release
   // event is sent.
-  ui::KeyEvent press(ui::ET_KEY_PRESSED, ui::VKEY_C, ui::DomCode::KEY_C,
+  ui::KeyEvent press(ui::ET_KEY_PRESSED, ui::VKEY_C, ui::DomCode::US_C,
                      ui::EF_NONE, ui::DomKey::Constant<'c'>::Character,
                      ui::EventTimeForNow());
   ui::EventDispatchDetails details = Send(&press);
@@ -2322,7 +2318,7 @@ TEST_F(EventRewriterAshTest, StickyKeyEventDispatchImpl) {
             static_cast<ui::KeyEvent*>(events[1])->key_code());
 
   // Test key release event is not modified.
-  ui::KeyEvent release(ui::ET_KEY_RELEASED, ui::VKEY_C, ui::DomCode::KEY_C,
+  ui::KeyEvent release(ui::ET_KEY_RELEASED, ui::VKEY_C, ui::DomCode::US_C,
                        ui::EF_NONE, ui::DomKey::Constant<'c'>::Character,
                        ui::EventTimeForNow());
   details = Send(&release);
@@ -2437,7 +2433,7 @@ TEST_F(StickyKeysOverlayTest, OneModifierEnabled) {
             overlay_->GetModifierKeyState(ui::EF_CONTROL_DOWN));
 
   // Pressing a normal key should hide overlay.
-  SendActivateStickyKeyPattern(ui::VKEY_T, ui::DomCode::KEY_T,
+  SendActivateStickyKeyPattern(ui::VKEY_T, ui::DomCode::US_T,
                                ui::DomKey::Constant<'t'>::Character);
   EXPECT_FALSE(overlay_->is_visible());
   EXPECT_EQ(ash::STICKY_KEY_STATE_DISABLED,
@@ -2463,7 +2459,7 @@ TEST_F(StickyKeysOverlayTest, TwoModifiersEnabled) {
             overlay_->GetModifierKeyState(ui::EF_CONTROL_DOWN));
 
   // Pressing a normal key should hide overlay.
-  SendActivateStickyKeyPattern(ui::VKEY_N, ui::DomCode::KEY_N,
+  SendActivateStickyKeyPattern(ui::VKEY_N, ui::DomCode::US_N,
                                ui::DomKey::Constant<'n'>::Character);
   EXPECT_FALSE(overlay_->is_visible());
   EXPECT_EQ(ash::STICKY_KEY_STATE_DISABLED,
@@ -2487,7 +2483,7 @@ TEST_F(StickyKeysOverlayTest, LockedModifier) {
             overlay_->GetModifierKeyState(ui::EF_ALT_DOWN));
 
   // Pressing a normal key should not hide overlay.
-  SendActivateStickyKeyPattern(ui::VKEY_D, ui::DomCode::KEY_D,
+  SendActivateStickyKeyPattern(ui::VKEY_D, ui::DomCode::US_D,
                                ui::DomKey::Constant<'d'>::Character);
   EXPECT_TRUE(overlay_->is_visible());
   EXPECT_EQ(ash::STICKY_KEY_STATE_LOCKED,
@@ -2520,7 +2516,7 @@ TEST_F(StickyKeysOverlayTest, LockedAndNormalModifier) {
             overlay_->GetModifierKeyState(ui::EF_SHIFT_DOWN));
 
   // Pressing a normal key should not hide overlay but disable normal modifier.
-  SendActivateStickyKeyPattern(ui::VKEY_D, ui::DomCode::KEY_D,
+  SendActivateStickyKeyPattern(ui::VKEY_D, ui::DomCode::US_D,
                                ui::DomKey::Constant<'d'>::Character);
   EXPECT_TRUE(overlay_->is_visible());
   EXPECT_EQ(ash::STICKY_KEY_STATE_LOCKED,

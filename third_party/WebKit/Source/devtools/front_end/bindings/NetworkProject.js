@@ -79,6 +79,7 @@ WebInspector.NetworkProject = function(target, workspace, networkMapping)
     target[WebInspector.NetworkProject._networkProjectSymbol] = this;
 
     target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, this._resourceAdded, this);
+    target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameWillNavigate, this._frameWillNavigate, this);
     target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
 
     var debuggerModel = WebInspector.DebuggerModel.fromTarget(target);
@@ -342,7 +343,8 @@ WebInspector.NetworkProject.prototype = {
         // Only load selected resource types from resources.
         if (resourceType !== WebInspector.resourceTypes.Image &&
             resourceType !== WebInspector.resourceTypes.Font &&
-            resourceType !== WebInspector.resourceTypes.Document) {
+            resourceType !== WebInspector.resourceTypes.Document &&
+            resourceType !== WebInspector.resourceTypes.Manifest) {
             return;
         }
 
@@ -363,6 +365,20 @@ WebInspector.NetworkProject.prototype = {
             uiSourceCode[WebInspector.NetworkProject._resourceSymbol] = resource;
             this._addUISourceCodeWithProvider(uiSourceCode, resource);
         }
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _frameWillNavigate: function(event)
+    {
+        var frame = /** @type {!WebInspector.ResourceTreeFrame} */ (event.data);
+        var project = this._workspaceProject(frame, false);
+        for (var resource of frame.resources())
+            project.removeUISourceCode(resource.url);
+        project = this._workspaceProject(frame, true);
+        for (var resource of frame.resources())
+            project.removeUISourceCode(resource.url);
     },
 
     /**

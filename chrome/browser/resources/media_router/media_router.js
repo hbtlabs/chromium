@@ -22,6 +22,8 @@ cr.define('media_router', function() {
     container = $('media-router-container');
     media_router.ui.setContainer(container);
 
+    container.addEventListener('acknowledge-first-run-flow',
+                               onAcknowledgeFirstRunFlow);
     container.addEventListener('back-click', onNavigateToSinkList);
     container.addEventListener('cast-mode-selected', onCastModeSelected);
     container.addEventListener('close-button-click', onCloseDialogEvent);
@@ -29,12 +31,34 @@ cr.define('media_router', function() {
     container.addEventListener('close-route-click', onCloseRouteClick);
     container.addEventListener('create-route', onCreateRoute);
     container.addEventListener('issue-action-click', onIssueActionClick);
+    container.addEventListener('join-route-click', onJoinRouteClick);
     container.addEventListener('navigate-sink-list-to-details',
                                onNavigateToDetails);
     container.addEventListener('navigate-to-cast-mode-list',
                                onNavigateToCastMode);
     container.addEventListener('report-sink-count', onSinkCountReported);
     container.addEventListener('sink-click', onSinkClick);
+  }
+
+  /**
+   * Reports the selected cast mode.
+   * Called when the user selects a cast mode from the picker.
+   *
+   * @param {{detail: {castModeType: number}}} data
+   * Parameters in |data|.detail:
+   *   castModeType - type of cast mode selected by the user.
+   */
+  function onCastModeSelected(data) {
+    media_router.browserApi.reportSelectedCastMode(data.detail.castModeType);
+  }
+
+  /**
+   * Updates the preference that the user has seen the first run flow.
+   * Called when the user clicks on the acknowledgement button on the first run
+   * flow.
+   */
+  function onAcknowledgeFirstRunFlow() {
+    media_router.browserApi.acknowledgeFirstRunFlow();
   }
 
   /**
@@ -64,18 +88,6 @@ cr.define('media_router', function() {
   }
 
   /**
-   * Reports the selected cast mode.
-   * Called when the user selects a cast mode from the picker.
-   *
-   * @param {{detail: {castModeType: number}}} data
-   * Parameters in |data|.detail:
-   *   castModeType - type of cast mode selected by the user.
-   */
-  function onCastModeSelected(data) {
-    media_router.browserApi.reportSelectedCastMode(data.detail.castModeType);
-  }
-
-  /**
    * Creates a media route.
    * Called when the user requests to create a media route.
    *
@@ -93,12 +105,24 @@ cr.define('media_router', function() {
    * Stops a route.
    * Called when the user requests to stop a media route.
    *
-   * @param {{detail: {route: string}}} data
+   * @param {{detail: {route: media_router.Route}}} data
    * Parameters in |data|.detail:
-   *   route - route ID.
+   *   route - route to close.
    */
   function onCloseRouteClick(data) {
     media_router.browserApi.closeRoute(data.detail.route);
+  }
+
+  /**
+   * Joins a route.
+   * Called when the user requests to join a media route.
+   *
+   * @param {{detail: {route: media_router.Route}}} data
+   * Parameters in |data|.detail:
+   *   route - route to join.
+   */
+  function onJoinRouteClick(data) {
+    media_router.browserApi.joinRoute(data.detail.route);
   }
 
   /**
@@ -141,6 +165,18 @@ cr.define('media_router', function() {
   function onNavigateToSinkList() {
     media_router.browserApi.reportNavigateToView(
         media_router.MediaRouterView.SINK_LIST);
+  }
+
+  /**
+   * Reports the index of the sink that was clicked.
+   * Called when the user selects a sink on the sink list.
+   *
+   * @param {{detail: {index: number}}} data
+   * Paramters in |data|.detail:
+   *   index - the index of the clicked sink.
+   */
+  function onSinkClick(data) {
+    media_router.browserApi.reportClickedSinkIndex(data.detail.index);
   }
 
   /**

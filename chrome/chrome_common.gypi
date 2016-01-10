@@ -352,6 +352,7 @@
         '<(DEPTH)/skia/skia.gyp:skia_library',
         '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
         '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
+        '<(DEPTH)/third_party/kasko/kasko.gyp:kasko_features',
         '<(DEPTH)/third_party/zlib/google/zip.gyp:zip',
         '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
@@ -484,18 +485,6 @@
         ['enable_print_preview==1', {
           'sources': [ '<@(chrome_common_service_process_sources)' ],
         }],
-        ['enable_service_discovery==1', {
-          'sources' : [
-            'common/local_discovery/service_discovery_client.cc',
-            'common/local_discovery/service_discovery_client.h',
-           ]
-        }],
-        ['enable_mdns==1', {
-          'sources' : [
-            'common/local_discovery/service_discovery_client_impl.cc',
-            'common/local_discovery/service_discovery_client_impl.h',
-          ]
-        }],
         ['OS=="android"', {
           'sources!': [
             'common/channel_info_posix.cc',
@@ -515,11 +504,6 @@
           'dependencies': [
             '<(DEPTH)/components/components.gyp:dom_distiller_core',  # Needed by chrome_content_client.cc.
           ],
-        }],
-        ['enable_mdns == 1', {
-            'sources': [
-              'common/local_discovery/local_discovery_messages.h',
-            ]
         }],
         ['OS=="mac"', {
           'dependencies': [

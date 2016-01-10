@@ -19,12 +19,12 @@
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "chromecast/base/cast_constants.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/cast_sys_info_util.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/base/metrics/grouped_histogram.h"
-#include "chromecast/base/pref_service_helper.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_content_browser_client.h"
@@ -32,6 +32,7 @@
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/metrics/cast_metrics_prefs.h"
 #include "chromecast/browser/metrics/cast_metrics_service_client.h"
+#include "chromecast/browser/pref_service_helper.h"
 #include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/platform_client_auth.h"
 #include "chromecast/media/base/key_systems_common.h"
@@ -41,6 +42,7 @@
 #include "chromecast/public/cast_sys_info.h"
 #include "chromecast/service/cast_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -325,6 +327,9 @@ int CastBrowserMainParts::PreCreateThreads() {
   gfx::Screen::SetScreenInstance(gfx::SCREEN_TYPE_NATIVE,
                                  cast_browser_process_->cast_screen());
 #endif
+
+  content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+      kChromeResourceScheme);
   return 0;
 }
 
@@ -342,8 +347,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple());
   metrics::RegisterPrefs(pref_registry.get());
   cast_browser_process_->SetPrefService(
-      PrefServiceHelper::CreatePrefService(
-          pref_registry.get(), content::BrowserThread::GetBlockingPool()));
+      PrefServiceHelper::CreatePrefService(pref_registry.get()));
 
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 #if defined(OS_ANDROID)

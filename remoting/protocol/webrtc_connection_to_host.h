@@ -35,7 +35,7 @@ class WebrtcConnectionToHost : public ConnectionToHost,
   // ConnectionToHost interface.
   void set_client_stub(ClientStub* client_stub) override;
   void set_clipboard_stub(ClipboardStub* clipboard_stub) override;
-  void set_video_stub(VideoStub* video_stub) override;
+  void set_video_renderer(VideoRenderer* video_renderer) override;
   void set_audio_stub(AudioStub* audio_stub) override;
   void Connect(scoped_ptr<Session> session,
                scoped_refptr<TransportContext> transport_context,
@@ -51,6 +51,7 @@ class WebrtcConnectionToHost : public ConnectionToHost,
   void OnSessionStateChange(Session::State state) override;
 
   // WebrtcTransport::EventHandler interface.
+  void OnWebrtcTransportConnecting() override;
   void OnWebrtcTransportConnected() override;
   void OnWebrtcTransportError(ErrorCode error) override;
 

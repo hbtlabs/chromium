@@ -167,10 +167,12 @@ include_rules = [
   "+skia/ext",
   "+sync/api",  # Sync API files.
   "+sync/internal_api/public/attachments",  # Needed for tests.
+  "+sync/internal_api/public/base",
   "+sync/protocol",  # Sync protobuf files.
   "+sync/util",  # Sync utilities like GetSessionName.
   "+syzygy/kasko",
   "+third_party/cros_system_api",
+  "+third_party/kasko",
   "+win8/util",
 
   # chrome only needs switches from cc. All usage of the compositor is from

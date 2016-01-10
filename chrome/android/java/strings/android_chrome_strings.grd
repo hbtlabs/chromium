@@ -1421,6 +1421,9 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_NOTIFICATION_SITE_SETTINGS_BUTTON" desc="Text of a button shown on notifications, that opens the Site Settings of the website that showed the notification. (If it isn't possible to fit within the char limit, the string will be ellipsized if 3 buttons are shown side by side, so try to ensure that the user can guess the meaning from the first 8 characters). [CHAR-LIMIT=9]">
         Settings
       </message>
+      <message name="IDS_NOTIFICATION_WORK_PROFILE_BADGE_CONTENT_DESCRIPTION" desc="Content description of the work profile badge in the notification.">
+        Work profile
+      </message>
 
       <!-- Fullscreen -->
       <message name="IDS_IMMERSIVE_FULLSCREEN_API_NOTIFICATION" desc="Notification message when a site has entered immersive fullscreen and the directions of how to exit.">
@@ -1762,10 +1765,10 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
 
       <!-- Main menu items -->
-      <message name="IDS_MENU_UPDATE" desc="Menu item for updating chrome. [CHAR-LIMIT=27]">
+      <message name="IDS_MENU_UPDATE" desc="Menu item for updating chrome. [CHAR-LIMIT=24]">
         Update Chrome
       </message>
-      <message name="IDS_MENU_UPDATE_SUMMARY_DEFAULT" desc="Summary string for update menu item explaing why Chrome should be updated. [CHAR-LIMIT=27]">
+      <message name="IDS_MENU_UPDATE_SUMMARY_DEFAULT" desc="Summary string for update menu item explaing why Chrome should be updated. [CHAR-LIMIT=30]">
         Newer version is available
       </message>
       <message name="IDS_MENU_NEW_TAB" desc="Menu item for opening a new tab. [CHAR-LIMIT=27]">
@@ -1845,6 +1848,9 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
         Sign in
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_PAGE_SAVED" desc="Message shown after user adds a new bookmark. [CHAR-LIMIT=32]">
+        Bookmarked
+      </message>
+      <message name="IDS_ENHANCED_BOOKMARK_PAGE_SAVED_FOLDER" desc="Message shown after user adds a new bookmark. Also specifies in which folder the bookmark was added. [CHAR-LIMIT=32]">
         Bookmarked to <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph>
       </message>
       <message name="IDS_ENHANCED_BOOKMARK_DRAWER_ALL_ITEMS" desc="Menu item for showing all bookmark items in the enhanced bookmarks UI [CHAR-LIMIT=24]">
@@ -2317,6 +2323,9 @@ Chrome will scan for nearby pages when your device is unlocked. These pages will
       </message>
       <message name="IDS_PHYSICAL_WEB_EMPTY_LIST_SCANNING" desc="The message displayed in place of a list of nearby URLs while still scanning for nearby URLs.">
         Looking for nearby Physical Web pages
+      </message>
+      <message name="IDS_PHYSICAL_WEB_REFRESH" desc="The label for a button that initiates a scan for nearby URLs">
+        Refresh
       </message>
     </messages>
   </release>
