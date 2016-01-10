@@ -47,9 +47,6 @@ class BluetoothTestAndroid : public BluetoothTestBase {
       BluetoothGattCharacteristic* characteristic) override;
   void SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
       BluetoothGattCharacteristic* characteristic) override;
-  void SimulateGattCharacteristicChanged(
-      BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8_t>& value) override;
   void SimulateGattCharacteristicRead(
       BluetoothGattCharacteristic* characteristic,
       const std::vector<uint8_t>& value) override;

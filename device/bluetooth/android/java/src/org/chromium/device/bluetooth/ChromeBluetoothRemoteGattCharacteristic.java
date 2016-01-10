@@ -51,17 +51,8 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     @CalledByNative
     private void onBluetoothRemoteGattCharacteristicAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattCharacteristic Destroyed.");
-        mChromeDevice.mBluetoothGatt.setCharacteristicNotification(mCharacteristic, false);
         mNativeBluetoothRemoteGattCharacteristicAndroid = 0;
         mChromeDevice.mWrapperToChromeCharacteristicsMap.remove(mCharacteristic);
-    }
-
-    void onCharacteristicChanged() {
-        Log.i(TAG, "onCharacteristicChanged");
-        if (mNativeBluetoothRemoteGattCharacteristicAndroid != 0) {
-            nativeOnChanged(
-                    mNativeBluetoothRemoteGattCharacteristicAndroid, mCharacteristic.getValue());
-        }
     }
 
     void onCharacteristicRead(int status) {
@@ -116,42 +107,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
             return false;
         }
-
-        Wrappers.BluetoothGattDescriptorWrapper clientCharacteristicConfigurationDescriptor =
-                mCharacteristic.getDescriptor(UUID.fromString(
-                        "00002902-0000-1000-8000-00805F9B34FB" /* Config's standard UUID*/));
-
-        if (clientCharacteristicConfigurationDescriptor == null) {
-            Log.v(TAG, "startNotifySession config descriptor failed!");
-            return false;
-        }
-        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
-            if (!clientCharacteristicConfigurationDescriptor.setValue(
-                        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                Log.v(TAG, "startNotifySession NOTIFY failed!");
-                return false;
-            }
-            Log.v(TAG, "startNotifySession NOTIFY.");
-        } else if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE)
-                != 0) {
-            if (!clientCharacteristicConfigurationDescriptor.setValue(
-                        BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
-                Log.v(TAG, "startNotifySession INDICATE failed!");
-                return false;
-            }
-            Log.v(TAG, "startNotifySession INDICATE.");
-        } else {
-            Log.v(TAG,
-                    "startNotifySession failed! Characteristic has neither PROPERTY_NOTIFY or PROPERTY_INDICATE.");
-            return false;
-        }
-
-        if (!mChromeDevice.mBluetoothGatt.writeDescriptor(
-                    clientCharacteristicConfigurationDescriptor)) {
-            Log.i(TAG, "startNotifySession writeDescriptor failed!");
-            return false;
-        }
-
+        Log.i(TAG, "startNotifySession.");
         return true;
     }
 
@@ -194,9 +150,6 @@ final class ChromeBluetoothRemoteGattCharacteristic {
 
     // ---------------------------------------------------------------------------------------------
     // BluetoothAdapterDevice C++ methods declared for access from java:
-
-    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnChanged.
-    native void nativeOnChanged(long nativeBluetoothRemoteGattCharacteristicAndroid, byte[] value);
 
     // Binds to BluetoothRemoteGattCharacteristicAndroid::OnRead.
     native void nativeOnRead(
