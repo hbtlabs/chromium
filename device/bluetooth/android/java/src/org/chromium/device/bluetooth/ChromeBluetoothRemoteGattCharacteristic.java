@@ -4,15 +4,11 @@
 
 package org.chromium.device.bluetooth;
 
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
-
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Exposes android.bluetooth.BluetoothGattCharacteristic as necessary
