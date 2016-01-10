@@ -282,7 +282,7 @@ void BluetoothTestAndroid::RememberDescriptorForSubsequentAction(
   BluetoothRemoteGattDescriptorAndroid* descriptor_android =
       static_cast<BluetoothRemoteGattDescriptorAndroid*>(descriptor);
 
-  Java_FakeBluetoothGattDescriptor_RememberDescriptorForSubsequentAction(
+  Java_FakeBluetoothGattDescriptor_rememberDescriptorForSubsequentAction(
       base::android::AttachCurrentThread(),
       descriptor_android->GetJavaObject().obj());
 }
