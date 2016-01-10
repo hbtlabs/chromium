@@ -276,7 +276,6 @@ void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated()
   if (!descriptors_.empty())
     return;
 
-  // Java call
   Java_ChromeBluetoothRemoteGattCharacteristic_ensureDescriptorsCreated(
       AttachCurrentThread(), j_characteristic_.obj());
 }

@@ -545,8 +545,7 @@ class Fakes {
                             + uuidString + "' that has already been added to this characteristic.");
                 }
             }
-            fakeCharacteristic.mDescriptors.add(
-                    new FakeBluetoothGattDescriptor(fakeCharacteristic, uuid));
+            fakeCharacteristic.mDescriptors.add(new FakeBluetoothGattDescriptor(uuid));
         }
 
         // -----------------------------------------------------------------------------------------
@@ -588,15 +587,12 @@ class Fakes {
      * Fakes android.bluetooth.BluetoothGattDescriptor.
      */
     static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
-        final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
         byte[] mValue;
         static FakeBluetoothGattDescriptor sRememberedDescriptor;
 
-        public FakeBluetoothGattDescriptor(
-                FakeBluetoothGattCharacteristic characteristic, UUID uuid) {
+        public FakeBluetoothGattDescriptor(UUID uuid) {
             super(null);
-            mCharacteristic = characteristic;
             mUuid = uuid;
             mValue = new byte[0];
         }

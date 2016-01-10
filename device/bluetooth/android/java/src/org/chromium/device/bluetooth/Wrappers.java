@@ -466,6 +466,7 @@ class Wrappers {
 
             ArrayList<BluetoothGattDescriptorWrapper> descriptorsWrapped =
                     new ArrayList<BluetoothGattDescriptorWrapper>(descriptors.size());
+
             for (BluetoothGattDescriptor descriptor : descriptors) {
                 BluetoothGattDescriptorWrapper descriptorWrapper =
                         mDeviceWrapper.mDescriptorsToWrappers.get(descriptor);
