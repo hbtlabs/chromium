@@ -178,7 +178,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         return true;
     }
 
-    // Implements BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated
+    // Implements BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated.
     @CalledByNative
     private void ensureDescriptorsCreated() {
         List<Wrappers.BluetoothGattDescriptorWrapper> descriptors =
