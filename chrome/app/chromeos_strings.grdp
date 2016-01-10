@@ -5181,6 +5181,9 @@ Battery full
   <message name="IDS_IME_NAME_INPUTMETHOD_ZHUYIN" desc="The input method name shows in system tray menu, this is Zhuyin input method for Traditional Chinese.">
     Zhuyin input method
   </message>
+  <message name="IDS_IME_NAME_INPUTMETHOD_CANTONESE" desc="The input method name shows in system tray menu, this is Cantonese input method for Traditional Chinese.">
+    Cantonese input method
+  </message>
   <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL" desc="The input method name shows in system tray menu, this is Korean Hangul input method.">
     Korean input method
   </message>
@@ -5910,6 +5913,9 @@ All users must sign out to continue.
   </message>
   <message name="IDS_PAIRING_CONTROLLER_CONNECTION_LOST_TEXT" desc="Text on the controller page which says that connection with host was lost during the 'Chromebox for meeting' setup process.">
     Lost connection to your Chromebox. Please move closer, or check your device while we try to reconnect.
+  </message>
+  <message name="IDS_PAIRING_CONTROLLER_HOST_NETWORK_ERROR_TITLE" desc="Title of the controller page which says that the host device's network is not set up successfully.">
+    Failed to set up your Chromebox's network
   </message>
   <message name="IDS_PAIRING_ENROLL_TITLE" desc="Title of the enroll page of the 'Chromebox for meeting' setup process.">
     Enroll in your organization

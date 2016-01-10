@@ -32,6 +32,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Fullscreen.h"
+#include "core/dom/IntersectionObserverController.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/RenderedPosition.h"
@@ -120,7 +121,7 @@ FrameView::FrameView(LocalFrame* frame)
     , m_inSynchronousPostLayout(false)
     , m_postLayoutTasksTimer(this, &FrameView::postLayoutTimerFired)
     , m_updateWidgetsTimer(this, &FrameView::updateWidgetsTimerFired)
-    , m_intersectionObserverNotificationFactory(CancellableTaskFactory::create(this, &FrameView::notifyIntersectionObservers))
+    , m_renderThrottlingObserverNotificationFactory(CancellableTaskFactory::create(this, &FrameView::notifyRenderThrottlingObservers))
     , m_isTransparent(false)
     , m_baseBackgroundColor(Color::white)
     , m_mediaType(MediaTypeNames::screen)
@@ -204,7 +205,6 @@ void FrameView::reset()
     m_hasPendingLayout = false;
     m_doFullPaintInvalidation = false;
     m_layoutSchedulingEnabled = true;
-    m_inPerformLayout = false;
     m_inSynchronousPostLayout = false;
     m_layoutCount = 0;
     m_nestedLayoutCount = 0;
@@ -285,7 +285,7 @@ void FrameView::dispose()
 
     if (m_didScrollTimer.isActive())
         m_didScrollTimer.stop();
-    m_intersectionObserverNotificationFactory->cancel();
+    m_renderThrottlingObserverNotificationFactory->cancel();
 
     // FIXME: Do we need to do something here for OOPI?
     HTMLFrameOwnerElement* ownerElement = m_frame->deprecatedLocalOwner();
@@ -825,8 +825,6 @@ void FrameView::performLayout(bool inSubtreeLayout)
     ASSERT(!isInPerformLayout());
     lifecycle().advanceTo(DocumentLifecycle::InPerformLayout);
 
-    TemporaryChange<bool> changeInPerformLayout(m_inPerformLayout, true);
-
     // performLayout is the actual guts of layout().
     // FIXME: The 300 other lines in layout() probably belong in other helper functions
     // so that a single human could understand what layout() is actually doing.
@@ -1062,7 +1060,7 @@ void FrameView::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidation
 
     lifecycle().advanceTo(DocumentLifecycle::InPaintInvalidation);
 
-    ASSERT(layoutView());
+    RELEASE_ASSERT(layoutView());
     LayoutView& rootForPaintInvalidation = *layoutView();
     ASSERT(!rootForPaintInvalidation.needsLayout());
 
@@ -1594,19 +1592,15 @@ bool FrameView::computeCompositedSelection(LocalFrame& frame, CompositedSelectio
 
     VisiblePosition visibleStart(visibleSelection.visibleStart());
     RenderedPosition renderedStart(visibleStart);
-    renderedStart.positionInGraphicsLayerBacking(selection.start);
+    renderedStart.positionInGraphicsLayerBacking(selection.start, true);
     if (!selection.start.layer)
         return false;
 
-    if (visibleSelection.isCaret()) {
-        selection.end = selection.start;
-    } else {
-        VisiblePosition visibleEnd(visibleSelection.visibleEnd());
-        RenderedPosition renderedEnd(visibleEnd);
-        renderedEnd.positionInGraphicsLayerBacking(selection.end);
-        if (!selection.end.layer)
-            return false;
-    }
+    VisiblePosition visibleEnd(visibleSelection.visibleEnd());
+    RenderedPosition renderedEnd(visibleEnd);
+    renderedEnd.positionInGraphicsLayerBacking(selection.end, false);
+    if (!selection.end.layer)
+        return false;
 
     selection.type = visibleSelection.selectionType();
     selection.isEditable = visibleSelection.isContentEditable();
@@ -1614,8 +1608,8 @@ bool FrameView::computeCompositedSelection(LocalFrame& frame, CompositedSelectio
         if (HTMLTextFormControlElement* enclosingTextFormControlElement = enclosingTextFormControl(visibleSelection.rootEditableElement()))
             selection.isEmptyTextFormControl = enclosingTextFormControlElement->value().isEmpty();
     }
-    selection.start.isTextDirectionRTL = primaryDirectionOf(*visibleSelection.start().anchorNode()) == RTL;
-    selection.end.isTextDirectionRTL = primaryDirectionOf(*visibleSelection.end().anchorNode()) == RTL;
+    selection.start.isTextDirectionRTL |= primaryDirectionOf(*visibleSelection.start().anchorNode()) == RTL;
+    selection.end.isTextDirectionRTL |= primaryDirectionOf(*visibleSelection.end().anchorNode()) == RTL;
 
     return true;
 }
@@ -1766,8 +1760,7 @@ bool FrameView::layoutPending() const
 
 bool FrameView::isInPerformLayout() const
 {
-    ASSERT(m_inPerformLayout == (lifecycle().state() == DocumentLifecycle::InPerformLayout));
-    return m_inPerformLayout;
+    return lifecycle().state() == DocumentLifecycle::InPerformLayout;
 }
 
 bool FrameView::needsLayout() const
@@ -2376,7 +2369,7 @@ void FrameView::updateLifecyclePhasesInternal(LifeCycleUpdateOption phases)
     RefPtrWillBeRawPtr<FrameView> protector(this);
 
     if (shouldThrottleRendering()) {
-        updateViewportIntersectionsForSubtree();
+        updateViewportIntersectionsForSubtree(std::min(phases, OnlyUpToCompositingCleanPlusScrolling));
         return;
     }
 
@@ -2384,7 +2377,7 @@ void FrameView::updateLifecyclePhasesInternal(LifeCycleUpdateOption phases)
     ASSERT(lifecycle().state() >= DocumentLifecycle::LayoutClean);
 
     if (phases == OnlyUpToLayoutClean) {
-        updateViewportIntersectionsForSubtree();
+        updateViewportIntersectionsForSubtree(phases);
         return;
     }
 
@@ -2413,7 +2406,7 @@ void FrameView::updateLifecyclePhasesInternal(LifeCycleUpdateOption phases)
             if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
                 updatePaintProperties();
 
-            if (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled() && !m_frame->document()->printing())
+            if (!m_frame->document()->printing())
                 synchronizedPaint();
 
             if (RuntimeEnabledFeatures::frameTimingSupportEnabled())
@@ -2423,16 +2416,18 @@ void FrameView::updateLifecyclePhasesInternal(LifeCycleUpdateOption phases)
                 pushPaintArtifactToCompositor();
 
             ASSERT(!view->hasPendingSelection());
-            ASSERT(lifecycle().state() == DocumentLifecycle::PaintInvalidationClean
-                || (RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled() && lifecycle().state() == DocumentLifecycle::PaintClean));
+            ASSERT((m_frame->document()->printing() && lifecycle().state() == DocumentLifecycle::PaintInvalidationClean)
+                || lifecycle().state() == DocumentLifecycle::PaintClean);
         }
     }
 
-    updateViewportIntersectionsForSubtree();
+    updateViewportIntersectionsForSubtree(phases);
 }
 
 void FrameView::updatePaintProperties()
 {
+    TRACE_EVENT0("blink", "FrameView::updatePaintProperties");
+
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
     forAllNonThrottledFrameViews([](FrameView& frameView) { frameView.lifecycle().advanceTo(DocumentLifecycle::InUpdatePaintProperties); });
@@ -2442,7 +2437,8 @@ void FrameView::updatePaintProperties()
 
 void FrameView::synchronizedPaint()
 {
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintSynchronizedPaintingEnabled());
+    TRACE_EVENT0("blink", "FrameView::synchronizedPaint");
+
     ASSERT(frame() == page()->mainFrame() || (!frame().tree().parent()->isLocalFrame()));
 
     LayoutView* view = layoutView();
@@ -2491,6 +2487,8 @@ void FrameView::synchronizedPaintRecursively(GraphicsLayer* graphicsLayer)
 
 void FrameView::pushPaintArtifactToCompositor()
 {
+    TRACE_EVENT0("blink", "FrameView::pushPaintArtifactToCompositor");
+
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
     LayoutView* view = layoutView();
@@ -2587,7 +2585,7 @@ void FrameView::updateStyleAndLayoutIfNeededRecursive()
 
 void FrameView::invalidateTreeIfNeededRecursive()
 {
-    ASSERT(layoutView());
+    RELEASE_ASSERT(layoutView());
 
     // We need to stop recursing here since a child frame view might not be throttled
     // even though we are (e.g., it didn't compute its visibility yet).
@@ -2607,8 +2605,15 @@ void FrameView::invalidateTreeIfNeededRecursive()
     // We need to call invalidateTreeIfNeededRecursive() for such frames to finish required
     // paint invalidation and advance their life cycle state.
     for (Frame* child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
-        if (child->isLocalFrame())
-            toLocalFrame(child)->view()->invalidateTreeIfNeededRecursive();
+        if (child->isLocalFrame()) {
+            FrameView& childFrameView = *toLocalFrame(child)->view();
+            // The children frames can be in any state, including stopping.
+            // Thus we have to check that it makes sense to do paint
+            // invalidation onto them here.
+            if (!childFrameView.layoutView())
+                continue;
+            childFrameView.invalidateTreeIfNeededRecursive();
+        }
     }
 
     // Process objects needing paint invalidation on the next frame. See the definition of PaintInvalidationDelayedFull for more details.
@@ -3919,12 +3924,10 @@ void FrameView::setNeedsUpdateViewportIntersection()
 
 void FrameView::updateViewportIntersectionIfNeeded()
 {
-    // TODO(skyostil): Replace this with a real intersection observer.
     if (!m_needsUpdateViewportIntersection)
         return;
     m_needsUpdateViewportIntersection = false;
     m_viewportIntersectionValid = true;
-
     FrameView* parent = parentFrameView();
     if (!parent) {
         m_viewportIntersection = frameRect();
@@ -3951,14 +3954,20 @@ void FrameView::updateViewportIntersectionIfNeeded()
     m_viewportIntersection.intersect(viewport);
 }
 
-void FrameView::updateViewportIntersectionsForSubtree()
+void FrameView::updateViewportIntersectionsForSubtree(LifeCycleUpdateOption phases)
 {
     bool hadValidIntersection = m_viewportIntersectionValid;
     bool hadEmptyIntersection = m_viewportIntersection.isEmpty();
     updateViewportIntersectionIfNeeded();
+
+    // Notify javascript IntersectionObservers
+    if (phases == AllPhases)
+        frame().document()->ensureIntersectionObserverController().computeTrackedIntersectionObservations();
+
+    // Adjust render throttling for iframes based on visibility
     bool shouldNotify = !hadValidIntersection || hadEmptyIntersection != m_viewportIntersection.isEmpty();
-    if (shouldNotify && !m_intersectionObserverNotificationFactory->isPending())
-        m_frame->frameScheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, m_intersectionObserverNotificationFactory->cancelAndCreate());
+    if (shouldNotify && !m_renderThrottlingObserverNotificationFactory->isPending())
+        m_frame->frameScheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, m_renderThrottlingObserverNotificationFactory->cancelAndCreate());
 
     if (!m_needsUpdateViewportIntersectionInSubtree)
         return;
@@ -3968,13 +3977,13 @@ void FrameView::updateViewportIntersectionsForSubtree()
         if (!child->isLocalFrame())
             continue;
         if (FrameView* view = toLocalFrame(child)->view())
-            view->updateViewportIntersectionsForSubtree();
+            view->updateViewportIntersectionsForSubtree(phases);
     }
 }
 
-void FrameView::notifyIntersectionObservers()
+void FrameView::notifyRenderThrottlingObservers()
 {
-    TRACE_EVENT0("blink", "FrameView::notifyIntersectionObservers");
+    TRACE_EVENT0("blink", "FrameView::notifyRenderThrottlingObservers");
     ASSERT(!isInPerformLayout());
     ASSERT(!m_frame->document()->inStyleRecalc());
     bool wasThrottled = canThrottleRendering();

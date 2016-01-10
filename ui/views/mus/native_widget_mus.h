@@ -72,10 +72,6 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
       const Widget::InitParams& init_params,
       std::map<std::string, std::vector<uint8_t>>* properties);
 
-  static void ConfigurePropertiesForNewWindowFromDelegate(
-      WidgetDelegate* widget_delegate,
-      std::map<std::string, std::vector<uint8_t>>* properties);
-
   mus::Window* window() { return window_; }
 
   void OnPlatformWindowClosed();
@@ -88,6 +84,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus : public internal::NativeWidgetPrivate,
   // internal::NativeWidgetPrivate:
   NonClientFrameView* CreateNonClientFrameView() override;
   void InitNativeWidget(const Widget::InitParams& params) override;
+  void OnWidgetInitDone() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;

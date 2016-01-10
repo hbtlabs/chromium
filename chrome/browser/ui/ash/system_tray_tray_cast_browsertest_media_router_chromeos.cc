@@ -105,7 +105,7 @@ IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
 // Verifies that we only show the tray view if there are available cast
 // targets/sinks.
 IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
-                       DISABLED_VerifyCorrectVisiblityWithSinks) {
+                       VerifyCorrectVisiblityWithSinks) {
   ash::TrayCast* tray = GetTrayCast();
   ash::TrayCastTestAPI test_api(tray);
   EXPECT_TRUE(test_api.IsTrayInitialized());
@@ -145,7 +145,7 @@ IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
 // we display the correct cast session if there are multiple active casting
 // sessions.
 IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
-                       DISABLED_VerifyCastingShowsCastView) {
+                       VerifyCastingShowsCastView) {
   ash::TrayCast* tray = GetTrayCast();
   ash::TrayCastTestAPI test_api(tray);
   EXPECT_TRUE(test_api.IsTrayInitialized());
@@ -171,13 +171,15 @@ IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
   // display the local route over a non-local route. This also verifies that we
   // display the cast view when we're casting.
   test_api.OnCastingSessionStartedOrStopped(true /*is_casting*/);
-  media_routes_observer()->OnRoutesUpdated(multiple_routes);
+  media_routes_observer()->OnRoutesUpdated(
+      multiple_routes, std::vector<media_router::MediaRoute::Id>());
   EXPECT_TRUE(test_api.IsTrayCastViewVisible());
   EXPECT_EQ("local_route", test_api.GetDisplayedCastId());
 
   // When a casting session stops, we shouldn't display the cast view.
   test_api.OnCastingSessionStartedOrStopped(false /*is_casting*/);
-  media_routes_observer()->OnRoutesUpdated(no_routes);
+  media_routes_observer()->OnRoutesUpdated(
+      no_routes, std::vector<media_router::MediaRoute::Id>());
   EXPECT_FALSE(test_api.IsTrayCastViewVisible());
 
   ash::TrayCastTestAPI(GetTrayCast()).ReleaseConfigCallbacks();

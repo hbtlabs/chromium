@@ -7,8 +7,7 @@
 #include "platform/SharedBuffer.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/image-decoders/ImageFrame.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/StringHasher.h"
@@ -17,20 +16,20 @@ namespace blink {
 
 PassRefPtr<SharedBuffer> readFile(const char* fileName)
 {
-    String filePath = Platform::current()->unitTestSupport()->webKitRootDir();
+    String filePath = testing::blinkRootDir();
     filePath.append(fileName);
-    return Platform::current()->unitTestSupport()->readFromFile(filePath);
+    return testing::readFromFile(filePath);
 }
 
 PassRefPtr<SharedBuffer> readFile(const char* dir, const char* fileName)
 {
-    String filePath = Platform::current()->unitTestSupport()->webKitRootDir();
+    String filePath = testing::blinkRootDir();
     filePath.append("/");
     filePath.append(dir);
     filePath.append("/");
     filePath.append(fileName);
 
-    return Platform::current()->unitTestSupport()->readFromFile(filePath);
+    return testing::readFromFile(filePath);
 }
 
 unsigned hashBitmap(const SkBitmap& bitmap)

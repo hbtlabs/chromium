@@ -20,10 +20,10 @@
 #include "ui/gfx/ipc/gfx_param_traits_macros.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
-#include "ui/ozone/ozone_export.h"
+#include "ui/ozone/ozone_base_export.h"
 
 #undef IPC_MESSAGE_EXPORT
-#define IPC_MESSAGE_EXPORT OZONE_EXPORT
+#define IPC_MESSAGE_EXPORT OZONE_BASE_EXPORT
 
 #define IPC_MESSAGE_START OzoneGpuMsgStart
 
@@ -71,8 +71,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::OverlayCheck_Params)
   IPC_STRUCT_TRAITS_MEMBER(display_rect)
   IPC_STRUCT_TRAITS_MEMBER(crop_rect)
   IPC_STRUCT_TRAITS_MEMBER(plane_z_order)
-  IPC_STRUCT_TRAITS_MEMBER(weight)
-  IPC_STRUCT_TRAITS_MEMBER(plane_ids)
+  IPC_STRUCT_TRAITS_MEMBER(is_overlay_candidate)
 IPC_STRUCT_TRAITS_END()
 
 // clang-format on

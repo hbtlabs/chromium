@@ -17,6 +17,7 @@
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "build/build_config.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/request_info.h"
 #include "content/common/appcache_interfaces.h"
@@ -298,6 +299,12 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
     base::SharedMemoryHandle duplicate_handle;
     EXPECT_TRUE(shared_memory->ShareToProcess(base::GetCurrentProcessHandle(),
                                               &duplicate_handle));
+#if defined(OS_WIN)
+    EXPECT_TRUE(dispatcher_.OnMessageReceived(ResourceMsg_SetDataBufferDebug1(
+        request_id, HandleToLong(duplicate_handle.GetHandle()))));
+    EXPECT_TRUE(dispatcher_.OnMessageReceived(ResourceMsg_SetDataBufferDebug2(
+        request_id, HandleToLong(duplicate_handle.GetHandle()) + 3)));
+#endif
     EXPECT_TRUE(dispatcher_.OnMessageReceived(
         ResourceMsg_SetDataBuffer(request_id, duplicate_handle,
                                   shared_memory->requested_size(), 0)));
@@ -725,8 +732,7 @@ TEST_F(ResourceDispatcherTest, SerializedPostData) {
   // FIXME
 }
 
-class TimeConversionTest : public ResourceDispatcherTest,
-                           public RequestPeer {
+class TimeConversionTest : public ResourceDispatcherTest {
  public:
   bool Send(IPC::Message* msg) override {
     delete msg;
@@ -741,38 +747,6 @@ class TimeConversionTest : public ResourceDispatcherTest,
     dispatcher()->OnMessageReceived(
         ResourceMsg_ReceivedResponse(0, response_head));
   }
-
-  // RequestPeer methods.
-  void OnUploadProgress(uint64_t position, uint64_t size) override {}
-
-  bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          const ResourceResponseInfo& info) override {
-    return true;
-  }
-
-  void OnReceivedResponse(const ResourceResponseInfo& info) override {
-    response_info_ = info;
-  }
-
-  void OnDownloadedData(int len, int encoded_data_length) override {}
-
-  void OnReceivedData(scoped_ptr<ReceivedData> data) override {}
-
-  void OnCompletedRequest(int error_code,
-                          bool was_ignored_by_handler,
-                          bool stale_copy_in_cache,
-                          const std::string& security_info,
-                          const base::TimeTicks& completion_time,
-                          int64_t total_transfer_size) override {}
-
-  void OnReceivedCompletedResponse(const ResourceResponseInfo& info,
-                                   scoped_ptr<ReceivedData> data,
-                                   int error_code,
-                                   bool was_ignored_by_handler,
-                                   bool stale_copy_in_cache,
-                                   const std::string& security_info,
-                                   const base::TimeTicks& completion_time,
-                                   int64_t total_transfer_size) override {}
 
   const ResourceResponseInfo& response_info() const { return response_info_; }
 

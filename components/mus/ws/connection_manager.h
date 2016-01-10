@@ -137,6 +137,9 @@ class ConnectionManager : public ServerWindowDelegate,
   // supplied by the client.
   void WindowManagerChangeCompleted(uint32_t window_manager_change_id,
                                     bool success);
+  void WindowManagerCreatedTopLevelWindow(WindowTreeImpl* wm_connection,
+                                          uint32_t window_manager_change_id,
+                                          Id transport_window_id);
 
   // These functions trivially delegate to all WindowTreeImpls, which in
   // term notify their clients.
@@ -148,7 +151,8 @@ class ConnectionManager : public ServerWindowDelegate,
       const ServerWindow* window,
       const gfx::Insets& new_client_area,
       const std::vector<gfx::Rect>& new_additional_client_areas);
-  void ProcessViewportMetricsChanged(const mojom::ViewportMetrics& old_metrics,
+  void ProcessViewportMetricsChanged(WindowTreeHostImpl* host,
+                                     const mojom::ViewportMetrics& old_metrics,
                                      const mojom::ViewportMetrics& new_metrics);
   void ProcessWillChangeWindowHierarchy(const ServerWindow* window,
                                         const ServerWindow* new_parent,
@@ -184,6 +188,10 @@ class ConnectionManager : public ServerWindowDelegate,
   bool GetAndClearInFlightWindowManagerChange(
       uint32_t window_manager_change_id,
       InFlightWindowManagerChange* change);
+
+  // Called when we get an unexpected message from the WindowManager.
+  // TODO(sky): decide what we want to do here.
+  void WindowManagerSentBogusMessage(WindowTreeImpl* connection) {}
 
   // Invoked when a connection is about to execute a window server operation.
   // Subsequently followed by FinishOperation() once the change is done.

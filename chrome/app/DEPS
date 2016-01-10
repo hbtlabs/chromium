@@ -11,6 +11,7 @@ include_rules = [
   "+chrome_elf/chrome_elf_main.h",
   "+chromeos/chromeos_paths.h",
   "+chromeos/chromeos_switches.h",
+  "+chromeos/hugepage_text/hugepage_text.h",
   "+components/browser_watcher",
   "+components/component_updater",
   "+components/content_settings/core/common/content_settings_pattern.h",
@@ -31,4 +32,5 @@ include_rules = [
   "+sandbox",
   "+syzygy/kasko/api",
   "+third_party/crashpad/crashpad",
+  "+third_party/kasko",
 ]

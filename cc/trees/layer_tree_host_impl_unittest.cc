@@ -16,6 +16,8 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_id_provider.h"
 #include "cc/animation/scrollbar_animation_controller_thinning.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/base/math_util.h"
@@ -110,6 +112,7 @@ class LayerTreeHostImplTest : public testing::Test,
     settings.minimum_occlusion_tracking_size = gfx::Size();
     settings.renderer_settings.texture_id_allocation_chunk_size = 1;
     settings.gpu_rasterization_enabled = true;
+    settings.use_compositor_animation_timelines = true;
     settings.verify_property_trees = true;
     return settings;
   }
@@ -207,6 +210,13 @@ class LayerTreeHostImplTest : public testing::Test,
         BEGINFRAME_FROM_HERE,
         base::TimeTicks() + base::TimeDelta::FromMilliseconds(1)));
     host_impl_->DidFinishImplFrame();
+
+    if (host_impl_->settings().use_compositor_animation_timelines) {
+      timeline_ =
+          AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
+      host_impl_->animation_host()->AddAnimationTimeline(timeline_);
+    }
+
     return init;
   }
 
@@ -358,6 +368,7 @@ class LayerTreeHostImplTest : public testing::Test,
         host_impl_->InnerViewportScrollLayer()->parent()->parent();
     inner_clip_layer->SetBounds(viewport_size);
     host_impl_->InnerViewportScrollLayer()->SetBounds(viewport_size);
+    host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
     host_impl_->SetViewportSize(viewport_size);
     host_impl_->active_tree()->DidBecomeActive();
@@ -406,6 +417,8 @@ class LayerTreeHostImplTest : public testing::Test,
 
   void SetupMouseMoveAtWithDeviceScale(float device_scale_factor);
 
+  scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
+
  protected:
   virtual scoped_ptr<OutputSurface> CreateOutputSurface() {
     return FakeOutputSurface::Create3d();
@@ -439,6 +452,7 @@ class LayerTreeHostImplTest : public testing::Test,
   bool skip_draw_layers_in_on_draw_;
   scoped_ptr<LayerTreeHostImpl::FrameData> last_on_draw_frame_;
   RenderPassList last_on_draw_render_passes_;
+  scoped_refptr<AnimationTimeline> timeline_;
 };
 
 // A test fixture for new animation timelines tests.
@@ -558,9 +572,11 @@ TEST_F(LayerTreeHostImplTest, ScrollDeltaRepeatedScrolls) {
     root_layer->SetBounds(gfx::Size(110, 110));
     root_layer->SetScrollClipLayer(root_clip->id());
     root_layer->PushScrollOffsetFromMainThread(scroll_offset);
-    root_layer->ScrollBy(scroll_delta);
     host_impl_->active_tree()->SetRootLayer(std::move(root_clip));
+    host_impl_->active_tree()->BuildPropertyTreesForTesting();
+    root_layer->ScrollBy(scroll_delta);
   }
+
   LayerImpl* root =
       host_impl_->active_tree()->root_layer()->children()[0].get();
 
@@ -1075,7 +1091,7 @@ TEST_F(LayerTreeHostImplTest, ScrollWithUserUnscrollableLayers) {
   ASSERT_EQ(1u, scroll_layer->children().size());
   LayerImpl* overflow = scroll_layer->children()[0].get();
   overflow->SetBounds(overflow_size);
-  overflow->SetScrollClipLayer(scroll_layer->parent()->id());
+  overflow->SetScrollClipLayer(scroll_layer->parent()->parent()->id());
   overflow->PushScrollOffsetFromMainThread(gfx::ScrollOffset());
   overflow->SetPosition(gfx::PointF());
 
@@ -1135,7 +1151,11 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingPendingTree) {
   child->SetBounds(gfx::Size(10, 10));
   child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
   child->SetDrawsContent(true);
-  AddAnimatedTransformToLayer(child, 10.0, 3, 0);
+  if (host_impl_->settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child->id(), timeline(), 10.0, 3, 0);
+  } else {
+    AddAnimatedTransformToLayer(child, 10.0, 3, 0);
+  }
 
   EXPECT_FALSE(did_request_next_frame_);
   EXPECT_FALSE(did_request_redraw_);
@@ -1191,7 +1211,12 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingActiveTree) {
   start.AppendTranslate(6.f, 7.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(8.f, 9.f, 0.f);
-  AddAnimatedTransformToLayer(child, 4.0, start, end);
+  if (host_impl_->settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child->id(), timeline(), 4.0, start,
+                                          end);
+  } else {
+    AddAnimatedTransformToLayer(child, 4.0, start, end);
+  }
 
   base::TimeTicks now = base::TimeTicks::Now();
   host_impl_->WillBeginImplFrame(
@@ -1248,7 +1273,11 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingCommitToActiveTree) {
   child->SetBounds(gfx::Size(10, 10));
   child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
   child->SetDrawsContent(true);
-  AddAnimatedTransformToLayer(child, 10.0, 3, 0);
+  if (host_impl_->settings().use_compositor_animation_timelines) {
+    AddAnimatedTransformToLayerWithPlayer(child->id(), timeline(), 10.0, 3, 0);
+  } else {
+    AddAnimatedTransformToLayer(child, 10.0, 3, 0);
+  }
 
   // Set up the property trees so that UpdateDrawProperties will work in
   // CommitComplete below.
@@ -1315,7 +1344,13 @@ TEST_F(LayerTreeHostImplTest, AnimationMarksLayerNotReady) {
   start.AppendTranslate(6.f, 7.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(8.f, 9.f, 0.f);
-  int animation_id = AddAnimatedTransformToLayer(child, 4.0, start, end);
+  int animation_id;
+  if (host_impl_->settings().use_compositor_animation_timelines) {
+    animation_id = AddAnimatedTransformToLayerWithPlayer(
+        child->id(), timeline(), 4.0, start, end);
+  } else {
+    animation_id = AddAnimatedTransformToLayer(child, 4.0, start, end);
+  }
 
   base::TimeTicks now = base::TimeTicks::Now();
   host_impl_->WillBeginImplFrame(
@@ -1346,7 +1381,12 @@ TEST_F(LayerTreeHostImplTest, AnimationMarksLayerNotReady) {
 
   // Remove the animation.
   child->set_has_missing_tiles(true);
-  child->layer_animation_controller()->RemoveAnimation(animation_id);
+  if (host_impl_->settings().use_compositor_animation_timelines) {
+    RemoveAnimationFromLayerWithExistingPlayer(child->id(), timeline(),
+                                               animation_id);
+  } else {
+    child->layer_animation_controller()->RemoveAnimation(animation_id);
+  }
   child->draw_properties().screen_space_transform_is_animating = false;
 
   // Child layer doesn't have an animation, but was never ready since the last
@@ -2187,6 +2227,7 @@ TEST_F(LayerTreeHostImplTest, PageScaleAnimationTransferedOnSyncTreeActivate) {
   CreateScrollAndContentsLayers(
       host_impl_->pending_tree(),
       gfx::Size(100, 100));
+  host_impl_->pending_tree()->BuildPropertyTreesForTesting();
   host_impl_->ActivateSyncTree();
   DrawFrame();
 
@@ -3200,18 +3241,17 @@ TEST_F(LayerTreeHostImplTest, DidDrawCalledOnAllLayers) {
 
 class MissingTextureAnimatingLayer : public DidDrawCheckLayer {
  public:
-  static scoped_ptr<LayerImpl> Create(LayerTreeImpl* tree_impl,
-                                      int id,
-                                      bool tile_missing,
-                                      bool had_incomplete_tile,
-                                      bool animating,
-                                      ResourceProvider* resource_provider) {
-    return make_scoped_ptr(new MissingTextureAnimatingLayer(tree_impl,
-                                                            id,
-                                                            tile_missing,
-                                                            had_incomplete_tile,
-                                                            animating,
-                                                            resource_provider));
+  static scoped_ptr<LayerImpl> Create(
+      LayerTreeImpl* tree_impl,
+      int id,
+      bool tile_missing,
+      bool had_incomplete_tile,
+      bool animating,
+      ResourceProvider* resource_provider,
+      scoped_refptr<AnimationTimeline> timeline) {
+    return make_scoped_ptr(new MissingTextureAnimatingLayer(
+        tree_impl, id, tile_missing, had_incomplete_tile, animating,
+        resource_provider, timeline));
   }
 
   void AppendQuads(RenderPass* render_pass,
@@ -3229,12 +3269,18 @@ class MissingTextureAnimatingLayer : public DidDrawCheckLayer {
                                bool tile_missing,
                                bool had_incomplete_tile,
                                bool animating,
-                               ResourceProvider* resource_provider)
+                               ResourceProvider* resource_provider,
+                               scoped_refptr<AnimationTimeline> timeline)
       : DidDrawCheckLayer(tree_impl, id),
         tile_missing_(tile_missing),
         had_incomplete_tile_(had_incomplete_tile) {
-    if (animating)
-      AddAnimatedTransformToLayer(this, 10.0, 3, 0);
+    if (animating) {
+      if (tree_impl->settings().use_compositor_animation_timelines) {
+        AddAnimatedTransformToLayerWithPlayer(this->id(), timeline, 10.0, 3, 0);
+      } else {
+        AddAnimatedTransformToLayer(this, 10.0, 3, 0);
+      }
+    }
   }
 
   bool tile_missing_;
@@ -3342,12 +3388,15 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
   host_impl_->SwapBuffers(frame);
 
   for (size_t i = 0; i < cases.size(); ++i) {
+    // Clean up host_impl_ state.
     const auto& testcase = cases[i];
     std::vector<LayerImpl*> to_remove;
     for (const auto& child : root->children())
       to_remove.push_back(child.get());
     for (auto* child : to_remove)
       root->RemoveChild(child);
+    if (host_impl_->settings().use_compositor_animation_timelines)
+      timeline()->ClearPlayers();
 
     std::ostringstream scope;
     scope << "Test case: " << i;
@@ -3356,7 +3405,8 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 2, testcase.layer_before.has_missing_tile,
         testcase.layer_before.has_incomplete_tile,
-        testcase.layer_before.is_animating, host_impl_->resource_provider()));
+        testcase.layer_before.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* before =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_before.has_copy_request)
@@ -3365,7 +3415,8 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 3, testcase.layer_between.has_missing_tile,
         testcase.layer_between.has_incomplete_tile,
-        testcase.layer_between.is_animating, host_impl_->resource_provider()));
+        testcase.layer_between.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* between =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_between.has_copy_request)
@@ -3374,7 +3425,8 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 4, testcase.layer_after.has_missing_tile,
         testcase.layer_after.has_incomplete_tile,
-        testcase.layer_after.is_animating, host_impl_->resource_provider()));
+        testcase.layer_after.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* after =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_after.has_copy_request)
@@ -3445,7 +3497,8 @@ TEST_F(LayerTreeHostImplTest,
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 2, testcase.layer_before.has_missing_tile,
         testcase.layer_before.has_incomplete_tile,
-        testcase.layer_before.is_animating, host_impl_->resource_provider()));
+        testcase.layer_before.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* before =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_before.has_copy_request)
@@ -3454,7 +3507,8 @@ TEST_F(LayerTreeHostImplTest,
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 3, testcase.layer_between.has_missing_tile,
         testcase.layer_between.has_incomplete_tile,
-        testcase.layer_between.is_animating, host_impl_->resource_provider()));
+        testcase.layer_between.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* between =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_between.has_copy_request)
@@ -3463,7 +3517,8 @@ TEST_F(LayerTreeHostImplTest,
     root->AddChild(MissingTextureAnimatingLayer::Create(
         host_impl_->active_tree(), 4, testcase.layer_after.has_missing_tile,
         testcase.layer_after.has_incomplete_tile,
-        testcase.layer_after.is_animating, host_impl_->resource_provider()));
+        testcase.layer_after.is_animating, host_impl_->resource_provider(),
+        timeline()));
     DidDrawCheckLayer* after =
         static_cast<DidDrawCheckLayer*>(root->children().back().get());
     if (testcase.layer_after.has_copy_request)
@@ -3496,6 +3551,7 @@ TEST_F(LayerTreeHostImplTest, ClampingAfterActivation) {
   host_impl_->pending_tree()->PushPageScaleFromMainThread(1.f, 1.f, 1.f);
   CreateScrollAndContentsLayers(host_impl_->pending_tree(),
                                 gfx::Size(100, 100));
+  host_impl_->pending_tree()->BuildPropertyTreesForTesting();
   host_impl_->ActivateSyncTree();
 
   host_impl_->CreatePendingTree();
@@ -3584,6 +3640,7 @@ class LayerTreeHostImplTopControlsTest : public LayerTreeHostImplTest {
     host_impl_->active_tree()->SetViewportLayersFromIds(
         Layer::INVALID_ID, page_scale_layer_id, inner_viewport_scroll_layer_id,
         outer_viewport_scroll_layer_id);
+    host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
     host_impl_->SetViewportSize(inner_viewport_size);
     LayerImpl* root_clip_ptr = host_impl_->active_tree()->root_layer();
@@ -4583,26 +4640,30 @@ TEST_F(LayerTreeHostImplTest, ScrollWithoutBubbling) {
   // the scroll doesn't bubble up to the parent layer.
   gfx::Size surface_size(20, 20);
   gfx::Size viewport_size(10, 10);
-  scoped_ptr<LayerImpl> root = LayerImpl::Create(host_impl_->active_tree(), 1);
-  root->SetForceRenderSurface(true);
+  scoped_ptr<LayerImpl> root_ptr =
+      LayerImpl::Create(host_impl_->active_tree(), 1);
+  scoped_ptr<LayerImpl> root_clip =
+      LayerImpl::Create(host_impl_->active_tree(), 2);
+  root_clip->SetForceRenderSurface(true);
   scoped_ptr<LayerImpl> root_scrolling =
-      CreateScrollableLayer(2, surface_size, root.get());
+      CreateScrollableLayer(3, surface_size, root_clip.get());
   root_scrolling->SetIsContainerForFixedPositionLayers(true);
 
   scoped_ptr<LayerImpl> grand_child =
-      CreateScrollableLayer(4, surface_size, root.get());
+      CreateScrollableLayer(5, surface_size, root_clip.get());
 
   scoped_ptr<LayerImpl> child =
-      CreateScrollableLayer(3, surface_size, root.get());
+      CreateScrollableLayer(4, surface_size, root_clip.get());
   LayerImpl* grand_child_layer = grand_child.get();
   child->AddChild(std::move(grand_child));
 
   LayerImpl* child_layer = child.get();
   root_scrolling->AddChild(std::move(child));
-  root->AddChild(std::move(root_scrolling));
-  EXPECT_EQ(viewport_size, root->bounds());
-  host_impl_->active_tree()->SetRootLayer(std::move(root));
-  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 2,
+  root_clip->AddChild(std::move(root_scrolling));
+  EXPECT_EQ(viewport_size, root_clip->bounds());
+  root_ptr->AddChild(std::move(root_clip));
+  host_impl_->active_tree()->SetRootLayer(std::move(root_ptr));
+  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 3,
                                                       Layer::INVALID_ID);
   host_impl_->active_tree()->DidBecomeActive();
   host_impl_->SetViewportSize(viewport_size);
@@ -4623,9 +4684,12 @@ TEST_F(LayerTreeHostImplTest, ScrollWithoutBubbling) {
         host_impl_->ProcessScrollDeltas();
 
     // The grand child should have scrolled up to its limit.
-    LayerImpl* child =
-        host_impl_->active_tree()->root_layer()->children()[0]->children()
-            [0].get();
+    LayerImpl* child = host_impl_->active_tree()
+                           ->root_layer()
+                           ->children()[0]
+                           ->children()[0]
+                           ->children()[0]
+                           .get();
     LayerImpl* grand_child = child->children()[0].get();
     EXPECT_TRUE(ScrollInfoContains(*scroll_info.get(), grand_child->id(),
                                    gfx::Vector2d(0, -2)));
@@ -4698,25 +4762,28 @@ TEST_F(LayerTreeHostImplTest, ScrollEventBubbling) {
   // should be applied to one of its ancestors if possible.
   gfx::Size surface_size(10, 10);
   gfx::Size content_size(20, 20);
+  scoped_ptr<LayerImpl> root_ptr =
+      LayerImpl::Create(host_impl_->active_tree(), 4);
   scoped_ptr<LayerImpl> root_clip =
       LayerImpl::Create(host_impl_->active_tree(), 3);
   root_clip->SetForceRenderSurface(true);
-  scoped_ptr<LayerImpl> root =
+  scoped_ptr<LayerImpl> root_scroll =
       CreateScrollableLayer(1, content_size, root_clip.get());
   // Make 'root' the clip layer for child: since they have the same sizes the
   // child will have zero max_scroll_offset and scrolls will bubble.
   scoped_ptr<LayerImpl> child =
-      CreateScrollableLayer(2, content_size, root.get());
+      CreateScrollableLayer(2, content_size, root_scroll.get());
   child->SetIsContainerForFixedPositionLayers(true);
-  root->SetBounds(content_size);
+  root_scroll->SetBounds(content_size);
 
-  int root_scroll_id = root->id();
-  root->AddChild(std::move(child));
-  root_clip->AddChild(std::move(root));
+  int root_scroll_id = root_scroll->id();
+  root_scroll->AddChild(std::move(child));
+  root_clip->AddChild(std::move(root_scroll));
+  root_ptr->AddChild(std::move(root_clip));
 
   host_impl_->SetViewportSize(surface_size);
-  host_impl_->active_tree()->SetRootLayer(std::move(root_clip));
-  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 3, 2,
+  host_impl_->active_tree()->SetRootLayer(std::move(root_ptr));
+  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 4, 2,
                                                       Layer::INVALID_ID);
   host_impl_->active_tree()->DidBecomeActive();
   DrawFrame();
@@ -4739,15 +4806,18 @@ TEST_F(LayerTreeHostImplTest, ScrollEventBubbling) {
 
 TEST_F(LayerTreeHostImplTest, ScrollBeforeRedraw) {
   gfx::Size surface_size(10, 10);
-  scoped_ptr<LayerImpl> root_clip =
+  scoped_ptr<LayerImpl> root_ptr =
       LayerImpl::Create(host_impl_->active_tree(), 1);
+  scoped_ptr<LayerImpl> root_clip =
+      LayerImpl::Create(host_impl_->active_tree(), 2);
   scoped_ptr<LayerImpl> root_scroll =
-      CreateScrollableLayer(2, surface_size, root_clip.get());
+      CreateScrollableLayer(3, surface_size, root_clip.get());
   root_scroll->SetIsContainerForFixedPositionLayers(true);
   root_clip->SetForceRenderSurface(true);
   root_clip->AddChild(std::move(root_scroll));
-  host_impl_->active_tree()->SetRootLayer(std::move(root_clip));
-  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 2,
+  root_ptr->AddChild(std::move(root_clip));
+  host_impl_->active_tree()->SetRootLayer(std::move(root_ptr));
+  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 1, 3,
                                                       Layer::INVALID_ID);
   host_impl_->active_tree()->DidBecomeActive();
   host_impl_->SetViewportSize(surface_size);
@@ -4756,15 +4826,18 @@ TEST_F(LayerTreeHostImplTest, ScrollBeforeRedraw) {
   // synchronization.
   DrawFrame();
   host_impl_->active_tree()->DetachLayerTree();
+  scoped_ptr<LayerImpl> root_ptr2 =
+      LayerImpl::Create(host_impl_->active_tree(), 4);
   scoped_ptr<LayerImpl> root_clip2 =
-      LayerImpl::Create(host_impl_->active_tree(), 3);
+      LayerImpl::Create(host_impl_->active_tree(), 5);
   scoped_ptr<LayerImpl> root_scroll2 =
-      CreateScrollableLayer(4, surface_size, root_clip2.get());
+      CreateScrollableLayer(6, surface_size, root_clip2.get());
   root_scroll2->SetIsContainerForFixedPositionLayers(true);
   root_clip2->AddChild(std::move(root_scroll2));
   root_clip2->SetForceRenderSurface(true);
-  host_impl_->active_tree()->SetRootLayer(std::move(root_clip2));
-  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 3, 4,
+  root_ptr2->AddChild(std::move(root_clip2));
+  host_impl_->active_tree()->SetRootLayer(std::move(root_ptr2));
+  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 4, 6,
                                                       Layer::INVALID_ID);
   host_impl_->active_tree()->DidBecomeActive();
 
@@ -5169,6 +5242,7 @@ TEST_F(LayerTreeHostImplTest, RootLayerScrollOffsetDelegation) {
   host_impl_->CreatePendingTree();
   host_impl_->pending_tree()->PushPageScaleFromMainThread(1.f, 1.f, 1.f);
   CreateScrollAndContentsLayers(host_impl_->pending_tree(), new_size);
+  host_impl_->pending_tree()->BuildPropertyTreesForTesting();
   host_impl_->ActivateSyncTree();
   EXPECT_EQ(gfx::SizeF(new_size), scroll_watcher.scrollable_size());
 
@@ -7162,23 +7236,26 @@ TEST_F(LayerTreeHostImplTest, TouchFlingShouldNotBubble) {
   // bubble).
   gfx::Size surface_size(10, 10);
   gfx::Size content_size(20, 20);
+  scoped_ptr<LayerImpl> root_ptr =
+      LayerImpl::Create(host_impl_->active_tree(), 4);
   scoped_ptr<LayerImpl> root_clip =
       LayerImpl::Create(host_impl_->active_tree(), 3);
   root_clip->SetForceRenderSurface(true);
 
-  scoped_ptr<LayerImpl> root =
+  scoped_ptr<LayerImpl> root_scroll =
       CreateScrollableLayer(1, content_size, root_clip.get());
-  root->SetIsContainerForFixedPositionLayers(true);
+  root_scroll->SetIsContainerForFixedPositionLayers(true);
   scoped_ptr<LayerImpl> child =
       CreateScrollableLayer(2, content_size, root_clip.get());
 
-  root->AddChild(std::move(child));
-  int root_id = root->id();
-  root_clip->AddChild(std::move(root));
+  root_scroll->AddChild(std::move(child));
+  int root_id = root_scroll->id();
+  root_clip->AddChild(std::move(root_scroll));
+  root_ptr->AddChild(std::move(root_clip));
 
   host_impl_->SetViewportSize(surface_size);
-  host_impl_->active_tree()->SetRootLayer(std::move(root_clip));
-  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 3, 1,
+  host_impl_->active_tree()->SetRootLayer(std::move(root_ptr));
+  host_impl_->active_tree()->SetViewportLayersFromIds(Layer::INVALID_ID, 4, 1,
                                                       Layer::INVALID_ID);
   host_impl_->active_tree()->DidBecomeActive();
   DrawFrame();
@@ -7899,7 +7976,7 @@ TEST_F(LayerTreeHostImplWithTopControlsTest, TopControlsAnimationAtOrigin) {
 
   // End the scroll while the controls are still offset from their limit.
   host_impl_->ScrollEnd();
-  ASSERT_TRUE(host_impl_->top_controls_manager()->animation());
+  ASSERT_TRUE(host_impl_->top_controls_manager()->has_animation());
   EXPECT_TRUE(did_request_next_frame_);
   EXPECT_TRUE(did_request_redraw_);
   EXPECT_FALSE(did_request_commit_);
@@ -7933,12 +8010,12 @@ TEST_F(LayerTreeHostImplWithTopControlsTest, TopControlsAnimationAtOrigin) {
       EXPECT_TRUE(did_request_redraw_);
 
     if (new_offset != 0) {
-      EXPECT_TRUE(host_impl_->top_controls_manager()->animation());
+      EXPECT_TRUE(host_impl_->top_controls_manager()->has_animation());
       EXPECT_TRUE(did_request_next_frame_);
     }
     host_impl_->DidFinishImplFrame();
   }
-  EXPECT_FALSE(host_impl_->top_controls_manager()->animation());
+  EXPECT_FALSE(host_impl_->top_controls_manager()->has_animation());
 }
 
 TEST_F(LayerTreeHostImplWithTopControlsTest, TopControlsAnimationAfterScroll) {
@@ -7973,7 +8050,7 @@ TEST_F(LayerTreeHostImplWithTopControlsTest, TopControlsAnimationAfterScroll) {
 
   // End the scroll while the controls are still offset from the limit.
   host_impl_->ScrollEnd();
-  ASSERT_TRUE(host_impl_->top_controls_manager()->animation());
+  ASSERT_TRUE(host_impl_->top_controls_manager()->has_animation());
   EXPECT_TRUE(did_request_next_frame_);
   EXPECT_TRUE(did_request_redraw_);
   EXPECT_FALSE(did_request_commit_);
@@ -8002,7 +8079,7 @@ TEST_F(LayerTreeHostImplWithTopControlsTest, TopControlsAnimationAfterScroll) {
     }
     host_impl_->DidFinishImplFrame();
   }
-  EXPECT_FALSE(host_impl_->top_controls_manager()->animation());
+  EXPECT_FALSE(host_impl_->top_controls_manager()->has_animation());
   EXPECT_EQ(-top_controls_height_,
             host_impl_->top_controls_manager()->ControlsTopOffset());
 }
@@ -8040,7 +8117,7 @@ TEST_F(LayerTreeHostImplWithTopControlsTest,
 
   // End the fling while the controls are still offset from the limit.
   host_impl_->MainThreadHasStoppedFlinging();
-  ASSERT_TRUE(host_impl_->top_controls_manager()->animation());
+  ASSERT_TRUE(host_impl_->top_controls_manager()->has_animation());
   EXPECT_TRUE(did_request_next_frame_);
   EXPECT_TRUE(did_request_redraw_);
   EXPECT_FALSE(did_request_commit_);
@@ -8067,7 +8144,7 @@ TEST_F(LayerTreeHostImplWithTopControlsTest,
     }
     host_impl_->DidFinishImplFrame();
   }
-  EXPECT_FALSE(host_impl_->top_controls_manager()->animation());
+  EXPECT_FALSE(host_impl_->top_controls_manager()->has_animation());
   EXPECT_EQ(-top_controls_height_,
             host_impl_->top_controls_manager()->ControlsTopOffset());
 }

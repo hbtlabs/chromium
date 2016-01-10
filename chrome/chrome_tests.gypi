@@ -170,7 +170,6 @@
       'browser/extensions/api/management/management_api_browsertest.cc',
       'browser/extensions/api/management/management_apitest.cc',
       'browser/extensions/api/management/management_browsertest.cc',
-      'browser/extensions/api/mdns/mdns_apitest.cc',
       'browser/extensions/api/media_galleries/media_galleries_apitest.cc',
       'browser/extensions/api/media_galleries/media_galleries_watch_apitest.cc',
       'browser/extensions/api/messaging/native_messaging_apitest.cc',
@@ -243,6 +242,8 @@
       'browser/extensions/extension_icon_source_apitest.cc',
       'browser/extensions/extension_incognito_apitest.cc',
       'browser/extensions/extension_install_prompt_browsertest.cc',
+      'browser/extensions/extension_install_prompt_test_helper.cc',
+      'browser/extensions/extension_install_prompt_test_helper.h',
       'browser/extensions/extension_install_ui_browsertest.cc',
       'browser/extensions/extension_javascript_url_apitest.cc',
       'browser/extensions/extension_loading_browsertest.cc',
@@ -901,6 +902,9 @@
       'browser/ui/app_list/search/webstore/webstore_provider_browsertest.cc',
       'browser/ui/app_list/speech_recognizer_browsertest.cc',
     ],
+    'chrome_browser_tests_service_discovery_sources': [
+      'browser/extensions/api/mdns/mdns_apitest.cc',
+    ],
     'chrome_browser_tests_media_router_sources': [
       'browser/ui/webui/media_router/media_router_dialog_controller_impl_browsertest.cc',
       'test/data/webui/media_router/media_router_elements_browsertest.js',
@@ -991,6 +995,7 @@
       'test/data/webui/settings/basic_page_browsertest.js',
       'test/data/webui/settings/bluetooth_page_browsertest_chromeos.js',
       'test/data/webui/settings/cr_settings_browsertest.js',
+      'test/data/webui/settings/on_startup_browsertest.js',
       'test/data/webui/settings/settings_page_browsertest.js',
       'test/data/webui/settings/settings_passwords_section_browsertest.js',
       'test/data/webui/settings/settings_subpage_browsertest.js',
@@ -1432,8 +1437,6 @@
       'app/chrome_version.rc.version',
       'browser/sync/test/integration/enable_disable_test.cc',
       'browser/sync/test/integration/migration_test.cc',
-      'browser/sync/test/integration/multiple_client_dictionary_sync_test.cc',
-      'browser/sync/test/integration/multiple_client_passwords_sync_test.cc',
       'browser/sync/test/integration/single_client_app_list_sync_test.cc',
       'browser/sync/test/integration/single_client_apps_sync_test.cc',
       'browser/sync/test/integration/single_client_backup_rollback_test.cc',
@@ -2566,6 +2569,9 @@
         }, {
           'sources!': [ 'browser/ui/webui/app_list/start_page_browsertest.js' ],
         }],
+        ['enable_service_discovery==1', {
+          'sources': [ '<@(chrome_browser_tests_service_discovery_sources)' ],
+        }],
         ['enable_supervised_users==1', {
           'sources': [ '<@(chrome_browser_tests_supervised_user_sources)' ],
         }, {
@@ -2928,7 +2934,6 @@
           # Dictionary sync is disabled on Mac.
           # Note: list duplicated in GN build.
           'sources!': [
-            'browser/sync/test/integration/multiple_client_dictionary_sync_test.cc',
             'browser/sync/test/integration/single_client_dictionary_sync_test.cc',
             'browser/sync/test/integration/two_client_dictionary_sync_test.cc',
           ],
@@ -3529,7 +3534,8 @@
             '../net/net.gyp:net',
             '../base/base.gyp:base',
             '../base/base.gyp:test_support_base',
-            'utility',
+            # TODO(vitalybuka): Extract mdns code into lib or component.
+            'browser',
           ],
           'sources': [
             'tools/service_discovery_sniffer/service_discovery_sniffer.cc',

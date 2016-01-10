@@ -19,7 +19,9 @@ void ShellApplicationDelegate::Initialize(mojo::ApplicationImpl* app) {
   app_ = app;
   StartBrowserDriver();
   StartWindowManager();
+  StartWallpaper();
   StartSystemUI();
+  StartQuickLaunch();
 }
 
 bool ShellApplicationDelegate::ConfigureIncomingConnection(
@@ -34,6 +36,12 @@ void ShellApplicationDelegate::StartWindowManager() {
                  base::Unretained(this)));
 }
 
+void ShellApplicationDelegate::StartWallpaper() {
+  StartRestartableService("mojo:wallpaper",
+                          base::Bind(&ShellApplicationDelegate::StartWallpaper,
+                                     base::Unretained(this)));
+}
+
 void ShellApplicationDelegate::StartSystemUI() {
   StartRestartableService("mojo:system_ui",
                           base::Bind(&ShellApplicationDelegate::StartSystemUI,
@@ -44,6 +52,13 @@ void ShellApplicationDelegate::StartBrowserDriver() {
   StartRestartableService(
       "mojo:browser_driver",
       base::Bind(&ShellApplicationDelegate::StartBrowserDriver,
+                 base::Unretained(this)));
+}
+
+void ShellApplicationDelegate::StartQuickLaunch() {
+  StartRestartableService(
+      "mojo:quick_launch",
+      base::Bind(&ShellApplicationDelegate::StartQuickLaunch,
                  base::Unretained(this)));
 }
 

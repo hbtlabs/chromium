@@ -147,12 +147,12 @@ class ScopedSetBoundsNotifier {
 // Some operations are only permitted in the connection that created the window.
 bool OwnsWindow(WindowTreeConnection* connection, Window* window) {
   return !connection ||
-         static_cast<WindowTreeClientImpl*>(connection)
-             ->OwnsWindow(window->id());
+         static_cast<WindowTreeClientImpl*>(connection)->OwnsWindow(window);
 }
 
 bool IsConnectionRoot(Window* window) {
-  return window->connection() && window->connection()->GetRoot() == window;
+  return window->connection() &&
+         window->connection()->GetRoots().count(window) > 0;
 }
 
 bool OwnsWindowOrIsRoot(Window* window) {
@@ -194,6 +194,13 @@ void Window::SetBounds(const gfx::Rect& bounds) {
   if (connection_)
     tree_client()->SetBounds(this, bounds_, bounds);
   LocalSetBounds(bounds_, bounds);
+}
+
+gfx::Rect Window::GetBoundsInRoot() const {
+  gfx::Vector2d offset;
+  for (const Window* w = parent(); w != nullptr; w = w->parent())
+    offset += w->bounds().OffsetFromOrigin();
+  return bounds() + offset;
 }
 
 void Window::SetClientArea(
@@ -273,6 +280,9 @@ void Window::AddChild(Window* child) {
   //             embeddee in an embedder-embeddee relationship.
   if (connection_)
     CHECK_EQ(child->connection(), connection_);
+  // Roots can not be added as children of other windows.
+  if (tree_client() && tree_client()->IsRoot(child))
+    return;
   LocalAddChild(child);
   if (connection_)
     tree_client()->AddChild(this, child->id());

@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <set>
 
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -65,7 +66,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                mojom::OrderDirection direction);
 
   // Returns true if the specified window was created by this connection.
-  bool OwnsWindow(Id id) const;
+  bool OwnsWindow(Window* window) const;
 
   void SetBounds(Window* window,
                  const gfx::Rect& old_bounds,
@@ -104,6 +105,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // WindowTreeConnection::GetWindowById.
   void AddWindow(Window* window);
 
+  bool IsRoot(Window* window) const { return roots_.count(window) > 0; }
+
   bool is_embed_root() const { return is_embed_root_; }
 
   // Called after the window's observers have been notified of destruction (as
@@ -113,8 +116,14 @@ class WindowTreeClientImpl : public WindowTreeConnection,
  private:
   friend class WindowTreeClientImplPrivate;
 
+  enum class NewWindowType {
+    CHILD,
+    TOP_LEVEL,
+  };
+
   using IdToWindowMap = std::map<Id, Window*>;
 
+  // TODO(sky): this assumes change_ids never wrap, which is a bad assumption.
   using InFlightMap = std::map<uint32_t, scoped_ptr<InFlightChange>>;
 
   // Returns the oldest InFlightChange that matches |change|.
@@ -129,6 +138,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   // See InFlightChange for details on how InFlightChanges are used.
   bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
 
+  Window* NewWindowImpl(NewWindowType type,
+                        const Window::SharedProperties* properties);
+
   // OnEmbed() calls into this. Exposed as a separate function for testing.
   void OnEmbedImpl(mojom::WindowTree* window_tree,
                    ConnectionSpecificId connection_id,
@@ -137,10 +149,13 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                    uint32_t access_policy);
 
   // Overridden from WindowTreeConnection:
-  Window* GetRoot() override;
+  void SetDeleteOnNoRoots(bool value) override;
+  const std::set<Window*>& GetRoots() override;
   Window* GetWindowById(Id id) override;
   Window* GetFocusedWindow() override;
   Window* NewWindow(const Window::SharedProperties* properties) override;
+  Window* NewTopLevelWindow(
+      const Window::SharedProperties* properties) override;
   bool IsEmbedRoot() override;
   ConnectionSpecificId GetConnectionId() override;
   void AddObserver(WindowTreeConnectionObserver* observer) override;
@@ -153,7 +168,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                Id focused_window_id,
                uint32_t access_policy) override;
   void OnEmbeddedAppDisconnected(Id window_id) override;
-  void OnUnembed() override;
+  void OnUnembed(Id window_id) override;
+  void OnTopLevelCreated(uint32_t change_id,
+                         mojom::WindowDataPtr data) override;
   void OnWindowBoundsChanged(Id window_id,
                              mojo::RectPtr old_bounds,
                              mojo::RectPtr new_bounds) override;
@@ -166,6 +183,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnTransientWindowRemoved(uint32_t window_id,
                                 uint32_t transient_window_id) override;
   void OnWindowViewportMetricsChanged(
+      mojo::Array<uint32_t> window_ids,
       mojom::ViewportMetricsPtr old_metrics,
       mojom::ViewportMetricsPtr new_metrics) override;
   void OnWindowHierarchyChanged(
@@ -202,6 +220,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                      Id window_id,
                      const mojo::String& name,
                      mojo::Array<uint8_t> transit_data) override;
+  void WmCreateTopLevelWindow(uint32_t change_id,
+                              mojo::Map<mojo::String, mojo::Array<uint8_t>>
+                                  transport_properties) override;
 
   // This is set once and only once when we get OnEmbed(). It gives the unique
   // id for this connection.
@@ -218,7 +239,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   WindowManagerDelegate* window_manager_delegate_;
 
-  Window* root_;
+  std::set<Window*> roots_;
 
   IdToWindowMap windows_;
 
@@ -231,6 +252,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   mojom::WindowTree* tree_;
 
   bool is_embed_root_;
+
+  bool delete_on_no_roots_;
 
   bool in_destructor_;
 

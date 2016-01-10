@@ -84,6 +84,24 @@ extern "C" {
 #define EGL_X11_VISUAL_ID_ANGLE 0x33A3
 #endif /* EGL_ANGLE_x11_visual */
 
+#ifndef EGL_ANGLE_surface_orientation
+#define EGL_ANGLE_surface_orientation
+#define EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE 0x33A7
+#define EGL_SURFACE_ORIENTATION_ANGLE 0x33A8
+#define EGL_SURFACE_ORIENTATION_INVERT_X_ANGLE 0x0001
+#define EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE 0x0002
+#endif /* EGL_ANGLE_surface_orientation */
+
+#ifndef EGL_ANGLE_direct_composition
+#define EGL_ANGLE_direct_composition 1
+#define EGL_DIRECT_COMPOSITION_ANGLE 0x33A5
+#endif /* EGL_ANGLE_direct_composition */
+
+#ifndef EGL_ANGLE_flexible_surface_compatibility
+#define EGL_ANGLE_flexible_surface_compatibility 1
+#define EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE 0x33A6
+#endif /* EGL_ANGLE_flexible_surface_compatibility */
+
 using ui::GetLastEGLErrorString;
 
 namespace gfx {
@@ -107,6 +125,8 @@ bool g_egl_create_context_robustness_supported = false;
 bool g_egl_sync_control_supported = false;
 bool g_egl_window_fixed_size_supported = false;
 bool g_egl_surfaceless_context_supported = false;
+bool g_egl_surface_orientation_supported = false;
+bool g_use_direct_composition = false;
 
 class EGLSyncControlVSyncProvider
     : public gfx::SyncControlVSyncProvider {
@@ -364,6 +384,16 @@ bool GLSurfaceEGL::InitializeOneOff() {
       HasEGLExtension("EGL_CHROMIUM_sync_control");
   g_egl_window_fixed_size_supported =
       HasEGLExtension("EGL_ANGLE_window_fixed_size");
+  g_egl_surface_orientation_supported =
+      HasEGLExtension("EGL_ANGLE_surface_orientation");
+
+  // Need EGL_ANGLE_flexible_surface_compatibility to allow surfaces with and
+  // without alpha to be bound to the same context.
+  g_use_direct_composition =
+      HasEGLExtension("EGL_ANGLE_direct_composition") &&
+      HasEGLExtension("EGL_ANGLE_flexible_surface_compatibility") &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseDirectComposition);
 
   // TODO(oetuaho@nvidia.com): Surfaceless is disabled on Android as a temporary
   // workaround, since code written for Android WebView takes different paths
@@ -425,6 +455,10 @@ bool GLSurfaceEGL::IsCreateContextRobustnessSupported() {
 
 bool GLSurfaceEGL::IsEGLSurfacelessContextSupported() {
   return g_egl_surfaceless_context_supported;
+}
+
+bool GLSurfaceEGL::IsDirectCompositionSupported() {
+  return g_use_direct_composition;
 }
 
 GLSurfaceEGL::~GLSurfaceEGL() {}
@@ -489,9 +523,11 @@ NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(EGLNativeWindowType window)
     : window_(window),
       config_(NULL),
       size_(1, 1),
+      alpha_(true),
+      enable_fixed_size_angle_(false),
       surface_(NULL),
       supports_post_sub_buffer_(false),
-      alpha_(true),
+      flips_vertically_(false),
       swap_interval_(1) {
 #if defined(OS_ANDROID)
   if (window)
@@ -529,7 +565,7 @@ bool NativeViewGLSurfaceEGL::Initialize(
 
   std::vector<EGLint> egl_window_attributes;
 
-  if (g_egl_window_fixed_size_supported) {
+  if (g_egl_window_fixed_size_supported && enable_fixed_size_angle_) {
     egl_window_attributes.push_back(EGL_FIXED_SIZE_ANGLE);
     egl_window_attributes.push_back(EGL_TRUE);
     egl_window_attributes.push_back(EGL_WIDTH);
@@ -540,6 +576,26 @@ bool NativeViewGLSurfaceEGL::Initialize(
 
   if (gfx::g_driver_egl.ext.b_EGL_NV_post_sub_buffer) {
     egl_window_attributes.push_back(EGL_POST_SUB_BUFFER_SUPPORTED_NV);
+    egl_window_attributes.push_back(EGL_TRUE);
+  }
+
+  if (g_egl_surface_orientation_supported) {
+    EGLint attrib;
+    eglGetConfigAttrib(GetDisplay(), GetConfig(),
+                       EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE, &attrib);
+    flips_vertically_ = (attrib == EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE);
+  }
+
+  if (flips_vertically_) {
+    egl_window_attributes.push_back(EGL_SURFACE_ORIENTATION_ANGLE);
+    egl_window_attributes.push_back(EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE);
+  }
+
+  if (g_use_direct_composition) {
+    egl_window_attributes.push_back(
+        EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE);
+    egl_window_attributes.push_back(EGL_TRUE);
+    egl_window_attributes.push_back(EGL_DIRECT_COMPOSITION_ANGLE);
     egl_window_attributes.push_back(EGL_TRUE);
   }
 
@@ -704,6 +760,10 @@ bool NativeViewGLSurfaceEGL::SupportsPostSubBuffer() {
   return supports_post_sub_buffer_;
 }
 
+bool NativeViewGLSurfaceEGL::FlipsVertically() const {
+  return flips_vertically_;
+}
+
 gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(int x,
                                                       int y,
                                                       int width,
@@ -712,6 +772,12 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(int x,
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
     return gfx::SwapResult::SWAP_FAILED;
+  }
+  if (flips_vertically_) {
+    // With EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE the contents are rendered
+    // inverted, but the PostSubBuffer rectangle is still measured from the
+    // bottom left.
+    y = GetSize().height() - y - height;
   }
   if (!eglPostSubBufferNV(GetDisplay(), surface_, x, y, width, height)) {
     DVLOG(1) << "eglPostSubBufferNV failed with error "
@@ -802,15 +868,22 @@ bool PbufferGLSurfaceEGL::Initialize() {
   // they have different addresses. If they have the same address then a
   // future call to MakeCurrent might early out because it appears the current
   // context and surface have not changed.
-  const EGLint pbuffer_attribs[] = {
-    EGL_WIDTH, size_.width(),
-    EGL_HEIGHT, size_.height(),
-    EGL_NONE
-  };
+  std::vector<EGLint> pbuffer_attribs;
+  pbuffer_attribs.push_back(EGL_WIDTH);
+  pbuffer_attribs.push_back(size_.width());
+  pbuffer_attribs.push_back(EGL_HEIGHT);
+  pbuffer_attribs.push_back(size_.height());
 
-  EGLSurface new_surface = eglCreatePbufferSurface(display,
-                                                   GetConfig(),
-                                                   pbuffer_attribs);
+  if (g_use_direct_composition) {
+    pbuffer_attribs.push_back(
+        EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE);
+    pbuffer_attribs.push_back(EGL_TRUE);
+  }
+
+  pbuffer_attribs.push_back(EGL_NONE);
+
+  EGLSurface new_surface =
+      eglCreatePbufferSurface(display, GetConfig(), &pbuffer_attribs[0]);
   if (!new_surface) {
     LOG(ERROR) << "eglCreatePbufferSurface failed with error "
                << GetLastEGLErrorString();

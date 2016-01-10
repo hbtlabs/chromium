@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "remoting/base/constants.h"
 #include "remoting/protocol/fake_session.h"
+#include "remoting/protocol/fake_video_renderer.h"
 #include "remoting/protocol/ice_connection_to_client.h"
 #include "remoting/protocol/ice_connection_to_host.h"
 #include "remoting/protocol/protocol_mock_objects.h"
@@ -36,6 +37,10 @@ MATCHER_P(EqualsCapabilitiesMessage, message, "") {
 MATCHER_P(EqualsKeyEvent, event, "") {
   return arg.usb_keycode() == event.usb_keycode() &&
          arg.pressed() == event.pressed();
+}
+
+ACTION_P(QuitRunLoop, run_loop) {
+  run_loop->Quit();
 }
 
 class MockConnectionToHostEventCallback
@@ -90,7 +95,7 @@ class ConnectionTest : public testing::Test,
     // Setup client side.
     client_connection_->set_client_stub(&client_stub_);
     client_connection_->set_clipboard_stub(&client_clipboard_stub_);
-    client_connection_->set_video_stub(&client_video_stub_);
+    client_connection_->set_video_renderer(&client_video_renderer_);
   }
 
   void Connect() {
@@ -167,7 +172,7 @@ class ConnectionTest : public testing::Test,
   MockConnectionToHostEventCallback client_event_handler_;
   MockClientStub client_stub_;
   MockClipboardStub client_clipboard_stub_;
-  MockVideoStub client_video_stub_;
+  FakeVideoRenderer client_video_renderer_;
   scoped_ptr<ConnectionToHost> client_connection_;
   FakeSession* client_session_;  // Owned by |client_connection_|.
   scoped_ptr<FakeSession> owned_client_session_;
@@ -177,9 +182,7 @@ class ConnectionTest : public testing::Test,
   DISALLOW_COPY_AND_ASSIGN(ConnectionTest);
 };
 
-// TODO(sergeyu): Disabled due to failures on Vista bots. See
-// https://crbug.com/573366.
-// INSTANTIATE_TEST_CASE_P(Ice, ConnectionTest, ::testing::Values(false));
+INSTANTIATE_TEST_CASE_P(Ice, ConnectionTest, ::testing::Values(false));
 INSTANTIATE_TEST_CASE_P(Webrtc, ConnectionTest, ::testing::Values(true));
 
 TEST_P(ConnectionTest, RejectConnection) {
@@ -213,13 +216,16 @@ TEST_P(ConnectionTest, Control) {
   Capabilities capabilities_msg;
   capabilities_msg.set_capabilities("test_capability");
 
+  base::RunLoop run_loop;
+
   EXPECT_CALL(client_stub_,
-              SetCapabilities(EqualsCapabilitiesMessage(capabilities_msg)));
+              SetCapabilities(EqualsCapabilitiesMessage(capabilities_msg)))
+      .WillOnce(QuitRunLoop(&run_loop));
 
   // Send capabilities from the host.
   host_connection_->client_stub()->SetCapabilities(capabilities_msg);
 
-  base::RunLoop().RunUntilIdle();
+  run_loop.Run();
 }
 
 TEST_P(ConnectionTest, Events) {
@@ -229,14 +235,17 @@ TEST_P(ConnectionTest, Events) {
   event.set_usb_keycode(3);
   event.set_pressed(true);
 
+  base::RunLoop run_loop;
+
   EXPECT_CALL(host_event_handler_,
               OnInputEventReceived(host_connection_.get(), _));
-  EXPECT_CALL(host_input_stub_, InjectKeyEvent(EqualsKeyEvent(event)));
+  EXPECT_CALL(host_input_stub_, InjectKeyEvent(EqualsKeyEvent(event)))
+      .WillOnce(QuitRunLoop(&run_loop));
 
   // Send capabilities from the client.
   client_connection_->input_stub()->InjectKeyEvent(event);
 
-  base::RunLoop().RunUntilIdle();
+  run_loop.Run();
 }
 
 }  // namespace protocol

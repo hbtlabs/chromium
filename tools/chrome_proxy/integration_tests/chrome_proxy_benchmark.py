@@ -81,6 +81,26 @@ class ChromeProxyHTTPSBypass(ChromeProxyBenchmark):
     return 'chrome_proxy_benchmark.https_bypass.https_bypass'
 
 
+class ChromeProxyHTML5Test(ChromeProxyBenchmark):
+  tag = 'html5test'
+  test = measurements.ChromeProxyHTML5Test
+  page_set = pagesets.HTML5TestStorySet
+
+  @classmethod
+  def Name(cls):
+    return 'chrome_proxy_benchmark.html5test.html5test'
+
+
+class ChromeProxyYouTube(ChromeProxyBenchmark):
+  tag = 'youtube'
+  test = measurements.ChromeProxyYouTube
+  page_set = pagesets.YouTubeStorySet
+
+  @classmethod
+  def Name(cls):
+    return 'chrome_proxy_benchmark.youtube.youtube'
+
+
 class ChromeProxyCorsBypass(ChromeProxyBenchmark):
   tag = 'bypass'
   test = measurements.ChromeProxyCorsBypass

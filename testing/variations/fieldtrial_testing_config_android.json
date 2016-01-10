@@ -36,15 +36,13 @@
         {
             "group_name": "OptOut",
             "params": {
-                "enabled": "true",
-                "promo_on_limited_taps": "true",
-                "promo_opt_out": "true",
-                "tap_prefetch_limit_for_decided": "50",
-                "tap_prefetch_limit_for_undecided": "20",
-                "tap_resolve_limit_for_decided": "50",
-                "tap_resolve_limit_for_undecided": "20",
-                "tap_triggered_promo_limit": "50"
+                "enabled": "true"
             }
+        }
+    ],
+    "CreditCardScan": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "CustomTabs": [
@@ -86,6 +84,11 @@
             "params": {
                 "minimum_refresh_interval_on_success_msec": "21600000"
             }
+        }
+    ],
+    "DataReductionProxyFREPromo": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "DataReductionProxyUseQuic": [
@@ -291,6 +294,11 @@
     "SdchPersistence": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "SpdyEnableDependencies": [
+        {
+            "group_name": "Enable"
         }
     ],
     "SpeculativeResourcePrefetching": [

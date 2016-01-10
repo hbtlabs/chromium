@@ -1564,6 +1564,65 @@ class LayerTreeHostTestSetVisible : public LayerTreeHostTest {
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestSetVisible);
 
+class TestOpacityChangeLayerDelegate : public ContentLayerClient {
+ public:
+  TestOpacityChangeLayerDelegate() : test_layer_(0) {}
+
+  void SetTestLayer(Layer* test_layer) { test_layer_ = test_layer; }
+
+  gfx::Rect PaintableRegion() override {
+    return gfx::Rect(test_layer_->bounds());
+  }
+  scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
+      PaintingControlSetting picture_control) override {
+    // Set layer opacity to 0.
+    if (test_layer_)
+      test_layer_->SetOpacity(0.f);
+
+    // Return a dummy display list.
+    scoped_refptr<DisplayItemList> display_list =
+        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
+    return display_list;
+  }
+  bool FillsBoundsCompletely() const override { return false; }
+  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
+
+ private:
+  Layer* test_layer_;
+};
+
+// Layer opacity change during paint should not prevent compositor resources
+// from being updated during commit.
+class LayerTreeHostTestOpacityChange : public LayerTreeHostTest {
+ public:
+  LayerTreeHostTestOpacityChange() : test_opacity_change_delegate_() {}
+
+  void SetupTree() override {
+    LayerTreeHostTest::SetupTree();
+
+    update_check_picture_layer_ = FakePictureLayer::Create(
+        layer_settings(), &test_opacity_change_delegate_);
+    test_opacity_change_delegate_.SetTestLayer(
+        update_check_picture_layer_.get());
+    layer_tree_host()->root_layer()->AddChild(update_check_picture_layer_);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override { EndTest(); }
+
+  void AfterTest() override {
+    // Update() should have been called once.
+    EXPECT_EQ(1, update_check_picture_layer_->update_count());
+  }
+
+ private:
+  TestOpacityChangeLayerDelegate test_opacity_change_delegate_;
+  scoped_refptr<FakePictureLayer> update_check_picture_layer_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestOpacityChange);
+
 class LayerTreeHostTestDeviceScaleFactorScalesViewportAndLayers
     : public LayerTreeHostTest {
  public:
@@ -2113,6 +2172,70 @@ class LayerTreeHostTestUninvertibleTransformDoesNotBlockActivation
 
 SINGLE_AND_MULTI_THREAD_TEST_F(
     LayerTreeHostTestUninvertibleTransformDoesNotBlockActivation);
+
+class LayerTreeHostTestChangeLayerPropertiesInPaintContents
+    : public LayerTreeHostTest {
+ public:
+  class SetBoundsClient : public ContentLayerClient {
+   public:
+    SetBoundsClient() : layer_(0) {}
+
+    void set_layer(Layer* layer) { layer_ = layer; }
+
+    gfx::Rect PaintableRegion() override { return gfx::Rect(layer_->bounds()); }
+
+    scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
+        PaintingControlSetting picture_control) override {
+      layer_->SetBounds(gfx::Size(2, 2));
+
+      // Return a dummy display list.
+      scoped_refptr<DisplayItemList> display_list =
+          DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
+      return display_list;
+    }
+
+    bool FillsBoundsCompletely() const override { return false; }
+    size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
+
+   private:
+    Layer* layer_;
+  };
+
+  LayerTreeHostTestChangeLayerPropertiesInPaintContents() : num_commits_(0) {}
+
+  void SetupTree() override {
+    scoped_refptr<PictureLayer> root_layer =
+        PictureLayer::Create(layer_settings(), &client_);
+    root_layer->SetIsDrawable(true);
+    root_layer->SetBounds(gfx::Size(1, 1));
+    client_.set_layer(root_layer.get());
+
+    layer_tree_host()->SetRootLayer(root_layer);
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+  void AfterTest() override {}
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    num_commits_++;
+    if (num_commits_ == 1) {
+      LayerImpl* root_layer = host_impl->active_tree()->root_layer();
+      EXPECT_EQ(gfx::Size(1, 1), root_layer->bounds());
+    } else {
+      LayerImpl* root_layer = host_impl->active_tree()->root_layer();
+      EXPECT_EQ(gfx::Size(2, 2), root_layer->bounds());
+      EndTest();
+    }
+  }
+
+ private:
+  SetBoundsClient client_;
+  int num_commits_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(
+    LayerTreeHostTestChangeLayerPropertiesInPaintContents);
 
 class MockIOSurfaceWebGraphicsContext3D : public TestWebGraphicsContext3D {
  public:
@@ -5063,14 +5186,17 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
     posted_ = false;
     client_.set_fill_with_nonsolid_color(true);
 
-    scoped_refptr<Layer> root = Layer::Create(layer_settings());
-    root->SetBounds(gfx::Size(500, 500));
+    scoped_refptr<Layer> root_clip = Layer::Create(layer_settings());
+    root_clip->SetBounds(gfx::Size(500, 500));
+    scoped_refptr<Layer> page_scale_layer = Layer::Create(layer_settings());
+    page_scale_layer->SetBounds(gfx::Size(500, 500));
 
     scoped_refptr<Layer> pinch = Layer::Create(layer_settings());
     pinch->SetBounds(gfx::Size(500, 500));
-    pinch->SetScrollClipLayerId(root->id());
+    pinch->SetScrollClipLayerId(root_clip->id());
     pinch->SetIsContainerForFixedPositionLayers(true);
-    root->AddChild(pinch);
+    page_scale_layer->AddChild(pinch);
+    root_clip->AddChild(page_scale_layer);
 
     scoped_ptr<FakeDisplayListRecordingSource> recording(
         new FakeDisplayListRecordingSource);
@@ -5084,11 +5210,12 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
     // pinch.
     pinch->AddChild(layer);
 
-    layer_tree_host()->RegisterViewportLayers(NULL, root, pinch, nullptr);
+    layer_tree_host()->RegisterViewportLayers(NULL, page_scale_layer, pinch,
+                                              nullptr);
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root_clip);
     LayerTreeHostTest::SetupTree();
-    client_.set_bounds(root->bounds());
+    client_.set_bounds(root_clip->bounds());
   }
 
   // Returns the delta scale of all quads in the frame's root pass from their
@@ -5364,14 +5491,17 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
     continuous_draws_ = 0;
     client_.set_fill_with_nonsolid_color(true);
 
-    scoped_refptr<Layer> root = Layer::Create(layer_settings());
-    root->SetBounds(gfx::Size(500, 500));
+    scoped_refptr<Layer> root_clip = Layer::Create(layer_settings());
+    root_clip->SetBounds(gfx::Size(500, 500));
+    scoped_refptr<Layer> page_scale_layer = Layer::Create(layer_settings());
+    page_scale_layer->SetBounds(gfx::Size(500, 500));
 
     scoped_refptr<Layer> pinch = Layer::Create(layer_settings());
     pinch->SetBounds(gfx::Size(500, 500));
-    pinch->SetScrollClipLayerId(root->id());
+    pinch->SetScrollClipLayerId(root_clip->id());
     pinch->SetIsContainerForFixedPositionLayers(true);
-    root->AddChild(pinch);
+    page_scale_layer->AddChild(pinch);
+    root_clip->AddChild(page_scale_layer);
 
     scoped_ptr<FakeDisplayListRecordingSource> recording(
         new FakeDisplayListRecordingSource);
@@ -5385,11 +5515,12 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
     // pinch.
     pinch->AddChild(layer);
 
-    layer_tree_host()->RegisterViewportLayers(NULL, root, pinch, nullptr);
+    layer_tree_host()->RegisterViewportLayers(NULL, page_scale_layer, pinch,
+                                              nullptr);
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root_clip);
     LayerTreeHostTest::SetupTree();
-    client_.set_bounds(root->bounds());
+    client_.set_bounds(root_clip->bounds());
   }
 
   // Returns the delta scale of all quads in the frame's root pass from their

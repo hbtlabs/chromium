@@ -34,6 +34,8 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -161,6 +163,16 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
     private static void initializeBrowser(final Application app) {
         ThreadUtils.assertOnUiThread();
         try {
+            // Loading the native library may spuriously trigger StrictMode violations when
+            // running instrumentation tests. This does not happen if full Chrome has
+            // started before reaching this point.
+            // crbug.com/574532
+            if (!LibraryLoader.isInitialized()) {
+                StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+                LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER)
+                        .ensureInitialized(app.getApplicationContext());
+                StrictMode.setThreadPolicy(oldPolicy);
+            }
             ChromeBrowserInitializer.getInstance(app).handleSynchronousStartup();
         } catch (ProcessInitException e) {
             Log.e(TAG, "ProcessInitException while starting the browser process.");
@@ -371,21 +383,21 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
 
     @Override
     public boolean updateVisuals(final ICustomTabsCallback callback, Bundle bundle) {
+        // TODO(ianwen): add update logic here to support bundle list and bottom bar items.
         final Bundle actionButtonBundle = IntentUtils.safeGetBundle(bundle,
                 CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE);
         if (actionButtonBundle == null) return false;
 
-        final Bitmap bitmap = ActionButtonParams.tryParseBitmapFromBundle(mApplication,
-                actionButtonBundle);
-        final String description = ActionButtonParams
-                .tryParseDescriptionFromBundle(actionButtonBundle);
+        final Bitmap bitmap = CustomButtonParams.parseBitmapFromBundle(actionButtonBundle);
+        final String description = CustomButtonParams
+                .parseDescriptionFromBundle(actionButtonBundle);
         if (bitmap == null || description == null) return false;
 
         try {
             return ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
-                    return CustomTabActivity.updateActionButton(callback.asBinder(), bitmap,
+                    return CustomTabActivity.updateCustomButton(callback.asBinder(), 0, bitmap,
                             description);
                 }
             });

@@ -14,14 +14,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/local_discovery/cloud_device_list.h"
-#include "chrome/browser/local_discovery/privet_confirm_api_flow.h"
-#include "chrome/browser/local_discovery/privet_constants.h"
-#include "chrome/browser/local_discovery/privet_device_lister_impl.h"
-#include "chrome/browser/local_discovery/privet_http_asynchronous_factory.h"
 #include "chrome/browser/local_discovery/service_discovery_shared_client.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
+#include "chrome/browser/printing/cloud_print/privet_confirm_api_flow.h"
+#include "chrome/browser/printing/cloud_print/privet_constants.h"
+#include "chrome/browser/printing/cloud_print/privet_device_lister_impl.h"
+#include "chrome/browser/printing/cloud_print/privet_http_asynchronous_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -41,6 +40,11 @@
 #define CLOUD_PRINT_CONNECTOR_UI_AVAILABLE
 #endif
 
+using cloud_print::CloudPrintPrinterList;
+using cloud_print::DeviceDescription;
+using cloud_print::GCDApiFlow;
+using cloud_print::PrivetRegisterOperation;
+
 namespace local_discovery {
 
 namespace {
@@ -59,30 +63,29 @@ int g_num_visible = 0;
 const int kCloudDevicesPrivetVersion = 3;
 
 scoped_ptr<base::DictionaryValue> CreateDeviceInfo(
-    const CloudDeviceListDelegate::Device& description) {
+    const CloudPrintPrinterList::Device& description) {
   scoped_ptr<base::DictionaryValue> return_value(new base::DictionaryValue);
 
   return_value->SetString(kDictionaryKeyID, description.id);
   return_value->SetString(kDictionaryKeyDisplayName, description.display_name);
   return_value->SetString(kDictionaryKeyDescription, description.description);
-  return_value->SetString(kDictionaryKeyType, description.type);
+  return_value->SetString(kDictionaryKeyType, "printer");
 
   return return_value;
 }
 
-void ReadDevicesList(
-    const std::vector<CloudDeviceListDelegate::Device>& devices,
-    const std::set<std::string>& local_ids,
-    base::ListValue* devices_list) {
-  for (CloudDeviceList::iterator i = devices.begin(); i != devices.end(); i++) {
-    if (local_ids.count(i->id) > 0) {
-      devices_list->Append(CreateDeviceInfo(*i).release());
+void ReadDevicesList(const CloudPrintPrinterList::DeviceList& devices,
+                     const std::set<std::string>& local_ids,
+                     base::ListValue* devices_list) {
+  for (const auto& i : devices) {
+    if (local_ids.count(i.id) > 0) {
+      devices_list->Append(CreateDeviceInfo(i).release());
     }
   }
 
-  for (CloudDeviceList::iterator i = devices.begin(); i != devices.end(); i++) {
-    if (local_ids.count(i->id) == 0) {
-      devices_list->Append(CreateDeviceInfo(*i).release());
+  for (const auto& i : devices) {
+    if (local_ids.count(i.id) == 0) {
+      devices_list->Append(CreateDeviceInfo(i).release());
     }
   }
 }
@@ -171,9 +174,11 @@ void LocalDiscoveryUIHandler::HandleStart(const base::ListValue* args) {
   if (!privet_lister_) {
     service_discovery_client_ = ServiceDiscoverySharedClient::GetInstance();
     privet_lister_.reset(
-        new PrivetDeviceListerImpl(service_discovery_client_.get(), this));
-    privet_http_factory_ = PrivetHTTPAsynchronousFactory::CreateInstance(
-        profile->GetRequestContext());
+        new cloud_print::PrivetDeviceListerImpl(service_discovery_client_.get(),
+                                                this));
+    privet_http_factory_ =
+        cloud_print::PrivetHTTPAsynchronousFactory::CreateInstance(
+            profile->GetRequestContext());
 
     SigninManagerBase* signin_manager =
         SigninManagerFactory::GetInstance()->GetForProfile(profile);
@@ -268,9 +273,9 @@ void LocalDiscoveryUIHandler::HandleShowSyncUI(
 }
 
 void LocalDiscoveryUIHandler::StartRegisterHTTP(
-    scoped_ptr<PrivetHTTPClient> http_client) {
+    scoped_ptr<cloud_print::PrivetHTTPClient> http_client) {
   current_http_client_ =
-      PrivetV1HTTPClient::CreateDefault(std::move(http_client));
+      cloud_print::PrivetV1HTTPClient::CreateDefault(std::move(http_client));
 
   std::string user = GetSyncAccount();
 
@@ -285,7 +290,7 @@ void LocalDiscoveryUIHandler::StartRegisterHTTP(
 }
 
 void LocalDiscoveryUIHandler::OnPrivetRegisterClaimToken(
-    PrivetRegisterOperation* operation,
+    cloud_print::PrivetRegisterOperation* operation,
     const std::string& token,
     const GURL& url) {
   web_ui()->CallJavascriptFunction(
@@ -301,10 +306,11 @@ void LocalDiscoveryUIHandler::OnPrivetRegisterClaimToken(
     return;
   }
   confirm_api_call_flow_->Start(
-      make_scoped_ptr<GCDApiFlow::Request>(new PrivetConfirmApiCallFlow(
-          token,
-          base::Bind(&LocalDiscoveryUIHandler::OnConfirmDone,
-                     base::Unretained(this)))));
+      make_scoped_ptr<GCDApiFlow::Request>(
+          new cloud_print::PrivetConfirmApiCallFlow(
+              token,
+              base::Bind(&LocalDiscoveryUIHandler::OnConfirmDone,
+                         base::Unretained(this)))));
 }
 
 void LocalDiscoveryUIHandler::OnPrivetRegisterError(
@@ -316,12 +322,12 @@ void LocalDiscoveryUIHandler::OnPrivetRegisterError(
   std::string error;
 
   if (reason == PrivetRegisterOperation::FAILURE_JSON_ERROR &&
-      json->GetString(kPrivetKeyError, &error)) {
-    if (error == kPrivetErrorTimeout) {
+      json->GetString(cloud_print::kPrivetKeyError, &error)) {
+    if (error == cloud_print::kPrivetErrorTimeout) {
         web_ui()->CallJavascriptFunction(
             "local_discovery.onRegistrationTimeout");
       return;
-    } else if (error == kPrivetErrorCancel) {
+    } else if (error == cloud_print::kPrivetErrorCancel) {
       web_ui()->CallJavascriptFunction(
             "local_discovery.onRegistrationCanceledPrinter");
       return;
@@ -396,7 +402,7 @@ void LocalDiscoveryUIHandler::DeviceCacheFlushed() {
 }
 
 void LocalDiscoveryUIHandler::OnDeviceListReady(
-    const std::vector<Device>& devices) {
+    const CloudPrintPrinterList::DeviceList& devices) {
   cloud_devices_.insert(cloud_devices_.end(), devices.begin(), devices.end());
   ++succeded_list_count_;
   CheckListingDone();

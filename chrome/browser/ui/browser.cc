@@ -1102,14 +1102,11 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
   if (session_service && !tab_strip_model_->closing_all()) {
     session_service->SetSelectedTabInWindow(session_id(),
                                             tab_strip_model_->active_index());
-    if (SessionRestore::GetSmartRestoreMode() ==
-        SessionRestore::SMART_RESTORE_MODE_MRU) {
-      SessionTabHelper* session_tab_helper =
-          SessionTabHelper::FromWebContents(new_contents);
-      session_service->SetLastActiveTime(session_id(),
-                                         session_tab_helper->session_id(),
-                                         base::TimeTicks::Now());
-    }
+    SessionTabHelper* session_tab_helper =
+        SessionTabHelper::FromWebContents(new_contents);
+    session_service->SetLastActiveTime(session_id(),
+                                       session_tab_helper->session_id(),
+                                       base::TimeTicks::Now());
   }
 
   // This needs to be called after notifying SearchDelegate.
@@ -1620,14 +1617,17 @@ void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
   }
 }
 
-void Browser::ContentsMouseEvent(
-    WebContents* source, const gfx::Point& location, bool motion) {
-  if (!GetStatusBubble())
+void Browser::ContentsMouseEvent(WebContents* source,
+                                 const gfx::Point& location,
+                                 bool motion,
+                                 bool exited) {
+  // Mouse motion events update the status bubble, if it exists.
+  if (!GetStatusBubble() || (!motion && !exited))
     return;
 
   if (source == tab_strip_model_->GetActiveWebContents()) {
-    GetStatusBubble()->MouseMoved(location, !motion);
-    if (!motion)
+    GetStatusBubble()->MouseMoved(location, exited);
+    if (exited)
       GetStatusBubble()->SetURL(GURL(), std::string());
   }
 }

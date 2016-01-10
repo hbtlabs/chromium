@@ -24,9 +24,11 @@ check_targets = [
   "//cc/*",
 
   #"//chrome/*",  # Epic number of errors.
+  "//chrome/app/*",
   "//chrome/common/*",
   "//chrome/installer/*",
   "//chrome/third_party/mozilla_security_manager/*",
+  "//chrome/tools/*",
   "//chrome/utility/*",
   "//chromecast/*",
   "//chrome_elf/*",
@@ -79,6 +81,7 @@ check_targets = [
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
+  "//third_party/kasko/*",
   "//third_party/WebKit/Source/*",
   "//tools/*",
 

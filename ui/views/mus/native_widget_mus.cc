@@ -239,21 +239,21 @@ void NativeWidgetMus::UpdateClientArea() {
 void NativeWidgetMus::ConfigurePropertiesForNewWindow(
     const Widget::InitParams& init_params,
     std::map<std::string, std::vector<uint8_t>>* properties) {
+  if (!init_params.bounds.IsEmpty()) {
+    (*properties)[mus::mojom::WindowManager::kUserSetBounds_Property] =
+        mojo::TypeConverter<const std::vector<uint8_t>, gfx::Rect>::Convert(
+            init_params.bounds);
+  }
+
   if (!Widget::RequiresNonClientView(init_params.type))
     return;
 
   (*properties)[mus::mojom::WindowManager::kWindowType_Property] =
       mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
           mojo::ConvertTo<mus::mojom::WindowType>(init_params.type));
-  ConfigurePropertiesForNewWindowFromDelegate(init_params.delegate, properties);
-}
-
-void NativeWidgetMus::ConfigurePropertiesForNewWindowFromDelegate(
-    WidgetDelegate* delegate,
-    std::map<std::string, std::vector<uint8_t>>* properties) {
   (*properties)[mus::mojom::WindowManager::kResizeBehavior_Property] =
       mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-          ResizeBehaviorFromDelegate(delegate));
+          ResizeBehaviorFromDelegate(init_params.delegate));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,6 +313,14 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   // TODO(beng): much else, see [Desktop]NativeWidgetAura.
 
   native_widget_delegate_->OnNativeWidgetCreated(false);
+}
+
+void NativeWidgetMus::OnWidgetInitDone() {
+  // The client area is calculated from the NonClientView. During
+  // InitNativeWidget() the NonClientView has not been created. When this
+  // function is called the NonClientView has been created, so that we can
+  // correctly calculate the client area and push it to the mus::Window.
+  UpdateClientArea();
 }
 
 bool NativeWidgetMus::ShouldUseNativeFrame() const {
@@ -432,13 +440,13 @@ void NativeWidgetMus::InitModalType(ui::ModalType modal_type) {
 }
 
 gfx::Rect NativeWidgetMus::GetWindowBoundsInScreen() const {
-  // NOTIMPLEMENTED();
-  return gfx::Rect();
+  return window_ ? window_->GetBoundsInRoot() : gfx::Rect();
 }
 
 gfx::Rect NativeWidgetMus::GetClientAreaBoundsInScreen() const {
-  // NOTIMPLEMENTED();
-  return gfx::Rect();
+  // View-to-screen coordinate system transformations depend on this returning
+  // the full window bounds, for example View::ConvertPointToScreen().
+  return GetWindowBoundsInScreen();
 }
 
 gfx::Rect NativeWidgetMus::GetRestoredBounds() const {

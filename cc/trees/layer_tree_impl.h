@@ -5,9 +5,6 @@
 #ifndef CC_TREES_LAYER_TREE_IMPL_H_
 #define CC_TREES_LAYER_TREE_IMPL_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <map>
 #include <set>
 #include <string>
@@ -101,7 +98,6 @@ class CC_EXPORT LayerTreeImpl {
   bool PinchGestureActive() const;
   BeginFrameArgs CurrentBeginFrameArgs() const;
   base::TimeDelta CurrentBeginFrameInterval() const;
-  void SetNeedsCommit();
   gfx::Rect DeviceViewport() const;
   gfx::Size DrawViewportSize() const;
   const gfx::Rect ViewportRectForTilePriority() const;
@@ -142,6 +138,18 @@ class CC_EXPORT LayerTreeImpl {
 
   void PushPropertiesTo(LayerTreeImpl* tree_impl);
 
+  // TODO(thakis): Consider marking this CC_EXPORT once we understand
+  // http://crbug.com/575700 better.
+  struct ElementLayers {
+    // Transform and opacity mutations apply to this layer.
+    LayerImpl* main = nullptr;
+    // Scroll mutations apply to this layer.
+    LayerImpl* scroll = nullptr;
+  };
+
+  void AddToElementMap(LayerImpl* layer);
+  void RemoveFromElementMap(LayerImpl* layer);
+  ElementLayers GetMutableLayers(uint64_t element_id);
   int source_frame_number() const { return source_frame_number_; }
   void set_source_frame_number(int frame_number) {
     source_frame_number_ = frame_number;
@@ -476,6 +484,8 @@ class CC_EXPORT LayerTreeImpl {
 
   typedef base::hash_map<int, LayerImpl*> LayerIdMap;
   LayerIdMap layer_id_map_;
+
+  base::hash_map<uint64_t, ElementLayers> element_layers_map_;
 
   // Maps from clip layer ids to scroll layer ids.  Note that this only includes
   // the subset of clip layers that act as scrolling containers.  (This is

@@ -746,44 +746,24 @@ TEST_P(SpdyNetworkTransactionTest, GetAtEachPriority) {
     // this repeats the RequestPriority-->SpdyPriority mapping from
     // SpdyFramer::ConvertRequestPriorityToSpdyPriority to make
     // sure it's being done right.
-    if (spdy_util_.spdy_version() < SPDY3) {
-      switch (p) {
-        case HIGHEST:
-          EXPECT_EQ(0, spdy_prio);
-          break;
-        case MEDIUM:
-          EXPECT_EQ(1, spdy_prio);
-          break;
-        case LOW:
-        case LOWEST:
-          EXPECT_EQ(2, spdy_prio);
-          break;
-        case IDLE:
-          EXPECT_EQ(3, spdy_prio);
-          break;
-        default:
-          FAIL();
-      }
-    } else {
-      switch (p) {
-        case HIGHEST:
-          EXPECT_EQ(0, spdy_prio);
-          break;
-        case MEDIUM:
-          EXPECT_EQ(1, spdy_prio);
-          break;
-        case LOW:
-          EXPECT_EQ(2, spdy_prio);
-          break;
-        case LOWEST:
-          EXPECT_EQ(3, spdy_prio);
-          break;
-        case IDLE:
-          EXPECT_EQ(4, spdy_prio);
-          break;
-        default:
-          FAIL();
-      }
+    switch (p) {
+      case HIGHEST:
+        EXPECT_EQ(0, spdy_prio);
+        break;
+      case MEDIUM:
+        EXPECT_EQ(1, spdy_prio);
+        break;
+      case LOW:
+        EXPECT_EQ(2, spdy_prio);
+        break;
+      case LOWEST:
+        EXPECT_EQ(3, spdy_prio);
+        break;
+      case IDLE:
+        EXPECT_EQ(4, spdy_prio);
+        break;
+      default:
+        FAIL();
     }
 
     scoped_ptr<SpdyFrame> resp(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
@@ -6349,9 +6329,6 @@ TEST_P(SpdyNetworkTransactionTest, FlowControlNegativeSendWindowSize) {
 }
 
 TEST_P(SpdyNetworkTransactionTest, GoAwayOnOddPushStreamId) {
-  if (spdy_util_.spdy_version() < SPDY3)
-    return;
-
   scoped_ptr<SpdyHeaderBlock> push_headers(new SpdyHeaderBlock);
   spdy_util_.AddUrlToHeaderBlock("http://www.example.org/a.dat",
                                  push_headers.get());
@@ -6377,9 +6354,6 @@ TEST_P(SpdyNetworkTransactionTest, GoAwayOnOddPushStreamId) {
 
 TEST_P(SpdyNetworkTransactionTest,
        GoAwayOnPushStreamIdLesserOrEqualThanLastAccepted) {
-  if (spdy_util_.spdy_version() < SPDY3)
-    return;
-
   scoped_ptr<SpdyFrame> push_a(spdy_util_.ConstructSpdyPush(
       NULL, 0, 4, 1, GetDefaultUrlWithPath("/a.dat").c_str()));
   scoped_ptr<SpdyHeaderBlock> push_b_headers(new SpdyHeaderBlock);
@@ -6447,6 +6421,47 @@ TEST_P(SpdyNetworkTransactionTest, LargeRequest) {
   EXPECT_EQ(OK, out.rv);
   EXPECT_EQ("HTTP/1.1 200", out.status_line);
   EXPECT_EQ("hello!", out.response_data);
+}
+
+// Regression test for https://crbug.com/535629: response header exceeds 16 kB.
+TEST_P(SpdyNetworkTransactionTest, LargeResponseHeader) {
+  scoped_ptr<SpdyHeaderBlock> headers(
+      spdy_util_.ConstructGetHeaderBlock(GetDefaultUrl()));
+  scoped_ptr<SpdyFrame> req(
+      spdy_util_.ConstructSpdySyn(1, *headers, LOWEST, false, true));
+  MockWrite writes[] = {
+      CreateMockWrite(*req, 0),
+  };
+
+  // HPACK decoder implementation limits string literal length to 16 kB.
+  const char* response_headers[2];
+  const std::string kKey(16 * 1024, 'a');
+  response_headers[0] = kKey.data();
+  const std::string kValue(16 * 1024, 'b');
+  response_headers[1] = kValue.data();
+
+  scoped_ptr<SpdyFrame> resp(
+      spdy_util_.ConstructSpdyGetSynReply(response_headers, 1, 1));
+  scoped_ptr<SpdyFrame> body(spdy_util_.ConstructSpdyBodyFrame(1, true));
+  MockRead reads[] = {
+      CreateMockRead(*resp, 1), CreateMockRead(*body, 2),
+      MockRead(ASYNC, 0, 3)  // EOF
+  };
+
+  HttpRequestInfo request;
+  request.method = "GET";
+  request.url = GURL(GetDefaultUrl());
+  NormalSpdyTransactionHelper helper(request, DEFAULT_PRIORITY, BoundNetLog(),
+                                     GetParam(), nullptr);
+
+  SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
+  helper.RunToCompletion(&data);
+  TransactionHelperResult out = helper.output();
+
+  EXPECT_EQ(OK, out.rv);
+  EXPECT_EQ("HTTP/1.1 200", out.status_line);
+  EXPECT_EQ("hello!", out.response_data);
+  ASSERT_TRUE(out.response_info.headers->HasHeaderValue(kKey, kValue));
 }
 
 class SpdyNetworkTransactionNoTLSUsageCheckTest

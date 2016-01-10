@@ -128,7 +128,6 @@
 #include "content/renderer/shared_worker/embedded_shared_worker_stub.h"
 #include "gin/public/debug.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/mojo/ipc_channel_mojo.h"
@@ -150,7 +149,6 @@
 #include "third_party/WebKit/public/web/WebDatabase.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebImageCache.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebMemoryPressureListener.h"
 #include "third_party/WebKit/public/web/WebNetworkStateNotifier.h"
@@ -1219,7 +1217,8 @@ void RenderThreadImpl::EnsureWebKitInitialized() {
                  base::Unretained(this)));
 
   SetResourceDispatchTaskQueue(renderer_scheduler_->LoadingTaskRunner());
-  if (!command_line.HasSwitch(switches::kDisableThreadedCompositing))
+  if (!command_line.HasSwitch(switches::kDisableThreadedCompositing) &&
+      !command_line.HasSwitch(switches::kUseRemoteCompositing))
     InitializeCompositorThread();
 
   if (!input_event_filter_.get()) {
@@ -1933,7 +1932,8 @@ void RenderThreadImpl::OnMemoryPressure(
 
   // Do not call into blink if it is not initialized.
   if (blink_platform_impl_) {
-    blink::WebMemoryPressureListener::onMemoryPressure();
+    blink::WebMemoryPressureListener::onMemoryPressure(
+        static_cast<blink::WebMemoryPressureLevel>(memory_pressure_level));
 
     if (blink::mainThreadIsolate()) {
       // Trigger full v8 garbage collection on memory pressure notifications.
@@ -1947,9 +1947,6 @@ void RenderThreadImpl::OnMemoryPressure(
 
     if (memory_pressure_level ==
         base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
-      // Clear the image cache.
-      blink::WebImageCache::clear();
-
       // Purge Skia font cache, by setting it to 0 and then again to the
       // previous limit.
       size_t font_cache_limit = SkGraphics::SetFontCacheLimit(0);

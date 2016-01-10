@@ -18,6 +18,7 @@
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_property.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
+#include "mojo/common/common_type_converters.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/input_events/input_events_type_converters.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -95,6 +96,12 @@ class WindowTreeSetup {
 
   TestWindowTree* window_tree() { return &window_tree_; }
 
+  Window* GetFirstRoot() {
+    return window_tree_connection()->GetRoots().empty()
+               ? nullptr
+               : *window_tree_connection()->GetRoots().begin();
+  }
+
  private:
   TestWindowTree window_tree_;
   TestWindowTreeDelegate window_tree_delegate_;
@@ -150,7 +157,7 @@ using WindowTreeClientImplTest = testing::Test;
 // Verifies bounds are reverted if the server replied that the change failed.
 TEST_F(WindowTreeClientImplTest, SetBoundsFailed) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const gfx::Rect original_bounds(root->bounds());
   const gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
@@ -166,7 +173,7 @@ TEST_F(WindowTreeClientImplTest, SetBoundsFailed) {
 // server replies with a new bounds and the original bounds change fails.
 TEST_F(WindowTreeClientImplTest, SetBoundsFailedWithPendingChange) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const gfx::Rect original_bounds(root->bounds());
   const gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
@@ -199,7 +206,7 @@ TEST_F(WindowTreeClientImplTest, SetBoundsFailedWithPendingChange) {
 
 TEST_F(WindowTreeClientImplTest, TwoInFlightBoundsChangesBothCanceled) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const gfx::Rect original_bounds(root->bounds());
   const gfx::Rect bounds1(gfx::Rect(0, 0, 100, 100));
@@ -229,7 +236,7 @@ TEST_F(WindowTreeClientImplTest, TwoInFlightBoundsChangesBothCanceled) {
 // failed.
 TEST_F(WindowTreeClientImplTest, SetPropertyFailed) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   ASSERT_FALSE(root->HasSharedProperty("foo"));
   const int32_t new_value = 11;
@@ -246,7 +253,7 @@ TEST_F(WindowTreeClientImplTest, SetPropertyFailed) {
 // server replies with a new property and the original property change fails.
 TEST_F(WindowTreeClientImplTest, SetPropertyFailedWithPendingChange) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const int32_t value1 = 11;
   root->SetSharedProperty("foo", value1);
@@ -280,7 +287,7 @@ TEST_F(WindowTreeClientImplTest, SetPropertyFailedWithPendingChange) {
 // Verifies visible is reverted if the server replied that the change failed.
 TEST_F(WindowTreeClientImplTest, SetVisibleFailed) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const bool original_visible = root->visible();
   const bool new_visible = !original_visible;
@@ -296,7 +303,7 @@ TEST_F(WindowTreeClientImplTest, SetVisibleFailed) {
 // server replies with a new visible and the original visible change fails.
 TEST_F(WindowTreeClientImplTest, SetVisibleFailedWithPendingChange) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   const bool original_visible = root->visible();
   const bool new_visible = !original_visible;
@@ -327,7 +334,7 @@ TEST_F(WindowTreeClientImplTest, SetVisibleFailedWithPendingChange) {
 
 TEST_F(WindowTreeClientImplTest, InputEventBasic) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
 
   TestInputEventHandler event_handler;
@@ -357,7 +364,7 @@ TEST_F(WindowTreeClientImplTest, InputEventBasic) {
 // Verifies focus is reverted if the server replied that the change failed.
 TEST_F(WindowTreeClientImplTest, SetFocusFailed) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   root->SetVisible(true);
   Window* child = setup.window_tree_connection()->NewWindow();
@@ -378,7 +385,7 @@ TEST_F(WindowTreeClientImplTest, SetFocusFailed) {
 // replies with a new focus and the original focus change fails.
 TEST_F(WindowTreeClientImplTest, SetFocusFailedWithPendingChange) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   root->SetVisible(true);
   Window* child1 = setup.window_tree_connection()->NewWindow();
@@ -415,7 +422,7 @@ TEST_F(WindowTreeClientImplTest, SetFocusFailedWithPendingChange) {
 
 TEST_F(WindowTreeClientImplTest, FocusOnRemovedWindowWithInFlightFocusChange) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   root->SetVisible(true);
   Window* child1 = setup.window_tree_connection()->NewWindow();
@@ -471,7 +478,7 @@ class ToggleVisibilityFromDestroyedObserver : public WindowObserver {
 
 TEST_F(WindowTreeClientImplTest, ToggleVisibilityFromWindowDestroyed) {
   WindowTreeSetup setup;
-  Window* root = setup.window_tree_connection()->GetRoot();
+  Window* root = setup.GetFirstRoot();
   ASSERT_TRUE(root);
   Window* child1 = setup.window_tree_connection()->NewWindow();
   root->AddChild(child1);
@@ -484,6 +491,158 @@ TEST_F(WindowTreeClientImplTest, ToggleVisibilityFromWindowDestroyed) {
   uint32_t change_id;
   ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
   setup.window_tree_client()->OnChangeCompleted(change_id, true);
+}
+
+TEST_F(WindowTreeClientImplTest, NewTopLevelWindow) {
+  WindowTreeSetup setup;
+  Window* root1 = setup.GetFirstRoot();
+  ASSERT_TRUE(root1);
+  Window* root2 = setup.window_tree_connection()->NewTopLevelWindow(nullptr);
+  ASSERT_TRUE(root2);
+  ASSERT_NE(root2, root1);
+  EXPECT_NE(root2->id(), root1->id());
+  EXPECT_EQ(2u, setup.window_tree_connection()->GetRoots().size());
+  EXPECT_TRUE(setup.window_tree_connection()->GetRoots().count(root1) > 0u);
+  EXPECT_TRUE(setup.window_tree_connection()->GetRoots().count(root2) > 0u);
+
+  // Ack the request to the windowtree to create the new window.
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+  EXPECT_EQ(setup.window_tree()->window_id(), root2->id());
+
+  mojom::WindowDataPtr data = mojom::WindowData::New();
+  data->window_id = root2->id();
+  data->viewport_metrics = mojom::ViewportMetrics::New();
+  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data));
+
+  // Should not be able to add a top level as a child of another window.
+  root1->AddChild(root2);
+  ASSERT_EQ(nullptr, root2->parent());
+
+  // Destroy the first root, shouldn't initiate tear down.
+  root1->Destroy();
+  root1 = nullptr;
+  EXPECT_EQ(1u, setup.window_tree_connection()->GetRoots().size());
+  EXPECT_TRUE(setup.window_tree_connection()->GetRoots().count(root2) > 0u);
+}
+
+TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsPropertiesFromData) {
+  WindowTreeSetup setup;
+  Window* root1 = setup.GetFirstRoot();
+  ASSERT_TRUE(root1);
+  Window* root2 = setup.window_tree_connection()->NewTopLevelWindow(nullptr);
+  ASSERT_TRUE(root2);
+
+  EXPECT_FALSE(root2->IsDrawn());
+  EXPECT_FALSE(root2->visible());
+
+  // Ack the request to the windowtree to create the new window.
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+  EXPECT_EQ(setup.window_tree()->window_id(), root2->id());
+
+  mojom::WindowDataPtr data = mojom::WindowData::New();
+  data->window_id = root2->id();
+  data->viewport_metrics = mojom::ViewportMetrics::New();
+  data->viewport_metrics->size_in_pixels = mojo::Size::From(gfx::Size(1, 2));
+  data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
+  data->visible = true;
+  data->drawn = true;
+  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data));
+
+  // Make sure all the properties took.
+  EXPECT_TRUE(root2->IsDrawn());
+  EXPECT_TRUE(root2->visible());
+  EXPECT_EQ(gfx::Size(1, 2),
+            root2->viewport_metrics().size_in_pixels.To<gfx::Size>());
+  EXPECT_EQ(gfx::Rect(1, 2, 3, 4), root2->bounds());
+}
+
+TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsAllChangesInFlight) {
+  WindowTreeSetup setup;
+  Window* root1 = setup.GetFirstRoot();
+  ASSERT_TRUE(root1);
+  Window* root2 = setup.window_tree_connection()->NewTopLevelWindow(nullptr);
+  ASSERT_TRUE(root2);
+
+  EXPECT_FALSE(root2->IsDrawn());
+  EXPECT_FALSE(root2->visible());
+
+  // Get the id of the in flight change for creating the new window.
+  uint32_t new_window_in_flight_change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(
+      &new_window_in_flight_change_id));
+  EXPECT_EQ(setup.window_tree()->window_id(), root2->id());
+
+  // Make visibility go from false->true->false. Don't ack immediately.
+  root2->SetVisible(true);
+  uint32_t vis_in_flight_change_id1;
+  ASSERT_TRUE(
+      setup.window_tree()->GetAndClearChangeId(&vis_in_flight_change_id1));
+  EXPECT_NE(new_window_in_flight_change_id, vis_in_flight_change_id1);
+  root2->SetVisible(false);
+  uint32_t vis_in_flight_change_id2;
+  ASSERT_TRUE(
+      setup.window_tree()->GetAndClearChangeId(&vis_in_flight_change_id2));
+  EXPECT_NE(vis_in_flight_change_id1, vis_in_flight_change_id2);
+
+  // Change bounds to 5, 6, 7, 8.
+  root2->SetBounds(gfx::Rect(5, 6, 7, 8));
+  uint32_t bounds_in_flight_change_id;
+  ASSERT_TRUE(
+      setup.window_tree()->GetAndClearChangeId(&bounds_in_flight_change_id));
+  EXPECT_NE(vis_in_flight_change_id2, bounds_in_flight_change_id);
+
+  root2->SetSharedProperty<std::string>("xx", "client_xx");
+  uint32_t property_in_flight_change_id;
+  ASSERT_TRUE(
+      setup.window_tree()->GetAndClearChangeId(&property_in_flight_change_id));
+  EXPECT_NE(bounds_in_flight_change_id, property_in_flight_change_id);
+
+  // Ack the new window top level window. Vis and bounds shouldn't change.
+  mojom::WindowDataPtr data = mojom::WindowData::New();
+  data->window_id = root2->id();
+  data->viewport_metrics = mojom::ViewportMetrics::New();
+  data->viewport_metrics->size_in_pixels = mojo::Size::From(gfx::Size(1, 2));
+  data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
+  data->visible = true;
+  data->drawn = true;
+  data->properties["xx"] = mojo::Array<uint8_t>::From(std::string("server_xx"));
+  data->properties["yy"] = mojo::Array<uint8_t>::From(std::string("server_yy"));
+  setup.window_tree_client()->OnTopLevelCreated(new_window_in_flight_change_id,
+                                                std::move(data));
+
+  // The only value that should take effect is the property for 'yy' as it was
+  // not in flight.
+  EXPECT_TRUE(WindowPrivate(root2).drawn());
+  EXPECT_FALSE(root2->visible());
+  EXPECT_EQ(gfx::Size(1, 2),
+            root2->viewport_metrics().size_in_pixels.To<gfx::Size>());
+  EXPECT_EQ(gfx::Rect(5, 6, 7, 8), root2->bounds());
+  EXPECT_EQ(2u, root2->shared_properties().size());
+  ASSERT_TRUE(root2->HasSharedProperty("yy"));
+  EXPECT_EQ("server_yy", root2->GetSharedProperty<std::string>("yy"));
+  ASSERT_TRUE(root2->HasSharedProperty("xx"));
+  EXPECT_EQ("client_xx", root2->GetSharedProperty<std::string>("xx"));
+
+  // Tell the client the changes failed. This should cause the values to change
+  // to that of the server.
+  setup.window_tree_client()->OnChangeCompleted(vis_in_flight_change_id1,
+                                                false);
+  EXPECT_FALSE(root2->visible());
+  setup.window_tree_client()->OnChangeCompleted(vis_in_flight_change_id2,
+                                                false);
+  EXPECT_TRUE(root2->visible());
+  setup.window_tree_client()->OnChangeCompleted(bounds_in_flight_change_id,
+                                                false);
+  EXPECT_EQ(gfx::Rect(1, 2, 3, 4), root2->bounds());
+  setup.window_tree_client()->OnChangeCompleted(property_in_flight_change_id,
+                                                false);
+  EXPECT_EQ(2u, root2->shared_properties().size());
+  ASSERT_TRUE(root2->HasSharedProperty("yy"));
+  EXPECT_EQ("server_yy", root2->GetSharedProperty<std::string>("yy"));
+  ASSERT_TRUE(root2->HasSharedProperty("xx"));
+  EXPECT_EQ("server_xx", root2->GetSharedProperty<std::string>("xx"));
 }
 
 }  // namespace mus

@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/render_view_host.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/button/blue_button.h"
@@ -211,8 +212,6 @@ scoped_ptr<views::LabelButton> GenerateButton(views::ButtonListener* listener,
                                               const base::string16& text) {
   scoped_ptr<views::LabelButton> button(new views::LabelButton(listener, text));
   button->SetStyle(views::Button::STYLE_BUTTON);
-  button->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
-      ui::ResourceBundle::SmallFont));
   return button;
 }
 
@@ -247,7 +246,7 @@ class ManagePasswordsBubbleView::AccountChooserView
       password_manager::CredentialType type);
 
   ManagePasswordsBubbleView* parent_;
-  views::LabelButton* cancel_button_;
+  views::Button* cancel_button_;
 
   DISALLOW_COPY_AND_ASSIGN(AccountChooserView);
 };
@@ -366,7 +365,7 @@ class ManagePasswordsBubbleView::AutoSigninView
   base::OneShotTimer timer_;
   ManagePasswordsBubbleView* parent_;
   ScopedObserver<views::Widget, views::WidgetObserver> observed_browser_;
-  views::LabelButton* ok_button_;
+  views::Button* ok_button_;
 
   DISALLOW_COPY_AND_ASSIGN(AutoSigninView);
 };
@@ -493,8 +492,8 @@ class ManagePasswordsBubbleView::PendingView
 
   ManagePasswordsBubbleView* parent_;
 
-  views::BlueButton* save_button_;
-  views::LabelButton* never_button_;
+  views::Button* save_button_;
+  views::Button* never_button_;
 
   DISALLOW_COPY_AND_ASSIGN(PendingView);
 };
@@ -515,8 +514,6 @@ ManagePasswordsBubbleView::PendingView::PendingView(
   }
   save_button_ = new views::BlueButton(
       this, l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SAVE_BUTTON));
-  save_button_->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
-      ui::ResourceBundle::SmallFont));
   never_button_ = GenerateButton(
       this,
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_BUBBLE_BLACKLIST_BUTTON))
@@ -603,7 +600,7 @@ class ManagePasswordsBubbleView::ManageView : public views::View,
   ManagePasswordsBubbleView* parent_;
 
   views::Link* manage_link_;
-  views::LabelButton* done_button_;
+  views::Button* done_button_;
 
   DISALLOW_COPY_AND_ASSIGN(ManageView);
 };
@@ -645,8 +642,6 @@ ManagePasswordsBubbleView::ManageView::ManageView(
   // Then add the "manage passwords" link and "Done" button.
   manage_link_ = new views::Link(parent_->model()->manage_link());
   manage_link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  manage_link_->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
-      ui::ResourceBundle::SmallFont));
   manage_link_->SetUnderline(false);
   manage_link_->set_listener(this);
 
@@ -702,7 +697,7 @@ class ManagePasswordsBubbleView::SaveConfirmationView
                               int event_flags) override;
 
   ManagePasswordsBubbleView* parent_;
-  views::LabelButton* ok_button_;
+  views::Button* ok_button_;
 
   DISALLOW_COPY_AND_ASSIGN(SaveConfirmationView);
 };
@@ -835,9 +830,8 @@ class ManagePasswordsBubbleView::UpdatePendingView
 
   CredentialsSelectionView* selection_view_;
 
-  views::BlueButton* update_button_;
-
-  views::LabelButton* nope_button_;
+  views::Button* update_button_;
+  views::Button* nope_button_;
 
   DISALLOW_COPY_AND_ASSIGN(UpdatePendingView);
 };
@@ -867,9 +861,6 @@ ManagePasswordsBubbleView::UpdatePendingView::UpdatePendingView(
 
   update_button_ = new views::BlueButton(
       this, l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_UPDATE_BUTTON));
-  update_button_->SetFontList(
-      ui::ResourceBundle::GetSharedInstance().GetFontList(
-          ui::ResourceBundle::SmallFont));
 
   // Title row.
   AddTitleRowWithLink(layout, parent_->model(), this);

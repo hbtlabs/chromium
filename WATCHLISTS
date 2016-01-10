@@ -29,6 +29,9 @@
       'filepath': 'chrome/browser/extensions/activity_log/' \
                   '|chrome/browser/extensions/api/activity_log_private/'
     },
+    'android_infobars': {
+      'filepath': 'chrome/android/java/src/org/chromium/chrome/browser/infobar/'
+    },
     'android_infra': {
       'filepath': 'build/android/' \
                   '|testing/android/' \
@@ -1226,6 +1229,7 @@
                       'plundblad+watch@chromium.org',
                       'yuzo+watch@chromium.org'],
     'activity_log': ['felt@chromium.org'],
+    'android_infobars': ['dfalcantara+watch@chromium.org'],
     'android_infra': ['yfriedman+watch@chromium.org',
                       'klundberg+watch@chromium.org',
                       'jbudorick+watch@chromium.org',
@@ -1263,7 +1267,8 @@
     'base_memory': ['gavinp+memory@chromium.org'],
     'base_win': ['grt+watch@chromium.org', 'wfh+watch@chromium.org'],
     'battery_status': ['timvolodine@chromium.org'],
-    'blimp' : ['dtrainor+watch-blimp@chromium.org',
+    'blimp' : ['anandc+watch-blimp@chromium.org',
+               'dtrainor+watch-blimp@chromium.org',
                'kmarshall+watch-blimp@chromium.org',
                'maniscalco+watch-blimp@chromium.org',
                'marcinjb+watch-blimp@chromium.org',
@@ -1436,8 +1441,7 @@
                    'piman+watch@chromium.org', 'ihf+watch@chromium.org',
                    'yusukes+watch@chromium.org', 'binji+watch@chromium.org',
                    'teravest+watch@chromium.org', 'tzik@chromium.org'],
-    'permissions': ['mlamouri+watch-permissions@chromium.org',
-                    'kcarattini+watch@chromium.org'],
+    'permissions': ['mlamouri+watch-permissions@chromium.org'],
     'plugin': ['jam@chromium.org'],
     'policy_definitions': ['tnagel+watch@chromium.org'],
     'polymer': ['michaelpg+watch-polymer@chromium.org'],
@@ -1471,7 +1475,7 @@
                    'rlp+watch@chromium.org',
                    'rouslan+spell@chromium.org'],
     'streams': ['zork+watch@chromium.org'],
-    'styleguide': ['vmpstr+watch@chromium.org'],
+    'styleguide': ['danakj+watch@chromium.org', 'jbroman+cpp@chromium.org', 'vmpstr+watch@chromium.org'],
     'sync': ['tim+watch@chromium.org',
              'maxbogue+watch@chromium.org',
              'plaree+watch@chromium.org',
@@ -1589,7 +1593,7 @@
     'blink_owners': [ 'abarth@chromium.org'],
     'blink_platform': [ 'kinuko+watch@chromium.org' ],
     'blink_platform_graphics': [ 'schenney@chromium.org',
-                                 'danakj@chromium.org',
+                                 'danakj+watch@chromium.org',
                                  'pdr+graphicswatchlist@chromium.org',
                                  'cabanier@adobe.com',
                                  'dschulze@chromium.org',

@@ -32,7 +32,8 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
 
   // Methods to update the status displayed by the dialog.
   void UpdateSinks(const std::vector<MediaSinkWithCastModes>& sinks);
-  void UpdateRoutes(const std::vector<MediaRoute>& routes);
+  void UpdateRoutes(const std::vector<MediaRoute>& routes,
+                    const std::vector<MediaRoute::Id>& joinable_route_ids);
   void UpdateCastModes(const CastModeSet& cast_modes,
                        const std::string& source_host);
   void OnCreateRouteResponseReceived(const MediaSink::Id& sink_id,
@@ -55,8 +56,10 @@ class MediaRouterWebUIMessageHandler : public content::WebUIMessageHandler {
   // See media_router_ui_interface.js for documentation on parameters.
   void OnRequestInitialData(const base::ListValue* args);
   void OnCreateRoute(const base::ListValue* args);
+  void OnAcknowledgeFirstRunFlow(const base::ListValue* args);
   void OnActOnIssue(const base::ListValue* args);
   void OnCloseRoute(const base::ListValue* args);
+  void OnJoinRoute(const base::ListValue* args);
   void OnCloseDialog(const base::ListValue* args);
   void OnReportClickedSinkIndex(const base::ListValue* args);
   void OnReportNavigateToView(const base::ListValue* args);
