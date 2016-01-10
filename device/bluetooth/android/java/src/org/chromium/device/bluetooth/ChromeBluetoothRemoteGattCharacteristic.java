@@ -130,10 +130,10 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     // ---------------------------------------------------------------------------------------------
     // BluetoothAdapterDevice C++ methods declared for access from java:
 
-    // Binds to BluetoothRemoteGattServiceAndroid::OnRead.
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnRead.
     native void nativeOnRead(
             long nativeBluetoothRemoteGattCharacteristicAndroid, int status, byte[] value);
 
-    // Binds to BluetoothRemoteGattServiceAndroid::OnWrite.
+    // Binds to BluetoothRemoteGattCharacteristicAndroid::OnWrite.
     native void nativeOnWrite(long nativeBluetoothRemoteGattCharacteristicAndroid, int status);
 }
