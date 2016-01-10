@@ -1047,7 +1047,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> valueForCounterDirectives(const Computed
 
         list->append(CSSCustomIdentValue::create(item.key));
         short number = propertyID == CSSPropertyCounterIncrement ? item.value.incrementValue() : item.value.resetValue();
-        list->append(cssValuePool().createValue((double)number, CSSPrimitiveValue::UnitType::Number));
+        list->append(cssValuePool().createValue((double)number, CSSPrimitiveValue::UnitType::Integer));
     }
 
     if (!list->length())
@@ -2636,7 +2636,7 @@ PassRefPtrWillBeRawPtr<CSSValue> ComputedStyleCSSValueMapping::get(CSSPropertyID
         // the above properties are not yet implemented in the engine
         return nullptr;
     case CSSPropertyD:
-        return svgStyle.d();
+        return svgStyle.d()->computedCSSValue();
     case CSSPropertyCx:
         return zoomAdjustedPixelValueForLength(svgStyle.cx(), style);
     case CSSPropertyCy:

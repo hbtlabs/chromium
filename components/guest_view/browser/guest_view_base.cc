@@ -111,6 +111,13 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     guest_->web_contents()->SetPageScale(page_scale_factor);
   }
 
+  void DidUpdateAudioMutingState(bool muted) override {
+    if (destroyed_)
+      return;
+
+    guest_->web_contents()->SetAudioMuted(muted);
+  }
+
  private:
   bool is_fullscreen_;
   bool destroyed_;
@@ -401,6 +408,9 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
 
   SetUpSizing(*attach_params());
 
+  // The guest should have the same muting state as the owner.
+  web_contents()->SetAudioMuted(owner_web_contents()->IsAudioMuted());
+
   // Give the derived class an opportunity to perform some actions.
   DidAttachToEmbedder();
 
@@ -608,12 +618,13 @@ void GuestViewBase::ActivateContents(WebContents* web_contents) {
 
 void GuestViewBase::ContentsMouseEvent(WebContents* source,
                                        const gfx::Point& location,
-                                       bool motion) {
+                                       bool motion,
+                                       bool exited) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
   embedder_web_contents()->GetDelegate()->ContentsMouseEvent(
-      embedder_web_contents(), location, motion);
+      embedder_web_contents(), location, motion, exited);
 }
 
 void GuestViewBase::ContentsZoomChange(bool zoom_in) {

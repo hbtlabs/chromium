@@ -283,7 +283,11 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   void OnEmbeddedAppDisconnected(Id window_id) override {
     tracker()->OnEmbeddedAppDisconnected(window_id);
   }
-  void OnUnembed() override { tracker()->OnUnembed(); }
+  void OnUnembed(Id window_id) override { tracker()->OnUnembed(window_id); }
+  void OnTopLevelCreated(uint32_t change_id,
+                         mojom::WindowDataPtr data) override {
+    tracker()->OnTopLevelCreated(change_id, std::move(data));
+  }
   void OnWindowBoundsChanged(Id window_id,
                              RectPtr old_bounds,
                              RectPtr new_bounds) override {
@@ -307,7 +311,8 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
                                 uint32_t transient_window_id) override {
     tracker()->OnTransientWindowRemoved(window_id, transient_window_id);
   }
-  void OnWindowViewportMetricsChanged(ViewportMetricsPtr old_metrics,
+  void OnWindowViewportMetricsChanged(mojo::Array<uint32_t> window_ids,
+                                      ViewportMetricsPtr old_metrics,
                                       ViewportMetricsPtr new_metrics) override {
     // Don't track the metrics as they are available at an indeterministic time
     // on Android.
@@ -1251,7 +1256,8 @@ TEST_F(WindowTreeAppTest, EmbedWithSameWindowId) {
   // Connection2 should have been told of the unembed and delete.
   {
     ws_client2_->WaitForChangeCount(2);
-    EXPECT_EQ("OnUnembed", ChangesToDescription1(*changes2())[0]);
+    EXPECT_EQ("OnUnembed window=" + IdToString(window_1_1),
+              ChangesToDescription1(*changes2())[0]);
     EXPECT_EQ("WindowDeleted window=" + IdToString(window_1_1),
               ChangesToDescription1(*changes2())[1]);
   }
@@ -1301,7 +1307,8 @@ TEST_F(WindowTreeAppTest, EmbedWithSameWindowId2) {
 
     // And 3 should get an unembed and delete.
     ws_client3_->WaitForChangeCount(2);
-    EXPECT_EQ("OnUnembed", ChangesToDescription1(*changes3())[0]);
+    EXPECT_EQ("OnUnembed window=" + IdToString(window_1_1),
+              ChangesToDescription1(*changes3())[0]);
     EXPECT_EQ("WindowDeleted window=" + IdToString(window_1_1),
               ChangesToDescription1(*changes3())[1]);
   }

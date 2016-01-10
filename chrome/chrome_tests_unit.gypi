@@ -85,7 +85,6 @@
       'browser/custom_handlers/protocol_handler_registry_unittest.cc',
       'browser/data_usage/tab_id_annotator_unittest.cc',
       'browser/data_usage/tab_id_provider_unittest.cc',
-      'browser/devtools/device/cast_device_provider_unittest.cc',
       'browser/devtools/devtools_network_controller_unittest.cc',
       'browser/download/all_download_item_notifier_unittest.cc',
       'browser/download/chrome_download_manager_delegate_unittest.cc',
@@ -279,7 +278,6 @@
       'browser/update_client/chrome_update_query_params_delegate_unittest.cc',
       'common/chrome_content_client_unittest.cc',
       'common/chrome_paths_unittest.cc',
-      'common/cloud_print/cloud_print_helpers_unittest.cc',
       'common/component_flash_hint_file_linux_unittest.cc',
       'common/crash_keys_unittest.cc',
       'common/ini_parser_unittest.cc',
@@ -311,7 +309,6 @@
       'test/base/v8_unit_test.h',
       'test/logging/win/mof_data_parser_unittest.cc',
       'utility/chrome_content_utility_client_unittest.cc',
-      'utility/cloud_print/pwg_encoder_unittest.cc',
 
       # Duplicate these tests here because PathService has more items in
       # unit_tests than in base_unittests.
@@ -439,8 +436,6 @@
       'browser/extensions/api/file_handlers/api_file_handler_util_unittest.cc',
       'browser/extensions/api/file_handlers/mime_util_unittest.cc',
       'browser/extensions/api/file_system/file_system_api_unittest.cc',
-      'browser/extensions/api/gcd_private/privet_v3_context_getter_unittest.cc',
-      'browser/extensions/api/gcd_private/privet_v3_session_unittest.cc',
       'browser/extensions/api/identity/extension_token_key_unittest.cc',
       'browser/extensions/api/identity/gaia_web_auth_flow_unittest.cc',
       'browser/extensions/api/identity/identity_mint_queue_unittest.cc',
@@ -452,8 +447,6 @@
       'browser/extensions/api/image_writer_private/write_from_file_operation_unittest.cc',
       'browser/extensions/api/image_writer_private/write_from_url_operation_unittest.cc',
       'browser/extensions/api/management/management_api_unittest.cc',
-      'browser/extensions/api/mdns/dns_sd_registry_unittest.cc',
-      'browser/extensions/api/mdns/mdns_api_unittest.cc',
       'browser/extensions/api/omnibox/omnibox_unittest.cc',
       'browser/extensions/api/permissions/permissions_api_helpers_unittest.cc',
       'browser/extensions/api/preference/preference_api_prefs_unittest.cc',
@@ -468,6 +461,7 @@
       'browser/extensions/api/sockets_tcp_server/sockets_tcp_server_api_unittest.cc',
       'browser/extensions/api/storage/settings_sync_unittest.cc',
       'browser/extensions/api/streams_private/streams_private_manifest_unittest.cc',
+      'browser/extensions/api/tabs/tabs_api_unittest.cc',
       'browser/extensions/api/web_navigation/frame_navigation_state_unittest.cc',
       'browser/extensions/api/web_request/web_request_api_unittest.cc',
       'browser/extensions/api/web_request/web_request_permissions_unittest.cc',
@@ -675,6 +669,12 @@
       'utility/image_writer/image_writer_unittest.cc',
       'utility/media_galleries/image_metadata_extractor_unittest.cc',
     ],
+    'chrome_unit_tests_extensions_service_discovery_sources': [
+      'browser/extensions/api/gcd_private/privet_v3_context_getter_unittest.cc',
+      'browser/extensions/api/gcd_private/privet_v3_session_unittest.cc',
+      'browser/extensions/api/mdns/dns_sd_registry_unittest.cc',
+      'browser/extensions/api/mdns/mdns_api_unittest.cc',
+    ],
     'chrome_unit_tests_extensions_non_chromeos_sources': [
       'browser/extensions/api/messaging/native_message_process_host_unittest.cc',
       'browser/extensions/api/messaging/native_messaging_host_manifest_unittest.cc',
@@ -716,20 +716,20 @@
       'browser/task_manager/task_manager_util_unittest.cc',
     ],
     'chrome_unit_tests_mdns_sources': [
-      'browser/local_discovery/privet_device_lister_unittest.cc',
-      'browser/local_discovery/privet_local_printer_lister_unittest.cc',
-      'browser/local_discovery/privet_notifications_unittest.cc',
-      'common/local_discovery/local_domain_resolver_unittest.cc',
-      'common/local_discovery/service_discovery_client_unittest.cc',
+      'browser/local_discovery/local_domain_resolver_unittest.cc',
+      'browser/local_discovery/service_discovery_client_unittest.cc',
+      'browser/printing/cloud_print/privet_device_lister_unittest.cc',
+      'browser/printing/cloud_print/privet_local_printer_lister_unittest.cc',
     ],
     'chrome_unit_tests_service_discovery_sources': [
-      'browser/local_discovery/cloud_device_list_unittest.cc',
-      'browser/local_discovery/cloud_print_printer_list_unittest.cc',
-      'browser/local_discovery/gcd_api_flow_unittest.cc',
-      'browser/local_discovery/privet_confirm_api_flow_unittest.cc',
-      'browser/local_discovery/privet_http_unittest.cc',
-      'browser/local_discovery/privet_url_fetcher_unittest.cc',
+      'browser/devtools/device/cast_device_provider_unittest.cc',
       'browser/local_discovery/service_discovery_client_mac_unittest.mm',
+      'browser/printing/cloud_print/cloud_print_printer_list_unittest.cc',
+      'browser/printing/cloud_print/gcd_api_flow_unittest.cc',
+      'browser/printing/cloud_print/privet_confirm_api_flow_unittest.cc',
+      'browser/printing/cloud_print/privet_http_unittest.cc',
+      'browser/printing/cloud_print/privet_notifications_unittest.cc',
+      'browser/printing/cloud_print/privet_url_fetcher_unittest.cc',
     ],
     'chrome_unit_tests_configuration_policy_sources': [
       'browser/policy/cloud/cloud_policy_invalidator_unittest.cc',
@@ -872,6 +872,7 @@
       'browser/printing/print_preview_test.h',
       'browser/ui/webui/print_preview/extension_printer_handler_unittest.cc',
       'browser/ui/webui/print_preview/print_preview_ui_unittest.cc',
+      'common/cloud_print/cloud_print_helpers_unittest.cc',
       'common/service_process_util_unittest.cc',
       'service/cloud_print/cloud_print_service_helpers_unittest.cc',
       'service/cloud_print/cloud_print_token_store_unittest.cc',
@@ -881,6 +882,7 @@
       'service/cloud_print/printer_job_queue_handler_unittest.cc',
       'service/service_ipc_server_unittest.cc',
       'service/service_process_prefs_unittest.cc',
+      'utility/cloud_print/pwg_encoder_unittest.cc',
     ],
     'chrome_unit_tests_captive_portal_sources': [
       'browser/captive_portal/captive_portal_service_unittest.cc',
@@ -1726,8 +1728,6 @@
       'sources': [
         'app/chrome_main_delegate.cc',
         'app/chrome_main_delegate.h',
-        'app/close_handle_hook_win.cc',
-        'app/close_handle_hook_win.h',
         'browser/browsing_data/mock_browsing_data_appcache_helper.cc',
         'browser/browsing_data/mock_browsing_data_appcache_helper.h',
         'browser/browsing_data/mock_browsing_data_cache_storage_helper.cc',
@@ -2400,7 +2400,10 @@
             ['configuration_policy==1', {
               'sources': [ '<@(chrome_unit_tests_extensions_policy_sources)' ],
             }],
-            ['chromeos == 0', {
+            ['enable_service_discovery==1', {
+              'sources': [ '<@(chrome_unit_tests_extensions_service_discovery_sources)' ],
+            }],
+            ['chromeos==0', {
               'sources': [
                 '<@(chrome_unit_tests_extensions_non_chromeos_sources)',
               ],
@@ -2738,7 +2741,6 @@
         }],
         ['OS=="android" or OS=="ios"', {
           'sources!': [
-            'browser/devtools/device/cast_device_provider_unittest.cc',
             'browser/ui/bookmarks/bookmark_ui_utils_desktop_unittest.cc',
             'browser/ui/sync/sync_promo_ui_unittest.cc',
           ],
@@ -2888,6 +2890,7 @@
         '../components/components.gyp:crash_core_common',
         '../components/components.gyp:flags_ui_switches',
         '../content/content.gyp:content_app_both',
+        '../third_party/kasko/kasko.gyp:kasko_features',
         # 2) test-specific support libraries:
         '../base/base.gyp:run_all_unittests',
         '../testing/gmock.gyp:gmock',
@@ -2906,9 +2909,6 @@
         'app/delay_load_hook_win.cc',
         'app/delay_load_hook_win.h',
         'app/resources/resources_unittest.cc',
-        'app/signature_validator_win.cc',
-        'app/signature_validator_win.h',
-        'app/signature_validator_win_unittest.cc',
         'common/crash_keys.cc',
         'common/crash_keys.h',
       ],
@@ -2937,11 +2937,6 @@
               ],
             }],
           ],
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'AdditionalDependencies': [ 'wintrust.lib' ],
-            },
-          },
         }],
       ],
     },

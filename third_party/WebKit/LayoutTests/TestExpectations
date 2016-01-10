@@ -255,9 +255,7 @@ crbug.com/498539 inspector/elements/styles-3/styles-change-node-while-editing.ht
 crbug.com/498539 [ Mac10.7 ] inspector/sources/debugger/js-with-inline-stylesheets.html [ Pass Timeout ]
 crbug.com/498539 [ Mac10.7 Mac10.8 Retina Mac10.9 Mac10.10 Mac10.6 ] inspector/sources/debugger/live-edit-no-reveal.html [ Crash Pass Timeout ]
 crbug.com/498539 [ Mac10.8 Mac10.10 ] inspector/sources/debugger/debug-inlined-scripts-fragment-id.html [ Pass Timeout ]
-# TODO(yangguo): Below is commented out as it conflicts with another [ NeedsManualRebaseline ] entry.
-# See also http://crbug.com/569175.
-# crbug.com/498539 [ Precise ] inspector/sources/debugger-step/debugger-step-over-inlined-scripts.html [ Pass Timeout ]
+crbug.com/498539 [ Precise ] inspector/sources/debugger-step/debugger-step-over-inlined-scripts.html [ Pass Timeout ]
 crbug.com/498539 [ Precise Win7 Mac10.10 ] inspector/sources/debugger-breakpoints/dynamic-scripts-breakpoints.html [ Pass Timeout ]
 crbug.com/498539 [ Precise Mac10.10 ] inspector/sources/debugger-breakpoints/set-breakpoint.html [ Pass Timeout ]
 crbug.com/498539 [ Trusty ] inspector/sources/debugger/mutation-observer-suspend-while-paused.html [ Pass Timeout ]
@@ -299,7 +297,6 @@ crbug.com/498539 [ Win7 Release ] inspector/elements/styles-2/perform-undo-perfo
 crbug.com/498539 [ Win7 ] inspector/elements/styles-3/selector-list.html [ Failure Pass ]
 crbug.com/498539 [ Win7 Debug ] inspector/elements/styles-3/styles-computed-trace.html [ Crash Pass ]
 crbug.com/498539 [ Win7 ] inspector/elements/styles-4/styles-update-from-js.html [ Crash Pass ]
-crbug.com/565059 [ Debug ] inspector/console/console-uncaught-promise.html [ Crash Pass ]
 
 crbug.com/571478 [ Win10 XP ] svg/custom/text-match-highlight.html [ Failure Pass Crash ]
 
@@ -429,13 +426,13 @@ crbug.com/542660 fast/css/absolute-inline-alignment.html [ Failure ]
 crbug.com/542660 fast/inline/nested-text-descendants.html [ Failure ]
 
 # Ref tests that pass but causes 1px diff on images.
-crbug.com/391260 [ Win ] fast/text/international/dir-isolation/dir-isolation-002c.html [ Failure ]
-crbug.com/391260 [ Mac ] fast/text/international/dir-isolation/dir-isolation-006a.html [ Failure ]
-crbug.com/391260 [ Mac ] fast/text/international/dir-isolation/dir-isolation-006b.html [ Failure ]
-crbug.com/391260 [ Mac Win ] fast/text/international/dir-isolation/dir-isolation-006c.html [ Failure ]
-crbug.com/391260 [ Mac ] fast/text/international/dir-isolation/dir-isolation-009a.html [ Failure ]
-crbug.com/391260 [ Mac ] fast/text/international/dir-isolation/dir-isolation-009b.html [ Failure ]
-crbug.com/391260 [ Mac ] fast/text/international/dir-isolation/dir-isolation-009c.html [ Failure ]
+crbug.com/391260 [ Win ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-002c.html [ Failure ]
+crbug.com/391260 [ Mac ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-006a.html [ Failure ]
+crbug.com/391260 [ Mac ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-006b.html [ Failure ]
+crbug.com/391260 [ Mac Win ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-006c.html [ Failure ]
+crbug.com/391260 [ Mac ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-009a.html [ Failure ]
+crbug.com/391260 [ Mac ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-009b.html [ Failure ]
+crbug.com/391260 [ Mac ] imported/web-platform-tests/html/dom/elements/requirements-relating-to-bidirectional-algorithm-formatting-characters/dir-isolation-009c.html [ Failure ]
 
 # Ref tests that needs investigation.
 crbug.com/404597 [ Mac ] fast/css3-text/css3-text-justify/text-justify-crash.html [ Failure ]
@@ -947,8 +944,6 @@ crbug.com/462689 [ Linux ] fast/text/unicode-variation-selector.html [ Failure ]
 # Temporary, until WebAXObjectProxy support lands.
 crbug.com/421771 accessibility/inline-text-box-next-on-line.html [ Skip ]
 
-crbug.com/571404 [ Mac ] fast/repaint/line-flow-with-floats-10.html [ NeedsRebaseline ]
-
 # Disabled briefly until test runner support lands.
 crbug.com/479533 accessibility/show-context-menu.html [ Skip ]
 crbug.com/479533 accessibility/show-context-menu-shadowdom.html [ Skip ]
@@ -1074,7 +1069,6 @@ crbug.com/521730 [ Win10 ] fast/text/atsui-multiple-renderers.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/basic/009.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/basic/generic-family-changes.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/capitalize-boundaries.html [ Failure ]
-crbug.com/521730 [ Win10 ] fast/text/drawBidiText.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/emoji-web-font.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/firstline/001.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/text/firstline/002.html [ Failure ]
@@ -1260,6 +1254,8 @@ crbug.com/558574 [ Win7 ] fast/text/emphasis.html [ Failure ]
 
 crbug.com/574196 fast/js/mozilla/strict/13.1.html [ NeedsManualRebaseline ]
 
+crbug.com/575799 http/tests/background_sync/oneshot.html [ Skip ]
+
 crbug.com/561595 [ XP ] plugins/webview-plugin-scroll.html [ Failure ]
 crbug.com/561595 [ XP ] plugins/webview-plugin-nested-iframe-scroll.html [ Failure ]
 
@@ -1285,25 +1281,11 @@ crbug.com/568778 [ XP ] tables/mozilla/bugs/bug86708.html [ Failure ]
 crbug.com/568778 [ XP ] tables/mozilla_expected_failures/bugs/97619.html [ Failure ]
 crbug.com/568778 [ XP ] tables/mozilla_expected_failures/bugs/bug85016.html [ Failure ]
 
-# FIXME crbug.com/570401 bad rebaselines submited, wrong size scale factor affecting the text result expected
-# backing size, some image results twice a big as expected, or become all-white squares.
-
-crbug.com/570401 paint/selection/selection-within-composited-scroller.html [ NeedsManualRebaseline ]
-crbug.com/570401 fast/canvas/canvas-shadow-source-in.html [ Failure ]
-crbug.com/570401 virtual/display_list_2d_canvas/fast/canvas/canvas-shadow-source-in.html [ Failure ]
-crbug.com/570401 compositing/overflow/updating-scrolling-content.html [ Failure ]
-crbug.com/570401 compositing/repaint/should-not-clip-composited-overflow-scrolling-layer.html [ Failure ]
+crbug.com/504837 [ XP ] svg/batik/filters/feTile.svg [ Failure ]
+crbug.com/504837 [ XP ] svg/filters/feTile.svg [ Failure ]
 
 crbug.com/568867 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-deep.html [ Failure ]
 crbug.com/568867 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
-
-crbug.com/569514 inspector/sources/debugger-step/debugger-step-into-document-write.html [ NeedsManualRebaseline ]
-crbug.com/569514 inspector/sources/debugger-step/debugger-step-into-inlined-scripts.html [ NeedsManualRebaseline ]
-crbug.com/569514 inspector/sources/debugger-step/debugger-step-over-document-write.html [ NeedsManualRebaseline ]
-# TODO(yangguo): When the below is rebaselined please uncomment the [ Pass Timeout ] entry for the test.
-# See also http://crbug.com/569175.
-crbug.com/569514 inspector/sources/debugger-step/debugger-step-over-inlined-scripts.html [ NeedsManualRebaseline ]
-crbug.com/569514 inspector/sources/debugger/debugger-scripts.html [ NeedsManualRebaseline ]
 
 crbug.com/569811 inspector-protocol/debugger/updateCallFrameScopes.html [ Pass Failure ]
 
@@ -1315,10 +1297,8 @@ crbug.com/571361 [ Mac10.6 ] virtual/rootlayerscrolls/fast/scrolling/background-
 crbug.com/320139 fast/repaint/block-layout-inline-children-replaced.html [ Pass Failure ]
 
 crbug.com/571709 http/tests/inspector/resource-tree/resource-request-content-while-loading.html [ Timeout Pass ]
-crbug.com/451577 http/tests/inspector/resource-tree/resource-tree-crafted-frame-add.html [ Timeout Pass ]
 crbug.com/571709 http/tests/inspector/resource-tree/resource-tree-events.html [ Timeout Pass ]
 crbug.com/571709 http/tests/inspector/resource-tree/resource-tree-frame-add.html [ Timeout Pass ]
-crbug.com/571709 http/tests/inspector/resource-tree/resource-tree-frame-in-crafted-frame.html [ Timeout Pass ]
 
 crbug.com/571710 http/tests/inspector/search/source-frame-search.html [ Timeout Pass ]
 
@@ -1345,3 +1325,4 @@ crbug.com/572723 [ Linux Mac10.9 ] inspector/sources/debugger/debugger-disable-e
 crbug.com/572723 [ Mac Release ] inspector/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]
 
 crbug.com/572726 inspector/tracing/timeline-node-reference.html [ Timeout Pass Crash ]
+

@@ -17,6 +17,7 @@
 #include "ui/gl/gl_switches.h"
 
 namespace blimp {
+namespace client {
 
 // TODO(dtrainor): This is temporary to get the compositor up and running.
 // Much of this will either have to be pulled from the server or refactored to
@@ -52,6 +53,7 @@ void PopulateCommonLayerTreeSettings(cc::LayerTreeSettings* settings) {
   settings->initial_debug_state.show_screen_space_rects = false;
   settings->initial_debug_state.show_replica_screen_space_rects = false;
   settings->initial_debug_state.SetRecordRenderingStats(false);
+  settings->strict_layer_property_change_checking = false;
 
 #if defined(OS_ANDROID)
   if (base::SysInfo::IsLowEndDevice())
@@ -104,4 +106,5 @@ void PopulateCommonLayerTreeSettings(cc::LayerTreeSettings* settings) {
   settings->use_compositor_animation_timelines = true;
 }
 
+}  // namespace client
 }  // namespace blimp

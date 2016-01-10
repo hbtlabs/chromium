@@ -58,7 +58,7 @@
 #include <atlbase.h>
 #include <malloc.h>
 #include <algorithm>
-#include "chrome/app/close_handle_hook_win.h"
+#include "base/debug/close_handle_hook_win.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/v8_breakpad_support_win.h"
 #include "components/crash/content/app/crashpad.h"
@@ -91,6 +91,7 @@
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/hugepage_text/hugepage_text.h"
 #endif
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
@@ -191,6 +192,22 @@ bool IsSandboxedProcess() {
       reinterpret_cast<IsSandboxedProcessFunc>(
           GetProcAddress(GetModuleHandle(NULL), "IsSandboxedProcess"));
   return is_sandboxed_process_func && is_sandboxed_process_func();
+}
+
+bool UseHooks() {
+#if defined(ARCH_CPU_X86_64)
+  return false;
+#elif defined(NDEBUG)
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::CANARY ||
+      channel == version_info::Channel::DEV) {
+    return true;
+  }
+
+  return false;
+#else  // NDEBUG
+  return true;
+#endif
 }
 
 #endif  // defined(OS_WIN)
@@ -502,7 +519,11 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
     return true;
   }
 
-  InstallHandleHooks();
+  if (UseHooks())
+    base::debug::InstallHandleHooks();
+  else
+    base::win::DisableHandleVerifier();
+
 #endif
 
   chrome::RegisterPathProvider();
@@ -892,7 +913,7 @@ void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
-  RemoveHandleHooks();
+  base::debug::RemoveHandleHooks();
 #endif
 }
 
@@ -924,6 +945,10 @@ bool ChromeMainDelegate::DelaySandboxInitialization(
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
 void ChromeMainDelegate::ZygoteStarting(
     ScopedVector<content::ZygoteForkDelegate>* delegates) {
+#if defined(OS_CHROMEOS)
+    chromeos::ReloadElfTextInHugePages();
+#endif
+
 #if !defined(DISABLE_NACL)
   nacl::AddNaClZygoteForkDelegates(delegates);
 #endif

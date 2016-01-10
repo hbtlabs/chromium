@@ -121,7 +121,7 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
   // instead of using default matrix crbug.com/226218.
   copier_->DoCopyTextureWithTransform(
       state_provider_->GetGlDecoder().get(), GL_TEXTURE_EXTERNAL_OES,
-      surface_texture_id_, picture_buffer_texture_id,
+      surface_texture_id_, GL_TEXTURE_2D, picture_buffer_texture_id,
       state_provider_->GetSize().width(), state_provider_->GetSize().height(),
       false, false, false, kIdentityMatrix);
 }
@@ -130,6 +130,13 @@ void AndroidCopyingBackingStrategy::CodecChanged(
     media::VideoCodecBridge* codec,
     const AndroidVideoDecodeAccelerator::OutputBufferMap&) {
   media_codec_ = codec;
+}
+
+void AndroidCopyingBackingStrategy::OnFrameAvailable() {
+  // TODO(liberato): crbug.com/574948 .  The OnFrameAvailable logic can be
+  // moved into AVDA, and we should wait for it before doing the copy.
+  // Because there were some test failures, we don't do this now but
+  // instead preserve the old behavior.
 }
 
 }  // namespace content

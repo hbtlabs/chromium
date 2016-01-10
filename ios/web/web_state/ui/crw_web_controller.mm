@@ -1325,10 +1325,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)loadCurrentURLInWebView {
   [self willLoadCurrentURLInWebView];
 
-  // Re-register the user agent, because UIWebView sometimes loses it.
-  // See crbug.com/228397.
-  [self registerUserAgent];
-
   // Clear the set of URLs opened in external applications.
   _openedApplicationURL.reset([[NSMutableSet alloc] init]);
 
@@ -1567,6 +1563,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         [[CRWWebControllerContainerView alloc] initWithDelegate:self]);
     self.containerView.frame =
         [UIApplication sharedApplication].keyWindow.bounds;
+    DCHECK(!CGRectIsEmpty(self.containerView.frame));
     [self.containerView addGestureRecognizer:[self touchTrackingRecognizer]];
     [self.containerView setAccessibilityIdentifier:web::kContainerViewID];
     // Is |currentUrl| a web scheme or native chrome scheme.
@@ -1591,9 +1588,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     if (!_overlayPreviewMode)
       _usePlaceholderOverlay = NO;
   } else if (_requireReloadOnDisplay && self.webView) {
+    _requireReloadOnDisplay = NO;
     [self addPlaceholderOverlay];
     [self loadCurrentURL];
-    _requireReloadOnDisplay = NO;
   }
 }
 
@@ -2823,8 +2820,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
 
   if ([[request HTTPMethod] isEqualToString:@"POST"]) {
-    [self cachePOSTDataForRequest:request
-                   inSessionEntry:[self currentSessionEntry]];
+    CRWSessionEntry* currentEntry = [self currentSessionEntry];
+    // TODO(crbug.com/570699): Remove this check once it's no longer possible to
+    // have no current entries.
+    if (currentEntry)
+      [self cachePOSTDataForRequest:request inSessionEntry:currentEntry];
   }
 
   return YES;
@@ -2832,11 +2832,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (void)restoreStateAfterURLRejection {
   [[self sessionController] discardNonCommittedEntries];
-
-  // Re-register the user agent, because UIWebView will sometimes try to read
-  // the agent again from a saved search result page in which no other page has
-  // yet been loaded. See crbug.com/260370.
-  [self registerUserAgent];
 
   // Reset |_lastRegisteredRequestURL| so that it reflects the URL from before
   // the load was rejected. This value may be out of sync because

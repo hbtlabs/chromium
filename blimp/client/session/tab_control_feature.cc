@@ -6,12 +6,11 @@
 
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/blimp_message.pb.h"
-#include "blimp/common/proto/size.pb.h"
 #include "blimp/common/proto/tab_control.pb.h"
 #include "blimp/net/blimp_message_processor.h"
-#include "ui/gfx/geometry/size.h"
 
 namespace blimp {
+namespace client {
 
 TabControlFeature::TabControlFeature() {}
 
@@ -24,6 +23,13 @@ void TabControlFeature::set_outgoing_message_processor(
 
 void TabControlFeature::SetSizeAndScale(const gfx::Size& size,
                                         float device_pixel_ratio) {
+  if (last_size_ == size && last_device_pixel_ratio_ == device_pixel_ratio) {
+    return;
+  }
+
+  last_size_ = size;
+  last_device_pixel_ratio_ = device_pixel_ratio;
+
   SizeMessage* size_details;
   scoped_ptr<BlimpMessage> message = CreateBlimpMessage(&size_details);
   size_details->set_width(size.width());
@@ -36,10 +42,27 @@ void TabControlFeature::SetSizeAndScale(const gfx::Size& size,
                                               net::CompletionCallback());
 }
 
+void TabControlFeature::CreateTab(int tab_id) {
+  TabControlMessage* tab_control;
+  scoped_ptr<BlimpMessage> message = CreateBlimpMessage(&tab_control);
+  tab_control->set_type(TabControlMessage::CREATE_TAB);
+  outgoing_message_processor_->ProcessMessage(std::move(message),
+                                              net::CompletionCallback());
+}
+
+void TabControlFeature::CloseTab(int tab_id) {
+  TabControlMessage* tab_control;
+  scoped_ptr<BlimpMessage> message = CreateBlimpMessage(&tab_control);
+  tab_control->set_type(TabControlMessage::CLOSE_TAB);
+  outgoing_message_processor_->ProcessMessage(std::move(message),
+                                              net::CompletionCallback());
+}
+
 void TabControlFeature::ProcessMessage(
     scoped_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
   NOTIMPLEMENTED();
 }
 
+}  // namespace client
 }  // namespace blimp

@@ -127,6 +127,10 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH);
   html_source->AddLocalizedString(
+      "bluetoothAddDevicePageTitle", IDS_SETTINGS_BLUETOOTH_ADD_DEVICE);
+  html_source->AddLocalizedString(
+      "bluetoothPairDevicePageTitle", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE);
+  html_source->AddLocalizedString(
       "bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE);
   html_source->AddLocalizedString(
       "bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT);
@@ -142,6 +146,39 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
       "bluetoothConnecting", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECTING);
   html_source->AddLocalizedString(
       "bluetoothRemove", IDS_SETTINGS_BLUETOOTH_REMOVE);
+  html_source->AddLocalizedString(
+      "bluetoothCancel", IDS_OPTIONS_SETTINGS_BLUETOOTH_CANCEL);
+  html_source->AddLocalizedString(
+      "bluetoothScanning", IDS_OPTIONS_SETTINGS_BLUETOOTH_SCANNING);
+  html_source->AddLocalizedString(
+      "bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY);
+  html_source->AddLocalizedString(
+      "bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY);
+  html_source->AddLocalizedString(
+      "bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT);
+  html_source->AddLocalizedString(
+      "bluetoothCancel", IDS_OPTIONS_SETTINGS_BLUETOOTH_CANCEL);
+  html_source->AddLocalizedString(
+      "bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR);
+
+  // Device connecting and pairing.
+  html_source->AddLocalizedString("bluetoothStartConnecting",
+                                  IDS_SETTINGS_BLUETOOTH_START_CONNECTING);
+  html_source->AddLocalizedString("bluetoothEnterKey",
+                                  IDS_OPTIONS_SETTINGS_BLUETOOTH_ENTER_KEY);
+  // These ids are generated in JS using 'bluetooth_' + a value from
+  // bluetoothPrivate.PairingEventType (see bluetooth_private.idl).
+  // 'keysEntered', and 'requestAuthorization' have no associated message.
+  html_source->AddLocalizedString("bluetooth_requestPincode",
+                                  IDS_SETTINGS_BLUETOOTH_REQUEST_PINCODE);
+  html_source->AddLocalizedString("bluetooth_displayPincode",
+                                  IDS_SETTINGS_BLUETOOTH_DISPLAY_PINCODE);
+  html_source->AddLocalizedString("bluetooth_requestPasskey",
+                                  IDS_SETTINGS_BLUETOOTH_REQUEST_PASSKEY);
+  html_source->AddLocalizedString("bluetooth_displayPasskey",
+                                  IDS_SETTINGS_BLUETOOTH_DISPLAY_PASSKEY);
+  html_source->AddLocalizedString("bluetooth_confirmPasskey",
+                                  IDS_SETTINGS_BLUETOOTH_CONFIRM_PASSKEY);
 }
 #endif
 
@@ -456,6 +493,11 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString("peoplePageTitle", IDS_SETTINGS_PEOPLE);
   html_source->AddLocalizedString("manageOtherPeople",
                                   IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE);
+
+#if !defined(OS_CHROMEOS)
+  html_source->AddLocalizedString("editPerson", IDS_SETTINGS_EDIT_PERSON);
+#endif
+
   html_source->AddLocalizedString("syncOverview", IDS_SETTINGS_SYNC_OVERVIEW);
   html_source->AddLocalizedString("syncSignin", IDS_SETTINGS_SYNC_SIGNIN);
   html_source->AddLocalizedString("syncDisconnect",
@@ -613,12 +655,26 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
 }
 
 void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
-  html_source->AddLocalizedString("siteSettingsPageTitle",
-                                  IDS_SETTINGS_SITE_SETTINGS);
-  // TODO(finnur): Would be nice to show 'Location'/'Camera' instead of hard-
-  // coding this.
   html_source->AddLocalizedString("siteSettingsCategoryPageTitle",
                                   IDS_SETTINGS_SITE_SETTINGS_CATEGORY);
+  html_source->AddLocalizedString("siteSettingsCategoryCamera",
+                                  IDS_SETTINGS_SITE_SETTINGS_CAMERA);
+  html_source->AddLocalizedString("siteSettingsCategoryCookies",
+                                  IDS_SETTINGS_SITE_SETTINGS_COOKIES);
+  html_source->AddLocalizedString("siteSettingsCategoryFullscreen",
+                                  IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN);
+  html_source->AddLocalizedString("siteSettingsCategoryImages",
+                                  IDS_SETTINGS_SITE_SETTINGS_IMAGES);
+  html_source->AddLocalizedString("siteSettingsCategoryLocation",
+                                  IDS_SETTINGS_SITE_SETTINGS_LOCATION);
+  html_source->AddLocalizedString("siteSettingsCategoryJavascript",
+                                  IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT);
+  html_source->AddLocalizedString("siteSettingsCategoryMicrophone",
+                                  IDS_SETTINGS_SITE_SETTINGS_MIC);
+  html_source->AddLocalizedString("siteSettingsCategoryNotifications",
+                                  IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS);
+  html_source->AddLocalizedString("siteSettingsCategoryPopups",
+                                  IDS_SETTINGS_SITE_SETTINGS_POPUPS);
   html_source->AddLocalizedString("siteSettingsSiteDetailsPageTitle",
                                   IDS_SETTINGS_SITE_SETTINGS_SITE_DETAILS);
   html_source->AddLocalizedString("siteSettingsAllSites",

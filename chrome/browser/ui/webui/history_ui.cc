@@ -25,6 +25,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "grit/browser_resources.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -106,7 +107,8 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
                              IDS_HISTORY_ACTION_MENU_DESCRIPTION);
   source->AddLocalizedString("removeFromHistory", IDS_HISTORY_REMOVE_PAGE);
   source->AddLocalizedString("moreFromSite", IDS_HISTORY_MORE_FROM_SITE);
-  source->AddLocalizedString("groupByDomainLabel", IDS_GROUP_BY_DOMAIN_LABEL);
+  source->AddLocalizedString("groupByDomainLabel",
+                             IDS_HISTORY_GROUP_BY_DOMAIN_LABEL);
   source->AddLocalizedString("rangeLabel", IDS_HISTORY_RANGE_LABEL);
   source->AddLocalizedString("rangeAllTime", IDS_HISTORY_RANGE_ALL_TIME);
   source->AddLocalizedString("rangeWeek", IDS_HISTORY_RANGE_WEEK);

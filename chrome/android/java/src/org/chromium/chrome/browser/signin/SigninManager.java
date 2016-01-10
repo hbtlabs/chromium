@@ -18,8 +18,8 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
+import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
 import org.chromium.sync.signin.ChromeSigninController;
 
 import javax.annotation.Nullable;
@@ -47,13 +47,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
     /** Forced signin for child accounts. */
     public static final int SIGNIN_TYPE_FORCED_CHILD_ACCOUNT = 2;
-
-    // The timing of enabling the ProfileSyncService.
-    /** Postpone sync till the set up is fully complete. */
-    public static final int SIGNIN_SYNC_SETUP_IN_PROGRESS = 0;
-
-    /** Enable sync immediately. */
-    public static final int SIGNIN_SYNC_IMMEDIATELY = 1;
 
     private static final String TAG = "SigninManager";
 
@@ -266,7 +259,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * @param passive If passive is true then this operation should not interact with the user.
      * @param observer The Observer to notify when the sign-in process is finished.
      */
-    public void startSignIn(Activity activity, final Account account, boolean passive,
+    public void startSignIn(@Nullable Activity activity, final Account account, boolean passive,
             final SignInFlowObserver observer) {
         if (mSignInAccount != null) {
             Log.w(TAG, "Ignoring sign-in request as another sign-in request is pending.");
@@ -286,7 +279,16 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         notifySignInAllowedChanged();
 
         if (!AccountTrackerService.get(mContext).checkAndSeedSystemAccounts()) {
-            mHasPendingSignin = true;
+            if (AccountIdProvider.getInstance().canBeUsed(mContext)) {
+                mHasPendingSignin = true;
+            } else {
+                UserRecoverableErrorHandler errorHandler = activity != null
+                        ? new UserRecoverableErrorHandler.ModalDialog(activity)
+                        : new UserRecoverableErrorHandler.SystemNotification();
+                ExternalAuthUtils.getInstance().canUseGooglePlayServices(mContext, errorHandler);
+                Log.w(TAG, "Cancelling the sign-in process as Google Play services is unavailable");
+                cancelSignIn();
+            }
             return;
         }
 
@@ -376,15 +378,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // sync tries to start without being signed in natively and crashes.
         ChromeSigninController.get(mContext).setSignedInAccountName(mSignInAccount.name);
 
-        // Sign-in to sync.
-        ProfileSyncService profileSyncService = ProfileSyncService.get();
-        if (profileSyncService != null
-                && AndroidSyncSettings.isSyncEnabled(mContext)
-                && !profileSyncService.hasSyncSetupCompleted()) {
-            profileSyncService.setSetupInProgress(true);
-            profileSyncService.requestStart();
-        }
-
         if (mSignInFlowObserver != null) mSignInFlowObserver.onSigninComplete();
 
         // All done, cleanup.
@@ -428,10 +421,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         boolean wipeData = getManagementDomain() != null;
         Log.d(TAG, "Signing out, wipe data? " + wipeData);
 
-        ProfileSyncService profileSyncService = ProfileSyncService.get();
-        if (profileSyncService != null) {
-            profileSyncService.signOut();
-        }
         ChromeSigninController.get(mContext).setSignedInAccountName(null);
         nativeSignOut(mNativeSigninManagerAndroid);
 
@@ -481,12 +470,10 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      *                   signin.
      * @param account    The account to sign into.
      * @param signInType The type of the sign-in (one of SIGNIN_TYPE constants).
-     * @param signInSync When to enable the ProfileSyncService (one of SIGNIN_SYNC constants).
      * @param observer   The observer to invoke when done, or null.
      */
     public void signInToSelectedAccount(@Nullable Activity activity, final Account account,
-            final int signInType, final int signInSync,
-            @Nullable final SignInFlowObserver observer) {
+            final int signInType, @Nullable final SignInFlowObserver observer) {
         // The SigninManager handles most of the sign-in flow, and onSigninComplete handles the
         // Chrome-specific details.
         final boolean passive = signInType != SIGNIN_TYPE_INTERACTIVE;
@@ -494,15 +481,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         startSignIn(activity, account, passive, new SignInFlowObserver() {
             @Override
             public void onSigninComplete() {
-                // TODO(acleung): Maybe GoogleServicesManager should have a
-                // sync = true but setSetupInProgress(true) state?
-                ProfileSyncService profileSyncService = ProfileSyncService.get();
-                if (profileSyncService != null) {
-                    profileSyncService.setSetupInProgress(
-                            signInSync == SIGNIN_SYNC_SETUP_IN_PROGRESS);
-                    profileSyncService.requestStart();
-                }
-
                 if (observer != null) observer.onSigninComplete();
 
                 if (signInType != SIGNIN_TYPE_INTERACTIVE) {

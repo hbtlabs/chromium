@@ -52,6 +52,7 @@ namespace blimp {
 
 class BlimpConnection;
 class BlimpMessage;
+class BlimpMessageThreadPipe;
 
 namespace engine {
 
@@ -80,7 +81,7 @@ class BlimpEngineSession
   BlimpBrowserContext* browser_context() { return browser_context_.get(); }
 
   // BlimpMessageProcessor implementation.
-  // This object handles incoming TAB_CONTROL and NAVIGATION messages.
+  // This object handles incoming TAB_CONTROL and NAVIGATION messages directly.
   void ProcessMessage(scoped_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
@@ -94,7 +95,9 @@ class BlimpEngineSession
 
   // TabControlMessage handler methods.
   // Creates a new WebContents, which will be indexed by |target_tab_id|.
-  void CreateWebContents(const int target_tab_id);
+  // Returns true if a new WebContents is created, false otherwise.
+  bool CreateWebContents(const int target_tab_id);
+
   void CloseWebContents(const int target_tab_id);
   void HandleResize(float device_pixel_ratio, const gfx::Size& size);
 
@@ -158,16 +161,19 @@ class BlimpEngineSession
   // Only one web_contents is supported for blimp 0.5
   scoped_ptr<content::WebContents> web_contents_;
 
+  // Handles all incoming and outgoing messages related to RenderWidget,
+  // including INPUT, COMPOSITOR and RENDER_WIDGET messages.
+  EngineRenderWidgetFeature render_widget_feature_;
+
   // Container for connection manager, authentication handler, and
   // browser connection handler. The components run on the I/O thread, and
   // this object is destroyed there.
   scoped_ptr<EngineNetworkComponents> net_components_;
 
-  // Handles all incoming and outgoing messages related to RenderWidget,
-  // including INPUT, COMPOSITOR and RENDER_WIDGET messages.
-  // TODO(dtrainor, haibinlu): Move this to a higher level once we start dealing
-  // with multiple tabs.
-  EngineRenderWidgetFeature render_widget_feature_;
+  // Pipes for receiving BlimpMessages from IO thread.
+  // Incoming messages are only routed to the UI thread since all features run
+  // there.
+  std::vector<scoped_ptr<BlimpMessageThreadPipe>> incoming_pipes_;
 
   scoped_ptr<BlimpMessageProcessor> tab_control_message_sender_;
   scoped_ptr<BlimpMessageProcessor> navigation_message_sender_;

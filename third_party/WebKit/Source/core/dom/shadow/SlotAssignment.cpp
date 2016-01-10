@@ -28,13 +28,16 @@ void SlotAssignment::resolveAssignment(const ShadowRoot& shadowRoot)
 {
     m_assignment.clear();
 
-    using Name2Slot = HashMap<AtomicString, HTMLSlotElement*>;
+    using Name2Slot = WillBeHeapHashMap<AtomicString, RefPtrWillBeMember<HTMLSlotElement>>;
     Name2Slot name2slot;
     HTMLSlotElement* defaultSlot = nullptr;
+    WillBeHeapVector<RefPtrWillBeMember<HTMLSlotElement>> slots;
 
     // TODO(hayato): Cache slots elements so that we do not have to travese the shadow tree. See ShadowRoot::descendantInsertionPoints()
     for (HTMLSlotElement& slot : Traversal<HTMLSlotElement>::descendantsOf(shadowRoot)) {
         slot.clearDistribution();
+
+        slots.append(&slot);
 
         AtomicString name = slot.fastGetAttribute(HTMLNames::nameAttr);
         if (name.isNull() || name.isEmpty()) {
@@ -71,6 +74,10 @@ void SlotAssignment::resolveAssignment(const ShadowRoot& shadowRoot)
             detachNotAssignedNode(child);
         }
     }
+
+    // Update each slot's distribution in reverse tree order so that a child slot is visited before its parent slot.
+    for (auto slot = slots.rbegin(); slot != slots.rend(); ++slot)
+        (*slot)->updateDistributedNodesWithFallback();
 }
 
 void SlotAssignment::assign(Node& hostChild, HTMLSlotElement& slot)

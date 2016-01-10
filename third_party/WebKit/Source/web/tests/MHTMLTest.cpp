@@ -36,6 +36,7 @@
 #include "platform/SharedBuffer.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
@@ -79,11 +80,11 @@ private:
     size_t m_index;
 };
 
-class MHTMLTest : public testing::Test {
+class MHTMLTest : public ::testing::Test {
 public:
     MHTMLTest()
     {
-        m_filePath = Platform::current()->unitTestSupport()->webKitRootDir();
+        m_filePath = testing::blinkRootDir();
         m_filePath.append("/Source/web/tests/data/mhtml/");
     }
 
@@ -166,7 +167,7 @@ private:
     PassRefPtr<SharedBuffer> readFile(const char* fileName)
     {
         String filePath = m_filePath + fileName;
-        return Platform::current()->unitTestSupport()->readFromFile(filePath);
+        return testing::readFromFile(filePath);
     }
 
     String m_filePath;

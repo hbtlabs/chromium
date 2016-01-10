@@ -27,7 +27,6 @@ public:
         Vmax,
         Cm,
         Mm,
-        QUnit,
         In,
         Pc,
         Pt,
@@ -45,6 +44,9 @@ public:
     // static LengthValue* fromDictionary(const CalcDictionary&);
 
 protected:
+    // Length(const String& cssString) : StyleValue(cssString) {}
+    // Length(double value, LengthUnit type) {}
+    LengthValue() {}
     static LengthUnit lengthUnitFromName(const String&);
     static const String& lengthTypeToString(LengthUnit type);
 
@@ -52,10 +54,6 @@ protected:
     virtual PassRefPtrWillBeRawPtr<LengthValue> subtractInternal(const LengthValue* other, ExceptionState&);
     virtual PassRefPtrWillBeRawPtr<LengthValue> multiplyInternal(double, ExceptionState&);
     virtual PassRefPtrWillBeRawPtr<LengthValue> divideInternal(double, ExceptionState&);
-
-    // Length(const String& cssString) : StyleValue(cssString) {}
-    // Length(double value, LengthUnit type) {}
-    LengthValue() {}
 };
 
 } // namespace blink

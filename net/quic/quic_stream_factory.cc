@@ -27,7 +27,6 @@
 #include "net/cert/ct_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/single_request_host_resolver.h"
-#include "net/http/http_server_properties.h"
 #include "net/quic/crypto/channel_id_chromium.h"
 #include "net/quic/crypto/proof_verifier_chromium.h"
 #include "net/quic/crypto/properties_based_quic_server_info.h"
@@ -317,7 +316,8 @@ void QuicStreamFactory::Job::RunAuxilaryJob() {
 void QuicStreamFactory::Job::Cancel() {
   callback_.Reset();
   if (session_)
-    session_->connection()->SendConnectionClose(QUIC_CONNECTION_CANCELLED);
+    session_->connection()->SendConnectionCloseWithDetails(
+        QUIC_CONNECTION_CANCELLED, "New job canceled.");
 }
 
 void QuicStreamFactory::Job::CancelWaitForDataReadyCallback() {
@@ -473,7 +473,9 @@ int QuicStreamFactory::Job::DoConnectComplete(int rv) {
   // existing session instead.
   AddressList address(session_->connection()->peer_address());
   if (factory_->OnResolution(server_id_, address)) {
-    session_->connection()->SendConnectionClose(QUIC_CONNECTION_IP_POOLED);
+    session_->connection()->SendConnectionCloseWithDetails(
+        QUIC_CONNECTION_IP_POOLED,
+        "An active session exists for the given IP.");
     session_ = nullptr;
     return OK;
   }
@@ -708,6 +710,20 @@ base::TimeDelta QuicStreamFactory::GetTimeDelayForWaitingJob(
 void QuicStreamFactory::set_quic_server_info_factory(
     QuicServerInfoFactory* quic_server_info_factory) {
   quic_server_info_factory_.reset(quic_server_info_factory);
+}
+
+bool QuicStreamFactory::CanUseExistingSession(QuicServerId server_id,
+                                              PrivacyMode privacy_mode,
+                                              StringPiece origin_host) {
+  // TODO(zhongyi): delete active_sessions_.empty() checks once the
+  // android crash issue(crbug.com/498823) is resolved.
+  if (active_sessions_.empty())
+    return false;
+  SessionMap::iterator it = active_sessions_.find(server_id);
+  if (it == active_sessions_.end())
+    return false;
+  QuicChromiumClientSession* session = it->second;
+  return session->CanPool(origin_host.as_string(), privacy_mode);
 }
 
 int QuicStreamFactory::Create(const HostPortPair& host_port_pair,

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <cmath>
 #include <utility>
 
 #include "base/command_line.h"
@@ -396,6 +397,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       closed_by_user_gesture_(false),
       minimum_zoom_percent_(static_cast<int>(kMinimumZoomFactor * 100)),
       maximum_zoom_percent_(static_cast<int>(kMaximumZoomFactor * 100)),
+      zoom_scroll_remainder_(0),
       render_view_message_source_(NULL),
       render_frame_message_source_(NULL),
       fullscreen_widget_routing_id_(MSG_ROUTING_NONE),
@@ -771,6 +773,12 @@ RenderFrameHostImpl* WebContentsImpl::GetFocusedFrame() {
   return focused_node->current_frame_host();
 }
 
+RenderFrameHostImpl* WebContentsImpl::FindFrameByFrameTreeNodeId(
+    int frame_tree_node_id) {
+  FrameTreeNode* frame = frame_tree_.FindByID(frame_tree_node_id);
+  return frame ? frame->current_frame_host() : nullptr;
+}
+
 void WebContentsImpl::ForEachFrame(
     const base::Callback<void(RenderFrameHost*)>& on_frame) {
   frame_tree_.ForEach(base::Bind(&ForEachFrameInternal, on_frame));
@@ -1119,6 +1127,9 @@ void WebContentsImpl::SetAudioMuted(bool mute) {
     DCHECK(audio_muter_);
     audio_muter_->StopMuting();
   }
+
+  FOR_EACH_OBSERVER(WebContentsObserver, observers_,
+                    DidUpdateAudioMutingState(mute));
 
   // Notification for UI updates in response to the changed muting state.
   NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
@@ -1587,7 +1598,14 @@ bool WebContentsImpl::HandleWheelEvent(
   if (delegate_ && event.wheelTicksY &&
       (event.modifiers & blink::WebInputEvent::ControlKey) &&
       !event.canScroll) {
-    delegate_->ContentsZoomChange(event.wheelTicksY > 0);
+    // Count only integer cumulative scrolls as zoom events; this handles
+    // smooth scroll and regular scroll device behavior.
+    zoom_scroll_remainder_ += event.wheelTicksY;
+    int whole_zoom_scroll_remainder_ = std::lround(zoom_scroll_remainder_);
+    zoom_scroll_remainder_ -= whole_zoom_scroll_remainder_;
+    if (whole_zoom_scroll_remainder_ != 0) {
+      delegate_->ContentsZoomChange(whole_zoom_scroll_remainder_ > 0);
+    }
     return true;
   }
 #endif

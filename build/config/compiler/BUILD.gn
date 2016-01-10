@@ -750,11 +750,17 @@ config("default_warnings") {
     ]
 
     if (visual_studio_version == "2015") {
-      # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to 4267.
-      # Example: short TruncTest(size_t x) { return x; }
-      # Since we already disable 4244 we need to disable 4267 during migration.
-      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-      cflags += [ "/wd4267" ]
+      cflags += [
+        # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to 4267.
+        # Example: short TruncTest(size_t x) { return x; }
+        # Since we disable 4244 we need to disable 4267 during migration.
+        # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+        "/wd4267",
+
+        # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
+        # TODO(brucedawson): fix warnings, crbug.com/554200
+        "/wd4312",
+      ]
     }
 
     # VS xtree header file needs to be patched or 4702 (unreachable code
@@ -782,14 +788,11 @@ config("default_warnings") {
       cflags += [ "-Werror" ]
     }
 
-    if (is_mac) {
-      cflags += [ "-Wnewline-eof" ]
-      if (!is_nacl) {
-        # When compiling Objective-C, warns if a method is used whose
-        # availability is newer than the deployment target. This is not
-        # required when compiling Chrome for iOS.
-        cflags += [ "-Wpartial-availability" ]
-      }
+    if (is_mac && !is_nacl) {
+      # When compiling Objective-C, warns if a method is used whose
+      # availability is newer than the deployment target. This is not
+      # required when compiling Chrome for iOS.
+      cflags += [ "-Wpartial-availability" ]
     }
 
     if (gcc_version >= 48) {
@@ -797,7 +800,7 @@ config("default_warnings") {
         # See comment for -Wno-c++11-narrowing.
         "-Wno-narrowing",
       ]
-      if (!is_clang) {
+      if (!is_clang && is_chromeos) {
         cflags_cc += [
           # TODO(thakis): Remove, http://crbug.com/263960
           "-Wno-literal-suffix",
@@ -830,6 +833,12 @@ config("default_warnings") {
 
   if (is_clang) {
     cflags += [
+      # TODO(thakis): Add -Wfor-loop-analysis to -Wall in clang, remove this:
+      "-Wfor-loop-analysis",
+
+      # TODO(thakis): Consider -Wloop-analysis (turns on
+      # -Wrange-loop-analysis too).
+
       # This warns on using ints as initializers for floats in
       # initializer lists (e.g. |int a = f(); CGSize s = { a, a };|),
       # which happens in several places in chrome code. Not sure if
@@ -854,7 +863,7 @@ config("default_warnings") {
       "-Wno-inconsistent-missing-override",
     ]
 
-    if (is_posix && !is_mac && !is_ios) {
+    if (is_chromeos) {
       cflags += [
         # TODO(thakis): Remove, http://crbug.com/263960
         "-Wno-reserved-user-defined-literal",
@@ -869,17 +878,6 @@ config("default_warnings") {
       cflags += [
         # TODO(thakis): Enable this, crbug.com/507717
         "-Wno-shift-negative-value",
-
-        # TODO(thakis): Consider enabling this?
-        "-Wno-bitfield-width",
-      ]
-    }
-
-    if (is_nacl_nonsfi) {
-      cflags += [
-        # TODO(phosek): Enable after https://codereview.chromium.org/1419373002/
-        # is rolled into Chrome.
-        "-Wno-sign-compare",
       ]
     }
   }
@@ -1159,7 +1157,10 @@ config("no_optimize") {
     if (!using_sanitizer) {
       cflags += [ "-fomit-frame-pointer" ]
     }
-    ldflags = common_optimize_on_ldflags
+
+    # Don't use gc-sections since it can cause links to succeed when they
+    # actually shouldn't. http://crbug.com/159847
+    ldflags = common_optimize_on_ldflags - [ "-Wl,--gc-sections" ]
   } else {
     cflags = [ "-O0" ]
     ldflags = []

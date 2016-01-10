@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
@@ -90,15 +91,13 @@ public final class FirstRunSignInProcessor {
             return;
         }
 
-        final boolean delaySync = getFirstRunFlowSignInSetupSync(activity);
-        final int delaySyncType = delaySync
-                ? SigninManager.SIGNIN_SYNC_SETUP_IN_PROGRESS
-                : SigninManager.SIGNIN_SYNC_IMMEDIATELY;
+        final boolean setUpSync = getFirstRunFlowSignInSetupSync(activity);
+        RecordUserAction.record("Signin_Signin_FromStartPage");
         signinManager.signInToSelectedAccount(activity, account,
-                SigninManager.SIGNIN_TYPE_INTERACTIVE, delaySyncType, new SignInFlowObserver() {
+                SigninManager.SIGNIN_TYPE_INTERACTIVE, new SignInFlowObserver() {
                     private void completeSignIn() {
                         // Show sync settings if user pressed the "Settings" button.
-                        if (delaySync) {
+                        if (setUpSync) {
                             openSyncSettings(activity);
                         }
                         setFirstRunFlowSignInComplete(activity, true);
@@ -106,6 +105,7 @@ public final class FirstRunSignInProcessor {
 
                     @Override
                     public void onSigninComplete() {
+                        RecordUserAction.record("Signin_Signin_Succeed");
                         completeSignIn();
                     }
 
@@ -121,6 +121,7 @@ public final class FirstRunSignInProcessor {
      */
     private static void openSyncSettings(Activity activity) {
         if (ProfileSyncService.get() == null) return;
+        assert !ProfileSyncService.get().hasSyncSetupCompleted();
         String accountName = ChromeSigninController.get(activity).getSignedInAccountName();
         if (TextUtils.isEmpty(accountName)) return;
         Intent intent = PreferencesLauncher.createIntentForSettingsPage(

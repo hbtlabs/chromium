@@ -4679,6 +4679,8 @@ TEST_F(CompositedSelectionBoundsTest, None) { runTest("composited_selection_boun
 TEST_F(CompositedSelectionBoundsTest, NoneReadonlyCaret) { runTest("composited_selection_bounds_none_readonly_caret.html"); }
 TEST_F(CompositedSelectionBoundsTest, Basic) { runTest("composited_selection_bounds_basic.html"); }
 TEST_F(CompositedSelectionBoundsTest, Transformed) { runTest("composited_selection_bounds_transformed.html"); }
+TEST_F(CompositedSelectionBoundsTest, VerticalRightToLeft) { runTest("composited_selection_bounds_vertical_rl.html"); }
+TEST_F(CompositedSelectionBoundsTest, VerticalLeftToRight) { runTest("composited_selection_bounds_vertical_lr.html"); }
 TEST_F(CompositedSelectionBoundsTest, SplitLayer) { runTest("composited_selection_bounds_split_layer.html"); }
 TEST_F(CompositedSelectionBoundsTest, EmptyLayer) { runTest("composited_selection_bounds_empty_layer.html"); }
 TEST_F(CompositedSelectionBoundsTest, Iframe) { runTestWithMultipleFiles("composited_selection_bounds_iframe.html", "composited_selection_bounds_basic.html", nullptr); }
@@ -5718,7 +5720,7 @@ TEST_P(ParameterizedWebFrameTest, CompositorScrollIsUserScrollLongPage)
 
 TEST_P(ParameterizedWebFrameTest, FirstPartyForCookiesForRedirect)
 {
-    WTF::String filePath = Platform::current()->unitTestSupport()->webKitRootDir();
+    String filePath = testing::blinkRootDir();
     filePath.append("/Source/web/tests/data/first_party.html");
 
     WebURL testURL(toKURL("http://internal.test/first_party_redirect.html"));

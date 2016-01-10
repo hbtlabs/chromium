@@ -1897,7 +1897,8 @@ KERNEL32.dll!WriteFile
 *!base::File::WriteAtCurrentPos
 *!sessions::SessionBackend::AppendCommandsToFile
 *!sessions::SessionBackend::AppendCommands
-*!base::internal::RunnableAdapter<>::Run
+*!base::internal::InvokeHelper<>::MakeItSo
+*!base::internal::Invoker<>::Run
 
 UNADDRESSABLE ACCESS
 name=bug_505734
@@ -2086,9 +2087,7 @@ content.dll!content::WebMediaPlayerMSCompositor::ReplaceCurrentFrameWithACopy
 
 INVALID HEAP ARGUMENT
 name=bug_571551_a
-drmemorylib.dll!replace_operator_delete_nothrow
-media.dll!mkvmuxer::Segment::WriteFramesLessThan
-media.dll!mkvmuxer::Segment::MakeNewCluster
+...
 media.dll!mkvmuxer::Segment::DoNewClusterProcessing
 media.dll!mkvmuxer::Segment::AddGenericFrame
 media.dll!mkvmuxer::Segment::AddFrame

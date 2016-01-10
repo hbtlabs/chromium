@@ -88,6 +88,8 @@
         'base/android/system_time_change_notifier_android.cc',
         'base/android/system_time_change_notifier_android.h',
         'base/bind_to_task_runner.h',
+        'base/cast_constants.cc',
+        'base/cast_constants.h',
         'base/cast_paths.cc',
         'base/cast_paths.h',
         'base/cast_resource.h',
@@ -110,8 +112,6 @@
         'base/path_utils.h',
         'base/pref_names.cc',
         'base/pref_names.h',
-        'base/pref_service_helper.cc',
-        'base/pref_service_helper.h',
         'base/process_utils.cc',
         'base/process_utils.h',
         'base/scoped_temp_file.cc',
@@ -124,11 +124,6 @@
         'base/task_runner_impl.h',
       ],
       'conditions': [
-        ['chromecast_branding=="public"', {
-          'sources': [
-            'base/pref_service_helper_simple.cc',
-          ],
-        }],
         ['OS=="android"', {
           'dependencies': [
             'cast_jni_headers',
@@ -399,6 +394,8 @@
         'browser/metrics/cast_metrics_service_client.h',
         'browser/metrics/cast_stability_metrics_provider.cc',
         'browser/metrics/cast_stability_metrics_provider.h',
+        'browser/pref_service_helper.cc',
+        'browser/pref_service_helper.h',
         'browser/service/cast_service_simple.cc',
         'browser/service/cast_service_simple.h',
         'browser/url_request_context_factory.cc',
@@ -433,6 +430,7 @@
           'sources': [
             'browser/cast_content_browser_client_simple.cc',
             'browser/cast_network_delegate_simple.cc',
+            'browser/pref_service_helper_simple.cc',
             'common/platform_client_auth_simple.cc',
             'renderer/cast_content_renderer_client_simple.cc',
           ],

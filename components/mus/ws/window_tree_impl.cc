@@ -127,7 +127,7 @@ const WindowTreeHostImpl* WindowTreeImpl::GetHost(
                 : nullptr;
 }
 
-void WindowTreeImpl::OnWillDestroyWindowTreeImpl(WindowTreeImpl* connection) {
+void WindowTreeImpl::OnWindowDestroyingTreeImpl(WindowTreeImpl* connection) {
   // Notify our client if |connection| was embedded in any of our views.
   for (const auto* connection_root : connection->roots_) {
     const bool owns_connection_root =
@@ -139,6 +139,12 @@ void WindowTreeImpl::OnWillDestroyWindowTreeImpl(WindowTreeImpl* connection) {
       client_->OnEmbeddedAppDisconnected(MapWindowIdToClient(connection_root));
     }
   }
+}
+
+void WindowTreeImpl::OnWillDestroyWindowTreeHost(
+    WindowTreeHostImpl* tree_host) {
+  if (event_source_host_ == tree_host)
+    event_source_host_ = nullptr;
 }
 
 void WindowTreeImpl::NotifyChangeCompleted(
@@ -246,8 +252,32 @@ void WindowTreeImpl::DispatchInputEvent(ServerWindow* target,
   DispatchInputEventImpl(target, std::move(event));
 }
 
+bool WindowTreeImpl::IsWaitingForNewTopLevelWindow(uint32_t wm_change_id) {
+  return waiting_for_top_level_window_info_ &&
+         waiting_for_top_level_window_info_->wm_change_id == wm_change_id;
+}
+
+void WindowTreeImpl::OnWindowManagerCreatedTopLevelWindow(
+    uint32_t wm_change_id,
+    uint32_t client_change_id,
+    const WindowId& window_id) {
+  DCHECK(IsWaitingForNewTopLevelWindow(wm_change_id));
+  scoped_ptr<WaitingForTopLevelWindowInfo> waiting_for_top_level_window_info(
+      std::move(waiting_for_top_level_window_info_));
+  connection_manager_->GetClientConnection(this)
+      ->SetIncomingMethodCallProcessingPaused(false);
+  embed_to_real_id_map_[waiting_for_top_level_window_info->window_id] =
+      window_id;
+  std::vector<const ServerWindow*> unused;
+  const ServerWindow* window = GetWindow(window_id);
+  roots_.insert(window);
+  GetUnknownWindowsFrom(window, &unused);
+  client_->OnTopLevelCreated(client_change_id, WindowToWindowData(window));
+}
+
 WindowId WindowTreeImpl::MapWindowIdFromClient(const WindowId& id) const {
-  return id;
+  auto iter = embed_to_real_id_map_.find(id);
+  return iter == embed_to_real_id_map_.end() ? id : iter->second;
 }
 
 Id WindowTreeImpl::MapWindowIdToClient(const ServerWindow* window) const {
@@ -255,6 +285,12 @@ Id WindowTreeImpl::MapWindowIdToClient(const ServerWindow* window) const {
 }
 
 Id WindowTreeImpl::MapWindowIdToClient(const WindowId& id) const {
+  // Clients typically don't have many embed windows, so we don't maintain an
+  // inverse mapping.
+  for (const auto& pair : embed_to_real_id_map_) {
+    if (pair.second == id)
+      return WindowIdToTransportId(pair.first);
+  }
   return WindowIdToTransportId(id);
 }
 
@@ -286,11 +322,20 @@ void WindowTreeImpl::ProcessClientAreaChanged(
 }
 
 void WindowTreeImpl::ProcessViewportMetricsChanged(
+    WindowTreeHostImpl* host,
     const mojom::ViewportMetrics& old_metrics,
     const mojom::ViewportMetrics& new_metrics,
     bool originated_change) {
-  client_->OnWindowViewportMetricsChanged(old_metrics.Clone(),
-                                          new_metrics.Clone());
+  mojo::Array<Id> window_ids;
+  for (const ServerWindow* root : roots_) {
+    if (GetHost(root) == host)
+      window_ids.push_back(MapWindowIdToClient(root->id()));
+  }
+  if (window_ids.size() == 0u)
+    return;
+
+  client_->OnWindowViewportMetricsChanged(
+      std::move(window_ids), old_metrics.Clone(), new_metrics.Clone());
 }
 
 void WindowTreeImpl::ProcessWillChangeWindowHierarchy(
@@ -503,7 +548,8 @@ bool WindowTreeImpl::IsWindowKnown(const ServerWindow* window) const {
 }
 
 bool WindowTreeImpl::IsValidIdForNewWindow(const WindowId& id) const {
-  return id.connection_id == id_ && window_map_.count(id.window_id) == 0;
+  return id.connection_id == id_ && embed_to_real_id_map_.count(id) == 0 &&
+         window_map_.count(id.window_id) == 0;
 }
 
 bool WindowTreeImpl::CanReorderWindow(const ServerWindow* window,
@@ -575,12 +621,19 @@ void WindowTreeImpl::RemoveRoot(const ServerWindow* window,
   roots_.erase(window);
   const Id transport_id = MapWindowIdToClient(window);
 
+  for (auto& pair : embed_to_real_id_map_) {
+    if (pair.second == window->id()) {
+      embed_to_real_id_map_.erase(pair.first);
+      break;
+    }
+  }
+
   // No need to do anything if we created the window.
   if (window->id().connection_id == id_)
     return;
 
   if (reason == RemoveRootReason::EMBED) {
-    client_->OnUnembed();
+    client_->OnUnembed(transport_id);
     client_->OnWindowDeleted(transport_id);
     connection_manager_->OnConnectionMessagedClient(id_);
   }
@@ -734,6 +787,38 @@ void WindowTreeImpl::NewWindow(
   client_->OnChangeCompleted(
       change_id,
       NewWindow(MapWindowIdFromClient(transport_window_id), properties));
+}
+
+void WindowTreeImpl::NewTopLevelWindow(
+    uint32_t change_id,
+    Id transport_window_id,
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties) {
+  DCHECK(!waiting_for_top_level_window_info_);
+  const WindowId window_id(MapWindowIdFromClient(transport_window_id));
+  // TODO(sky): need a way for client to provide context.
+  WindowTreeHostImpl* tree_host =
+      connection_manager_->GetActiveWindowTreeHost();
+  if (!tree_host || tree_host->GetWindowTree() == this ||
+      !IsValidIdForNewWindow(window_id)) {
+    client_->OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  // The server creates the real window. Any further messages from the client
+  // may try to alter the window. Pause incoming messages so that we know we
+  // can't get a message for a window before the window is created. Once the
+  // window is created we'll resume processing.
+  connection_manager_->GetClientConnection(this)
+      ->SetIncomingMethodCallProcessingPaused(true);
+
+  const uint32_t wm_change_id =
+      connection_manager_->GenerateWindowManagerChangeId(this, change_id);
+
+  waiting_for_top_level_window_info_.reset(
+      new WaitingForTopLevelWindowInfo(window_id, wm_change_id));
+
+  tree_host->GetWindowTree()->window_manager_internal_->WmCreateTopLevelWindow(
+      wm_change_id, std::move(transport_properties));
 }
 
 void WindowTreeImpl::DeleteWindow(uint32_t change_id, Id transport_window_id) {
@@ -980,7 +1065,7 @@ void WindowTreeImpl::SetFocus(uint32_t change_id, Id transport_window_id) {
 
 void WindowTreeImpl::SetCanFocus(Id transport_window_id, bool can_focus) {
   ServerWindow* window = GetWindow(MapWindowIdFromClient(transport_window_id));
-  // TODO(sky): there should be an else case (if shouldn't route to wm and
+  // TODO(sky): there should be an else case (it shouldn't route to wm and
   // policy allows, then set_can_focus).
   if (window && ShouldRouteToWindowManager(window))
     window->set_can_focus(can_focus);
@@ -1032,6 +1117,15 @@ void WindowTreeImpl::WmRequestClose(Id transport_window_id) {
       connection_manager_->GetConnectionWithRoot(window);
   if (connection && connection != host->GetWindowTree())
     connection->client_->RequestClose(MapWindowIdToClient(window));
+  // TODO(sky): think about what else case means.
+}
+
+void WindowTreeImpl::OnWmCreatedTopLevelWindow(uint32_t change_id,
+                                               Id transport_window_id) {
+  if (GetHostForWindowManager()) {
+    connection_manager_->WindowManagerCreatedTopLevelWindow(
+        this, change_id, transport_window_id);
+  }
   // TODO(sky): think about what else case means.
 }
 

@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -148,9 +147,7 @@ TemplateURLRef::SearchTermsArgs::SearchTermsArgs(
       input_type(metrics::OmniboxInputType::INVALID),
       accepted_suggestion(NO_SUGGESTIONS_AVAILABLE),
       cursor_position(base::string16::npos),
-      enable_omnibox_start_margin(false),
       page_classification(metrics::OmniboxEventProto::INVALID_SPEC),
-      bookmark_bar_pinned(false),
       append_extra_query_params(false),
       force_instant_results(false),
       from_app_list(false),
@@ -279,12 +276,9 @@ bool TemplateURLRef::EncodeFormData(const PostParams& post_params,
     return false;
 
   const char kUploadDataMIMEType[] = "multipart/form-data; boundary=";
-  const char kMultipartBoundary[] = "----+*+----%016" PRIx64 "----+*+----";
   // Each name/value pair is stored in a body part which is preceded by a
-  // boundary delimiter line. Uses random number generator here to create
-  // a unique boundary delimiter for form data encoding.
-  std::string boundary = base::StringPrintf(kMultipartBoundary,
-                                            base::RandUint64());
+  // boundary delimiter line.
+  std::string boundary = net::GenerateMimeMultipartBoundary();
   // Sets the content MIME type.
   post_content->first = kUploadDataMIMEType;
   post_content->first += boundary;
@@ -571,8 +565,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     replacements->push_back(Replacement(GOOGLE_BASE_URL, start));
   } else if (parameter == "google:baseSuggestURL") {
     replacements->push_back(Replacement(GOOGLE_BASE_SUGGEST_URL, start));
-  } else if (parameter == "google:bookmarkBarPinned") {
-    replacements->push_back(Replacement(GOOGLE_BOOKMARK_BAR_PINNED, start));
   } else if (parameter == "google:currentPageUrl") {
     replacements->push_back(Replacement(GOOGLE_CURRENT_PAGE_URL, start));
   } else if (parameter == "google:cursorPosition") {
@@ -602,10 +594,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
                                         start));
   } else if (parameter == "google:instantExtendedEnabledKey") {
     url->insert(start, google_util::kInstantExtendedAPIParam);
-  } else if (parameter == "google:ntpIsThemedParameter") {
-    replacements->push_back(Replacement(GOOGLE_NTP_IS_THEMED, start));
-  } else if (parameter == "google:omniboxStartMarginParameter") {
-    replacements->push_back(Replacement(GOOGLE_OMNIBOX_START_MARGIN, start));
   } else if (parameter == "google:contextualSearchVersion") {
     replacements->push_back(
         Replacement(GOOGLE_CONTEXTUAL_SEARCH_VERSION, start));
@@ -904,17 +892,6 @@ std::string TemplateURLRef::HandleReplacements(
             &url);
         break;
 
-      case GOOGLE_BOOKMARK_BAR_PINNED:
-        if (search_terms_data.IsShowingSearchTermsOnSearchResultsPages()) {
-          // Log whether the bookmark bar is pinned when the user is seeing
-          // InstantExtended on the SRP.
-          DCHECK(!i->is_post_param);
-          HandleReplacement(
-              "bmbp", search_terms_args.bookmark_bar_pinned ? "1" : "0", *i,
-              &url);
-        }
-        break;
-
       case GOOGLE_CURRENT_PAGE_URL:
         DCHECK(!i->is_post_param);
         if (!search_terms_args.current_page_url.empty()) {
@@ -957,23 +934,6 @@ std::string TemplateURLRef::HandleReplacements(
                               type_ == SEARCH),
                           *i,
                           &url);
-        break;
-
-      case GOOGLE_NTP_IS_THEMED:
-        DCHECK(!i->is_post_param);
-        HandleReplacement(
-            std::string(), search_terms_data.NTPIsThemedParam(), *i, &url);
-        break;
-
-      case GOOGLE_OMNIBOX_START_MARGIN:
-        DCHECK(!i->is_post_param);
-        if (search_terms_args.enable_omnibox_start_margin) {
-          int omnibox_start_margin = search_terms_data.OmniboxStartMargin();
-          if (omnibox_start_margin >= 0) {
-            HandleReplacement("es_sm", base::IntToString(omnibox_start_margin),
-                              *i, &url);
-          }
-        }
         break;
 
       case GOOGLE_CONTEXTUAL_SEARCH_VERSION:

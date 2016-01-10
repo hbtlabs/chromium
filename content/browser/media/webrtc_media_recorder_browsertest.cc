@@ -13,6 +13,7 @@
 
 #if defined(OS_ANDROID)
 // TODO(cpaulin): when crbug.com/561068 is fixed, enable this test
+// on android platform.
 #define MAYBE_WebRtcMediaRecorderTest DISABLED_WebRtcMediaRecorderTest
 #else
 #define MAYBE_WebRtcMediaRecorderTest WebRtcMediaRecorderTest
@@ -20,8 +21,7 @@
 
 namespace {
 
-// Blink features necessary to run the test.
-static const char kBlinkFeaturesNeeded[] = "GetUserMedia,MediaRecorder";
+static const char kBlinkFeaturesNeeded[] = "GetUserMedia";
 
 static const char kMediaRecorderHtmlFile[] = "/media/mediarecorder_test.html";
 
@@ -76,7 +76,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest, MediaRecorderResume) {
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
                        MediaRecorderNoResumeWhenRecorderInactive) {
-  MakeTypicalCall("testNoResumeWhileRecorderInactive();",
+  MakeTypicalCall("testIllegalResumeThrowsDOMError();",
       kMediaRecorderHtmlFile);
 }
 
@@ -103,8 +103,12 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
                        MediaRecorderIllegalPauseThrowsDOMError) {
-  MakeTypicalCall("testIllegalPauseThrowsDOMError();",
-      kMediaRecorderHtmlFile);
+  MakeTypicalCall("testIllegalPauseThrowsDOMError();", kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderTwoChannelAudioRecording) {
+  MakeTypicalCall("testTwoChannelAudio();", kMediaRecorderHtmlFile);
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
@@ -123,6 +127,17 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
                        MediaRecorderIllegalStartWhilePausedThrowsDOMError) {
   MakeTypicalCall("testIllegalStartInPausedStateThrowsDOMError();",
       kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderIllegalRequestDataThrowsDOMError) {
+  MakeTypicalCall("testIllegalRequestDataThrowsDOMError();",
+      kMediaRecorderHtmlFile);
+}
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcMediaRecorderTest,
+                       MediaRecorderPeerConnection) {
+  MakeTypicalCall("testRecordRemotePeerConnection();", kMediaRecorderHtmlFile);
 }
 
 }  // namespace content

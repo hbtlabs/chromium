@@ -34,7 +34,9 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Document.h"
+#include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/Settings.h"
+#include "core/frame/SubresourceIntegrity.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLMetaElement.h"
@@ -202,6 +204,7 @@ public:
         request->setCrossOrigin(m_crossOrigin);
         request->setCharset(charset());
         request->setDefer(m_defer);
+        request->setIntegrityMetadata(m_integrityMetadata);
         return request.release();
     }
 
@@ -218,6 +221,16 @@ private:
             setDefer(FetchRequest::LazyLoad);
         else if (match(attributeName, deferAttr))
             setDefer(FetchRequest::LazyLoad);
+        // Note that only scripts need to have the integrity metadata set on
+        // preloads. This is because script resources fetches, and only script
+        // resource fetches, need to re-request resources if a cached version
+        // has different metadata (including empty) from the metadata on the
+        // request. See the comment before the call to
+        // mustRefetchDueToIntegrityMismatch() in
+        // Source/core/fetch/ResourceFetcher.cpp for a more complete
+        // explanation.
+        else if (match(attributeName, integrityAttr))
+            SubresourceIntegrity::parseIntegrityAttribute(attributeValue, m_integrityMetadata);
     }
 
     template<typename NameType>
@@ -402,6 +415,7 @@ private:
     RefPtrWillBeMember<MediaValues> m_mediaValues;
     bool m_referrerPolicySet;
     ReferrerPolicy m_referrerPolicy;
+    IntegrityMetadataSet m_integrityMetadata;
 };
 
 TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> documentParameters)

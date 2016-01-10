@@ -41,9 +41,8 @@ TEST_F(KeyboardTest, OnKeyboardEnter) {
   scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   shell_surface->SetToplevel();
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size).Pass(),
-                 GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(new Buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
   surface->Attach(buffer.get());
   surface->Commit();
 
@@ -61,7 +60,7 @@ TEST_F(KeyboardTest, OnKeyboardEnter) {
 
   EXPECT_CALL(delegate, CanAcceptKeyboardEventsForSurface(surface.get()))
       .WillOnce(testing::Return(true));
-  ui::DomCode expected_pressed_keys[] = {ui::DomCode::KEY_A};
+  ui::DomCode expected_pressed_keys[] = {ui::DomCode::US_A};
   EXPECT_CALL(delegate, OnKeyboardModifiers(0));
   EXPECT_CALL(delegate,
               OnKeyboardEnter(surface.get(),
@@ -81,9 +80,8 @@ TEST_F(KeyboardTest, OnKeyboardLeave) {
   scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   shell_surface->SetToplevel();
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size).Pass(),
-                 GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(new Buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
   surface->Attach(buffer.get());
   surface->Commit();
 
@@ -111,9 +109,8 @@ TEST_F(KeyboardTest, OnKeyboardKey) {
   scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   shell_surface->SetToplevel();
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size).Pass(),
-                 GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(new Buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
   surface->Attach(buffer.get());
   surface->Commit();
 
@@ -131,13 +128,13 @@ TEST_F(KeyboardTest, OnKeyboardKey) {
 
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
   // This should only generate one press event for KEY_A.
-  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::KEY_A, true));
+  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::US_A, true));
   generator.PressKey(ui::VKEY_A, 0);
   generator.PressKey(ui::VKEY_A, 0);
   generator.ReleaseKey(ui::VKEY_B, 0);
 
   // This should only generate one release event for KEY_A.
-  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::KEY_A, false));
+  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::US_A, false));
   generator.ReleaseKey(ui::VKEY_A, 0);
   generator.ReleaseKey(ui::VKEY_A, 0);
 
@@ -150,9 +147,8 @@ TEST_F(KeyboardTest, OnKeyboardModifiers) {
   scoped_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
   shell_surface->SetToplevel();
   gfx::Size buffer_size(10, 10);
-  scoped_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size).Pass(),
-                 GL_TEXTURE_2D));
+  scoped_ptr<Buffer> buffer(new Buffer(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D));
   surface->Attach(buffer.get());
   surface->Commit();
 
@@ -170,18 +166,18 @@ TEST_F(KeyboardTest, OnKeyboardModifiers) {
 
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
   // This should generate a modifier event.
-  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::KEY_A, true));
+  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::US_A, true));
   EXPECT_CALL(delegate, OnKeyboardModifiers(ui::EF_SHIFT_DOWN));
   generator.PressKey(ui::VKEY_A, ui::EF_SHIFT_DOWN);
 
   // This should generate another modifier event.
-  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::KEY_B, true));
+  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::US_B, true));
   EXPECT_CALL(delegate,
               OnKeyboardModifiers(ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN));
   generator.PressKey(ui::VKEY_B, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
 
   // This should generate a third modifier event.
-  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::KEY_B, false));
+  EXPECT_CALL(delegate, OnKeyboardKey(testing::_, ui::DomCode::US_B, false));
   EXPECT_CALL(delegate, OnKeyboardModifiers(0));
   generator.ReleaseKey(ui::VKEY_B, 0);
 
