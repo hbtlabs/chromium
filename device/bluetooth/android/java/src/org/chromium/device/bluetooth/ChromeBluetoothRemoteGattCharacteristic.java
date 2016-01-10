@@ -141,8 +141,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             }
             Log.v(TAG, "startNotifySession INDICATE.");
         } else {
-            Log.v(TAG,
-                    "startNotifySession failed! Characteristic has neither PROPERTY_NOTIFY or PROPERTY_INDICATE.");
+            Log.v(TAG, "startNotifySession failed! Characteristic needs NOTIFY or INDICATE.");
             return false;
         }
 
