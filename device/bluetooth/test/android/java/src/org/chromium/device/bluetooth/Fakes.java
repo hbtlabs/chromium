@@ -468,7 +468,7 @@ class Fakes {
 
         // Implements BluetoothTestAndroid::RememberCharacteristicForSubsequentAction.
         @CalledByNative("FakeBluetoothGattCharacteristic")
-        private static void RememberCharacteristicForSubsequentAction(
+        private static void rememberCharacteristicForSubsequentAction(
                 ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic) {
             sRememberedCharacteristic =
                     (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
@@ -625,7 +625,7 @@ class Fakes {
 
         // Implements BluetoothTestAndroid::RememberDescriptorForSubsequentAction.
         @CalledByNative("FakeBluetoothGattDescriptor")
-        private static void RememberDescriptorForSubsequentAction(
+        private static void rememberDescriptorForSubsequentAction(
                 ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
             sRememberedDescriptor = (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
         }
