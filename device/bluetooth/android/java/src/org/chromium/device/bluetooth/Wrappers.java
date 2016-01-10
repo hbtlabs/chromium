@@ -398,8 +398,8 @@ class Wrappers {
      * Wraps android.bluetooth.BluetoothGattService.
      */
     static class BluetoothGattServiceWrapper {
-        final BluetoothGattService mService;
-        final BluetoothDeviceWrapper mDeviceWrapper;
+        private final BluetoothGattService mService;
+        private final BluetoothDeviceWrapper mDeviceWrapper;
 
         public BluetoothGattServiceWrapper(
                 BluetoothGattService service, BluetoothDeviceWrapper deviceWrapper) {
