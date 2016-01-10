@@ -168,7 +168,7 @@ void BluetoothTestAndroid::RememberCharacteristicForSubsequentAction(
   BluetoothRemoteGattCharacteristicAndroid* characteristic_android =
       static_cast<BluetoothRemoteGattCharacteristicAndroid*>(characteristic);
 
-  Java_FakeBluetoothGattCharacteristic_RememberCharacteristicForSubsequentAction(
+  Java_FakeBluetoothGattCharacteristic_rememberCharacteristicForSubsequentAction(
       base::android::AttachCurrentThread(),
       characteristic_android->GetJavaObject().obj());
 }
