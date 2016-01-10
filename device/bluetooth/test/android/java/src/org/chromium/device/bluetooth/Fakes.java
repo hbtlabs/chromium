@@ -362,6 +362,17 @@ class Fakes {
                     mDevice.mAdapter.mNativeBluetoothTestAndroid, characteristic.getValue());
             return true;
         }
+
+        @Override
+        boolean writeDescriptor(Wrappers.BluetoothGattDescriptorWrapper descriptor) {
+            if (mWriteDescriptorWillFailSynchronouslyOnce) {
+                mWriteDescriptorWillFailSynchronouslyOnce = false;
+                return false;
+            }
+            nativeOnFakeBluetoothGattWriteDescriptor(
+                    mDevice.mAdapter.mNativeBluetoothTestAndroid, descriptor.getValue());
+            return true;
+        }
     }
 
     /**
@@ -589,6 +600,7 @@ class Fakes {
     static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
+        byte[] mValue;
         static FakeBluetoothGattDescriptor sRememberedDescriptor;
 
         public FakeBluetoothGattDescriptor(
@@ -596,6 +608,40 @@ class Fakes {
             super(null);
             mCharacteristic = characteristic;
             mUuid = uuid;
+            mValue = new byte[0];
+        }
+
+        // Implements BluetoothTestAndroid::RememberDescriptorForSubsequentAction.
+        @CalledByNative("FakeBluetoothGattDescriptor")
+        private static void rememberDescriptorForSubsequentAction(
+                ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
+            sRememberedDescriptor = (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+        }
+
+        // Simulate a value being written to a descriptor.
+        @CalledByNative("FakeBluetoothGattDescriptor")
+        private static void valueWrite(
+                ChromeBluetoothRemoteGattDescriptor chromeDescriptor, int status) {
+            if (chromeDescriptor == null && sRememberedDescriptor == null)
+                throw new IllegalArgumentException("rememberDescriptor wasn't called previously.");
+
+            FakeBluetoothGattDescriptor fakeDescriptor = (chromeDescriptor == null)
+                    ? sRememberedDescriptor
+                    : (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+
+            fakeDescriptor.mCharacteristic.mService.mDevice.mGattCallback.onDescriptorWrite(
+                    fakeDescriptor, status);
+        }
+
+        // Cause subsequent value write of a descriptor to fail synchronously.
+        @CalledByNative("FakeBluetoothGattDescriptor")
+        private static void setWriteDescriptorWillFailSynchronouslyOnce(
+                ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
+            FakeBluetoothGattDescriptor fakeDescriptor =
+                    (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+
+            fakeDescriptor.mCharacteristic.mService.mDevice.mGatt
+                    .mWriteDescriptorWillFailSynchronouslyOnce = true;
         }
 
         // -----------------------------------------------------------------------------------------
@@ -604,6 +650,17 @@ class Fakes {
         @Override
         public UUID getUuid() {
             return mUuid;
+        }
+
+        @Override
+        public byte[] getValue() {
+            return mValue;
+        }
+
+        @Override
+        public boolean setValue(byte[] value) {
+            mValue = value;
+            return true;
         }
     }
 
@@ -631,5 +688,9 @@ class Fakes {
 
     // Binds to BluetoothTestAndroid::OnFakeBluetoothGattWriteCharacteristic.
     private static native void nativeOnFakeBluetoothGattWriteCharacteristic(
+            long nativeBluetoothTestAndroid, byte[] value);
+
+    // Binds to BluetoothTestAndroid::OnFakeBluetoothGattWriteDescriptor.
+    private static native void nativeOnFakeBluetoothGattWriteDescriptor(
             long nativeBluetoothTestAndroid, byte[] value);
 }
