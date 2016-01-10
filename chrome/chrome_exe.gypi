@@ -75,8 +75,6 @@
         'app/kasko_client.h',
         'app/main_dll_loader_win.cc',
         'app/main_dll_loader_win.h',
-        'app/signature_validator_win.cc',
-        'app/signature_validator_win.h',
       ],
       'mac_bundle_resources': [
         'app/app-Info.plist',
@@ -107,20 +105,13 @@
             '../components/components.gyp:browser_watcher_client',
             '../components/components.gyp:crash_component',
             '../third_party/crashpad/crashpad/handler/handler.gyp:crashpad_handler_lib',
+            '../third_party/kasko/kasko.gyp:kasko',
           ],
           'sources': [
             'app/chrome_crash_reporter_client.cc',
             'app/chrome_crash_reporter_client.h',
           ],
           'conditions': [
-            ['kasko==1', {
-              'dependencies': [
-                'kasko_dll',
-              ],
-              'sources': [
-                'app/chrome_crash_reporter_client.cc',
-              ],
-            }],
             ['win_console_app==1', {
               'defines': ['WIN_CONSOLE_APP'],
             }],
@@ -435,6 +426,7 @@
             '../components/components.gyp:crash_core_common',
             '../components/components.gyp:flags_ui_switches',
             '../sandbox/sandbox.gyp:sandbox',
+            '../third_party/kasko/kasko.gyp:kasko_features',
             '../ui/gfx/gfx.gyp:gfx',
             '../win8/metro_driver/metro_driver.gyp:metro_driver',
             '../win8/delegate_execute/delegate_execute.gyp:*',
@@ -458,10 +450,6 @@
                 'uxtheme.dll',
                 'ole32.dll',
                 'oleaut32.dll',
-              ],
-              'AdditionalDependencies': [
-                'wintrust.lib',
-                'crypt32.lib'
               ],
               'conditions': [
                 ['win_console_app==0', {

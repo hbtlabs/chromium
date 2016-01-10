@@ -482,6 +482,9 @@
       # Enable crash reporting via Kasko.
       'kasko%': 0,
 
+      # Enable hang reports in Kasko.
+      'kasko_hang_reports%': 0,
+
       # Enable building with LSan (Clang's -fsanitize=leak option).
       # -fsanitize=leak only works with clang, but lsan=1 implies clang=1
       # See https://sites.google.com/a/chromium.org/dev/developers/testing/leaksanitizer
@@ -1011,7 +1014,7 @@
           'use_openmax_dl_fft%': 0,
         }],
         ['OS=="win" or OS=="linux"', {
-            'enable_mdns%' : 1,
+          'enable_mdns%' : 1,
         }],
 
         # Disable various features by default on embedded.
@@ -1192,6 +1195,7 @@
     'use_sanitizer_options%': '<(use_sanitizer_options)',
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
+    'kasko_hang_reports%': '<(kasko_hang_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -1548,9 +1552,6 @@
     # Force disable libstdc++ debug mode.
     'disable_glibcxx_debug%': 0,
 
-    # Set to 1 to compile with MSE support for MPEG2 TS
-    'enable_mpeg2ts_stream_parser%': 0,
-
     # Support ChromeOS touchpad gestures with ozone.
     'use_evdev_gestures%': 0,
 
@@ -1885,7 +1886,6 @@
         'use_system_fontconfig%': 1,
       }],
       ['chromecast==1', {
-        'enable_mpeg2ts_stream_parser%': 1,
         'use_custom_freetype%': 0,
         'use_playready%': 0,
         'conditions': [
@@ -1943,18 +1943,16 @@
           # based on mac_sdk_min will be bypassed entirely.
           'conditions': [
             ['OS=="ios"', {
-              'mac_sdk_min%': '10.8',
               # The iOS build can use Xcode's clang, and that will complain
               # about -stdlib=libc++ if the deployment target is not at least
               # 10.7.
               'mac_deployment_target%': '10.7',
             }, {  # else OS!="ios"
-              'mac_sdk_min%': '10.10',
               'mac_deployment_target%': '10.6',
             }],
           ],
+          'mac_sdk_min': '10.10',
           'mac_sdk_path%': '',
-
         },
 
         'mac_sdk_min': '<(mac_sdk_min)',
@@ -2633,6 +2631,12 @@
       'clang_warning_flags': [
         '-Wheader-hygiene',
 
+        # TODO(thakis): Add -Wfor-loop-analysis to -Wall in clang, remove this:
+        '-Wfor-loop-analysis',
+
+        # TODO(thakis): Consider -Wloop-analysis (turns on
+        # -Wrange-loop-analysis too).
+
         # Don't die on dtoa code that uses a char as an array index.
         # This is required solely for base/third_party/dmg_fp/dtoa.cc.
         '-Wno-char-subscripts',
@@ -2667,9 +2671,6 @@
 
         # TODO(thakis): Enable this, crbug.com/507717
         '-Wno-shift-negative-value',
-
-        # TODO(thakis): Consider enabling this?
-        '-Wno-bitfield-width',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
@@ -2774,11 +2775,6 @@
       }],
       ['proprietary_codecs==1', {
         'defines': ['USE_PROPRIETARY_CODECS'],
-        'conditions': [
-          ['enable_mpeg2ts_stream_parser==1', {
-            'defines': ['ENABLE_MPEG2TS_STREAM_PARSER'],
-          }],
-        ],
       }],
       ['enable_viewport==1', {
         'defines': ['ENABLE_VIEWPORT'],
@@ -2895,14 +2891,6 @@
             'SYZYASAN',
             'MEMORY_TOOL_REPLACES_ALLOCATOR',
             'MEMORY_SANITIZER_INITIAL_SIZE',
-        ],
-      }],
-      ['kasko==1', {
-        'defines': [
-            'KASKO',
-        ],
-        'include_dirs': [
-          '<(DEPTH)/third_party/kasko/include',
         ],
       }],
       ['OS=="win"', {
@@ -4327,16 +4315,18 @@
               }]]
           }],
           ['clang==1', {
-            'cflags': [
-              # TODO(thakis): Remove, http://crbug.com/263960
-              '-Wno-reserved-user-defined-literal',
-            ],
             'cflags_cc': [
               # gnu++11 instead of c++11 is needed because some code uses
               # typeof() (a GNU extension).
               # TODO(thakis): Eventually switch this to c++11 instead,
               # http://crbug.com/427584
               '-std=gnu++11',
+            ],
+          }],
+          ['clang==1 and chromeos==1', {
+            'cflags': [
+              # TODO(thakis): Remove, http://crbug.com/263960
+              '-Wno-reserved-user-defined-literal',
             ],
           }],
           ['clang==0 and host_clang==1', {
@@ -4724,8 +4714,6 @@
                   '-std=gnu++11',
                   # See comment for -Wno-c++11-narrowing.
                   '-Wno-narrowing',
-                  # TODO(thakis): Remove, http://crbug.com/263960
-                  '-Wno-literal-suffix',
                 ],
               }],
             ],
@@ -4737,6 +4725,24 @@
                   '-std=gnu++11',
                   # See comment for -Wno-c++11-narrowing.
                   '-Wno-narrowing',
+                ],
+              }],
+            ],
+          }],
+          ['gcc_version>=47 and clang==0 and chromeos==1', {
+            'target_conditions': [
+              ['_toolset=="target"', {
+                'cflags_cc': [
+                  # TODO(thakis): Remove, http://crbug.com/263960
+                  '-Wno-literal-suffix',
+                ],
+              }],
+            ],
+          }],
+          ['host_gcc_version>=47 and clang==0 and host_clang==0 and chromeos==1', {
+            'target_conditions': [
+              ['_toolset=="host"', {
+                'cflags_cc': [
                   # TODO(thakis): Remove, http://crbug.com/263960
                   '-Wno-literal-suffix',
                 ],
@@ -5050,8 +5056,12 @@
         'mac_bundle': 0,
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'NO',
+          'CLANG_CXX_LANGUAGE_STANDARD': 'c++11',  # -std=c++11
           # Don't link in libarclite_macosx.a, see http://crbug.com/156530.
           'CLANG_LINK_OBJC_RUNTIME': 'NO',          # -fno-objc-link-runtime
+          # Warn if automatic synthesis is triggered with
+          # the -Wobjc-missing-property-synthesis flag.
+          'CLANG_WARN_OBJC_MISSING_PROPERTY_SYNTHESIS': 'YES',
           'COPY_PHASE_STRIP': 'NO',
           'GCC_C_LANGUAGE_STANDARD': 'c99',         # -std=c99
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
@@ -5061,11 +5071,9 @@
           # GCC_INLINES_ARE_PRIVATE_EXTERN maps to -fvisibility-inlines-hidden
           'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES',
           'GCC_OBJC_CALL_CXX_CDTORS': 'YES',        # -fobjc-call-cxx-cdtors
-          'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',      # -fvisibility=hidden
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'GCC_TREAT_WARNINGS_AS_ERRORS': 'YES',    # -Werror
-          'GCC_VERSION': '4.2',
-          'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
+          'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
           'USE_HEADERMAP': 'NO',
           'WARNING_CFLAGS': [
             '-Wall',
@@ -5075,6 +5083,11 @@
             # Don't warn about the "struct foo f = {0};" initialization
             # pattern.
             '-Wno-missing-field-initializers',
+            # This warns on selectors from Cocoa headers (-length, -set).
+            # cfe-dev is currently discussing the merits of this warning.
+            # TODO(thakis): Reevaluate what to do with this, based on the
+            # cfe-dev discussion.
+            '-Wno-selector-type-mismatch',
           ],
           'conditions': [
             ['chromium_mac_pch', {'GCC_PRECOMPILE_PREFIX_HEADER': 'YES'},
@@ -5082,25 +5095,9 @@
             ],
             # Note that the prebuilt Clang binaries should not be used for iOS
             # development except for ASan builds.
-            ['clang==1', {
-              'CLANG_CXX_LANGUAGE_STANDARD': 'c++11',  # -std=c++11
-              # Warn if automatic synthesis is triggered with
-              # the -Wobjc-missing-property-synthesis flag.
-              'CLANG_WARN_OBJC_MISSING_PROPERTY_SYNTHESIS': 'YES',
-              'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
-              'WARNING_CFLAGS': [
-                # This warns on selectors from Cocoa headers (-length, -set).
-                # cfe-dev is currently discussing the merits of this warning.
-                # TODO(thakis): Reevaluate what to do with this, based one
-                # cfe-dev discussion.
-                '-Wno-selector-type-mismatch',
-              ],
-              'conditions': [
-                ['clang_xcode==0', {
-                  'CC': '$(SOURCE_ROOT)/<(clang_dir)/clang',
-                  'LDPLUSPLUS': '$(SOURCE_ROOT)/<(clang_dir)/clang++',
-                }],
-              ],
+            ['clang_xcode==0', {
+              'CC': '$(SOURCE_ROOT)/<(clang_dir)/clang',
+              'LDPLUSPLUS': '$(SOURCE_ROOT)/<(clang_dir)/clang++',
             }],
             ['clang==1 and clang_xcode==0 and clang_use_chrome_plugins==1', {
               'OTHER_CFLAGS': [
@@ -5173,6 +5170,29 @@
                 ],
               }],
             ],
+          }],
+          ['OS=="mac"', {
+            'xcode_settings': {
+              'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',    # -fvisibility=hidden
+            },
+          }],
+          ['OS=="ios"', {
+            'configurations': {
+              'Debug': {
+                'xcode_settings': {
+                  # XCTests inject a dynamic library into the application. If
+                  # fvisibility is set to hidden, then some symbols needed by
+                  # XCTests are not available. Disable this setting for
+                  # Debug configuration.
+                  'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
+                },
+              },
+              'Release': {
+                'xcode_settings': {
+                  'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',    # -fvisibility=hidden
+                },
+              },
+            },
           }],
         ],
         'target_conditions': [

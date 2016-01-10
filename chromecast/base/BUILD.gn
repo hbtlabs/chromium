@@ -14,6 +14,8 @@ source_set("base") {
     "android/system_time_change_notifier_android.cc",
     "android/system_time_change_notifier_android.h",
     "bind_to_task_runner.h",
+    "cast_constants.cc",
+    "cast_constants.h",
     "cast_paths.cc",
     "cast_paths.h",
     "cast_resource.cc",
@@ -29,8 +31,6 @@ source_set("base") {
     "path_utils.h",
     "pref_names.cc",
     "pref_names.h",
-    "pref_service_helper.cc",
-    "pref_service_helper.h",
     "process_utils.cc",
     "process_utils.h",
     "serializers.cc",
@@ -41,10 +41,6 @@ source_set("base") {
     "task_runner_impl.h",
   ]
 
-  if (chromecast_branding == "public") {
-    sources += [ "pref_service_helper_simple.cc" ]
-  }
-
   public_deps = [
     "//chromecast/base/metrics",
     "//chromecast/public",
@@ -52,7 +48,6 @@ source_set("base") {
 
   deps = [
     "//base",
-    "//base:prefs",
   ]
 }
 

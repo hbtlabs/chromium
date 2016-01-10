@@ -9,11 +9,15 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/strings/string16.h"
 #include "chromeos/binder/buffer_reader.h"
 #include "chromeos/chromeos_export.h"
 
 namespace binder {
 
+class CommandBroker;
+class Object;
 class TransactionData;
 
 // Reads contents of a TransactionData.
@@ -28,25 +32,39 @@ class CHROMEOS_EXPORT TransactionDataReader {
   bool HasMoreData() const;
 
   // Reads the specified number of bytes with appropriate padding.
+  // Returns true on success.
   bool ReadData(void* buf, size_t n);
 
-  // Reads an int32_t value.
+  // Reads an int32_t value. Returns true on success.
   bool ReadInt32(int32_t* value);
 
-  // Reads an uint32_t value.
+  // Reads an uint32_t value. Returns true on success.
   bool ReadUint32(uint32_t* value);
 
-  // Reads an int64_t value.
+  // Reads an int64_t value. Returns true on success.
   bool ReadInt64(int64_t* value);
 
-  // Reads an uint64_t value.
+  // Reads an uint64_t value. Returns true on success.
   bool ReadUint64(uint64_t* value);
 
-  // Reads a float value.
+  // Reads a float value. Returns true on success.
   bool ReadFloat(float* value);
 
-  // Reads a double value.
+  // Reads a double value. Returns true on success.
   bool ReadDouble(double* value);
+
+  // Reads a null-terminated C string.
+  bool ReadCString(const char** value);
+
+  // Reads a string.
+  bool ReadString(std::string* value);
+
+  // Reads a UTF-16 string.
+  bool ReadString16(base::string16* value);
+
+  // Reads an object. Returns null on failure.
+  // |command_broker| will be used for object ref-count operations.
+  scoped_refptr<Object> ReadObject(CommandBroker* command_broker);
   // TODO(hashimoto): Support more types (i.e. strings, FDs, objects).
 
  private:

@@ -53,6 +53,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/paint/PaintLayer.h"
@@ -688,6 +689,8 @@ static VisiblePositionTemplate<Strategy> previousBoundary(const VisiblePositionT
         bool inTextSecurityMode = it.node() && it.node()->layoutObject() && it.node()->layoutObject()->style()->textSecurity() != TSNONE;
         // iterate to get chunks until the searchFunction returns a non-zero
         // value.
+        // TODO(xiaochengh): Iterative prepending has quadratic running time
+        // in the worst case. Should improve it to linear.
         if (!inTextSecurityMode) {
             it.prependTextTo(string);
         } else {
@@ -697,6 +700,9 @@ static VisiblePositionTemplate<Strategy> previousBoundary(const VisiblePositionT
             iteratorString.fill('x', it.length());
             string.prepend(iteratorString.data(), iteratorString.size());
         }
+        // TODO(xiaochengh): The following line takes O(string.size()) time,
+        // which makes the while loop take quadratic time in the worst case.
+        // Should improve it in some way.
         next = searchFunction(string.data(), string.size(), string.size() - suffixLength, MayHaveMoreContext, needMoreContext);
         if (next)
             break;
@@ -706,6 +712,7 @@ static VisiblePositionTemplate<Strategy> previousBoundary(const VisiblePositionT
         // The last search returned the beginning of the buffer and asked for
         // more context, but there is no earlier text. Force a search with
         // what's available.
+        // TODO(xiaochengh): Do we have to search the whole string?
         next = searchFunction(string.data(), string.size(), string.size() - suffixLength, DontHaveMoreContext, needMoreContext);
         ASSERT(!needMoreContext);
     }
@@ -748,6 +755,8 @@ static VisiblePositionTemplate<Strategy> nextBoundary(const VisiblePositionTempl
             backwardsIterator.prependTextTo(characters);
             int length = characters.size();
             int i = startOfLastWordBoundaryContext(characters.data(), length);
+            // TODO(xiaochengh): Iterative prepending has quadratic running
+            // time in the worst case. Should improve it to linear.
             string.prepend(characters.data() + i, length - i);
             prefixLength += length - i;
             if (i > 0)
@@ -761,6 +770,7 @@ static VisiblePositionTemplate<Strategy> nextBoundary(const VisiblePositionTempl
     TextIteratorAlgorithm<Strategy> it(searchStart, searchEnd, TextIteratorEmitsCharactersBetweenAllVisiblePositions);
     const unsigned invalidOffset = static_cast<unsigned>(-1);
     unsigned next = invalidOffset;
+    unsigned offset = prefixLength;
     bool needMoreContext = false;
     while (!it.atEnd()) {
         // Keep asking the iterator for chunks until the search function
@@ -776,15 +786,22 @@ static VisiblePositionTemplate<Strategy> nextBoundary(const VisiblePositionTempl
             iteratorString.fill('x', it.length());
             string.append(iteratorString.data(), iteratorString.size());
         }
-        next = searchFunction(string.data(), string.size(), prefixLength, MayHaveMoreContext, needMoreContext);
+        next = searchFunction(string.data(), string.size(), offset, MayHaveMoreContext, needMoreContext);
         if (next != string.size())
             break;
         it.advance();
+        if (!needMoreContext) {
+            // When the search does not need more context, skip all examined
+            // characters except the last one, in case it is a boundary.
+            offset = string.size();
+            U16_BACK_1(string.data(), 0, offset);
+        }
     }
     if (needMoreContext) {
         // The last search returned the end of the buffer and asked for more
         // context, but there is no further text. Force a search with what's
         // available.
+        // TODO(xiaochengh): Do we still have to search the whole string?
         next = searchFunction(string.data(), string.size(), prefixLength, DontHaveMoreContext, needMoreContext);
         ASSERT(!needMoreContext);
     }
@@ -818,6 +835,7 @@ static VisiblePositionTemplate<Strategy> nextBoundary(const VisiblePositionTempl
 
 static unsigned startWordBoundary(const UChar* characters, unsigned length, unsigned offset, BoundarySearchContextAvailability mayHaveMoreContext, bool& needMoreContext)
 {
+    TRACE_EVENT0("blink", "startWordBoundary");
     ASSERT(offset);
     if (mayHaveMoreContext && !startOfLastWordBoundaryContext(characters, offset)) {
         needMoreContext = true;
@@ -2890,22 +2908,22 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
         if (!box)
             return primaryDirection == LTR ? previousVisuallyDistinctCandidate(deepPosition) : nextVisuallyDistinctCandidate(deepPosition);
 
-        LayoutObject* layoutObject = &box->layoutObject();
+        LineLayoutItem lineLayoutItem = box->lineLayoutItem();
 
         while (true) {
-            if ((layoutObject->isAtomicInlineLevel() || layoutObject->isBR()) && offset == box->caretRightmostOffset())
+            if ((lineLayoutItem.isAtomicInlineLevel() || lineLayoutItem.isBR()) && offset == box->caretRightmostOffset())
                 return box->isLeftToRightDirection() ? previousVisuallyDistinctCandidate(deepPosition) : nextVisuallyDistinctCandidate(deepPosition);
 
-            if (!layoutObject->node()) {
+            if (!lineLayoutItem.node()) {
                 box = box->prevLeafChild();
                 if (!box)
                     return primaryDirection == LTR ? previousVisuallyDistinctCandidate(deepPosition) : nextVisuallyDistinctCandidate(deepPosition);
-                layoutObject = &box->layoutObject();
+                lineLayoutItem = box->lineLayoutItem();
                 offset = box->caretRightmostOffset();
                 continue;
             }
 
-            offset = box->isLeftToRightDirection() ? layoutObject->previousOffset(offset) : layoutObject->nextOffset(offset);
+            offset = box->isLeftToRightDirection() ? lineLayoutItem.previousOffset(offset) : lineLayoutItem.nextOffset(offset);
 
             int caretMinOffset = box->caretMinOffset();
             int caretMaxOffset = box->caretMaxOffset();
@@ -2930,7 +2948,7 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
                 // Reposition at the other logical position corresponding to our
                 // edge's visual position and go for another round.
                 box = prevBox;
-                layoutObject = &box->layoutObject();
+                lineLayoutItem = box->lineLayoutItem();
                 offset = prevBox->caretRightmostOffset();
                 continue;
             }
@@ -2945,7 +2963,7 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
                     InlineBox* logicalStart = 0;
                     if (primaryDirection == LTR ? box->root().getLogicalStartBoxWithNode(logicalStart) : box->root().getLogicalEndBoxWithNode(logicalStart)) {
                         box = logicalStart;
-                        layoutObject = &box->layoutObject();
+                        lineLayoutItem = box->lineLayoutItem();
                         offset = primaryDirection == LTR ? box->caretMinOffset() : box->caretMaxOffset();
                     }
                     break;
@@ -2964,19 +2982,19 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
                     break;
 
                 box = prevBox;
-                layoutObject = &box->layoutObject();
+                lineLayoutItem = box->lineLayoutItem();
                 offset = box->caretRightmostOffset();
                 if (box->direction() == primaryDirection)
                     break;
                 continue;
             }
 
-            while (prevBox && !prevBox->layoutObject().node())
+            while (prevBox && !prevBox->lineLayoutItem().node())
                 prevBox = prevBox->prevLeafChild();
 
             if (prevBox) {
                 box = prevBox;
-                layoutObject = &box->layoutObject();
+                lineLayoutItem = box->lineLayoutItem();
                 offset = box->caretRightmostOffset();
                 if (box->bidiLevel() > level) {
                     do {
@@ -3007,13 +3025,13 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
                         break;
                     level = box->bidiLevel();
                 }
-                layoutObject = &box->layoutObject();
+                lineLayoutItem = box->lineLayoutItem();
                 offset = primaryDirection == LTR ? box->caretMinOffset() : box->caretMaxOffset();
             }
             break;
         }
 
-        p = PositionTemplate<Strategy>::editingPositionOf(layoutObject->node(), offset);
+        p = PositionTemplate<Strategy>::editingPositionOf(lineLayoutItem.node(), offset);
 
         if ((isVisuallyEquivalentCandidate(p) && mostForwardCaretPosition(p) != downstreamStart) || p.atStartOfTree() || p.atEndOfTree())
             return p;

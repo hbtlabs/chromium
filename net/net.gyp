@@ -117,7 +117,6 @@
       'sources': [
         'base/filename_util_icu.cc',
         'base/net_string_util_icu.cc',
-        'base/net_util_icu.cc',
         'filter/brotli_filter.cc',
       ],
       'includes': [ 'net_common.gypi' ],
@@ -273,6 +272,7 @@
         ['disable_file_support==1', {
           'sources!': [
             'base/directory_lister_unittest.cc',
+            'base/directory_listing_unittest.cc',
             'url_request/url_request_file_job_unittest.cc',
           ],
         }],
@@ -836,8 +836,8 @@
         'tools/quic/quic_in_memory_cache.h',
         'tools/quic/quic_per_connection_packet_writer.cc',
         'tools/quic/quic_per_connection_packet_writer.h',
-        'tools/quic/quic_server_session.cc',
-        'tools/quic/quic_server_session.h',
+        'tools/quic/quic_server_session_base.cc',
+        'tools/quic/quic_server_session_base.h',
         'tools/quic/quic_simple_client.cc',
         'tools/quic/quic_simple_client.h',
         'tools/quic/quic_simple_per_connection_packet_writer.cc',
@@ -846,6 +846,8 @@
         'tools/quic/quic_simple_server.h',
         'tools/quic/quic_simple_server_packet_writer.cc',
         'tools/quic/quic_simple_server_packet_writer.h',
+        'tools/quic/quic_simple_server_session.cc',
+        'tools/quic/quic_simple_server_session.h',
         'tools/quic/quic_spdy_client_stream.cc',
         'tools/quic/quic_spdy_client_stream.h',
         'tools/quic/quic_simple_server_stream.cc',

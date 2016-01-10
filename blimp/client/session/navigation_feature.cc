@@ -11,6 +11,7 @@
 #include "url/gurl.h"
 
 namespace blimp {
+namespace client {
 
 NavigationFeature::NavigationFeature() {}
 
@@ -84,9 +85,12 @@ void NavigationFeature::ProcessMessage(
   const NavigationMessage& navigation_message = message->navigation();
 
   NavigationFeatureDelegate* delegate = FindDelegate(tab_id);
-  DCHECK(delegate);
-  if (!delegate)
+  if (!delegate) {
+    // TODO(haibinlu): implement NavigationFeatureDelegate for Linux client.
+    // crbug.com/574602
+    LOG(WARNING) << "NavigationFeatureDelegate not found";
     return;
+  }
 
   switch (navigation_message.type()) {
     case NavigationMessage::NAVIGATION_STATE_CHANGED: {
@@ -127,4 +131,5 @@ NavigationFeature::NavigationFeatureDelegate* NavigationFeature::FindDelegate(
   return nullptr;
 }
 
+}  // namespace client
 }  // namespace blimp

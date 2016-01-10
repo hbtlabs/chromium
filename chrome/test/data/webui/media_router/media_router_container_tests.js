@@ -56,6 +56,7 @@ cr.define('media_router_container', function() {
         'cast-mode-list',
         'container-header',
         'device-missing',
+        'first-run-flow',
         'issue-banner',
         'route-details',
         'sink-list',
@@ -126,13 +127,17 @@ cr.define('media_router_container', function() {
         ];
 
         fakeRouteList = [
-          new media_router.Route('id 1', 'sink id 1', 'Title 1', 0, true),
-          new media_router.Route('id 2', 'sink id 2', 'Title 2', 1, false),
+          new media_router.Route('id 1', 'sink id 1',
+                                 'Title 1', 0, true, false),
+          new media_router.Route('id 2', 'sink id 2',
+                                 'Title 2', 1, false, true),
         ];
 
         fakeRouteListWithLocalRoutesOnly = [
-          new media_router.Route('id 1', 'sink id 1', 'Title 1', 0, true),
-          new media_router.Route('id 2', 'sink id 2', 'Title 2', 1, true),
+          new media_router.Route('id 1', 'sink id 1',
+                                 'Title 1', 0, true, false),
+          new media_router.Route('id 2', 'sink id 2',
+                                 'Title 2', 1, true, false),
         ];
 
         var castModeBitset = 0x2 | 0x4 | 0x8;
@@ -165,7 +170,7 @@ cr.define('media_router_container', function() {
       // Tests for 'acknowledge-first-run-flow' event firing when the
       // 'first-run-button' button is clicked.
       test('first run button click', function(done) {
-        container.showFirstRunFlow_ = true;
+        container.showFirstRunFlow = true;
 
         setTimeout(function() {
           container.addEventListener('acknowledge-first-run-flow', function() {
@@ -452,6 +457,23 @@ cr.define('media_router_container', function() {
         });
       });
 
+      // Tests for the expected visible UI when interacting with the first run
+      // flow.
+      test('first run button visibility', function(done) {
+        container.showFirstRunFlow = true;
+
+        setTimeout(function() {
+          checkElementVisibleWithId(true, 'first-run-flow');
+          MockInteractions.tap(container.shadowRoot.getElementById(
+              'first-run-button'));
+
+          setTimeout(function() {
+            checkElementVisibleWithId(false, 'first-run-flow');
+            done();
+          });
+        });
+      });
+
       // Tests for expected visible UI when the view is ROUTE_DETAILS.
       test('route details visibility', function(done) {
         container.showRouteDetails_();
@@ -510,7 +532,7 @@ cr.define('media_router_container', function() {
 
       // Tests for expected visible UI when the view is SINK_LIST, and there is
       // a non blocking issue.
-      test('sink list visibilitynon blocking issue', function(done) {
+      test('sink list visibility non blocking issue', function(done) {
         container.showSinkList_();
 
         // Set an non-empty sink list.
@@ -627,7 +649,8 @@ cr.define('media_router_container', function() {
 
         container.allSinks = newSinks;
         container.routeList = [
-          new media_router.Route('id 1', 'sink id 30', 'Title 1', 1, false),
+          new media_router.Route('id 1', 'sink id 30',
+                                 'Title 1', 1, false, false),
         ];
 
         setTimeout(function() {

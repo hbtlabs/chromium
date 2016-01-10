@@ -890,16 +890,9 @@ void InProcessCommandBuffer::FenceSyncReleaseOnGpuThread(uint64_t release) {
   gles2::MailboxManager* mailbox_manager =
       decoder_->GetContextGroup()->mailbox_manager();
   if (mailbox_manager->UsesSync()) {
-    bool make_current_success = false;
-    {
-      base::AutoLock lock(command_buffer_lock_);
-      make_current_success = MakeCurrent();
-    }
-    if (make_current_success) {
-      SyncToken sync_token(GetNamespaceID(), GetExtraCommandBufferData(),
-                           GetCommandBufferID(), release);
-      mailbox_manager->PushTextureUpdates(sync_token);
-    }
+    SyncToken sync_token(GetNamespaceID(), GetExtraCommandBufferData(),
+                         GetCommandBufferID(), release);
+    mailbox_manager->PushTextureUpdates(sync_token);
   }
 
   sync_point_client_->ReleaseFenceSync(release);
@@ -949,8 +942,8 @@ void InProcessCommandBuffer::SignalSyncTokenOnGpuThread(
     return;
   }
 
-  sync_point_client_->Wait(release_state.get(), sync_token.release_count(),
-                           WrapCallback(callback));
+  sync_point_client_->WaitOutOfOrder(
+      release_state.get(), sync_token.release_count(), WrapCallback(callback));
 }
 
 void InProcessCommandBuffer::SignalQuery(unsigned query_id,

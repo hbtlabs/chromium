@@ -454,6 +454,17 @@ bool IsUsingLoFi(LoFiState lofi_state,
   return lofi_state == LOFI_ON;
 }
 
+// Record RAPPOR for aborted main frame loads. Separate into a fast and
+// slow bucket because a shocking number of aborts happen under 100ms.
+void RecordAbortRapporOnUI(const GURL& url,
+                           base::TimeDelta request_loading_time) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (request_loading_time.InMilliseconds() < 100)
+    GetContentClient()->browser()->RecordURLMetric("Net.ErrAborted.Fast", url);
+  else
+    GetContentClient()->browser()->RecordURLMetric("Net.ErrAborted.Slow", url);
+}
+
 }  // namespace
 
 // static
@@ -845,8 +856,8 @@ bool ResourceDispatcherHostImpl::HandleExternalProtocol(ResourceLoader* loader,
     return false;
 
   return delegate_->HandleExternalProtocol(
-      url, info->GetChildID(), info->GetRouteID(), info->IsMainFrame(),
-      info->GetPageTransition(), info->HasUserGesture());
+      url, info->GetChildID(), info->GetWebContentsGetterForRequest(),
+      info->IsMainFrame(), info->GetPageTransition(), info->HasUserGesture());
 }
 
 void ResourceDispatcherHostImpl::DidStartRequest(ResourceLoader* loader) {
@@ -972,6 +983,11 @@ void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
                                     1, 50000000, 50);
         UMA_HISTOGRAM_LONG_TIMES(
             "Net.RequestTime2.ErrAborted", request_loading_time);
+
+        BrowserThread::PostTask(
+            BrowserThread::UI, FROM_HERE,
+            base::Bind(&RecordAbortRapporOnUI, loader->request()->url(),
+                       request_loading_time));
         break;
       case net::ERR_CONNECTION_RESET:
         UMA_HISTOGRAM_LONG_TIMES(
@@ -1181,8 +1197,8 @@ void ResourceDispatcherHostImpl::UpdateRequestForTransfer(
   // ResourceHandlers should always get state related to the request from the
   // ResourceRequestInfo rather than caching it locally.  This lets us update
   // the info object when a transfer occurs.
-  info->UpdateForTransfer(child_id, route_id, request_data.origin_pid,
-                          request_id, request_data.parent_render_frame_id,
+  info->UpdateForTransfer(child_id, route_id, request_data.render_frame_id,
+                          request_data.origin_pid, request_id,
                           filter_->GetWeakPtr());
 
   // Update maps that used the old IDs, if necessary.  Some transfers in tests
@@ -1414,7 +1430,6 @@ void ResourceDispatcherHostImpl::BeginRequest(
       request_data.render_frame_id,
       request_data.is_main_frame,
       request_data.parent_is_main_frame,
-      request_data.parent_render_frame_id,
       request_data.resource_type,
       request_data.transition_type,
       request_data.should_replace_current_entry,
@@ -1712,7 +1727,6 @@ ResourceRequestInfoImpl* ResourceDispatcherHostImpl::CreateRequestInfo(
       render_frame_route_id,
       false,             // is_main_frame
       false,             // parent_is_main_frame
-      -1,                // parent_render_frame_id
       RESOURCE_TYPE_SUB_RESOURCE,
       ui::PAGE_TRANSITION_LINK,
       false,     // should_replace_current_entry
@@ -1779,8 +1793,8 @@ void ResourceDispatcherHostImpl::OnAudioRenderHostStreamStateChanged(
 // This function is only used for saving feature.
 void ResourceDispatcherHostImpl::BeginSaveFile(const GURL& url,
                                                const Referrer& referrer,
-                                               int save_item_id,
-                                               int save_package_id,
+                                               SaveItemId save_item_id,
+                                               SavePackageId save_package_id,
                                                int child_id,
                                                int render_view_route_id,
                                                int render_frame_route_id,
@@ -2152,7 +2166,6 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       request_id_,
       -1,  // request_data.render_frame_id,
       info.is_main_frame, info.parent_is_main_frame,
-      -1,  // request_data.parent_render_frame_id,
       resource_type, info.common_params.transition,
       // should_replace_current_entry. This was only maintained at layer for
       // request transfers and isn't needed for browser-side navigations.

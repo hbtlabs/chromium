@@ -23,6 +23,7 @@
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "extensions/browser/event_router.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
@@ -131,6 +132,15 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   SET_STRING("privacy-note", IDS_FEEDBACK_PRIVACY_NOTE);
   SET_STRING("performance-trace",
              IDS_FEEDBACK_INCLUDE_PERFORMANCE_TRACE_CHECKBOX);
+  // Add the localized strings needed for the "system information" page.
+  SET_STRING("sysinfoPageTitle", IDS_FEEDBACK_SYSINFO_PAGE_TITLE);
+  SET_STRING("sysinfoPageDescription", IDS_ABOUT_SYS_DESC);
+  SET_STRING("sysinfoPageTableTitle", IDS_ABOUT_SYS_TABLE_TITLE);
+  SET_STRING("sysinfoPageExpandAllBtn", IDS_ABOUT_SYS_EXPAND_ALL);
+  SET_STRING("sysinfoPageCollapseAllBtn", IDS_ABOUT_SYS_COLLAPSE_ALL);
+  SET_STRING("sysinfoPageExpandBtn", IDS_ABOUT_SYS_EXPAND);
+  SET_STRING("sysinfoPageCollapseBtn", IDS_ABOUT_SYS_COLLAPSE);
+  SET_STRING("sysinfoPageStatusLoading", IDS_FEEDBACK_SYSINFO_PAGE_LOADING);
 #undef SET_STRING
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();

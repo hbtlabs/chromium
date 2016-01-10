@@ -449,7 +449,6 @@ component("net") {
     sources += [
       "base/filename_util_icu.cc",
       "base/net_string_util_icu.cc",
-      "base/net_util_icu.cc",
     ]
 
     # Brotli support.
@@ -1266,8 +1265,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_in_memory_cache.h",
     "tools/quic/quic_per_connection_packet_writer.cc",
     "tools/quic/quic_per_connection_packet_writer.h",
-    "tools/quic/quic_server_session.cc",
-    "tools/quic/quic_server_session.h",
+    "tools/quic/quic_server_session_base.cc",
+    "tools/quic/quic_server_session_base.h",
     "tools/quic/quic_simple_client.cc",
     "tools/quic/quic_simple_client.h",
     "tools/quic/quic_simple_per_connection_packet_writer.cc",
@@ -1276,6 +1275,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server.h",
     "tools/quic/quic_simple_server_packet_writer.cc",
     "tools/quic/quic_simple_server_packet_writer.h",
+    "tools/quic/quic_simple_server_session.cc",
+    "tools/quic/quic_simple_server_session.h",
     "tools/quic/quic_simple_server_stream.cc",
     "tools/quic/quic_simple_server_stream.h",
     "tools/quic/quic_spdy_client_stream.cc",
@@ -1531,6 +1532,7 @@ test("net_unittests") {
   if (disable_file_support) {
     sources -= [
       "base/directory_lister_unittest.cc",
+      "base/directory_listing_unittest.cc",
       "url_request/url_request_file_job_unittest.cc",
     ]
   }

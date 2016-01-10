@@ -19,6 +19,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "grit/components_strings.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_constants.h"
@@ -57,11 +58,6 @@ const char kDesktopMediaSourceViewClassName[] =
 DesktopMediaID::Id AcceleratedWidgetToDesktopMediaId(
     gfx::AcceleratedWidget accelerated_widget) {
 #if defined(OS_WIN)
-  return reinterpret_cast<DesktopMediaID::Id>(accelerated_widget);
-#elif defined(OS_ANDROID)
-  // TODO(bshe): We may need to revisit this for Android platform. See
-  // crbug.com/557424.
-  NOTIMPLEMENTED();
   return reinterpret_cast<DesktopMediaID::Id>(accelerated_widget);
 #else
   return static_cast<DesktopMediaID::Id>(accelerated_widget);

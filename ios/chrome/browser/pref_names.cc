@@ -10,10 +10,6 @@ namespace prefs {
 // request.
 const char kAcceptLanguages[] = "intl.accept_languages";
 
-// Boolean controlling whether deleting browsing and download history is
-// permitted.
-const char kAllowDeletingBrowserHistory[] = "history.deleting_enabled";
-
 // The application locale.
 const char kApplicationLocale[] = "intl.app_locale";
 
@@ -166,9 +162,5 @@ const char kSafeBrowsingExtendedReportingOptInAllowed[] =
 // users to proceed anyway.
 const char kSafeBrowsingProceedAnywayDisabled[] =
     "safebrowsing.proceed_anyway_disabled";
-
-// Boolean that is true when the SSL interstitial should allow users to
-// proceed anyway. Otherwise, proceeding is not possible.
-const char kSSLErrorOverrideAllowed[] = "ssl.error_override_allowed";
 
 }  // namespace prefs

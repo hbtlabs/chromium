@@ -240,6 +240,8 @@ class CONTENT_EXPORT WebContentsImpl
   RenderProcessHost* GetRenderProcessHost() const override;
   RenderFrameHostImpl* GetMainFrame() override;
   RenderFrameHostImpl* GetFocusedFrame() override;
+  RenderFrameHostImpl* FindFrameByFrameTreeNodeId(
+      int frame_tree_node_id) override;
   void ForEachFrame(
       const base::Callback<void(RenderFrameHost*)>& on_frame) override;
   void SendToAllFrames(IPC::Message* message) override;
@@ -1179,6 +1181,9 @@ class CONTENT_EXPORT WebContentsImpl
   // Minimum/maximum zoom percent.
   int minimum_zoom_percent_;
   int maximum_zoom_percent_;
+
+  // Used to correctly handle integer zooming through a smooth scroll device.
+  float zoom_scroll_remainder_;
 
   // The intrinsic size of the page.
   gfx::Size preferred_size_;

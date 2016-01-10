@@ -27,6 +27,7 @@
 #include "cc/base/switches.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -661,13 +662,12 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_SHOW_AUTOFILL_TYPE_PREDICTIONS_DESCRIPTION,
      kOsAll,
      SINGLE_VALUE_TYPE(autofill::switches::kShowAutofillTypePredictions)},
-    {"enable-smooth-scrolling",  // FLAGS:RECORD_UMA
+    {"disable-smooth-scrolling",  // FLAGS:RECORD_UMA
      IDS_FLAGS_SMOOTH_SCROLLING_NAME,
      IDS_FLAGS_SMOOTH_SCROLLING_DESCRIPTION,
-     // Can't expose the switch unless the code is compiled in.
-     // On by default for the Mac (different implementation in WebKit).
-     kOsLinux | kOsWin,
-     SINGLE_VALUE_TYPE(switches::kEnableSmoothScrolling)},
+     // Mac has a separate implementation with its own setting to disable.
+     kOsLinux | kOsCrOS | kOsWin | kOsAndroid,
+     SINGLE_DISABLE_VALUE_TYPE(switches::kDisableSmoothScrolling)},
 #if defined(USE_AURA) || defined(OS_LINUX)
     {"overlay-scrollbars",
      IDS_FLAGS_OVERLAY_SCROLLBARS_NAME,
@@ -2115,6 +2115,11 @@ const FeatureEntry kFeatureEntries[] = {
          switches::kMarketUrlForTesting,
          "https://play.google.com/store/apps/details?id=com.android.chrome")},
 #endif  // OS_ANDROID
+#if defined(OS_WIN) || defined(OS_MACOSX)
+    {"automatic-tab-discarding", IDS_FLAGS_AUTOMATIC_TAB_DISCARDING_NAME,
+     IDS_FLAGS_AUTOMATIC_TAB_DISCARDING_DESCRIPTION, kOsWin | kOsMac,
+     FEATURE_VALUE_TYPE(features::kAutomaticTabDiscarding)},
+#endif  // OS_WIN || OS_MACOSX
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.

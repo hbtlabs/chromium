@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/display/display_info.h"
+#include "ash/display/display_manager.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
@@ -178,7 +181,15 @@ void surface_set_buffer_transform(wl_client* client,
 void surface_set_buffer_scale(wl_client* client,
                               wl_resource* resource,
                               int32_t scale) {
-  NOTIMPLEMENTED();
+  if (scale < 1) {
+    wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_SCALE,
+                           "buffer scale must be at least one "
+                           "('%d' specified)",
+                           scale);
+    return;
+  }
+
+  GetUserDataAs<Surface>(resource)->SetBufferScale(scale);
 }
 
 const struct wl_surface_interface surface_implementation = {
@@ -488,7 +499,7 @@ void drm_create_prime_buffer(wl_client* client,
   buffer->set_release_callback(
       base::Bind(&wl_buffer_send_release, base::Unretained(buffer_resource)));
 
-  SetImplementation(buffer_resource, &buffer_implementation, buffer.Pass());
+  SetImplementation(buffer_resource, &buffer_implementation, std::move(buffer));
 }
 
 const struct wl_drm_interface drm_implementation = {
@@ -706,6 +717,9 @@ void shell_get_shell_surface(wl_client* client,
     return;
   }
 
+  shell_surface->set_surface_destroyed_callback(base::Bind(
+      &wl_resource_destroy, base::Unretained(shell_surface_resource)));
+
   SetImplementation(shell_surface_resource, &shell_surface_implementation,
                     std::move(shell_surface));
 }
@@ -722,6 +736,55 @@ void bind_shell(wl_client* client, void* data, uint32_t version, uint32_t id) {
   }
   wl_resource_set_implementation(resource, &shell_implementation, data,
                                  nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_output_interface:
+
+const uint32_t output_version = 2;
+
+void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
+  wl_resource* resource = wl_resource_create(
+      client, &wl_output_interface, std::min(version, output_version), id);
+  if (!resource) {
+    wl_client_post_no_memory(client);
+    return;
+  }
+
+  // TODO(reveman): Watch for display changes and report them.
+  // TODO(reveman): Multi-display support.
+  ash::DisplayManager* display_manager =
+      ash::Shell::GetInstance()->display_manager();
+  const gfx::Display& primary = display_manager->GetPrimaryDisplayCandidate();
+
+  const ash::DisplayInfo& info = display_manager->GetDisplayInfo(primary.id());
+  const float kInchInMm = 25.4f;
+  const char* kUnknownMake = "unknown";
+  const char* kUnknownModel = "unknown";
+  gfx::Rect bounds = info.bounds_in_native();
+  // TODO(reveman): Send the actual active device rotation.
+  wl_output_send_geometry(
+      resource, bounds.x(), bounds.y(),
+      static_cast<int>(kInchInMm * bounds.width() / info.device_dpi()),
+      static_cast<int>(kInchInMm * bounds.height() / info.device_dpi()),
+      WL_OUTPUT_SUBPIXEL_UNKNOWN, kUnknownMake, kUnknownModel,
+      WL_OUTPUT_TRANSFORM_NORMAL);
+
+  // TODO(reveman): Send correct device scale factor when surface API respects
+  // scale.
+  if (version >= WL_OUTPUT_SCALE_SINCE_VERSION)
+    wl_output_send_scale(resource, 1);
+
+  // TODO(reveman): Send real list of modes after adding multi-display support.
+  ash::DisplayMode mode =
+      display_manager->GetActiveModeForDisplayId(primary.id());
+  wl_output_send_mode(resource,
+                      WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
+                      mode.size.width(), mode.size.height(),
+                      static_cast<int>(mode.refresh_rate * 1000));
+
+  if (version >= WL_OUTPUT_DONE_SINCE_VERSION)
+    wl_output_send_done(resource);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -870,6 +933,9 @@ void xdg_shell_get_xdg_surface(wl_client* client,
 
   // An XdgSurface is a toplevel shell surface.
   shell_surface->SetToplevel();
+
+  shell_surface->set_close_callback(base::Bind(
+      &xdg_surface_send_close, base::Unretained(xdg_surface_resource)));
 
   SetImplementation(xdg_surface_resource, &xdg_surface_implementation,
                     std::move(shell_surface));
@@ -1201,13 +1267,13 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
       const char* xkb_name;
     } modifiers[] = {
         {ui::EF_SHIFT_DOWN, XKB_MOD_NAME_SHIFT},
-        {ui::EF_CAPS_LOCK_DOWN, XKB_MOD_NAME_CAPS},
         {ui::EF_CONTROL_DOWN, XKB_MOD_NAME_CTRL},
         {ui::EF_ALT_DOWN, XKB_MOD_NAME_ALT},
-        {ui::EF_NUM_LOCK_DOWN, XKB_MOD_NAME_NUM},
-        {ui::EF_MOD3_DOWN, "Mod3"},
         {ui::EF_COMMAND_DOWN, XKB_MOD_NAME_LOGO},
         {ui::EF_ALTGR_DOWN, "Mod5"},
+        {ui::EF_MOD3_DOWN, "Mod3"},
+        {ui::EF_NUM_LOCK_ON, XKB_MOD_NAME_NUM},
+        {ui::EF_CAPS_LOCK_ON, XKB_MOD_NAME_CAPS},
     };
     uint32_t xkb_modifiers = 0;
     for (auto modifier : modifiers) {
@@ -1412,6 +1478,8 @@ Server::Server(Display* display)
                    bind_subcompositor);
   wl_global_create(wl_display_.get(), &wl_shell_interface, 1, display_,
                    bind_shell);
+  wl_global_create(wl_display_.get(), &wl_output_interface, output_version,
+                   display_, bind_output);
   wl_global_create(wl_display_.get(), &xdg_shell_interface, 1, display_,
                    bind_xdg_shell);
   wl_global_create(wl_display_.get(), &wl_data_device_manager_interface, 1,

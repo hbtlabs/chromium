@@ -7,9 +7,8 @@
 #include "core/layout/LayoutView.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "platform/text/TextStream.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebUnitTestSupport.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/HashMap.h"
 #include "wtf/Vector.h"
@@ -19,15 +18,16 @@ namespace blink {
 class PaintPropertyTreeBuilderTest : public RenderingTest {
 public:
     PaintPropertyTreeBuilderTest()
-        : m_originalSlimmingPaintV2Enabled(RuntimeEnabledFeatures::slimmingPaintV2Enabled()) { }
+        : RenderingTest(SingleChildFrameLoaderClient::create())
+        , m_originalSlimmingPaintV2Enabled(RuntimeEnabledFeatures::slimmingPaintV2Enabled()) { }
 
     void loadTestData(const char* fileName)
     {
-        String fullPath(Platform::current()->unitTestSupport()->webKitRootDir());
+        String fullPath = testing::blinkRootDir();
         fullPath.append("/Source/core/paint/test_data/");
         fullPath.append(fileName);
-        WebData inputBuffer = Platform::current()->unitTestSupport()->readFromFile(fullPath);
-        setBodyInnerHTML(String(inputBuffer.data(), inputBuffer.size()));
+        RefPtr<SharedBuffer> inputBuffer = testing::readFromFile(fullPath);
+        setBodyInnerHTML(String(inputBuffer->data(), inputBuffer->size()));
     }
 
 private:
@@ -553,6 +553,25 @@ TEST_F(PaintPropertyTreeBuilderTest, BorderRadiusClip)
             FloatSize(6, 1)), //  (bottom right) = max((56, 56) - (50, 55), (0, 0))
         borderRadiusClip->clipRect());
     EXPECT_EQ(frameView->contentClip(), borderRadiusClip->parent());
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes)
+{
+    setBodyInnerHTML(
+        "<style>body { margin: 0; }</style>"
+        "<div id='divWithTransform' style='transform: translate3d(1px, 2px, 3px);'>"
+        "  <iframe id='frame' width='500' height='500'></iframe>"
+        "</div>");
+    Document& frameDocument = setupChildIframe("frame", "<div id='transform' style='transform: translate3d(4px, 5px, 6px);'></div>");
+    document().view()->updateAllLifecyclePhases();
+
+    LayoutObject& divWithTransform = *document().getElementById("divWithTransform")->layoutObject();
+    ObjectPaintProperties* divWithTransformProperties = divWithTransform.objectPaintProperties();
+    EXPECT_EQ(TransformationMatrix().translate3d(1, 2, 3), divWithTransformProperties->transform()->matrix());
+
+    LayoutObject* innerDivWithTransform = frameDocument.getElementById("transform")->layoutObject();
+    ObjectPaintProperties* innerDivWithTransformProperties = innerDivWithTransform->objectPaintProperties();
+    EXPECT_EQ(TransformationMatrix().translate3d(4, 5, 6), innerDivWithTransformProperties->transform()->matrix());
 }
 
 } // namespace blink

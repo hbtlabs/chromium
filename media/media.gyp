@@ -13,7 +13,7 @@
     'linux_link_pulseaudio%': 0,
     'conditions': [
       # Enable ALSA and Pulse for runtime selection.
-      ['(OS=="linux" or OS=="freebsd" or OS=="solaris") and (chromecast==0 or is_cast_desktop_build==1)', {
+      ['(OS=="linux" or OS=="freebsd" or OS=="solaris") and ((embedded!=1 and chromecast==0) or is_cast_desktop_build==1)', {
         # ALSA is always needed for Web MIDI even if the cras is enabled.
         'use_alsa%': 1,
         'conditions': [
@@ -33,6 +33,15 @@
       }, {
         'use_low_memory_buffer%': 0,
       }],
+      ['proprietary_codecs==1 and chromecast==1', {
+        # Enable AC3/EAC3 audio demuxing. Actual decoding must be provided by
+        # the platform (or HDMI sink in Chromecast for audio pass-through case).
+        'enable_ac3_eac3_audio_demuxing%': 1,
+        'enable_mse_mpeg2ts_stream_parser%': 1,
+      }, {
+        'enable_ac3_eac3_audio_demuxing%': 0,
+        'enable_mse_mpeg2ts_stream_parser%': 0,
+      }],
       ['chromecast==1', {
         # Enable HEVC/H265 demuxing. Actual decoding must be provided by the
         # platform.
@@ -48,10 +57,23 @@
   ],
   'targets': [
     {
+      # GN version: //media:media_features
+      'target_name': 'media_features',
+      'includes': [ '../build/buildflag_header.gypi' ],
+      'variables': {
+        'buildflag_header_path': 'media/media_features.h',
+        'buildflag_flags': [
+          "ENABLE_AC3_EAC3_AUDIO_DEMUXING=<(enable_ac3_eac3_audio_demuxing)",
+          "ENABLE_MSE_MPEG2TS_STREAM_PARSER=<(enable_mse_mpeg2ts_stream_parser)",
+        ],
+      },
+    },
+    {
       # GN version: //media
       'target_name': 'media',
       'type': '<(component)',
       'dependencies': [
+        'media_features',
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
@@ -1039,32 +1061,6 @@
             'filters/ffmpeg_h264_to_annex_b_bitstream_converter.h',
             'filters/h264_to_annex_b_bitstream_converter.cc',
             'filters/h264_to_annex_b_bitstream_converter.h',
-            'formats/mp2t/es_adapter_video.cc',
-            'formats/mp2t/es_adapter_video.h',
-            'formats/mp2t/es_parser.cc',
-            'formats/mp2t/es_parser.h',
-            'formats/mp2t/es_parser_adts.cc',
-            'formats/mp2t/es_parser_adts.h',
-            'formats/mp2t/es_parser_h264.cc',
-            'formats/mp2t/es_parser_h264.h',
-            'formats/mp2t/es_parser_mpeg1audio.cc',
-            'formats/mp2t/es_parser_mpeg1audio.h',
-            'formats/mp2t/mp2t_common.h',
-            'formats/mp2t/mp2t_stream_parser.cc',
-            'formats/mp2t/mp2t_stream_parser.h',
-            'formats/mp2t/timestamp_unroller.cc',
-            'formats/mp2t/timestamp_unroller.h',
-            'formats/mp2t/ts_packet.cc',
-            'formats/mp2t/ts_packet.h',
-            'formats/mp2t/ts_section.h',
-            'formats/mp2t/ts_section_pat.cc',
-            'formats/mp2t/ts_section_pat.h',
-            'formats/mp2t/ts_section_pes.cc',
-            'formats/mp2t/ts_section_pes.h',
-            'formats/mp2t/ts_section_pmt.cc',
-            'formats/mp2t/ts_section_pmt.h',
-            'formats/mp2t/ts_section_psi.cc',
-            'formats/mp2t/ts_section_psi.h',
             'formats/mp4/aac.cc',
             'formats/mp4/aac.h',
             'formats/mp4/avc.cc',
@@ -1093,6 +1089,36 @@
             'formats/mpeg/mpeg1_audio_stream_parser.h',
             'formats/mpeg/mpeg_audio_stream_parser_base.cc',
             'formats/mpeg/mpeg_audio_stream_parser_base.h',
+          ],
+        }],
+        ['proprietary_codecs==1 and enable_mse_mpeg2ts_stream_parser==1', {
+          'sources': [
+            'formats/mp2t/es_adapter_video.cc',
+            'formats/mp2t/es_adapter_video.h',
+            'formats/mp2t/es_parser.cc',
+            'formats/mp2t/es_parser.h',
+            'formats/mp2t/es_parser_adts.cc',
+            'formats/mp2t/es_parser_adts.h',
+            'formats/mp2t/es_parser_h264.cc',
+            'formats/mp2t/es_parser_h264.h',
+            'formats/mp2t/es_parser_mpeg1audio.cc',
+            'formats/mp2t/es_parser_mpeg1audio.h',
+            'formats/mp2t/mp2t_common.h',
+            'formats/mp2t/mp2t_stream_parser.cc',
+            'formats/mp2t/mp2t_stream_parser.h',
+            'formats/mp2t/timestamp_unroller.cc',
+            'formats/mp2t/timestamp_unroller.h',
+            'formats/mp2t/ts_packet.cc',
+            'formats/mp2t/ts_packet.h',
+            'formats/mp2t/ts_section.h',
+            'formats/mp2t/ts_section_pat.cc',
+            'formats/mp2t/ts_section_pat.h',
+            'formats/mp2t/ts_section_pes.cc',
+            'formats/mp2t/ts_section_pes.h',
+            'formats/mp2t/ts_section_pmt.cc',
+            'formats/mp2t/ts_section_pmt.h',
+            'formats/mp2t/ts_section_psi.cc',
+            'formats/mp2t/ts_section_psi.h',
           ],
         }],
         ['proprietary_codecs==1 and enable_hevc_demuxing==1', {
@@ -1413,14 +1439,6 @@
             'filters/h264_to_annex_b_bitstream_converter_unittest.cc',
             'formats/common/stream_parser_test_base.cc',
             'formats/common/stream_parser_test_base.h',
-            'formats/mp2t/es_adapter_video_unittest.cc',
-            'formats/mp2t/es_parser_adts_unittest.cc',
-            'formats/mp2t/es_parser_h264_unittest.cc',
-            'formats/mp2t/es_parser_mpeg1audio_unittest.cc',
-            'formats/mp2t/es_parser_test_base.cc',
-            'formats/mp2t/es_parser_test_base.h',
-            'formats/mp2t/mp2t_stream_parser_unittest.cc',
-            'formats/mp2t/timestamp_unroller_unittest.cc',
             'formats/mp4/aac_unittest.cc',
             'formats/mp4/avc_unittest.cc',
             'formats/mp4/box_reader_unittest.cc',
@@ -1430,6 +1448,18 @@
             'formats/mp4/track_run_iterator_unittest.cc',
             'formats/mpeg/adts_stream_parser_unittest.cc',
             'formats/mpeg/mpeg1_audio_stream_parser_unittest.cc',
+          ],
+        }],
+        ['proprietary_codecs==1 and enable_mse_mpeg2ts_stream_parser==1', {
+          'sources': [
+            'formats/mp2t/es_adapter_video_unittest.cc',
+            'formats/mp2t/es_parser_adts_unittest.cc',
+            'formats/mp2t/es_parser_h264_unittest.cc',
+            'formats/mp2t/es_parser_mpeg1audio_unittest.cc',
+            'formats/mp2t/es_parser_test_base.cc',
+            'formats/mp2t/es_parser_test_base.h',
+            'formats/mp2t/mp2t_stream_parser_unittest.cc',
+            'formats/mp2t/timestamp_unroller_unittest.cc',
           ],
         }],
         ['OS=="mac"', {
@@ -1823,7 +1853,6 @@
             'base/android/java/src/org/chromium/media/MediaDrmBridge.java',
             'base/android/java/src/org/chromium/media/MediaPlayerBridge.java',
             'base/android/java/src/org/chromium/media/MediaPlayerListener.java',
-            'base/android/java/src/org/chromium/media/WebAudioMediaCodecBridge.java',
           ],
           'variables': {
             'jni_gen_package': 'media',
@@ -1901,9 +1930,6 @@
             'base/android/sdk_media_codec_bridge.h',
             'base/android/video_decoder_job.cc',
             'base/android/video_decoder_job.h',
-            'base/android/webaudio_media_codec_bridge.cc',
-            'base/android/webaudio_media_codec_bridge.h',
-            'base/android/webaudio_media_codec_info.h',
           ],
           'conditions': [
             # Only 64 bit builds are using android-21 NDK library, check common.gypi

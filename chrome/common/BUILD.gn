@@ -102,6 +102,7 @@ static_library("common") {
     "//net",
     "//skia",
     "//third_party/icu",
+    "//third_party/kasko:kasko_features",
     "//third_party/zlib:zip",
     "//ui/accessibility",
     "//ui/base",
@@ -212,19 +213,6 @@ static_library("common") {
     }
   }
 
-  if (enable_service_discovery) {
-    sources += [
-      "local_discovery/service_discovery_client.cc",
-      "local_discovery/service_discovery_client.h",
-    ]
-  }
-  if (enable_mdns) {
-    sources += [
-      "local_discovery/service_discovery_client_impl.cc",
-      "local_discovery/service_discovery_client_impl.h",
-    ]
-  }
-
   if (is_android) {
     sources -= [
       "channel_info_posix.cc",
@@ -245,10 +233,6 @@ static_library("common") {
       "//components/dom_distiller/core",  # Needed by chrome_content_client.cc.
       "//third_party/wtl",
     ]
-  }
-
-  if (enable_mdns) {
-    sources += [ "local_discovery/local_discovery_messages.h" ]
   }
 
   if (is_mac) {
@@ -306,6 +290,8 @@ static_library("constants") {
   sources = [
     "chrome_constants.cc",
     "chrome_constants.h",
+    "chrome_features.cc",
+    "chrome_features.h",
     "chrome_icon_resources_win.cc",
     "chrome_icon_resources_win.h",
     "chrome_paths.cc",

@@ -651,14 +651,6 @@
       'browser/ui/views/frame/web_app_left_header_view_ash.cc',
       'browser/ui/views/frame/web_app_left_header_view_ash.h',
       'browser/ui/views/tabs/window_finder_ash.cc',
-      'browser/ui/views/tabs/window_finder_impl.cc',
-      'browser/ui/views/tabs/window_finder_impl.h',
-    ],
-    # Used when Android + Views.
-    'chrome_browser_ui_views_android_sources': [
-      'browser/ui/views/tabs/window_finder_android.cc',
-      'browser/ui/views/tabs/window_finder_impl.cc',
-      'browser/ui/views/tabs/window_finder_impl.h',
     ],
     # Used when ash is disabled.
     'chrome_browser_ui_non_ash_sources': [
@@ -2004,6 +1996,8 @@
       'browser/ui/webui/settings/settings_clear_browsing_data_handler.h',
       'browser/ui/webui/settings/settings_default_browser_handler.cc',
       'browser/ui/webui/settings/settings_default_browser_handler.h',
+      'browser/ui/webui/settings/settings_manage_profile_handler.cc',
+      'browser/ui/webui/settings/settings_manage_profile_handler.h',
       'browser/ui/webui/settings/settings_startup_pages_handler.cc',
       'browser/ui/webui/settings/settings_startup_pages_handler.h',
       'browser/ui/webui/signin/inline_login_handler.cc',
@@ -2248,7 +2242,6 @@
       'browser/ui/views/frame/browser_frame_mac.mm',
       'browser/ui/views/frame/browser_non_client_frame_view.cc',
       'browser/ui/views/frame/browser_non_client_frame_view.h',
-      'browser/ui/views/frame/browser_non_client_frame_view_factory_android.cc',
       'browser/ui/views/frame/browser_non_client_frame_view_factory_mac.mm',
       'browser/ui/views/frame/browser_non_client_frame_view_factory_views.cc',
       'browser/ui/views/frame/browser_non_client_frame_view_mac.h',
@@ -2271,7 +2264,6 @@
       'browser/ui/views/frame/contents_web_view.h',
       'browser/ui/views/frame/immersive_mode_controller.cc',
       'browser/ui/views/frame/immersive_mode_controller.h',
-      'browser/ui/views/frame/immersive_mode_controller_factory_android.cc',
       'browser/ui/views/frame/immersive_mode_controller_factory_mac.cc',
       'browser/ui/views/frame/immersive_mode_controller_factory_views.cc',
       'browser/ui/views/frame/immersive_mode_controller_stub.cc',
@@ -2774,8 +2766,10 @@
       'browser/ui/hung_plugin_tab_helper.h',
       'browser/ui/webui/flash_ui.cc',
       'browser/ui/webui/flash_ui.h',
-      'browser/ui/webui/plugins_ui.cc',
-      'browser/ui/webui/plugins_ui.h',
+      'browser/ui/webui/plugins/plugins_handler.cc',
+      'browser/ui/webui/plugins/plugins_handler.h',
+      'browser/ui/webui/plugins/plugins_ui.cc',
+      'browser/ui/webui/plugins/plugins_ui.h',
     ],
     'chrome_browser_ui_policy_sources': [
       'browser/ui/webui/policy_material_design_ui.cc',
@@ -3039,9 +3033,6 @@
                   'sources': [ '<@(chrome_browser_ui_views_extensions_non_mac_sources)' ],
                 }],
               ],
-            }],
-            ['OS=="android"', {
-              'sources': [ '<@(chrome_browser_ui_views_android_sources)' ],
             }],
             ['enable_extensions==1', {
               'dependencies': [

@@ -78,7 +78,9 @@ public:
     ShadowRoot* youngerShadowRoot() const { return prev(); }
 
     ShadowRoot* olderShadowRootForBindings() const;
-    bool isOpen() const { return type() == ShadowRootType::V0 || type() == ShadowRootType::Open; }
+
+    bool isOpenOrV0() const { return type() == ShadowRootType::V0 || type() == ShadowRootType::Open; }
+
     bool isV1() const { return type() == ShadowRootType::Open || type() == ShadowRootType::Closed; }
 
     bool isYoungest() const { return !youngerShadowRoot(); }

@@ -397,6 +397,7 @@ void Widget::Init(const InitParams& in_params) {
   // the correct NativeTheme (on Linux). See http://crbug.com/384492
   observer_manager_.Add(GetNativeTheme());
   native_widget_initialized_ = true;
+  native_widget_->OnWidgetInitDone();
 }
 
 // Unconverted methods (see header) --------------------------------------------
@@ -1449,9 +1450,16 @@ void Widget::SetInitialBounds(const gfx::Rect& bounds) {
     }
   } else {
     if (bounds.IsEmpty()) {
-      // No initial bounds supplied, so size the window to its content and
-      // center over its parent.
-      native_widget_->CenterWindow(non_client_view_->GetPreferredSize());
+      if (bounds.origin().IsOrigin()) {
+        // No initial bounds supplied, so size the window to its content and
+        // center over its parent.
+        native_widget_->CenterWindow(non_client_view_->GetPreferredSize());
+      } else {
+        // Use the preferred size and the supplied origin.
+        gfx::Rect preferred_bounds(bounds);
+        preferred_bounds.set_size(non_client_view_->GetPreferredSize());
+        SetBoundsConstrained(preferred_bounds);
+      }
     } else {
       // Use the supplied initial bounds.
       SetBoundsConstrained(bounds);

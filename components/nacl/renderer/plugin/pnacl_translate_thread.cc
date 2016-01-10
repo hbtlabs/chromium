@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "components/nacl/renderer/plugin/plugin.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
-#include "components/nacl/renderer/plugin/srpc_params.h"
 #include "components/nacl/renderer/plugin/temporary_file.h"
 #include "components/nacl/renderer/plugin/utility.h"
 #include "content/public/common/sandbox_init.h"
@@ -32,48 +31,32 @@ std::string MakeCommandLineArg(const char* key, const Val val) {
   return ss.str();
 }
 
-void GetLlcCommandLine(std::vector<char>* split_args,
+void GetLlcCommandLine(std::vector<std::string>* args,
                        size_t obj_files_size,
                        int32_t opt_level,
                        bool is_debug,
                        const std::string& architecture_attributes) {
-  typedef std::vector<std::string> Args;
-  Args args;
-
   // TODO(dschuff): This CL override is ugly. Change llc to default to
   // using the number of modules specified in the first param, and
   // ignore multiple uses of -split-module
-  args.push_back(MakeCommandLineArg("-split-module=", obj_files_size));
-  args.push_back(MakeCommandLineArg("-O", opt_level));
+  args->push_back(MakeCommandLineArg("-split-module=", obj_files_size));
+  args->push_back(MakeCommandLineArg("-O", opt_level));
   if (is_debug)
-    args.push_back("-bitcode-format=llvm");
+    args->push_back("-bitcode-format=llvm");
   if (!architecture_attributes.empty())
-    args.push_back("-mattr=" + architecture_attributes);
-
-  for (const std::string& arg : args) {
-    std::copy(arg.begin(), arg.end(), std::back_inserter(*split_args));
-    split_args->push_back('\x00');
-  }
+    args->push_back("-mattr=" + architecture_attributes);
 }
 
-void GetSubzeroCommandLine(std::vector<char>* split_args,
+void GetSubzeroCommandLine(std::vector<std::string>* args,
                            int32_t opt_level,
                            bool is_debug,
                            const std::string& architecture_attributes) {
-  typedef std::vector<std::string> Args;
-  Args args;
-
-  args.push_back(MakeCommandLineArg("-O", opt_level));
+  args->push_back(MakeCommandLineArg("-O", opt_level));
   DCHECK(!is_debug);
   // TODO(stichnot): enable this once the mattr flag formatting is
   // compatible: https://code.google.com/p/nativeclient/issues/detail?id=4132
   // if (!architecture_attributes.empty())
-  //   args.push_back("-mattr=" + architecture_attributes);
-
-  for (const std::string& arg : args) {
-    std::copy(arg.begin(), arg.end(), std::back_inserter(*split_args));
-    split_args->push_back('\x00');
-  }
+  //   args->push_back("-mattr=" + architecture_attributes);
 }
 
 }  // namespace
@@ -90,6 +73,7 @@ PnaclTranslateThread::PnaclTranslateThread()
       nexe_file_(NULL),
       coordinator_error_info_(NULL),
       coordinator_(NULL),
+      compiler_channel_peer_pid_(base::kNullProcessId),
       ld_channel_peer_pid_(base::kNullProcessId) {
   NaClXMutexCtor(&subprocess_mu_);
   NaClXMutexCtor(&cond_mu_);
@@ -130,12 +114,18 @@ void PnaclTranslateThread::RunCompile(
   DCHECK(compiler_subprocess_->service_runtime());
   compiler_subprocess_active_ = true;
 
-  // Free this IPC channel now to make sure that it does not get freed on
-  // the child thread when the child thread calls Shutdown().
-  // TODO(mseaborn): Convert DoCompile() to using Chrome IPC instead of SRPC,
-  // the same way DoLink() has been converted.  Then we will use this IPC
-  // channel instead of just freeing it here.
-  compiler_subprocess_->service_runtime()->TakeTranslatorChannel();
+  // Take ownership of this IPC channel to make sure that it does not get
+  // freed on the child thread when the child thread calls Shutdown().
+  compiler_channel_ =
+      compiler_subprocess_->service_runtime()->TakeTranslatorChannel();
+  // compiler_channel_ is a IPC::SyncChannel, which is not thread-safe and
+  // cannot be used directly by the child thread, so create a
+  // SyncMessageFilter which can be used by the child thread.
+  compiler_channel_filter_ = compiler_channel_->CreateSyncMessageFilter();
+  // Make a copy of the process ID, again to avoid any thread-safety issues
+  // involved in accessing compiler_subprocess_ on the child thread.
+  compiler_channel_peer_pid_ =
+      compiler_subprocess_->service_runtime()->get_process_id();
 
   compile_finished_callback_ = compile_finished_callback;
   translate_thread_.reset(new NaClThread);
@@ -193,7 +183,7 @@ void PnaclTranslateThread::RunLink() {
 void PnaclTranslateThread::PutBytes(const void* bytes, int32_t count) {
   CHECK(bytes != NULL);
   NaClXMutexLock(&cond_mu_);
-  data_buffers_.push_back(std::vector<char>());
+  data_buffers_.push_back(std::string());
   data_buffers_.back().insert(data_buffers_.back().end(),
                               static_cast<const char*>(bytes),
                               static_cast<const char*>(bytes) + count);
@@ -209,13 +199,13 @@ void PnaclTranslateThread::EndStream() {
 }
 
 ppapi::proxy::SerializedHandle PnaclTranslateThread::GetHandleForSubprocess(
-    TempFile* file, int32_t open_flags) {
+    TempFile* file, int32_t open_flags, base::ProcessId peer_pid) {
   IPC::PlatformFileForTransit file_for_transit;
 
 #if defined(OS_WIN)
   if (!content::BrokerDuplicateHandle(
           file->GetFileHandle(),
-          ld_channel_peer_pid_,
+          peer_pid,
           &file_for_transit,
           0,  // desired_access is 0 since we're using DUPLICATE_SAME_ACCESS.
           DUPLICATE_SAME_ACCESS)) {
@@ -246,64 +236,46 @@ void PnaclTranslateThread::DoCompile() {
     // and now, just leave now.
     if (!compiler_subprocess_active_)
       return;
-    // Now that we are in helper thread, we can do the the blocking
-    // StartSrpcServices operation.
-    if (!compiler_subprocess_->StartSrpcServices()) {
-      TranslateFailed(
-          PP_NACL_ERROR_SRPC_CONNECTION_FAIL,
-          "SRPC connection failure for " + compiler_subprocess_->description());
-      return;
-    }
   }
 
-  SrpcParams params;
-  std::vector<nacl::DescWrapper*> compile_out_files;
-  size_t i;
-  for (i = 0; i < obj_files_->size(); i++)
-    compile_out_files.push_back((*obj_files_)[i]->write_wrapper());
-  for (; i < PnaclCoordinator::kMaxTranslatorObjectFiles; i++)
-    compile_out_files.push_back(invalid_desc_wrapper_);
+  std::vector<ppapi::proxy::SerializedHandle> compiler_output_files;
+  for (TempFile* obj_file : *obj_files_) {
+    compiler_output_files.push_back(
+        GetHandleForSubprocess(obj_file, PP_FILEOPENFLAG_WRITE,
+                               compiler_channel_peer_pid_));
+  }
 
   PLUGIN_PRINTF(("DoCompile using subzero: %d\n", pnacl_options_->use_subzero));
 
   pp::Core* core = pp::Module::Get()->core();
   int64_t do_compile_start_time = NaClGetTimeOfDayMicroseconds();
-  bool init_success;
 
-  std::vector<char> split_args;
+  std::vector<std::string> args;
   if (pnacl_options_->use_subzero) {
-    GetSubzeroCommandLine(&split_args, pnacl_options_->opt_level,
+    GetSubzeroCommandLine(&args, pnacl_options_->opt_level,
                           PP_ToBool(pnacl_options_->is_debug),
                           architecture_attributes_);
   } else {
-    GetLlcCommandLine(&split_args, obj_files_->size(),
+    GetLlcCommandLine(&args, obj_files_->size(),
                       pnacl_options_->opt_level,
                       PP_ToBool(pnacl_options_->is_debug),
                       architecture_attributes_);
   }
 
-  init_success = compiler_subprocess_->InvokeSrpcMethod(
-      "StreamInitWithSplit", "ihhhhhhhhhhhhhhhhC", &params, num_threads_,
-      compile_out_files[0]->desc(), compile_out_files[1]->desc(),
-      compile_out_files[2]->desc(), compile_out_files[3]->desc(),
-      compile_out_files[4]->desc(), compile_out_files[5]->desc(),
-      compile_out_files[6]->desc(), compile_out_files[7]->desc(),
-      compile_out_files[8]->desc(), compile_out_files[9]->desc(),
-      compile_out_files[10]->desc(), compile_out_files[11]->desc(),
-      compile_out_files[12]->desc(), compile_out_files[13]->desc(),
-      compile_out_files[14]->desc(), compile_out_files[15]->desc(),
-      &split_args[0], split_args.size());
-  if (!init_success) {
-    if (compiler_subprocess_->srpc_client()->GetLastError() ==
-        NACL_SRPC_RESULT_APP_ERROR) {
-      // The error message is only present if the error was returned from llc
-      TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
-                      std::string("Stream init failed: ") +
-                      std::string(params.outs()[0]->arrays.str));
-    } else {
-      TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
-                      "Stream init internal error");
-    }
+  bool success = false;
+  std::string error_str;
+  if (!compiler_channel_filter_->Send(
+      new PpapiMsg_PnaclTranslatorCompileInit(
+          num_threads_, compiler_output_files, args, &success, &error_str))) {
+    TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
+                    "Compile stream init failed: "
+                    "reply not received from PNaCl translator "
+                    "(it probably crashed)");
+    return;
+  }
+  if (!success) {
+    TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
+                    std::string("Stream init failed: ") + error_str);
     return;
   }
   PLUGIN_PRINTF(("PnaclCoordinator: StreamInit successful\n"));
@@ -318,50 +290,48 @@ void PnaclTranslateThread::DoCompile() {
                    ")\n",
                    done_, data_buffers_.size()));
     if (data_buffers_.size() > 0) {
-      std::vector<char> data;
+      std::string data;
       data.swap(data_buffers_.front());
       data_buffers_.pop_front();
       NaClXMutexUnlock(&cond_mu_);
       PLUGIN_PRINTF(("StreamChunk\n"));
-      if (!compiler_subprocess_->InvokeSrpcMethod("StreamChunk", "C", &params,
-                                                  &data[0], data.size())) {
-        if (compiler_subprocess_->srpc_client()->GetLastError() !=
-            NACL_SRPC_RESULT_APP_ERROR) {
-          // If the error was reported by the translator, then we fall through
-          // and call StreamEnd, which returns a string describing the error,
-          // which we can then send to the Javascript console. Otherwise just
-          // fail here, since the translator has probably crashed or asserted.
-          TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
-                          "Compile stream chunk failed. "
-                          "The PNaCl translator has probably crashed.");
-          return;
-        }
-        break;
-      } else {
-        PLUGIN_PRINTF(("StreamChunk Successful\n"));
-        core->CallOnMainThread(
-            0,
-            coordinator_->GetCompileProgressCallback(data.size()),
-            PP_OK);
+
+      if (!compiler_channel_filter_->Send(
+              new PpapiMsg_PnaclTranslatorCompileChunk(data, &success))) {
+        TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
+                        "Compile stream chunk failed: "
+                        "reply not received from PNaCl translator "
+                        "(it probably crashed)");
+        return;
       }
+      if (!success) {
+        // If the error was reported by the translator, then we fall through
+        // and call PpapiMsg_PnaclTranslatorCompileEnd, which returns a string
+        // describing the error, which we can then send to the Javascript
+        // console.
+        break;
+      }
+      PLUGIN_PRINTF(("StreamChunk Successful\n"));
+      core->CallOnMainThread(
+          0,
+          coordinator_->GetCompileProgressCallback(data.size()),
+          PP_OK);
     } else {
       NaClXMutexUnlock(&cond_mu_);
     }
   }
   PLUGIN_PRINTF(("PnaclTranslateThread done with chunks\n"));
   // Finish llc.
-  if (!compiler_subprocess_->InvokeSrpcMethod("StreamEnd", std::string(),
-                                              &params)) {
-    PLUGIN_PRINTF(("PnaclTranslateThread StreamEnd failed\n"));
-    if (compiler_subprocess_->srpc_client()->GetLastError() ==
-        NACL_SRPC_RESULT_APP_ERROR) {
-      // The error string is only present if the error was sent back from llc.
-      TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
-                      params.outs()[3]->arrays.str);
-    } else {
-      TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
-                      "Compile StreamEnd internal error");
-    }
+  if (!compiler_channel_filter_->Send(
+          new PpapiMsg_PnaclTranslatorCompileEnd(&success, &error_str))) {
+    TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL,
+                    "Compile stream end failed: "
+                    "reply not received from PNaCl translator "
+                    "(it probably crashed)");
+    return;
+  }
+  if (!success) {
+    TranslateFailed(PP_NACL_ERROR_PNACL_LLC_INTERNAL, error_str);
     return;
   }
   compile_time_ = NaClGetTimeOfDayMicroseconds() - do_compile_start_time;
@@ -409,11 +379,13 @@ void PnaclTranslateThread::DoLink() {
   }
 
   ppapi::proxy::SerializedHandle nexe_file =
-      GetHandleForSubprocess(nexe_file_, PP_FILEOPENFLAG_WRITE);
+      GetHandleForSubprocess(nexe_file_, PP_FILEOPENFLAG_WRITE,
+                             ld_channel_peer_pid_);
   std::vector<ppapi::proxy::SerializedHandle> ld_input_files;
   for (TempFile* obj_file : *obj_files_) {
     ld_input_files.push_back(
-        GetHandleForSubprocess(obj_file, PP_FILEOPENFLAG_READ));
+        GetHandleForSubprocess(obj_file, PP_FILEOPENFLAG_READ,
+                               ld_channel_peer_pid_));
   }
 
   int64_t link_start_time = NaClGetTimeOfDayMicroseconds();

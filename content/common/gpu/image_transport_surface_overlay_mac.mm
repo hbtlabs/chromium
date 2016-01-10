@@ -206,9 +206,6 @@ class ImageTransportSurfaceOverlayMac::OverlayPlane {
       return;
     [ca_layer setContents:nil];
     [ca_layer removeFromSuperlayer];
-    [ca_layer setBorderWidth:0];
-    [ca_layer setBorderColor:CGColorGetConstantColor(kCGColorClear)];
-    [ca_layer setBackgroundColor:CGColorGetConstantColor(kCGColorClear)];
     ca_layer.reset();
   }
 
@@ -465,7 +462,7 @@ void ImageTransportSurfaceOverlayMac::DisplayFirstPendingSwapImmediately() {
   GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params params;
   if (use_remote_layer_api_) {
     params.ca_context_id = [ca_context_ contextId];
-  } else {
+  } else if (current_root_plane_.get()) {
     params.io_surface.reset(
         IOSurfaceCreateMachPort(current_root_plane_->io_surface));
   }

@@ -93,7 +93,6 @@
         '../../components/components.gyp:pref_registry',
         '../../components/components.gyp:proxy_config',
         '../../components/components.gyp:rappor',
-        '../../components/components.gyp:safe_browsing_db',
         '../../components/components.gyp:search',
         '../../components/components.gyp:search_engines',
         '../../components/components.gyp:security_interstitials_core',
@@ -497,6 +496,8 @@
         'browser/snapshots/snapshot_overlay.mm',
         'browser/snapshots/snapshots_util.h',
         'browser/snapshots/snapshots_util.mm',
+        'browser/ssl/ios_ssl_blocking_page.cc',
+        'browser/ssl/ios_ssl_blocking_page.h',
         'browser/suggestions/image_fetcher_impl.h',
         'browser/suggestions/image_fetcher_impl.mm',
         'browser/suggestions/suggestions_service_factory.h',
@@ -653,8 +654,11 @@
             'browser/safe_browsing/safe_browsing_service.h',
             'browser/safe_browsing/ui_manager.cc',
             'browser/safe_browsing/ui_manager.h',
+            'browser/safe_browsing/util.cc',
+            'browser/safe_browsing/util.h',
           ],
           'dependencies': [
+            '../../crypto/crypto.gyp:crypto',
             'ios_chrome_safe_browsing_proto',
           ],
         }]

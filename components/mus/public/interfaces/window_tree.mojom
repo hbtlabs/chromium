@@ -93,6 +93,14 @@ interface WindowTree {
             uint32 window_id,
             map<string, array<uint8>>? properties);
 
+  // Requests the WindowManager to create a new top level window. On success
+  // OnTopLevelCreated() is called with the WindowData for the new window. On
+  // failure OnChangeCompleted() is called.
+  // TODO(sky): this likely needs context, maybe in |properties|.
+  NewTopLevelWindow(uint32 change_id,
+                    uint32 window_id,
+                    map<string, array<uint8>> properties);
+
   // Deletes a window. This does not recurse. No hierarchy change notifications
   // are sent as a result of this. Only the connection that created the window
   // can delete it.
@@ -257,7 +265,10 @@ interface WindowTreeClient {
 
   // Sent when another connection is embedded in the Window this connection was
   // previously embedded in. See Embed() for more information.
-  OnUnembed();
+  OnUnembed(uint32 window);
+
+  // Called in response to NewTopLevelWindow() successfully completing.
+  OnTopLevelCreated(uint32 change_id, WindowData data);
 
   // Invoked when a window's bounds have changed.
   OnWindowBoundsChanged(uint32 window,
@@ -274,9 +285,14 @@ interface WindowTreeClient {
   OnTransientWindowRemoved(uint32 window_id,
                            uint32 transient_window_id);
 
-  // Invoked when the viewport metrics for the window have changed.
-  // Clients are expected to propagate this to the window tree.
-  OnWindowViewportMetricsChanged(ViewportMetrics old_metrics,
+  // Invoked when the viewport metrics for the specified windows have changed.
+  // This is only sent for the roots, not for every window, it is expected
+  // clients propagate this to the tree.
+  // TODO(sky): rather than passing viewportmetrics like this, perhaps each
+  // window should know the display it is on, and the viewportmetrics of the
+  // display may change.
+  OnWindowViewportMetricsChanged(array<uint32> window_ids,
+                                 ViewportMetrics old_metrics,
                                  ViewportMetrics new_metrics);
 
   // Invoked when a change is done to the hierarchy. A value of 0 is used to
@@ -361,6 +377,9 @@ interface WindowManagerInternal {
                 uint32 window_id,
                 string name,
                 array<uint8>? value);
+  // Asks the WindowManager to create a new window.
+  WmCreateTopLevelWindow(uint32 change_id,
+                         map<string, array<uint8>> properties);
 };
 
 // This interface is only used as an associated interface and is associated
@@ -372,4 +391,8 @@ interface WindowManagerInternalClient {
   // Calls WindowTreeClient::RequestClose() on the embedded app at the
   // specified window.
   WmRequestClose(uint32 window_id);
+
+  // Response from WmCreateTopLevelWindow() informing the client of the id for
+  // the new window.
+  OnWmCreatedTopLevelWindow(uint32 change_id, uint32 window_id);
 };

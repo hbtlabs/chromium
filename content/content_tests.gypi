@@ -657,6 +657,7 @@
       'common/discardable_shared_memory_heap_unittest.cc',
       'common/dom_storage/dom_storage_map_unittest.cc',
       'common/dwrite_font_platform_win_unittest.cc',
+      'common/experiments/api_key_unittest.cc',
       'common/fileapi/file_system_util_unittest.cc',
       'common/font_warmup_win_unittest.cc',
       'common/gpu/client/gpu_memory_buffer_impl_shared_memory_unittest.cc',
@@ -666,6 +667,7 @@
       'common/gpu/gpu_channel_unittest.cc',
       'common/host_discardable_shared_memory_manager_unittest.cc',
       'common/host_shared_bitmap_manager_unittest.cc',
+      'common/id_type_unittest.cc',
       'common/indexed_db/indexed_db_key_unittest.cc',
       'common/input/gesture_event_stream_validator_unittest.cc',
       'common/input/input_param_traits_unittest.cc',
@@ -764,6 +766,7 @@
       'browser/renderer_host/p2p/socket_host_unittest.cc',
       'renderer/media/audio_repetition_detector_unittest.cc',
       'renderer/media/audio_track_recorder_unittest.cc',
+      'renderer/media/canvas_capture_handler_unittest.cc',
       'renderer/media/html_video_element_capturer_source_unittest.cc',
       'renderer/media/media_recorder_handler_unittest.cc',
       'renderer/media/media_stream_audio_processor_unittest.cc',
@@ -1282,6 +1285,13 @@
                 '../third_party/libvpx_new/libvpx.gyp:libvpx_new',
               ],
             }],
+            ['chromecast == 1', {
+              'sources!': [
+                'renderer/media/audio_track_recorder_unittest.cc',
+                'renderer/media/media_recorder_handler_unittest.cc',
+                'renderer/media/video_track_recorder_unittest.cc',
+              ],
+            }],
             # Avoid windows due to non-availability of cursor resources in test.
             ['OS != "linux"', {
               'sources!': [
@@ -1500,6 +1510,7 @@
               ],
               'dependencies': [
                 '<(DEPTH)/content/app/strings/content_strings.gyp:content_strings',
+                '<(DEPTH)/media/media.gyp:media_features',
                 '<(DEPTH)/net/net.gyp:net_resources',
                 '<(DEPTH)/third_party/WebKit/public/blink_resources.gyp:blink_resources',
                 '<(DEPTH)/third_party/iaccessible2/iaccessible2.gyp:iaccessible2',

@@ -49,8 +49,12 @@ class WindowTreeConnection {
       CreateType create_type,
       WindowManagerDelegate* window_manager_delegate);
 
+  // Sets whether this is deleted when there are no roots. The default is to
+  // delete when there are no roots.
+  virtual void SetDeleteOnNoRoots(bool value) = 0;
+
   // Returns the root of this connection.
-  virtual Window* GetRoot() = 0;
+  virtual const std::set<Window*>& GetRoots() = 0;
 
   // Returns a Window known to this connection.
   virtual Window* GetWindowById(Id id) = 0;
@@ -63,6 +67,8 @@ class WindowTreeConnection {
   // Windows are initially hidden, use SetVisible(true) to show.
   Window* NewWindow() { return NewWindow(nullptr); }
   virtual Window* NewWindow(
+      const std::map<std::string, std::vector<uint8_t>>* properties) = 0;
+  virtual Window* NewTopLevelWindow(
       const std::map<std::string, std::vector<uint8_t>>* properties) = 0;
 
   // Returns true if ACCESS_POLICY_EMBED_ROOT was specified.
