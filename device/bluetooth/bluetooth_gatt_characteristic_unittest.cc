@@ -37,8 +37,8 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     SimulateGattServicesDiscovered(device_, services);
     ASSERT_EQ(1u, device_->GetGattServices().size());
     service_ = device_->GetGattServices()[0];
-    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
-    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
+    SimulateGattCharacteristic(service_, uuid, /* properties: NOTIFY */ 0x10);
+    SimulateGattCharacteristic(service_, uuid, /* properties: NOTIFY */ 0x10);
     ASSERT_EQ(2u, service_->GetCharacteristics().size());
     characteristic1_ = service_->GetCharacteristics()[0];
     characteristic2_ = service_->GetCharacteristics()[1];
