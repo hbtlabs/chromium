@@ -578,7 +578,6 @@ class Fakes {
     static class FakeBluetoothGattDescriptor extends Wrappers.BluetoothGattDescriptorWrapper {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
-        static FakeBluetoothGattDescriptor sRememberedDescriptor;
 
         public FakeBluetoothGattDescriptor(
                 FakeBluetoothGattCharacteristic characteristic, UUID uuid) {
