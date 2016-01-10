@@ -701,4 +701,13 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_Multiple) {
 }
 #endif  // defined(OS_ANDROID)
 
+#if defined(OS_ANDROID)
+TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_FindNone) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  EXPECT_EQ(0u, characteristic1_->GetDescriptors().size());
+}
+#endif  // defined(OS_ANDROID)
+
+
 }  // namespace device
