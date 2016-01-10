@@ -613,7 +613,7 @@ class Fakes {
 
         // Implements BluetoothTestAndroid::RememberDescriptorForSubsequentAction.
         @CalledByNative("FakeBluetoothGattDescriptor")
-        private static void RememberDescriptorForSubsequentAction(
+        private static void rememberDescriptorForSubsequentAction(
                 ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
             sRememberedDescriptor = (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
         }
