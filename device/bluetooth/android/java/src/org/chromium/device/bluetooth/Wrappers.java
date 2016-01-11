@@ -377,13 +377,6 @@ class Wrappers {
         }
 
         @Override
-        public void onDescriptorWrite(
-                BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
-            mWrapperCallback.onDescriptorWrite(
-                    mDeviceWrapper.mDescriptorsToWrappers.get(descriptor), status);
-        }
-
-        @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             mWrapperCallback.onConnectionStateChange(status, newState);
         }
@@ -411,8 +404,6 @@ class Wrappers {
                 BluetoothGattCharacteristicWrapper characteristic, int status);
         public abstract void onCharacteristicWrite(
                 BluetoothGattCharacteristicWrapper characteristic, int status);
-        public abstract void onDescriptorWrite(
-                BluetoothGattDescriptorWrapper descriptor, int status);
         public abstract void onConnectionStateChange(int status, int newState);
         public abstract void onServicesDiscovered(int status);
     }
@@ -432,7 +423,6 @@ class Wrappers {
 
         public List<BluetoothGattCharacteristicWrapper> getCharacteristics() {
             List<BluetoothGattCharacteristic> characteristics = mService.getCharacteristics();
-
             ArrayList<BluetoothGattCharacteristicWrapper> characteristicsWrapped =
                     new ArrayList<BluetoothGattCharacteristicWrapper>(characteristics.size());
             for (BluetoothGattCharacteristic characteristic : characteristics) {
