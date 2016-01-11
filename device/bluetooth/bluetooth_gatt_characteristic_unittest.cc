@@ -37,8 +37,8 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     SimulateGattServicesDiscovered(device_, services);
     ASSERT_EQ(1u, device_->GetGattServices().size());
     service_ = device_->GetGattServices()[0];
-    SimulateGattCharacteristic(service_, uuid, /* properties: NOTIFY */ 0x10);
-    SimulateGattCharacteristic(service_, uuid, /* properties: NOTIFY */ 0x10);
+    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
+    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
     ASSERT_EQ(2u, service_->GetCharacteristics().size());
     characteristic1_ = service_->GetCharacteristics()[0];
     characteristic2_ = service_->GetCharacteristics()[1];
@@ -645,6 +645,24 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
   EXPECT_EQ(characteristic1_->GetIdentifier(),
             notify_sessions_[0]->GetCharacteristicIdentifier());
   EXPECT_TRUE(notify_sessions_[0]->IsActive());
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// StartNotifySession fails if characteristic doesn't have Notify or Indicate
+// property.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  characteristic1_->StartNotifySession(
+      GetNotifyCallback(Call::NOT_EXPECTED),
+      GetGattErrorCallback(Call::EXPECTED));
+  EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
+
+  // The expected error callback is asynchronous:
+  EXPECT_EQ(0, error_callback_count_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, error_callback_count_);
 }
 #endif  // defined(OS_ANDROID)
 
