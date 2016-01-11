@@ -652,6 +652,12 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
   EXPECT_EQ(characteristic1_->GetIdentifier(),
             notify_sessions_[0]->GetCharacteristicIdentifier());
   EXPECT_TRUE(notify_sessions_[0]->IsActive());
+
+  // Test that remote config descriptor was written to.
+  EXPECT_EQ(1, gatt_write_descriptor_attempts_);
+  uint8_t values[] = {0x1, 0x0};
+  std::vector<uint8_t> written_vector(values, values + arraysize(values));
+  EXPECT_EQ(written_vector, last_write_value_);
 }
 #endif  // defined(OS_ANDROID)
 
