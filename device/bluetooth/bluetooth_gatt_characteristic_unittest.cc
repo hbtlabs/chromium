@@ -24,7 +24,8 @@ namespace device {
 class BluetoothGattCharacteristicTest : public BluetoothTest {
  public:
   // Creates adapter_, device_, service_, characteristic1_, & characteristic2_.
-  void FakeCharacteristicBoilerplate() {
+  // |properties| will be used for each characteristic.
+  void FakeCharacteristicBoilerplate(int properties = 0) {
     InitWithFakeAdapter();
     StartLowEnergyDiscoverySession();
     device_ = DiscoverLowEnergyDevice(3);
@@ -37,8 +38,8 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     SimulateGattServicesDiscovered(device_, services);
     ASSERT_EQ(1u, device_->GetGattServices().size());
     service_ = device_->GetGattServices()[0];
-    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
-    SimulateGattCharacteristic(service_, uuid, /* properties */ 0);
+    SimulateGattCharacteristic(service_, uuid, properties);
+    SimulateGattCharacteristic(service_, uuid, properties);
     ASSERT_EQ(2u, service_->GetCharacteristics().size());
     characteristic1_ = service_->GetCharacteristics()[0];
     characteristic2_ = service_->GetCharacteristics()[1];
@@ -669,22 +670,11 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
 // StartNotifySession fails if the characteristic is missing the Client
 // Characteristic Configuration descriptor.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoConfigDescriptor) {
-  InitWithFakeAdapter();
-  StartLowEnergyDiscoverySession();
-  BluetoothDevice* device = DiscoverLowEnergyDevice(3);
-  device->CreateGattConnection(GetGattConnectionCallback(Call::EXPECTED),
-                               GetConnectErrorCallback(Call::NOT_EXPECTED));
-  SimulateGattConnection(device);
-  std::vector<std::string> services;
-  std::string uuid("00000000-0000-1000-8000-00805f9b34fb");
-  services.push_back(uuid);
-  SimulateGattServicesDiscovered(device, services);
-  ASSERT_EQ(1u, device->GetGattServices().size());
-  BluetoothGattService* service = device->GetGattServices()[0];
-  SimulateGattCharacteristic(service, uuid, /* properties: NOTIFY */ 0x10);
-  ASSERT_EQ(1u, service->GetCharacteristics().size());
-  service->GetCharacteristics()[0]->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
-                                     GetGattErrorCallback(Call::EXPECTED));
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+
+  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                       GetGattErrorCallback(Call::EXPECTED));
   EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
 
   // The expected error callback is asynchronous:
