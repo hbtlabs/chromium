@@ -631,7 +631,13 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
 #if defined(OS_ANDROID)
 // Tests StartNotifySession success.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+  SimulateGattDescriptor(
+      characteristic1_,
+      /* Client Characteristic Configuration descriptor's standard UUID: */
+      "00002902-0000-1000-8000-00805F9B34FB");
+  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
 
   characteristic1_->StartNotifySession(
       GetNotifyCallback(Call::EXPECTED),
@@ -705,7 +711,13 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_SynchronousError) {
 #if defined(OS_ANDROID)
 // Tests multiple StartNotifySession success.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_Multiple) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+  SimulateGattDescriptor(
+      characteristic1_,
+      /* Client Characteristic Configuration descriptor's standard UUID: */
+      "00002902-0000-1000-8000-00805F9B34FB");
+  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
 
   characteristic1_->StartNotifySession(
       GetNotifyCallback(Call::EXPECTED),
