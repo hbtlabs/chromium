@@ -591,6 +591,7 @@ class Fakes {
         final FakeBluetoothGattCharacteristic mCharacteristic;
         final UUID mUuid;
         byte[] mValue;
+        static FakeBluetoothGattDescriptor sRememberedDescriptor;
 
         public FakeBluetoothGattDescriptor(
                 FakeBluetoothGattCharacteristic characteristic, UUID uuid) {
@@ -598,6 +599,28 @@ class Fakes {
             mCharacteristic = characteristic;
             mUuid = uuid;
             mValue = new byte[0];
+        }
+
+        // Implements BluetoothTestAndroid::RememberDescriptorForSubsequentAction.
+        @CalledByNative("FakeBluetoothGattDescriptor")
+        private static void rememberDescriptorForSubsequentAction(
+                ChromeBluetoothRemoteGattDescriptor chromeDescriptor) {
+            sRememberedDescriptor = (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+        }
+
+        // Simulate a value being written to a descriptor.
+        @CalledByNative("FakeBluetoothGattDescriptor")
+        private static void valueWrite(
+                ChromeBluetoothRemoteGattDescriptor chromeDescriptor, int status) {
+            if (chromeDescriptor == null && sRememberedDescriptor == null)
+                throw new IllegalArgumentException("rememberDescriptor wasn't called previously.");
+
+            FakeBluetoothGattDescriptor fakeDescriptor = (chromeDescriptor == null)
+                    ? sRememberedDescriptor
+                    : (FakeBluetoothGattDescriptor) chromeDescriptor.mDescriptor;
+
+            fakeDescriptor.mCharacteristic.mService.mDevice.mGattCallback.onDescriptorWrite(
+                    fakeDescriptor, status);
         }
 
         // Cause subsequent value write of a descriptor to fail synchronously.

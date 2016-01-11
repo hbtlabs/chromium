@@ -176,6 +176,25 @@ class BluetoothTestBase : public testing::Test {
       BluetoothGattCharacteristic* characteristic,
       const std::string& uuid) {}
 
+  // Remembers |descriptor|'s platform specific object to be used in a
+  // subsequent call to methods such as SimulateGattDescriptorRead that
+  // accept a nullptr value to select this remembered descriptor. This
+  // enables tests where the platform attempts to reference descriptor
+  // objects after the Chrome objects have been deleted, e.g. with DeleteDevice.
+  virtual void RememberDescriptorForSubsequentAction(
+      BluetoothGattDescriptor* descriptor) {}
+
+  // Simulates a Descriptor Write operation succeeding, returning |value|.
+  // If |descriptor| is null, acts upon the descriptor provided to
+  // RememberDescriptorForSubsequentAction.
+  virtual void SimulateGattDescriptorWrite(
+      BluetoothGattDescriptor* descriptor) {}
+
+  // Simulates a Descriptor Write operation failing with a GattErrorCode.
+  virtual void SimulateGattDescriptorWriteError(
+      BluetoothGattDescriptor* descriptor,
+      BluetoothGattService::GattErrorCode) {}
+
   // Simulates a Descriptor Write operation failing synchronously once for
   // an unknown reason.
   virtual void SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
