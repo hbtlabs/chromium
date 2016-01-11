@@ -112,6 +112,15 @@ final class ChromeBluetoothRemoteGattCharacteristic {
     // Implements BluetoothRemoteGattCharacteristicAndroid::StartNotifySession.
     @CalledByNative
     private boolean startNotifySession() {
+        // Verify properties first, to provide clearest error log.
+        int properties = mCharacteristic.getProperties();
+        boolean hasNotify = (properties & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0;
+        boolean hasIndicate = (properties & BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0;
+        if (!hasNotify && !hasIndicate) {
+            Log.v(TAG, "startNotifySession failed! Characteristic needs NOTIFY or INDICATE.");
+            return false;
+        }
+
         if (!mChromeDevice.mBluetoothGatt.setCharacteristicNotification(mCharacteristic, true)) {
             Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
             return false;
@@ -120,29 +129,26 @@ final class ChromeBluetoothRemoteGattCharacteristic {
         Wrappers.BluetoothGattDescriptorWrapper clientCharacteristicConfigurationDescriptor =
                 mCharacteristic.getDescriptor(UUID.fromString(
                         "00002902-0000-1000-8000-00805F9B34FB" /* Config's standard UUID*/));
-
         if (clientCharacteristicConfigurationDescriptor == null) {
             Log.v(TAG, "startNotifySession config descriptor failed!");
             return false;
         }
-        if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
+
+        if (hasNotify) {
             if (!clientCharacteristicConfigurationDescriptor.setValue(
                         BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
                 Log.v(TAG, "startNotifySession NOTIFY failed!");
                 return false;
             }
             Log.v(TAG, "startNotifySession NOTIFY.");
-        } else if ((mCharacteristic.getProperties() & BluetoothGattCharacteristic.PROPERTY_INDICATE)
-                != 0) {
+        } else {
+            assert(hasIndicate);
             if (!clientCharacteristicConfigurationDescriptor.setValue(
                         BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
                 Log.v(TAG, "startNotifySession INDICATE failed!");
                 return false;
             }
             Log.v(TAG, "startNotifySession INDICATE.");
-        } else {
-            Log.v(TAG, "startNotifySession failed! Characteristic needs NOTIFY or INDICATE.");
-            return false;
         }
 
         if (!mChromeDevice.mBluetoothGatt.writeDescriptor(

@@ -135,16 +135,6 @@ bool BluetoothRemoteGattCharacteristicAndroid::UpdateValue(
 void BluetoothRemoteGattCharacteristicAndroid::StartNotifySession(
     const NotifySessionCallback& callback,
     const ErrorCallback& error_callback) {
-  if (!(GetProperties() & (PROPERTY_NOTIFY | PROPERTY_INDICATE))) {
-    DVLOG(1) << "StartNotifySession not supported on characteristic lacking "
-                "Notify or Indicate properties.";
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(
-            error_callback,
-            BluetoothRemoteGattServiceAndroid::GATT_ERROR_NOT_SUPPORTED));
-  }
-
   if (Java_ChromeBluetoothRemoteGattCharacteristic_startNotifySession(
           AttachCurrentThread(), j_characteristic_.obj())) {
     // TODO(crbug.com/569664): Wait until descriptor write completes before
