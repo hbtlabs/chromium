@@ -422,7 +422,6 @@ class Wrappers {
 
         public List<BluetoothGattCharacteristicWrapper> getCharacteristics() {
             List<BluetoothGattCharacteristic> characteristics = mService.getCharacteristics();
-
             ArrayList<BluetoothGattCharacteristicWrapper> characteristicsWrapped =
                     new ArrayList<BluetoothGattCharacteristicWrapper>(characteristics.size());
             for (BluetoothGattCharacteristic characteristic : characteristics) {
