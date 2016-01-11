@@ -654,9 +654,37 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
-  characteristic1_->StartNotifySession(
-      GetNotifyCallback(Call::NOT_EXPECTED),
-      GetGattErrorCallback(Call::EXPECTED));
+  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                       GetGattErrorCallback(Call::EXPECTED));
+  EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
+
+  // The expected error callback is asynchronous:
+  EXPECT_EQ(0, error_callback_count_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, error_callback_count_);
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// StartNotifySession fails if the characteristic is missing the Client
+// Characteristic Configuration descriptor.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoConfigDescriptor) {
+  InitWithFakeAdapter();
+  StartLowEnergyDiscoverySession();
+  BluetoothDevice* device = DiscoverLowEnergyDevice(3);
+  device->CreateGattConnection(GetGattConnectionCallback(Call::EXPECTED),
+                               GetConnectErrorCallback(Call::NOT_EXPECTED));
+  SimulateGattConnection(device);
+  std::vector<std::string> services;
+  std::string uuid("00000000-0000-1000-8000-00805f9b34fb");
+  services.push_back(uuid);
+  SimulateGattServicesDiscovered(device, services);
+  ASSERT_EQ(1u, device->GetGattServices().size());
+  BluetoothGattService* service = device->GetGattServices()[0];
+  SimulateGattCharacteristic(service, uuid, /* properties: NOTIFY */ 0x10);
+  ASSERT_EQ(1u, service->GetCharacteristics().size());
+  service->GetCharacteristics()[0]->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                     GetGattErrorCallback(Call::EXPECTED));
   EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
 
   // The expected error callback is asynchronous:

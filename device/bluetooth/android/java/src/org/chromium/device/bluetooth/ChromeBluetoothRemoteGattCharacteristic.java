@@ -121,11 +121,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             return false;
         }
 
-        if (!mChromeDevice.mBluetoothGatt.setCharacteristicNotification(mCharacteristic, true)) {
-            Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
-            return false;
-        }
-
+        // Find config descriptor.
         Wrappers.BluetoothGattDescriptorWrapper clientCharacteristicConfigurationDescriptor =
                 mCharacteristic.getDescriptor(UUID.fromString(
                         "00002902-0000-1000-8000-00805F9B34FB" /* Config's standard UUID*/));
@@ -134,6 +130,13 @@ final class ChromeBluetoothRemoteGattCharacteristic {
             return false;
         }
 
+        // Request Android route onCharacteristicChanged notifications for this characteristic.
+        if (!mChromeDevice.mBluetoothGatt.setCharacteristicNotification(mCharacteristic, true)) {
+            Log.i(TAG, "startNotifySession setCharacteristicNotification failed.");
+            return false;
+        }
+
+        // Enable notification on remote device's characteristic:
         if (hasNotify) {
             if (!clientCharacteristicConfigurationDescriptor.setValue(
                         BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
