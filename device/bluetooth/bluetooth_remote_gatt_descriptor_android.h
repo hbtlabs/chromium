@@ -11,8 +11,6 @@
 
 namespace device {
 
-class BluetoothAdapterAndroid;
-
 // BluetoothRemoteGattDescriptorAndroid along with its owned Java class
 // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattDescriptor
 // implement BluetootGattDescriptor.
@@ -26,7 +24,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
   // The ChromeBluetoothRemoteGattDescriptor instance will hold a Java
   // reference to |bluetooth_gatt_descriptor_wrapper|.
   static scoped_ptr<BluetoothRemoteGattDescriptorAndroid> Create(
-      BluetoothAdapterAndroid* adapter,
       const std::string& instanceId,
       jobject /* BluetoothGattDescriptorWrapper */
       bluetooth_gatt_descriptor_wrapper,
@@ -54,12 +51,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattDescriptorAndroid
                              const ErrorCallback& error_callback) override;
 
  private:
-  BluetoothRemoteGattDescriptorAndroid(BluetoothAdapterAndroid* adapter,
-                                       const std::string& instanceId);
-
-  // The adapter associated with this service. It's ok to store a raw pointer
-  // here since |adapter_| indirectly owns this instance.
-  BluetoothAdapterAndroid* adapter_;
+  BluetoothRemoteGattDescriptorAndroid(const std::string& instanceId);
 
   // Java object
   // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattDescriptor.

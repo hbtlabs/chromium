@@ -168,6 +168,8 @@ final class ChromeBluetoothDevice {
                 @Override
                 public void run() {
                     if (mNativeBluetoothDeviceAndroid != 0) {
+                        // TODO(crbug.com/576906): Update or replace existing GATT objects if they
+                        //                         change after initial discovery.
                         for (Wrappers.BluetoothGattServiceWrapper service :
                                 mBluetoothGatt.getServices()) {
                             // Create an adapter unique service ID. getInstanceId only differs
