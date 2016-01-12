@@ -18,7 +18,8 @@ import org.chromium.base.annotations.JNINamespace;
 final class ChromeBluetoothRemoteGattDescriptor {
     private static final String TAG = "Bluetooth";
 
-    private long mNativeBluetoothRemoteGattDescriptorAndroid;
+    // TODO(scheib): Will need c++ pointer eventually:
+    //     private long mNativeBluetoothRemoteGattDescriptorAndroid;
     final Wrappers.BluetoothGattDescriptorWrapper mDescriptor;
     final ChromeBluetoothDevice mChromeDevice;
 
