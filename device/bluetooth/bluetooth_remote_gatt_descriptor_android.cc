@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "device/bluetooth/bluetooth_adapter_android.h"
 #include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothRemoteGattDescriptor_jni.h"
@@ -22,14 +21,13 @@ namespace device {
 // static
 scoped_ptr<BluetoothRemoteGattDescriptorAndroid>
 BluetoothRemoteGattDescriptorAndroid::Create(
-    BluetoothAdapterAndroid* adapter,
     const std::string& instance_id,
     jobject /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
     jobject /* chromeBluetoothDevice */
     chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattDescriptorAndroid> descriptor(
-      new BluetoothRemoteGattDescriptorAndroid(adapter, instance_id));
+      new BluetoothRemoteGattDescriptorAndroid(instance_id));
 
   descriptor->j_descriptor_.Reset(
       Java_ChromeBluetoothRemoteGattDescriptor_create(
@@ -110,8 +108,7 @@ void BluetoothRemoteGattDescriptorAndroid::WriteRemoteDescriptor(
 }
 
 BluetoothRemoteGattDescriptorAndroid::BluetoothRemoteGattDescriptorAndroid(
-    BluetoothAdapterAndroid* adapter,
     const std::string& instance_id)
-    : adapter_(adapter), instance_id_(instance_id) {}
+    : instance_id_(instance_id) {}
 
 }  // namespace device

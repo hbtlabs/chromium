@@ -741,8 +741,10 @@ TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_and_GetDescriptor) {
   EXPECT_EQ(c2_uuid2, characteristic2_->GetDescriptor(c2_id2)->GetUUID());
 
   // Multiple GetDescriptor calls for an ID return the same object:
-  EXPECT_EQ(characteristic1_->GetDescriptor(c1_id1)->GetUUID(),
-            characteristic1_->GetDescriptor(c1_id1)->GetUUID());
+  EXPECT_EQ(characteristic1_->GetDescriptor(c1_id1),
+            characteristic1_->GetDescriptor(c1_id1));
+  EXPECT_EQ(characteristic1_->GetDescriptor(c1_id1), // c1_id1 came from [0]:
+            characteristic1_->GetDescriptors()[0]);
 
   // Characteristic 1 has descriptor uuids 1 and 2 (we don't know the order).
   EXPECT_TRUE(c1_uuid1 == uuid1 || c1_uuid2 == uuid1);
