@@ -201,7 +201,9 @@ void BluetoothTestAndroid::SimulateGattCharacteristicChanged(
   JNIEnv* env = base::android::AttachCurrentThread();
 
   Java_FakeBluetoothGattCharacteristic_valueChanged(
-      env, characteristic_android->GetJavaObject().obj(),
+      env,
+      characteristic_android ? characteristic_android->GetJavaObject().obj()
+                             : nullptr,
       base::android::ToJavaByteArray(env, value).obj());
 }
 

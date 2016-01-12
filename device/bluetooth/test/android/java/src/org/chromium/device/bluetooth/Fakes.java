@@ -458,8 +458,13 @@ class Fakes {
         @CalledByNative("FakeBluetoothGattCharacteristic")
         private static void valueChanged(
                 ChromeBluetoothRemoteGattCharacteristic chromeCharacteristic, byte[] value) {
-            FakeBluetoothGattCharacteristic fakeCharacteristic =
-                    (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
+            if (chromeCharacteristic == null && sRememberedCharacteristic == null)
+                throw new IllegalArgumentException(
+                        "rememberCharacteristic wasn't called previously.");
+
+            FakeBluetoothGattCharacteristic fakeCharacteristic = (chromeCharacteristic == null)
+                    ? sRememberedCharacteristic
+                    : (FakeBluetoothGattCharacteristic) chromeCharacteristic.mCharacteristic;
 
             fakeCharacteristic.mValue = value;
             fakeCharacteristic.mService.mDevice.mGattCallback.onCharacteristicChanged(
