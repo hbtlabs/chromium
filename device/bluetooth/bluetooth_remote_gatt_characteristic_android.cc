@@ -252,8 +252,8 @@ void BluetoothRemoteGattCharacteristicAndroid::CreateGattRemoteDescriptor(
     const JavaParamRef<jstring>& instanceId,
     const JavaParamRef<jobject>& /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
-    const JavaParamRef<
-        jobject>& /* chromeBluetoothDevice */ chrome_bluetooth_device) {
+    const JavaParamRef<jobject>& /* ChromeBluetoothDevice */
+    chrome_bluetooth_device) {
   std::string instanceIdString =
       base::android::ConvertJavaStringToUTF8(env, instanceId);
 
