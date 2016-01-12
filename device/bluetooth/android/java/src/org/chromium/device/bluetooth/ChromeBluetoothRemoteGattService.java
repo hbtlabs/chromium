@@ -64,9 +64,10 @@ final class ChromeBluetoothRemoteGattService {
         return mService.getUuid().toString();
     }
 
-    // Implements BluetoothRemoteGattServiceAndroid::EnsureCharacteristicsCreated
+    // Creates objects for all characteristics. Designed only to be called by
+    // BluetoothRemoteGattServiceAndroid::EnsureCharacteristicsCreated.
     @CalledByNative
-    private void ensureCharacteristicsCreated() {
+    private void createCharacteristics() {
         List<Wrappers.BluetoothGattCharacteristicWrapper> characteristics =
                 mService.getCharacteristics();
         for (Wrappers.BluetoothGattCharacteristicWrapper characteristic : characteristics) {
