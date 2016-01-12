@@ -59,12 +59,12 @@ final class ChromeBluetoothRemoteGattDescriptor {
     private static ChromeBluetoothRemoteGattDescriptor create(
             // TODO(scheib): Will need c++ pointer eventually:
             //    long nativeBluetoothRemoteGattDescriptorAndroid,
-            Object bluetoothGattDescriptorWrapper, Object chromeDevice) {
+            Object bluetoothGattDescriptorWrapper, ChromeBluetoothDevice chromeDevice) {
         return new ChromeBluetoothRemoteGattDescriptor(
                 // TODO(scheib): Will need c++ pointer eventually:
                 //    nativeBluetoothRemoteGattDescriptorAndroid,
                 (Wrappers.BluetoothGattDescriptorWrapper) bluetoothGattDescriptorWrapper,
-                (ChromeBluetoothDevice) chromeDevice);
+                chromeDevice);
     }
 
     // Implements BluetoothRemoteGattDescriptorAndroid::GetUUID.
