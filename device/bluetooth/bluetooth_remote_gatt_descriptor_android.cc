@@ -33,7 +33,9 @@ BluetoothRemoteGattDescriptorAndroid::Create(
 
   descriptor->j_descriptor_.Reset(
       Java_ChromeBluetoothRemoteGattDescriptor_create(
-          AttachCurrentThread(), reinterpret_cast<intptr_t>(descriptor.get()),
+          AttachCurrentThread(),
+          // TODO(scheib) Will eventually need to pass c++ pointer:
+          //     reinterpret_cast<intptr_t>(descriptor.get()),
           bluetooth_gatt_descriptor_wrapper, chrome_bluetooth_device));
 
   return descriptor;
