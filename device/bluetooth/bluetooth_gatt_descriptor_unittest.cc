@@ -23,7 +23,7 @@ class BluetoothGattDescriptorTest : public BluetoothTest {};
 TEST_F(BluetoothGattDescriptorTest, GetIdentifier) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
-  // 2 devices to verify unique IDs across them.
+  // 2 devices to verify that descriptors on them have distinct IDs.
   BluetoothDevice* device1 = DiscoverLowEnergyDevice(3);
   BluetoothDevice* device2 = DiscoverLowEnergyDevice(4);
   device1->CreateGattConnection(GetGattConnectionCallback(Call::EXPECTED),
@@ -59,6 +59,8 @@ TEST_F(BluetoothGattDescriptorTest, GetIdentifier) {
   BluetoothGattCharacteristic* char5 = service3->GetCharacteristics()[0];
   BluetoothGattCharacteristic* char6 = service3->GetCharacteristics()[1];
   // 6 descriptors (same UUID), 1 on each characteristic
+  // TODO(crbug.com/576900) Test multiple descriptors with same UUID on one
+  // characteristic.
   SimulateGattDescriptor(char1, uuid);
   SimulateGattDescriptor(char2, uuid);
   SimulateGattDescriptor(char3, uuid);

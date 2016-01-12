@@ -196,6 +196,7 @@ final class ChromeBluetoothRemoteGattCharacteristic {
                 mCharacteristic.getDescriptors();
         for (Wrappers.BluetoothGattDescriptorWrapper descriptor : descriptors) {
             // Create an adapter unique descriptor ID.
+            // TODO(crbug.com/576900) Unique descriptorInstanceId duplicate UUID values.
             String descriptorInstanceId = mInstanceId + "/" + descriptor.getUuid().toString();
             nativeCreateGattRemoteDescriptor(mNativeBluetoothRemoteGattCharacteristicAndroid,
                     descriptorInstanceId, descriptor, mChromeDevice);

@@ -87,7 +87,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
                const base::android::JavaParamRef<jobject>& jcaller,
                int32_t status);
 
-  // Creates a Bluetooth GATT descriptor object and adds it to |descriptors_|
+  // Creates a Bluetooth GATT descriptor object and adds it to |descriptors_|,
   // DCHECKing that it has not already been created.
   void CreateGattRemoteDescriptor(
       JNIEnv* env,
