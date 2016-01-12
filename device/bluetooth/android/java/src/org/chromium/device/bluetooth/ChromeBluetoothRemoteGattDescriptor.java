@@ -18,14 +18,19 @@ import org.chromium.base.annotations.JNINamespace;
 final class ChromeBluetoothRemoteGattDescriptor {
     private static final String TAG = "Bluetooth";
 
-    private long mNativeBluetoothRemoteGattDescriptorAndroid;
+    // TODO(scheib): Will need c++ pointer eventually:
+    //     private long mNativeBluetoothRemoteGattDescriptorAndroid;
     final Wrappers.BluetoothGattDescriptorWrapper mDescriptor;
     final ChromeBluetoothDevice mChromeDevice;
 
-    private ChromeBluetoothRemoteGattDescriptor(long nativeBluetoothRemoteGattDescriptorAndroid,
+    private ChromeBluetoothRemoteGattDescriptor(
+            // TODO(scheib): Will need c++ pointer eventually:
+            //    long nativeBluetoothRemoteGattDescriptorAndroid,
             Wrappers.BluetoothGattDescriptorWrapper descriptorWrapper,
             ChromeBluetoothDevice chromeDevice) {
-        mNativeBluetoothRemoteGattDescriptorAndroid = nativeBluetoothRemoteGattDescriptorAndroid;
+        // TODO(scheib): Will need c++ pointer eventually:
+        //    mNativeBluetoothRemoteGattDescriptorAndroid =
+        //    nativeBluetoothRemoteGattDescriptorAndroid;
         mDescriptor = descriptorWrapper;
         mChromeDevice = chromeDevice;
 
@@ -40,7 +45,8 @@ final class ChromeBluetoothRemoteGattDescriptor {
     @CalledByNative
     private void onBluetoothRemoteGattDescriptorAndroidDestruction() {
         Log.v(TAG, "ChromeBluetoothRemoteGattDescriptor Destroyed.");
-        mNativeBluetoothRemoteGattDescriptorAndroid = 0;
+        // TODO(scheib): Will need c++ pointer eventually:
+        //    mNativeBluetoothRemoteGattDescriptorAndroid = 0;
         mChromeDevice.mWrapperToChromeDescriptorsMap.remove(mDescriptor);
     }
 
@@ -51,9 +57,12 @@ final class ChromeBluetoothRemoteGattDescriptor {
     // TODO(http://crbug.com/505554): Replace 'Object' with specific type when JNI fixed.
     @CalledByNative
     private static ChromeBluetoothRemoteGattDescriptor create(
-            long nativeBluetoothRemoteGattDescriptorAndroid, Object bluetoothGattDescriptorWrapper,
-            Object chromeDevice) {
-        return new ChromeBluetoothRemoteGattDescriptor(nativeBluetoothRemoteGattDescriptorAndroid,
+            // TODO(scheib): Will need c++ pointer eventually:
+            //    long nativeBluetoothRemoteGattDescriptorAndroid,
+            Object bluetoothGattDescriptorWrapper, Object chromeDevice) {
+        return new ChromeBluetoothRemoteGattDescriptor(
+                // TODO(scheib): Will need c++ pointer eventually:
+                //    nativeBluetoothRemoteGattDescriptorAndroid,
                 (Wrappers.BluetoothGattDescriptorWrapper) bluetoothGattDescriptorWrapper,
                 (ChromeBluetoothDevice) chromeDevice);
     }
