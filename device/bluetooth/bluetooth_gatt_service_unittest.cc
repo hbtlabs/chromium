@@ -138,9 +138,12 @@ TEST_F(BluetoothGattServiceTest, GetCharacteristics_and_GetCharacteristic) {
   EXPECT_EQ(char_uuid3, service->GetCharacteristic(char_id3)->GetUUID());
   EXPECT_EQ(char_uuid4, service->GetCharacteristic(char_id4)->GetUUID());
 
-  // Multiple GetCharacteristic calls for an ID return the same object:
-  EXPECT_EQ(service->GetCharacteristic(char_id1)->GetUUID(),
-            service->GetCharacteristic(char_id1)->GetUUID());
+  // GetCharacteristics & GetCharacteristic return the same object for the same
+  // ID:
+  EXPECT_EQ(service->GetCharacteristics()[0],
+            service->GetCharacteristic(char_id1));
+  EXPECT_EQ(service->GetCharacteristic(char_id1),
+            service->GetCharacteristic(char_id1));
 }
 #endif  // defined(OS_ANDROID)
 
