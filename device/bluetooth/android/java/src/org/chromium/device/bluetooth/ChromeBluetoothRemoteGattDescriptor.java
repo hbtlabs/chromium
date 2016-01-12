@@ -72,7 +72,4 @@ final class ChromeBluetoothRemoteGattDescriptor {
     private String getUUID() {
         return mDescriptor.getUuid().toString();
     }
-
-    // ---------------------------------------------------------------------------------------------
-    // BluetoothAdapterDevice C++ methods declared for access from java:
 }
