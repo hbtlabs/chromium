@@ -207,7 +207,7 @@ void BluetoothRemoteGattServiceAndroid::EnsureCharacteristicsCreated() const {
     return;
 
   // Java call
-  Java_ChromeBluetoothRemoteGattService_ensureCharacteristicsCreated(
+  Java_ChromeBluetoothRemoteGattService_createCharacteristics(
       AttachCurrentThread(), j_service_.obj());
 }
 
