@@ -79,7 +79,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceAndroid
                   const ErrorCallback& error_callback) override;
 
   // Creates a Bluetooth GATT characteristic object and adds it to
-  // |characteristics_| DCHECKing that it has not already been created.
+  // |characteristics_|, DCHECKing that it has not already been created.
   void CreateGattRemoteCharacteristic(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& caller,
