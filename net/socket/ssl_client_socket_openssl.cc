@@ -35,9 +35,9 @@
 #include "crypto/scoped_openssl_types.h"
 #include "net/base/ip_address_number.h"
 #include "net/base/net_errors.h"
-#include "net/cert/cert_policy_enforcer.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/x509_certificate_net_log_param.h"
 #include "net/cert/x509_util_openssl.h"
@@ -541,7 +541,7 @@ SSLClientSocketOpenSSL::SSLClientSocketOpenSSL(
       ssl_failure_state_(SSL_FAILURE_NONE),
       signature_result_(kNoPendingResult),
       transport_security_state_(context.transport_security_state),
-      policy_enforcer_(context.cert_policy_enforcer),
+      policy_enforcer_(context.ct_policy_enforcer),
       net_log_(transport_->socket()->NetLog()),
       weak_factory_(this) {
   DCHECK(cert_verifier_);
@@ -986,13 +986,7 @@ int SSLClientSocketOpenSSL::Init() {
     command.append(":!RC4");
   }
 
-  if (ssl_config_.deprecated_cipher_suites_enabled) {
-    // Add TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 under a fallback. This is
-    // believed to work around a bug in some out-of-date Microsoft IIS servers
-    // which cause them to require the version downgrade
-    // (https://crbug.com/433406).
-    command.append(":ECDHE-RSA-AES256-SHA384");
-  } else {
+  if (!ssl_config_.deprecated_cipher_suites_enabled) {
     // Only offer DHE on the second handshake. https://crbug.com/538690
     command.append(":!kDHE");
   }

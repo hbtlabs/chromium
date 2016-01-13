@@ -4,6 +4,8 @@
 
 #include "chrome/browser/plugins/plugin_infobar_delegates.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,9 +32,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
-#if defined(OS_WIN)
-#include "base/win/metro.h"
-#endif
 #include "chrome/browser/plugins/plugin_installer.h"
 #endif
 
@@ -60,10 +59,11 @@ void OutdatedPluginInfoBarDelegate::Create(
   base::string16 name(plugin_metadata->name());
   infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
       scoped_ptr<ConfirmInfoBarDelegate>(new OutdatedPluginInfoBarDelegate(
-          installer, plugin_metadata.Pass(),
+          installer, std::move(plugin_metadata),
           l10n_util::GetStringFUTF16(
-              (installer->state() == PluginInstaller::INSTALLER_STATE_IDLE) ?
-                  IDS_PLUGIN_OUTDATED_PROMPT : IDS_PLUGIN_DOWNLOADING,
+              (installer->state() == PluginInstaller::INSTALLER_STATE_IDLE)
+                  ? IDS_PLUGIN_OUTDATED_PROMPT
+                  : IDS_PLUGIN_DOWNLOADING,
               name)))));
 }
 
@@ -74,7 +74,7 @@ OutdatedPluginInfoBarDelegate::OutdatedPluginInfoBarDelegate(
     : ConfirmInfoBarDelegate(),
       WeakPluginInstallerObserver(installer),
       identifier_(plugin_metadata->identifier()),
-      plugin_metadata_(plugin_metadata.Pass()),
+      plugin_metadata_(std::move(plugin_metadata)),
       message_(message) {
   content::RecordAction(UserMetricsAction("OutdatedPluginInfobar.Shown"));
   std::string name = base::UTF16ToUTF8(plugin_metadata_->name());
@@ -211,7 +211,7 @@ void OutdatedPluginInfoBarDelegate::Replace(
       infobar,
       infobar->owner()->CreateConfirmInfoBar(
           scoped_ptr<ConfirmInfoBarDelegate>(new OutdatedPluginInfoBarDelegate(
-              installer, plugin_metadata.Pass(), message))));
+              installer, std::move(plugin_metadata), message))));
 }
 
 #if defined(OS_WIN)
@@ -277,7 +277,7 @@ void LaunchDesktopInstanceHelper(const base::string16& url) {
 }
 
 bool PluginMetroModeInfoBarDelegate::Accept() {
-  chrome::AttemptRestartToDesktopMode();
+  // TODO(scottmg): Remove this entire class http://crbug.com/558054.
   return true;
 }
 

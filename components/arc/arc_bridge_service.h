@@ -81,6 +81,10 @@ class ArcBridgeService : public ArcBridgeHost {
     virtual void OnAuthInstanceReady() {}
     virtual void OnAuthInstanceClosed() {}
 
+    // Called whenever the ARC clipboard interface state changes.
+    virtual void OnClipboardInstanceReady() {}
+    virtual void OnClipboardInstanceClosed() {}
+
     // Called whenever the ARC input interface state changes.
     virtual void OnInputInstanceReady() {}
     virtual void OnInputInstanceClosed() {}
@@ -100,6 +104,10 @@ class ArcBridgeService : public ArcBridgeHost {
     // Called whenever the ARC settings interface state changes.
     virtual void OnSettingsInstanceReady() {}
     virtual void OnSettingsInstanceClosed() {}
+
+    // Called whenever the ARC video interface state changes.
+    virtual void OnVideoInstanceReady() {}
+    virtual void OnVideoInstanceClosed() {}
 
    protected:
     virtual ~Observer() {}
@@ -140,6 +148,7 @@ class ArcBridgeService : public ArcBridgeHost {
   // thread that this class was created on.
   AppInstance* app_instance() { return app_ptr_.get(); }
   AuthInstance* auth_instance() { return auth_ptr_.get(); }
+  ClipboardInstance* clipboard_instance() { return clipboard_ptr_.get(); }
   InputInstance* input_instance() { return input_ptr_.get(); }
   NotificationsInstance* notifications_instance() {
     return notifications_ptr_.get();
@@ -147,24 +156,29 @@ class ArcBridgeService : public ArcBridgeHost {
   PowerInstance* power_instance() { return power_ptr_.get(); }
   ProcessInstance* process_instance() { return process_ptr_.get(); }
   SettingsInstance* settings_instance() { return settings_ptr_.get(); }
+  VideoInstance* video_instance() { return video_ptr_.get(); }
 
   int32_t app_version() const { return app_ptr_.version(); }
   int32_t auth_version() const { return auth_ptr_.version(); }
+  int32_t clipboard_version() const { return clipboard_ptr_.version(); }
   int32_t input_version() const { return input_ptr_.version(); }
   int32_t notifications_version() const { return notifications_ptr_.version(); }
   int32_t power_version() const { return power_ptr_.version(); }
   int32_t process_version() const { return process_ptr_.version(); }
   int32_t settings_version() const { return settings_ptr_.version(); }
+  int32_t video_version() const { return video_ptr_.version(); }
 
   // ArcHost:
   void OnAppInstanceReady(AppInstancePtr app_ptr) override;
   void OnAuthInstanceReady(AuthInstancePtr auth_ptr) override;
+  void OnClipboardInstanceReady(ClipboardInstancePtr clipboard_ptr) override;
   void OnInputInstanceReady(InputInstancePtr input_ptr) override;
   void OnNotificationsInstanceReady(
       NotificationsInstancePtr notifications_ptr) override;
   void OnPowerInstanceReady(PowerInstancePtr power_ptr) override;
   void OnProcessInstanceReady(ProcessInstancePtr process_ptr) override;
   void OnSettingsInstanceReady(SettingsInstancePtr process_ptr) override;
+  void OnVideoInstanceReady(VideoInstancePtr video_ptr) override;
 
   // Gets the current state of the bridge service.
   State state() const { return state_; }
@@ -198,29 +212,35 @@ class ArcBridgeService : public ArcBridgeHost {
   // Called when one of the individual channels is closed.
   void CloseAppChannel();
   void CloseAuthChannel();
+  void CloseClipboardChannel();
   void CloseInputChannel();
   void CloseNotificationsChannel();
   void ClosePowerChannel();
   void CloseProcessChannel();
   void CloseSettingsChannel();
+  void CloseVideoChannel();
 
   // Callbacks for QueryVersion.
   void OnAppVersionReady(int32_t version);
   void OnAuthVersionReady(int32_t version);
+  void OnClipboardVersionReady(int32_t version);
   void OnInputVersionReady(int32_t version);
   void OnNotificationsVersionReady(int32_t version);
   void OnPowerVersionReady(int32_t version);
   void OnProcessVersionReady(int32_t version);
   void OnSettingsVersionReady(int32_t version);
+  void OnVideoVersionReady(int32_t version);
 
   // Mojo interfaces.
   AppInstancePtr app_ptr_;
   AuthInstancePtr auth_ptr_;
+  ClipboardInstancePtr clipboard_ptr_;
   InputInstancePtr input_ptr_;
   NotificationsInstancePtr notifications_ptr_;
   PowerInstancePtr power_ptr_;
   ProcessInstancePtr process_ptr_;
   SettingsInstancePtr settings_ptr_;
+  VideoInstancePtr video_ptr_;
 
   // Temporary Mojo interfaces.  After a Mojo interface pointer has been
   // received from the other endpoint, we still need to asynchronously query
@@ -230,11 +250,13 @@ class ArcBridgeService : public ArcBridgeHost {
   // pointer in a temporary variable to avoid losing its reference.
   AppInstancePtr temporary_app_ptr_;
   AuthInstancePtr temporary_auth_ptr_;
+  ClipboardInstancePtr temporary_clipboard_ptr_;
   InputInstancePtr temporary_input_ptr_;
   NotificationsInstancePtr temporary_notifications_ptr_;
   PowerInstancePtr temporary_power_ptr_;
   ProcessInstancePtr temporary_process_ptr_;
   SettingsInstancePtr temporary_settings_ptr_;
+  VideoInstancePtr temporary_video_ptr_;
 
   base::ObserverList<Observer> observer_list_;
 

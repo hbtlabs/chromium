@@ -208,7 +208,6 @@ void Internals::resetToConsistentState(Page* page)
     if (!sFeaturesBackup)
         sFeaturesBackup = new RuntimeEnabledFeatures::Backup;
     sFeaturesBackup->restore();
-    page->setDeviceScaleFactor(1);
     page->setIsCursorVisible(true);
     page->setPageScaleFactor(1);
     page->deprecatedLocalMainFrame()->view()->layoutViewportScrollableArea()->setScrollPosition(IntPoint(0, 0), ProgrammaticScroll);
@@ -483,6 +482,11 @@ bool Internals::isCompositedAnimation(Animation* animation)
 void Internals::disableCompositedAnimation(Animation* animation)
 {
     animation->disableCompositedAnimationForTesting();
+}
+
+void Internals::disableCSSAdditiveAnimations()
+{
+    RuntimeEnabledFeatures::setCSSAdditiveAnimationsEnabled(false);
 }
 
 void Internals::advanceTimeForImage(Element* image, double deltaTimeInSeconds, ExceptionState& exceptionState)
@@ -1405,11 +1409,8 @@ LayerRectList* Internals::touchEventTargetLayerRects(Document* document, Excepti
         return nullptr;
     }
 
-    // Do any pending layout and compositing update (which may call touchEventTargetRectsChange) to ensure this
-    // really takes any previous changes into account.
-    forceCompositingUpdate(document, exceptionState);
-    if (exceptionState.hadException())
-        return nullptr;
+    if (ScrollingCoordinator* scrollingCoordinator = document->page()->scrollingCoordinator())
+        scrollingCoordinator->updateAfterCompositingChangeIfNeeded();
 
     if (LayoutView* view = document->layoutView()) {
         if (PaintLayerCompositor* compositor = view->compositor()) {

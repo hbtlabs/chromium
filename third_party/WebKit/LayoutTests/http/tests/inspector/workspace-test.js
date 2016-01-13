@@ -62,7 +62,7 @@ InspectorTest.createMockTarget = function(id, debuggerModelConstructor)
         __proto__: WebInspector.Target.prototype
     }
 
-    var target = new MockTarget("mock-target-" + id, new InspectorBackendClass.StubConnection());
+    var target = new MockTarget("mock-target-" + id, new WebInspector.StubConnection());
     InspectorTest.testTargetManager.addTarget(target);
     return target;
 }
@@ -132,12 +132,12 @@ InspectorTest._defaultWorkspaceEventHandler = function(event)
         return;
     if (uiSourceCode.project().type() === WebInspector.projectTypes.Service)
         return;
-    InspectorTest.addResult("Workspace event: " + event.type + ": " + uiSourceCode.uri() + ".");
+    InspectorTest.addResult("Workspace event: " + event.type + ": " + uiSourceCode.url() + ".");
 }
 
 InspectorTest.uiSourceCodeURL = function(uiSourceCode)
 {
-    return uiSourceCode.originURL().replace(/.*LayoutTests/, "LayoutTests");
+    return uiSourceCode.url().replace(/.*LayoutTests/, "LayoutTests");
 }
 
 InspectorTest.dumpUISourceCode = function(uiSourceCode, callback)

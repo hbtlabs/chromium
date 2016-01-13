@@ -29,6 +29,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -49,11 +50,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
-#include "chrome/browser/safe_browsing/database_manager.h"
 #include "chrome/browser/safe_browsing/local_database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_util.h"
-#include "chrome/browser/safe_browsing/test_database_manager.h"
 #include "chrome/browser/task_management/providers/web_contents/web_contents_tags_manager.h"
 #include "chrome/browser/task_management/task_management_browsertest_util.h"
 #include "chrome/browser/task_manager/task_manager.h"
@@ -78,6 +77,8 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing_db/test_database_manager.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -222,9 +223,10 @@ std::string CreateServerRedirect(const std::string& dest_url) {
 // Clears the specified data using BrowsingDataRemover.
 void ClearBrowsingData(Browser* browser, int remove_mask) {
   BrowsingDataRemover* remover =
-      BrowsingDataRemover::CreateForUnboundedRange(browser->profile());
+      BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
   BrowsingDataRemoverCompletionObserver observer(remover);
-  remover->Remove(remove_mask, BrowsingDataHelper::UNPROTECTED_WEB);
+  remover->Remove(BrowsingDataRemover::Unbounded(), remove_mask,
+                  BrowsingDataHelper::UNPROTECTED_WEB);
   observer.BlockUntilCompletion();
   // BrowsingDataRemover deletes itself.
 }

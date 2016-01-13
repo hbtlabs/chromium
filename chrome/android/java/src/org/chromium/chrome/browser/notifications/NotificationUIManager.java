@@ -13,6 +13,7 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.StrictMode;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -467,17 +468,19 @@ public class NotificationUIManager {
                                                   persistentNotificationId, origin, profileId,
                                                   incognito, tag, actionIndex));
         }
-        // Site settings button is always the last action button.
-        if (actionTitles.length == 0) {
-            notificationBuilder.addAction(R.drawable.settings_cog,
-                    res.getString(R.string.page_info_site_settings_button), pendingSettingsIntent);
-        } else {
-            // Hide site settings icon and use shorter text when website provided
-            // action buttons.
-            notificationBuilder.addAction(0 /* actionIcon */,
-                    res.getString(R.string.notification_site_settings_button),
-                    pendingSettingsIntent);
-        }
+
+        // If action buttons are displayed, there isn't room for the full Site Settings button
+        // label and icon, so abbreviate it. This has the unfortunate side-effect of unnecessarily
+        // abbreviating it on Android Wear also (crbug.com/576656). If custom layouts are enabled,
+        // the label and icon provided here only affect Android Wear, so don't abbreviate them.
+        boolean abbreviateSiteSettings = actionTitles.length > 0 && !useCustomLayouts();
+        int settingsIconId = abbreviateSiteSettings ? 0 : R.drawable.settings_cog;
+        CharSequence settingsTitle = abbreviateSiteSettings
+                                     ? res.getString(R.string.notification_site_settings_button)
+                                     : res.getString(R.string.page_info_site_settings_button);
+        // If the settings button is displayed together with the other buttons it has to be the last
+        // one, so add it after the other actions.
+        notificationBuilder.addSettingsAction(settingsIconId, settingsTitle, pendingSettingsIntent);
 
         notificationBuilder.setDefaults(makeDefaults(vibrationPattern.length, silent));
         if (vibrationPattern.length > 0) {
@@ -485,7 +488,14 @@ public class NotificationUIManager {
         }
 
         String platformTag = makePlatformTag(persistentNotificationId, origin, tag);
-        mNotificationManager.notify(platformTag, PLATFORM_ID, notificationBuilder.build());
+        // Temporarily allowing disk access. TODO: Fix. See http://crbug.com/577185
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        StrictMode.allowThreadDiskWrites();
+        try {
+            mNotificationManager.notify(platformTag, PLATFORM_ID, notificationBuilder.build());
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     private NotificationBuilder createNotificationBuilder() {
@@ -560,7 +570,8 @@ public class NotificationUIManager {
      *
      * @return Whether custom layouts should be used.
      */
-    private static boolean useCustomLayouts() {
+    @VisibleForTesting
+    static boolean useCustomLayouts() {
         // Query the field trial state first to ensure correct UMA reporting.
         String groupName = FieldTrialList.findFullName("WebNotificationCustomLayouts");
         CommandLine commandLine = CommandLine.getInstance();
@@ -570,7 +581,7 @@ public class NotificationUIManager {
         if (commandLine.hasSwitch(ChromeSwitches.ENABLE_WEB_NOTIFICATION_CUSTOM_LAYOUTS)) {
             return true;
         }
-        return groupName.equals("Enabled");
+        return !groupName.equals("Disabled");
     }
 
     /**

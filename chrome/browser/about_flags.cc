@@ -48,6 +48,7 @@
 #include "components/password_manager/core/common/password_manager_switches.h"
 #include "components/proximity_auth/switches.h"
 #include "components/search/search_switches.h"
+#include "components/security_state/switches.h"
 #include "components/signin/core/common/signin_switches.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/tracing/tracing_switches.h"
@@ -178,12 +179,12 @@ const FeatureEntry::Choice kNaClDebugMaskChoices[] = {
 #endif
 
 const FeatureEntry::Choice kMarkNonSecureAsChoices[] = {
-    { IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
-    { IDS_MARK_NON_SECURE_AS_NEUTRAL,
-        switches::kMarkNonSecureAs, switches::kMarkNonSecureAsNeutral},
-    { IDS_MARK_NON_SECURE_AS_NON_SECURE,
-        switches::kMarkNonSecureAs, switches::kMarkNonSecureAsNonSecure}
-};
+    {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
+    {IDS_MARK_NON_SECURE_AS_NEUTRAL, security_state::switches::kMarkNonSecureAs,
+     security_state::switches::kMarkNonSecureAsNeutral},
+    {IDS_MARK_NON_SECURE_AS_NON_SECURE,
+     security_state::switches::kMarkNonSecureAs,
+     security_state::switches::kMarkNonSecureAsNonSecure}};
 
 const FeatureEntry::Choice kDataReductionProxyLoFiChoices[] = {
     { IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
@@ -499,6 +500,8 @@ const FeatureEntry::Choice kUpdateMenuItemSummaryChoices[] = {
     {IDS_FLAGS_UPDATE_MENU_ITEM_NO_SUMMARY, "", ""},
     {IDS_FLAGS_UPDATE_MENU_ITEM_DEFAULT_SUMMARY,
         switches::kForceShowUpdateMenuItemSummary, ""},
+    {IDS_FLAGS_UPDATE_MENU_ITEM_NEW_FEATURES_SUMMARY,
+        switches::kForceShowUpdateMenuItemNewFeaturesSummary, ""},
     {IDS_FLAGS_UPDATE_MENU_ITEM_CUSTOM_SUMMARY,
         switches::kForceShowUpdateMenuItemCustomSummary, "Custom summary"},
 };
@@ -1397,6 +1400,13 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableTranslateNewUX,
                                switches::kDisableTranslateNewUX)},
 #endif
+#if defined(OS_MACOSX)
+    {"enable-native-notifications",
+     IDS_NOTIFICATIONS_NATIVE_FLAG,
+     IDS_NOTIFICATIONS_NATIVE_FLAG_DESCRIPTION,
+     kOsMac,
+     SINGLE_VALUE_TYPE(switches::kEnableNativeNotifications)},
+#endif
 #if defined(TOOLKIT_VIEWS)
     {"disable-views-rect-based-targeting",  // FLAGS:RECORD_UMA
      IDS_FLAGS_VIEWS_RECT_BASED_TARGETING_NAME,
@@ -1423,11 +1433,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_READER_MODE_HEURISTICS_DESCRIPTION,
      kOsAndroid,
      MULTI_VALUE_TYPE(kReaderModeHeuristicsChoices)},
-    {"enable-dom-distiller-button-animation",
-     IDS_FLAGS_READER_MODE_BUTTON_ANIMATION,
-     IDS_FLAGS_READER_MODE_BUTTON_ANIMATION_DESCRIPTION,
-     kOsAndroid,
-     SINGLE_VALUE_TYPE(switches::kEnableDomDistillerButtonAnimation)},
 #endif
     {"num-raster-threads",
      IDS_FLAGS_NUM_RASTER_THREADS_NAME,
@@ -1845,11 +1850,6 @@ const FeatureEntry kFeatureEntries[] = {
      kOsWin,
      SINGLE_VALUE_TYPE(switches::kTrySupportedChannelLayouts)},
 #endif
-    {"emphasize-titles-in-omnibox-dropdown",
-     IDS_FLAGS_EMPHASIZE_TITLES_IN_OMNIBOX_DROPDOWN_NAME,
-     IDS_FLAGS_EMPHASIZE_TITLES_IN_OMNIBOX_DROPDOWN_DESCRIPTION,
-     kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEmphasizeTitlesInOmniboxDropdown)},
 #if defined(ENABLE_WEBRTC)
     {"enable-webrtc-dtls12",
      IDS_FLAGS_WEBRTC_DTLS12_NAME,
@@ -2120,6 +2120,21 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_AUTOMATIC_TAB_DISCARDING_DESCRIPTION, kOsWin | kOsMac,
      FEATURE_VALUE_TYPE(features::kAutomaticTabDiscarding)},
 #endif  // OS_WIN || OS_MACOSX
+    {"enable-unsafe-es3-apis",
+     IDS_FLAGS_WEBGL2_NAME,
+     IDS_FLAGS_WEBGL2_DESCRIPTION,
+     kOsAll,
+     SINGLE_VALUE_TYPE(switches::kEnableUnsafeES3APIs)},
+    {"enable-webfonts-intervention",
+      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME,
+      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_DESCRIPTION,
+      kOsAll,
+      FEATURE_VALUE_TYPE(features::kWebFontsIntervention)},
+    {"enable-grouped-history",
+     IDS_FLAGS_ENABLE_GROUPED_HISTORY_NAME,
+     IDS_FLAGS_ENABLE_GROUPED_HISTORY_DESCRIPTION,
+     kOsDesktop,
+     SINGLE_VALUE_TYPE(switches::kHistoryEnableGroupByDomain)},
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.

@@ -7,7 +7,6 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/v8.gni")
-import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
@@ -99,8 +98,8 @@ source_set("test_support") {
       "//ipc:test_support",
       "//ipc/mojo",
       "//media",
-      "//mojo/application/public/cpp:cpp_for_chromium",
       "//mojo/environment:chromium",
+      "//mojo/shell/public/cpp:cpp_for_chromium",
       "//storage/browser",
       "//storage/common",
       "//third_party/mojo/src/mojo/edk/test:test_support",
@@ -353,10 +352,6 @@ test("content_browsertests") {
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
-  if (proprietary_codecs && enable_hevc_demuxing) {
-    defines += [ "ENABLE_HEVC_DEMUXING" ]
-  }
-
   configs += [
     "//build/config:precompiled_headers",
     "//build/config/compiler:no_size_t_to_int_warning",
@@ -388,10 +383,10 @@ test("content_browsertests") {
     "//media:test_support",
     "//media/audio:test_support",
     "//media/base:test_support",
-    "//mojo/application/public/cpp:cpp_for_chromium",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
+    "//mojo/shell/public/cpp:cpp_for_chromium",
     "//mojo/test:test_support",
     "//net:test_support",
     "//testing/gmock",

@@ -16,6 +16,7 @@ namespace device {
 
 class BluetoothAdapterAndroid;
 class BluetoothRemoteGattDescriptorAndroid;
+class BluetoothRemoteGattServiceAndroid;
 
 // BluetoothRemoteGattCharacteristicAndroid along with its owned Java class
 // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic
@@ -36,6 +37,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
   // to |bluetooth_gatt_characteristic_wrapper|.
   static scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> Create(
       BluetoothAdapterAndroid* adapter,
+      BluetoothRemoteGattServiceAndroid* service,
       const std::string& instance_id,
       jobject /* BluetoothGattCharacteristicWrapper */
       bluetooth_gatt_characteristic_wrapper,
@@ -82,7 +84,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
                const base::android::JavaParamRef<jobject>& jcaller,
                int32_t status);
 
-  // Creates a Bluetooth GATT descriptor object and adds it to |descriptors_|
+  // Creates a Bluetooth GATT descriptor object and adds it to |descriptors_|,
   // DCHECKing that it has not already been created.
   void CreateGattRemoteDescriptor(
       JNIEnv* env,
@@ -96,15 +98,18 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattCharacteristicAndroid
       chrome_bluetooth_characteristic);
 
  private:
-  BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                           const std::string& instance_id);
+  BluetoothRemoteGattCharacteristicAndroid(
+      BluetoothAdapterAndroid* adapter,
+      BluetoothRemoteGattServiceAndroid* service,
+      const std::string& instance_id);
 
   // Populates |descriptors_| from Java objects if necessary.
   void EnsureDescriptorsCreated() const;
 
-  // The adapter associated with this service. It's ok to store a raw pointer
-  // here since |adapter_| indirectly owns this instance.
+  // The adapter and service associated with this characteristic. It's ok to
+  // store a raw pointers here since they indirectly own this instance.
   BluetoothAdapterAndroid* adapter_;
+  BluetoothRemoteGattServiceAndroid* service_;
 
   // Java object
   // org.chromium.device.bluetooth.ChromeBluetoothRemoteGattCharacteristic.

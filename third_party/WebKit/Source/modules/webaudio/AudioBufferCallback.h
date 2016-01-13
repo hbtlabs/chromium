@@ -28,21 +28,19 @@
 #include "platform/heap/Handle.h"
 #include "wtf/build_config.h"
 
-#if ENABLE(WEB_AUDIO)
-
 namespace blink {
 
 class AudioBuffer;
+class DOMException;
 
 class AudioBufferCallback : public GarbageCollectedFinalized<AudioBufferCallback> {
 public:
     virtual ~AudioBufferCallback() { }
     DEFINE_INLINE_VIRTUAL_TRACE() { }
     virtual void handleEvent(AudioBuffer*) = 0;
+    virtual void handleEvent(DOMException*) = 0;
 };
 
 } // namespace
-
-#endif // ENABLE(WEB_AUDIO)
 
 #endif // AudioBufferCallback_h

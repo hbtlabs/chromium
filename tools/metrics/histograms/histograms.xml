@@ -19257,6 +19257,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.Session.RequestAudioFocusResult" enum="BooleanSuccess">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <summary>
+    Indicate whether the native requestAudioFocus() call was successful.
+  </summary>
+</histogram>
+
 <histogram name="Media.Session.Stop" enum="MediaSessionActionSource">
   <owner>avayvod@chromium.org</owner>
   <owner>mlamouri@chromium.org</owner>
@@ -19704,6 +19712,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="MediaRouter.Ui.Action.CloseLatency" units="ms">
+  <owner>apacible@chromium.org</owner>
+  <summary>
+    Duration in milliseconds taken from the user opening the Media Router dialog
+    to the user closing the dialog. This is only recorded if closing the dialog
+    is the first action the user takes.
+  </summary>
+</histogram>
+
+<histogram name="MediaRouter.Ui.Action.StartLocal.Latency" units="ms">
+  <owner>apacible@chromium.org</owner>
+  <summary>
+    Duration in milliseconds taken from the Media Router dialog showing the sink
+    list and being populated with at least one device to the user selecting a
+    device immediately after to create a new route.
+  </summary>
+</histogram>
+
 <histogram name="MediaRouter.Ui.Action.StartLocalPosition"
     enum="MediaRouterSinkPositionLabel">
   <owner>apacible@chromium.org</owner>
@@ -19744,6 +19770,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Duration in milliseconds taken from a user click to open the Media Router
     dialog to the initial paint.
+  </summary>
+</histogram>
+
+<histogram name="MediaRouter.Ui.FirstAction" units="MediaRouterUserAction">
+  <owner>apacible@chromium.org</owner>
+  <summary>
+    The first action taken by the user after opening the Media Router dialog.
+  </summary>
+</histogram>
+
+<histogram name="MediaRouter.Ui.InitialState" enum="MediaRouterInitialViews">
+  <owner>apacible@chromium.org</owner>
+  <summary>
+    The view that was shown when the Media Router dialog is initially opened.
   </summary>
 </histogram>
 
@@ -40733,6 +40773,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="SB2.GetChunkResponseOrErrorCode"
+    enum="CombinedHttpResponseAndNetErrorCode">
+  <owner>vakh@google.com</owner>
+  <summary>
+    Response or error codes from the SafeBrowsing service. Logged after a
+    GetChunk request finishes to capture the response code or error code for
+    that call. Split out from SB2.GetHashErrorResponseOrErrorCode in M49.
+  </summary>
+</histogram>
+
 <histogram name="SB2.GetHash200">
   <obsolete>
     Deprecated in favor of SB2.GetHashResult STATUS_200.
@@ -40753,13 +40803,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="SB2.GetHashErrorResponseOrErrorCode"
+<histogram name="SB2.GetHashResponseOrErrorCode"
     enum="CombinedHttpResponseAndNetErrorCode">
   <owner>vakh@google.com</owner>
   <summary>
     Response or error codes from the SafeBrowsing service. Logged after a
     GetHash request finishes to capture the response code or error code for that
-    call.
+    call. Split out from SB2.GetHashErrorResponseOrErrorCode in M49.
   </summary>
 </histogram>
 
@@ -44390,6 +44440,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Settings.SearchLength">
+  <owner>dschuyler@chromium.org</owner>
+  <summary>
+    The number of characters typed in the chrome://settings page search box.
+    Intended to determine if we are making the user type too much to find what
+    they are looking for (the search is incremental).
+  </summary>
+</histogram>
+
+<histogram name="Settings.SearchMatchCount">
+  <owner>dschuyler@chromium.org</owner>
+  <summary>
+    The number of search hits within the chrome://settings page.  This is
+    especially important when the count is zero (i.e. we returned no hits for a
+    given search in settings).  A search is considered complete via timeout
+    since there is no concrete way to define the end of a search (the search is
+    incremental).
+  </summary>
+</histogram>
+
 <histogram name="Settings.ShowHomeButton" enum="BooleanEnabled">
   <owner>mpearson@chromium.org</owner>
   <summary>
@@ -44740,6 +44810,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Signin.AccountEquality" enum="SigninAccountEquality">
+  <owner>skym@chromium.org</owner>
+  <summary>
+    There are two separate ways to test for account equality, using the account
+    id or the email. Historically the email was always used, but going forward
+    email will be modifiable. Now when we check account equality we use both
+    approaches and emit this metric to capture if they agreed or not.
+  </summary>
+</histogram>
+
 <histogram name="Signin.AccountReconcilorState.OnGaiaResponse"
     enum="SigninAccountReconcilorState">
   <owner>bzanotti@chromium.org</owner>
@@ -44791,6 +44871,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Track how many minutes of local system time elapsed from when Chrome was
     installed to when Signin occured for this profile.
+  </summary>
+</histogram>
+
+<histogram name="Signin.InvestigatedScenario" enum="SigninInvestigatedScenario">
+  <owner>skym@chromium.org</owner>
+  <summary>
+    Records the general type of signin that is occuring in relation to previous
+    signin and local data.
   </summary>
 </histogram>
 
@@ -45551,6 +45639,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Number of retries until the final response was recorded.</summary>
 </histogram>
 
+<histogram name="SiteEngagementService.DaysSinceLastShortcutLaunch"
+    units="days">
+  <owner>calamity@chromium.org</owner>
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    The number of days between launches of an origin saved to homescreen or as a
+    bookmark app shortcut. Recorded at the second and each following launch of a
+    specific origin from a shortcut, independently per origin.
+  </summary>
+</histogram>
+
 <histogram name="SiteEngagementService.EngagementScore">
   <owner>calamity@chromium.org</owner>
   <owner>dominickn@chromium.org</owner>
@@ -45558,6 +45657,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Distribution of the engagement scores accumulated by a user, recorded at
     startup per non-incognito profile, and then upon the first
     engagement-increasing event every hour thereafter.
+  </summary>
+</histogram>
+
+<histogram name="SiteEngagementService.EngagementScoreBucket" units="%">
+  <owner>calamity@chromium.org</owner>
+  <summary>
+    The percentage of sites on a user's profile that have engagement scores that
+    fall in these buckets, recorded at startup per non-incognito profile, and
+    then upon the first engagement-increasing event every hour thereafter.
   </summary>
 </histogram>
 
@@ -50484,6 +50592,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Toolbar.AppMenuTimeToAction" units="ms">
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <summary>
+    The number of millseconds between when the user opens the app menu and when
+    the app menu is closed. Logged once per app menu run when the menu closes.
+    Not recorded for menu runs that are initiated by a drag-and-drop sequence.
+    Note that the code paths for Views-platforms vs Mac are different, so cross-
+    platform comparison may not always be reasonable.
+  </summary>
+</histogram>
+
 <histogram name="TopSites.NumberOfApplyBlacklist">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <summary>The number of times TopSitesImpl::ApplyBlacklist is called.</summary>
@@ -51900,6 +52019,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>mmenke@chromium.org</owner>
   <summary>
     Size (in kilobytes) of response bodies retrieved as strings from URLFetcher.
+  </summary>
+</histogram>
+
+<histogram name="UserCert.ContentDisposition" enum="UserCertContentDisposition">
+  <owner>rsleevi@chromium.org</owner>
+  <owner>svaldez@chromium.org</owner>
+  <summary>
+    Distribution of Content-Disposition headers sent with x-x509-user-cert
+    content types.
   </summary>
 </histogram>
 
@@ -61337,6 +61465,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="309" label="Allow Dinosaur Easter Egg Game"/>
   <int value="310" label="Whether RC4 cipher suites in TLS are enabled"/>
   <int value="311" label="Default value for Display Rotation"/>
+  <int value="312" label="Allow export of supervised user data"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -64948,6 +65077,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1097" label="V8RegExpPrototypeToString"/>
   <int value="1098"
       label="V8InputDeviceCapabilities_FiresTouchEvents_AttributeGetter"/>
+  <int value="1099" label="DataElement"/>
+  <int value="1100" label="TimeElement"/>
+  <int value="1101" label="SVG1DOMUriReference"/>
+  <int value="1102" label="SVG1DOMZoomAndPan"/>
+  <int value="1103" label="V8SVGGraphicsElement_Transform_AttributeGetter"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -66557,6 +66691,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     CAUSE_FOR_GPU_LAUNCH_JPEGDECODEACCELERATOR_INITIALIZE
   </int>
   <int value="13" label="Mojo Setup">CAUSE_FOR_GPU_LAUNCH_MOJO_SETUP</int>
+  <int value="14" label="Create arc video accelerator">
+    CAUSE_FOR_GPU_LAUNCH_ARCVIDEOACCELERATOR
+  </int>
 </enum>
 
 <enum name="GzipEncodingFixupResult" type="int">
@@ -69171,6 +69308,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-488779992" label="blink-settings"/>
   <int value="-478462945" label="enable-ephemeral-apps"/>
   <int value="-462205750" label="enable-service-worker-sync"/>
+  <int value="-455203267" label="use_new_features_summary"/>
   <int value="-430360431" label="disable-password-generation"/>
   <int value="-418868128" label="enable-experimental-web-platform-features"/>
   <int value="-385337473" label="enable-fast-unload"/>
@@ -69229,6 +69367,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="27507364" label="apps-keep-chrome-alive"/>
   <int value="37024318" label="disable-affiliation-based-matching"/>
   <int value="48159177" label="reduced-referrer-granularity"/>
+  <int value="56723110" label="enable-webfonts-intervention"/>
   <int value="61205887" label="enable-text-input-focus-manager"/>
   <int value="75747474" label="disable-webview-signin-flow"/>
   <int value="78998551" label="disable-hosted-app-shim-creation"/>
@@ -69249,6 +69388,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="270267831" label="enable-scripts-require-action"/>
   <int value="274103741" label="enable-ntp-popular-sites"/>
   <int value="278756320" label="disable-app-list-app-info"/>
+  <int value="280322118" label="enable-unsafe-es3-apis"/>
   <int value="324631366" label="enable-drive-search-in-app-launcher"/>
   <int value="330138076" label="enable-clear-browsing-data-counters"/>
   <int value="346711293" label="enable-save-password-bubble"/>
@@ -69471,11 +69611,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1891210939" label="enable-blink-features"/>
   <int value="1892201400" label="enable-password-separated-signin-flow"/>
   <int value="1896456311" label="enable-password-save-in-page-navigation"/>
+  <int value="1898231011" label="enable-native-notifications"/>
   <int value="1900529524" label="disable-touch-drag-drop"/>
   <int value="1906942630" label="enable-easy-unlock"/>
   <int value="1915178511" label="disable-blink-features"/>
   <int value="1930901873" label="disable-sync-app-list"/>
   <int value="1939413645" label="enable-invalid-cert-collection"/>
+  <int value="1942911276" label="enable-grouped-history"/>
   <int value="1944156526" label="sync-url"/>
   <int value="1955677113" label="trace-export-events-to-etw"/>
   <int value="1961425320" label="force-qtkit"/>
@@ -70529,6 +70671,11 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="3" label="Page"/>
 </enum>
 
+<enum name="MediaRouterInitialViews" type="int">
+  <int value="0" label="Route Details"/>
+  <int value="1" label="Sink List"/>
+</enum>
+
 <enum name="MediaRouterSinkPositionLabel" type="int">
   <int value="100" label="100+"/>
 </enum>
@@ -70537,6 +70684,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="App"/>
   <int value="2" label="Tab"/>
   <int value="4" label="Desktop"/>
+</enum>
+
+<enum name="MediaRouterUserAction" type="int">
+  <int value="0" label="Change Mode"/>
+  <int value="1" label="Start Local"/>
+  <int value="2" label="Stop Local"/>
+  <int value="3" label="Close"/>
+  <int value="4" label="Status Remote"/>
 </enum>
 
 <enum name="MediaRouteType" type="int">
@@ -75959,6 +76114,10 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="238" label="XXE"/>
   <int value="239" label="ZIPX"/>
   <int value="240" label="ZPAQ"/>
+  <int value="241" label="RELS"/>
+  <int value="242" label="MSG"/>
+  <int value="243" label="EML"/>
+  <int value="244" label="RTF"/>
 </enum>
 
 <enum name="SBClientDownloadIsSignedBinary" type="int">
@@ -76620,6 +76779,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="17" label="Typed URL with unknown access point"/>
 </enum>
 
+<enum name="SigninAccountEquality" type="int">
+  <int value="0" label="Both Equal"/>
+  <int value="1" label="Both Different"/>
+  <int value="2" label="Only Same Email"/>
+  <int value="3" label="Only Same Id"/>
+  <int value="4" label="Email Fallback"/>
+</enum>
+
 <enum name="SigninAccountReconcilorState" type="int">
   <int value="0" label="OK">
     The account reconcilor has finished running and is up-to-date.
@@ -76682,6 +76849,13 @@ To add a new entry, add it with any value and run test to compute valid value.
     The sync was started through auto-accept with advanced settings.
   </int>
   <int value="10" label="Undo">The sync was aborted with an undo button.</int>
+</enum>
+
+<enum name="SigninInvestigatedScenario" type="int">
+  <int value="0" label="Upgrade low risk"/>
+  <int value="1" label="Upgrade high risk"/>
+  <int value="2" label="Same account"/>
+  <int value="3" label="Different account"/>
 </enum>
 
 <enum name="SigninReason" type="int">
@@ -76916,6 +77090,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="4" label="Mouse wheel"/>
   <int value="5" label="Media (foreground tab)"/>
   <int value="6" label="Media (background tab)"/>
+  <int value="7" label="Webapp shortcut launch"/>
 </enum>
 
 <enum name="SiteIsolationMimeType" type="int">
@@ -79355,6 +79530,11 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="Was used in draw"/>
 </enum>
 
+<enum name="UserCertContentDisposition" type="int">
+  <int value="0" label="No Content-Disposition"/>
+  <int value="1" label="Content-Disposition"/>
+</enum>
+
 <enum name="UserChannels" type="int">
   <int value="-1" label="Unknown"/>
   <int value="0" label="Canary"/>
@@ -79930,6 +80110,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="7" label="Auth Rejected"/>
   <int value="8" label="Auth Timeout"/>
   <int value="9" label="Unsupported Device"/>
+  <int value="10" label="Invalid Attribute Length"/>
+  <int value="11" label="Congested Connection"/>
+  <int value="12" label="Insufficient Encryption"/>
+  <int value="13" label="Invalid Offset"/>
+  <int value="14" label="Read Not Permitted"/>
+  <int value="15" label="Unsupported Request"/>
+  <int value="16" label="Write Not Permitted"/>
 </enum>
 
 <enum name="WebBluetoothFunction" type="int">
@@ -81651,6 +81838,21 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Media.EME.ClearKey"/>
   <affected-histogram name="Media.EME.Unknown"/>
   <affected-histogram name="Media.EME.Widevine"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="EngagementScoreBuckets">
+  <owner>calamity@chromium.org</owner>
+  <suffix name="0"/>
+  <suffix name="10"/>
+  <suffix name="20"/>
+  <suffix name="30"/>
+  <suffix name="40"/>
+  <suffix name="50"/>
+  <suffix name="60"/>
+  <suffix name="70"/>
+  <suffix name="80"/>
+  <suffix name="90"/>
+  <affected-histogram name="SiteEngagementService.EngagementScoreBucket"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ExitFunnels" separator=".">

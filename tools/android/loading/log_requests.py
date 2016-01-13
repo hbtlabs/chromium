@@ -14,65 +14,35 @@ import logging
 import optparse
 import os
 import sys
-import time
 
-file_dir = os.path.dirname(__file__)
-sys.path.append(os.path.join(file_dir, '..', '..', '..', 'build', 'android'))
-sys.path.append(os.path.join(file_dir, '..', '..', 'telemetry'))
-sys.path.append(os.path.join(file_dir, '..', '..', 'chrome_proxy'))
+_SRC_DIR = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..'))
 
-from pylib import constants
-from pylib import flag_changer
-from pylib.device import device_utils
-from pylib.device import intent
-from common import inspector_network
+sys.path.append(os.path.join(_SRC_DIR, 'third_party', 'catapult', 'devil'))
+from devil.android import device_utils
+
+sys.path.append(os.path.join(_SRC_DIR, 'build', 'android'))
+import devil_chromium
+
+sys.path.append(os.path.join(_SRC_DIR, 'tools', 'telemetry'))
 from telemetry.internal.backends.chrome_inspector import inspector_websocket
 from telemetry.internal.backends.chrome_inspector import websocket
 
+sys.path.append(os.path.join(_SRC_DIR, 'tools', 'chrome_proxy'))
+from common import inspector_network
 
-_PORT = 9222 # DevTools port number.
-
-
-@contextlib.contextmanager
-def FlagChanger(device, command_line_path, new_flags):
-  """Changes the flags in a context, restores them afterwards.
-
-  Args:
-    device: Device to target, from DeviceUtils.
-    command_line_path: Full path to the command-line file.
-    new_flags: Flags to add.
-  """
-  changer = flag_changer.FlagChanger(device, command_line_path)
-  changer.AddFlags(new_flags)
-  try:
-    yield
-  finally:
-    changer.Restore()
-
-
-@contextlib.contextmanager
-def ForwardPort(device, local, remote):
-  """Forwards a local port to a remote one on a device in a context."""
-  device.adb.Forward(local, remote)
-  try:
-    yield
-  finally:
-    device.adb.ForwardRemove(local)
-
-
-def _SetUpDevice(device, package_info):
-  """Enables root and closes Chrome on a device."""
-  device.EnableRoot()
-  device.KillAll(package_info.package, quiet=True)
+import device_setup
 
 
 class AndroidRequestsLogger(object):
   """Logs all the requests made to load a page on a device."""
 
   def __init__(self, device):
+    """If device is None, we connect to a local chrome session."""
     self.device = device
     self._please_stop = False
     self._main_frame_id = None
+    self._tracing_data = []
 
   def _PageDataReceived(self, msg):
     """Called when a Page event is received.
@@ -93,10 +63,13 @@ class AndroidRequestsLogger(object):
           and params['frameId'] == self._main_frame_id):
       self._please_stop = True
 
+  def _TracingDataReceived(self, msg):
+    self._tracing_data.append(msg)
+
   def _LogPageLoadInternal(self, url, clear_cache):
     """Returns the collection of requests made to load a given URL.
 
-    Assumes that DevTools is available on http://localhost:_PORT.
+    Assumes that DevTools is available on http://localhost:DEVTOOLS_PORT.
 
     Args:
       url: URL to load.
@@ -107,7 +80,8 @@ class AndroidRequestsLogger(object):
     """
     self._main_frame_id = None
     self._please_stop = False
-    r = httplib.HTTPConnection('localhost', _PORT)
+    r = httplib.HTTPConnection(
+        device_setup.DEVTOOLS_HOSTNAME, device_setup.DEVTOOLS_PORT)
     r.request('GET', '/json')
     response = r.getresponse()
     if response.status != 200:
@@ -132,10 +106,43 @@ class AndroidRequestsLogger(object):
       except websocket.WebSocketTimeoutException as e:
         logging.warning('Exception: ' + str(e))
         break
+    if not self._please_stop:
+      logging.warning('Finished with timeout instead of page load')
     inspector.StopMonitoringNetwork()
     return inspector.GetResponseData()
 
-  def LogPageLoad(self, url, clear_cache):
+  def _LogTracingInternal(self, url):
+    self._main_frame_id = None
+    self._please_stop = False
+    r = httplib.HTTPConnection('localhost', device_setup.DEVTOOLS_PORT)
+    r.request('GET', '/json')
+    response = r.getresponse()
+    if response.status != 200:
+      logging.error('Cannot connect to the remote target.')
+      return None
+    json_response = json.loads(response.read())
+    r.close()
+    websocket_url = json_response[0]['webSocketDebuggerUrl']
+    ws = inspector_websocket.InspectorWebsocket()
+    ws.Connect(websocket_url)
+    ws.RegisterDomain('Tracing', self._TracingDataReceived)
+    logging.warning('Tracing.start: ' +
+                    str(ws.SyncRequest({'method': 'Tracing.start',
+                                        'options': 'zork'})))
+    ws.SendAndIgnoreResponse({'method': 'Page.navigate',
+                              'params': {'url': url}})
+    while not self._please_stop:
+      try:
+        ws.DispatchNotifications()
+      except websocket.WebSocketTimeoutException:
+        break
+    if not self._please_stop:
+      logging.warning('Finished with timeout instead of page load')
+    return {'events': self._tracing_data,
+            'end': ws.SyncRequest({'method': 'Tracing.end'})}
+
+
+  def LogPageLoad(self, url, clear_cache, package):
     """Returns the collection of requests made to load a given URL on a device.
 
     Args:
@@ -145,19 +152,19 @@ class AndroidRequestsLogger(object):
     Returns:
       See _LogPageLoadInternal().
     """
-    package_info = constants.PACKAGE_INFO['chrome']
-    command_line_path = '/data/local/chrome-command-line'
-    new_flags = ['--enable-test-events', '--remote-debugging-port=%d' % _PORT]
-    _SetUpDevice(self.device, package_info)
-    with FlagChanger(self.device, command_line_path, new_flags):
-      start_intent = intent.Intent(
-          package=package_info.package, activity=package_info.activity,
-          data='about:blank')
-      self.device.StartActivity(start_intent, blocking=True)
-      time.sleep(2)
-      with ForwardPort(self.device, 'tcp:%d' % _PORT,
-                       'localabstract:chrome_devtools_remote'):
-        return self._LogPageLoadInternal(url, clear_cache)
+    return device_setup.SetUpAndExecute(
+        self.device, package,
+        lambda: self._LogPageLoadInternal(url, clear_cache))
+
+  def LogTracing(self, url):
+    """Log tracing events from a load of the given URL.
+
+    TODO(mattcary): This doesn't work. It would be best to log tracing
+    simultaneously with network requests, but as that wasn't working the tracing
+    logging was broken out separately. It still doesn't work...
+    """
+    return device_setup.SetUpAndExecute(
+        self.device, 'chrome', lambda: self._LogTracingInternal(url))
 
 
 def _ResponseDataToJson(data):
@@ -197,16 +204,30 @@ def _CreateOptionParser():
   parser.add_option('--no-clear-cache', help=('Do not clear the HTTP cache '
                                               'before loading the URL.'),
                     default=True, action='store_false', dest='clear_cache')
+  parser.add_option('--package', help='Package info for chrome build. '
+                                      'See build/android/pylib/constants.',
+                    default='chrome')
+  parser.add_option('--local', action='store_true', default=False,
+                    help='Connect to local chrome session rather than android.')
   return parser
 
 
 def main():
+  logging.basicConfig(level=logging.WARNING)
   parser = _CreateOptionParser()
   options, _ = parser.parse_args()
-  devices = device_utils.DeviceUtils.HealthyDevices()
-  device = devices[0]
+
+  devil_chromium.Initialize()
+
+  if options.local:
+    device = None
+  else:
+    devices = device_utils.DeviceUtils.HealthyDevices()
+    device = devices[0]
+
   request_logger = AndroidRequestsLogger(device)
-  response_data = request_logger.LogPageLoad(options.url, options.clear_cache)
+  response_data = request_logger.LogPageLoad(
+      options.url, options.clear_cache, options.package)
   json_data = _ResponseDataToJson(response_data)
   with open(options.output, 'w') as f:
     f.write(json_data)

@@ -15,11 +15,11 @@
 #include "components/mus/ws/window_tree_host_connection.h"
 #include "components/mus/ws/window_tree_host_impl.h"
 #include "components/mus/ws/window_tree_impl.h"
-#include "mojo/application/public/cpp/application_connection.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/application_runner.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
+#include "mojo/shell/public/cpp/application_connection.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/application_runner.h"
 #include "ui/events/event_switches.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gl/gl_surface.h"
@@ -45,7 +45,7 @@ MandolineUIServicesApp::MandolineUIServicesApp()
 
 MandolineUIServicesApp::~MandolineUIServicesApp() {
   if (gpu_state_)
-    gpu_state_->StopControlThread();
+    gpu_state_->StopThreads();
   // Destroy |connection_manager_| first, since it depends on |event_source_|.
   connection_manager_.reset();
 }
@@ -55,9 +55,9 @@ void MandolineUIServicesApp::Initialize(ApplicationImpl* app) {
   surfaces_state_ = new SurfacesState;
 
 #if defined(USE_X11)
+  XInitThreads();
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(kUseX11TestConfig)) {
-    XInitThreads();
     ui::test::SetUseOverrideRedirectWindowByDefault(true);
   }
 #endif

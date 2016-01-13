@@ -14,7 +14,6 @@ import android.app.Instrumentation.ActivityMonitor;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.os.SystemClock;
 import android.test.FlakyTest;
@@ -1015,20 +1014,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     }
 
     /**
-     * Tests a sequence in landscape orientation: swiping the overlay open, after an
-     * initial tap that activates the peeking card.
-     */
-    @DisabledTest // https://crbug.com/543733
-    @SmallTest
-    @Feature({"ContextualSearch"})
-    @Restriction({RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    public void testSwipeExpandLandscape() throws InterruptedException, TimeoutException {
-        getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        testSwipeExpand();
-        getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-    }
-
-    /**
      * Tests that only a single low-priority request is issued for a Tap/Open sequence.
      */
     @SmallTest
@@ -1192,7 +1177,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     /**
      * Tests that a Tap gesture followed by tapping a non-text character doesn't select.
      */
-    @DisabledTest // https://crbug.com/552107
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
@@ -1201,9 +1185,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         clickWordNode("states-far");
         waitForPanelToPeek();
         clickNode("button");
-        waitForGestureProcessing();
-        assertPanelClosedOrUndefined();
-        assertNull(mSelectionController.getSelectedText());
+        waitForPanelToCloseAndSelectionDissolved();
     }
 
     /**
@@ -1589,34 +1571,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         clickWordNode("states");
         clickNode("states-far");
         waitForPanelToCloseAndSelectionDissolved();
-    }
-
-    /**
-     * This is a test that happens to create a separate bar without any content area!
-     *
-     * @SmallTest
-     * @Feature({"ContextualSearch"})
-     */
-    @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @FlakyTest
-    public void testDisembodiedBar() throws InterruptedException, TimeoutException {
-        mPolicy.setTapPrefetchLimitForDecidedForTesting(2);
-        clickToTriggerPrefetch();
-        assertLoadedLowPriorityUrl();
-        clickToTriggerPrefetch();
-        assertLoadedLowPriorityUrl();
-        // 3rd click should not preload.
-        clickToTriggerPrefetch();
-        assertLoadedNoUrl();
-
-        // Expanding the panel should reset the limit.
-        flingPanelUp();
-        tapBasePageToClosePanel();
-        waitForPanelToCloseAndSelectionDissolved();
-
-        // Click should preload again.
-        clickToTriggerPrefetch();
-        assertLoadedLowPriorityUrl();
     }
 
     /**

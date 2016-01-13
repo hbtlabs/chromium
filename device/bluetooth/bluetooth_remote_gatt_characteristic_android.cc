@@ -24,12 +24,14 @@ namespace device {
 scoped_ptr<BluetoothRemoteGattCharacteristicAndroid>
 BluetoothRemoteGattCharacteristicAndroid::Create(
     BluetoothAdapterAndroid* adapter,
+    BluetoothRemoteGattServiceAndroid* service,
     const std::string& instance_id,
     jobject /* BluetoothGattCharacteristicWrapper */
     bluetooth_gatt_characteristic_wrapper,
     jobject /* ChromeBluetoothDevice */ chrome_bluetooth_device) {
   scoped_ptr<BluetoothRemoteGattCharacteristicAndroid> characteristic(
-      new BluetoothRemoteGattCharacteristicAndroid(adapter, instance_id));
+      new BluetoothRemoteGattCharacteristicAndroid(adapter, service,
+                                                   instance_id));
 
   JNIEnv* env = AttachCurrentThread();
   characteristic->j_characteristic_.Reset(
@@ -80,8 +82,7 @@ const std::vector<uint8_t>& BluetoothRemoteGattCharacteristicAndroid::GetValue()
 
 BluetoothGattService* BluetoothRemoteGattCharacteristicAndroid::GetService()
     const {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return service_;
 }
 
 BluetoothGattCharacteristic::Properties
@@ -252,24 +253,25 @@ void BluetoothRemoteGattCharacteristicAndroid::CreateGattRemoteDescriptor(
     const JavaParamRef<jstring>& instanceId,
     const JavaParamRef<jobject>& /* BluetoothGattDescriptorWrapper */
     bluetooth_gatt_descriptor_wrapper,
-    const JavaParamRef<
-        jobject>& /* chromeBluetoothDevice */ chrome_bluetooth_device) {
+    const JavaParamRef<jobject>& /* ChromeBluetoothDevice */
+    chrome_bluetooth_device) {
   std::string instanceIdString =
       base::android::ConvertJavaStringToUTF8(env, instanceId);
 
   DCHECK(!descriptors_.contains(instanceIdString));
 
-  descriptors_.set(
-      instanceIdString,
-      BluetoothRemoteGattDescriptorAndroid::Create(
-          adapter_, instanceIdString, bluetooth_gatt_descriptor_wrapper,
-          chrome_bluetooth_device));
+  descriptors_.set(instanceIdString,
+                   BluetoothRemoteGattDescriptorAndroid::Create(
+                       instanceIdString, bluetooth_gatt_descriptor_wrapper,
+                       chrome_bluetooth_device));
 }
 
 BluetoothRemoteGattCharacteristicAndroid::
-    BluetoothRemoteGattCharacteristicAndroid(BluetoothAdapterAndroid* adapter,
-                                             const std::string& instance_id)
-    : adapter_(adapter), instance_id_(instance_id) {}
+    BluetoothRemoteGattCharacteristicAndroid(
+        BluetoothAdapterAndroid* adapter,
+        BluetoothRemoteGattServiceAndroid* service,
+        const std::string& instance_id)
+    : adapter_(adapter), service_(service), instance_id_(instance_id) {}
 
 void BluetoothRemoteGattCharacteristicAndroid::EnsureDescriptorsCreated()
     const {

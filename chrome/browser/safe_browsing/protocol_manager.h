@@ -91,6 +91,7 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // argument when the results are retrieved. The callback may be invoked
   // synchronously. Uses the V4 Safe Browsing protocol.
   virtual void GetV4FullHashes(const std::vector<SBPrefix>& prefixes,
+                               const std::vector<PlatformType>& platforms,
                                ThreatType threat_type,
                                FullHashCallback callback);
 
@@ -206,7 +207,17 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
                            TestGetV4HashRequest);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
+                           TestParseV4HashResponse);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
+                           TestParseV4HashResponseWrongThreatEntryType);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
+                           TestParseV4HashResponseSocialEngineeringThreatType);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
+                           TestParseV4HashResponseNonPermissionMetadata);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
                            TestGetHashBackOffTimes);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest,
+                           TestGetV4HashBackOffTimes);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestNextChunkUrl);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingProtocolManagerTest, TestUpdateUrl);
   friend class SafeBrowsingServerTest;
@@ -246,10 +257,20 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // encoded in base 64.
   GURL GetV4HashUrl(const std::string& request_base64) const;
 
-  // Fills a FindFullHashesRequest protocol buffer for an API_ABUSE request.
+  // Fills a FindFullHashesRequest protocol buffer for a V4 request.
   // Returns the serialized and base 64 encoded request as a string.
   std::string GetV4HashRequest(const std::vector<SBPrefix>& prefixes,
+                               const std::vector<PlatformType>& platforms,
                                ThreatType threat_type);
+
+  // Parses a FindFullHashesResponse protocol buffer and fills the results in
+  // |full_hashes| and |negative_cache_duration|. |data| is a serialized
+  // FindFullHashes protocol buffer. |negative_cache_duration| is the duration
+  // to cache the response for entities that did not match the threat list.
+  // Returns true if parsing is successful, false otherwise.
+  bool ParseV4HashResponse(const std::string& data_base64,
+                           std::vector<SBFullHashResult>* full_hashes,
+                           base::TimeDelta* negative_cache_duration);
 
   // Composes a ChunkUrl based on input string.
   GURL NextChunkUrl(const std::string& input) const;
@@ -264,6 +285,15 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // 2nd and 5th, and |error_count| is incremented with each call.
   base::TimeDelta GetNextBackOffInterval(size_t* error_count,
                                          size_t* multiplier) const;
+
+  // Worker function for calculating the V4 GetHash backoff times.
+  // |multiplier| is doubled for each consecutive error after the
+  // first, and |error_count| is incremented with each call.
+  static base::TimeDelta GetNextV4BackOffInterval(size_t* error_count,
+                                                  size_t* multiplier);
+
+  // Resets the V4 gethash error counter and multiplier.
+  void ResetGetHashV4Errors();
 
   // Manages our update with the next allowable update time. If 'back_off_' is
   // true, we must decrease the frequency of requests of the SafeBrowsing
@@ -298,6 +328,10 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // Updates internal state for each GetHash response error, assuming that the
   // current time is |now|.
   void HandleGetHashError(const base::Time& now);
+
+  // Updates internal state for each GetHash V4 response error, assuming that
+  // the current time is |now|.
+  void HandleGetHashV4Error(const base::Time& now);
 
   // Helper function for update completion.
   void UpdateFinished(bool success);
@@ -337,13 +371,16 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
   // The kind of request that is currently in progress.
   SafeBrowsingRequestType request_type_;
 
-  // The number of HTTP response errors, used for request backoff timing.
+  // The number of HTTP response errors since the the last successful HTTP
+  // response, used for request backoff timing.
   size_t update_error_count_;
   size_t gethash_error_count_;
+  size_t gethash_v4_error_count_;
 
   // Multipliers which double (max == 8) for each error after the second.
   size_t update_back_off_mult_;
   size_t gethash_back_off_mult_;
+  size_t gethash_v4_back_off_mult_;
 
   // Multiplier between 0 and 1 to spread clients over an interval.
   float back_off_fuzz_;
@@ -375,6 +412,10 @@ class SafeBrowsingProtocolManager : public net::URLFetcherDelegate,
 
   // While in GetHash backoff, we can't make another GetHash until this time.
   base::Time next_gethash_time_;
+  // For v4, the next gethash time is set to the backoff time is the last
+  // response was an error, or the minimum wait time if the last response was
+  // successful.
+  base::Time next_gethash_v4_time_;
 
   // Current product version sent in each request.
   std::string version_;

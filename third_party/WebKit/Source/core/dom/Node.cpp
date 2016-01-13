@@ -907,7 +907,6 @@ void Node::detach(const AttachContext& context)
     if (layoutObject())
         layoutObject()->destroyAndCleanupAnonymousWrappers();
     setLayoutObject(nullptr);
-
     setStyleChange(NeedsReattachStyleChange);
     clearChildNeedsStyleInvalidation();
 }
@@ -980,23 +979,21 @@ bool Node::isInV0ShadowTree() const
     return shadowRoot && !shadowRoot->isV1();
 }
 
-static ElementShadow* parentElementShadow(const Node& node)
+ElementShadow* Node::parentElementShadow() const
 {
-    Element* parent = node.parentElement();
-    if (!parent)
-        return nullptr;
-    return parent->shadow();
+    Element* parent = parentElement();
+    return parent ? parent->shadow() : nullptr;
 }
 
 bool Node::isChildOfV1ShadowHost() const
 {
-    ElementShadow* parentShadow = parentElementShadow(*this);
+    ElementShadow* parentShadow = parentElementShadow();
     return parentShadow && parentShadow->isV1();
 }
 
 bool Node::isChildOfV0ShadowHost() const
 {
-    ElementShadow* parentShadow = parentElementShadow(*this);
+    ElementShadow* parentShadow = parentElementShadow();
     return parentShadow && !parentShadow->isV1();
 }
 
@@ -2243,7 +2240,7 @@ PassRefPtrWillBeRawPtr<StaticNodeList> Node::getDestinationInsertionPoints()
 HTMLSlotElement* Node::assignedSlot() const
 {
     ASSERT(!needsDistributionRecalc());
-    if (ElementShadow* shadow = parentElementShadow(*this))
+    if (ElementShadow* shadow = parentElementShadow())
         return shadow->assignedSlotFor(*this);
     return nullptr;
 }
@@ -2251,7 +2248,7 @@ HTMLSlotElement* Node::assignedSlot() const
 HTMLSlotElement* Node::assignedSlotForBinding()
 {
     updateDistribution();
-    if (ElementShadow* shadow = parentElementShadow(*this)) {
+    if (ElementShadow* shadow = parentElementShadow()) {
         if (shadow->isV1() && shadow->isOpenOrV0())
             return shadow->assignedSlotFor(*this);
     }

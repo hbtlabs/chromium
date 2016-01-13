@@ -9,9 +9,9 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
-#include "chrome/browser/ssl/security_state_model.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+#include "components/security_state/security_state_model.h"
 #include "content/public/common/page_zoom.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -103,16 +103,14 @@ bool CanBookmarkAllTabs(const Browser* browser);
 void SaveCreditCard(Browser* browser);
 void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
-#if defined(OS_WIN)
-void TogglePagePinnedToStartScreen(Browser* browser);
-#endif
 void SavePage(Browser* browser);
 bool CanSavePage(const Browser* browser);
 void ShowFindBar(Browser* browser);
-void ShowWebsiteSettings(Browser* browser,
-                         content::WebContents* web_contents,
-                         const GURL& url,
-                         const SecurityStateModel::SecurityInfo& security_info);
+void ShowWebsiteSettings(
+    Browser* browser,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityStateModel::SecurityInfo& security_info);
 void Print(Browser* browser);
 bool CanPrint(Browser* browser);
 #if defined(ENABLE_BASIC_PRINTING)

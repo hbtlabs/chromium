@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 
+#include <string>
+
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -101,6 +103,8 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "appearancePageTitle", IDS_SETTINGS_APPEARANCE);
   html_source->AddLocalizedString(
+      "exampleDotCom", IDS_SETTINGS_EXAMPLE_DOT_COM);
+  html_source->AddLocalizedString(
       "setWallpaper", IDS_SETTINGS_SET_WALLPAPER);
   html_source->AddLocalizedString(
       "getThemes", IDS_SETTINGS_THEMES);
@@ -113,7 +117,7 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
   html_source->AddLocalizedString(
       "homePageNtp", IDS_SETTINGS_HOME_PAGE_NTP);
   html_source->AddLocalizedString(
-      "openThisPage", IDS_SETTINGS_OPEN_THIS_PAGE);
+      "other", IDS_SETTINGS_OTHER);
   html_source->AddLocalizedString(
       "changeHomePage", IDS_SETTINGS_CHANGE_HOME_PAGE);
   html_source->AddLocalizedString(
@@ -459,20 +463,14 @@ void AddOnStartupStrings(content::WebUIDataSource* html_source) {
       "onStartupOpenSpecific",
       IDS_SETTINGS_ON_STARTUP_OPEN_SPECIFIC);
   html_source->AddLocalizedString(
-      "onStartupAddPage",
-      IDS_SETTINGS_ON_STARTUP_ADD_PAGE);
-  html_source->AddLocalizedString(
-      "onStartupSetPages",
-      IDS_SETTINGS_ON_STARTUP_SET_PAGES);
-  html_source->AddLocalizedString(
       "onStartupUseCurrent",
       IDS_SETTINGS_ON_STARTUP_USE_CURRENT);
   html_source->AddLocalizedString(
       "onStartupAddNewPage",
       IDS_SETTINGS_ON_STARTUP_ADD_NEW_PAGE);
   html_source->AddLocalizedString(
-      "onStartupEnterUrl",
-      IDS_SETTINGS_ON_STARTUP_ENTER_URL);
+      "onStartupSiteUrl",
+      IDS_SETTINGS_ON_STARTUP_SITE_URL);
 }
 
 void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {

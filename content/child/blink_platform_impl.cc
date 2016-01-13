@@ -1089,15 +1089,6 @@ double BlinkPlatformImpl::monotonicallyIncreasingTimeSeconds() {
       static_cast<double>(base::Time::kMicrosecondsPerSecond);
 }
 
-double BlinkPlatformImpl::systemTraceTime() {
-  return (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-}
-
-void BlinkPlatformImpl::cryptographicallyRandomValues(
-    unsigned char* buffer, size_t length) {
-  base::RandBytes(buffer, length);
-}
-
 blink::WebThread* BlinkPlatformImpl::compositorThread() const {
   return compositor_thread_;
 }

@@ -73,10 +73,6 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
-#if defined(OS_WIN)
-#include "chrome/browser/ui/metro_pin_tab_helper_win.h"
-#endif
-
 #if defined(ENABLE_CAPTIVE_PORTAL_DETECTION)
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
 #endif
@@ -164,7 +160,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
                             web_contents->GetBrowserContext())).get());
   HistoryTabHelper::CreateForWebContents(web_contents);
   InfoBarService::CreateForWebContents(web_contents);
-  ManagePasswordsUIController::CreateForWebContents(web_contents);
   NavigationCorrectionTabObserver::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
   chrome::InitializePageLoadMetricsForWebContents(web_contents);
@@ -193,6 +188,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents);
   extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
   HungPluginTabHelper::CreateForWebContents(web_contents);
+  ManagePasswordsUIController::CreateForWebContents(web_contents);
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents,
       scoped_ptr<pdf::PDFWebContentsHelperClient>(
@@ -210,10 +206,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (banners::AppBannerManagerDesktop::IsEnabled()) {
     banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
   }
-#endif
-
-#if defined(OS_WIN)
-  MetroPinTabHelper::CreateForWebContents(web_contents);
 #endif
 
   // --- Feature tab helpers behind flags ---

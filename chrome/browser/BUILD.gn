@@ -159,6 +159,7 @@ source_set("browser") {
     "//components/search_engines",
     "//components/search_provider_logos",
     "//components/security_interstitials/core",
+    "//components/security_state",
     "//components/signin/core/browser",
     "//components/ssl_errors",
     "//components/startup_metric_utils/browser:lib",
@@ -358,11 +359,11 @@ source_set("browser") {
       "//device/usb",
       "//media",
       "//media/midi",
-      "//mojo/application/public/cpp",
       "//mojo/common",
       "//mojo/environment:chromium",
       "//mojo/public/cpp/bindings",
       "//mojo/public/js",
+      "//mojo/shell/public/cpp",
       "//net:extras",
       "//net:net_with_v8",
       "//storage/browser",
@@ -1002,7 +1003,6 @@ if (is_win) {
     ]
     deps = [
       "//base",
-      "//chrome/browser/metro_utils",
       "//chrome/common:constants",
     ]
     if (enable_configuration_policy) {

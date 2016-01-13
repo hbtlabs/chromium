@@ -117,7 +117,8 @@ class CC_EXPORT TileManager {
   // SetResources.
   void SetResources(ResourcePool* resource_pool,
                     TileTaskRunner* tile_task_runner,
-                    size_t scheduled_raster_task_limit);
+                    size_t scheduled_raster_task_limit,
+                    bool use_gpu_rasterization);
 
   // This causes any completed raster work to finalize, so that tiles get up to
   // date draw information.
@@ -242,12 +243,7 @@ class CC_EXPORT TileManager {
   void OnRasterTaskCompleted(
       Tile::Id tile,
       Resource* resource,
-      const DisplayListRasterSource::SolidColorAnalysis& analysis,
       bool was_canceled);
-  void UpdateTileDrawInfo(
-      Tile* tile,
-      Resource* resource,
-      const DisplayListRasterSource::SolidColorAnalysis& analysis);
 
   void FreeResourcesForTile(Tile* tile);
   void FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(Tile* tile);
@@ -291,6 +287,7 @@ class CC_EXPORT TileManager {
   GlobalStateThatImpactsTilePriority global_state_;
   size_t scheduled_raster_task_limit_;
   const bool use_partial_raster_;
+  bool use_gpu_rasterization_;
 
   typedef base::hash_map<Tile::Id, Tile*> TileMap;
   TileMap tiles_;

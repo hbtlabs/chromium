@@ -182,6 +182,16 @@ TEST_F(BluetoothGattCharacteristicTest, GetProperties) {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
+// Tests GetService.
+TEST_F(BluetoothGattCharacteristicTest, GetService) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  EXPECT_EQ(service_, characteristic1_->GetService());
+  EXPECT_EQ(service_, characteristic2_->GetService());
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
 // Tests ReadRemoteCharacteristic and GetValue with empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Empty) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
@@ -739,6 +749,12 @@ TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_and_GetDescriptor) {
   EXPECT_EQ(c1_uuid2, characteristic1_->GetDescriptor(c1_id2)->GetUUID());
   EXPECT_EQ(c2_uuid1, characteristic2_->GetDescriptor(c2_id1)->GetUUID());
   EXPECT_EQ(c2_uuid2, characteristic2_->GetDescriptor(c2_id2)->GetUUID());
+
+  // GetDescriptors & GetDescriptor return the same object for the same ID:
+  EXPECT_EQ(characteristic1_->GetDescriptors()[0],
+            characteristic1_->GetDescriptor(c1_id1));
+  EXPECT_EQ(characteristic1_->GetDescriptor(c1_id1),
+            characteristic1_->GetDescriptor(c1_id1));
 
   // Characteristic 1 has descriptor uuids 1 and 2 (we don't know the order).
   EXPECT_TRUE(c1_uuid1 == uuid1 || c1_uuid2 == uuid1);

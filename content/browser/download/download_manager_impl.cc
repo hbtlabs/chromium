@@ -329,6 +329,7 @@ void DownloadManagerImpl::Shutdown() {
       download->Cancel(false);
   }
   STLDeleteValues(&downloads_);
+  url_downloaders_.clear();
 
   // We'll have nothing more to report to the observers after this point.
   observers_.Clear();
@@ -378,6 +379,9 @@ void DownloadManagerImpl::StartDownloadWithId(
       info->request_handle->CancelRequest();
       if (!on_started.is_null())
         on_started.Run(NULL, DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
+      // The ByteStreamReader lives and dies on the FILE thread.
+      BrowserThread::DeleteSoon(BrowserThread::FILE, FROM_HERE,
+                                stream.release());
       return;
     }
     download = item_iterator->second;

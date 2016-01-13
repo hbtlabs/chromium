@@ -8,12 +8,13 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
@@ -260,7 +261,7 @@ void SafeBrowsingResourceThrottle::OnCheckBrowseUrlResult(
       content::BrowserThread::GetMessageLoopProxyForThread(
           content::BrowserThread::IO);
   resource.render_process_host_id = info->GetChildID();
-  resource.render_view_id = info->GetRouteID();
+  resource.render_frame_id = info->GetRenderFrameID();
   resource.threat_source = database_manager_->GetThreatSource();
 
   state_ = STATE_DISPLAYING_BLOCKING_PAGE;
@@ -276,11 +277,11 @@ void SafeBrowsingResourceThrottle::StartDisplayingBlockingPage(
     const base::WeakPtr<SafeBrowsingResourceThrottle>& throttle,
     scoped_refptr<SafeBrowsingUIManager> ui_manager,
     const SafeBrowsingUIManager::UnsafeResource& resource) {
-  content::RenderViewHost* rvh = content::RenderViewHost::FromID(
-      resource.render_process_host_id, resource.render_view_id);
-  if (rvh) {
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      resource.render_process_host_id, resource.render_frame_id);
+  if (rfh) {
     content::WebContents* web_contents =
-        content::WebContents::FromRenderViewHost(rvh);
+        content::WebContents::FromRenderFrameHost(rfh);
     prerender::PrerenderContents* prerender_contents =
         prerender::PrerenderContents::FromWebContents(web_contents);
 
@@ -321,6 +322,8 @@ void SafeBrowsingResourceThrottle::OnBlockingPageComplete(bool proceed) {
 }
 
 bool SafeBrowsingResourceThrottle::CheckUrl(const GURL& url) {
+  TRACE_EVENT1("SafeBrowsing", "SafeBrowsingResourceThrottle::CheckUrl", "url",
+               url.spec());
   CHECK_EQ(state_, STATE_NONE);
   // To reduce aggregate latency on mobile, check only the most dangerous
   // resource types.

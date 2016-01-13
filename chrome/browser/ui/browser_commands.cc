@@ -14,6 +14,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
@@ -83,10 +84,6 @@
 #include "content/public/common/user_agent.h"
 #include "net/base/escape.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-
-#if defined(OS_WIN)
-#include "chrome/browser/ui/metro_pin_tab_helper_win.h"
-#endif
 
 #if defined(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -847,14 +844,6 @@ void ManagePasswordsForPage(Browser* browser) {
       !controller->IsAutomaticallyOpeningBubble());
 }
 
-#if defined(OS_WIN)
-void TogglePagePinnedToStartScreen(Browser* browser) {
-  MetroPinTabHelper::FromWebContents(
-      browser->tab_strip_model()->GetActiveWebContents())->
-          TogglePinnedToStartScreen();
-}
-#endif
-
 void SavePage(Browser* browser) {
   content::RecordAction(UserMetricsAction("SavePage"));
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
@@ -882,7 +871,7 @@ void ShowWebsiteSettings(
     Browser* browser,
     content::WebContents* web_contents,
     const GURL& url,
-    const SecurityStateModel::SecurityInfo& security_info) {
+    const security_state::SecurityStateModel::SecurityInfo& security_info) {
   browser->window()->ShowWebsiteSettings(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()),
       web_contents, url, security_info);
@@ -1178,8 +1167,9 @@ void ToggleFullscreenMode(Browser* browser) {
 
 void ClearCache(Browser* browser) {
   BrowsingDataRemover* remover =
-      BrowsingDataRemover::CreateForUnboundedRange(browser->profile());
-  remover->Remove(BrowsingDataRemover::REMOVE_CACHE,
+      BrowsingDataRemoverFactory::GetForBrowserContext(browser->profile());
+  remover->Remove(BrowsingDataRemover::Unbounded(),
+                  BrowsingDataRemover::REMOVE_CACHE,
                   BrowsingDataHelper::UNPROTECTED_WEB);
   // BrowsingDataRemover takes care of deleting itself when done.
 }

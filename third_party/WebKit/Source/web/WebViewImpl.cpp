@@ -1854,7 +1854,7 @@ void WebViewImpl::performResize()
     // (see MediaQueryExp::isViewportDependent), since they are only viewport-dependent in emulation mode,
     // and thus will not be invalidated in |FrameView::performPreLayoutTasks|.
     // Therefore we should force explicit media queries invalidation here.
-    if (m_devToolsEmulator->deviceEmulationEnabled()) {
+    if (m_devToolsEmulator->resizeIsDeviceSizeChange()) {
         if (Document* document = mainFrameImpl()->frame()->document())
             document->mediaQueryAffectingValueChanged();
     }
@@ -1902,12 +1902,11 @@ TopControls& WebViewImpl::topControls()
 
 void WebViewImpl::resizeViewWhileAnchored(FrameView* view)
 {
-    // FIXME: TextAutosizer does not yet support out-of-process frames.
-    if (mainFrameImpl() && mainFrameImpl()->frame()->isLocalFrame()) {
+    ASSERT(mainFrameImpl() && mainFrameImpl()->frame()->isLocalFrame());
+
+    {
         // Avoids unnecessary invalidations while various bits of state in TextAutosizer are updated.
         TextAutosizer::DeferUpdatePageInfo deferUpdatePageInfo(page());
-        performResize();
-    } else {
         performResize();
     }
 
@@ -1922,6 +1921,17 @@ void WebViewImpl::resize(const WebSize& newSize)
 {
     if (m_shouldAutoResize || m_size == newSize)
         return;
+
+    if (page()->mainFrame() && !page()->mainFrame()->isLocalFrame()) {
+        // Viewport resize for a remote main frame does not require any
+        // particular action, but the state needs to reflect the correct size
+        // so that it can be used for initalization if the main frame gets
+        // swapped to a LocalFrame at a later time.
+        m_size = newSize;
+        pageScaleConstraintsSet().didChangeViewSize(m_size);
+        page()->frameHost().visualViewport().setSize(m_size);
+        return;
+    }
 
     WebLocalFrameImpl* mainFrame = mainFrameImpl();
     if (!mainFrame)
@@ -2270,12 +2280,6 @@ void WebViewImpl::mouseCaptureLost()
 
 void WebViewImpl::setFocus(bool enable)
 {
-    // On Windows, unnecessary setFocus(false) is called if a popup is shown and
-    // the hotdog menu is clicked.
-    // TODO(tkent): This should be fixed in Chromium.
-    if (!enable && m_pagePopup)
-        return;
-
     m_page->focusController().setFocused(enable);
     if (enable) {
         m_page->focusController().setActive(true);

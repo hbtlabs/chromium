@@ -23,15 +23,44 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
     *textures = ++gen_textures;
   }
 
-  GLuint InsertSyncPointCHROMIUM() override { return ++sync_point; }
+  void ShallowFlushCHROMIUM() override {
+    flushed_fence_sync_ = next_fence_sync_ - 1;
+  }
+
+  void OrderingBarrierCHROMIUM() override {
+    flushed_fence_sync_ = next_fence_sync_ - 1;
+  }
+
+  GLuint64 InsertFenceSyncCHROMIUM() override { return next_fence_sync_++; }
+
+  void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override {
+    gpu::SyncToken sync_token_data;
+    if (fence_sync <= flushed_fence_sync_) {
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
+                          fence_sync);
+      sync_token_data.SetVerifyFlush();
+    }
+    memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
+  }
+
+  void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
+                                      GLbyte* sync_token) override {
+    gpu::SyncToken sync_token_data;
+    if (fence_sync <= flushed_fence_sync_) {
+      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0, 0,
+                          fence_sync);
+    }
+    memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
+  }
 
   void GenMailboxCHROMIUM(GLbyte* mailbox) override {
-    *reinterpret_cast<unsigned*>(mailbox) = ++this->mailbox;
+    *reinterpret_cast<unsigned*>(mailbox) = ++mailbox_;
   }
 
  private:
-  unsigned sync_point = 0u;
-  unsigned mailbox = 0u;
+  uint64_t next_fence_sync_ = 1u;
+  uint64_t flushed_fence_sync_ = 0u;
+  unsigned mailbox_ = 0u;
 };
 
 }  // unnamed namespace
@@ -155,6 +184,55 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, ReuseFirstResource) {
   EXPECT_NE(software_frame.get(), frame.get());
   EXPECT_EQ(6u, gles2_->gen_textures);
   EXPECT_EQ(frame->mailbox_holder(0).mailbox, mailbox);
+  EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
+}
+
+TEST_F(GpuMemoryBufferVideoFramePoolTest, DoNotReuseInUse) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  scoped_refptr<VideoFrame> frame2;
+
+  // Allocate a frame.
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame.get());
+  gpu::Mailbox mailbox = frame->mailbox_holder(0).mailbox;
+  const gpu::SyncToken sync_token = frame->mailbox_holder(0).sync_token;
+  EXPECT_EQ(3u, gles2_->gen_textures);
+
+  // Allocate a second frame.
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame2));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame2.get());
+  EXPECT_NE(mailbox, frame2->mailbox_holder(0).mailbox);
+  EXPECT_EQ(6u, gles2_->gen_textures);
+
+  // Allow the frames to be recycled.
+  frame = nullptr;
+  frame2 = nullptr;
+  RunUntilIdle();
+
+  // Set all buffers to be in use, so the next hardware frame will require
+  // a new allocation.
+  mock_gpu_factories_->SetGpuMemoryBuffersInUseByMacOSWindowServer(true);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(9u, gles2_->gen_textures);
+  EXPECT_NE(frame->mailbox_holder(0).mailbox, mailbox);
+  EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
+
+  // Set the buffers no longer in use, so no new allocations will be made.
+  mock_gpu_factories_->SetGpuMemoryBuffersInUseByMacOSWindowServer(false);
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame2));
+  RunUntilIdle();
+  EXPECT_NE(software_frame.get(), frame2.get());
+  EXPECT_EQ(9u, gles2_->gen_textures);
+  EXPECT_NE(frame->mailbox_holder(0).mailbox, mailbox);
   EXPECT_NE(frame->mailbox_holder(0).sync_token, sync_token);
 }
 

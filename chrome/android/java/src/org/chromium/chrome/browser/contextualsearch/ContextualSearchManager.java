@@ -4,13 +4,13 @@
 
 package org.chromium.chrome.browser.contextualsearch;
 
-import android.content.Context;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.ViewTreeObserver.OnGlobalFocusChangeListener;
 
+import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -47,15 +47,10 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.content_public.common.TopControlsState;
-import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
 
 import javax.annotation.Nullable;
 
@@ -66,7 +61,7 @@ import javax.annotation.Nullable;
  * with the layout.
  */
 public class ContextualSearchManager extends ContextualSearchObservable
-        implements ContextualSearchManagementDelegate,
+        implements ContextualSearchManagementDelegate, ContextualSearchTranslateInterface,
                 ContextualSearchNetworkCommunicator, ContextualSearchSelectionHandler,
                 ContextualSearchClient {
 
@@ -89,6 +84,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
     private final ChromeActivity mActivity;
     private ViewGroup mParentView;
     private final ViewTreeObserver.OnGlobalFocusChangeListener mOnFocusChangeListener;
+    private final ContextualSearchTranslateController mTranslateController;
 
     private final WindowAndroid mWindowAndroid;
     private WebContentsObserver mSearchWebContentsObserver;
@@ -119,10 +115,6 @@ public class ContextualSearchManager extends ContextualSearchObservable
     private boolean mWouldShowPeekPromo;
     private boolean mIsShowingPromo;
     private boolean mDidLogPromoOutcome;
-
-    // Cached native language data for translation;
-    private String mTranslateServiceTargetLanguage;
-    private String mAcceptLanguages;
 
     /**
      * Whether contextual search manager is currently promoting a tab. We should be ignoring hide
@@ -172,6 +164,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
         mTabPromotionDelegate = tabPromotionDelegate;
 
         mSelectionController = new ContextualSearchSelectionController(activity, this);
+        mTranslateController = new ContextualSearchTranslateController(activity, mPolicy, this);
 
         final View controlContainer = mActivity.findViewById(R.id.control_container);
         mOnFocusChangeListener = new OnGlobalFocusChangeListener() {
@@ -463,12 +456,12 @@ public class ContextualSearchManager extends ContextualSearchObservable
                     mSelectionController.getSelectedText());
             didRequestSurroundings = true;
             // Cache the native translate data, so JNI calls won't be made when time-critical.
-            cacheNativeTranslateData();
+            mTranslateController.cacheNativeTranslateData();
         } else {
             boolean shouldPrefetch = mPolicy.shouldPrefetchSearchResult(isTap);
             mSearchRequest = new ContextualSearchRequest(mSelectionController.getSelectedText(),
                     null, shouldPrefetch);
-            forceAutoDetectTranslateUnlessDisabled(mSearchRequest);
+            mTranslateController.forceAutoDetectTranslateUnlessDisabled(mSearchRequest);
             mDidStartLoadingResolvedSearchRequest = false;
             mSearchPanel.displaySearchTerm(mSelectionController.getSelectedText());
             if (shouldPrefetch) loadSearchUrl();
@@ -704,7 +697,7 @@ public class ContextualSearchManager extends ContextualSearchObservable
             boolean shouldPreload = !doPreventPreload && mPolicy.shouldPrefetchSearchResult(true);
             mSearchRequest = new ContextualSearchRequest(searchTerm, alternateTerm, shouldPreload);
             // Trigger translation, if enabled.
-            forceTranslateIfNeeded(mSearchRequest, contextLanguage);
+            mTranslateController.forceTranslateIfNeeded(mSearchRequest, contextLanguage);
             mDidStartLoadingResolvedSearchRequest = false;
             if (mSearchPanel.isContentShowing()) {
                 mSearchRequest.setNormalPriority();
@@ -752,165 +745,32 @@ public class ContextualSearchManager extends ContextualSearchObservable
         return mPolicy.isTapSupported();
     }
 
+    /**
+     * Called by the page through the CS JavaScript API to notify CS that there is
+     * a caption available on the current overlay.
+     * @param caption The caption to display.
+     * @param doesAnswer Whether the caption should be regarded as an answer such
+     *        that the user may not need to open the panel, or whether the caption
+     *        is simply informative or descriptive of the answer in the full results.
+     */
+    @CalledByNative
+    private void onSetCaption(String caption, boolean doesAnswer) {
+        // TODO(donnd): notify the UI of the caption and log doesAnswer.
+        Log.i(TAG, "ctxs setCaption: '" + caption + "', " + doesAnswer);
+    }
+
     // ============================================================================================
-    // Translation support
-    // TODO(donnd): move to a separate file.
+    // ContextualSearchTranslateInterface
     // ============================================================================================
 
-    /**
-     * Gets the list of readable languages for the current user, with the first
-     * item in the list being the user's primary language (according to the Translate Service).
-     * We assume that the user can read all languages that they can write.
-     * @return The {@link List} of languages the user understands with their primary language first.
-     */
-    private List<String> getReadableLanguages() {
-        // Using LinkedHashSet keeps the entries both unique and ordered.
-        LinkedHashSet<String> uniqueLanguages = getProficientLanguages();
-
-        // Add the accept languages to the end, since they are a weaker hint than
-        // the proficient languages.
-        List<String> acceptLanguages = getAcceptLanguages();
-        for (int i = 0; i < acceptLanguages.size(); i++) {
-            uniqueLanguages.add(trimLocaleToLanguage(acceptLanguages.get(i)));
-        }
-        return new ArrayList<String>(uniqueLanguages);
+    @Override
+    public String getAcceptLanguages() {
+        return nativeGetAcceptLanguages(mNativeContextualSearchManagerPtr);
     }
 
-    /**
-     * Gets the list of languages that the current user is proficient using.
-     * The list produced is based on the Translation-Service's target language, supplemented
-     * with the user's IME keyboard locales.
-     * @return An ordered {@link List} of languages the user is proficient using.
-     */
-    private ArrayList<String> getProficientLanguageList() {
-        return new ArrayList<String>(getProficientLanguages());
-    }
-
-    /**
-     * Similar to {@link #getProficientLanguageList} except the the result is provided in
-     * a {@link LinkedHashSet} to provide access to a unique ordered list.
-     * @return a {@link LinkedHashSet} of languages the user is proficient using.
-     */
-    private LinkedHashSet<String> getProficientLanguages() {
-        LinkedHashSet<String> uniqueLanguages = new LinkedHashSet<String>();
-        // The primary language, according to the translation-service, always comes first.
-        uniqueLanguages.add(trimLocaleToLanguage(getNativeTranslateServiceTargetLanguage()));
-        // Merge in the IME locales, if possible.
-        if (!ContextualSearchFieldTrial.isKeyboardLanguagesForTranslationDisabled()) {
-            Context context = mActivity.getApplicationContext();
-            if (context != null) {
-                for (String locale : UiUtils.getIMELocales(context)) {
-                    uniqueLanguages.add(trimLocaleToLanguage(locale));
-                }
-            }
-        }
-        return uniqueLanguages;
-    }
-
-    /**
-     * Gets the list of accept languages for this user.
-     * @return The {@link List} of languages the user understands or does not want translated.
-     */
-    private List<String> getAcceptLanguages() {
-        List<String> result = new ArrayList<String>();
-        if (!ContextualSearchFieldTrial.isAcceptLanguagesForTranslationDisabled()) {
-            String acceptLanguages = getNativeAcceptLanguages();
-            for (String language : acceptLanguages.split(",")) {
-                result.add(language);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * @return The given locale as a language code.
-     */
-    private String trimLocaleToLanguage(String locale) {
-        // TODO(donnd): use getScript or getLanguageTag (both API 21), or some other standard way to
-        // strip the country, instead of hard-coding the two character language code.
-        // TODO(donnd): Shouldn't getLanguage() do this?
-        String trimmedLocale = locale.substring(0, 2);
-        return new Locale(trimmedLocale).getLanguage();
-    }
-
-    /**
-     * Force translation from the given language for the current search request,
-     * unless disabled by experiment.  Also log whenever conditions are right to translate.
-     * @param searchRequest The search request to force translation upon.
-     * @param sourceLanguage The language to translate from, or an empty string if not known.
-     */
-    private void forceTranslateIfNeeded(ContextualSearchRequest searchRequest,
-            String sourceLanguage) {
-        if (!mPolicy.isTranslationEnabled()) return;
-
-        if (!TextUtils.isEmpty(sourceLanguage)) {
-            if (mPolicy.needsTranslation(sourceLanguage, getReadableLanguages())) {
-                boolean doForceTranslate = !mPolicy.isForceTranslationOneboxDisabled();
-                if (doForceTranslate && searchRequest != null) {
-                    searchRequest.forceTranslation(sourceLanguage,
-                            mPolicy.bestTargetLanguage(getProficientLanguageList()));
-                }
-                // Log that conditions were right for translation, even though it may be disabled
-                // for an experiment so we can compare with the counter factual data.
-                ContextualSearchUma.logTranslateOnebox(doForceTranslate);
-            }
-        }
-    }
-
-    /**
-     * Force auto-detect translation for the current search request unless disabled by experiment.
-     * Also log that conditions are right to translate.
-     * @param searchRequest The search request to force translation upon.
-     */
-    private void forceAutoDetectTranslateUnlessDisabled(ContextualSearchRequest searchRequest) {
-        // Always trigger translation using auto-detect when we're not resolving,
-        // unless disabled by policy.
-        if (!mPolicy.isTranslationEnabled()) return;
-
-        boolean shouldAutoDetectTranslate = !mPolicy.isAutoDetectTranslationOneboxDisabled();
-        if (shouldAutoDetectTranslate && searchRequest != null) {
-            // The translation one-box won't actually show when the source text ends up being
-            // the same as the target text, so we err on over-triggering.
-            searchRequest.forceAutoDetectTranslation(
-                    mPolicy.bestTargetLanguage(getProficientLanguageList()));
-        }
-        // Log that conditions were right for translation, even though it may be disabled
-        // for an experiment so we can compare with the counter factual data.
-        ContextualSearchUma.logTranslateOnebox(shouldAutoDetectTranslate);
-    }
-
-    /**
-     * Caches all the native translate language info, so we can avoid repeated JNI calls.
-     */
-    private void cacheNativeTranslateData() {
-        if (!mPolicy.isTranslationEnabled()) return;
-
-        if (!mPolicy.isForceTranslationOneboxDisabled()) {
-            getNativeTranslateServiceTargetLanguage();
-            getNativeAcceptLanguages();
-        }
-    }
-
-    /**
-     * @return The accept-languages string from the cache or from native code (when not cached).
-     */
-    private String getNativeAcceptLanguages() {
-        if (mAcceptLanguages == null) {
-            mAcceptLanguages = nativeGetAcceptLanguages(mNativeContextualSearchManagerPtr);
-        }
-        return mAcceptLanguages;
-    }
-
-    /**
-     * @return The Translate Service's target language string from the cache or from
-     *         native code (when not cached).
-     */
-    private String getNativeTranslateServiceTargetLanguage() {
-        if (mTranslateServiceTargetLanguage == null) {
-            mTranslateServiceTargetLanguage = nativeGetTargetLanguage(
-                    mNativeContextualSearchManagerPtr);
-        }
-        return mTranslateServiceTargetLanguage;
+    @Override
+    public String getTranslateServiceTargetLanguage() {
+        return nativeGetTargetLanguage(mNativeContextualSearchManagerPtr);
     }
 
     // ============================================================================================
@@ -1000,6 +860,13 @@ public class ContextualSearchManager extends ContextualSearchObservable
 
         @Override
         public void onContentViewCreated(ContentViewCore contentViewCore) {
+            // TODO(donnd): Consider moving to OverlayPanelContent.
+            if (mPolicy.isContextualSearchJsApiEnabled()) {
+                // Enable the Contextual Search JavaScript API between our service and the new view.
+                nativeEnableContextualSearchJsApiForOverlay(
+                        mNativeContextualSearchManagerPtr, contentViewCore);
+            }
+
             // TODO(mdjones): Move SearchContentViewDelegate ownership to panel.
             mSearchContentViewDelegate.setOverlayPanelContentViewCore(contentViewCore);
         }
@@ -1350,6 +1217,8 @@ public class ContextualSearchManager extends ContextualSearchObservable
     private native void nativeGatherSurroundingText(long nativeContextualSearchManager,
             String selection, boolean useResolvedSearchTerm, ContentViewCore baseContentViewCore,
             boolean maySendBasePageUrl);
+    private native void nativeEnableContextualSearchJsApiForOverlay(
+            long nativeContextualSearchManager, ContentViewCore overlayContentViewCore);
     // Don't call these directly, instead call the private methods that cache the results.
     private native String nativeGetTargetLanguage(long nativeContextualSearchManager);
     private native String nativeGetAcceptLanguages(long nativeContextualSearchManager);

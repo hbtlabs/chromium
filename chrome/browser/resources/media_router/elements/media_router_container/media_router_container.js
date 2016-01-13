@@ -75,6 +75,15 @@ Polymer({
     },
 
     /**
+     * The time |this| element calls ready().
+     * @private {number}
+     */
+    elementReadyTimeMs_: {
+      type: Number,
+      value: 0,
+    },
+
+    /**
      * The text for the first run flow button.
      * @private {string}
      */
@@ -159,6 +168,17 @@ Polymer({
     mouseIsPositionedOverDialog_: {
       type: Boolean,
       value: false,
+    },
+
+    /**
+     * The time the sink list was shown and populated with at least one sink.
+     * This is reset whenever the user switches views or there are no sinks
+     * available for display.
+     * @private {number}
+     */
+    populatedSinkListSeenTimeMs_: {
+      type: Number,
+      value: -1,
     },
 
     /**
@@ -263,6 +283,15 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * Whether the user has already taken an action.
+     * @type {boolean}
+     */
+    userHasTakenInitialAction_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   listeners: {
@@ -271,7 +300,13 @@ Polymer({
     'mouseenter': 'onMouseEnter_',
   },
 
+  observers: [
+    'maybeUpdateStartSinkDisplayStartTime_(currentView_, sinksToShow_)',
+    'shownComponentsChanged_(showFirstRunFlow, currentView_)'
+  ],
+
   ready: function() {
+    this.elementReadyTimeMs_ = performance.now();
     this.showSinkList_();
   },
 
@@ -295,6 +330,29 @@ Polymer({
   acknowledgeFirstRunFlow_: function() {
     this.showFirstRunFlow = false;
     this.fire('acknowledge-first-run-flow');
+  },
+
+  /**
+   * Fires a 'report-initial-action' event when the user takes their first
+   * action after the dialog opens. Also fires a 'report-initial-action-close'
+   * event if that initial action is to close the dialog.
+   */
+  maybeReportUserFirstAction: function(initialAction) {
+    if (this.userHasTakenInitialAction_)
+      return;
+
+    this.fire('report-initial-action', {
+      action: initialAction,
+    });
+
+    if (initialAction == media_router.MediaRouterUserAction.CLOSE) {
+      var timeToClose = performance.now() - this.elementReadyTimeMs_;
+      this.fire('report-initial-action-close', {
+        timeMs: timeToClose,
+      });
+    }
+
+    this.userHasTakenInitialAction_ = true;
   },
 
   /**
@@ -492,6 +550,17 @@ Polymer({
   },
 
   /**
+   * @param {boolean} showFirstRunFlow Whether or not to show the first run
+   *     flow.
+   * @param {!media_router.MediaRouterView} currentView The current view.
+   * @private
+   */
+  computeShowFirstRunFlow_: function(showFirstRunFlow, currentView) {
+    return showFirstRunFlow &&
+        currentView == media_router.MediaRouterView.SINK_LIST;
+  },
+
+  /**
    * @param {!media_router.Sink} sink The sink to determine an icon for.
    * @return {string} The Polymer <iron-icon> icon to use. The format is
    *     <iconset>:<icon>, where <iconset> is the set ID and <icon> is the name
@@ -643,6 +712,7 @@ Polymer({
 
     if (localRoute)
       this.showRouteDetails_(localRoute);
+    this.fire('show-initial-state', {currentView: this.currentView_});
   },
 
   /**
@@ -654,6 +724,29 @@ Polymer({
   maybeShowIssueView_: function(issue) {
     if (!!issue && issue.isBlocking)
       this.currentView_ = media_router.MediaRouterView.ISSUE;
+  },
+
+  /**
+   * May update |populatedSinkListSeenTimeMs_| depending on |currentView| and
+   * |sinksToShow|.
+   * Called when |currentView_| or |sinksToShow_| is updated.
+   *
+   * @param {?media_router.MediaRouterView} currentView The current view of the
+   *                                        dialog.
+   * @param {!Array<!media_router.Sink>} sinksToShow The sinks to display.
+   * @private
+   */
+  maybeUpdateStartSinkDisplayStartTime_: function(currentView, sinksToShow) {
+    if (currentView == media_router.MediaRouterView.SINK_LIST &&
+        sinksToShow.length != 0) {
+      // Only set |populatedSinkListSeenTimeMs_| if it has not already been set.
+      if (this.populatedSinkListSeenTimeMs_ == -1)
+        this.populatedSinkListSeenTimeMs_ = performance.now();
+    } else {
+      // Reset |populatedSinkListLastSeen_| if the sink list isn't being shown
+      // or if there aren't any sinks available for display.
+      this.populatedSinkListSeenTimeMs_ = -1;
+    }
   },
 
   /**
@@ -684,6 +777,8 @@ Polymer({
     }
 
     this.showSinkList_();
+    this.maybeReportUserFirstAction(
+        media_router.MediaRouterUserAction.CHANGE_MODE);
   },
 
   /**
@@ -691,11 +786,19 @@ Polymer({
    * to close the dialog if there is no click within three seconds.
    *
    * @param {!Event} event The event object.
+   * @param {{detail: {route: media_router.Route}}} data
+   * Parameters in |data|.detail:
+   *   route - route to close.
    * @private
    */
-  onCloseRouteClick_: function(event) {
+  onCloseRouteClick_: function(event, data) {
     this.showSinkList_();
     this.startTapTimer_();
+
+    if (data.route.isLocal) {
+      this.maybeReportUserFirstAction(
+          media_router.MediaRouterUserAction.STOP_LOCAL);
+    }
   },
 
   /**
@@ -867,6 +970,31 @@ Polymer({
   },
 
   /**
+   * Updates the top margins of the header and sink list view depending on
+   * whether the first run flow is being shown.
+   *
+   * @param {boolean} showFirstRunFlow Whether or not to show the first run
+   *     flow.
+   * @param {!media_router.MediaRouterView} currentView The current view.
+   * @private
+   */
+  shownComponentsChanged_: function(showFirstRunFlow, currentView) {
+    var headerHeight = this.$$('#container-header').offsetHeight;
+    if (this.computeShowFirstRunFlow_(showFirstRunFlow, currentView)) {
+      // Ensures that first run flow elements have finished stamping.
+      this.async(function() {
+        var firstRunFlowHeight = this.$$('#first-run-flow').offsetHeight;
+        this.$['container-header'].style.marginTop = firstRunFlowHeight + 'px';
+        this.$['sink-list-view'].style.marginTop =
+            firstRunFlowHeight + headerHeight + 'px';
+      });
+    } else {
+      this.$['container-header'].style.marginTop = '0px';
+      this.$['sink-list-view'].style.marginTop = headerHeight + 'px';
+    }
+  },
+
+  /**
    * Creates a new route if there is no route to the |sink| . Otherwise,
    * shows the route details.
    *
@@ -878,6 +1006,8 @@ Polymer({
     if (route) {
       this.showRouteDetails_(route);
       this.fire('navigate-sink-list-to-details');
+      this.maybeReportUserFirstAction(
+          media_router.MediaRouterUserAction.STATUS_REMOTE);
     } else if (this.currentLaunchingSinkId_ == '') {
       // Allow one launch at a time.
       this.fire('create-route', {
@@ -891,6 +1021,13 @@ Polymer({
                 sink.castModes & -sink.castModes : this.shownCastModeValue_
       });
       this.currentLaunchingSinkId_ = sink.id;
+
+      var timeToSelectSink =
+          performance.now() - this.populatedSinkListSeenTimeMs_;
+      this.fire('report-sink-click-time', {timeMs: timeToSelectSink});
+
+      this.maybeReportUserFirstAction(
+          media_router.MediaRouterUserAction.START_LOCAL);
     }
   },
 
@@ -939,5 +1076,28 @@ Polymer({
       this.showCastModeList_();
       this.fire('navigate-to-cast-mode-list');
     }
+  },
+
+  /**
+   * Compute the new maximum height of the sink list and update the style.
+   *
+   * @param {number} dialogHeight The height of the Media Router dialog.
+   */
+  updateMaxSinkListHeight: function(dialogHeight) {
+    var headerHeight = this.$$('#container-header').offsetHeight;
+    var firstRunFlowHeight =
+        this.computeShowFirstRunFlow_(this.showFirstRunFlow,
+                                      this.currentView_) ?
+        this.$$('#first-run-flow').offsetHeight : 0;
+    this.$['container-header'].style.marginTop = firstRunFlowHeight + 'px';
+    this.$['sink-list-view'].style.marginTop =
+        firstRunFlowHeight + headerHeight + 'px';
+
+    // TODO(apacible): After non-fatal issue banner has been updated to appear
+    // below the sink list rather than overlapping, take into account the
+    // banner height when calculating the sink list height.
+    // crbug.com/567362
+    this.$['sink-list'].style.maxHeight =
+        dialogHeight - headerHeight - firstRunFlowHeight + 'px';
   },
 });

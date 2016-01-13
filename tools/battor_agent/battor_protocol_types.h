@@ -40,6 +40,12 @@ enum BattOrMessageType : uint8_t {
 enum BattOrControlMessageType : uint8_t {
   // Tells the BattOr to initialize itself.
   BATTOR_CONTROL_MESSAGE_TYPE_INIT = 0x00,
+  // Tells the BattOr to reset itself.
+  BATTOR_CONTROL_MESSAGE_TYPE_RESET,
+  // Tells the BattOr to run a self test.
+  BATTOR_CONTROL_MESSAGE_TYPE_SELF_TEST,
+  // Tells the BattOr to send its EEPROM contents over the serial connection.
+  BATTOR_CONTROL_MESSAGE_TYPE_READ_EEPROM,
   // Sets the current measurement's gain.
   BATTOR_CONTROL_MESSAGE_TYPE_SET_GAIN,
   // Tells the BattOr to start taking samples and sending them over the
@@ -50,12 +56,6 @@ enum BattOrControlMessageType : uint8_t {
   // Tells the BattOr to start streaming the samples stored on its SD card over
   // the connection.
   BATTOR_CONTROL_MESSAGE_TYPE_READ_SD_UART,
-  // Tells the BattOr to send its EEPROM contents over the serial connection.
-  BATTOR_CONTROL_MESSAGE_TYPE_READ_EEPROM,
-  // Tells the BattOr to reset itself.
-  BATTOR_CONTROL_MESSAGE_TYPE_RESET,
-  // Tells the BattOr to run a self test.
-  BATTOR_CONTROL_MESSAGE_TYPE_SELF_TEST,
 };
 
 // The gain level for the BattOr to use.
@@ -76,6 +76,61 @@ struct BattOrControlMessage {
 struct BattOrControlMessageAck {
   BattOrControlMessageType type;
   uint8_t param;
+};
+
+// TODO(charliea, aschulman): Write better descriptions for the EEPROM fields
+// when we actually start doing the math to convert raw BattOr readings to
+// accurate ones.
+
+// The BattOr's EEPROM is persistent storage that contains information that we
+// need in order to convert raw BattOr readings into accurate voltage and
+// current measurements.
+struct BattOrEEPROM {
+  uint8_t magic[4];
+  uint16_t version;
+  uint32_t timestamp;
+  float r1;
+  float r2;
+  float r3;
+  float low_gain;
+  float low_gain_correction_factor;
+  float low_gain_correction_offset;
+  uint16_t low_gain_amppot;
+  float high_gain;
+  float high_gain_correction_factor;
+  float high_gain_correction_offset;
+  uint32_t sd_sr;
+  uint16_t sd_tdiv;
+  uint16_t sd_tovf;
+  uint16_t sd_filpot;
+  uint32_t uart_sr;
+  uint16_t uart_tdiv;
+  uint16_t uart_tovf;
+  uint16_t uart_filpot;
+  uint16_t high_gain_amppot;
+  uint32_t crc32;
+};
+
+// The BattOrFrameHeader begins every frame containing BattOr samples.
+struct BattOrFrameHeader {
+  // The number of frames that have preceded this one.
+  uint32_t sequence_no;
+  // The number of bytes of raw samples in this frame.
+  uint16_t length;
+};
+
+// A single BattOr sample. These samples are raw because they come directly from
+// the BattOr's analog to digital converter and comprise only part of the
+// equation to calculate meaningful voltage and current measurements.
+struct RawBattOrSample {
+  int16_t voltage_raw;
+  int16_t current_raw;
+};
+
+// A single BattOr sample after conversion to a real number with units.
+struct BattOrSample {
+  double voltage_mV;
+  double current_mA;
 };
 
 #pragma pack(pop)

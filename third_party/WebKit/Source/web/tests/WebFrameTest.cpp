@@ -7023,6 +7023,31 @@ TEST_F(WebFrameSwapTest, SwapMainFrame)
     remoteFrame->close();
 }
 
+TEST_F(WebFrameSwapTest, ValidateSizeOnRemoteToLocalMainFrameSwap)
+{
+    WebSize size(111, 222);
+
+    WebRemoteFrame* remoteFrame = WebRemoteFrame::create(WebTreeScopeType::Document, nullptr);
+    mainFrame()->swap(remoteFrame);
+
+    remoteFrame->view()->resize(size);
+
+    FrameTestHelpers::TestWebFrameClient client;
+    WebLocalFrame* localFrame = WebLocalFrame::createProvisional(&client, remoteFrame, WebSandboxFlags::None, WebFrameOwnerProperties());
+    remoteFrame->swap(localFrame);
+
+    // Verify that the size that was set with a remote main frame is correct
+    // after swapping to a local frame.
+    FrameHost* host = toWebViewImpl(localFrame->view())->page()->mainFrame()->host();
+    EXPECT_EQ(size.width, host->visualViewport().size().width());
+    EXPECT_EQ(size.height, host->visualViewport().size().height());
+
+    // Manually reset to break WebViewHelper's dependency on the stack allocated
+    // TestWebFrameClient.
+    reset();
+    remoteFrame->close();
+}
+
 namespace {
 
 class SwapMainFrameWhenTitleChangesWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
@@ -8357,6 +8382,75 @@ TEST_F(WebFrameTest, CallbackOrdering)
     FrameTestHelpers::WebViewHelper webViewHelper;
     CallbackOrderingWebFrameClient client;
     webViewHelper.initializeAndLoad(m_baseURL + "foo.html", true, &client);
+}
+
+class TestWebRemoteFrameClientForVisibility : public FrameTestHelpers::TestWebRemoteFrameClient {
+public:
+    TestWebRemoteFrameClientForVisibility()
+        : m_visible(true)
+    {
+    }
+    void visibilityChanged(bool visible) override { m_visible = visible; }
+
+    bool isVisible() const { return m_visible; }
+
+private:
+    bool m_visible;
+};
+
+class WebFrameVisibilityChangeTest : public WebFrameTest {
+public:
+    WebFrameVisibilityChangeTest()
+    {
+        registerMockedHttpURLLoad("visible_iframe.html");
+        registerMockedHttpURLLoad("single_iframe.html");
+        m_frame = m_webViewHelper.initializeAndLoad(m_baseURL + "single_iframe.html", true)->mainFrame();
+        m_webRemoteFrame = remoteFrameClient()->frame();
+    }
+
+    ~WebFrameVisibilityChangeTest()
+    {
+    }
+
+    void executeScriptOnMainFrame(const WebScriptSource& script)
+    {
+        mainFrame()->executeScript(script);
+        mainFrame()->view()->updateAllLifecyclePhases();
+        runPendingTasks();
+    }
+
+    void swapLocalFrameToRemoteFrame()
+    {
+        mainFrame()->lastChild()->swap(remoteFrame());
+        remoteFrame()->setReplicatedOrigin(SecurityOrigin::createUnique());
+    }
+
+    WebFrame* mainFrame() { return m_frame; }
+    WebRemoteFrameImpl* remoteFrame() { return m_webRemoteFrame; }
+    TestWebRemoteFrameClientForVisibility* remoteFrameClient() { return &m_remoteFrameClient; }
+
+private:
+    TestWebRemoteFrameClientForVisibility m_remoteFrameClient;
+    FrameTestHelpers::WebViewHelper m_webViewHelper;
+    WebFrame* m_frame;
+    RawPtrWillBePersistent<WebRemoteFrameImpl> m_webRemoteFrame;
+};
+
+TEST_F(WebFrameVisibilityChangeTest, RemoteFrameVisibilityChange)
+{
+    swapLocalFrameToRemoteFrame();
+    executeScriptOnMainFrame(WebScriptSource("document.querySelector('iframe').style.display = 'none';"));
+    EXPECT_FALSE(remoteFrameClient()->isVisible());
+
+    executeScriptOnMainFrame(WebScriptSource("document.querySelector('iframe').style.display = 'block';"));
+    EXPECT_TRUE(remoteFrameClient()->isVisible());
+}
+
+TEST_F(WebFrameVisibilityChangeTest, RemoteFrameParentVisibilityChange)
+{
+    swapLocalFrameToRemoteFrame();
+    executeScriptOnMainFrame(WebScriptSource("document.querySelector('iframe').parentElement.style.display = 'none';"));
+    EXPECT_FALSE(remoteFrameClient()->isVisible());
 }
 
 } // namespace blink

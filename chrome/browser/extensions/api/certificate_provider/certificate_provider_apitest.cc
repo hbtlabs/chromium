@@ -66,10 +66,13 @@ void StoreDigest(std::vector<uint8_t>* digest,
                  const base::Closure& callback,
                  const base::Value* value) {
   const base::BinaryValue* binary = nullptr;
-  value->GetAsBinary(&binary);
-  const uint8_t* const binary_begin =
-      reinterpret_cast<const uint8_t*>(binary->GetBuffer());
-  digest->assign(binary_begin, binary_begin + binary->GetSize());
+  const bool is_binary = value->GetAsBinary(&binary);
+  EXPECT_TRUE(is_binary) << "Unexpected value in StoreDigest";
+  if (is_binary) {
+    const uint8_t* const binary_begin =
+        reinterpret_cast<const uint8_t*>(binary->GetBuffer());
+    digest->assign(binary_begin, binary_begin + binary->GetSize());
+  }
 
   callback.Run();
 }
@@ -156,7 +159,13 @@ class CertificateProviderApiTest : public ExtensionApiTest {
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, Basic) {
+// See crbug.com/576364 for details
+#if defined(OS_CHROMEOS)
+#define MAYBE_Basic DISABLED_Basic
+#else
+#define MAYBE_Basic Basic
+#endif
+IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, MAYBE_Basic) {
   // Start an HTTPS test server that requests a client certificate.
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;

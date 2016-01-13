@@ -44,8 +44,6 @@
 #include "wtf/Vector.h"
 #include "wtf/build_config.h"
 
-#if ENABLE(WEB_AUDIO)
-
 namespace blink {
 
 class AnalyserNode;
@@ -134,7 +132,10 @@ public:
     AudioBuffer* createBuffer(unsigned numberOfChannels, size_t numberOfFrames, float sampleRate, ExceptionState&);
 
     // Asynchronous audio file data decoding.
-    void decodeAudioData(DOMArrayBuffer*, AudioBufferCallback*, AudioBufferCallback*, ExceptionState&);
+    ScriptPromise decodeAudioData(ScriptState*, DOMArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ExceptionState&);
+
+    // Handles the promise and callbacks when |decodeAudioData| is finished decoding.
+    void handleDecodeAudioData(AudioBuffer*, ScriptPromiseResolver*, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback);
 
     AudioListener* listener() { return m_listener.get(); }
 
@@ -245,6 +246,9 @@ public:
     // Get the security origin for this audio context.
     SecurityOrigin* securityOrigin() const;
 
+    // Get the PeriodicWave for the specified oscillator type.  The table is initialized internally
+    // if necessary.
+    PeriodicWave* periodicWave(int type);
 protected:
     explicit AbstractAudioContext(Document*);
     AbstractAudioContext(Document*, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate);
@@ -269,6 +273,8 @@ protected:
     // the promises here until they can be resolved or rejected.
     HeapVector<Member<ScriptPromiseResolver>> m_resumeResolvers;
 
+    void setClosedContextSampleRate(float newSampleRate) { m_closedContextSampleRate = newSampleRate; }
+    float closedContextSampleRate() const { return m_closedContextSampleRate; }
 private:
     bool m_isCleared;
     void clear();
@@ -318,13 +324,28 @@ private:
 
     AsyncAudioDecoder m_audioDecoder;
 
+    // When a context is closed, the sample rate is cleared.  But decodeAudioData can be called
+    // after the context has been closed and it needs the sample rate.  When the context is closed,
+    // the sample rate is saved here.
+    float m_closedContextSampleRate;
+
+    // Vector of promises created by decodeAudioData.  This keeps the resolvers alive until
+    // decodeAudioData finishes decoding and can tell the main thread to resolve them.
+    HeapHashSet<Member<ScriptPromiseResolver>> m_decodeAudioResolvers;
+
+    // PeriodicWave's for the builtin oscillator types.  These only depend on the sample rate. so
+    // they can be shared with all OscillatorNodes in the context.  To conserve memory, these are
+    // lazily initiialized on first use.
+    Member<PeriodicWave> m_periodicWaveSine;
+    Member<PeriodicWave> m_periodicWaveSquare;
+    Member<PeriodicWave> m_periodicWaveSawtooth;
+    Member<PeriodicWave> m_periodicWaveTriangle;
+
     // This is considering 32 is large enough for multiple channels audio.
     // It is somewhat arbitrary and could be increased if necessary.
     enum { MaxNumberOfChannels = 32 };
 };
 
 } // namespace blink
-
-#endif // ENABLE(WEB_AUDIO)
 
 #endif // AbstractAudioContext_h

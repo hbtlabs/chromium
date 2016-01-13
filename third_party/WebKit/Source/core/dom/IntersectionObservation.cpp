@@ -25,6 +25,7 @@ IntersectionObservation::IntersectionObservation(IntersectionObserver& observer,
 
 void IntersectionObservation::initializeGeometry(IntersectionGeometry& geometry)
 {
+    ASSERT(m_target);
     LayoutObject* targetLayoutObject = m_target->layoutObject();
     if (targetLayoutObject->isBoxModelObject())
         geometry.targetRect = toLayoutBoxModelObject(targetLayoutObject)->visualOverflowRect();
@@ -37,12 +38,14 @@ void IntersectionObservation::clipToRoot(LayoutRect& rect)
 {
     // Map and clip rect into root element coordinates.
     // TODO(szager): the writing mode flipping needs a test.
+    ASSERT(m_target);
     LayoutObject* rootLayoutObject = m_observer->rootLayoutObject();
     LayoutObject* targetLayoutObject = m_target->layoutObject();
     targetLayoutObject->mapToVisibleRectInAncestorSpace(toLayoutBoxModelObject(rootLayoutObject), rect, nullptr);
     if (rootLayoutObject->hasOverflowClip()) {
         LayoutBox* rootLayoutBox = toLayoutBox(rootLayoutObject);
         LayoutRect clipRect(LayoutPoint(), LayoutSize(rootLayoutBox->layer()->size()));
+        m_observer->applyRootMargin(clipRect);
         rootLayoutBox->flipForWritingMode(rect);
         rect.intersect(clipRect);
         rootLayoutBox->flipForWritingMode(rect);
@@ -55,12 +58,14 @@ void IntersectionObservation::clipToFrameView(IntersectionGeometry& geometry)
     LayoutObject* rootLayoutObject = m_observer->rootLayoutObject();
     if (rootElement == rootElement->document().documentElement()) {
         geometry.rootRect = LayoutRect(rootElement->document().view()->visibleContentRect());
+        m_observer->applyRootMargin(geometry.rootRect);
         geometry.intersectionRect.intersect(geometry.rootRect);
     } else {
         if (rootLayoutObject->isBox())
             geometry.rootRect = LayoutRect(toLayoutBox(rootLayoutObject)->absoluteContentBox());
         else
             geometry.rootRect = LayoutRect(rootLayoutObject->absoluteBoundingBoxRect());
+        m_observer->applyRootMargin(geometry.rootRect);
     }
 
     LayoutPoint scrollPosition(rootElement->document().view()->scrollPosition());
@@ -76,6 +81,7 @@ static void mapRectToDocumentCoordinates(LayoutObject& layoutObject, LayoutRect&
 
 bool IntersectionObservation::computeGeometry(IntersectionGeometry& geometry)
 {
+    ASSERT(m_target);
     LayoutObject* rootLayoutObject = m_observer->rootLayoutObject();
     LayoutObject* targetLayoutObject = m_target->layoutObject();
     if (!rootLayoutObject->isBoxModelObject())
@@ -113,6 +119,11 @@ bool IntersectionObservation::computeGeometry(IntersectionGeometry& geometry)
 
 void IntersectionObservation::computeIntersectionObservations(double timestamp)
 {
+    // Pre-oilpan, there will be a delay between the time when the target Element gets deleted
+    // (because its ref count dropped to zero) and when this IntersectionObservation gets
+    // deleted (during the next gc run, because the target Element is the only thing keeping
+    // the IntersectionObservation alive).  During that interval, we need to check that m_target
+    // hasn't been cleared.
     Element* targetElement = target();
     if (!targetElement || !isActive())
         return;
@@ -145,10 +156,8 @@ void IntersectionObservation::computeIntersectionObservations(double timestamp)
 
 void IntersectionObservation::disconnect()
 {
-    if (m_target) {
+    if (m_target)
         m_target->ensureIntersectionObserverData().removeObservation(this->observer());
-        m_target.clear();
-    }
     m_observer->removeObservation(*this);
     m_observer.clear();
 }

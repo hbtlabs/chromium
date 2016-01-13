@@ -171,7 +171,7 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
         rejectPromise();
         return;
     }
-    RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create((char*)m_loader.arrayBufferResult()->data(), m_loader.arrayBufferResult()->byteLength());
+    RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create((char*)m_loader.arrayBufferResult()->data(), static_cast<size_t>(m_loader.arrayBufferResult()->byteLength()));
 
     OwnPtr<ImageSource> source = adoptPtr(new ImageSource());
     source->setData(*sharedBuffer, true);
@@ -183,13 +183,14 @@ void ImageBitmapFactories::ImageBitmapLoader::didFinishLoading()
         return;
     }
 
-    RefPtr<Image> image = StaticBitmapImage::create(frame);
+    RefPtr<StaticBitmapImage> image = StaticBitmapImage::create(frame);
+    image->setOriginClean(true);
     if (!m_cropRect.width() && !m_cropRect.height()) {
         // No cropping variant was called.
         m_cropRect = IntRect(IntPoint(), image->size());
     }
 
-    RefPtrWillBeRawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image.get(), m_cropRect);
+    RefPtrWillBeRawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(image, m_cropRect);
     m_resolver->resolve(imageBitmap.release());
     m_factory->didFinishLoading(this);
 }

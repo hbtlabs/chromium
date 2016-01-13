@@ -190,6 +190,7 @@ extern const char kLanguagePreloadEngines[];
 extern const char kLanguagePreloadEnginesSyncable[];
 extern const char kLanguageEnabledExtensionImes[];
 extern const char kLanguageEnabledExtensionImesSyncable[];
+extern const char kLangugaeImeMenuActivated[];
 extern const char kLanguageShouldMergeInputMethods[];
 extern const char kLanguageRemapCapsLockKeyTo[];
 extern const char kLanguageRemapSearchKeyTo[];
@@ -320,6 +321,7 @@ extern const char kPluginsMetadata[];
 extern const char kPluginsResourceCacheUpdate[];
 #endif
 extern const char kCheckDefaultBrowser[];
+extern const char kResetCheckDefaultBrowser[];
 extern const char kDefaultBrowserSettingEnabled[];
 #if defined(OS_MACOSX)
 extern const char kShowUpdatePromotionInfoBar[];
@@ -404,6 +406,7 @@ extern const char kCopresenceAuthenticatedDeviceId[];
 extern const char kCopresenceAnonymousDeviceId[];
 extern const char kToolbarIconSurfacingBubbleAcknowledged[];
 extern const char kToolbarIconSurfacingBubbleLastShowTime[];
+extern const char kToolbarMigratedComponentActionStatus[];
 #endif
 
 #if defined(ENABLE_WEBRTC)

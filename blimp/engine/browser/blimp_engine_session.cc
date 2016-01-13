@@ -331,7 +331,19 @@ void BlimpEngineSession::OnWebInputEvent(
   if (!web_contents_ || !web_contents_->GetRenderViewHost())
     return;
 
-  // TODO(dtrainor): Send the input event directly to the render process?
+  content::RenderWidgetHost* host =
+      web_contents_->GetRenderViewHost()->GetWidget();
+
+  if (!host)
+    return;
+
+  if (blink::WebInputEvent::isGestureEventType(event->type)) {
+    const blink::WebGestureEvent& gesture_event =
+            *static_cast<const blink::WebGestureEvent*>(event.get());
+    host->ForwardGestureEvent(gesture_event);
+  } else {
+    NOTIMPLEMENTED() << "Dropping event of type " << event->type;
+  }
 }
 
 void BlimpEngineSession::OnCompositorMessageReceived(
@@ -353,14 +365,16 @@ void BlimpEngineSession::OnCompositorMessageReceived(
 void BlimpEngineSession::ProcessMessage(
     scoped_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
+  DCHECK(!callback.is_null());
   DCHECK(message->type() == BlimpMessage::TAB_CONTROL ||
          message->type() == BlimpMessage::NAVIGATION);
 
-  bool result = true;
+  net::Error result = net::OK;
   if (message->type() == BlimpMessage::TAB_CONTROL) {
     switch (message->tab_control().type()) {
       case TabControlMessage::CREATE_TAB:
-        result = CreateWebContents(message->target_tab_id());
+        if (!CreateWebContents(message->target_tab_id()))
+          result = net::ERR_FAILED;
         break;
       case TabControlMessage::CLOSE_TAB:
         CloseWebContents(message->target_tab_id());
@@ -371,6 +385,7 @@ void BlimpEngineSession::ProcessMessage(
         break;
       default:
         NOTIMPLEMENTED();
+        result = net::ERR_NOT_IMPLEMENTED;
     }
   } else if (message->type() == BlimpMessage::NAVIGATION && web_contents_) {
     switch (message->navigation().type()) {
@@ -389,14 +404,14 @@ void BlimpEngineSession::ProcessMessage(
         break;
       default:
         NOTIMPLEMENTED();
+        result = net::ERR_NOT_IMPLEMENTED;
     }
   } else {
-    result = false;
+    DVLOG(1) << "No WebContents for navigation control";
+    result = net::ERR_FAILED;
   }
 
-  if (!callback.is_null()) {
-    callback.Run(result ? net::OK : net::ERR_FAILED);
-  }
+  callback.Run(result);
 }
 
 void BlimpEngineSession::AddNewContents(content::WebContents* source,

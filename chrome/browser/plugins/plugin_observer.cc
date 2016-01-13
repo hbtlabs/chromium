@@ -4,6 +4,8 @@
 
 #include "chrome/browser/plugins/plugin_observer.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/debug/crash_logging.h"
@@ -39,9 +41,6 @@
 #include "ui/gfx/vector_icons_public.h"
 
 #if defined(ENABLE_PLUGIN_INSTALLATION)
-#if defined(OS_WIN)
-#include "base/win/metro.h"
-#endif
 #include "chrome/browser/plugins/plugin_installer.h"
 #include "chrome/browser/plugins/plugin_installer_observer.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
@@ -90,8 +89,7 @@ ConfirmInstallDialogDelegate::ConfirmInstallDialogDelegate(
     : TabModalConfirmDialogDelegate(web_contents),
       WeakPluginInstallerObserver(installer),
       web_contents_(web_contents),
-      plugin_metadata_(plugin_metadata.Pass()) {
-}
+      plugin_metadata_(std::move(plugin_metadata)) {}
 
 base::string16 ConfirmInstallDialogDelegate::GetTitle() {
   return l10n_util::GetStringFUTF16(
@@ -382,8 +380,9 @@ void PluginObserver::OnBlockedOutdatedPlugin(int placeholder_id,
   if (finder->FindPluginWithIdentifier(identifier, &installer, &plugin)) {
     plugin_placeholders_[placeholder_id] = new PluginPlaceholderHost(
         this, placeholder_id, plugin->name(), installer);
-    OutdatedPluginInfoBarDelegate::Create(InfoBarService::FromWebContents(
-        web_contents()), installer, plugin.Pass());
+    OutdatedPluginInfoBarDelegate::Create(
+        InfoBarService::FromWebContents(web_contents()), installer,
+        std::move(plugin));
   } else {
     NOTREACHED();
   }
@@ -438,10 +437,6 @@ void PluginObserver::OnCouldNotLoadPlugin(const base::FilePath& plugin_path) {
 
 void PluginObserver::OnNPAPINotSupported(const std::string& identifier) {
 #if defined(OS_WIN) && defined(ENABLE_PLUGIN_INSTALLATION)
-#if !defined(USE_AURA)
-  DCHECK(base::win::IsMetroProcess());
-#endif
-
   scoped_ptr<PluginMetadata> plugin;
   bool ret = PluginFinder::GetInstance()->FindPluginWithIdentifier(
       identifier, NULL, &plugin);

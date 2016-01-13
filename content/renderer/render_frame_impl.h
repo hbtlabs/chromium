@@ -34,8 +34,8 @@
 #include "ipc/ipc_platform_file.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
-#include "mojo/application/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
@@ -59,7 +59,7 @@
 #endif
 
 #if defined(ENABLE_MOJO_MEDIA)
-#include "media/mojo/interfaces/service_factory.mojom.h"
+#include "media/mojo/interfaces/service_factory.mojom.h"  // nogncheck
 #endif
 
 class TransportDIB;

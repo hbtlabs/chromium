@@ -19,18 +19,18 @@
 #include "components/web_view/frame_tree_delegate.h"
 #include "components/web_view/frame_user_data.h"
 #include "components/web_view/frame_utils.h"
-#include "mojo/application/public/interfaces/shell.mojom.h"
 #include "mojo/common/url_type_converters.h"
+#include "mojo/shell/public/interfaces/shell.mojom.h"
 #include "url/gurl.h"
 
 using mus::Window;
 
-DECLARE_WINDOW_PROPERTY_TYPE(web_view::Frame*);
+MUS_DECLARE_WINDOW_PROPERTY_TYPE(web_view::Frame*);
 
 namespace web_view {
 
 // Used to find the Frame associated with a Window.
-DEFINE_LOCAL_WINDOW_PROPERTY_KEY(Frame*, kFrame, nullptr);
+MUS_DEFINE_LOCAL_WINDOW_PROPERTY_KEY(Frame*, kFrame, nullptr);
 
 namespace {
 

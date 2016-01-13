@@ -232,6 +232,7 @@
       'browser/indexed_db/mock_browsertest_indexed_db_class_factory.cc',
       'browser/indexed_db/mock_browsertest_indexed_db_class_factory.h',
       'browser/loader/async_resource_handler_browsertest.cc',
+      'browser/loader/async_revalidation_manager_browsertest.cc',
       'browser/loader/cross_site_resource_handler_browsertest.cc',
       'browser/loader/resource_dispatcher_host_browsertest.cc',
       'browser/manifest/manifest_browsertest.cc',
@@ -1553,11 +1554,6 @@
               ],
               'sources': [
                 'renderer/external_popup_menu_browsertest.cc',
-              ],
-            }],
-            ['chromecast==1', {
-              'defines': [
-                'ENABLE_HEVC_DEMUXING',
               ],
             }],
             ['use_aura==1 or toolkit_views==1', {

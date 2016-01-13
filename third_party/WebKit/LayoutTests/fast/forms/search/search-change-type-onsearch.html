@@ -8,16 +8,13 @@
 var input = document.querySelector('input');
 input.onsearch = function() {
     input.type = 'text';
+    test.done();
 };
 
 var test = async_test('Changing the input type in search event handler should not crash.');
 test.step(function() {  
-    input.offsetTop;
-    input.setRangeText('', 0, 1); // Trigger 'search' event.
+    input.focus();
+    eventSender.keyDown('a'); // Trigger 'search' event.
 });
-setTimeout(function() { test.step(function() {
-    assert_equals(input.type, 'text');
-    test.done();
-})}, 0);
 </script>
 </body>

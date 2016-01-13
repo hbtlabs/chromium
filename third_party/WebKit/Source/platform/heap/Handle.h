@@ -1197,13 +1197,13 @@ template<typename T> PassOwnPtrWillBeRawPtr<T> adoptPtrWillBeNoop(T* ptr) { retu
 #endif // ENABLE(OILPAN)
 
 template<typename T, bool = IsGarbageCollectedType<T>::value>
-class PointerFieldStorageTrait {
+class RawPtrOrMemberTrait {
 public:
     using Type = RawPtr<T>;
 };
 
 template<typename T>
-class PointerFieldStorageTrait<T, true> {
+class RawPtrOrMemberTrait<T, true> {
 public:
     using Type = Member<T>;
 };
@@ -1229,7 +1229,7 @@ public:
     void clear() { m_object.clear(); }
 
 private:
-    typename PointerFieldStorageTrait<T>::Type m_object;
+    typename RawPtrOrMemberTrait<T>::Type m_object;
 };
 
 // SelfKeepAlive<Object> is the idiom to use for objects that have to keep
@@ -1299,11 +1299,17 @@ private:
     Persistent<Self> m_keepAlive;
 };
 
+// Only a very reduced form of weak heap object references can currently be held
+// by WTF::Closure<>s. i.e., bound as a 'this' pointer only.
+//
+// TODO(sof): once wtf/Functional.h is able to work over platform/heap/ types
+// (like CrossThreadWeakPersistent<>), drop the restriction on weak persistent
+// use by function closures (and rename this ad-hoc type.)
 template<typename T>
-class AllowCrossThreadWeakPersistent {
+class CrossThreadWeakPersistentThisPointer {
     STACK_ALLOCATED();
 public:
-    explicit AllowCrossThreadWeakPersistent(T* value) : m_value(value) { }
+    explicit CrossThreadWeakPersistentThisPointer(T* value) : m_value(value) { }
     CrossThreadWeakPersistent<T> value() const { return m_value; }
 private:
     CrossThreadWeakPersistent<T> m_value;
@@ -1569,17 +1575,21 @@ struct ParamStorageTraits<RawPtr<T>> : public PointerParamStorageTraits<T*, blin
 };
 
 template<typename T>
-struct ParamStorageTraits<blink::AllowCrossThreadWeakPersistent<T>> {
+struct ParamStorageTraits<blink::CrossThreadWeakPersistentThisPointer<T>> {
     static_assert(sizeof(T), "T must be fully defined");
     using StorageType = blink::CrossThreadWeakPersistent<T>;
 
-    static StorageType wrap(const blink::AllowCrossThreadWeakPersistent<T>& value) { return value.value(); }
+    static StorageType wrap(const blink::CrossThreadWeakPersistentThisPointer<T>& value) { return value.value(); }
 
-    // Currently assume that the call sites of this unwrap() account for cleared weak references also.
-    // TODO(sof): extend WTF::FunctionWrapper call overloading to also handle (CrossThread)WeakPersistent.
-    static T* unwrap(const StorageType& value) { return value.get(); }
+    // WTF::FunctionWrapper<> handles WeakPtr<>, so recast this weak persistent
+    // into it.
+    //
+    // TODO(sof): remove this hack once wtf/Functional.h can also work with a type like
+    // CrossThreadWeakPersistent<>.
+    static WeakPtr<T> unwrap(const StorageType& value) { return WeakPtr<T>(WeakReference<T>::create(value.get())); }
 };
 
+// Adoption is not needed nor wanted for RefCountedGarbageCollected<>-derived types.
 template<typename T>
 PassRefPtr<T> adoptRef(blink::RefCountedGarbageCollected<T>*) = delete;
 

@@ -53,16 +53,12 @@ struct LayoutBoxRareData {
     WTF_MAKE_NONCOPYABLE(LayoutBoxRareData); USING_FAST_MALLOC(LayoutBoxRareData);
 public:
     LayoutBoxRareData()
-        : m_inlineBoxWrapper(nullptr)
-        , m_spannerPlaceholder(nullptr)
+        : m_spannerPlaceholder(nullptr)
         , m_overrideLogicalContentHeight(-1)
         , m_overrideLogicalContentWidth(-1)
         , m_previousBorderBoxSize(-1, -1)
     {
     }
-
-    // For inline replaced elements, the inline box that owns us.
-    InlineBox* m_inlineBoxWrapper;
 
     // For spanners, the spanner placeholder that lays us out within the multicol container.
     LayoutMultiColumnSpannerPlaceholder* m_spannerPlaceholder;
@@ -305,6 +301,9 @@ public:
         frameRectChanged();
     }
 
+    // This function is in the container's coordinate system, meaning
+    // that it includes the logical top/left offset and the
+    // inline-start/block-start margins.
     LayoutRect frameRect() const { return m_frameRect; }
     void setFrameRect(const LayoutRect& rect)
     {
@@ -314,6 +313,8 @@ public:
         frameRectChanged();
     }
 
+    // Note that those functions have their origin at this box's CSS border box.
+    // As such their location doesn't account for 'top'/'left'.
     LayoutRect borderBoxRect() const { return LayoutRect(LayoutPoint(), size()); }
     LayoutRect paddingBoxRect() const { return LayoutRect(borderLeft(), borderTop(), clientWidth(), clientHeight()); }
     IntRect pixelSnappedBorderBoxRect() const { return IntRect(IntPoint(), m_frameRect.pixelSnappedSize()); }
@@ -567,10 +568,10 @@ public:
     virtual InlineBox* createInlineBox();
     void dirtyLineBoxes(bool fullLayout);
 
-    // For inline replaced elements, this function returns the inline box that owns us.  Enables
-    // the replaced LayoutObject to quickly determine what line it is contained on and to easily
+    // For atomic inline elements, this function returns the inline box that contains us.  Enables
+    // the atomic inline LayoutObject to quickly determine what line it is contained on and to easily
     // iterate over structures on the line.
-    InlineBox* inlineBoxWrapper() const { return m_rareData ? m_rareData->m_inlineBoxWrapper : 0; }
+    InlineBox* inlineBoxWrapper() const { return m_inlineBoxWrapper; }
     void setInlineBoxWrapper(InlineBox*);
     void deleteLineBoxWrapper();
 
@@ -967,7 +968,14 @@ private:
 
     void updateBackgroundAttachmentFixedStatusAfterStyleChange();
 
-    // The width/height of the contents + borders + padding.  The x/y location is relative to our container (which is not always our parent).
+    // The CSS border box rect for this box.
+    //
+    // The rectangle is in this box's physical coordinates but with a
+    // flipped block-flow direction (see the COORDINATE SYSTEMS section
+    // in LayoutBoxModelObject). The location is the distance from this
+    // object's border edge to the container's border edge (which is not
+    // always the parent). Thus it includes any logical top/left along
+    // with this box's margins.
     LayoutRect m_frameRect;
 
     // Our intrinsic height, used for min-height: min-content etc. Maintained by
@@ -995,6 +1003,9 @@ protected:
     OwnPtr<OverflowModel> m_overflow;
 
 private:
+    // The inline box containing this LayoutBox, for atomic inline elements.
+    InlineBox* m_inlineBoxWrapper;
+
     OwnPtr<LayoutBoxRareData> m_rareData;
 };
 
@@ -1059,16 +1070,16 @@ inline LayoutBox* LayoutBox::nextSiblingMultiColumnBox() const
 inline void LayoutBox::setInlineBoxWrapper(InlineBox* boxWrapper)
 {
     if (boxWrapper) {
-        ASSERT(!inlineBoxWrapper());
-        // m_inlineBoxWrapper should already be 0. Deleting it is a safeguard against security issues.
+        ASSERT(!m_inlineBoxWrapper);
+        // m_inlineBoxWrapper should already be nullptr. Deleting it is a safeguard against security issues.
         // Otherwise, there will two line box wrappers keeping the reference to this layoutObject, and
         // only one will be notified when the layoutObject is getting destroyed. The second line box wrapper
         // will keep a stale reference.
-        if (UNLIKELY(inlineBoxWrapper() != nullptr))
+        if (UNLIKELY(m_inlineBoxWrapper != nullptr))
             deleteLineBoxWrapper();
     }
 
-    ensureRareData().m_inlineBoxWrapper = boxWrapper;
+    m_inlineBoxWrapper = boxWrapper;
 }
 
 } // namespace blink
