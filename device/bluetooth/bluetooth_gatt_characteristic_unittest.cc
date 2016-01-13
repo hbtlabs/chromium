@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
+#include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_ANDROID)
@@ -663,24 +664,6 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-// Tests StartNotifySession success.
-TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
-  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
-      /* properties: NOTIFY */ 0x10,
-      /* expected_config_descriptor_value: NOTIFY */ 1));
-}
-#endif  // defined(OS_ANDROID)
-
-#if defined(OS_ANDROID)
-// Tests StartNotifySession success.
-TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_OnIndicate) {
-  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
-      /* properties: INDICATE */ 0x20,
-      /* expected_config_descriptor_value: INDICATE */ 2));
-}
-#endif  // defined(OS_ANDROID)
-
-#if defined(OS_ANDROID)
 // StartNotifySession fails if characteristic doesn't have Notify or Indicate
 // property.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
@@ -730,6 +713,48 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_SynchronousError) {
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(1, error_callback_count_);
   ASSERT_EQ(0u, notify_sessions_.size());
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// Tests StartNotifySession success.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
+      /* properties: NOTIFY */ 0x10,
+      /* expected_config_descriptor_value: NOTIFY */ 1));
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// Tests StartNotifySession success.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_OnIndicate) {
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
+      /* properties: INDICATE */ 0x20,
+      /* expected_config_descriptor_value: INDICATE */ 2));
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID)
+// Tests StartNotifySession success.
+TEST_F(BluetoothGattCharacteristicTest, GattCharacteristicValueChanged) {
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
+      /* properties: NOTIFY */ 0x10,
+      /* expected_config_descriptor_value: NOTIFY */ 1));
+
+  TestBluetoothAdapterObserver observer(adapter_);
+
+  std::vector<uint8_t> test_vector1;
+  test_vector1.push_back(111);
+  std::vector<uint8_t> test_vector2;
+  test_vector2.push_back(222);
+
+  SimulateGattCharacteristicChanged(characteristic1_, test_vector1);
+  EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
+  EXPECT_EQ(test_vector1, characteristic1_->GetValue());
+
+  SimulateGattCharacteristicChanged(characteristic1_, test_vector2);
+  EXPECT_EQ(2, observer.gatt_characteristic_value_changed_count());
+  EXPECT_EQ(test_vector2, characteristic1_->GetValue());
 }
 #endif  // defined(OS_ANDROID)
 
