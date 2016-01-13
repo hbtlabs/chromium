@@ -8,11 +8,15 @@
 #include "ui/gfx/vector_icons_public.h"
 
 TestToolbarModel::TestToolbarModel()
-    : ChromeToolbarModel(),
-      perform_search_term_replacement_(false),
-      security_level_(SecurityStateModel::NONE),
+    : perform_search_term_replacement_(false),
+      security_level_(security_state::SecurityStateModel::NONE),
+#if defined(TOOLKIT_VIEWS)
+      icon_(gfx::VectorIconId::LOCATION_BAR_HTTP),
+#else
       icon_(gfx::VectorIconId::VECTOR_ICON_NONE),
-      should_display_url_(true) {}
+#endif
+      should_display_url_(true) {
+}
 
 TestToolbarModel::~TestToolbarModel() {}
 
@@ -37,8 +41,8 @@ bool TestToolbarModel::WouldPerformSearchTermReplacement(
   return perform_search_term_replacement_;
 }
 
-SecurityStateModel::SecurityLevel TestToolbarModel::GetSecurityLevel(
-    bool ignore_editing) const {
+security_state::SecurityStateModel::SecurityLevel
+TestToolbarModel::GetSecurityLevel(bool ignore_editing) const {
   return security_level_;
 }
 
@@ -52,8 +56,9 @@ gfx::VectorIconId TestToolbarModel::GetVectorIcon() const {
 }
 
 base::string16 TestToolbarModel::GetEVCertName() const {
-  return (security_level_ == SecurityStateModel::EV_SECURE) ? ev_cert_name_
-                                                            : base::string16();
+  return (security_level_ == security_state::SecurityStateModel::EV_SECURE)
+             ? ev_cert_name_
+             : base::string16();
 }
 
 bool TestToolbarModel::ShouldDisplayURL() const {

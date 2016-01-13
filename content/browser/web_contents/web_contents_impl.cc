@@ -123,6 +123,7 @@
 #if defined(OS_ANDROID)
 #include "content/browser/android/content_video_view.h"
 #include "content/browser/media/android/media_session.h"
+#include "content/browser/media/android/media_web_contents_observer_android.h"
 #endif  // OS_ANDROID
 
 #if defined(OS_ANDROID) && !defined(USE_AURA)
@@ -415,7 +416,11 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
   frame_tree_.SetFrameRemoveListener(
       base::Bind(&WebContentsImpl::OnFrameRemoved,
                  base::Unretained(this)));
+#if defined(OS_ANDROID)
+  media_web_contents_observer_.reset(new MediaWebContentsObserverAndroid(this));
+#else
   media_web_contents_observer_.reset(new MediaWebContentsObserver(this));
+#endif
   wake_lock_service_context_.reset(new WakeLockServiceContext(this));
 }
 
@@ -3171,8 +3176,8 @@ void WebContentsImpl::OnDidLoadResourceFromMemoryCache(
   // Send out a notification that we loaded a resource from our memory cache.
   // TODO(alcutter,eranm): Pass signed_certificate_timestamp_ids into details.
   LoadFromMemoryCacheDetails details(
-      url, GetRenderProcessHost()->GetID(), status.cert_id, status.cert_status,
-      http_method, mime_type, resource_type);
+      url, status.cert_id, status.cert_status, http_method, mime_type,
+      resource_type);
 
   controller_.ssl_manager()->DidLoadFromMemoryCache(details);
 

@@ -25,7 +25,6 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/win/metro.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -115,8 +114,8 @@ class TranslationDelegate : public installer::TranslationDelegate {
 void ExecuteFontCacheBuildTask(const base::FilePath& path) {
   base::WeakPtr<content::UtilityProcessHost> utility_process_host(
       content::UtilityProcessHost::Create(NULL, NULL)->AsWeakPtr());
-  utility_process_host->SetName(l10n_util::GetStringUTF16(
-      IDS_UTILITY_PROCESS_FONT_CACHE_BUILDER_NAME));
+  utility_process_host->SetName(
+      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_FONT_CACHE_BUILDER_NAME));
   utility_process_host->DisableSandbox();
   utility_process_host->Send(
       new ChromeUtilityHostMsg_BuildDirectWriteFontCache(path));
@@ -279,21 +278,6 @@ int DoUninstallTasks(bool chrome_still_running) {
 ChromeBrowserMainPartsWin::ChromeBrowserMainPartsWin(
     const content::MainFunctionParams& parameters)
     : ChromeBrowserMainParts(parameters) {
-  if (base::win::IsMetroProcess()) {
-    typedef const wchar_t* (*GetMetroSwitches)(void);
-    GetMetroSwitches metro_switches_proc = reinterpret_cast<GetMetroSwitches>(
-        GetProcAddress(base::win::GetMetroModule(),
-                       "GetMetroCommandLineSwitches"));
-    if (metro_switches_proc) {
-      base::string16 metro_switches = (*metro_switches_proc)();
-      if (!metro_switches.empty()) {
-        base::CommandLine extra_switches(base::CommandLine::NO_PROGRAM);
-        extra_switches.ParseFromString(metro_switches);
-        base::CommandLine::ForCurrentProcess()->AppendArguments(extra_switches,
-                                                                false);
-      }
-    }
-  }
 }
 
 ChromeBrowserMainPartsWin::~ChromeBrowserMainPartsWin() {
@@ -344,7 +328,9 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
   ChromeBrowserMainParts::PostProfileInit();
 
   // DirectWrite support is mainly available Windows 7 and up.
-  if (gfx::win::ShouldUseDirectWrite()) {
+  // Skip loading the font cache if we are using the font proxy field trial.
+  if (gfx::win::ShouldUseDirectWrite() &&
+      !content::ShouldUseDirectWriteFontProxyFieldTrial()) {
     base::FilePath path(
       profile()->GetPath().AppendASCII(content::kFontCacheSharedSectionName));
     // This function will create a read only section if cache file exists
@@ -354,14 +340,14 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
       // We delay building of font cache until first startup page loads.
       // During first renderer start there are lot of things happening
       // simultaneously some of them are:
-      // - Renderer is going through all font files on the system to create
-      //   a font collection.
-      // - Renderer loading up startup URL, accessing HTML/JS File cache,
-      //   net activity etc.
+      // - Renderer is going through all font files on the system to create a
+      //   font collection.
+      // - Renderer loading up startup URL, accessing HTML/JS File cache, net
+      //   activity etc.
       // - Extension initialization.
-      // We delay building of cache mainly to avoid parallel font file
-      // loading along with Renderer. Some systems have significant number of
-      // font files which takes long time to process.
+      // We delay building of cache mainly to avoid parallel font file loading
+      // along with Renderer. Some systems have significant number of font files
+      // which takes long time to process.
       // Related information is at http://crbug.com/436195.
       const int kBuildFontCacheDelaySec = 30;
       content::BrowserThread::PostDelayedTask(
@@ -542,10 +528,6 @@ bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
         sei.nShow = SW_SHOWNORMAL;
         sei.lpFile = setup_exe.value().c_str();
         sei.lpParameters = params.c_str();
-        // On Windows 8 SEE_MASK_FLAG_LOG_USAGE is necessary to guarantee we
-        // flip to the Desktop when launching.
-        if (base::win::IsMetroProcess())
-          sei.fMask |= SEE_MASK_FLAG_LOG_USAGE;
 
         if (!::ShellExecuteEx(&sei))
           DPCHECK(false);

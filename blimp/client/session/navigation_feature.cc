@@ -78,6 +78,7 @@ void NavigationFeature::GoBack(int tab_id) {
 void NavigationFeature::ProcessMessage(
     scoped_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
+  DCHECK(!callback.is_null());
   DCHECK(message->type() == BlimpMessage::NAVIGATION);
 
   int tab_id = message->target_tab_id();
@@ -85,13 +86,7 @@ void NavigationFeature::ProcessMessage(
   const NavigationMessage& navigation_message = message->navigation();
 
   NavigationFeatureDelegate* delegate = FindDelegate(tab_id);
-  if (!delegate) {
-    // TODO(haibinlu): implement NavigationFeatureDelegate for Linux client.
-    // crbug.com/574602
-    LOG(WARNING) << "NavigationFeatureDelegate not found";
-    return;
-  }
-
+  DCHECK(delegate) << "NavigationFeatureDelegate not found for tab " << tab_id;
   switch (navigation_message.type()) {
     case NavigationMessage::NAVIGATION_STATE_CHANGED: {
       const NavigationStateChangeMessage& details =
@@ -119,8 +114,7 @@ void NavigationFeature::ProcessMessage(
       NOTREACHED();
   }
 
-  if (!callback.is_null())
-    callback.Run(net::OK);
+  callback.Run(net::OK);
 }
 
 NavigationFeature::NavigationFeatureDelegate* NavigationFeature::FindDelegate(

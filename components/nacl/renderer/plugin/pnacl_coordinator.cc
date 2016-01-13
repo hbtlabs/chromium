@@ -307,7 +307,7 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
   for (int i = 0; i < split_module_count_; i++) {
     PP_FileHandle obj_handle =
         plugin_->nacl_interface()->CreateTemporaryFile(plugin_->pp_instance());
-    nacl::scoped_ptr<TempFile> temp_file(new TempFile(plugin_, obj_handle));
+    scoped_ptr<TempFile> temp_file(new TempFile(plugin_, obj_handle));
     int32_t pp_error = temp_file->CheckValidity();
     if (pp_error != PP_OK) {
       ReportPpapiError(PP_NACL_ERROR_PNACL_CREATE_TEMP,
@@ -318,7 +318,6 @@ void PnaclCoordinator::BitcodeStreamCacheMiss(int64_t expected_pexe_size,
       obj_files_.push_back(temp_file.release());
     }
   }
-  invalid_desc_wrapper_.reset(plugin_->wrapper_factory()->MakeInvalid());
 
   temp_nexe_file_.reset(new TempFile(plugin_, nexe_handle));
   // Open the nexe file for connecting ld and sel_ldr.
@@ -452,8 +451,7 @@ void PnaclCoordinator::RunCompile(int32_t pp_error,
   translate_thread_->SetupState(
       report_translate_finished, &compiler_subprocess_, &ld_subprocess_,
       &obj_files_, num_threads_, temp_nexe_file_.get(),
-      invalid_desc_wrapper_.get(), &error_info_, &pnacl_options_,
-      architecture_attributes_, this);
+      &error_info_, &pnacl_options_, architecture_attributes_, this);
   translate_thread_->RunCompile(compile_finished);
 }
 

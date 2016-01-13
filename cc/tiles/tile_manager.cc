@@ -24,6 +24,7 @@
 #include "cc/debug/traced_value.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/raster/raster_buffer.h"
+#include "cc/raster/task_category.h"
 #include "cc/raster/tile_task_runner.h"
 #include "cc/tiles/tile.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -55,10 +56,7 @@ class RasterTaskImpl : public RasterTask {
                  uint64_t previous_content_id,
                  uint64_t resource_content_id,
                  int source_frame_number,
-                 bool analyze_picture,
-                 const base::Callback<
-                     void(const DisplayListRasterSource::SolidColorAnalysis&,
-                          bool)>& reply,
+                 const base::Callback<void(bool)>& reply,
                  ImageDecodeTask::Vector* dependencies)
       : RasterTask(dependencies),
         resource_(resource),
@@ -74,7 +72,6 @@ class RasterTaskImpl : public RasterTask {
         previous_content_id_(previous_content_id),
         resource_content_id_(resource_content_id),
         source_frame_number_(source_frame_number),
-        analyze_picture_(analyze_picture),
         reply_(reply) {}
 
   // Overridden from Task:
@@ -84,12 +81,6 @@ class RasterTaskImpl : public RasterTask {
 
     DCHECK(raster_source_.get());
     DCHECK(raster_buffer_);
-
-    if (analyze_picture_) {
-      Analyze(raster_source_.get());
-      if (analysis_.is_solid_color)
-        return;
-    }
 
     Raster(raster_source_.get());
   }
@@ -102,25 +93,13 @@ class RasterTaskImpl : public RasterTask {
   }
   void CompleteOnOriginThread(TileTaskClient* client) override {
     client->ReleaseBufferForRaster(std::move(raster_buffer_));
-    reply_.Run(analysis_, !HasFinishedRunning());
+    reply_.Run(!HasFinishedRunning());
   }
 
  protected:
   ~RasterTaskImpl() override { DCHECK(!raster_buffer_); }
 
  private:
-  void Analyze(const DisplayListRasterSource* raster_source) {
-    frame_viewer_instrumentation::ScopedAnalyzeTask analyze_task(
-        tile_, tile_resolution_, source_frame_number_, layer_id_);
-
-    DCHECK(raster_source);
-
-    raster_source->PerformSolidColorAnalysis(content_rect_, contents_scale_,
-                                             &analysis_);
-    // Clear the flag if we're not using the estimator.
-    analysis_.is_solid_color &= kUseColorEstimator;
-  }
-
   void Raster(const DisplayListRasterSource* raster_source) {
     frame_viewer_instrumentation::ScopedRasterTask raster_task(
         tile_, tile_resolution_, source_frame_number_, layer_id_);
@@ -136,7 +115,6 @@ class RasterTaskImpl : public RasterTask {
   }
 
   const Resource* resource_;
-  DisplayListRasterSource::SolidColorAnalysis analysis_;
   scoped_refptr<DisplayListRasterSource> raster_source_;
   gfx::Rect content_rect_;
   gfx::Rect invalid_content_rect_;
@@ -149,9 +127,7 @@ class RasterTaskImpl : public RasterTask {
   uint64_t previous_content_id_;
   uint64_t resource_content_id_;
   int source_frame_number_;
-  bool analyze_picture_;
-  const base::Callback<void(const DisplayListRasterSource::SolidColorAnalysis&,
-                            bool)> reply_;
+  const base::Callback<void(bool)> reply_;
   scoped_ptr<RasterBuffer> raster_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(RasterTaskImpl);
@@ -169,23 +145,41 @@ size_t kTileTaskPriorityBase = 10u;
 
 void InsertNodeForTask(TaskGraph* graph,
                        TileTask* task,
-                       size_t priority,
+                       uint16_t category,
+                       uint16_t priority,
                        size_t dependencies) {
   DCHECK(std::find_if(graph->nodes.begin(), graph->nodes.end(),
                       [task](const TaskGraph::Node& node) {
                         return node.task == task;
                       }) == graph->nodes.end());
-
-  // TODO(ericrk): Add in more logic around category selection.
   graph->nodes.push_back(
-      TaskGraph::Node(task, 0 /* category */, priority, dependencies));
+      TaskGraph::Node(task, category, priority, dependencies));
 }
 
 void InsertNodesForRasterTask(TaskGraph* graph,
                               RasterTask* raster_task,
                               const ImageDecodeTask::Vector& decode_tasks,
-                              size_t priority) {
+                              size_t priority,
+                              bool use_gpu_rasterization,
+                              bool high_priority) {
   size_t dependencies = 0u;
+
+  // Determine the TaskCategory for raster tasks - if a task uses GPU, it
+  // cannot run concurrently and is assigned
+  // TASK_CATEGORY_NONCONCURRENT_FOREGROUND, regardless of its priority.
+  // Otherwise its category is based on its priority.
+  TaskCategory raster_task_category;
+  if (use_gpu_rasterization) {
+    raster_task_category = TASK_CATEGORY_NONCONCURRENT_FOREGROUND;
+  } else {
+    raster_task_category =
+        high_priority ? TASK_CATEGORY_FOREGROUND : TASK_CATEGORY_BACKGROUND;
+  }
+
+  // Determine the TaskCategory for decode tasks. This category is based on
+  // the priority of the raster task which depends on it.
+  TaskCategory decode_task_category =
+      high_priority ? TASK_CATEGORY_FOREGROUND : TASK_CATEGORY_BACKGROUND;
 
   // Insert image decode tasks.
   for (ImageDecodeTask::Vector::const_iterator it = decode_tasks.begin();
@@ -204,13 +198,22 @@ void InsertNodesForRasterTask(TaskGraph* graph,
                      [decode_task](const TaskGraph::Node& node) {
                        return node.task == decode_task;
                      });
-    if (decode_it == graph->nodes.end())
-      InsertNodeForTask(graph, decode_task, priority, 0u);
+
+    // Tasks are inserted in priority order, so existing decode tasks should
+    // already be FOREGROUND if this is a high priority task.
+    DCHECK(decode_it == graph->nodes.end() || !high_priority ||
+           static_cast<uint16_t>(TASK_CATEGORY_FOREGROUND) ==
+               decode_it->category);
+
+    if (decode_it == graph->nodes.end()) {
+      InsertNodeForTask(graph, decode_task, decode_task_category, priority, 0u);
+    }
 
     graph->edges.push_back(TaskGraph::Edge(decode_task, raster_task));
   }
 
-  InsertNodeForTask(graph, raster_task, priority, dependencies);
+  InsertNodeForTask(graph, raster_task, raster_task_category, priority,
+                    dependencies);
 }
 
 class TaskSetFinishedTaskImpl : public TileTask {
@@ -282,6 +285,7 @@ TileManager::TileManager(
       tile_task_runner_(nullptr),
       scheduled_raster_task_limit_(scheduled_raster_task_limit),
       use_partial_raster_(use_partial_raster),
+      use_gpu_rasterization_(false),
       all_tiles_that_need_to_be_rasterized_are_scheduled_(true),
       did_check_for_completed_tasks_since_last_schedule_tasks_(true),
       did_oom_on_last_assign_(false),
@@ -329,10 +333,12 @@ void TileManager::FinishTasksAndCleanUp() {
 
 void TileManager::SetResources(ResourcePool* resource_pool,
                                TileTaskRunner* tile_task_runner,
-                               size_t scheduled_raster_task_limit) {
+                               size_t scheduled_raster_task_limit,
+                               bool use_gpu_rasterization) {
   DCHECK(!tile_task_runner_);
   DCHECK(tile_task_runner);
 
+  use_gpu_rasterization_ = use_gpu_rasterization;
   scheduled_raster_task_limit_ = scheduled_raster_task_limit;
   resource_pool_ = resource_pool;
   tile_task_runner_ = tile_task_runner;
@@ -593,6 +599,23 @@ void TileManager::AssignGpuMemoryToTiles(
       break;
     }
 
+    if (tile->use_picture_analysis() && kUseColorEstimator) {
+      // We analyze for solid color here, to decide to continue
+      // or drop the tile for scheduling and raster.
+      // TODO(sohanjg): Check if we could use a shared analysis
+      // canvas which is reset between tiles.
+      SkColor color = SK_ColorTRANSPARENT;
+      bool is_solid_color =
+          prioritized_tile.raster_source()->PerformSolidColorAnalysis(
+              tile->content_rect(), tile->contents_scale(), &color);
+      if (is_solid_color) {
+        tile->draw_info().set_solid_color(color);
+        tile->draw_info().set_was_ever_ready_to_draw();
+        client_->NotifyTileStateChanged(tile);
+        continue;
+      }
+    }
+
     // We won't be able to schedule this tile, so break out early.
     if (tiles_that_need_to_be_rasterized->size() >=
         scheduled_raster_task_limit) {
@@ -752,16 +775,24 @@ void TileManager::ScheduleTasks(
     all_count++;
     graph_.edges.push_back(TaskGraph::Edge(task, all_done_task.get()));
 
-    InsertNodesForRasterTask(&graph_, task, task->dependencies(), priority++);
+    bool high_priority =
+        tile->required_for_draw() || tile->required_for_activation();
+    InsertNodesForRasterTask(&graph_, task, task->dependencies(), priority++,
+                             use_gpu_rasterization_, high_priority);
   }
 
+  // Insert nodes for our task completion tasks. We enqueue these using
+  // FOREGROUND priority as they are relatively quick tasks and we'd like
+  // to trigger our callbacks quickly to aid in scheduling.
   InsertNodeForTask(&graph_, required_for_activation_done_task.get(),
+                    TASK_CATEGORY_FOREGROUND,
                     kRequiredForActivationDoneTaskPriority,
                     required_for_activate_count);
   InsertNodeForTask(&graph_, required_for_draw_done_task.get(),
-                    kRequiredForDrawDoneTaskPriority, required_for_draw_count);
-  InsertNodeForTask(&graph_, all_done_task.get(), kAllDoneTaskPriority,
-                    all_count);
+                    TASK_CATEGORY_FOREGROUND, kRequiredForDrawDoneTaskPriority,
+                    required_for_draw_count);
+  InsertNodeForTask(&graph_, all_done_task.get(), TASK_CATEGORY_FOREGROUND,
+                    kAllDoneTaskPriority, all_count);
 
   // We must reduce the amount of unused resoruces before calling
   // ScheduleTasks to prevent usage from rising above limits.
@@ -826,7 +857,6 @@ scoped_refptr<RasterTask> TileManager::CreateRasterTask(
       prioritized_tile.priority().resolution, tile->layer_id(),
       prepare_tiles_count_, static_cast<const void*>(tile), tile->id(),
       tile->invalidated_id(), resource_content_id, tile->source_frame_number(),
-      tile->use_picture_analysis(),
       base::Bind(&TileManager::OnRasterTaskCompleted, base::Unretained(this),
                  tile->id(), resource),
       &decode_tasks));
@@ -835,11 +865,11 @@ scoped_refptr<RasterTask> TileManager::CreateRasterTask(
 void TileManager::OnRasterTaskCompleted(
     Tile::Id tile_id,
     Resource* resource,
-    const DisplayListRasterSource::SolidColorAnalysis& analysis,
     bool was_canceled) {
   DCHECK(tiles_.find(tile_id) != tiles_.end());
 
   Tile* tile = tiles_[tile_id];
+  TileDrawInfo& draw_info = tile->draw_info();
   DCHECK(tile->raster_task_.get());
   orphan_tasks_.push_back(tile->raster_task_);
   tile->raster_task_ = nullptr;
@@ -854,32 +884,12 @@ void TileManager::OnRasterTaskCompleted(
     return;
   }
 
-  UpdateTileDrawInfo(tile, resource, analysis);
-}
-
-void TileManager::UpdateTileDrawInfo(
-    Tile* tile,
-    Resource* resource,
-    const DisplayListRasterSource::SolidColorAnalysis& analysis) {
-  TileDrawInfo& draw_info = tile->draw_info();
-
   ++flush_stats_.completed_count;
 
-  if (analysis.is_solid_color) {
-    draw_info.set_solid_color(analysis.solid_color);
-    if (resource) {
-      // TODO(ericrk): If more partial raster work is done in the future, it may
-      // be worth returning the resource to the pool with its previous ID (not
-      // currently tracked). crrev.com/1370333002/#ps40001 has a possible method
-      // of achieving this.
-      resource_pool_->ReleaseResource(resource, 0 /* content_id */);
-    }
-  } else {
-    DCHECK(resource);
-    draw_info.set_use_resource();
-    draw_info.resource_ = resource;
-    draw_info.contents_swizzled_ = DetermineResourceRequiresSwizzle(tile);
-  }
+  draw_info.set_use_resource();
+  draw_info.resource_ = resource;
+  draw_info.contents_swizzled_ = DetermineResourceRequiresSwizzle(tile);
+
   DCHECK(draw_info.IsReadyToDraw());
   draw_info.set_was_ever_ready_to_draw();
 

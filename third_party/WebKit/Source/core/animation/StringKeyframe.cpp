@@ -6,6 +6,7 @@
 
 #include "core/XLinkNames.h"
 #include "core/animation/CSSColorInterpolationType.h"
+#include "core/animation/CSSFontWeightInterpolationType.h"
 #include "core/animation/CSSImageInterpolationType.h"
 #include "core/animation/CSSImageListInterpolationType.h"
 #include "core/animation/CSSLengthInterpolationType.h"
@@ -14,6 +15,7 @@
 #include "core/animation/CSSPaintInterpolationType.h"
 #include "core/animation/CSSShadowListInterpolationType.h"
 #include "core/animation/CSSValueInterpolationType.h"
+#include "core/animation/CSSVisibilityInterpolationType.h"
 #include "core/animation/CompositorAnimations.h"
 #include "core/animation/ConstantStyleInterpolation.h"
 #include "core/animation/DefaultSVGInterpolation.h"
@@ -54,28 +56,36 @@ namespace blink {
 
 StringKeyframe::StringKeyframe(const StringKeyframe& copyFrom)
     : Keyframe(copyFrom.m_offset, copyFrom.m_composite, copyFrom.m_easing)
-    , m_propertySet(copyFrom.m_propertySet->mutableCopy())
-    , m_svgPropertyMap(copyFrom.m_svgPropertyMap)
+    , m_cssPropertyMap(copyFrom.m_cssPropertyMap->mutableCopy())
+    , m_presentationAttributeMap(copyFrom.m_presentationAttributeMap->mutableCopy())
+    , m_svgAttributeMap(copyFrom.m_svgAttributeMap)
 {
 }
 
-void StringKeyframe::setPropertyValue(CSSPropertyID property, const String& value, Element* element, StyleSheetContents* styleSheetContents)
+void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, const String& value, Element* element, StyleSheetContents* styleSheetContents)
 {
     ASSERT(property != CSSPropertyInvalid);
     if (CSSAnimations::isAnimatableProperty(property))
-        m_propertySet->setProperty(property, value, false, styleSheetContents);
+        m_cssPropertyMap->setProperty(property, value, false, styleSheetContents);
 }
 
-void StringKeyframe::setPropertyValue(CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSValue> value)
+void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSValue> value)
 {
     ASSERT(property != CSSPropertyInvalid);
     ASSERT(CSSAnimations::isAnimatableProperty(property));
-    m_propertySet->setProperty(property, value, false);
+    m_cssPropertyMap->setProperty(property, value, false);
 }
 
-void StringKeyframe::setPropertyValue(const QualifiedName& attributeName, const String& value)
+void StringKeyframe::setPresentationAttributeValue(CSSPropertyID property, const String& value, Element* element, StyleSheetContents* styleSheetContents)
 {
-    m_svgPropertyMap.set(&attributeName, value);
+    ASSERT(property != CSSPropertyInvalid);
+    if (CSSAnimations::isAnimatableProperty(property))
+        m_presentationAttributeMap->setProperty(property, value, false, styleSheetContents);
+}
+
+void StringKeyframe::setSVGAttributeValue(const QualifiedName& attributeName, const String& value)
+{
+    m_svgAttributeMap.set(&attributeName, value);
 }
 
 PropertyHandleSet StringKeyframe::properties() const
@@ -83,10 +93,13 @@ PropertyHandleSet StringKeyframe::properties() const
     // This is not used in time-critical code, so we probably don't need to
     // worry about caching this result.
     PropertyHandleSet properties;
-    for (unsigned i = 0; i < m_propertySet->propertyCount(); ++i)
-        properties.add(PropertyHandle(m_propertySet->propertyAt(i).id()));
+    for (unsigned i = 0; i < m_cssPropertyMap->propertyCount(); ++i)
+        properties.add(PropertyHandle(m_cssPropertyMap->propertyAt(i).id(), false));
 
-    for (const auto& key: m_svgPropertyMap.keys())
+    for (unsigned i = 0; i < m_presentationAttributeMap->propertyCount(); ++i)
+        properties.add(PropertyHandle(m_presentationAttributeMap->propertyAt(i).id(), true));
+
+    for (const auto& key: m_svgAttributeMap.keys())
         properties.add(PropertyHandle(*key));
 
     return properties;
@@ -101,6 +114,9 @@ PassOwnPtr<Keyframe::PropertySpecificKeyframe> StringKeyframe::createPropertySpe
 {
     if (property.isCSSProperty())
         return adoptPtr(new CSSPropertySpecificKeyframe(offset(), &easing(), cssPropertyValue(property.cssProperty()), composite()));
+
+    if (property.isPresentationAttribute())
+        return adoptPtr(new CSSPropertySpecificKeyframe(offset(), &easing(), presentationAttributeValue(property.presentationAttribute()), composite()));
 
     ASSERT(property.isSVGAttribute());
     return adoptPtr(new SVGPropertySpecificKeyframe(offset(), &easing(), svgPropertyValue(property.svgAttribute()), composite()));
@@ -145,8 +161,8 @@ const InterpolationTypes* applicableTypesForProperty(PropertyHandle property)
     bool fallbackToLegacy = false;
     OwnPtr<InterpolationTypes> applicableTypes = adoptPtr(new InterpolationTypes());
 
-    if (property.isCSSProperty()) {
-        CSSPropertyID cssProperty = property.cssProperty();
+    if (property.isCSSProperty() || property.isPresentationAttribute()) {
+        CSSPropertyID cssProperty = property.isCSSProperty() ? property.cssProperty() : property.presentationAttribute();
         switch (cssProperty) {
         case CSSPropertyBaselineShift:
         case CSSPropertyBorderBottomWidth:
@@ -255,6 +271,12 @@ const InterpolationTypes* applicableTypesForProperty(PropertyHandle property)
             break;
         case CSSPropertyStrokeDasharray:
             applicableTypes->append(adoptPtr(new CSSLengthListInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyFontWeight:
+            applicableTypes->append(adoptPtr(new CSSFontWeightInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyVisibility:
+            applicableTypes->append(adoptPtr(new CSSVisibilityInterpolationType(cssProperty)));
             break;
         default:
             // TODO(alancutter): Support all interpolable CSS properties here so we can stop falling back to the old StyleInterpolation implementation.
@@ -406,12 +428,12 @@ PassRefPtr<Interpolation> StringKeyframe::CSSPropertySpecificKeyframe::maybeCrea
 {
     const InterpolationTypes* applicableTypes = applicableTypesForProperty(propertyHandle);
     if (applicableTypes)
-        return InvalidatableInterpolation::create(*applicableTypes, *this, end);
+        return InvalidatableInterpolation::create(propertyHandle, *applicableTypes, *this, end);
 
     // TODO(alancutter): Remove the remainder of this function.
 
     // FIXME: Refactor this into a generic piece that lives in InterpolationEffect, and a template parameter specific converter.
-    CSSPropertyID property = propertyHandle.cssProperty();
+    CSSPropertyID property = propertyHandle.isCSSProperty() ? propertyHandle.cssProperty() : propertyHandle.presentationAttribute();
     CSSValue* fromCSSValue = m_value.get();
     CSSValue* toCSSValue = toCSSPropertySpecificKeyframe(end).value();
     InterpolationRange range = RangeAll;
@@ -629,7 +651,7 @@ PassRefPtr<Interpolation> SVGPropertySpecificKeyframe::maybeCreateInterpolation(
 {
     const InterpolationTypes* applicableTypes = applicableTypesForProperty(propertyHandle);
     if (applicableTypes)
-        return InvalidatableInterpolation::create(*applicableTypes, *this, end);
+        return InvalidatableInterpolation::create(propertyHandle, *applicableTypes, *this, end);
 
     ASSERT(element);
     SVGAnimatedPropertyBase* attribute = toSVGElement(element)->propertyFromAttribute(propertyHandle.svgAttribute());

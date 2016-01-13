@@ -45,12 +45,10 @@
 #include "components/nacl/renderer/trusted_plugin_channel.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/sandbox_init.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
-#include "native_client/src/public/imc_types.h"
 #include "net/base/data_url.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_util.h"
@@ -406,7 +404,6 @@ void LaunchSelLdr(PP_Instance instance,
                   const PP_NaClFileInfo* nexe_file_info,
                   PP_Bool uses_nonsfi_mode,
                   PP_NaClAppProcessType pp_process_type,
-                  void* imc_handle,
                   scoped_ptr<IPC::SyncChannel>* translator_channel,
                   base::ProcessId* process_id,
                   PP_CompletionCallback callback) {
@@ -507,7 +504,6 @@ void LaunchSelLdr(PP_Instance instance,
     // Even on error, some FDs/handles may be passed to here.
     // We must release those resources.
     // See also nacl_process_host.cc.
-    IPC::PlatformFileForTransitToFile(launch_result.imc_channel_handle);
     base::SharedMemory::CloseHandle(launch_result.crash_info_shmem_handle);
 
     if (PP_ToBool(main_service_runtime)) {
@@ -547,10 +543,6 @@ void LaunchSelLdr(PP_Instance instance,
           new InstanceInfo(instance_info));
     }
   }
-
-  *(static_cast<NaClHandle*>(imc_handle)) =
-      IPC::PlatformFileForTransitToPlatformFile(
-          launch_result.imc_channel_handle);
 
   // Store the crash information shared memory handle.
   load_manager->set_crash_info_shmem_handle(
@@ -633,20 +625,6 @@ int UrandomFD(void) {
   return base::GetUrandomFD();
 #else
   return -1;
-#endif
-}
-
-int32_t BrokerDuplicateHandle(PP_FileHandle source_handle,
-                              uint32_t process_id,
-                              PP_FileHandle* target_handle,
-                              uint32_t desired_access,
-                              uint32_t options) {
-#if defined(OS_WIN)
-  return content::BrokerDuplicateHandle(source_handle, process_id,
-                                        target_handle, desired_access,
-                                        options);
-#else
-  return 0;
 #endif
 }
 
@@ -1727,7 +1705,6 @@ void StreamPexe(PP_Instance instance,
 const PPB_NaCl_Private nacl_interface = {
   &LaunchSelLdr,
   &UrandomFD,
-  &BrokerDuplicateHandle,
   &GetReadExecPnaclFd,
   &CreateTemporaryFile,
   &GetNumberOfProcessors,

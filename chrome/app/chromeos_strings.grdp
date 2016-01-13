@@ -2197,6 +2197,27 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_UNSUPPORTED_DEVICE">
     Unsupported Bluetooth device: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
   </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_ATTRIBUTE_LENGTH_INVALID">
+    Write operation exceeds the maximum length of the attribute to: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_CONNECTION_CONGESTED">
+    Connection is congested to remote device: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_INSUFFICIENT_ENCRYPTION">
+    Insufficient encryption for a given operation on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_OFFSET_INVALID">
+    Read or write operation was requested with an invalid offset on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_READ_NOT_PERMITTED">
+    Read operation is not permitted on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_REQUEST_NOT_SUPPORTED">
+    The given request is not supported to: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED">
+    Write operation is not permitted on: "<ph name="DEVICE_NAME">%1<ex>Nexus 4</ex></ph>".
+  </message>
   <message name="IDS_OPTIONS_SETTINGS_BLUETOOTH_DISCONNECT_FAILED">
     Failed to disconnect from "<ph name="DEVICE_NAME">%1<ex>Nexus S</ex></ph>".
   </message>
@@ -3549,6 +3570,14 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_NO_INPUT_METHODS"
            desc="The label for languages with no Input Methods">
     This language doesn't have any input methods
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU"
+           desc="The label for activating IME menu on the shelf.">
+    Show the input method menu on the shelf.
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU_DESCRIPTION"
+           desc="The label for the description of showing input method menu.">
+    For easier switching of input methods and access to more input features: voice input, handwriting and emoji.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_THIRD_PARTY_WARNING_TITLE"
            desc="The title showing in the warning dialog when enabling a 3rd party Input Method">

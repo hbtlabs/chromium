@@ -53,7 +53,6 @@ namespace blink {
 
 GraphicsContext::GraphicsContext(PaintController& paintController, DisabledMode disableContextOrPainting, SkMetaData* metaData)
     : m_canvas(nullptr)
-    , m_originalCanvas(nullptr)
     , m_paintController(paintController)
     , m_paintStateStack()
     , m_paintStateIndex(0)
@@ -310,7 +309,7 @@ PassRefPtr<const SkPicture> GraphicsContext::endRecording()
         return nullptr;
 
     RefPtr<const SkPicture> picture = adoptRef(m_pictureRecorder.endRecordingAsPicture());
-    m_canvas = m_originalCanvas;
+    m_canvas = nullptr;
     ASSERT(picture);
     return picture.release();
 }
@@ -1069,17 +1068,17 @@ void GraphicsContext::strokeEllipse(const FloatRect& ellipse)
     drawOval(ellipse, immutableState()->strokePaint());
 }
 
-void GraphicsContext::clipRoundedRect(const FloatRoundedRect& rrect, SkRegion::Op regionOp)
+void GraphicsContext::clipRoundedRect(const FloatRoundedRect& rrect, SkRegion::Op regionOp, AntiAliasingMode shouldAntialias)
 {
     if (contextDisabled())
         return;
 
     if (!rrect.isRounded()) {
-        clipRect(rrect.rect(), NotAntiAliased, regionOp);
+        clipRect(rrect.rect(), shouldAntialias, regionOp);
         return;
     }
 
-    clipRRect(rrect, AntiAliased, regionOp);
+    clipRRect(rrect, shouldAntialias, regionOp);
 }
 
 void GraphicsContext::clipOut(const Path& pathToClip)

@@ -15,6 +15,8 @@ static_library("arc") {
     "arc_service_manager.cc",
     "arc_service_manager.h",
     "auth/arc_auth_service.h",
+    "clipboard/arc_clipboard_bridge.cc",
+    "clipboard/arc_clipboard_bridge.h",
     "input/arc_input_bridge.h",
     "input/arc_input_bridge_impl.cc",
     "input/arc_input_bridge_impl.h",
@@ -22,6 +24,9 @@ static_library("arc") {
     "power/arc_power_bridge.h",
     "settings/arc_settings_bridge.cc",
     "settings/arc_settings_bridge.h",
+    "video/arc_video_bridge.cc",
+    "video/arc_video_bridge.h",
+    "video/video_host_delegate.h",
   ]
 
   deps = [
@@ -29,10 +34,13 @@ static_library("arc") {
     "//base:prefs",
     "//chromeos",
     "//chromeos:power_manager_proto",
+    "//components/signin/core/account_id",
     "//ipc:ipc",
     "//ipc/mojo:mojo",
     "//third_party/mojo/src/mojo/edk/system",
+    "//ui/arc",
     "//ui/aura",
+    "//ui/base:base",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
   ]
@@ -47,11 +55,13 @@ mojom("arc_bindings") {
     "common/app.mojom",
     "common/arc_bridge.mojom",
     "common/auth.mojom",
+    "common/clipboard.mojom",
     "common/input.mojom",
     "common/notifications.mojom",
     "common/power.mojom",
     "common/process.mojom",
     "common/settings.mojom",
+    "common/video.mojom",
   ]
 }
 

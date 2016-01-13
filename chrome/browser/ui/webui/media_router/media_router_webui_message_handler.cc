@@ -12,7 +12,9 @@
 #include "base/metrics/user_metrics.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "chrome/browser/media/router/issue.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 #include "chrome/common/pref_names.h"
@@ -36,9 +38,13 @@ const char kCloseRoute[] = "closeRoute";
 const char kJoinRoute[] = "joinRoute";
 const char kCloseDialog[] = "closeDialog";
 const char kReportClickedSinkIndex[] = "reportClickedSinkIndex";
+const char kReportInitialAction[] = "reportInitialAction";
+const char kReportInitialState[] = "reportInitialState";
 const char kReportNavigateToView[] = "reportNavigateToView";
 const char kReportSelectedCastMode[] = "reportSelectedCastMode";
 const char kReportSinkCount[] = "reportSinkCount";
+const char kReportTimeToClickSink[] = "reportTimeToClickSink";
+const char kReportTimeToInitialActionClose[] = "reportTimeToInitialActionClose";
 const char kOnInitialDataReceived[] = "onInitialDataReceived";
 
 // JS function names.
@@ -51,6 +57,7 @@ const char kSetIssue[] = "media_router.ui.setIssue";
 const char kSetSinkList[] = "media_router.ui.setSinkList";
 const char kSetRouteList[] = "media_router.ui.setRouteList";
 const char kSetCastModeList[] = "media_router.ui.setCastModeList";
+const char kUpdateMaxHeight[] = "media_router.ui.updateMaxHeight";
 const char kWindowOpen[] = "window.open";
 
 scoped_ptr<base::ListValue> SinksToValue(
@@ -237,6 +244,12 @@ void MediaRouterWebUIMessageHandler::UpdateIssue(const Issue* issue) {
       issue ? *IssueToValue(*issue) : *base::Value::CreateNullValue());
 }
 
+void MediaRouterWebUIMessageHandler::UpdateMaxDialogHeight(int height) {
+  DVLOG(2) << "UpdateMaxDialogHeight";
+  web_ui()->CallJavascriptFunction(kUpdateMaxHeight,
+                                   base::FundamentalValue(height));
+}
+
 void MediaRouterWebUIMessageHandler::NotifyRouteCreationTimeout() {
   DVLOG(2) << "NotifyRouteCreationTimeout";
   web_ui()->CallJavascriptFunction(kNotifyRouteCreationTimeout);
@@ -276,6 +289,14 @@ void MediaRouterWebUIMessageHandler::RegisterMessages() {
       base::Bind(&MediaRouterWebUIMessageHandler::OnReportClickedSinkIndex,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      kReportInitialState,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportInitialState,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kReportInitialAction,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportInitialAction,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       kReportSelectedCastMode,
       base::Bind(&MediaRouterWebUIMessageHandler::OnReportSelectedCastMode,
                  base::Unretained(this)));
@@ -287,6 +308,15 @@ void MediaRouterWebUIMessageHandler::RegisterMessages() {
       kReportSinkCount,
       base::Bind(&MediaRouterWebUIMessageHandler::OnReportSinkCount,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kReportTimeToClickSink,
+      base::Bind(&MediaRouterWebUIMessageHandler::OnReportTimeToClickSink,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      kReportTimeToInitialActionClose,
+      base::Bind(
+          &MediaRouterWebUIMessageHandler::OnReportTimeToInitialActionClose,
+          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       kOnInitialDataReceived,
       base::Bind(&MediaRouterWebUIMessageHandler::OnInitialDataReceived,
@@ -489,6 +519,31 @@ void MediaRouterWebUIMessageHandler::OnReportClickedSinkIndex(
                               std::min(index, 100));
 }
 
+void MediaRouterWebUIMessageHandler::OnReportInitialAction(
+  const base::ListValue* args) {
+  DVLOG(1) << "OnReportInitialAction";
+  int action;
+  if (!args->GetInteger(0, &action)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+  media_router::MediaRouterMetrics::RecordMediaRouterInitialUserAction(
+      static_cast<MediaRouterUserAction>(action));
+}
+
+void MediaRouterWebUIMessageHandler::OnReportInitialState(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnReportInitialState";
+  std::string initial_view;
+  if (!args->GetString(0, &initial_view)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+  bool sink_list_state = initial_view == "sink-list";
+  DCHECK(sink_list_state || (initial_view == "route-details"));
+  UMA_HISTOGRAM_BOOLEAN("MediaRouter.Ui.InitialState", sink_list_state);
+}
+
 void MediaRouterWebUIMessageHandler::OnReportNavigateToView(
   const base::ListValue* args) {
   DVLOG(1) << "OnReportNavigateToView";
@@ -531,6 +586,30 @@ void MediaRouterWebUIMessageHandler::OnReportSinkCount(
     return;
   }
   UMA_HISTOGRAM_COUNTS_100("MediaRouter.Ui.Device.Count", sink_count);
+}
+
+void MediaRouterWebUIMessageHandler::OnReportTimeToClickSink(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnReportTimeToClickSink";
+  double time_to_click;
+  if (!args->GetDouble(0, &time_to_click)) {
+    DVLOG(1) << "Unable to extract args.";
+    return;
+  }
+  UMA_HISTOGRAM_TIMES("MediaRouter.Ui.Action.StartLocal.Latency",
+                      base::TimeDelta::FromMillisecondsD(time_to_click));
+}
+
+void MediaRouterWebUIMessageHandler::OnReportTimeToInitialActionClose(
+    const base::ListValue* args) {
+  DVLOG(1) << "OnReportTimeToInitialActionClose";
+  double time_to_close;
+  if (!args->GetDouble(0, &time_to_close)) {
+    VLOG(0) << "Unable to extract args.";
+    return;
+  }
+  UMA_HISTOGRAM_TIMES("MediaRouter.Ui.Action.CloseLatency",
+                      base::TimeDelta::FromMillisecondsD(time_to_close));
 }
 
 void MediaRouterWebUIMessageHandler::OnInitialDataReceived(

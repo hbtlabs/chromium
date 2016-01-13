@@ -2050,6 +2050,7 @@ interface HTMLMediaElement : HTMLElement
     getter readyState
     getter seekable
     getter seeking
+    getter sinkId
     getter src
     getter textTracks
     getter volume
@@ -2062,6 +2063,7 @@ interface HTMLMediaElement : HTMLElement
     method pause
     method play
     method setMediaKeys
+    method setSinkId
     setter autoplay
     setter controls
     setter crossOrigin
@@ -3353,6 +3355,9 @@ interface PushSubscription
     method constructor
     method toJSON
     method unsubscribe
+interface RTCCertificate
+    getter expires
+    method constructor
 interface RTCIceCandidate
     getter candidate
     getter sdpMLineIndex
@@ -5691,6 +5696,7 @@ interface webkitOfflineAudioContext : AudioContext
     method suspend
     setter oncomplete
 interface webkitRTCPeerConnection : EventTarget
+    static method generateCertificate
     getter iceConnectionState
     getter iceGatheringState
     getter localDescription

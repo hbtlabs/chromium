@@ -670,8 +670,16 @@ int SanityCheckCopyRequestCounts(LayerImpl* layer) {
   for (size_t i = 0; i < layer->children().size(); ++i) {
     count += SanityCheckCopyRequestCounts(layer->child_at(i));
   }
-  DCHECK_EQ(count, layer->num_layer_or_descendants_with_copy_request())
-      << ", id: " << layer->id();
+  if (layer->layer_tree_impl()
+          ->property_trees()
+          ->effect_tree.Node(layer->effect_tree_index())
+          ->owner_id == layer->id()) {
+    DCHECK_EQ(count, layer->num_copy_requests_in_target_subtree())
+        << ", id: " << layer->id();
+  } else {
+    DCHECK_LE(count, layer->num_copy_requests_in_target_subtree())
+        << ", id: " << layer->id();
+  }
   return count;
 }
 #endif
@@ -1876,7 +1884,9 @@ void LayerTreeImpl::GetViewportSelection(ViewportSelection* selection) {
 }
 
 void LayerTreeImpl::InputScrollAnimationFinished() {
-  layer_tree_host_impl_->ScrollEnd();
+  // TODO(majidvp): We should pass in the original starting scroll position here
+  ScrollState scroll_state(0, 0, 0, 0, 0, 0, false, false, false);
+  layer_tree_host_impl_->ScrollEnd(&scroll_state);
 }
 
 bool LayerTreeImpl::SmoothnessTakesPriority() const {

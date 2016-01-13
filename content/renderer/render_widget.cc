@@ -177,6 +177,20 @@ bool IsDateTimeInput(ui::TextInputType type) {
          type == ui::TEXT_INPUT_TYPE_TIME || type == ui::TEXT_INPUT_TYPE_WEEK;
 }
 
+content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
+    content::RenderWidget* widget) {
+#if defined(MOJO_SHELL_CLIENT)
+  if (content::MojoShellConnection::Get()) {
+    return content::RenderWidgetMusConnection::GetOrCreate(
+        widget->routing_id());
+  }
+#endif
+  // If we don't have a connection to the Mojo shell, then we want to route IPCs
+  // back to the browser process rather than Mus so we use the |widget| as the
+  // RenderWidgetInputHandlerDelegate.
+  return widget;
+}
+
 }  // namespace
 
 namespace content {
@@ -448,7 +462,6 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       can_compose_inline_(true),
       popup_type_(popup_type),
       pending_window_rect_count_(0),
-      input_handler_(this, this),
       screen_info_(screen_info),
       device_scale_factor_(screen_info_.deviceScaleFactor),
       next_output_surface_id_(0),
@@ -517,7 +530,7 @@ RenderWidget* RenderWidget::CreateForFrame(
   scoped_refptr<RenderWidget> widget(
       new RenderWidget(compositor_deps, blink::WebPopupTypeNone, screen_info,
                        false, hidden, false));
-  widget->routing_id_ = routing_id;
+  widget->SetRoutingID(routing_id);
   widget->for_oopif_ = true;
   // DoInit increments the reference count on |widget|, keeping it alive after
   // this function returns.
@@ -558,10 +571,21 @@ void RenderWidget::CloseForFrame() {
   OnClose();
 }
 
+void RenderWidget::SetRoutingID(int32_t routing_id) {
+  routing_id_ = routing_id;
+  input_handler_.reset(new RenderWidgetInputHandler(
+      GetRenderWidgetInputHandlerDelegate(this), this));
+}
+
 bool RenderWidget::Init(int32_t opener_id) {
-  return DoInit(
+  bool success = DoInit(
       opener_id, RenderWidget::CreateWebWidget(this),
       new ViewHostMsg_CreateWidget(opener_id, popup_type_, &routing_id_));
+  if (success) {
+    SetRoutingID(routing_id_);
+    return true;
+  }
+  return false;
 }
 
 bool RenderWidget::DoInit(int32_t opener_id,
@@ -588,6 +612,7 @@ bool RenderWidget::DoInit(int32_t opener_id,
       if (is_hidden_)
         RenderThreadImpl::current()->WidgetHidden();
     }
+
     return true;
   } else {
     // The above Send can fail when the tab is closing.
@@ -790,7 +815,7 @@ void RenderWidget::Resize(const gfx::Size& new_size,
 void RenderWidget::SetWindowRectSynchronously(
     const gfx::Rect& new_window_rect) {
   Resize(new_window_rect.size(),
-         new_window_rect.size(),
+         gfx::ScaleToCeiledSize(new_window_rect.size(), device_scale_factor_),
          top_controls_shrink_blink_size_,
          top_controls_height_,
          new_window_rect.size(),
@@ -933,6 +958,7 @@ GURL RenderWidget::GetURLForGraphicsContext3D() {
 }
 
 scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
+  DCHECK(webwidget_);
   // For widgets that are never visible, we don't start the compositor, so we
   // never get a request for a cc::OutputSurface.
   DCHECK(!compositor_never_visible_);
@@ -951,15 +977,29 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
   }
 #endif
 
+  scoped_refptr<GpuChannelHost> gpu_channel_host;
+  if (!use_software) {
+    CauseForGpuLaunch cause =
+        CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
+    gpu_channel_host =
+        RenderThreadImpl::current()->EstablishGpuChannelSync(cause);
+    if (!gpu_channel_host.get()) {
+      // Cause the compositor to wait and try again.
+      return nullptr;
+    }
+    // We may get a valid channel, but with a software renderer. In that case,
+    // disable GPU compositing.
+    if (gpu_channel_host->gpu_info().software_rendering)
+      use_software = true;
+  }
+
   scoped_refptr<ContextProviderCommandBuffer> context_provider;
   scoped_refptr<ContextProviderCommandBuffer> worker_context_provider;
   if (!use_software) {
     context_provider = ContextProviderCommandBuffer::Create(
-        CreateGraphicsContext3D(true), RENDER_COMPOSITOR_CONTEXT);
-    if (!context_provider.get()) {
-      // Cause the compositor to wait and try again.
-      return nullptr;
-    }
+        CreateGraphicsContext3D(gpu_channel_host.get()),
+        RENDER_COMPOSITOR_CONTEXT);
+    DCHECK(context_provider);
     worker_context_provider =
         RenderThreadImpl::current()->SharedWorkerContextProvider();
     if (!worker_context_provider) {
@@ -1030,7 +1070,7 @@ void RenderWidget::OnHandleInputEvent(const blink::WebInputEvent* input_event,
                                       const ui::LatencyInfo& latency_info) {
   if (!input_event)
     return;
-  input_handler_.HandleInputEvent(*input_event, latency_info);
+  input_handler_->HandleInputEvent(*input_event, latency_info);
 }
 
 void RenderWidget::OnCursorVisibilityChange(bool is_visible) {
@@ -1086,6 +1126,13 @@ void RenderWidget::OnDidOverscroll(const DidOverscrollParams& params) {
 
 void RenderWidget::OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) {
   Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, *input_event_ack));
+}
+
+void RenderWidget::SetInputHandler(RenderWidgetInputHandler* input_handler) {
+  // Nothing to do here. RenderWidget created the |input_handler| and will take
+  // ownership of it. We just verify here that we don't already have an input
+  // handler.
+  DCHECK(!input_handler_);
 }
 
 void RenderWidget::UpdateTextInputState(ShowIme show_ime,
@@ -1252,7 +1299,7 @@ void RenderWidget::DidCommitCompositorFrame() {
   FOR_EACH_OBSERVER(RenderFrameImpl, video_hole_frames_,
                     DidCommitCompositorFrame());
 #endif  // defined(VIDEO_HOLE)
-  input_handler_.FlushPendingInputEventAck();
+  input_handler_->FlushPendingInputEventAck();
 }
 
 void RenderWidget::DidCommitAndDrawCompositorFrame() {
@@ -1521,14 +1568,14 @@ void RenderWidget::OnImeConfirmComposition(const base::string16& text,
   if (!ShouldHandleImeEvent())
     return;
   ImeEventGuard guard(this);
-  input_handler_.set_handling_input_event(true);
+  input_handler_->set_handling_input_event(true);
   if (text.length())
     webwidget_->confirmComposition(text);
   else if (keep_selection)
     webwidget_->confirmComposition(WebWidget::KeepSelection);
   else
     webwidget_->confirmComposition(WebWidget::DoNotKeepSelection);
-  input_handler_.set_handling_input_event(false);
+  input_handler_->set_handling_input_event(false);
   UpdateCompositionInfo(true);
 }
 
@@ -1726,7 +1773,7 @@ void RenderWidget::SetHidden(bool hidden) {
   // The status has changed.  Tell the RenderThread about it and ensure
   // throttled acks are released in case frame production ceases.
   is_hidden_ = hidden;
-  input_handler_.FlushPendingInputEventAck();
+  input_handler_->FlushPendingInputEventAck();
 
   if (is_hidden_)
     RenderThreadImpl::current()->WidgetHidden();
@@ -1933,7 +1980,7 @@ void RenderWidget::showUnhandledTapUIIfNeeded(
     const WebPoint& tapped_position,
     const WebNode& tapped_node,
     bool page_changed) {
-  DCHECK(input_handler_.handling_input_event());
+  DCHECK(input_handler_->handling_input_event());
   bool should_trigger = !page_changed && tapped_node.isTextNode() &&
                         !tapped_node.isContentEditable() &&
                         !tapped_node.isInsideFocusableElementOrARIAWidget();
@@ -1967,8 +2014,8 @@ void RenderWidget::didOverscroll(
     const blink::WebFloatSize& accumulatedRootOverScroll,
     const blink::WebFloatPoint& position,
     const blink::WebFloatSize& velocity) {
-  input_handler_.DidOverscrollFromBlink(unusedDelta, accumulatedRootOverScroll,
-                                        position, velocity);
+  input_handler_->DidOverscrollFromBlink(unusedDelta, accumulatedRootOverScroll,
+                                         position, velocity);
 }
 
 void RenderWidget::StartCompositor() {
@@ -2009,15 +2056,15 @@ RenderWidgetCompositor* RenderWidget::compositor() const {
 }
 
 void RenderWidget::SetHandlingInputEventForTesting(bool handling_input_event) {
-  input_handler_.set_handling_input_event(handling_input_event);
+  input_handler_->set_handling_input_event(handling_input_event);
 }
 
 bool RenderWidget::SendAckForMouseMoveFromDebugger() {
-  return input_handler_.SendAckForMouseMoveFromDebugger();
+  return input_handler_->SendAckForMouseMoveFromDebugger();
 }
 
 void RenderWidget::IgnoreAckForMouseMoveFromDebugger() {
-  input_handler_.IgnoreAckForMouseMoveFromDebugger();
+  input_handler_->IgnoreAckForMouseMoveFromDebugger();
 }
 
 void RenderWidget::hasTouchEventHandlers(bool has_handlers) {
@@ -2036,7 +2083,7 @@ void RenderWidget::setTouchAction(
 
   // Ignore setTouchAction calls that result from synthetic touch events (eg.
   // when blink is emulating touch with mouse).
-  if (input_handler_.handling_event_type() != WebInputEvent::TouchStart)
+  if (input_handler_->handling_event_type() != WebInputEvent::TouchStart)
     return;
 
   // Verify the same values are used by the types so we can cast between them.
@@ -2065,21 +2112,7 @@ void RenderWidget::didUpdateTextOfFocusedElementByNonUserInput() {
 }
 
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
-RenderWidget::CreateGraphicsContext3D(bool compositor) {
-  if (!webwidget_)
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableGpuCompositing))
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-  if (!RenderThreadImpl::current())
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-  CauseForGpuLaunch cause =
-      CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
-  scoped_refptr<GpuChannelHost> gpu_channel_host(
-      RenderThreadImpl::current()->EstablishGpuChannelSync(cause));
-  if (!gpu_channel_host.get())
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-
+RenderWidget::CreateGraphicsContext3D(GpuChannelHost* gpu_channel_host) {
   // Explicitly disable antialiasing for the compositor. As of the time of
   // this writing, the only platform that supported antialiasing for the
   // compositor was Mac OS X, because the on-screen OpenGL context creation
@@ -2127,17 +2160,13 @@ RenderWidget::CreateGraphicsContext3D(bool compositor) {
   limits.mapped_memory_reclaim_limit =
       max_transfer_buffer_usage_mb * kBytesPerMegabyte;
 #endif
-  if (compositor) {
-    limits.command_buffer_size = 64 * 1024;
-    limits.start_transfer_buffer_size = 64 * 1024;
-    limits.min_transfer_buffer_size = 64 * 1024;
-  }
+  limits.command_buffer_size = 64 * 1024;
+  limits.start_transfer_buffer_size = 64 * 1024;
+  limits.min_transfer_buffer_size = 64 * 1024;
 
-  scoped_ptr<WebGraphicsContext3DCommandBufferImpl> context(
-      new WebGraphicsContext3DCommandBufferImpl(
-          0, GetURLForGraphicsContext3D(), gpu_channel_host.get(), attributes,
+  return make_scoped_ptr(new WebGraphicsContext3DCommandBufferImpl(
+          0, GetURLForGraphicsContext3D(), gpu_channel_host, attributes,
           lose_context_when_out_of_memory, limits, NULL));
-  return context;
 }
 
 void RenderWidget::RegisterRenderFrameProxy(RenderFrameProxy* proxy) {

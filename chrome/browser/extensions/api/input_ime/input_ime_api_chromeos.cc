@@ -16,7 +16,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/extensions/api/input_ime.h"
-#include "chrome/common/extensions/api/input_ime/input_components_handler.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
@@ -83,20 +82,6 @@ class ImeObserverChromeOS : public ui::ImeObserver {
   ~ImeObserverChromeOS() override {}
 
   // ui::IMEEngineObserver overrides
-  void OnActivate(const std::string& component_id) override {
-    if (extension_id_.empty() ||
-        !HasListener(input_ime::OnActivate::kEventName))
-      return;
-
-    scoped_ptr<base::ListValue> args(input_ime::OnActivate::Create(
-        component_id,
-        input_ime::ParseScreenType(GetCurrentScreenType())));
-
-    DispatchEventToExtension(extensions::events::INPUT_IME_ON_ACTIVATE,
-                             input_ime::OnActivate::kEventName,
-                             std::move(args));
-  }
-
   void OnInputContextUpdate(
       const IMEEngineHandlerInterface::InputContext& context) override {
     if (extension_id_.empty() ||
@@ -114,10 +99,6 @@ class ImeObserverChromeOS : public ui::ImeObserver {
     DispatchEventToExtension(
         extensions::events::INPUT_IME_ON_INPUT_CONTEXT_UPDATE,
         input_ime::OnInputContextUpdate::kEventName, std::move(args));
-  }
-
-  bool IsInterestedInKeyEvent() const override {
-    return ShouldForwardKeyEvent();
   }
 
   void OnCandidateClicked(
@@ -165,28 +146,6 @@ class ImeObserverChromeOS : public ui::ImeObserver {
     DispatchEventToExtension(
         extensions::events::INPUT_IME_ON_MENU_ITEM_ACTIVATED,
         input_ime::OnMenuItemActivated::kEventName, std::move(args));
-  }
-
-  void OnSurroundingTextChanged(const std::string& component_id,
-                                const std::string& text,
-                                int cursor_pos,
-                                int anchor_pos,
-                                int offset_pos) override {
-    if (extension_id_.empty() ||
-        !HasListener(input_ime::OnSurroundingTextChanged::kEventName))
-      return;
-
-    input_ime::OnSurroundingTextChanged::SurroundingInfo info;
-    info.text = text;
-    info.focus = cursor_pos;
-    info.anchor = anchor_pos;
-    info.offset = offset_pos;
-    scoped_ptr<base::ListValue> args(
-        input_ime::OnSurroundingTextChanged::Create(component_id, info));
-
-    DispatchEventToExtension(
-        extensions::events::INPUT_IME_ON_SURROUNDING_TEXT_CHANGED,
-        input_ime::OnSurroundingTextChanged::kEventName, std::move(args));
   }
 
   void OnCompositionBoundsChanged(
@@ -261,7 +220,7 @@ class ImeObserverChromeOS : public ui::ImeObserver {
   // The component IME extensions need to know the current screen type (e.g.
   // lock screen, login screen, etc.) so that its on-screen keyboard page
   // won't open new windows/pages. See crbug.com/395621.
-  std::string GetCurrentScreenType() {
+  std::string GetCurrentScreenType() override {
     switch (chromeos::input_method::InputMethodManager::Get()
                 ->GetUISessionState()) {
       case chromeos::input_method::InputMethodManager::STATE_LOGIN_SCREEN:
@@ -286,9 +245,14 @@ class ImeObserverChromeOS : public ui::ImeObserver {
 
 namespace extensions {
 
+InputImeEventRouter::InputImeEventRouter(Profile* profile)
+    : InputImeEventRouterBase(profile) {}
+
+InputImeEventRouter::~InputImeEventRouter() {}
+
 bool InputImeEventRouter::RegisterImeExtension(
     const std::string& extension_id,
-    const std::vector<extensions::InputComponentInfo>& input_components) {
+    const std::vector<InputComponentInfo>& input_components) {
   VLOG(1) << "RegisterImeExtension: " << extension_id;
 
   if (engine_map_[extension_id])
@@ -303,12 +267,12 @@ bool InputImeEventRouter::RegisterImeExtension(
   // Only creates descriptors for 3rd party IME extension, because the
   // descriptors for component IME extensions are managed by InputMethodUtil.
   if (!comp_ext_ime_manager->IsWhitelistedExtension(extension_id)) {
-    for (std::vector<extensions::InputComponentInfo>::const_iterator it =
+    for (std::vector<InputComponentInfo>::const_iterator it =
              input_components.begin();
          it != input_components.end();
          ++it) {
-      const extensions::InputComponentInfo& component = *it;
-      DCHECK(component.type == extensions::INPUT_COMPONENT_TYPE_IME);
+      const InputComponentInfo& component = *it;
+      DCHECK(component.type == INPUT_COMPONENT_TYPE_IME);
 
       std::vector<std::string> layouts;
       layouts.assign(component.layouts.begin(), component.layouts.end());
@@ -331,12 +295,12 @@ bool InputImeEventRouter::RegisterImeExtension(
   }
 
   scoped_ptr<ui::IMEEngineObserver> observer(
-      new ImeObserverChromeOS(extension_id, profile_));
+      new ImeObserverChromeOS(extension_id, profile()));
   chromeos::InputMethodEngine* engine = new chromeos::InputMethodEngine();
-  engine->Initialize(std::move(observer), extension_id.c_str(), profile_);
+  engine->Initialize(std::move(observer), extension_id.c_str(), profile());
   engine_map_[extension_id] = engine;
   chromeos::UserSessionManager::GetInstance()
-      ->GetDefaultIMEState(profile_)
+      ->GetDefaultIMEState(profile())
       ->AddInputMethodExtension(extension_id, descriptors, engine);
 
   return true;
@@ -352,6 +316,22 @@ void InputImeEventRouter::UnregisterAllImes(const std::string& extension_id) {
     delete it->second;
     engine_map_.erase(it);
   }
+}
+
+IMEEngineHandlerInterface* InputImeEventRouter::GetEngine(
+    const std::string& extension_id,
+    const std::string& component_id) {
+  std::map<std::string, IMEEngineHandlerInterface*>::iterator it =
+      engine_map_.find(extension_id);
+  return (it != engine_map_.end()) ? it->second : nullptr;
+}
+
+IMEEngineHandlerInterface* InputImeEventRouter::GetActiveEngine(
+    const std::string& extension_id) {
+  std::map<std::string, IMEEngineHandlerInterface*>::iterator it =
+      engine_map_.find(extension_id);
+  return (it != engine_map_.end() && it->second->IsActive()) ? it->second
+                                                             : nullptr;
 }
 
 bool InputImeSetCompositionFunction::RunSync() {
@@ -690,6 +670,38 @@ bool InputImeDeleteSurroundingTextFunction::RunSync() {
   engine->DeleteSurroundingText(params.context_id, params.offset, params.length,
                                 &error_);
   return true;
+}
+
+void InputImeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,
+                                    const Extension* extension) {
+  const std::vector<InputComponentInfo>* input_components =
+      InputComponents::GetInputComponents(extension);
+  if (input_components)
+    GetInputImeEventRouter(Profile::FromBrowserContext(browser_context))
+        ->RegisterImeExtension(extension->id(), *input_components);
+}
+
+void InputImeAPI::OnExtensionUnloaded(content::BrowserContext* browser_context,
+                                      const Extension* extension,
+                                      UnloadedExtensionInfo::Reason reason) {
+  const std::vector<InputComponentInfo>* input_components =
+      InputComponents::GetInputComponents(extension);
+  if (input_components && !input_components->empty()) {
+    GetInputImeEventRouter(Profile::FromBrowserContext(browser_context))
+        ->UnregisterAllImes(extension->id());
+  }
+}
+
+void InputImeAPI::OnListenerAdded(const EventListenerInfo& details) {
+  if (!details.browser_context)
+    return;
+  IMEEngineHandlerInterface* engine =
+      GetInputImeEventRouter(
+          Profile::FromBrowserContext(details.browser_context))
+          ->GetActiveEngine(details.extension_id);
+  // Notifies the IME extension for IME ready with onActivate/onFocus events.
+  if (engine)
+    engine->Enable(engine->GetActiveComponentId());
 }
 
 }  // namespace extensions

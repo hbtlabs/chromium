@@ -2,15 +2,14 @@
 
 {##############################################################################}
 {% macro constant_getter_callback(constant) %}
-{% filter conditional(constant.conditional_string) %}
 static void {{constant.name}}ConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMGetter");
     {% if constant.deprecate_as %}
-    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{constant.deprecate_as}});
+    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{constant.deprecate_as}});
     {% endif %}
     {% if constant.measure_as %}
-    UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{constant.measure_as('ConstantGetter')}});
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{constant.measure_as('ConstantGetter')}});
     {% endif %}
     {% if constant.is_api_experiment_enabled %}
     {{check_api_experiment(constant) | indent}}
@@ -24,7 +23,6 @@ static void {{constant.name}}ConstantGetterCallback(v8::Local<v8::Name>, const v
     {% endif %}
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
-{% endfilter %}
 {% endmacro %}
 
 

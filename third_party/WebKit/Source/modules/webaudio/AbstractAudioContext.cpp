@@ -23,8 +23,6 @@
  */
 
 #include "modules/webaudio/AbstractAudioContext.h"
-
-#if ENABLE(WEB_AUDIO)
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
@@ -88,6 +86,11 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
     , m_didInitializeContextGraphMutex(false)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
+    , m_closedContextSampleRate(-1)
+    , m_periodicWaveSine(nullptr)
+    , m_periodicWaveSquare(nullptr)
+    , m_periodicWaveSawtooth(nullptr)
+    , m_periodicWaveTriangle(nullptr)
 {
     m_didInitializeContextGraphMutex = true;
     m_destinationNode = DefaultAudioDestinationNode::create(this);
@@ -105,6 +108,11 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_didInitializeContextGraphMutex(false)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
+    , m_closedContextSampleRate(-1)
+    , m_periodicWaveSine(nullptr)
+    , m_periodicWaveSquare(nullptr)
+    , m_periodicWaveSawtooth(nullptr)
+    , m_periodicWaveTriangle(nullptr)
 {
     m_didInitializeContextGraphMutex = true;
 }
@@ -190,14 +198,44 @@ AudioBuffer* AbstractAudioContext::createBuffer(unsigned numberOfChannels, size_
     return AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate, exceptionState);
 }
 
-void AbstractAudioContext::decodeAudioData(DOMArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ExceptionState& exceptionState)
+ScriptPromise AbstractAudioContext::decodeAudioData(ScriptState* scriptState, DOMArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ExceptionState& exceptionState)
 {
-    if (isContextClosed()) {
-        throwExceptionForClosedState(exceptionState);
-        return;
+    ASSERT(isMainThread());
+    ASSERT(audioData);
+
+    ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
+    ScriptPromise promise = resolver->promise();
+
+    float rate = isContextClosed() ? closedContextSampleRate() : sampleRate();
+
+    ASSERT(rate > 0);
+
+    m_decodeAudioResolvers.add(resolver);
+    m_audioDecoder.decodeAsync(audioData, rate, successCallback, errorCallback, resolver, this);
+
+    return promise;
+}
+
+void AbstractAudioContext::handleDecodeAudioData(AudioBuffer* audioBuffer, ScriptPromiseResolver* resolver, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback)
+{
+    ASSERT(isMainThread());
+
+    if (audioBuffer) {
+        // Resolve promise successfully and run the success callback
+        resolver->resolve(audioBuffer);
+        if (successCallback)
+            successCallback->handleEvent(audioBuffer);
+    } else {
+        // Reject the promise and run the error callback
+        DOMException* error = DOMException::create(EncodingError, "Unable to decode audio data");
+        resolver->reject(error);
+        if (errorCallback)
+            errorCallback->handleEvent(error);
     }
 
-    m_audioDecoder.decodeAsync(audioData, sampleRate(), successCallback, errorCallback);
+    // We've resolved the promise.  Remove it now.
+    ASSERT(m_decodeAudioResolvers.contains(resolver));
+    m_decodeAudioResolvers.remove(resolver);
 }
 
 AudioBufferSourceNode* AbstractAudioContext::createBufferSource(ExceptionState& exceptionState)
@@ -552,6 +590,35 @@ PeriodicWave* AbstractAudioContext::createPeriodicWave(DOMFloat32Array* real, DO
     return PeriodicWave::create(sampleRate(), real, imag, isNormalizationDisabled);
 }
 
+PeriodicWave* AbstractAudioContext::periodicWave(int type)
+{
+    switch (type) {
+    case OscillatorHandler::SINE:
+        // Initialize the table if necessary
+        if (!m_periodicWaveSine)
+            m_periodicWaveSine = PeriodicWave::createSine(sampleRate());
+        return m_periodicWaveSine;
+    case OscillatorHandler::SQUARE:
+        // Initialize the table if necessary
+        if (!m_periodicWaveSquare)
+            m_periodicWaveSquare = PeriodicWave::createSquare(sampleRate());
+        return m_periodicWaveSquare;
+    case OscillatorHandler::SAWTOOTH:
+        // Initialize the table if necessary
+        if (!m_periodicWaveSawtooth)
+            m_periodicWaveSawtooth = PeriodicWave::createSawtooth(sampleRate());
+        return m_periodicWaveSawtooth;
+    case OscillatorHandler::TRIANGLE:
+        // Initialize the table if necessary
+        if (!m_periodicWaveTriangle)
+            m_periodicWaveTriangle = PeriodicWave::createTriangle(sampleRate());
+        return m_periodicWaveTriangle;
+    default:
+        ASSERT_NOT_REACHED();
+        return nullptr;
+    }
+}
+
 String AbstractAudioContext::state() const
 {
     // These strings had better match the strings for AudioContextState in AudioContext.idl.
@@ -739,6 +806,11 @@ void AbstractAudioContext::rejectPendingResolvers()
     }
     m_resumeResolvers.clear();
     m_isResolvingResumePromises = false;
+
+    // Now reject any pending decodeAudioData resolvers
+    for (auto& resolver : m_decodeAudioResolvers)
+        resolver->reject(DOMException::create(InvalidStateError, "Audio context is going away"));
+    m_decodeAudioResolvers.clear();
 }
 
 const AtomicString& AbstractAudioContext::interfaceName() const
@@ -776,6 +848,12 @@ DEFINE_TRACE(AbstractAudioContext)
         visitor->trace(m_activeSourceNodes);
     }
     visitor->trace(m_resumeResolvers);
+    visitor->trace(m_decodeAudioResolvers);
+
+    visitor->trace(m_periodicWaveSine);
+    visitor->trace(m_periodicWaveSquare);
+    visitor->trace(m_periodicWaveSawtooth);
+    visitor->trace(m_periodicWaveTriangle);
     RefCountedGarbageCollectedEventTargetWithInlineData<AbstractAudioContext>::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
@@ -790,4 +868,3 @@ SecurityOrigin* AbstractAudioContext::securityOrigin() const
 
 } // namespace blink
 
-#endif // ENABLE(WEB_AUDIO)

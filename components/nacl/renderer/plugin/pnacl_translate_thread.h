@@ -11,20 +11,15 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "native_client/src/include/nacl_macros.h"
-#include "native_client/src/include/nacl_scoped_ptr.h"
 #include "native_client/src/shared/platform/nacl_sync_checked.h"
 #include "native_client/src/shared/platform/nacl_threads.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/proxy/serialized_handle.h"
 
 struct PP_PNaClOptions;
-
-namespace nacl {
-class DescWrapper;
-}
-
 
 namespace plugin {
 
@@ -46,7 +41,6 @@ class PnaclTranslateThread {
                   const std::vector<TempFile*>* obj_files,
                   int num_threads,
                   TempFile* nexe_file,
-                  nacl::DescWrapper* invalid_desc_wrapper,
                   ErrorInfo* error_info,
                   PP_PNaClOptions* pnacl_options,
                   const std::string& architecture_attributes,
@@ -108,7 +102,7 @@ class PnaclTranslateThread {
   // Callback to run when tasks are completed or an error has occurred.
   pp::CompletionCallback report_translate_finished_;
 
-  nacl::scoped_ptr<NaClThread> translate_thread_;
+  scoped_ptr<NaClThread> translate_thread_;
 
   // Used to guard compiler_subprocess, ld_subprocess,
   // compiler_subprocess_active_, and ld_subprocess_active_
@@ -148,7 +142,6 @@ class PnaclTranslateThread {
   const std::vector<TempFile*>* obj_files_;
   int num_threads_;
   TempFile* nexe_file_;
-  nacl::DescWrapper* invalid_desc_wrapper_;
   ErrorInfo* coordinator_error_info_;
   PP_PNaClOptions* pnacl_options_;
   std::string architecture_attributes_;

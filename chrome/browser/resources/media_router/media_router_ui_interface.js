@@ -99,6 +99,15 @@ cr.define('media_router.ui', function() {
     container.allSinks = sinkList;
   }
 
+  /**
+   * Updates the max height of the dialog
+   *
+   * @param {number} height
+   */
+  function updateMaxHeight(height) {
+    container.updateMaxSinkListHeight(height);
+  }
+
   return {
     onNotifyRouteCreationTimeout: onNotifyRouteCreationTimeout,
     onCreateRouteResponseReceived: onCreateRouteResponseReceived,
@@ -108,6 +117,7 @@ cr.define('media_router.ui', function() {
     setIssue: setIssue,
     setRouteList: setRouteList,
     setSinkList: setSinkList,
+    updateMaxHeight: updateMaxHeight,
   };
 });
 
@@ -175,6 +185,24 @@ cr.define('media_router.browserApi', function() {
     chrome.send('reportClickedSinkIndex', [sinkIndex]);
   }
 
+  /*
+   * Reports the initial dialog view.
+   *
+   * @param {string} view
+   */
+  function reportInitialState(view) {
+    chrome.send('reportInitialState', [view]);
+  }
+
+  /**
+   * Reports the initial action the user took.
+   *
+   * @param {number} action
+   */
+  function reportInitialAction(action) {
+    chrome.send('reportInitialAction', [action]);
+  }
+
   /**
    * Reports the navigation to the specified view.
    *
@@ -200,6 +228,26 @@ cr.define('media_router.browserApi', function() {
    */
   function reportSinkCount(sinkCount) {
     chrome.send('reportSinkCount', [sinkCount]);
+  }
+
+  /**
+   * Reports the time it took for the user to select a sink after the sink list
+   * is populated and shown.
+   *
+   * @param {number} timeMs
+   */
+  function reportTimeToClickSink(timeMs) {
+    chrome.send('reportTimeToClickSink', [timeMs]);
+  }
+
+  /**
+   * Reports the time, in ms, it took for the user to close the dialog without
+   * taking any other action.
+   *
+   * @param {number} timeMs
+   */
+  function reportTimeToInitialActionClose(timeMs) {
+    chrome.send('reportTimeToInitialActionClose', [timeMs]);
   }
 
   /**
@@ -230,9 +278,13 @@ cr.define('media_router.browserApi', function() {
     joinRoute: joinRoute,
     onInitialDataReceived: onInitialDataReceived,
     reportClickedSinkIndex: reportClickedSinkIndex,
+    reportInitialAction: reportInitialAction,
+    reportInitialState: reportInitialState,
     reportNavigateToView: reportNavigateToView,
     reportSelectedCastMode: reportSelectedCastMode,
     reportSinkCount: reportSinkCount,
+    reportTimeToClickSink: reportTimeToClickSink,
+    reportTimeToInitialActionClose: reportTimeToInitialActionClose,
     requestInitialData: requestInitialData,
     requestRoute: requestRoute,
   };

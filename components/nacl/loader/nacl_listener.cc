@@ -112,17 +112,6 @@ int CreateMemoryObject(size_t size, int executable) {
 }
 
 #elif defined(OS_WIN)
-// We wrap the function to convert the bool return value to an int.
-int BrokerDuplicateHandle(NaClHandle source_handle,
-                          uint32_t process_id,
-                          NaClHandle* target_handle,
-                          uint32_t desired_access,
-                          uint32_t options) {
-  return content::BrokerDuplicateHandle(source_handle, process_id,
-                                        target_handle, desired_access,
-                                        options);
-}
-
 int AttachDebugExceptionHandler(const void* info, size_t info_size) {
   std::string info_string(reinterpret_cast<const char*>(info), info_size);
   bool result = false;
@@ -423,9 +412,6 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
         params.version);
   }
 
-  CHECK(params.imc_bootstrap_handle != IPC::InvalidPlatformFileForTransit());
-  args->imc_bootstrap_handle =
-      IPC::PlatformFileForTransitToPlatformFile(params.imc_bootstrap_handle);
   args->enable_debug_stub = params.enable_debug_stub;
 
   // Now configure parts that depend on process type.
@@ -457,7 +443,6 @@ void NaClListener::OnStart(const nacl::NaClStartParams& params) {
           params.debug_stub_server_bound_socket);
 #endif
 #if defined(OS_WIN)
-  args->broker_duplicate_handle_func = BrokerDuplicateHandle;
   args->attach_debug_exception_handler_func = AttachDebugExceptionHandler;
   args->debug_stub_server_port_selected_handler_func =
       DebugStubPortSelectedHandler;

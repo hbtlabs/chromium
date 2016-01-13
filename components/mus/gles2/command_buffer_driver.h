@@ -12,16 +12,19 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "components/mus/public/interfaces/command_buffer.mojom.h"
+#include "base/threading/non_thread_safe.h"
+#include "base/time/time.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/constants.h"
-#include "ui/gfx/geometry/size.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/system/buffer.h"
+#include "ui/gfx/native_widget_types.h"
+#include "ui/mojo/geometry/geometry.mojom.h"
 
 namespace gpu {
 class CommandBufferService;
 class GpuScheduler;
-class GpuControlService;
 class SyncPointClient;
 class SyncPointOrderData;
 namespace gles2 {
@@ -40,22 +43,23 @@ class GpuState;
 
 // This class receives CommandBuffer messages on the same thread as the native
 // viewport.
-class CommandBufferDriver {
+class CommandBufferDriver : base::NonThreadSafe {
  public:
   class Client {
    public:
     virtual ~Client();
-    virtual void DidLoseContext() = 0;
+    virtual void DidLoseContext(uint32_t reason) = 0;
+    virtual void UpdateVSyncParameters(int64_t timebase, int64_t interval) = 0;
   };
-  explicit CommandBufferDriver(scoped_refptr<GpuState> gpu_state);
-
+  CommandBufferDriver(gpu::CommandBufferNamespace command_buffer_namespace,
+                      uint64_t command_buffer_id,
+                      gfx::AcceleratedWidget widget,
+                      scoped_refptr<GpuState> gpu_state);
   ~CommandBufferDriver();
 
   void set_client(scoped_ptr<Client> client) { client_ = std::move(client); }
 
-  bool Initialize(mojo::InterfacePtrInfo<
-                      mojom::CommandBufferLostContextObserver> loss_observer,
-                  mojo::ScopedSharedBufferHandle shared_state,
+  bool Initialize(mojo::ScopedSharedBufferHandle shared_state,
                   mojo::Array<int32_t> attribs);
   void SetGetBuffer(int32_t buffer);
   void Flush(int32_t put_offset);
@@ -72,33 +76,52 @@ class CommandBufferDriver {
   void DestroyImage(int32_t id);
   bool IsScheduled() const;
   bool HasUnprocessedCommands() const;
-  gpu::Capabilities GetCapabilities();
-  gpu::CommandBuffer::State GetLastState();
+  gpu::Capabilities GetCapabilities() const;
+  gpu::CommandBuffer::State GetLastState() const;
   gpu::CommandBufferNamespace GetNamespaceID() const {
-    return gpu::CommandBufferNamespace::MOJO;
+    return command_buffer_namespace_;
   }
   uint64_t GetCommandBufferID() const { return command_buffer_id_; }
   gpu::SyncPointOrderData* sync_point_order_data() {
     return sync_point_order_data_.get();
   }
+  uint32_t GetUnprocessedOrderNum() const;
+  uint32_t GetProcessedOrderNum() const;
 
  private:
   bool MakeCurrent();
-  bool DoInitialize(mojo::ScopedSharedBufferHandle shared_state,
-                    mojo::Array<int32_t> attribs);
+
+  // Process pending queries and call |ScheduleDelayedWork| to schedule
+  // processing of delayed work.
+  void ProcessPendingAndIdleWork();
+
+  // Schedule processing of delayed work. This updates the time at which
+  // delayed work should be processed. |process_delayed_work_time_| is
+  // updated to current time + delay. Call this after processing some amount
+  // of delayed work.
+  void ScheduleDelayedWork(base::TimeDelta delay);
+
+  // Poll the command buffer to execute work.
+  void PollWork();
+  void PerformWork();
+
+  void DestroyDecoder();
+
+  // Callbacks:
+  void OnUpdateVSyncParameters(const base::TimeTicks timebase,
+                               const base::TimeDelta interval);
   bool OnWaitSyncPoint(uint32_t sync_point);
   void OnFenceSyncRelease(uint64_t release);
   bool OnWaitFenceSync(gpu::CommandBufferNamespace namespace_id,
                        uint64_t command_buffer_id,
                        uint64_t release);
-  void OnSyncPointRetired();
   void OnParseError();
   void OnContextLost(uint32_t reason);
-  void DestroyDecoder();
 
+  const gpu::CommandBufferNamespace command_buffer_namespace_;
   const uint64_t command_buffer_id_;
+  gfx::AcceleratedWidget widget_;
   scoped_ptr<Client> client_;
-  mojom::CommandBufferLostContextObserverPtr loss_observer_;
   scoped_ptr<gpu::CommandBufferService> command_buffer_;
   scoped_ptr<gpu::gles2::GLES2Decoder> decoder_;
   scoped_ptr<gpu::GpuScheduler> scheduler_;
@@ -110,6 +133,10 @@ class CommandBufferDriver {
 
   scoped_refptr<base::SingleThreadTaskRunner> context_lost_task_runner_;
   base::Callback<void(int32_t)> context_lost_callback_;
+
+  base::TimeTicks process_delayed_work_time_;
+  uint32_t previous_processed_num_;
+  base::TimeTicks last_idle_time_;
 
   base::WeakPtrFactory<CommandBufferDriver> weak_factory_;
 

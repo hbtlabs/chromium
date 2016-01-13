@@ -38,17 +38,18 @@ source_set("browser") {
     "//device/battery",
     "//device/vibration",
     "//google_apis",
-    "//mojo/application/public/cpp:cpp_for_chromium",
-    "//mojo/application/public/interfaces",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//mojo/shell",
     "//mojo/shell/package_manager",
+    "//mojo/shell/public/cpp:cpp_for_chromium",
+    "//mojo/shell/public/interfaces",
     "//net",
     "//net:extras",
     "//skia",
     "//sql",
     "//third_party/WebKit/public:blink_headers",
+    "//third_party/kasko:kasko_features",
     "//third_party/npapi",
     "//third_party/re2",
     "//third_party/zlib",
@@ -126,11 +127,11 @@ source_set("browser") {
       "//content/public/common:mojo_bindings",
       "//device/bluetooth",
       "//gin",
-      "//mojo/application/public/interfaces",
       "//mojo/common:url_type_converters",
       "//mojo/converters/geometry",
       "//mojo/public/cpp/bindings",
       "//mojo/public/js",
+      "//mojo/shell/public/interfaces",
       "//skia/public",
       "//storage/browser",
       "//storage/common",
@@ -416,6 +417,10 @@ source_set("browser") {
 
   if (is_chromeos) {
     sources -= [ "device_sensors/data_fetcher_shared_memory_default.cc" ]
+    sources += [
+      "gpu/gpu_arc_video_service_host.cc",
+      "gpu/gpu_arc_video_service_host.h",
+    ]
     deps += [
       "//chromeos",
       "//chromeos:power_manager_proto",

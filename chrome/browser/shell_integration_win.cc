@@ -56,6 +56,15 @@ namespace {
 const wchar_t kAppListAppNameSuffix[] = L"AppList";
 
 const char kAsyncSetAsDefaultExperimentName[] = "AsyncSetAsDefault";
+// A prefix shared by multiple groups that kicks off the generic
+// AsyncSetAsDefault experiment.
+const char kAsyncSetAsDefaultExperimentEnabledGroupPrefix[] = "Enabled";
+// One of the group names for the AsyncSetAsDefault experiment. Unlike other
+// "Enabled" groups, this group doesn't reset the current default browser choice
+// in the registry.
+const char kAsyncSetAsDefaultExperimentEnabledNoRegistryGroupName[] =
+    "EnabledNoRegistry";
+
 const char kEnableAsyncSetAsDefault[] = "enable-async-set-as-default";
 const char kDisableAsyncSetAsDefault[] = "disable-async-set-as-default";
 
@@ -279,13 +288,24 @@ bool IsAsyncSetAsDefaultEnabled() {
   // Note: It's important to query the field trial state first, to ensure that
   // UMA reports the correct group.
   const std::string group_name =
-      base::FieldTrialList::FindFullName("AsyncSetAsDefault");
+      base::FieldTrialList::FindFullName(kAsyncSetAsDefaultExperimentName);
   if (CommandLine::ForCurrentProcess()->HasSwitch(kDisableAsyncSetAsDefault))
     return false;
   if (CommandLine::ForCurrentProcess()->HasSwitch(kEnableAsyncSetAsDefault))
     return true;
 
-  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
+  return base::StartsWith(group_name,
+                          kAsyncSetAsDefaultExperimentEnabledGroupPrefix,
+                          base::CompareCase::SENSITIVE);
+}
+
+// Returns true if the default browser choice should be reset for the current
+// user.
+bool ShouldResetDefaultBrowser() {
+  return !base::StartsWith(
+      base::FieldTrialList::FindFullName(kAsyncSetAsDefaultExperimentName),
+      kAsyncSetAsDefaultExperimentEnabledNoRegistryGroupName,
+      base::CompareCase::SENSITIVE);
 }
 
 bool RegisterBrowser() {
@@ -583,8 +603,8 @@ int ShellIntegration::MigrateShortcutsInPathInternal(
     base::string16 default_chromium_model_id(
         ShellUtil::GetBrowserModelId(dist, is_per_user_install));
     if (check_dual_mode && expected_app_id == default_chromium_model_id) {
-      const bool dual_mode_desired =
-          InstallUtil::ShouldInstallMetroProperties();
+      // TODO(scottmg): Simplify with no Metro: http://crbug.com/558054.
+      const bool dual_mode_desired = false;
       propvariant.Reset();
       if (property_store->GetValue(PKEY_AppUserModel_IsDualMode,
                                    propvariant.Receive()) != S_OK) {
@@ -720,7 +740,8 @@ bool ShellIntegration::DefaultBrowserWorker::SetAsDefaultBrowserAsynchronous() {
   if (!RegisterBrowser())
     return false;
 
-  ResetDefaultBrowser();
+  if (ShouldResetDefaultBrowser())
+    ResetDefaultBrowser();
 
   base::CommandLine cmdline(base::FilePath(L"openwith.exe"));
   cmdline.AppendArgNative(StartupBrowserCreator::GetDefaultBrowserUrl());

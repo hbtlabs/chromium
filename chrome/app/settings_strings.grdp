@@ -73,6 +73,9 @@
   <message name="IDS_SETTINGS_APPEARANCE" desc="Name of the settings page which displays appearance preferences.">
     Appearance
   </message>
+  <message name="IDS_SETTINGS_EXAMPLE_DOT_COM" desc="Placeholder text for URL input example.">
+    www.example.com
+  </message>
   <message name="IDS_SETTINGS_SET_WALLPAPER" desc="Name of the control which allows the user to set the wallpaper.">
     Set wallpaper
   </message>
@@ -91,8 +94,8 @@
   <message name="IDS_SETTINGS_HOME_PAGE_NTP" desc="Description of the New Tab Page when set as the home page.">
     New Tab Page
   </message>
-  <message name="IDS_SETTINGS_OPEN_THIS_PAGE" desc="Label of the input box for the home page.">
-    Open this page:
+  <message name="IDS_SETTINGS_OTHER" desc="Label of the input box for the home page.">
+    Other
   </message>
   <message name="IDS_SETTINGS_CHANGE_HOME_PAGE" desc="Label of the control to change the home page.">
     Change
@@ -325,20 +328,14 @@
   <message name="IDS_SETTINGS_ON_STARTUP_OPEN_SPECIFIC" desc="Radio button option to open a specific set of pages.">
     Open a specific page or set of pages
   </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_ADD_PAGE" desc="Button to add a page.">
-    Add Page
-  </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_SET_PAGES" desc="Button to set pages.">
-    Set Pages
-  </message>
   <message name="IDS_SETTINGS_ON_STARTUP_USE_CURRENT" desc="Button to use current pages.">
-    Use Current Pages
+    Use current pages
   </message>
   <message name="IDS_SETTINGS_ON_STARTUP_ADD_NEW_PAGE" desc="Entry prompt to add a new page.">
     Add a new page
   </message>
-  <message name="IDS_SETTINGS_ON_STARTUP_ENTER_URL" desc="Example entry prompt to add a new page.">
-    Enter URL...
+  <message name="IDS_SETTINGS_ON_STARTUP_SITE_URL" desc="Prompt to add a new page.">
+    Site URL
   </message>
 
   <!-- Languages Page -->
@@ -434,7 +431,7 @@
     Search
   </message>
   <message name="IDS_SETTINGS_SEARCH_EXPLANATION" desc="Explanation for the search engine dropdown setting.">
-    Set which search engine is used when searching from the omnibox.
+    Search engine used when searching from the omnibox
   </message>
   <message name="IDS_SETTINGS_SEARCH_MANAGE_BUTTON_LABEL" desc="Label for the Manage Search Engines button.">
     Manage Search Engines

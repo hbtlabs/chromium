@@ -27,6 +27,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/extensions/api/input_ime/input_ime_api_chromeos.h"
+#elif defined(OS_LINUX) || defined(OS_WIN)
+#include "chrome/browser/extensions/api/input_ime/input_ime_api_nonchromeos.h"
 #endif  // defined(OS_CHROMEOS)
 
 class Profile;
@@ -42,6 +44,7 @@ class ImeObserver : public IMEEngineObserver {
   ~ImeObserver() override {}
 
   // IMEEngineObserver overrides.
+  void OnActivate(const std::string& component_id) override;
   void OnFocus(const IMEEngineHandlerInterface::InputContext& context) override;
   void OnBlur(int context_id) override;
   void OnKeyEvent(
@@ -52,6 +55,12 @@ class ImeObserver : public IMEEngineObserver {
   void OnDeactivated(const std::string& component_id) override;
   void OnCompositionBoundsChanged(
       const std::vector<gfx::Rect>& bounds) override;
+  bool IsInterestedInKeyEvent() const override;
+  void OnSurroundingTextChanged(const std::string& component_id,
+                                const std::string& text,
+                                int cursor_pos,
+                                int anchor_pos,
+                                int offset_pos) override;
 
  protected:
   // Helper function used to forward the given event to the |profile_|'s event
@@ -60,6 +69,9 @@ class ImeObserver : public IMEEngineObserver {
       extensions::events::HistogramValue histogram_value,
       const std::string& event_name,
       scoped_ptr<base::ListValue> args) = 0;
+
+  // Returns the type of the current screen.
+  virtual std::string GetCurrentScreenType() = 0;
 
   // Returns true if the extension is ready to accept key event, otherwise
   // returns false.
@@ -87,49 +99,8 @@ class ImeObserver : public IMEEngineObserver {
 }  // namespace ui
 
 namespace extensions {
+class InputImeEventRouter;
 class ExtensionRegistry;
-struct InputComponentInfo;
-
-class InputImeEventRouter {
- public:
-  explicit InputImeEventRouter(Profile* profile);
-  ~InputImeEventRouter();
-
-  bool RegisterImeExtension(
-      const std::string& extension_id,
-      const std::vector<extensions::InputComponentInfo>& input_components);
-  void UnregisterAllImes(const std::string& extension_id);
-
-  ui::IMEEngineHandlerInterface* GetEngine(const std::string& extension_id,
-                                           const std::string& component_id);
-  ui::IMEEngineHandlerInterface* GetActiveEngine(
-      const std::string& extension_id);
-
-  // Called when a key event was handled.
-  void OnKeyEventHandled(const std::string& extension_id,
-                         const std::string& request_id,
-                         bool handled);
-
-  std::string AddRequest(
-      const std::string& component_id,
-      ui::IMEEngineHandlerInterface::KeyEventDoneCallback& key_data);
-
- private:
-  typedef std::map<
-      std::string,
-      std::pair<std::string,
-                ui::IMEEngineHandlerInterface::KeyEventDoneCallback>>
-      RequestMap;
-
-  // The engine map from extension_id to an engine.
-  std::map<std::string, ui::IMEEngineHandlerInterface*> engine_map_;
-
-  unsigned int next_request_id_;
-  RequestMap request_map_;
-  Profile* profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(InputImeEventRouter);
-};
 
 class InputImeEventRouterFactory {
  public:

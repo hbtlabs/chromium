@@ -114,6 +114,7 @@
       'public/browser/browser_thread.h',
       'public/browser/browser_thread_delegate.h',
       'public/browser/browser_url_handler.h',
+      'public/browser/arc_video_host_delegate.h',
       'public/browser/cache_storage_context.h',
       'public/browser/cache_storage_usage_info.h',
       'public/browser/cert_store.h',
@@ -916,8 +917,6 @@
       'browser/loader/async_revalidation_driver.h',
       'browser/loader/async_revalidation_manager.cc',
       'browser/loader/async_revalidation_manager.h',
-      'browser/loader/certificate_resource_handler.cc',
-      'browser/loader/certificate_resource_handler.h',
       'browser/loader/cross_site_resource_handler.cc',
       'browser/loader/cross_site_resource_handler.h',
       'browser/loader/detachable_resource_handler.cc',
@@ -993,6 +992,8 @@
       'browser/media/android/media_session_uma_helper.h',
       'browser/media/android/media_throttler.cc',
       'browser/media/android/media_throttler.h',
+      'browser/media/android/media_web_contents_observer_android.cc',
+      'browser/media/android/media_web_contents_observer_android.h',
       'browser/media/android/provision_fetcher_impl.cc',
       'browser/media/android/provision_fetcher_impl.h',
       'browser/media/android/url_provision_fetcher.cc',
@@ -1846,20 +1847,9 @@
         # iOS only needs a small portion of content; exclude all the
         # implementation, and re-include what is used.
         ['exclude', '\\.(cc|mm)$'],
-        ['include', '_ios\\.(cc|mm)$'],
-        ['include', '^public/browser/content_browser_client\\.cc$'],
         ['include', '^public/browser/navigation_details\\.cc$'],
-        ['include', '^public/browser/notification_registrar\\.cc$'],
         ['include', '^public/browser/page_navigator\\.cc$'],
-        ['include', '^public/browser/web_ui_controller\\.cc'],
         ['include', '^browser/browser_context\\.cc$'],
-        ['include', '^browser/browser_url_handler_impl\\.cc$'],
-        ['include', '^browser/cert_store_impl\\.cc$'],
-        ['include', '^browser/download/download_create_info\\.cc$'],
-        ['include', '^browser/notification_service_impl\\.cc$'],
-        ['include', '^browser/signed_certificate_timestamp_store_impl\\.cc$'],
-        ['include', '^browser/user_metrics\\.cc$'],
-        ['include', '^browser/web_contents/navigation_entry_impl\\.cc$'],
       ],
     }, {  # OS!="ios"
       'dependencies': [
@@ -2119,6 +2109,11 @@
         '../build/linux/system.gyp:dbus',
         '../chromeos/chromeos.gyp:chromeos',
         '../chromeos/chromeos.gyp:power_manager_proto',
+        '../components/components.gyp:arc',
+      ],
+      'sources': [
+        'browser/gpu/gpu_arc_video_service_host.cc',
+        'browser/gpu/gpu_arc_video_service_host.h',
       ],
       'sources!': [
         'browser/device_sensors/data_fetcher_shared_memory_default.cc',

@@ -160,9 +160,9 @@ source_set("common") {
     "//components/tracing:startup_tracing",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common:gles2_utils",
-    "//mojo/application/public/cpp",
     "//mojo/converters/network",
     "//mojo/runner/child:lib",
+    "//mojo/shell/public/cpp",
     "//net",
     "//skia",
     "//third_party/icu",
@@ -199,9 +199,9 @@ source_set("common") {
       "//media",
       "//media:shared_memory_support",
       "//media/midi",
-      "//mojo/application/public/interfaces",
       "//mojo/common:common_base",
       "//mojo/environment:chromium",
+      "//mojo/shell/public/interfaces",
       "//sandbox",
       "//storage/common",
       "//third_party/WebKit/public:blink",
@@ -379,6 +379,8 @@ source_set("common") {
   if (is_chromeos) {
     sources += [
       "gpu/media/accelerated_video_decoder.h",
+      "gpu/media/gpu_arc_video_service.cc",
+      "gpu/media/gpu_arc_video_service.h",
       "gpu/media/h264_decoder.cc",
       "gpu/media/h264_decoder.h",
       "gpu/media/h264_dpb.cc",
@@ -392,6 +394,7 @@ source_set("common") {
       "gpu/media/vp9_picture.cc",
       "gpu/media/vp9_picture.h",
     ]
+    deps += [ "//components/arc" ]
     if (use_v4lplugin) {
       defines += [ "USE_LIBV4L2" ]
       sources += get_target_outputs(":libv4l2_generate_stubs")
@@ -548,7 +551,7 @@ mojom("mojo_bindings") {
   deps = [
     "//components/mus/public/interfaces",
     "//content/public/common:mojo_bindings",
-    "//mojo/application/public/interfaces",
+    "//mojo/shell/public/interfaces",
     "//skia/public/interfaces",
     "//ui/mojo/geometry:interfaces",
   ]

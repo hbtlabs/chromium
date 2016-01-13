@@ -551,7 +551,7 @@ void WebPluginContainerImpl::setWantsWheelEvents(bool wantsWheelEvents)
     if (Page* page = m_element->document().page()) {
         if (ScrollingCoordinator* scrollingCoordinator = page->scrollingCoordinator()) {
             if (parent() && parent()->isFrameView())
-                scrollingCoordinator->notifyLayoutUpdated();
+                scrollingCoordinator->notifyGeometryChanged();
         }
     }
 }
@@ -753,7 +753,7 @@ void WebPluginContainerImpl::handleMouseEvent(MouseEvent* event)
     Page* page = parentView->frame().page();
     if (!page)
         return;
-    toChromeClientImpl(page->chromeClient()).setCursorForPlugin(cursorInfo);
+    toChromeClientImpl(page->chromeClient()).setCursorForPlugin(cursorInfo, parentView->frame().localFrameRoot());
 }
 
 void WebPluginContainerImpl::handleDragEvent(MouseEvent* event)

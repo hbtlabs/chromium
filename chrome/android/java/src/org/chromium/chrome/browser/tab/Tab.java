@@ -65,7 +65,6 @@ import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.snackbar.LoFiBarPopupController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.ssl.ConnectionSecurityLevel;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.SingleTabModelSelector;
@@ -75,6 +74,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
+import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ActivityContentVideoViewClient;
 import org.chromium.content.browser.ContentVideoViewClient;
 import org.chromium.content.browser.ContentView;
@@ -1342,7 +1342,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      *                rendering content related to this {@link Tab}.
      */
     public void getAllContentViewCores(List<ContentViewCore> content) {
-        content.add(mContentViewCore);
+        if (mContentViewCore != null) content.add(mContentViewCore);
         for (int i = 0; i < mOverlayContentViewCores.size(); i++) {
             content.add(mOverlayContentViewCores.get(i));
         }
@@ -2592,11 +2592,13 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     /**
      * If a Lo-Fi snackbar has not been shown yet for this page load, a Lo-Fi snackbar is shown.
+     *
+     * @param isPreview Whether the Lo-Fi response was a preview response.
      */
     @CalledByNative
-    public void onLoFiResponseReceived() {
+    public void onLoFiResponseReceived(boolean isPreview) {
         if (mLoFiBarPopupController != null) {
-            mLoFiBarPopupController.maybeCreateLoFiBar(this);
+            mLoFiBarPopupController.maybeCreateLoFiBar(this, isPreview);
         }
     }
 

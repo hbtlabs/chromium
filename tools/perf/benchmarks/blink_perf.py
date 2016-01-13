@@ -166,7 +166,7 @@ class BlinkPerfCSS(perf_benchmark.PerfBenchmark):
 
 @benchmark.Disabled('xp',  # http://crbug.com/488059
                     'android',  # http://crbug.com/496707
-                    'reference')  # http://crbug.com/520092
+                    'reference')  # http://crbug.com/576779
 class BlinkPerfCanvas(perf_benchmark.PerfBenchmark):
   tag = 'canvas'
   test = _BlinkPerfMeasurement
@@ -249,8 +249,7 @@ class BlinkPerfPaint(perf_benchmark.PerfBenchmark):
     return cls.IsSvelte(possible_browser)  # http://crbug.com/574483
 
 
-@benchmark.Disabled('win',     # crbug.com/488493
-                    'android') # crbug.com/527156
+@benchmark.Disabled('win')  # crbug.com/488493
 class BlinkPerfParser(perf_benchmark.PerfBenchmark):
   tag = 'parser'
   test = _BlinkPerfMeasurement

@@ -19,13 +19,14 @@
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
-#include "chrome/browser/ui/toolbar/chrome_toolbar_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/security_state/security_state_model.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
@@ -539,28 +540,29 @@ void OmniboxViewMac::ApplyTextAttributes(
     }
   }
 
-  ChromeToolbarModel* chrome_toolbar_model =
-      static_cast<ChromeToolbarModel*>(controller()->GetToolbarModel());
   // TODO(shess): GTK has this as a member var, figure out why.
   // [Could it be to not change if no change?  If so, I'm guessing
   // AppKit may already handle that.]
-  const SecurityStateModel::SecurityLevel security_level =
-      chrome_toolbar_model->GetSecurityLevel(false);
+  const security_state::SecurityStateModel::SecurityLevel security_level =
+      controller()->GetToolbarModel()->GetSecurityLevel(false);
 
   // Emphasize the scheme for security UI display purposes (if necessary).
   if (!model()->user_input_in_progress() && model()->CurrentTextIsURL() &&
-      scheme.is_nonempty() && (security_level != SecurityStateModel::NONE)) {
+      scheme.is_nonempty() &&
+      (security_level != security_state::SecurityStateModel::NONE)) {
     NSColor* color;
-    if (security_level == SecurityStateModel::EV_SECURE ||
-        security_level == SecurityStateModel::SECURE) {
+    if (security_level == security_state::SecurityStateModel::EV_SECURE ||
+        security_level == security_state::SecurityStateModel::SECURE) {
       color = SecureSchemeColor();
-    } else if (security_level == SecurityStateModel::SECURITY_ERROR) {
+    } else if (security_level ==
+               security_state::SecurityStateModel::SECURITY_ERROR) {
       color = SecurityErrorSchemeColor();
       // Add a strikethrough through the scheme.
       [attributedString addAttribute:NSStrikethroughStyleAttributeName
                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
                  range:ComponentToNSRange(scheme)];
-    } else if (security_level == SecurityStateModel::SECURITY_WARNING) {
+    } else if (security_level ==
+               security_state::SecurityStateModel::SECURITY_WARNING) {
       color = BaseTextColor();
     } else {
       NOTREACHED();

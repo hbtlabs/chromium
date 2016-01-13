@@ -25,9 +25,9 @@
 #include "components/mus/ws/test_change_tracker.h"
 #include "components/mus/ws/window_tree_host_connection.h"
 #include "components/mus/ws/window_tree_impl.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/services/network/public/interfaces/url_loader.mojom.h"
+#include "mojo/shell/public/interfaces/service_provider.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -264,6 +264,7 @@ class TestConnectionManagerDelegate : public ConnectionManagerDelegate {
   }
 
   TestClientConnection* last_connection_;
+  WindowTreeHostImpl* window_tree_host_;
 
   DISALLOW_COPY_AND_ASSIGN(TestConnectionManagerDelegate);
 };
@@ -424,9 +425,11 @@ class WindowTreeTest : public testing::Test {
   }
 
   void AckPreviousEvent() {
-    host_connection()
-        ->window_tree_host()
-        ->tree_awaiting_input_ack_->OnWindowInputEventAck(0);
+    while (host_connection()->window_tree_host()->tree_awaiting_input_ack_) {
+      host_connection()
+          ->window_tree_host()
+          ->tree_awaiting_input_ack_->OnWindowInputEventAck(0);
+    }
   }
 
   void DispatchEventAndAckImmediately(const ui::Event& event) {

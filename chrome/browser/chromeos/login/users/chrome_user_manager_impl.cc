@@ -23,6 +23,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
+#include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -33,6 +35,8 @@
 #include "chrome/browser/chromeos/login/signin/auth_sync_observer_factory.h"
 #include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_impl.h"
+#include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
+#include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
@@ -53,6 +57,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/async_method_caller.h"
+#include "chromeos/login/login_state.h"
 #include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/timezone/timezone_resolver.h"
@@ -65,7 +71,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "policy/policy_constants.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
+#include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/wm/core/wm_core_switches.h"
 
 using content::BrowserThread;
@@ -98,6 +108,23 @@ std::string FullyCanonicalize(const std::string& email) {
   return gaia::CanonicalizeEmail(gaia::SanitizeEmail(email));
 }
 
+// Callback that is called after user removal is complete.
+void OnRemoveUserComplete(const AccountId& account_id,
+                          bool success,
+                          cryptohome::MountError return_code) {
+  // Log the error, but there's not much we can do.
+  if (!success) {
+    LOG(ERROR) << "Removal of cryptohome for " << account_id.Serialize()
+               << " failed, return code: " << return_code;
+  }
+}
+
+// Runs on SequencedWorkerPool thread. Passes resolved locale to UI thread.
+void ResolveLocale(const std::string& raw_locale,
+                   std::string* resolved_locale) {
+  ignore_result(l10n_util::CheckAndResolveLocale(raw_locale, resolved_locale));
+}
+
 }  // namespace
 
 // static
@@ -119,8 +146,7 @@ scoped_ptr<ChromeUserManager> ChromeUserManagerImpl::CreateChromeUserManager() {
 }
 
 ChromeUserManagerImpl::ChromeUserManagerImpl()
-    : ChromeUserManager(base::ThreadTaskRunnerHandle::Get(),
-                        BrowserThread::GetBlockingPool()),
+    : ChromeUserManager(base::ThreadTaskRunnerHandle::Get()),
       cros_settings_(CrosSettings::Get()),
       device_local_account_policy_service_(NULL),
       supervised_user_manager_(new SupervisedUserManagerImpl(this)),
@@ -1195,6 +1221,83 @@ void ChromeUserManagerImpl::RemoveReportingUser(const AccountId& account_id) {
   ListPrefUpdate users_update(GetLocalState(), kReportingUsers);
   users_update->Remove(
       base::StringValue(FullyCanonicalize(account_id.GetUserEmail())), NULL);
+}
+
+void ChromeUserManagerImpl::UpdateLoginState(
+    const user_manager::User* active_user,
+    const user_manager::User* primary_user,
+    bool is_current_user_owner) const {
+  chrome_user_manager_util::UpdateLoginState(active_user, primary_user,
+                                             is_current_user_owner);
+}
+
+bool ChromeUserManagerImpl::GetPlatformKnownUserId(
+    const std::string& user_email,
+    const std::string& gaia_id,
+    AccountId* out_account_id) const {
+  return chrome_user_manager_util::GetPlatformKnownUserId(user_email, gaia_id,
+                                                          out_account_id);
+}
+
+const AccountId& ChromeUserManagerImpl::GetGuestAccountId() const {
+  return login::GuestAccountId();
+}
+
+bool ChromeUserManagerImpl::IsFirstExecAfterBoot() const {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kFirstExecAfterBoot);
+}
+
+void ChromeUserManagerImpl::AsyncRemoveCryptohome(
+    const AccountId& account_id) const {
+  cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
+      account_id.GetUserEmail(), base::Bind(&OnRemoveUserComplete, account_id));
+}
+
+bool ChromeUserManagerImpl::IsGuestAccountId(
+    const AccountId& account_id) const {
+  return account_id == login::GuestAccountId();
+}
+
+bool ChromeUserManagerImpl::IsStubAccountId(const AccountId& account_id) const {
+  return account_id == login::StubAccountId();
+}
+
+bool ChromeUserManagerImpl::IsSupervisedAccountId(
+    const AccountId& account_id) const {
+  return gaia::ExtractDomainName(account_id.GetUserEmail()) ==
+         chromeos::login::kSupervisedUserDomain;
+}
+
+bool ChromeUserManagerImpl::HasBrowserRestarted() const {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return base::SysInfo::IsRunningOnChromeOS() &&
+         command_line->HasSwitch(chromeos::switches::kLoginUser);
+}
+
+const gfx::ImageSkia& ChromeUserManagerImpl::GetResourceImagekiaNamed(
+    int id) const {
+  return *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
+}
+
+base::string16 ChromeUserManagerImpl::GetResourceStringUTF16(
+    int string_id) const {
+  return l10n_util::GetStringUTF16(string_id);
+}
+
+void ChromeUserManagerImpl::ScheduleResolveLocale(
+    const std::string& locale,
+    const base::Closure& on_resolved_callback,
+    std::string* out_resolved_locale) const {
+  BrowserThread::GetBlockingPool()->PostTaskAndReply(
+      FROM_HERE,
+      base::Bind(ResolveLocale, locale, base::Unretained(out_resolved_locale)),
+      on_resolved_callback);
+}
+
+bool ChromeUserManagerImpl::IsValidDefaultUserImageId(int image_index) const {
+  return image_index >= 0 &&
+         image_index < chromeos::default_user_image::kDefaultImagesCount;
 }
 
 }  // namespace chromeos

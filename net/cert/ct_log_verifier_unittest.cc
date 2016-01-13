@@ -274,17 +274,29 @@ TEST_F(CTLogVerifierTest, FailsInvalidLogID) {
   EXPECT_FALSE(log_->Verify(cert_entry, *cert_sct.get()));
 }
 
-TEST_F(CTLogVerifierTest, SetsValidSTH) {
+TEST_F(CTLogVerifierTest, VerifiesValidSTH) {
   ct::SignedTreeHead sth;
-  ct::GetSampleSignedTreeHead(&sth);
-  ASSERT_TRUE(log_->VerifySignedTreeHead(sth));
+  ASSERT_TRUE(ct::GetSampleSignedTreeHead(&sth));
+  EXPECT_TRUE(log_->VerifySignedTreeHead(sth));
 }
 
-TEST_F(CTLogVerifierTest, DoesNotSetInvalidSTH) {
+TEST_F(CTLogVerifierTest, DoesNotVerifyInvalidSTH) {
   ct::SignedTreeHead sth;
-  ct::GetSampleSignedTreeHead(&sth);
+  ASSERT_TRUE(ct::GetSampleSignedTreeHead(&sth));
   sth.sha256_root_hash[0] = '\x0';
-  ASSERT_FALSE(log_->VerifySignedTreeHead(sth));
+  EXPECT_FALSE(log_->VerifySignedTreeHead(sth));
+}
+
+TEST_F(CTLogVerifierTest, VerifiesValidEmptySTH) {
+  ct::SignedTreeHead sth;
+  ASSERT_TRUE(ct::GetSampleEmptySignedTreeHead(&sth));
+  EXPECT_TRUE(log_->VerifySignedTreeHead(sth));
+}
+
+TEST_F(CTLogVerifierTest, DoesNotVerifyInvalidEmptySTH) {
+  ct::SignedTreeHead sth;
+  ASSERT_TRUE(ct::GetBadEmptySignedTreeHead(&sth));
+  EXPECT_FALSE(log_->VerifySignedTreeHead(sth));
 }
 
 // Test that excess data after the public key is rejected.

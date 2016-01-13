@@ -2,7 +2,6 @@
 
 {##############################################################################}
 {% macro generate_method(method, world_suffix) %}
-{% filter conditional(method.conditional_string) %}
 {% if method.returns_promise and method.has_exception_state %}
 static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}Promise(const v8::FunctionCallbackInfo<v8::Value>& info, ExceptionState& exceptionState)
 {% else %}
@@ -78,7 +77,6 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
         v8SetReturnValue(info, exceptionState.reject(ScriptState::current(info.GetIsolate())).v8Value());
 }
 {% endif %}
-{% endfilter %}
 {% endmacro %}
 
 
@@ -399,10 +397,10 @@ static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackI
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "{{overloads.name}}", "{{interface_name}}", info.Holder(), info.GetIsolate());
     {% if overloads.measure_all_as %}
-    UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{overloads.measure_all_as}});
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{overloads.measure_all_as}});
     {% endif %}
     {% if overloads.deprecate_all_as %}
-    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{overloads.deprecate_all_as}});
+    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{overloads.deprecate_all_as}});
     {% endif %}
     {# First resolve by length #}
     {# 2. Initialize argcount to be min(maxarg, n). #}
@@ -418,10 +416,10 @@ static void {{overloads.name}}Method{{world_suffix}}(const v8::FunctionCallbackI
                                   method.runtime_enabled_function) %}
         if ({{test}}) {
             {% if method.measure_as and not overloads.measure_all_as %}
-            UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
+            UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
             {% endif %}
             {% if method.deprecate_as and not overloads.deprecate_all_as %}
-            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
+            UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
             {% endif %}
             {{method.name}}{{method.overload_index}}Method{{world_suffix}}(info);
             return;
@@ -499,16 +497,15 @@ void postMessageImpl(const char* interfaceName, {{cpp_class}}* instance, const v
 
 {##############################################################################}
 {% macro method_callback(method, world_suffix) %}
-{% filter conditional(method.conditional_string) %}
 static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "DOMMethod");
     {% if not method.overloads %}{# Overloaded methods are measured in overload_resolution_method() #}
     {% if method.measure_as %}
-    UseCounter::countIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
+    UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.measure_as('Method')}});
     {% endif %}
     {% if method.deprecate_as %}
-    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), callingExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
+    UseCounter::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
     {% endif %}
     {% if method.is_api_experiment_enabled %}
     {{check_api_experiment(method) | indent}}
@@ -536,7 +533,6 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% endif %}
     TRACE_EVENT_SET_SAMPLING_STATE("v8", "V8Execution");
 }
-{% endfilter %}
 {% endmacro %}
 
 

@@ -28,6 +28,7 @@
 #include "core/css/CSSImageValue.h"
 #include "core/layout/LayoutObject.h"
 #include "core/style/StyleFetchedImage.h"
+#include "core/svg/graphics/SVGImageForContainer.h"
 #include "platform/graphics/CrossfadeGeneratedImage.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -91,6 +92,14 @@ static Image* renderableImageForCSSValue(CSSValue* value, const LayoutObject* la
         return nullptr;
 
     return cachedImage->image();
+}
+
+static KURL urlForCSSValue(const CSSValue* value)
+{
+    if (!value->isImageValue())
+        return KURL();
+
+    return KURL(ParsedURLString, toCSSImageValue(*value).url());
 }
 
 CSSCrossfadeValue::CSSCrossfadeValue(PassRefPtrWillBeRawPtr<CSSValue> fromValue, PassRefPtrWillBeRawPtr<CSSValue> toValue, PassRefPtrWillBeRawPtr<CSSPrimitiveValue> percentageValue)
@@ -215,7 +224,16 @@ PassRefPtr<Image> CSSCrossfadeValue::image(const LayoutObject* layoutObject, con
     if (!fromImage || !toImage)
         return Image::nullImage();
 
-    m_generatedImage = CrossfadeGeneratedImage::create(fromImage, toImage, m_percentageValue->getFloatValue(), fixedSize(layoutObject), size);
+    RefPtr<Image> fromImageRef(fromImage);
+    RefPtr<Image> toImageRef(toImage);
+
+    if (fromImage->isSVGImage())
+        fromImageRef = SVGImageForContainer::create(toSVGImage(fromImage), size, 1, urlForCSSValue(m_fromValue.get()));
+
+    if (toImage->isSVGImage())
+        toImageRef = SVGImageForContainer::create(toSVGImage(toImage), size, 1, urlForCSSValue(m_toValue.get()));
+
+    m_generatedImage = CrossfadeGeneratedImage::create(fromImageRef, toImageRef, m_percentageValue->getFloatValue(), fixedSize(layoutObject), size);
 
     return m_generatedImage.release();
 }

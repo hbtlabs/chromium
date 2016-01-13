@@ -77,7 +77,6 @@
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
-#include "chrome/browser/ssl/security_state_model.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/tab_contents/retargeting_details.h"
@@ -167,6 +166,7 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/search/search.h"
+#include "components/security_state/security_state_model.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -214,7 +214,6 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include <shellapi.h>
-#include "base/win/metro.h"
 #include "chrome/browser/task_manager/task_manager.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "components/autofill/core/browser/autofill_ie_toolbar_import_win.h"
@@ -243,6 +242,7 @@ using content::RenderWidgetHostView;
 using content::SiteInstance;
 using content::WebContents;
 using extensions::Extension;
+using security_state::SecurityStateModel;
 using ui::WebDialogDelegate;
 using web_modal::WebContentsModalDialogManager;
 using blink::WebWindowFeatures;
@@ -382,8 +382,7 @@ Browser::Browser(const CreateParams& params)
       override_bounds_(params.initial_bounds),
       initial_show_state_(params.initial_show_state),
       is_session_restore_(params.is_session_restore),
-      host_desktop_type_(
-          BrowserWindow::AdjustHostDesktopType(params.host_desktop_type)),
+      host_desktop_type_(params.host_desktop_type),
       content_setting_bubble_model_delegate_(
           new BrowserContentSettingBubbleModelDelegate(this)),
       toolbar_model_delegate_(new BrowserToolbarModelDelegate(this)),

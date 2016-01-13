@@ -300,6 +300,24 @@ class ChromeProxyLoFi(ChromeProxyValidation):
   def AddResults(self, tab, results):
     self._metrics.AddResultsForLoFi(tab, results)
 
+class ChromeProxyLoFiPreview(ChromeProxyValidation):
+  """Correctness measurement for Lo-Fi preview in Chrome-Proxy header."""
+
+  def __init__(self):
+    super(ChromeProxyLoFiPreview, self).__init__(
+        restart_after_each_page=True,
+        metrics=metrics.ChromeProxyMetric())
+
+  def CustomizeBrowserOptions(self, options):
+    super(ChromeProxyLoFiPreview, self).CustomizeBrowserOptions(options)
+    options.AppendExtraBrowserArgs(
+        '--data-reduction-proxy-lo-fi=always-on')
+    options.AppendExtraBrowserArgs(
+        '--enable-data-reduction-proxy-lo-fi-preview')
+
+  def AddResults(self, tab, results):
+    self._metrics.AddResultsForLoFiPreview(tab, results)
+
 class ChromeProxyExpDirective(ChromeProxyValidation):
   """Correctness measurement for experiment directives in Chrome-Proxy header.
 
@@ -387,6 +405,23 @@ class ChromeProxyReenableAfterBypass(ChromeProxyValidation):
     self._metrics.AddResultsForReenableAfterBypass(
         tab, results, self._page.bypass_seconds_min,
         self._page.bypass_seconds_max)
+
+
+class ChromeProxyReenableAfterSetBypass(ChromeProxyValidation):
+  """Correctness test for re-enabling proxies after bypasses with set duration.
+
+  This test loads a page that causes all data reduction proxies to be bypassed
+  for 20 seconds.
+  """
+
+  def __init__(self):
+    super(ChromeProxyReenableAfterSetBypass, self).__init__(
+        restart_after_each_page=True,
+        metrics=metrics.ChromeProxyMetric())
+
+  def AddResults(self, tab, results):
+    self._metrics.AddResultsForReenableAfterSetBypass(
+        tab, results, self._page.BYPASS_SECONDS)
 
 
 class ChromeProxySmoke(ChromeProxyValidation):

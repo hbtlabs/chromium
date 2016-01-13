@@ -216,14 +216,11 @@ private:
     bool parseBorderImageSlice(CSSPropertyID, RefPtrWillBeRawPtr<CSSBorderImageSliceValue>&);
     bool parseBorderImageWidth(RefPtrWillBeRawPtr<CSSQuadValue>&);
     bool parseBorderImageOutset(RefPtrWillBeRawPtr<CSSQuadValue>&);
-    bool parseBorderRadius(CSSPropertyID, bool important);
+    bool parseRadii(RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4], RefPtrWillBeRawPtr<CSSPrimitiveValue> radii2[4], CSSParserValueList*, CSSPropertyID = CSSPropertyInvalid);
 
     PassRefPtrWillBeRawPtr<CSSValue> parseReflect();
 
     bool consumeFlex(bool important);
-
-    PassRefPtrWillBeRawPtr<CSSValue> parsePosition(CSSParserValueList*);
-    PassRefPtrWillBeRawPtr<CSSValueList> parsePositionList(CSSParserValueList*);
 
     // Image generators
     bool parseDeprecatedGradient(CSSParserValueList*, RefPtrWillBeRawPtr<CSSValue>&);
@@ -247,8 +244,6 @@ private:
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> createPrimitiveNumericValue(CSSParserValue*);
     PassRefPtrWillBeRawPtr<CSSStringValue> createPrimitiveStringValue(CSSParserValue*);
     PassRefPtrWillBeRawPtr<CSSCustomIdentValue> createPrimitiveCustomIdentValue(CSSParserValue*);
-
-    PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> parseInsetRoundedCorners(PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue>, CSSParserValueList*);
 
     class ImplicitScope {
         STACK_ALLOCATED();
@@ -313,11 +308,6 @@ private:
     PassRefPtrWillBeRawPtr<CSSValue> parseDeprecatedGradientStopColor(const CSSParserValue*);
 
     void commitBorderImageProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important);
-
-    PassRefPtrWillBeRawPtr<CSSValue> parseScrollSnapPoints();
-    PassRefPtrWillBeRawPtr<CSSValue> parseScrollSnapDestination();
-    PassRefPtrWillBeRawPtr<CSSValue> parseScrollSnapCoordinate();
-    PassRefPtrWillBeRawPtr<CSSValue> parseScrollSnapPosition();
 
 private:
     // Inputs:

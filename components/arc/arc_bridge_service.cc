@@ -104,6 +104,31 @@ void ArcBridgeService::CloseAuthChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnAuthInstanceClosed());
 }
 
+void ArcBridgeService::OnClipboardInstanceReady(
+    ClipboardInstancePtr clipboard_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_clipboard_ptr_ = std::move(clipboard_ptr);
+  temporary_clipboard_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnClipboardVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnClipboardVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  clipboard_ptr_ = std::move(temporary_clipboard_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnClipboardInstanceReady());
+  clipboard_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseClipboardChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseClipboardChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!clipboard_ptr_)
+    return;
+
+  clipboard_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnClipboardInstanceClosed());
+}
+
 void ArcBridgeService::OnInputInstanceReady(InputInstancePtr input_ptr) {
   DCHECK(CalledOnValidThread());
   temporary_input_ptr_ = std::move(input_ptr);
@@ -227,6 +252,29 @@ void ArcBridgeService::CloseSettingsChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnSettingsInstanceClosed());
 }
 
+void ArcBridgeService::OnVideoInstanceReady(VideoInstancePtr video_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_video_ptr_ = std::move(video_ptr);
+  temporary_video_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnVideoVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnVideoVersionReady(int32_t version) {
+  video_ptr_ = std::move(temporary_video_ptr_);
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnVideoInstanceReady());
+  video_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseVideoChannel, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::CloseVideoChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!video_ptr_)
+    return;
+
+  video_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnVideoInstanceClosed());
+}
+
 void ArcBridgeService::SetState(State state) {
   DCHECK(CalledOnValidThread());
   // DCHECK on enum classes not supported.
@@ -251,11 +299,13 @@ void ArcBridgeService::CloseAllChannels() {
   // and notify any observers that the channel is closed.
   CloseAppChannel();
   CloseAuthChannel();
+  CloseClipboardChannel();
   CloseInputChannel();
   CloseNotificationsChannel();
   ClosePowerChannel();
   CloseProcessChannel();
   CloseSettingsChannel();
+  CloseVideoChannel();
 }
 
 }  // namespace arc

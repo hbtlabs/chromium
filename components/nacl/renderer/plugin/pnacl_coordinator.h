@@ -11,11 +11,11 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "components/nacl/renderer/plugin/nacl_subprocess.h"
 #include "components/nacl/renderer/plugin/plugin_error.h"
 #include "components/nacl/renderer/plugin/pnacl_resources.h"
 #include "native_client/src/include/nacl_macros.h"
-#include "native_client/src/trusted/desc/nacl_desc_wrapper.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/utility/completion_callback_factory.h"
 
@@ -49,9 +49,6 @@ class TempFile;
 // (2) ld links the object code in obj_file_ and produces a nexe in nexe_file_.
 class PnaclCoordinator {
  public:
-  // Maximum number of object files passable to the translator. Cannot be
-  // changed without changing the RPC signatures.
-  const static size_t kMaxTranslatorObjectFiles = 16;
   virtual ~PnaclCoordinator();
 
   // The factory method for translations.
@@ -152,7 +149,7 @@ class PnaclCoordinator {
                                 pp::ThreadSafeThreadTraits> callback_factory_;
 
   // An auxiliary class that manages downloaded resources (llc and ld nexes).
-  nacl::scoped_ptr<PnaclResources> resources_;
+  scoped_ptr<PnaclResources> resources_;
   NaClSubprocess compiler_subprocess_;
   NaClSubprocess ld_subprocess_;
 
@@ -167,14 +164,13 @@ class PnaclCoordinator {
 
   // Object file, produced by the translator and consumed by the linker.
   std::vector<TempFile*> obj_files_;
-  nacl::scoped_ptr<nacl::DescWrapper> invalid_desc_wrapper_;
   // Number of split modules for llc.
   int split_module_count_;
   // Number of threads for llc / subzero.
   int num_threads_;
 
   // Translated nexe file, produced by the linker.
-  nacl::scoped_ptr<TempFile> temp_nexe_file_;
+  scoped_ptr<TempFile> temp_nexe_file_;
 
   // Used to report information when errors (PPAPI or otherwise) are reported.
   ErrorInfo error_info_;
@@ -191,7 +187,7 @@ class PnaclCoordinator {
   // The helper thread used to do translations via SRPC.
   // It accesses fields of PnaclCoordinator so it must have a
   // shorter lifetime.
-  nacl::scoped_ptr<PnaclTranslateThread> translate_thread_;
+  scoped_ptr<PnaclTranslateThread> translate_thread_;
 };
 
 //----------------------------------------------------------------------

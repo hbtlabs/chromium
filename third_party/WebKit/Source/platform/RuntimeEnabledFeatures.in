@@ -26,11 +26,10 @@
 // ExperimentalFeatures.h/cpp. This static method allows the feature
 // implementation to check if it is enabled for the current context.
 
-AdditiveAnimations status=experimental, depends_on=StackedCSSPropertyAnimations
 AppBanner status=stable
 AlwaysUseComplexText status=stable
 ApplicationCache status=stable
-AudioOutputDevices status=experimental
+AudioOutputDevices status=stable
 AudioVideoTracks depends_on=Media, status=experimental
 AuthorShadowDOMForAnyElement
 BackgroundSync status=stable
@@ -46,6 +45,7 @@ ContextMenu status=experimental
 CredentialManager status=test
 CSS3Text status=experimental
 CSS3TextDecorations status=experimental
+CSSAdditiveAnimations status=experimental, depends_on=StackedCSSPropertyAnimations
 CSSBackdropFilter status=experimental
 CSSCompositing status=stable
 CSSContainment status=experimental
@@ -74,7 +74,7 @@ ForceDisplayList2dCanvas
 EncryptedMedia status=stable
 ExecCommandInJavaScript status=test
 ComputedAccessibilityInfo status=experimental
-EventListenerOptions status=experimental
+EventListenerOptions status=stable
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
 ExperimentalFramework status=test
@@ -136,6 +136,7 @@ OrientationEvent
 ForceOverlayFullscreenVideo
 OverlayScrollbars
 PagePopup status=stable
+PassiveEventListeners status=experimental
 PassPaintVisualRectToCompositor
 PathOpsSVGClipping status=stable
 PerformanceObserver status=experimental
@@ -159,7 +160,6 @@ RequestIdleCallback status=stable
 RequestAutocomplete status=test
 ResponseConstructedWithReadableStream status=experimental
 RestrictIFramePermissions
-RTCCertificate status=experimental
 SandboxBlocksModals status=stable
 ScreenOrientation status=stable
 ScriptedSpeech status=stable
@@ -202,7 +202,7 @@ UnsandboxedAuxiliary status=stable
 UserSelectAll status=experimental
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
-WebAudio condition=WEB_AUDIO, status=stable
+WebAudio status=stable
 WebBluetooth
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
@@ -215,3 +215,4 @@ smil status=stable
 ScrollCustomization
 ScrollRestoration status=stable
 WakeLock status=experimental
+WebFontsIntervention status=stable

@@ -375,7 +375,9 @@ ResourceProvider::~ResourceProvider() {
 bool ResourceProvider::InUseByConsumer(ResourceId id) {
   Resource* resource = GetResource(id);
   return resource->lock_for_read_count > 0 || resource->exported_count > 0 ||
-         resource->lost;
+         resource->lost ||
+         (resource->gpu_memory_buffer &&
+          resource->gpu_memory_buffer->IsInUseByMacOSWindowServer());
 }
 
 bool ResourceProvider::IsLost(ResourceId id) {
@@ -774,7 +776,9 @@ bool ResourceProvider::CanLockForWrite(ResourceId id) {
   Resource* resource = GetResource(id);
   return !resource->locked_for_write && !resource->lock_for_read_count &&
          !resource->exported_count && resource->origin == Resource::INTERNAL &&
-         !resource->lost && ReadLockFenceHasPassed(resource);
+         !resource->lost && ReadLockFenceHasPassed(resource) &&
+         !(resource->gpu_memory_buffer &&
+           resource->gpu_memory_buffer->IsInUseByMacOSWindowServer());
 }
 
 bool ResourceProvider::IsOverlayCandidate(ResourceId id) {
@@ -1145,7 +1149,7 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resources,
   bool need_sync_token = false;
 
   gpu::SyncToken new_sync_token;
-  std::vector<GLbyte*> unverified_sync_tokens;
+  std::vector<size_t> unverified_token_indexes;
   for (ResourceIdArray::const_iterator it = resources.begin();
        it != resources.end();
        ++it) {
@@ -1156,12 +1160,20 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resources,
 
     if (resource.mailbox_holder.sync_token.HasData() &&
         !resource.mailbox_holder.sync_token.verified_flush()) {
-      unverified_sync_tokens.push_back(
-          resource.mailbox_holder.sync_token.GetData());
+      unverified_token_indexes.push_back(list->size());
     }
 
     ++resources_.find(*it)->second.exported_count;
     list->push_back(resource);
+  }
+
+  // Fill out unverified sync tokens array.
+  std::vector<GLbyte*> unverified_sync_tokens;
+  unverified_sync_tokens.reserve(unverified_token_indexes.size() + 1);
+  for (auto it = unverified_token_indexes.begin();
+       it != unverified_token_indexes.end(); ++it) {
+    unverified_sync_tokens.push_back(
+        list->at(*it).mailbox_holder.sync_token.GetData());
   }
 
   if (need_sync_token &&
@@ -1663,6 +1675,11 @@ bool ResourceProvider::OnMemoryDump(
   for (const auto& resource_entry : resources_) {
     const auto& resource = resource_entry.second;
 
+    if (!resource.allocated) {
+      // Don't log unallocated resources - they have no backing memory.
+      continue;
+    }
+
     // Resource IDs are not process-unique, so log with the ResourceProvider's
     // unique id.
     std::string dump_name =
@@ -1677,28 +1694,32 @@ bool ResourceProvider::OnMemoryDump(
                     base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                     static_cast<uint64_t>(total_bytes));
 
-    // Resources which are shared across processes require a shared GUID to
-    // prevent double counting the memory. We currently support shared GUIDs for
-    // GpuMemoryBuffer, SharedBitmap, and GL backed resources.
+    // Resources may be shared across processes and require a shared GUID to
+    // prevent double counting the memory.
     base::trace_event::MemoryAllocatorDumpGuid guid;
-    if (resource.gpu_memory_buffer) {
-      guid = gfx::GetGpuMemoryBufferGUIDForTracing(
-          tracing_process_id, resource.gpu_memory_buffer->GetHandle().id);
-    } else if (resource.shared_bitmap) {
-      guid = GetSharedBitmapGUIDForTracing(resource.shared_bitmap->id());
-    } else if (resource.gl_id && resource.allocated) {
-      guid = gfx::GetGLTextureClientGUIDForTracing(
-          output_surface_->context_provider()
-              ->ContextSupport()
-              ->ShareGroupTracingGUID(),
-          resource.gl_id);
+    switch (resource.type) {
+      case RESOURCE_TYPE_GPU_MEMORY_BUFFER:
+        guid = gfx::GetGpuMemoryBufferGUIDForTracing(
+            tracing_process_id, resource.gpu_memory_buffer->GetHandle().id);
+        break;
+      case RESOURCE_TYPE_GL_TEXTURE:
+        guid = gfx::GetGLTextureClientGUIDForTracing(
+            output_surface_->context_provider()
+                ->ContextSupport()
+                ->ShareGroupTracingGUID(),
+            resource.gl_id);
+        break;
+      case RESOURCE_TYPE_BITMAP:
+        DCHECK(resource.has_shared_bitmap_id);
+        guid = GetSharedBitmapGUIDForTracing(resource.shared_bitmap_id);
+        break;
     }
 
-    if (!guid.empty()) {
-      const int kImportance = 2;
-      pmd->CreateSharedGlobalAllocatorDump(guid);
-      pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
-    }
+    DCHECK(!guid.empty());
+
+    const int kImportance = 2;
+    pmd->CreateSharedGlobalAllocatorDump(guid);
+    pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
   }
 
   return true;

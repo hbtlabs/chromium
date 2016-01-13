@@ -52,16 +52,18 @@ source_set("renderer") {
     "//gpu",
     "//gpu/blink",
     "//gpu/command_buffer/client:gles2_interface",
+    "//ipc/mojo",
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
     "//media/midi",
-    "//mojo/application/public/interfaces",
-    "//mojo/common:url_type_converters",
+    "//mojo/common",
     "//mojo/converters/geometry",
     "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
+    "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
     "//net",
     "//skia",
     "//skia/public",
@@ -215,7 +217,10 @@ source_set("renderer") {
   }
 
   if (enable_mojo_media != "none") {
-    deps += [ "//media/mojo/services:proxy" ]
+    deps += [
+      "//media/mojo/interfaces",
+      "//media/mojo/services:proxy",
+    ]
   }
 
   if (enable_webvr) {

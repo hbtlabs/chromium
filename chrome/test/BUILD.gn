@@ -701,6 +701,8 @@ if (!is_android) {
     ]
 
     data = [
+      "//tools/perf/run_telemetry_tests",
+
       # For isolate contract.
       "//testing/scripts/common.py",
       "//testing/xvfb.py",
@@ -873,6 +875,7 @@ if (!is_android) {
       "//components/dom_distiller/core:test_support",
       "//components/guest_view/browser:test_support",
       "//components/resources",
+      "//components/safe_browsing_db:test_database_manager",
       "//components/strings",
       "//components/translate/core/common",
       "//components/user_manager:test_support",
@@ -981,7 +984,7 @@ if (!is_android) {
       }
       if (is_win || is_linux) {
         sources += [ "../browser/nacl_host/test/nacl_gdb_browsertest.cc" ]
-        deps += [ "//chrome/browser/nacl_host/test:mock_nacl_gdb" ]
+        data_deps += [ "//chrome/browser/nacl_host/test:mock_nacl_gdb" ]
       }
       if (is_win) {
         # TODO(halyavin) NaCl on Windows can't open debug stub socket in
@@ -1187,7 +1190,6 @@ if (!is_android) {
         # message loops. See 306348
         "../renderer/safe_browsing/phishing_classifier_browsertest.cc",
         "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
-        "../renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc",
       ]
     }
     if (is_mac || is_win) {
@@ -1274,7 +1276,6 @@ if (!is_android) {
         # official builds.
         "../renderer/safe_browsing/phishing_classifier_browsertest.cc",
         "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
-        "../renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc",
       ]
     }
     if (!enable_autofill_dialog || is_android || is_ios) {
@@ -1583,6 +1584,7 @@ test("unit_tests") {
     "//base/allocator",
     "//chrome:resources",
     "//chrome:strings",
+    "//components/safe_browsing_db:test_database_manager",
     "//components/version_info:generate_version_info",
     "//courgette:courgette_lib",
     "//google_apis",
@@ -1614,6 +1616,7 @@ test("unit_tests") {
       "//content/app/resources",
       "//device/bluetooth:mocks",
       "//device/core:mocks",
+      "//device/usb:mocks",
       "//gpu:test_support",
       "//media:test_support",
 
@@ -1708,7 +1711,6 @@ test("unit_tests") {
     deps += [
       "//chrome/common/extensions/api",
       "//components/audio_modem:test_support",
-      "//device/usb:mocks",
       "//extensions:extensions_resources",
       "//extensions/strings",
     ]
@@ -2131,8 +2133,8 @@ if (is_win || (is_linux && !is_chromeos)) {
     sources = [
       "../app/chrome_watcher_client_unittest_win.cc",
       "../app/chrome_watcher_client_win.cc",
-      "../app/chrome_watcher_command_line_unittest_win.cc",
       "../app/chrome_watcher_command_line_win.cc",
+      "../app/chrome_watcher_command_line_win_unittest.cc",
       "../app/delay_load_hook_unittest_win.cc",
       "../app/delay_load_hook_win.cc",
       "../app/delay_load_hook_win.h",

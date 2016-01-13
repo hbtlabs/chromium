@@ -1972,7 +1972,7 @@ void FrameView::performPostLayoutTasks()
     scheduleUpdateWidgetsIfNecessary();
 
     if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
-        scrollingCoordinator->notifyLayoutUpdated();
+        scrollingCoordinator->notifyGeometryChanged();
 
     scrollToAnchor();
 
@@ -2076,10 +2076,8 @@ void FrameView::scrollTo(const DoublePoint& newPosition)
 
 void FrameView::invalidatePaintForTickmarks()
 {
-    if (Scrollbar* scrollbar = verticalScrollbar()) {
-        scrollbar->setTrackNeedsRepaint(true);
-        setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
-    }
+    if (Scrollbar* scrollbar = verticalScrollbar())
+        scrollbar->setNeedsPaintInvalidation(static_cast<ScrollbarPart>(~ThumbPart));
 }
 
 void FrameView::getTickmarks(Vector<IntRect>& tickmarks) const
@@ -3961,8 +3959,8 @@ void FrameView::updateViewportIntersectionsForSubtree(LifeCycleUpdateOption phas
     updateViewportIntersectionIfNeeded();
 
     // Notify javascript IntersectionObservers
-    if (phases == AllPhases)
-        frame().document()->ensureIntersectionObserverController().computeTrackedIntersectionObservations();
+    if (phases == AllPhases && frame().document()->intersectionObserverController())
+        frame().document()->intersectionObserverController()->computeTrackedIntersectionObservations();
 
     // Adjust render throttling for iframes based on visibility
     bool shouldNotify = !hadValidIntersection || hadEmptyIntersection != m_viewportIntersection.isEmpty();

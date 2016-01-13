@@ -436,6 +436,10 @@ const char kEnableMaterialDesignPolicyPage[]  = "enable-md-policy-page";
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
 
+// Enables the use of native notifications instead of using the Chrome based
+// ones.
+const char kEnableNativeNotifications[] = "enable-native-notifications";
+
 // Enables tracing for each navigation. It will attempt to trace each navigation
 // for 10s, until the buffer is full, or until the next navigation.
 // It only works if a URL was provided by --trace-upload-url.
@@ -696,11 +700,6 @@ const char kLocalNtpReload[]                = "local-ntp-reload";
 
 // Makes Chrome default browser
 const char kMakeDefaultBrowser[]            = "make-default-browser";
-
-// Use to opt-in to marking HTTP as non-secure.
-const char kMarkNonSecureAs[]               = "mark-non-secure-as";
-const char kMarkNonSecureAsNeutral[]        = "neutral";
-const char kMarkNonSecureAsNonSecure[]      = "non-secure";
 
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
@@ -1121,10 +1120,6 @@ const char kEnableAccessibilityTabSwitcher[] =
 // Enables Contextual Search.
 const char kEnableContextualSearch[]        = "enable-contextual-search";
 
-// Enables the DOM distiller animated button UI for Android.
-const char kEnableDomDistillerButtonAnimation[] =
-    "enable-dom-distiller-button-animation";
-
 // Enables chrome hosted mode for Android.
 const char kEnableHostedMode[] = "enable-hosted-mode";
 
@@ -1325,6 +1320,10 @@ const char kForceShowUpdateMenuItem[] = "force-show-update-menu-item";
 // Forces a summary to be displayed below the update menu item.
 const char kForceShowUpdateMenuItemSummary[] = "show_summary";
 
+// Forces the new features summary to be displayed below the update menu item.
+const char kForceShowUpdateMenuItemNewFeaturesSummary[] =
+    "use_new_features_summary";
+
 // Forces a custom summary to be displayed below the update menu item.
 const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
 
@@ -1380,8 +1379,12 @@ bool PowerOverlayEnabled() {
 
 #if defined(ENABLE_TASK_MANAGER)
 bool NewTaskManagerEnabled() {
+#if defined(OS_MACOSX)
+  return false;  // The new task manager hasn't been adopted on Mac yet.
+#else
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
       kDisableNewTaskManager);
+#endif  // defined(OS_MACOSX)
 }
 #endif  // defined(ENABLE_TASK_MANAGER)
 

@@ -860,10 +860,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
   // clear all of the copy request flags so that sanity checks for the counts
   // succeed.
   if (!active_tree_->LayersWithCopyOutputRequest().empty()) {
-    LayerTreeHostCommon::CallFunctionForSubtree(
-        active_tree_->root_layer(), [](LayerImpl* layer) {
-          layer->set_num_layer_or_descendant_with_copy_request(0);
-        });
+    active_tree()->property_trees()->effect_tree.ClearCopyRequests();
   }
 
   // Grab this region here before iterating layers. Taking copy requests from
@@ -2206,7 +2203,8 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
   tile_manager_->SetResources(
       resource_pool_.get(), tile_task_worker_pool_->AsTileTaskRunner(),
       is_synchronous_single_threaded_ ? std::numeric_limits<size_t>::max()
-                                      : settings_.scheduled_raster_task_limit);
+                                      : settings_.scheduled_raster_task_limit,
+      use_gpu_rasterization_);
   UpdateTileManagerMemoryPolicy(ActualManagedMemoryPolicy());
 }
 
@@ -2548,15 +2546,26 @@ static bool HasScrollAncestor(LayerImpl* child, LayerImpl* scroll_ancestor) {
 }
 
 InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBeginImpl(
+    ScrollState* scroll_state,
     LayerImpl* scrolling_layer_impl,
     InputHandler::ScrollInputType type) {
+  DCHECK(scroll_state);
+  DCHECK(scroll_state->delta_x() == 0 && scroll_state->delta_y() == 0);
+
   if (!scrolling_layer_impl)
     return SCROLL_IGNORED;
 
   top_controls_manager_->ScrollBegin();
 
   active_tree_->SetCurrentlyScrollingLayer(scrolling_layer_impl);
+  // TODO(majidvp): get rid of wheel_scrolling_ and set is_direct_manipulation
+  // in input_handler_proxy instead.
   wheel_scrolling_ = (type == WHEEL || type == ANIMATED_WHEEL);
+  scroll_state->set_is_direct_manipulation(!wheel_scrolling_);
+  // Invoke |DistributeScrollDelta| even with zero delta and velocity to ensure
+  // scroll customization callbacks are invoked.
+  DistributeScrollDelta(scroll_state);
+
   client_->RenewTreePriority();
   RecordCompositorSlowScrollMetric(type, ScrollThread::CC_THREAD);
 
@@ -2567,20 +2576,24 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBeginImpl(
 }
 
 InputHandler::ScrollStatus LayerTreeHostImpl::RootScrollBegin(
+    ScrollState* scroll_state,
     InputHandler::ScrollInputType type) {
   TRACE_EVENT0("cc", "LayerTreeHostImpl::RootScrollBegin");
 
   ClearCurrentlyScrollingLayer();
 
-  return ScrollBeginImpl(InnerViewportScrollLayer(), type);
+  return ScrollBeginImpl(scroll_state, InnerViewportScrollLayer(), type);
 }
 
 InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
-    const gfx::Point& viewport_point,
+    ScrollState* scroll_state,
     InputHandler::ScrollInputType type) {
   TRACE_EVENT0("cc", "LayerTreeHostImpl::ScrollBegin");
 
   ClearCurrentlyScrollingLayer();
+
+  gfx::Point viewport_point(scroll_state->start_position_x(),
+                            scroll_state->start_position_y());
 
   gfx::PointF device_viewport_point = gfx::ScalePoint(
       gfx::PointF(viewport_point), active_tree_->device_scale_factor());
@@ -2609,7 +2622,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
     return SCROLL_ON_MAIN_THREAD;
   }
 
-  return ScrollBeginImpl(scrolling_layer_impl, type);
+  return ScrollBeginImpl(scroll_state, scrolling_layer_impl, type);
 }
 
 InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
@@ -2620,12 +2633,15 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
                ? SCROLL_STARTED
                : SCROLL_IGNORED;
   }
+
+  ScrollState scroll_state(0, 0, viewport_point.x(), viewport_point.y(), 0, 0,
+                           false, true, false);
   // ScrollAnimated is used for animated wheel scrolls. We find the first layer
   // that can scroll and set up an animation of its scroll offset. Note that
   // this does not currently go through the scroll customization and viewport
   // machinery that ScrollBy uses for non-animated wheel scrolls.
   InputHandler::ScrollStatus scroll_status =
-      ScrollBegin(viewport_point, ANIMATED_WHEEL);
+      ScrollBegin(&scroll_state, ANIMATED_WHEEL);
   if (scroll_status == SCROLL_STARTED) {
     gfx::Vector2dF pending_delta = scroll_delta;
     for (LayerImpl* layer_impl = CurrentlyScrollingLayer(); layer_impl;
@@ -2658,7 +2674,8 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
       return SCROLL_STARTED;
     }
   }
-  ScrollEnd();
+  scroll_state.set_is_ending(true);
+  ScrollEnd(&scroll_state);
   return scroll_status;
 }
 
@@ -2820,22 +2837,11 @@ void LayerTreeHostImpl::ApplyScroll(LayerImpl* layer,
   scroll_state->set_current_native_scrolling_layer(layer);
 }
 
-InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
-    const gfx::Point& viewport_point,
-    const gfx::Vector2dF& scroll_delta) {
-  TRACE_EVENT0("cc", "LayerTreeHostImpl::ScrollBy");
-  if (!CurrentlyScrollingLayer())
-    return InputHandlerScrollResult();
-
-  float initial_top_controls_offset =
-      top_controls_manager_->ControlsTopOffset();
-  ScrollState scroll_state(
-      scroll_delta.x(), scroll_delta.y(), viewport_point.x(),
-      viewport_point.y(), false /* should_propagate */,
-      did_lock_scrolling_layer_ /* delta_consumed_for_scroll_sequence */,
-      !wheel_scrolling_ /* is_direct_manipulation */);
-  scroll_state.set_current_native_scrolling_layer(CurrentlyScrollingLayer());
-
+void LayerTreeHostImpl::DistributeScrollDelta(ScrollState* scroll_state) {
+  // TODO(majidvp): in Blink we compute scroll chain only at scroll begin which
+  // is not the case here. We eventually want to have the same behaviour on both
+  // sides but it may become a non issue if we get rid of scroll chaining (see
+  // crbug.com/526462)
   std::list<LayerImpl*> current_scroll_chain;
   for (LayerImpl* layer_impl = CurrentlyScrollingLayer(); layer_impl;
        layer_impl = NextLayerInScrollOrder(layer_impl)) {
@@ -2846,15 +2852,35 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
       continue;
     current_scroll_chain.push_front(layer_impl);
   }
-  scroll_state.set_scroll_chain(current_scroll_chain);
-  scroll_state.DistributeToScrollChainDescendant();
+  scroll_state->set_scroll_chain(current_scroll_chain);
+  scroll_state->DistributeToScrollChainDescendant();
+}
+
+InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
+    ScrollState* scroll_state) {
+  DCHECK(scroll_state);
+
+  TRACE_EVENT0("cc", "LayerTreeHostImpl::ScrollBy");
+  if (!CurrentlyScrollingLayer())
+    return InputHandlerScrollResult();
+
+  float initial_top_controls_offset =
+      top_controls_manager_->ControlsTopOffset();
+
+  scroll_state->set_delta_consumed_for_scroll_sequence(
+      did_lock_scrolling_layer_);
+  scroll_state->set_is_direct_manipulation(!wheel_scrolling_);
+  scroll_state->set_current_native_scrolling_layer(CurrentlyScrollingLayer());
+
+  DistributeScrollDelta(scroll_state);
 
   active_tree_->SetCurrentlyScrollingLayer(
-      scroll_state.current_native_scrolling_layer());
-  did_lock_scrolling_layer_ = scroll_state.delta_consumed_for_scroll_sequence();
+      scroll_state->current_native_scrolling_layer());
+  did_lock_scrolling_layer_ =
+      scroll_state->delta_consumed_for_scroll_sequence();
 
-  bool did_scroll_x = scroll_state.caused_scroll_x();
-  bool did_scroll_y = scroll_state.caused_scroll_y();
+  bool did_scroll_x = scroll_state->caused_scroll_x();
+  bool did_scroll_y = scroll_state->caused_scroll_y();
   bool did_scroll_content = did_scroll_x || did_scroll_y;
   if (did_scroll_content) {
     // If we are scrolling with an active scroll handler, forward latency
@@ -2872,8 +2898,8 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
     accumulated_root_overscroll_.set_x(0);
   if (did_scroll_y)
     accumulated_root_overscroll_.set_y(0);
-  gfx::Vector2dF unused_root_delta(scroll_state.delta_x(),
-                                   scroll_state.delta_y());
+  gfx::Vector2dF unused_root_delta(scroll_state->delta_x(),
+                                   scroll_state->delta_y());
 
   // When inner viewport is unscrollable, disable overscrolls.
   if (InnerViewportScrollLayer()) {
@@ -2894,9 +2920,11 @@ InputHandlerScrollResult LayerTreeHostImpl::ScrollBy(
   scroll_result.accumulated_root_overscroll = accumulated_root_overscroll_;
   scroll_result.unused_scroll_delta = unused_root_delta;
 
-  // Scrolling can change the root scroll offset, so inform the synchronous
-  // input handler.
-  UpdateRootLayerStateForSynchronousInputHandler();
+  if (scroll_result.did_scroll) {
+    // Scrolling can change the root scroll offset, so inform the synchronous
+    // input handler.
+    UpdateRootLayerStateForSynchronousInputHandler();
+  }
 
   return scroll_result;
 }
@@ -2965,7 +2993,11 @@ void LayerTreeHostImpl::ClearCurrentlyScrollingLayer() {
   accumulated_root_overscroll_ = gfx::Vector2dF();
 }
 
-void LayerTreeHostImpl::ScrollEnd() {
+void LayerTreeHostImpl::ScrollEnd(ScrollState* scroll_state) {
+  DCHECK(scroll_state);
+  DCHECK(scroll_state->delta_x() == 0 && scroll_state->delta_y() == 0);
+
+  DistributeScrollDelta(scroll_state);
   top_controls_manager_->ScrollEnd();
   ClearCurrentlyScrollingLayer();
 }
@@ -3777,7 +3809,9 @@ void LayerTreeHostImpl::LayerTransformIsPotentiallyAnimatingChanged(
 }
 
 void LayerTreeHostImpl::ScrollOffsetAnimationFinished() {
-  ScrollEnd();
+  // TODO(majidvp): We should pass in the original starting scroll position here
+  ScrollState scroll_state(0, 0, 0, 0, 0, 0, false, false, false);
+  ScrollEnd(&scroll_state);
 }
 
 gfx::ScrollOffset LayerTreeHostImpl::GetScrollOffsetForAnimation(

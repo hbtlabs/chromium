@@ -205,6 +205,15 @@ void StyleResolver::appendCSSStyleSheet(CSSStyleSheet& cssSheet)
         return;
 
     TreeScope* treeScope = &cssSheet.ownerNode()->treeScope();
+    // TODO(rune@opera.com): This is a workaround for crbug.com/559292
+    // when we're in the middle of removing a subtree with a style element
+    // and the treescope has been changed but inDocument and isInShadowTree
+    // are not.
+    //
+    // This check can be removed when crbug.com/567021 is fixed.
+    if (cssSheet.ownerNode()->isInShadowTree() && treeScope->rootNode().isDocumentNode())
+        return;
+
     // Sheets in the document scope of HTML imports apply to the main document
     // (m_document), so we override it for all document scoped sheets.
     if (treeScope->rootNode().isDocumentNode())
@@ -1003,8 +1012,10 @@ StyleRuleKeyframes* StyleResolver::findKeyframesRule(const Element* element, con
 template <CSSPropertyPriority priority>
 void StyleResolver::applyAnimatedProperties(StyleResolverState& state, const ActiveInterpolationsMap& activeInterpolationsMap)
 {
+    // TODO(alancutter): Don't apply presentation attribute animations here,
+    // they should instead apply in SVGElement::collectStyleForPresentationAttribute().
     for (const auto& entry : activeInterpolationsMap) {
-        CSSPropertyID property = entry.key.cssProperty();
+        CSSPropertyID property = entry.key.isCSSProperty() ? entry.key.cssProperty() : entry.key.presentationAttribute();
         if (!CSSPropertyPriorityData<priority>::propertyHasPriority(property))
             continue;
         const Interpolation& interpolation = *entry.value.first();

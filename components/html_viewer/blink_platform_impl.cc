@@ -27,9 +27,9 @@
 #include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "components/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
-#include "mojo/application/public/cpp/application_impl.h"
-#include "mojo/application/public/cpp/connect.h"
 #include "mojo/common/user_agent.h"
+#include "mojo/shell/public/cpp/application_impl.h"
+#include "mojo/shell/public/cpp/connect.h"
 #include "net/base/data_url.h"
 #include "net/base/ip_address_number.h"
 #include "net/base/net_errors.h"
@@ -127,11 +127,6 @@ double BlinkPlatformImpl::currentTimeSeconds() {
 double BlinkPlatformImpl::monotonicallyIncreasingTimeSeconds() {
   return base::TimeTicks::Now().ToInternalValue() /
       static_cast<double>(base::Time::kMicrosecondsPerSecond);
-}
-
-void BlinkPlatformImpl::cryptographicallyRandomValues(unsigned char* buffer,
-                                                      size_t length) {
-  base::RandBytes(buffer, length);
 }
 
 bool BlinkPlatformImpl::isThreadedCompositingEnabled() {

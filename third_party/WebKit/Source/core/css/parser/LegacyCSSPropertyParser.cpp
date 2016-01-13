@@ -506,9 +506,19 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
         addProperty(propId, CSSValuePair::create(parsedValue1.release(), parsedValue2.release(), CSSValuePair::DropIdenticalValues), important);
         return true;
     }
-    case CSSPropertyBorderRadius:
-    case CSSPropertyAliasWebkitBorderRadius:
-        return parseBorderRadius(unresolvedProperty, important);
+    case CSSPropertyBorderRadius: {
+        ShorthandScope scope(this, unresolvedProperty);
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4];
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> radii2[4];
+        if (!parseRadii(radii, radii2, m_valueList, unresolvedProperty))
+            return false;
+        ImplicitScope implicitScope(this);
+        addProperty(CSSPropertyBorderTopLeftRadius, CSSValuePair::create(radii[0].release(), radii2[0].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderTopRightRadius, CSSValuePair::create(radii[1].release(), radii2[1].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderBottomRightRadius, CSSValuePair::create(radii[2].release(), radii2[2].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderBottomLeftRadius, CSSValuePair::create(radii[3].release(), radii2[3].release(), CSSValuePair::DropIdenticalValues), important);
+        return true;
+    }
     case CSSPropertyWebkitBoxReflect:
         if (id == CSSValueNone)
             validPrimitive = true;
@@ -866,15 +876,10 @@ bool CSSPropertyParser::parseValue(CSSPropertyID unresolvedProperty, bool import
     case CSSPropertyListStyleImage:
     case CSSPropertyListStyle:
     case CSSPropertyPerspective:
-        validPrimitive = false;
-        break;
-
+    case CSSPropertyScrollSnapCoordinate:
     case CSSPropertyScrollSnapPointsX:
     case CSSPropertyScrollSnapPointsY:
-        parsedValue = parseScrollSnapPoints();
-        break;
-    case CSSPropertyScrollSnapCoordinate:
-        parsedValue = parseScrollSnapCoordinate();
+        validPrimitive = false;
         break;
 
     default:
@@ -1183,43 +1188,6 @@ bool CSSPropertyParser::parse4Values(CSSPropertyID propId, const CSSPropertyID *
     }
 
     return true;
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseScrollSnapPoints()
-{
-    CSSParserValue* value = m_valueList->current();
-
-    if (value->id == CSSValueNone) {
-        m_valueList->next();
-        return cssValuePool().createIdentifierValue(CSSValueNone);
-    }
-
-    if (value->m_unit == CSSParserValue::Function && value->function->id == CSSValueRepeat) {
-        // The spec defines the following grammar: repeat( <length>)
-        CSSParserValueList* arguments = value->function->args.get();
-        if (!arguments || arguments->size() != 1)
-            return nullptr;
-
-        CSSParserValue* repeatValue = arguments->valueAt(0);
-        if (validUnit(repeatValue, FNonNeg | FLength | FPercent) && (m_parsedCalculation || repeatValue->fValue > 0)) {
-            RefPtrWillBeRawPtr<CSSFunctionValue> result = CSSFunctionValue::create(CSSValueRepeat);
-            result->append(parseValidPrimitive(repeatValue->id, repeatValue));
-            m_valueList->next();
-            return result.release();
-        }
-    }
-
-    return nullptr;
-}
-
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseScrollSnapCoordinate()
-{
-    if (m_valueList->current()->id == CSSValueNone) {
-        m_valueList->next();
-        return cssValuePool().createIdentifierValue(CSSValueNone);
-    }
-
-    return parsePositionList(m_valueList);
 }
 
 PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseColor(const CSSParserValue* value, bool acceptQuirkyColors)
@@ -2636,76 +2604,6 @@ static void completeBorderRadii(RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4])
     radii[3] = radii[1];
 }
 
-// FIXME: This should be refactored with parseBorderRadius.
-// parseBorderRadius contains support for some legacy radius construction.
-PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> CSSPropertyParser::parseInsetRoundedCorners(PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> shape, CSSParserValueList* args)
-{
-    CSSParserValue* argument = args->next();
-
-    if (!argument)
-        return nullptr;
-
-    Vector<CSSParserValue*> radiusArguments;
-    while (argument) {
-        radiusArguments.append(argument);
-        argument = args->next();
-    }
-
-    unsigned num = radiusArguments.size();
-    if (!num || num > 9)
-        return nullptr;
-
-    // FIXME: Refactor completeBorderRadii and the array
-    RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[2][4];
-#if ENABLE(OILPAN)
-    // Zero initialize the array of raw pointers.
-    memset(&radii, 0, sizeof(radii));
-#endif
-
-    unsigned indexAfterSlash = 0;
-    for (unsigned i = 0; i < num; ++i) {
-        CSSParserValue* value = radiusArguments.at(i);
-        if (value->m_unit == CSSParserValue::Operator) {
-            if (value->iValue != '/')
-                return nullptr;
-
-            if (!i || indexAfterSlash || i + 1 == num)
-                return nullptr;
-
-            indexAfterSlash = i + 1;
-            completeBorderRadii(radii[0]);
-            continue;
-        }
-
-        if (i - indexAfterSlash >= 4)
-            return nullptr;
-
-        if (!validUnit(value, FLength | FPercent | FNonNeg))
-            return nullptr;
-
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> radius = createPrimitiveNumericValue(value);
-
-        if (!indexAfterSlash)
-            radii[0][i] = radius;
-        else
-            radii[1][i - indexAfterSlash] = radius.release();
-    }
-
-    if (!indexAfterSlash) {
-        completeBorderRadii(radii[0]);
-        for (unsigned i = 0; i < 4; ++i)
-            radii[1][i] = radii[0][i];
-    } else {
-        completeBorderRadii(radii[1]);
-    }
-    shape->setTopLeftRadius(CSSValuePair::create(radii[0][0].release(), radii[1][0].release(), CSSValuePair::DropIdenticalValues));
-    shape->setTopRightRadius(CSSValuePair::create(radii[0][1].release(), radii[1][1].release(), CSSValuePair::DropIdenticalValues));
-    shape->setBottomRightRadius(CSSValuePair::create(radii[0][2].release(), radii[1][2].release(), CSSValuePair::DropIdenticalValues));
-    shape->setBottomLeftRadius(CSSValuePair::create(radii[0][3].release(), radii[1][3].release(), CSSValuePair::DropIdenticalValues));
-
-    return shape;
-}
-
 PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> CSSPropertyParser::parseBasicShapeInset(CSSParserValueList* args)
 {
     ASSERT(args);
@@ -2718,6 +2616,8 @@ PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> CSSPropertyParser::parseBasicSha
 
     while (argument) {
         if (argument->m_unit == CSSParserValue::Identifier && argument->id == CSSValueRound) {
+            if (!args->next())
+                return nullptr;
             hasRoundedInset = true;
             break;
         }
@@ -2751,8 +2651,18 @@ PassRefPtrWillBeRawPtr<CSSBasicShapeInsetValue> CSSPropertyParser::parseBasicSha
         return nullptr;
     }
 
-    if (hasRoundedInset)
-        return parseInsetRoundedCorners(shape.release(), args);
+    if (hasRoundedInset) {
+        // FIXME: Refactor completeBorderRadii and the array
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4];
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> radii2[4];
+        if (!parseRadii(radii, radii2, args))
+            return nullptr;
+        shape->setTopLeftRadius(CSSValuePair::create(radii[0].release(), radii2[0].release(), CSSValuePair::DropIdenticalValues));
+        shape->setTopRightRadius(CSSValuePair::create(radii[1].release(), radii2[1].release(), CSSValuePair::DropIdenticalValues));
+        shape->setBottomRightRadius(CSSValuePair::create(radii[2].release(), radii2[2].release(), CSSValuePair::DropIdenticalValues));
+        shape->setBottomLeftRadius(CSSValuePair::create(radii[3].release(), radii2[3].release(), CSSValuePair::DropIdenticalValues));
+    }
+
     return shape.release();
 }
 
@@ -3366,37 +3276,6 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseReflect()
     return CSSReflectValue::create(direction.release(), offset.release(), mask.release());
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parsePosition(CSSParserValueList* valueList)
-{
-    RefPtrWillBeRawPtr<CSSValue> xValue = nullptr;
-    RefPtrWillBeRawPtr<CSSValue> yValue = nullptr;
-    parseFillPosition(valueList, xValue, yValue);
-    if (!xValue || !yValue)
-        return nullptr;
-    return CSSValuePair::create(xValue.release(), yValue.release(), CSSValuePair::KeepIdenticalValues);
-}
-
-// Parses a list of comma separated positions. i.e., <position>#
-PassRefPtrWillBeRawPtr<CSSValueList> CSSPropertyParser::parsePositionList(CSSParserValueList* valueList)
-{
-    RefPtrWillBeRawPtr<CSSValueList> positions = CSSValueList::createCommaSeparated();
-    while (true) {
-        // parsePosition consumes values until it reaches a separator [,/],
-        // an invalid token, or end of the list
-        RefPtrWillBeRawPtr<CSSValue> position = parsePosition(valueList);
-        if (!position)
-            return nullptr;
-        positions->append(position);
-
-        if (!valueList->current())
-            break;
-        if (!consumeComma(valueList) || !valueList->current())
-            return nullptr;
-    }
-
-    return positions.release();
-}
-
 class BorderImageParseContext {
     STACK_ALLOCATED();
 public:
@@ -3867,66 +3746,45 @@ bool CSSPropertyParser::parseBorderImageOutset(RefPtrWillBeRawPtr<CSSQuadValue>&
     return parseBorderImageQuad(FLength | FNumber | FNonNeg, result);
 }
 
-bool CSSPropertyParser::parseBorderRadius(CSSPropertyID unresolvedProperty, bool important)
+bool CSSPropertyParser::parseRadii(RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4], RefPtrWillBeRawPtr<CSSPrimitiveValue> radii2[4], CSSParserValueList* args, CSSPropertyID unresolvedProperty)
 {
-    unsigned num = m_valueList->size();
-    if (num > 9)
-        return false;
-
-    ShorthandScope scope(this, unresolvedProperty);
-    RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[2][4];
 #if ENABLE(OILPAN)
-    // Zero initialize the array of raw pointers.
-    memset(&radii, 0, sizeof(radii));
+    // Unconditionally zero initialize the arrays of raw pointers.
+    memset(radii, 0, 4 * sizeof(radii[0]));
+    memset(radii2, 0, 4 * sizeof(radii2[0]));
 #endif
-
-    unsigned indexAfterSlash = 0;
-    for (unsigned i = 0; i < num; ++i) {
-        CSSParserValue* value = m_valueList->valueAt(i);
-        if (value->m_unit == CSSParserValue::Operator) {
-            if (value->iValue != '/')
-                return false;
-
-            if (!i || indexAfterSlash || i + 1 == num || num > i + 5)
-                return false;
-
-            indexAfterSlash = i + 1;
-            completeBorderRadii(radii[0]);
-            continue;
-        }
-
-        if (i - indexAfterSlash >= 4)
-            return false;
-
+    CSSParserValue* value = args->current();
+    int i;
+    for (i = 0; i < 4 && value && value->m_unit != CSSParserValue::Operator;++i, value = args->next()) {
         if (!validUnit(value, FLength | FPercent | FNonNeg))
             return false;
 
-        RefPtrWillBeRawPtr<CSSPrimitiveValue> radius = createPrimitiveNumericValue(value);
-
-        if (!indexAfterSlash) {
-            radii[0][i] = radius;
-
-            // Legacy syntax: -webkit-border-radius: l1 l2; is equivalent to border-radius: l1 / l2;
-            if (num == 2 && unresolvedProperty == CSSPropertyAliasWebkitBorderRadius) {
-                indexAfterSlash = 1;
-                completeBorderRadii(radii[0]);
-            }
-        } else
-            radii[1][i - indexAfterSlash] = radius.release();
+        radii[i] = createPrimitiveNumericValue(value);
     }
 
-    if (!indexAfterSlash) {
-        completeBorderRadii(radii[0]);
+    if (!i || (value && value->m_unit == CSSParserValue::Operator && value->iValue != '/'))
+        return false;
+    // Legacy syntax: -webkit-border-radius: l1 l2; is equivalent to border-radius: l1 / l2;
+    if (!value && i == 2 && unresolvedProperty == CSSPropertyAliasWebkitBorderRadius) {
+        radii2[0] = radii[1];
+        radii[1] = nullptr;
+        completeBorderRadii(radii);
+        completeBorderRadii(radii2);
+        return true;
+    }
+    completeBorderRadii(radii);
+    if (value) {
+        value = args->next();
+        for (i = 0; i < 4 && value && validUnit(value, FLength | FPercent | FNonNeg); ++i, value = args->next())
+            radii2[i] = createPrimitiveNumericValue(value);
+        if (!i || value)
+            return false;
+        completeBorderRadii(radii2);
+    } else {
         for (unsigned i = 0; i < 4; ++i)
-            radii[1][i] = radii[0][i];
-    } else
-        completeBorderRadii(radii[1]);
+            radii2[i] = radii[i];
+    }
 
-    ImplicitScope implicitScope(this);
-    addProperty(CSSPropertyBorderTopLeftRadius, CSSValuePair::create(radii[0][0].release(), radii[1][0].release(), CSSValuePair::DropIdenticalValues), important);
-    addProperty(CSSPropertyBorderTopRightRadius, CSSValuePair::create(radii[0][1].release(), radii[1][1].release(), CSSValuePair::DropIdenticalValues), important);
-    addProperty(CSSPropertyBorderBottomRightRadius, CSSValuePair::create(radii[0][2].release(), radii[1][2].release(), CSSValuePair::DropIdenticalValues), important);
-    addProperty(CSSPropertyBorderBottomLeftRadius, CSSValuePair::create(radii[0][3].release(), radii[1][3].release(), CSSValuePair::DropIdenticalValues), important);
     return true;
 }
 

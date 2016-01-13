@@ -414,7 +414,7 @@
       'browser/ssl/certificate_reporting_test_utils.cc',
       'browser/ssl/certificate_reporting_test_utils.h',
       'browser/ssl/chrome_ssl_host_state_delegate_test.cc',
-      'browser/ssl/security_state_model_browser_tests.cc',
+      'browser/ssl/chrome_security_state_model_client_browser_tests.cc',
       'browser/ssl/ssl_browser_tests.cc',
       'browser/ssl/ssl_client_certificate_selector_test.cc',
       'browser/ssl/ssl_client_certificate_selector_test.h',
@@ -855,8 +855,6 @@
       'browser/safe_browsing/safe_browsing_blocking_page_test.cc',
       'browser/safe_browsing/safe_browsing_service_browsertest.cc',
       'browser/safe_browsing/safe_browsing_test.cc',
-      'browser/safe_browsing/test_database_manager.cc',
-      'browser/safe_browsing/test_database_manager.h',
       'renderer/safe_browsing/threat_dom_details_browsertest.cc',
       'renderer/safe_browsing/phishing_classifier_browsertest.cc',
       'renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc',
@@ -2127,7 +2125,9 @@
         '../components/components.gyp:dom_distiller_test_support',
         '../components/components.gyp:guest_view_test_support',
         '../components/components.gyp:history_core_test_support',
+        '../components/components.gyp:safe_browsing_db',
         '../components/components.gyp:ssl_config',
+        '../components/components.gyp:test_database_manager',
         '../components/components.gyp:translate_core_common',
         '../components/components.gyp:ui_zoom_test_support',
         '../components/components_resources.gyp:components_resources',
@@ -2489,7 +2489,6 @@
             # message loops. See 306348
             'renderer/safe_browsing/phishing_classifier_browsertest.cc',
             'renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc',
-            'renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc',
             # This tests the language options UI features that do not exist on
             # Mac.
             'browser/ui/webui/options/multilanguage_options_webui_browsertest.js',
@@ -2626,7 +2625,6 @@
             # official builds.
             'renderer/safe_browsing/phishing_classifier_browsertest.cc',
             'renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc',
-            'renderer/safe_browsing/phishing_dom_feature_extractor_browsertest.cc',
           ]
         }],
         ['enable_autofill_dialog!=1 or OS=="android" or OS=="ios"', {

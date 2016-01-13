@@ -29,6 +29,7 @@ void BlimpMessageDemultiplexer::AddProcessor(BlimpMessage::Type type,
 void BlimpMessageDemultiplexer::ProcessMessage(
     scoped_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
+  DVLOG(2) << "ProcessMessage : " << *message;
   auto receiver_iter = feature_receiver_map_.find(message->type());
   if (receiver_iter == feature_receiver_map_.end()) {
     DLOG(ERROR) << "No registered receiver for " << *message << ".";
@@ -38,6 +39,7 @@ void BlimpMessageDemultiplexer::ProcessMessage(
     return;
   }
 
+  DVLOG(2) << "Routed message " << *message << ".";
   receiver_iter->second->ProcessMessage(std::move(message), callback);
 }
 

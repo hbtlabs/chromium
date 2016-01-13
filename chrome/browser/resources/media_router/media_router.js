@@ -9,6 +9,10 @@
 cr.define('media_router', function() {
   'use strict';
 
+  // The ESC key maps to keycode '27'.
+  // @const {number}
+  var KEYCODE_ESC = 27;
+
   // The media-router-container element. Initialized after polymer is ready.
   var container = null;
 
@@ -36,8 +40,22 @@ cr.define('media_router', function() {
                                onNavigateToDetails);
     container.addEventListener('navigate-to-cast-mode-list',
                                onNavigateToCastMode);
+    container.addEventListener('report-initial-action', onInitialAction);
+    container.addEventListener('report-initial-action-close',
+                               onInitialActionClose);
+    container.addEventListener('report-sink-click-time',
+                               onSinkClickTimeReported);
     container.addEventListener('report-sink-count', onSinkCountReported);
+    container.addEventListener('show-initial-state', onShowInitialState);
     container.addEventListener('sink-click', onSinkClick);
+
+    // Pressing the ESC key closes the dialog.
+    document.addEventListener('keydown', function(e) {
+      if (e.keyCode == KEYCODE_ESC) {
+        container.maybeReportUserFirstAction(
+            media_router.MediaRouterUserAction.CLOSE);
+      }
+    });
   }
 
   /**
@@ -66,7 +84,35 @@ cr.define('media_router', function() {
    * Called when the user clicks the close button on the dialog.
    */
   function onCloseDialogEvent() {
+    container.maybeReportUserFirstAction(
+        media_router.MediaRouterUserAction.CLOSE);
     media_router.browserApi.closeDialog();
+  }
+
+  /**
+   * Reports the first action the user takes after opening the dialog.
+   * Called when the user explicitly interacts with the dialog to perform an
+   * action.
+   *
+   * @param {{detail: {action: number}}} data
+   * Parameters in |data|.detail:
+   *   action - the first action taken by the user.
+   */
+  function onInitialAction(data) {
+    media_router.browserApi.reportInitialAction(data.detail.action);
+  }
+
+  /**
+   * Reports the time it took for the user to close the dialog if that was the
+   * first action the user took after opening the dialog.
+   * Called when the user closes the dialog without taking any other action.
+   *
+   * @param {{detail: {timeMs: number}}} data
+   * Parameters in |data|.detail:
+   *   timeMs - time in ms for the user to close the dialog.
+   */
+  function onInitialActionClose(data) {
+    media_router.browserApi.reportTimeToInitialActionClose(data.detail.timeMs);
   }
 
   /**
@@ -167,6 +213,18 @@ cr.define('media_router', function() {
         media_router.MediaRouterView.SINK_LIST);
   }
 
+  /*
+   * Reports the initial state of the dialog after it is opened.
+   * Called after initial data is populated.
+   *
+   * @param {{detail: {currentView: string}}} data
+   * Parameters in |data|.detail:
+   *   currentView - the current dialog's current view.
+   */
+  function onShowInitialState(data) {
+    media_router.browserApi.reportInitialState(data.detail.currentView);
+  }
+
   /**
    * Reports the index of the sink that was clicked.
    * Called when the user selects a sink on the sink list.
@@ -177,6 +235,18 @@ cr.define('media_router', function() {
    */
   function onSinkClick(data) {
     media_router.browserApi.reportClickedSinkIndex(data.detail.index);
+  }
+
+  /**
+   * Reports the time it took for the user to select a sink to create a route
+   * after the list was popuated and shown.
+   *
+   * @param {{detail: {timeMs: number}}} data
+   * Paramters in |data|.detail:
+   *   timeMs - the time it took for the user to select a sink.
+   */
+  function onSinkClickTimeReported(data) {
+    media_router.browserApi.reportTimeToClickSink(data.detail.timeMs);
   }
 
   /**

@@ -11,7 +11,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
 #include "core/page/Page.h"
-#include "core/paint/CompositingRecorder.h"
 #include "core/paint/FilterPainter.h"
 #include "core/paint/LayerClipRecorder.h"
 #include "core/paint/LayerFixedPositionRecorder.h"
@@ -28,7 +27,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/ClipPathRecorder.h"
 #include "platform/graphics/paint/ClipRecorder.h"
-#include "platform/graphics/paint/CompositingDisplayItem.h"
+#include "platform/graphics/paint/CompositingRecorder.h"
 #include "platform/graphics/paint/PaintChunkProperties.h"
 #include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 #include "platform/graphics/paint/SubsequenceRecorder.h"
@@ -615,7 +614,7 @@ void PaintLayerPainter::paintFragmentWithPhase(PaintPhase phase, const PaintLaye
         DisplayItem::Type clipType = DisplayItem::paintPhaseToClipLayerFragmentType(phase);
         LayerClipRecorder::BorderRadiusClippingRule clippingRule;
         switch (phase) {
-        case PaintPhaseBlockBackground: // Background painting will handle clipping to self.
+        case PaintPhaseSelfBlockBackground: // Background painting will handle clipping to self.
         case PaintPhaseSelfOutline:
         case PaintPhaseMask: // Mask painting will handle clipping to self.
             clippingRule = LayerClipRecorder::DoNotIncludeSelfForBorderRadius;
@@ -656,7 +655,7 @@ void PaintLayerPainter::paintBackgroundForFragments(const PaintLayerFragments& l
         Optional<ScopeRecorder> scopeRecorder;
         if (needsScope)
             scopeRecorder.emplace(context);
-        paintFragmentWithPhase(PaintPhaseBlockBackground, fragment, context, fragment.backgroundRect, localPaintingInfo, paintingRootForLayoutObject, paintFlags, HasNotClipped);
+        paintFragmentWithPhase(PaintPhaseSelfBlockBackground, fragment, context, fragment.backgroundRect, localPaintingInfo, paintingRootForLayoutObject, paintFlags, HasNotClipped);
     }
 }
 
@@ -675,13 +674,13 @@ void PaintLayerPainter::paintForegroundForFragments(const PaintLayerFragments& l
 
     // We have to loop through every fragment multiple times, since we have to issue paint invalidations in each specific phase in order for
     // interleaving of the fragments to work properly.
-    paintForegroundForFragmentsWithPhase(selectionOnly ? PaintPhaseSelection : PaintPhaseChildBlockBackgrounds, layerFragments,
+    paintForegroundForFragmentsWithPhase(selectionOnly ? PaintPhaseSelection : PaintPhaseDescendantBlockBackgrounds, layerFragments,
         context, localPaintingInfo, paintingRootForLayoutObject, paintFlags, clipState);
 
     if (!selectionOnly) {
         paintForegroundForFragmentsWithPhase(PaintPhaseFloat, layerFragments, context, localPaintingInfo, paintingRootForLayoutObject, paintFlags, clipState);
         paintForegroundForFragmentsWithPhase(PaintPhaseForeground, layerFragments, context, localPaintingInfo, paintingRootForLayoutObject, paintFlags, clipState);
-        paintForegroundForFragmentsWithPhase(PaintPhaseChildOutlines, layerFragments, context, localPaintingInfo, paintingRootForLayoutObject, paintFlags, clipState);
+        paintForegroundForFragmentsWithPhase(PaintPhaseDescendantOutlines, layerFragments, context, localPaintingInfo, paintingRootForLayoutObject, paintFlags, clipState);
     }
 }
 
