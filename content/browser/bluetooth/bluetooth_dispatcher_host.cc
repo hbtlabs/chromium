@@ -479,6 +479,7 @@ void BluetoothDispatcherHost::AdapterPoweredChanged(
     device::BluetoothAdapter* adapter,
     bool powered) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  VLOG(1) << "AdapterPoweredChanged: " << powered;
   const BluetoothChooser::AdapterPresence presence =
       powered ? BluetoothChooser::AdapterPresence::POWERED_ON
               : BluetoothChooser::AdapterPresence::POWERED_OFF;

@@ -50,10 +50,10 @@ class Fakes {
         }
 
         private FakeBluetoothAdapter(long nativeBluetoothTestAndroid) {
-            super(null, new FakeContext(), new FakeBluetoothLeScanner());
+            super(null, new FakeContext());
             mNativeBluetoothTestAndroid = nativeBluetoothTestAndroid;
             mFakeContext = (FakeContext) mContext;
-            mFakeScanner = (FakeBluetoothLeScanner) mScanner;
+            mFakeScanner = new FakeBluetoothLeScanner();
         }
 
         @CalledByNative("FakeBluetoothAdapter")
@@ -114,13 +114,15 @@ class Fakes {
         // BluetoothAdapterWrapper overrides:
 
         @Override
-        public boolean isEnabled() {
-            return true;
+        public String getAddress() {
+            return "A1:B2:C3:D4:E5:F6";
         }
 
         @Override
-        public String getAddress() {
-            return "A1:B2:C3:D4:E5:F6";
+        public BluetoothLeScannerWrapper getBluetoothLeScanner() {
+            // TODO BEFORE LANDING. 
+            // Need to make this return null in some testing cases... 
+            return mFakeScanner;
         }
 
         @Override
@@ -136,6 +138,11 @@ class Fakes {
         @Override
         public boolean isDiscovering() {
             return false;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return true;
         }
     }
 

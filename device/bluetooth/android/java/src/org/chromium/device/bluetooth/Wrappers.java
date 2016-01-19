@@ -52,7 +52,7 @@ class Wrappers {
     static class BluetoothAdapterWrapper {
         private final BluetoothAdapter mAdapter;
         protected final ContextWrapper mContext;
-        protected final BluetoothLeScannerWrapper mScanner;
+        protected BluetoothLeScannerWrapper mScannerWrapper;
 
         /**
          * Creates a BluetoothAdapterWrapper using the default
@@ -94,32 +94,33 @@ class Wrappers {
                 Log.i(TAG, "BluetoothAdapterWrapper.create failed: Default adapter not found.");
                 return null;
             } else {
-                return new BluetoothAdapterWrapper(adapter, new ContextWrapper(context),
-                        new BluetoothLeScannerWrapper(adapter.getBluetoothLeScanner()));
+                return new BluetoothAdapterWrapper(adapter, new ContextWrapper(context));
             }
         }
 
-        public BluetoothAdapterWrapper(BluetoothAdapter adapter, ContextWrapper context,
-                BluetoothLeScannerWrapper scanner) {
+        public BluetoothAdapterWrapper(BluetoothAdapter adapter, ContextWrapper context) {
             mAdapter = adapter;
             mContext = context;
-            mScanner = scanner;
         }
 
         public ContextWrapper getContext() {
             return mContext;
         }
 
-        public BluetoothLeScannerWrapper getBluetoothLeScanner() {
-            return mScanner;
-        }
-
-        public boolean isEnabled() {
-            return mAdapter.isEnabled();
-        }
-
         public String getAddress() {
             return mAdapter.getAddress();
+        }
+
+        public BluetoothLeScannerWrapper getBluetoothLeScanner() {
+            BluetoothLeScanner scanner = mAdapter.getBluetoothLeScanner();
+            if (scanner == null) {
+                return null;
+            }
+            if (mScannerWrapper == null) {
+                    mScannerWrapper = new BluetoothLeScannerWrapper(scanner);
+            }
+            assert mScannerWrapper.mScanner == scanner;
+            return mScannerWrapper;
         }
 
         public String getName() {
@@ -132,6 +133,10 @@ class Wrappers {
 
         public boolean isDiscovering() {
             return mAdapter.isDiscovering();
+        }
+
+        public boolean isEnabled() {
+            return mAdapter.isEnabled();
         }
     }
 
@@ -155,7 +160,7 @@ class Wrappers {
      * Wraps android.bluetooth.BluetoothLeScanner.
      */
     static class BluetoothLeScannerWrapper {
-        private final BluetoothLeScanner mScanner;
+        final BluetoothLeScanner mScanner;
         private final HashMap<ScanCallbackWrapper, ForwardScanCallbackToWrapper> mCallbacks;
 
         public BluetoothLeScannerWrapper(BluetoothLeScanner scanner) {
@@ -237,6 +242,8 @@ class Wrappers {
         }
 
         public BluetoothDeviceWrapper getDevice() {
+            // TODO Before Landing --- did assert work????
+            assert false;
             return new BluetoothDeviceWrapper(mScanResult.getDevice());
         }
 
@@ -276,6 +283,9 @@ class Wrappers {
         }
 
         public int getBluetoothClass_getDeviceClass() {
+            if (mDevice == null || mDevice.getBluetoothClass() == null) {
+                return 0x1F00; // Bluetooth Device Class Uncategorized.
+            }
             return mDevice.getBluetoothClass().getDeviceClass();
         }
 
