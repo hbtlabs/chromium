@@ -47,10 +47,22 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     ResetEventCounts();
   }
 
+  enum class StartNotifySetupError {
+    CHARACTERISTIC_PROPERTIES,
+    NUMBER_OF_ERRORS,  // Add any new error enums above this.
+    NONE
+  };
   // Constructs characteristics with |properties|, calls StartNotifySession,
   // and verifies the appropriate |expected_config_descriptor_value| is written.
-  void StartNotifyBoilerplate(int properties,
-                              uint16_t expected_config_descriptor_value) {
+  // Error scenarios in this boilerplate are tested by setting |error| to the
+  // setup stage to test.
+  void StartNotifyBoilerplate(
+      int properties,
+      uint16_t expected_config_descriptor_value,
+      StartNotifySetupError error = StartNotifySetupError::NONE) {
+    if (error == StartNotifySetupError::CHARACTERISTIC_PROPERTIES) {
+      properties = 0;
+    }
     ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(properties));
     SimulateGattDescriptor(
         characteristic1_,
@@ -58,9 +70,17 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
         "00002902-0000-1000-8000-00805F9B34FB");
     ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
 
-    characteristic1_->StartNotifySession(
-        GetNotifyCallback(Call::EXPECTED),
-        GetGattErrorCallback(Call::NOT_EXPECTED));
+    switch (error) {
+      case StartNotifySetupError::CHARACTERISTIC_PROPERTIES:
+        characteristic1_->StartNotifySession(
+            GetNotifyCallback(Call::NOT_EXPECTED),
+            GetGattErrorCallback(Call::EXPECTED));
+        return;
+      default:
+        characteristic1_->StartNotifySession(
+            GetNotifyCallback(Call::EXPECTED),
+            GetGattErrorCallback(Call::NOT_EXPECTED));
+    }
     EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
     EXPECT_EQ(0, callback_count_);
     SimulateGattNotifySessionStarted(characteristic1_);
@@ -679,10 +699,11 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
 // StartNotifySession fails if characteristic doesn't have Notify or Indicate
 // property.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  StartNotifyBoilerplate(
+      /* properties: NOTIFY */ 0x10,
+      /* expected_config_descriptor_value: NOTIFY */ 1,
+      StartNotifySetupError::CHARACTERISTIC_PROPERTIES);
 
-  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
-                                       GetGattErrorCallback(Call::EXPECTED));
   EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
 
   // The expected error callback is asynchronous:
