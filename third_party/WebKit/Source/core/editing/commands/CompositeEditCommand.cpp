@@ -234,6 +234,11 @@ bool CompositeEditCommand::isTypingCommand() const
     return false;
 }
 
+bool CompositeEditCommand::isReplaceSelectionCommand() const
+{
+    return false;
+}
+
 void CompositeEditCommand::setShouldRetainAutocorrectionIndicator(bool)
 {
 }
@@ -308,7 +313,7 @@ bool CompositeEditCommand::isRemovableBlock(const Node* node)
 
 void CompositeEditCommand::insertNodeBefore(PassRefPtrWillBeRawPtr<Node> insertChild, PassRefPtrWillBeRawPtr<Node> refChild, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
 {
-    ASSERT(!isHTMLBodyElement(*refChild));
+    ASSERT(document().body() != refChild);
     applyCommandToComposite(InsertNodeBeforeCommand::create(insertChild, refChild, shouldAssumeContentIsAlwaysEditable));
 }
 
@@ -316,7 +321,7 @@ void CompositeEditCommand::insertNodeAfter(PassRefPtrWillBeRawPtr<Node> insertCh
 {
     ASSERT(insertChild);
     ASSERT(refChild);
-    ASSERT(!isHTMLBodyElement(*refChild));
+    ASSERT(document().body() != refChild);
     ContainerNode* parent = refChild->parentNode();
     ASSERT(parent);
     ASSERT(!parent->isShadowRoot());

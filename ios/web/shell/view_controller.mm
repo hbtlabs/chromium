@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/mac/objc_property_releaser.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_ptr.h"
@@ -28,14 +30,9 @@
 #include "ui/base/page_transition_types.h"
 
 namespace {
-// Returns true if WKWebView should be used instead of UIWebView.
-// TODO(stuartmorgan): Decide on a better way to control this.
+// Returns true if WKWebView is supported.
 bool UseWKWebView() {
-#if defined(FORCE_ENABLE_WKWEBVIEW)
   return web::IsWKWebViewSupported();
-#else
-  return false;
-#endif
 }
 }
 
@@ -126,7 +123,8 @@ NSString* const kWebShellAddressFieldAccessibilityLabel = @"Address field";
   webState->GetNavigationManagerImpl().InitializeSession(nil, nil, NO, 0);
   web::WebViewType webViewType =
       UseWKWebView() ? web::WK_WEB_VIEW_TYPE : web::UI_WEB_VIEW_TYPE;
-  _webController.reset(web::CreateWebController(webViewType, webState.Pass()));
+  _webController.reset(
+      web::CreateWebController(webViewType, std::move(webState)));
   [_webController setDelegate:self];
   [_webController setUIDelegate:self];
   [_webController setWebUsageEnabled:YES];
@@ -288,9 +286,7 @@ NSString* const kWebShellAddressFieldAccessibilityLabel = @"Address field";
   return nil;
 }
 
-- (CRWWebController*)webPageOrderedOpenBlankWithReferrer:
-                         (const web::Referrer&)referrer
-                                            inBackground:(BOOL)inBackground {
+- (CRWWebController*)webPageOrderedOpen {
   return nil;
 }
 

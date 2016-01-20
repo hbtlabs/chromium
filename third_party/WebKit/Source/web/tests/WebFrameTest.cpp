@@ -1029,7 +1029,7 @@ TEST_P(ParameterizedWebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag
     webViewHelper.webView()->resize(WebSize(viewportWidth, viewportHeight));
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    EXPECT_EQ(2, webViewHelper.webView()->deviceScaleFactor());
+    EXPECT_EQ(2, webViewHelper.webViewImpl()->page()->deviceScaleFactor());
 
     // Device scale factor should be independent of page scale.
     webViewHelper.webView()->setDefaultPageScaleLimits(1, 2);
@@ -4710,10 +4710,10 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     webViewHelper.webView()->resize(WebSize(viewWidth, viewHeight));
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "select_range_basic.html");
 
-    // The frame starts with a non-empty selection.
+    // The frame starts with no selection.
     WebFrame* frame = webViewHelper.webView()->mainFrame();
     ASSERT_TRUE(frame->hasSelection());
-    EXPECT_FALSE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
+    EXPECT_TRUE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
 
     // The selection cleared notification should be triggered upon layout.
     frame->executeCommand(WebString::fromUTF8("Unselect"));

@@ -672,6 +672,7 @@ static const GLenum kSupportedInternalFormatsTexImageES3[] = {
     GL_DEPTH_COMPONENT24,
     GL_DEPTH_COMPONENT32F,
     GL_DEPTH24_STENCIL8,
+    GL_DEPTH32F_STENCIL8,
 };
 
 // ES2 enums
@@ -747,6 +748,7 @@ static const GLenum kSupportedTypesES3[] = {
     GL_UNSIGNED_INT_10F_11F_11F_REV,
     GL_UNSIGNED_INT_5_9_9_9_REV,
     GL_UNSIGNED_INT_24_8,
+    GL_FLOAT_32_UNSIGNED_INT_24_8_REV,
 };
 
 // ES2 enums
@@ -860,6 +862,7 @@ static const FormatType kSupportedFormatTypesES3[] = {
     { GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT },
     { GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT },
     { GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8 },
+    { GL_DEPTH32F_STENCIL8, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV },
 };
 
 bool isUnsignedIntegerFormat(GLenum internalformat)
@@ -2472,18 +2475,21 @@ void WebGLRenderingContextBase::framebufferTexture2D(ScriptState* scriptState, G
         webContext()->framebufferTexture2D(target, GL_DEPTH_ATTACHMENT, textarget, textureObject, level);
         webContext()->framebufferTexture2D(target, GL_STENCIL_ATTACHMENT, textarget, textureObject, level);
         break;
-    case GL_DEPTH_ATTACHMENT:
-        webContext()->framebufferTexture2D(target, attachment, textarget, textureObject, level);
-        break;
-    case GL_STENCIL_ATTACHMENT:
-        webContext()->framebufferTexture2D(target, attachment, textarget, textureObject, level);
-        break;
     default:
         webContext()->framebufferTexture2D(target, attachment, textarget, textureObject, level);
     }
-    framebufferBinding->setAttachmentForBoundFramebuffer(target, attachment, textarget, texture, level, 0);
+    if (isWebGL2OrHigher() && attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+        // On ES3, DEPTH_STENCIL_ATTACHMENT is like an alias for DEPTH_ATTACHMENT + STENCIL_ATTACHMENT.
+        // We divide it here so in WebGLFramebuffer, we don't have to handle DEPTH_STENCIL_ATTACHMENT in WebGL 2.
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_DEPTH_ATTACHMENT, textarget, texture, level, 0);
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_STENCIL_ATTACHMENT, textarget, texture, level, 0);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_DEPTH_ATTACHMENT, texture);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_STENCIL_ATTACHMENT, texture);
+    } else {
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, attachment, textarget, texture, level, 0);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", attachment, texture);
+    }
     applyStencilTest();
-    preserveObjectWrapper(scriptState, framebufferBinding, "attachment", attachment, texture);
 }
 
 void WebGLRenderingContextBase::frontFace(GLenum mode)
@@ -3653,6 +3659,11 @@ void WebGLRenderingContextBase::linkProgram(WebGLProgram* program)
 {
     if (isContextLost() || !validateWebGLObject("linkProgram", program))
         return;
+
+    if (program->activeTransformFeedbackCount() > 0) {
+        synthesizeGLError(GL_INVALID_OPERATION, "linkProgram", "program being used by one or more active transform feedback objects");
+        return;
+    }
 
     webContext()->linkProgram(objectOrZero(program));
     program->increaseLinkCount();
@@ -5898,6 +5909,9 @@ bool WebGLRenderingContextBase::validateTexFuncData(const char* functionName, GL
             return false;
         }
         break;
+    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+        synthesizeGLError(GL_INVALID_OPERATION, functionName, "type FLOAT_32_UNSIGNED_INT_24_8_REV but ArrayBufferView is not NULL");
+        return false;
     default:
         ASSERT_NOT_REACHED();
     }

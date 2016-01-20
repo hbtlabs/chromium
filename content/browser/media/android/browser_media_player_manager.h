@@ -15,12 +15,12 @@
 #include "content/browser/android/content_video_view.h"
 #include "content/browser/media/android/media_session_observer.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_player_messages_enums_android.h"
 #include "ipc/ipc_message.h"
 #include "media/base/android/media_player_android.h"
 #include "media/base/android/media_player_manager.h"
 #include "media/base/android/media_url_interceptor.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gl/android/scoped_java_surface.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -45,7 +45,8 @@ class WebContents;
 // process.
 class CONTENT_EXPORT BrowserMediaPlayerManager
     : public media::MediaPlayerManager,
-      public MediaSessionObserver {
+      public MediaSessionObserver,
+      public ContentVideoView::Client {
  public:
   // Permits embedders to provide an extended version of the class.
   typedef BrowserMediaPlayerManager* (*Factory)(RenderFrameHost*);
@@ -71,9 +72,9 @@ class CONTENT_EXPORT BrowserMediaPlayerManager
 
   ~BrowserMediaPlayerManager() override;
 
-  // Fullscreen video playback controls.
-  virtual void ExitFullscreen(bool release_media_player);
-  virtual void SetVideoSurface(gfx::ScopedJavaSurface surface);
+  // ContentVideoView::Client implementation.
+  void DidExitFullscreen(bool release_media_player) override;
+  void SetVideoSurface(gfx::ScopedJavaSurface surface) override;
 
   // Called when browser player wants the renderer media element to seek.
   // Any actual seek started by renderer will be handled by browser in OnSeek().

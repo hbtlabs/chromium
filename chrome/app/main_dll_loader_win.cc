@@ -47,7 +47,7 @@
 #include "chrome/installer/util/util_constants.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "components/crash/content/app/crashpad.h"
-#include "components/startup_metric_utils/browser/pre_read_field_trial_utils_win.h"
+#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "content/public/app/sandbox_helper_win.h"
 #include "content/public/common/content_switches.h"
 #include "sandbox/win/src/sandbox.h"
@@ -179,9 +179,9 @@ MainDllLoader::~MainDllLoader() {
 // installed build.
 HMODULE MainDllLoader::Load(base::string16* version, base::FilePath* module) {
   const base::char16* dll_name = nullptr;
-  if (process_type_ == "service" || process_type_.empty()) {
+  if (process_type_ == switches::kServiceProcess || process_type_.empty()) {
     dll_name = installer::kChromeDll;
-  } else if (process_type_ == "watcher") {
+  } else if (process_type_ == switches::kWatcherProcess) {
     dll_name = kChromeWatcherDll;
   } else {
 #if defined(CHROME_MULTIPLE_DLL)
@@ -216,7 +216,7 @@ int MainDllLoader::Launch(HINSTANCE instance) {
   base::string16 version;
   base::FilePath file;
 
-  if (process_type_ == "watcher") {
+  if (process_type_ == switches::kWatcherProcess) {
     chrome::RegisterPathProvider();
 
     base::win::ScopedHandle parent_process;

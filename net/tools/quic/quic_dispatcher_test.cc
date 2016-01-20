@@ -12,7 +12,7 @@
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/quic_crypto_server_config.h"
 #include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_connection_helper.h"
+#include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_crypto_stream.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_utils.h"
@@ -34,7 +34,6 @@ using net::test::CryptoTestUtils;
 using net::test::MockConnection;
 using net::test::MockConnectionHelper;
 using net::test::ValueRestore;
-using net::test::TestWriterFactory;
 using std::string;
 using std::vector;
 using testing::DoAll;
@@ -89,7 +88,6 @@ class TestDispatcher : public QuicDispatcher {
       : QuicDispatcher(config,
                        crypto_config,
                        QuicSupportedVersions(),
-                       new QuicDispatcher::DefaultPacketWriterFactory(),
                        new QuicEpollConnectionHelper(eps)) {}
 
   MOCK_METHOD2(CreateQuicSession,
@@ -589,8 +587,6 @@ class QuicDispatcherWriteBlockedListTest : public QuicDispatcherTest {
  public:
   void SetUp() override {
     writer_ = new BlockingWriter;
-    QuicDispatcherPeer::SetPacketWriterFactory(&dispatcher_,
-                                               new TestWriterFactory());
     QuicDispatcherPeer::UseWriter(&dispatcher_, writer_);
 
     IPEndPoint client_address(net::test::Loopback4(), 1);

@@ -62,6 +62,10 @@ void ArcAppModelBuilder::OnAppReadyChanged(const std::string& app_id,
   app_item->SetReady(ready);
 }
 
+void ArcAppModelBuilder::OnAppRemoved(const std::string& app_id) {
+  RemoveApp(app_id);
+}
+
 void ArcAppModelBuilder::OnAppIconUpdated(const std::string& app_id,
                                           ui::ScaleFactor scale_factor) {
   ArcAppItem* app_item = GetArcAppItem(app_id);
@@ -73,6 +77,18 @@ void ArcAppModelBuilder::OnAppIconUpdated(const std::string& app_id,
 
   // Initiate async icon reloading.
   app_item->arc_app_icon()->LoadForScaleFactor(scale_factor);
+}
+
+void ArcAppModelBuilder::OnAppNameUpdated(const std::string& app_id,
+                                          const std::string& name) {
+  ArcAppItem* app_item = GetArcAppItem(app_id);
+  if (!app_item) {
+    VLOG(2) << "Could not update the name of ARC app(" << app_id
+            << ") because it was not found.";
+    return;
+  }
+
+  app_item->SetName(name);
 }
 
 void ArcAppModelBuilder::OnListItemMoved(size_t from_index,

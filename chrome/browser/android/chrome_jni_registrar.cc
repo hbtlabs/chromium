@@ -19,6 +19,7 @@
 #include "chrome/browser/android/bookmarks/edit_bookmark_helper.h"
 #include "chrome/browser/android/bookmarks/partner_bookmarks_reader.h"
 #include "chrome/browser/android/bottombar/overlay_panel_content.h"
+#include "chrome/browser/android/browsing_data/browsing_data_counter_bridge.h"
 #include "chrome/browser/android/chrome_application.h"
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/compositor/compositor_view.h"
@@ -38,6 +39,7 @@
 #include "chrome/browser/android/document/document_web_contents_delegate.h"
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
 #include "chrome/browser/android/download/chrome_download_delegate.h"
+#include "chrome/browser/android/download/download_manager_service.h"
 #include "chrome/browser/android/favicon_helper.h"
 #include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/android/feedback/connectivity_checker.h"
@@ -131,6 +133,7 @@
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/infobars/app_banner_infobar_android.h"
 #include "chrome/browser/ui/android/infobars/auto_signin_first_run_infobar.h"
+#include "chrome/browser/ui/android/infobars/autofill_save_card_infobar.h"
 #include "chrome/browser/ui/android/infobars/confirm_infobar.h"
 #include "chrome/browser/ui/android/infobars/data_reduction_proxy_infobar.h"
 #include "chrome/browser/ui/android/infobars/download_overwrite_infobar.h"
@@ -199,6 +202,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"AppBannerManagerAndroid", banners::AppBannerManagerAndroid::Register},
     {"ApplicationLifetime", RegisterApplicationLifetimeAndroid},
     {"AutocompleteControllerAndroid", RegisterAutocompleteControllerAndroid},
+    {"AutofillSaveCardInfoBar", AutofillSaveCardInfoBar::Register},
     {"AutofillDialogControllerAndroid",
      autofill::AutofillDialogControllerAndroid::
          RegisterAutofillDialogControllerAndroid},
@@ -215,6 +219,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
      BackgroundSyncLauncherAndroid::RegisterLauncher},
     {"BluetoothChooserAndroid", BluetoothChooserAndroid::Register},
     {"BookmarksBridge", BookmarksBridge::RegisterBookmarksBridge},
+    {"BrowsingDataCounterBridge", BrowsingDataCounterBridge::Register},
     {"CardUnmaskPrompt", autofill::CardUnmaskPromptViewAndroid::Register},
     {"CertificateViewer", RegisterCertificateViewer},
     {"ChildAccountFeedbackReporter", RegisterChildAccountFeedbackReporter},
@@ -251,6 +256,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"DomDistillerServiceFactory",
      dom_distiller::android::DomDistillerServiceFactoryAndroid::Register},
     {"DomDistillerTabUtils", RegisterDomDistillerTabUtils},
+    {"DownloadManagerService",
+     DownloadManagerService::RegisterDownloadManagerService},
     {"DownloadOverwriteInfoBarDelegate",
      RegisterDownloadOverwriteInfoBarDelegate},
     {"EditBookmarkHelper", RegisterEditBookmarkHelper},

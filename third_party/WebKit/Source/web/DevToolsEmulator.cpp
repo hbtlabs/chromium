@@ -263,11 +263,13 @@ void DevToolsEmulator::enableMobileEmulation()
     m_webViewImpl->page()->settings().setPrimaryPointerType(PointerTypeCoarse);
     m_webViewImpl->page()->settings().setAvailableHoverTypes(HoverTypeOnDemand);
     m_webViewImpl->page()->settings().setPrimaryHoverType(HoverTypeOnDemand);
+    m_webViewImpl->page()->settings().setResizeIsDeviceSizeChange(true);
     m_webViewImpl->setZoomFactorOverride(1);
 
     m_originalDefaultMinimumPageScaleFactor = m_webViewImpl->defaultMinimumPageScaleFactor();
     m_originalDefaultMaximumPageScaleFactor = m_webViewImpl->defaultMaximumPageScaleFactor();
     m_webViewImpl->setDefaultPageScaleLimits(0.25f, 5);
+    m_webViewImpl->mainFrameImpl()->frameView()->layout();
 }
 
 void DevToolsEmulator::disableMobileEmulation()
@@ -287,11 +289,13 @@ void DevToolsEmulator::disableMobileEmulation()
     m_webViewImpl->page()->settings().setPrimaryPointerType(m_embedderPrimaryPointerType);
     m_webViewImpl->page()->settings().setAvailableHoverTypes(m_embedderAvailableHoverTypes);
     m_webViewImpl->page()->settings().setPrimaryHoverType(m_embedderPrimaryHoverType);
+    m_webViewImpl->page()->settings().setResizeIsDeviceSizeChange(false);
     m_webViewImpl->setZoomFactorOverride(0);
     m_emulateMobileEnabled = false;
     m_webViewImpl->setDefaultPageScaleLimits(
         m_originalDefaultMinimumPageScaleFactor,
         m_originalDefaultMaximumPageScaleFactor);
+    m_webViewImpl->mainFrameImpl()->frameView()->layout();
 }
 
 void DevToolsEmulator::setTouchEventEmulationEnabled(bool enabled)

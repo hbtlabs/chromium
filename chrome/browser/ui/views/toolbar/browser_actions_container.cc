@@ -205,8 +205,7 @@ views::MenuButton* BrowserActionsContainer::GetOverflowReferenceView() {
 
 void BrowserActionsContainer::OnMouseEnteredToolbarActionView() {
   if (!shown_bubble_ && !toolbar_action_views_.empty() &&
-      ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-          browser_->profile())) {
+      toolbar_actions_bar_->show_icon_surfacing_bubble()) {
     ExtensionToolbarIconSurfacingBubble* bubble =
         new ExtensionToolbarIconSurfacingBubble(
             this,
@@ -224,8 +223,7 @@ void BrowserActionsContainer::AddViewForAction(
   if (chevron_)
     chevron_->CloseMenu();
 
-  ToolbarActionView* view =
-      new ToolbarActionView(view_controller, browser_->profile(), this);
+  ToolbarActionView* view = new ToolbarActionView(view_controller, this);
   toolbar_action_views_.insert(toolbar_action_views_.begin() + index, view);
   AddChildViewAt(view, index);
 }

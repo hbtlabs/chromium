@@ -202,10 +202,36 @@ bool requiresSubtreeInvalidation(const CSSSelector& selector)
 }
 
 template<class Map>
-InvalidationData& ensureInvalidationData(Map& map, const typename Map::KeyType& key)
+InvalidationSet& ensureInvalidationSet(Map& map, const typename Map::KeyType& key, InvalidationType type)
 {
-    typename Map::AddResult addResult = map.add(key, InvalidationData());
-    return addResult.storedValue->value;
+    typename Map::AddResult addResult = map.add(key, nullptr);
+    if (addResult.isNewEntry) {
+        if (type == InvalidateDescendants)
+            addResult.storedValue->value = DescendantInvalidationSet::create();
+        else
+            addResult.storedValue->value = SiblingInvalidationSet::create(nullptr);
+        return *addResult.storedValue->value;
+    }
+    if (addResult.storedValue->value->type() == type)
+        return *addResult.storedValue->value;
+
+    if (type == InvalidateDescendants)
+        return toSiblingInvalidationSet(addResult.storedValue->value.get())->ensureDescendants();
+
+    addResult.storedValue->value = SiblingInvalidationSet::create(toDescendantInvalidationSet(addResult.storedValue->value.get()));
+    return *addResult.storedValue->value;
+}
+
+void extractInvalidationSets(InvalidationSet* invalidationSet, DescendantInvalidationSet*& descendants, SiblingInvalidationSet*& siblings)
+{
+    if (invalidationSet->type() == InvalidateDescendants) {
+        descendants = toDescendantInvalidationSet(invalidationSet);
+        siblings = nullptr;
+        return;
+    }
+
+    siblings = toSiblingInvalidationSet(invalidationSet);
+    descendants = siblings->descendants();
 }
 
 } // anonymous namespace
@@ -230,24 +256,24 @@ RuleFeatureSet::~RuleFeatureSet()
 {
 }
 
-InvalidationData& RuleFeatureSet::ensureClassInvalidationData(const AtomicString& className)
+ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureClassInvalidationSet(const AtomicString& className, InvalidationType type)
 {
-    return ensureInvalidationData(m_classInvalidationSets, className);
+    return ensureInvalidationSet(m_classInvalidationSets, className, type);
 }
 
-InvalidationData& RuleFeatureSet::ensureAttributeInvalidationData(const AtomicString& attributeName)
+ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureAttributeInvalidationSet(const AtomicString& attributeName, InvalidationType type)
 {
-    return ensureInvalidationData(m_attributeInvalidationSets, attributeName);
+    return ensureInvalidationSet(m_attributeInvalidationSets, attributeName, type);
 }
 
-InvalidationData& RuleFeatureSet::ensureIdInvalidationData(const AtomicString& id)
+ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensureIdInvalidationSet(const AtomicString& id, InvalidationType type)
 {
-    return ensureInvalidationData(m_idInvalidationSets, id);
+    return ensureInvalidationSet(m_idInvalidationSets, id, type);
 }
 
-InvalidationData& RuleFeatureSet::ensurePseudoInvalidationData(CSSSelector::PseudoType pseudoType)
+ALWAYS_INLINE InvalidationSet& RuleFeatureSet::ensurePseudoInvalidationSet(CSSSelector::PseudoType pseudoType, InvalidationType type)
 {
-    return ensureInvalidationData(m_pseudoInvalidationSets, pseudoType);
+    return ensureInvalidationSet(m_pseudoInvalidationSets, pseudoType, type);
 }
 
 bool RuleFeatureSet::extractInvalidationSetFeature(const CSSSelector& selector, InvalidationSetFeatures& features)
@@ -405,6 +431,10 @@ RuleFeatureSet::extractInvalidationSetFeatures(const CSSSelector& selector, Inva
             continue;
 
         features.treeBoundaryCrossing = current->isShadowSelector();
+        if (current->relationIsAffectedByPseudoContent()) {
+            features.contentPseudoCrossing = true;
+            features.insertionPointCrossing = true;
+        }
         features.adjacent = current->isAdjacentSelector();
         if (current->relation() == CSSSelector::DirectAdjacent)
             features.maxDirectAdjacentSelectors = 1;
@@ -464,20 +494,17 @@ void RuleFeatureSet::addFeaturesToInvalidationSets(const CSSSelector* selector, 
 
                 addFeaturesToInvalidationSet(*invalidationSet, *siblingFeatures);
                 if (siblingFeatures == &descendantFeatures)
-                    siblingInvalidationSet->descendants().setInvalidatesSelf();
+                    siblingInvalidationSet->setInvalidatesSelf();
                 else
-                    addFeaturesToInvalidationSet(siblingInvalidationSet->descendants(), descendantFeatures);
+                    addFeaturesToInvalidationSet(siblingInvalidationSet->ensureSiblingDescendants(), descendantFeatures);
             } else {
                 addFeaturesToInvalidationSet(*invalidationSet, descendantFeatures);
             }
         } else {
             if (current->isHostPseudoClass())
                 descendantFeatures.treeBoundaryCrossing = true;
-            if (current->isInsertionPointCrossing()) {
+            if (current->isInsertionPointCrossing())
                 descendantFeatures.insertionPointCrossing = true;
-                if (current->pseudoType() == CSSSelector::PseudoContent)
-                    descendantFeatures.contentPseudoCrossing = true;
-            }
             if (const CSSSelectorList* selectorList = current->selectorList()) {
                 ASSERT(supportsInvalidationWithSelectorList(current->pseudoType()));
                 for (const CSSSelector* subSelector = selectorList->first(); subSelector; subSelector = CSSSelectorList::next(*subSelector))
@@ -488,9 +515,12 @@ void RuleFeatureSet::addFeaturesToInvalidationSets(const CSSSelector* selector, 
         if (current->relation() == CSSSelector::SubSelector)
             continue;
 
+        if (current->relationIsAffectedByPseudoContent()) {
+            descendantFeatures.insertionPointCrossing = true;
+            descendantFeatures.contentPseudoCrossing = true;
+        }
         if (current->isShadowSelector())
             descendantFeatures.treeBoundaryCrossing = true;
-
         if (!current->isAdjacentSelector()) {
             lastCompoundSelectorInAdjacentChain = current->tagHistory();
             siblingFeatures = nullptr;
@@ -579,13 +609,13 @@ void RuleFeatureSet::FeatureMetadata::clear()
 void RuleFeatureSet::add(const RuleFeatureSet& other)
 {
     for (const auto& entry : other.m_classInvalidationSets)
-        ensureClassInvalidationData(entry.key).combine(entry.value);
+        ensureInvalidationSet(m_classInvalidationSets, entry.key, entry.value->type()).combine(*entry.value);
     for (const auto& entry : other.m_attributeInvalidationSets)
-        ensureAttributeInvalidationData(entry.key).combine(entry.value);
+        ensureInvalidationSet(m_attributeInvalidationSets, entry.key, entry.value->type()).combine(*entry.value);
     for (const auto& entry : other.m_idInvalidationSets)
-        ensureIdInvalidationData(entry.key).combine(entry.value);
+        ensureInvalidationSet(m_idInvalidationSets, entry.key, entry.value->type()).combine(*entry.value);
     for (const auto& entry : other.m_pseudoInvalidationSets)
-        ensurePseudoInvalidationData(static_cast<CSSSelector::PseudoType>(entry.key)).combine(entry.value);
+        ensureInvalidationSet(m_pseudoInvalidationSets, static_cast<CSSSelector::PseudoType>(entry.key), entry.value->type()).combine(*entry.value);
 
     m_metadata.add(other.m_metadata);
 
@@ -610,12 +640,16 @@ void RuleFeatureSet::collectInvalidationSetsForClass(InvalidationLists& invalida
     if (it == m_classInvalidationSets.end())
         return;
 
-    if (DescendantInvalidationSet* descendants = it->value.descendants()) {
+    DescendantInvalidationSet* descendants;
+    SiblingInvalidationSet* siblings;
+    extractInvalidationSets(it->value.get(), descendants, siblings);
+
+    if (descendants) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, classChange, className);
         invalidationLists.descendants.append(descendants);
     }
 
-    if (SiblingInvalidationSet* siblings = it->value.siblings()) {
+    if (siblings) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, classChange, className);
         invalidationLists.siblings.append(siblings);
     }
@@ -627,12 +661,16 @@ void RuleFeatureSet::collectInvalidationSetsForId(InvalidationLists& invalidatio
     if (it == m_idInvalidationSets.end())
         return;
 
-    if (DescendantInvalidationSet* descendants = it->value.descendants()) {
+    DescendantInvalidationSet* descendants;
+    SiblingInvalidationSet* siblings;
+    extractInvalidationSets(it->value.get(), descendants, siblings);
+
+    if (descendants) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, idChange, id);
         invalidationLists.descendants.append(descendants);
     }
 
-    if (SiblingInvalidationSet* siblings = it->value.siblings()) {
+    if (siblings) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, idChange, id);
         invalidationLists.siblings.append(siblings);
     }
@@ -644,12 +682,16 @@ void RuleFeatureSet::collectInvalidationSetsForAttribute(InvalidationLists& inva
     if (it == m_attributeInvalidationSets.end())
         return;
 
-    if (DescendantInvalidationSet* descendants = it->value.descendants()) {
+    DescendantInvalidationSet* descendants;
+    SiblingInvalidationSet* siblings;
+    extractInvalidationSets(it->value.get(), descendants, siblings);
+
+    if (descendants) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, attributeChange, attributeName);
         invalidationLists.descendants.append(descendants);
     }
 
-    if (SiblingInvalidationSet* siblings = it->value.siblings()) {
+    if (siblings) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, attributeChange, attributeName);
         invalidationLists.siblings.append(siblings);
     }
@@ -661,12 +703,16 @@ void RuleFeatureSet::collectInvalidationSetsForPseudoClass(InvalidationLists& in
     if (it == m_pseudoInvalidationSets.end())
         return;
 
-    if (DescendantInvalidationSet* descendants = it->value.descendants()) {
+    DescendantInvalidationSet* descendants;
+    SiblingInvalidationSet* siblings;
+    extractInvalidationSets(it->value.get(), descendants, siblings);
+
+    if (descendants) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *descendants, pseudoChange, pseudo);
         invalidationLists.descendants.append(descendants);
     }
 
-    if (SiblingInvalidationSet* siblings = it->value.siblings()) {
+    if (siblings) {
         TRACE_SCHEDULE_STYLE_INVALIDATION(element, *siblings, pseudoChange, pseudo);
         invalidationLists.siblings.append(siblings);
     }

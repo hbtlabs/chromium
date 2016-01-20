@@ -38,11 +38,10 @@ static inline bool isValidRange(const FloatType& x)
 // at a higher precision internally, without any unnecessary runtime cost or code
 // complexity.
 template <typename CharType, typename FloatType>
-static bool genericParseNumber(const CharType*& ptr, const CharType* end, FloatType& number, WhitespaceMode mode)
+static bool genericParseNumber(const CharType*& cursor, const CharType* end, FloatType& number, WhitespaceMode mode)
 {
     FloatType integer, decimal, frac, exponent;
     int sign, expsign;
-    const CharType* start = ptr;
 
     exponent = 0;
     integer = 0;
@@ -52,8 +51,9 @@ static bool genericParseNumber(const CharType*& ptr, const CharType* end, FloatT
     expsign = 1;
 
     if (mode & AllowLeadingWhitespace)
-        skipOptionalSVGSpaces(ptr, end);
+        skipOptionalSVGSpaces(cursor, end);
 
+    const CharType* ptr = cursor;
     // read the sign
     if (ptr < end && *ptr == '+')
         ptr++;
@@ -67,14 +67,14 @@ static bool genericParseNumber(const CharType*& ptr, const CharType* end, FloatT
         return false;
 
     // read the integer part, build right-to-left
-    const CharType* ptrStartIntPart = ptr;
+    const CharType* digitsStart = ptr;
     while (ptr < end && *ptr >= '0' && *ptr <= '9')
         ++ptr; // Advance to first non-digit.
 
-    if (ptr != ptrStartIntPart) {
+    if (ptr != digitsStart) {
         const CharType* ptrScanIntPart = ptr - 1;
         FloatType multiplier = 1;
-        while (ptrScanIntPart >= ptrStartIntPart) {
+        while (ptrScanIntPart >= digitsStart) {
             integer += multiplier * static_cast<FloatType>(*(ptrScanIntPart--) - '0');
             multiplier *= 10;
         }
@@ -94,8 +94,12 @@ static bool genericParseNumber(const CharType*& ptr, const CharType* end, FloatT
             decimal += (*(ptr++) - '0') * (frac *= static_cast<FloatType>(0.1));
     }
 
+    // When we get here we should have consumed either a digit for the integer
+    // part or a fractional part (with at least one digit after the '.'.)
+    ASSERT(digitsStart != ptr);
+
     // read the exponent part
-    if (ptr != start && ptr + 1 < end && (*ptr == 'e' || *ptr == 'E')
+    if (ptr + 1 < end && (*ptr == 'e' || *ptr == 'E')
         && (ptr[1] != 'x' && ptr[1] != 'm')) {
         ptr++;
 
@@ -131,11 +135,11 @@ static bool genericParseNumber(const CharType*& ptr, const CharType* end, FloatT
     if (!isValidRange(number))
         return false;
 
-    if (start == ptr)
-        return false;
+    // A valid number has been parsed. Commit cursor.
+    cursor = ptr;
 
     if (mode & AllowTrailingWhitespace)
-        skipOptionalSVGSpacesOrDelimiter(ptr, end);
+        skipOptionalSVGSpacesOrDelimiter(cursor, end);
 
     return true;
 }

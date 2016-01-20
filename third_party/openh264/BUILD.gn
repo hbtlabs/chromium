@@ -4,8 +4,6 @@
 
 import("//third_party/openh264/openh264_args.gni")
 
-assert(use_openh264)
-
 # Import source and include variables from openh264.gypi.
 openh264_gypi_values = exec_script("//build/gypi_to_gn.py",
                                    [ rebase_path("openh264.gypi") ],
@@ -16,9 +14,8 @@ config("config") {
   cflags = []
   defines = []
 
-  # Compiler warnings to ignore.
-  if (!is_win) {
-    # GCC flags
+  # GCC and clang flags. MSVS (is_win && !is_clang) does not use cflags.
+  if (!is_win || is_clang) {
     cflags += [
       "-Wno-format",
       "-Wno-header-hygiene",

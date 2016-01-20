@@ -28,6 +28,9 @@
 #include "core/inspector/v8/V8Debugger.h"
 #include "core/inspector/v8/V8JavaScriptCallFrame.h"
 #include "platform/JSONValues.h"
+#include "platform/SharedBuffer.h"
+#include "platform/weborigin/KURL.h"
+#include "public/platform/Platform.h"
 #include "wtf/Optional.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
@@ -119,6 +122,19 @@ static PassRefPtrWillBeRawPtr<ScriptCallStack> toScriptCallStack(v8::Local<v8::C
 {
     RefPtr<JavaScriptCallFrame> jsCallFrame = toJavaScriptCallFrame(context, callFrames);
     return jsCallFrame ? toScriptCallStack(jsCallFrame.get()) : nullptr;
+}
+
+static PassOwnPtr<SourceMap> parseSourceMapFromDataUrl(const String& url)
+{
+    KURL sourceMapURL(KURL(), url);
+    if (sourceMapURL.isEmpty() || !sourceMapURL.isValid())
+        return nullptr;
+    WebString mimetype;
+    WebString charset;
+    RefPtr<SharedBuffer> data = PassRefPtr<SharedBuffer>(Platform::current()->parseDataURL(sourceMapURL, mimetype, charset));
+    if (!data)
+        return nullptr;
+    return SourceMap::parse(String(data->data(), data->size()));
 }
 
 PassOwnPtr<V8DebuggerAgent> V8DebuggerAgent::create(InjectedScriptManager* injectedScriptManager, V8Debugger* debugger, int contextGroupId)
@@ -217,6 +233,7 @@ void V8DebuggerAgentImpl::disable(ErrorString*)
     m_pausedScriptState = nullptr;
     m_currentCallStack.Reset();
     m_scripts.clear();
+    m_sourceMaps.clear();
     m_breakpointIdToDebuggerBreakpointIds.clear();
     internalSetAsyncCallStackDepth(0);
     m_promiseTracker->setEnabled(false, false);
@@ -429,6 +446,7 @@ void V8DebuggerAgentImpl::removeBreakpoint(const String& breakpointId)
         const String& debuggerBreakpointId = debuggerBreakpointIdsIterator->value[i];
         debugger().removeBreakpoint(debuggerBreakpointId);
         m_serverBreakpoints.remove(debuggerBreakpointId);
+        m_muteBreakpoints.remove(debuggerBreakpointId);
     }
     m_breakpointIdToDebuggerBreakpointIds.remove(debuggerBreakpointIdsIterator);
 }
@@ -518,9 +536,17 @@ bool V8DebuggerAgentImpl::isCallFrameWithUnknownScriptOrBlackboxed(PassRefPtr<Ja
         return true;
     bool isBlackboxed = false;
     String scriptURL = it->value.sourceURL();
-    if (m_cachedSkipStackRegExp && !scriptURL.isEmpty()) {
+    String sourceMappedScriptURL;
+    auto itSourceMap = m_sourceMaps.find(String::number(frame->sourceID()));
+    if (itSourceMap != m_sourceMaps.end()) {
+        const SourceMap::Entry* entry = itSourceMap->value->findEntry(frame->line(), frame->column());
+        if (entry)
+            sourceMappedScriptURL = entry->sourceURL;
+    }
+    if (m_cachedSkipStackRegExp && (!scriptURL.isEmpty() || !sourceMappedScriptURL.isEmpty())) {
         if (!it->value.getBlackboxedState(m_cachedSkipStackGeneration, &isBlackboxed)) {
-            isBlackboxed = m_cachedSkipStackRegExp->match(scriptURL) != -1;
+            isBlackboxed = !scriptURL.isEmpty() && m_cachedSkipStackRegExp->match(scriptURL) != -1;
+            isBlackboxed = isBlackboxed || (!sourceMappedScriptURL.isEmpty() && m_cachedSkipStackRegExp->match(sourceMappedScriptURL) != -1);
             it->value.setBlackboxedState(m_cachedSkipStackGeneration, isBlackboxed);
         }
     }
@@ -534,6 +560,22 @@ V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipExceptionPa
     if (isTopCallFrameBlackboxed())
         return RequestContinue;
     return RequestNoSkip;
+}
+
+bool V8DebuggerAgentImpl::isMuteBreakpointInstalled()
+{
+    if (!m_muteBreakpoints.size())
+        return false;
+    RefPtr<JavaScriptCallFrame> frame = debugger().callFrameNoScopes(0);
+    if (!frame)
+        return false;
+    String sourceID = String::number(frame->sourceID());
+    int line = frame->line();
+    for (auto it : m_muteBreakpoints.values()) {
+        if (it.first == sourceID && it.second == line)
+            return true;
+    }
+    return false;
 }
 
 V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::shouldSkipStepPause()
@@ -580,6 +622,8 @@ PassRefPtr<TypeBuilder::Debugger::Location> V8DebuggerAgentImpl::resolveBreakpoi
         return nullptr;
 
     m_serverBreakpoints.set(debuggerBreakpointId, std::make_pair(breakpointId, source));
+    if (breakpoint.condition == "false")
+        m_muteBreakpoints.set(debuggerBreakpointId, std::make_pair(scriptId, breakpoint.lineNumber));
 
     RELEASE_ASSERT(!breakpointId.isEmpty());
     BreakpointIdToDebuggerBreakpointIdsMap::iterator debuggerBreakpointIdsIterator = m_breakpointIdToDebuggerBreakpointIds.find(breakpointId);
@@ -1461,6 +1505,9 @@ void V8DebuggerAgentImpl::didParseSource(const V8DebuggerParsedScript& parsedScr
     bool hasSourceURL = script.hasSourceURL();
     String scriptURL = script.sourceURL();
     String sourceMapURL = sourceMapURLForScript(script, parsedScript.success);
+    OwnPtr<SourceMap> sourceMap = parseSourceMapFromDataUrl(sourceMapURL);
+    if (sourceMap)
+        m_sourceMaps.set(parsedScript.scriptId, sourceMap.release());
 
     const String* sourceMapURLParam = sourceMapURL.isNull() ? nullptr : &sourceMapURL;
     const bool* isContentScriptParam = isContentScript ? &isContentScript : nullptr;
@@ -1500,6 +1547,9 @@ V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::didPause(v8::Local<v8
 {
     ScriptState* scriptState = ScriptState::from(context);
     if (!scriptState->contextIsValid())
+        return RequestContinue;
+
+    if (isMuteBreakpointInstalled())
         return RequestContinue;
 
     ScriptValue exception(scriptState, v8exception);
@@ -1640,6 +1690,7 @@ void V8DebuggerAgentImpl::reset()
 {
     m_scheduledDebuggerStep = NoStep;
     m_scripts.clear();
+    m_sourceMaps.clear();
     m_breakpointIdToDebuggerBreakpointIds.clear();
     resetAsyncCallTracker();
     m_promiseTracker->clear();

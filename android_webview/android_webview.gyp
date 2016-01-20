@@ -227,6 +227,7 @@
         '../components/components.gyp:breakpad_host',
         '../components/components.gyp:cdm_browser',
         '../components/components.gyp:cdm_renderer',
+        '../components/components.gyp:component_metrics_proto',
         '../components/components.gyp:crash_component',
         '../components/components.gyp:data_reduction_proxy_core_browser',
         '../components/components.gyp:devtools_discovery',
@@ -456,7 +457,8 @@
         'has_java_resources': 1,
         'R_package': 'org.chromium.android_webview',
         'R_package_relpath': 'org/chromium/android_webview',
-        'android_manifest_path': '../android_webview/apk/java/AndroidManifest.xml', # for lint
+        # for lint; do not use the system webview's manifest because it's a template
+        'android_manifest_path': '../android_webview/test/shell/AndroidManifest.xml',
       },
       'conditions': [
         ['configuration_policy==1', {

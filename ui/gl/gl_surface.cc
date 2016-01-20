@@ -46,7 +46,9 @@ bool GLSurface::InitializeOneOff() {
         cmd->GetSwitchValueASCII(switches::kUseGL);
     if (requested_implementation_name == "any") {
       fallback_to_osmesa = true;
-    } else if (requested_implementation_name == "swiftshader") {
+    } else if (requested_implementation_name ==
+                   kGLImplementationSwiftShaderName ||
+               requested_implementation_name == kGLImplementationANGLEName) {
       impl = kGLImplementationEGLGLES2;
     } else {
       impl = GetNamedGLImplementation(requested_implementation_name);
@@ -223,6 +225,10 @@ bool GLSurface::FlipsVertically() const {
   return false;
 }
 
+bool GLSurface::BuffersFlipped() const {
+  return false;
+}
+
 GLSurface* GLSurface::GetCurrent() {
   return current_surface_.Pointer()->Get();
 }
@@ -385,6 +391,10 @@ bool GLSurfaceAdapter::IsSurfaceless() const {
 
 bool GLSurfaceAdapter::FlipsVertically() const {
   return surface_->FlipsVertically();
+}
+
+bool GLSurfaceAdapter::BuffersFlipped() const {
+  return surface_->BuffersFlipped();
 }
 
 GLSurfaceAdapter::~GLSurfaceAdapter() {}

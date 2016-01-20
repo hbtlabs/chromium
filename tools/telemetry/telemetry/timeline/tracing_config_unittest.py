@@ -23,8 +23,8 @@ class TracingConfigTests(unittest.TestCase):
         'x,-y,disabled-by-default-z,DELAY(7;foo)')
     config = tracing_config.TracingConfig()
     config.SetTracingCategoryFilter(category_filter)
-    config.tracing_options.enable_systrace = True
-    config.tracing_options.record_mode = tracing_config.RECORD_UNTIL_FULL
+    config.enable_systrace = True
+    config.record_mode = tracing_config.RECORD_UNTIL_FULL
     config_string = config.GetChromeTraceConfigJsonString()
     self.assertEquals(
         '{'
@@ -35,3 +35,30 @@ class TracingConfigTests(unittest.TestCase):
           '"synthetic_delays": ["DELAY(7;foo)"]'
         '}',
         config_string)
+
+  def testMemoryDumpConfigFormat(self):
+    config = tracing_config.TracingConfig()
+    dump_config = tracing_config.MemoryDumpConfig()
+    config.SetMemoryDumpConfig(dump_config)
+    self.assertEquals(
+        '{'
+          '"memory_dump_config": {"triggers": []}, '
+          '"record_mode": "record-as-much-as-possible"'
+        '}',
+        config.GetChromeTraceConfigJsonString())
+
+    dump_config.AddTrigger("light", 250)
+    dump_config.AddTrigger("detailed", 2000)
+    config.SetMemoryDumpConfig(dump_config)
+    self.assertEquals(
+        '{'
+          '"memory_dump_config": '
+            '{'
+              '"triggers": ['
+                '{"mode": "light", "periodic_interval_ms": 250}, '
+                '{"mode": "detailed", "periodic_interval_ms": 2000}'
+              ']'
+            '}, '
+          '"record_mode": "record-as-much-as-possible"'
+        '}',
+        config.GetChromeTraceConfigJsonString())

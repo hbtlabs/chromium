@@ -88,6 +88,9 @@
           # Enable Wayland display server support.
           'enable_wayland_server%' : 0,
 
+          # Enable Wi-Fi Display support.
+          'enable_wifi_display%' : 0,
+
           # By default we build against a stable sysroot image to avoid
           # depending on the packages installed on the local machine. Set this
           # to 0 to build against locally installed headers and libraries (e.g.
@@ -166,11 +169,16 @@
         'enable_hidpi%': '<(enable_hidpi)',
         'enable_topchrome_md%': '<(enable_topchrome_md)',
         'enable_wayland_server%': '<(enable_wayland_server)',
+        'enable_wifi_display%': '<(enable_wifi_display)',
         'buildtype%': '<(buildtype)',
         'branding%': '<(branding)',
         'branding_path_component%': '<(branding)',
         'host_arch%': '<(host_arch)',
         'target_arch%': '<(target_arch)',
+
+        # Set to true to instrument the code with function call logger.
+        # See src/third_party/cygprofile/cyg-profile.cc for details.
+        'order_profiling%': 0,
 
         'target_subarch%': '',
 
@@ -351,6 +359,7 @@
       'enable_hidpi%': '<(enable_hidpi)',
       'enable_topchrome_md%': '<(enable_topchrome_md)',
       'enable_wayland_server%': '<(enable_wayland_server)',
+      'enable_wifi_display%': '<(enable_wifi_display)',
       'android_channel%': '<(android_channel)',
       'use_goma%': '<(use_goma)',
       'gomadir%': '<(gomadir)',
@@ -363,11 +372,7 @@
       'sysroot%': '<(sysroot)',
       'chroot_cmd%': '<(chroot_cmd)',
       'system_libdir%': '<(system_libdir)',
-
-      # Set to 1 to enable fast builds. Set to 2 for even faster builds
-      # (it disables debug info for fastest compilation - only for use
-      # on compile-only bots).
-      'fastbuild%': 0,
+      'order_profiling%': '<(order_profiling)',
 
       # Set to 1 to not store any build metadata, e.g. ifdef out all __DATE__
       # and __TIME__. Set to 0 to reenable the use of these macros in the code
@@ -531,10 +536,6 @@
       # stdlibc++ as standard library. This is intended to use for instrumented
       # builds.
       'use_custom_libcxx%': 0,
-
-      # Set to true to instrument the code with function call logger.
-      # See src/third_party/cygprofile/cyg-profile.cc for details.
-      'order_profiling%': 0,
 
       # Use the provided profiled order file to link Chrome image with it.
       # This makes Chrome faster by better using CPU cache when executing code.
@@ -1042,6 +1043,18 @@
         }, {
           'enable_webvr%': 0,
         }],
+
+        ['order_profiling==0', {
+          # Set to 1 to enable fast builds. Set to 2 for even faster builds
+          # (it disables debug info for fastest compilation - only for use
+          # on compile-only bots).
+          'fastbuild%': 0,
+        }, {
+          # With instrumentation enabled, debug info puts libchrome.so over 4gb,
+          # which causes the linker to produce an invalid ELF.
+          # http://crbug.com/574476
+          'fastbuild%': 2,
+        }],
       ],
 
       # Setting this to '0' will cause V8's startup snapshot to be
@@ -1153,6 +1166,7 @@
     'enable_hidpi%': '<(enable_hidpi)',
     'enable_topchrome_md%': '<(enable_topchrome_md)',
     'enable_wayland_server%': '<(enable_wayland_server)',
+    'enable_wifi_display%': '<(enable_wifi_display)',
     'image_loader_extension%': '<(image_loader_extension)',
     'fastbuild%': '<(fastbuild)',
     'dont_embed_build_metadata%': '<(dont_embed_build_metadata)',
@@ -2775,6 +2789,9 @@
       }],
       ['enable_wayland_server==1', {
         'defines': ['ENABLE_WAYLAND_SERVER=1'],
+      }],
+      ['enable_wifi_display==1', {
+        'defines': ['ENABLE_WIFI_DISPLAY=1'],
       }],
       ['use_udev==1', {
         'defines': ['USE_UDEV'],

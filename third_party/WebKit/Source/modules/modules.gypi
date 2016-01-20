@@ -224,6 +224,7 @@
       'webaudio/DelayNode.idl',
       'webaudio/DynamicsCompressorNode.idl',
       'webaudio/GainNode.idl',
+      'webaudio/IIRFilterNode.idl',
       'webaudio/MediaElementAudioSourceNode.idl',
       'webaudio/MediaStreamAudioDestinationNode.idl',
       'webaudio/MediaStreamAudioSourceNode.idl',
@@ -310,6 +311,8 @@
       'webusb/USBInTransferResult.idl',
       'webusb/USBInterface.idl',
       'webusb/USBOutTransferResult.idl',
+      'worklet/Worklet.idl',
+      'worklet/WorkletGlobalScope.idl',
     ],
     # 'partial interface' or target (right side of) 'implements'
     'modules_dependency_idl_files': [
@@ -388,6 +391,7 @@
       'webgl/WebGLRenderingContextBase.idl',
       'webmidi/NavigatorWebMIDI.idl',
       'webusb/NavigatorUSB.idl',
+      'worklet/WindowWorklet.idl',
     ],
     # interfaces that inherit from Event
     'modules_event_idl_files': [
@@ -788,8 +792,6 @@
       'beacon/NavigatorBeacon.cpp',
       'beacon/NavigatorBeacon.h',
       'bluetooth/Bluetooth.h',
-      'bluetooth/ConvertWebVectorToArrayBuffer.cpp',
-      'bluetooth/ConvertWebVectorToArrayBuffer.h',
       'bluetooth/Bluetooth.cpp',
       'bluetooth/BluetoothAdvertisingData.cpp',
       'bluetooth/BluetoothAdvertisingData.h',
@@ -1179,6 +1181,8 @@
       'mediastream/MediaDevices.h',
       'mediastream/MediaDevicesRequest.cpp',
       'mediastream/MediaDevicesRequest.h',
+      'mediastream/MediaErrorState.cpp',
+      'mediastream/MediaErrorState.h',
       'mediastream/MediaStream.cpp',
       'mediastream/MediaStream.h',
       'mediastream/MediaStreamEvent.cpp',
@@ -1559,6 +1563,12 @@
       'webaudio/DynamicsCompressorNode.h',
       'webaudio/GainNode.cpp',
       'webaudio/GainNode.h',
+      'webaudio/IIRDSPKernel.h',
+      'webaudio/IIRDSPKernel.cpp',
+      'webaudio/IIRFilterNode.cpp',
+      'webaudio/IIRFilterNode.h',
+      'webaudio/IIRProcessor.h',
+      'webaudio/IIRProcessor.cpp',
       'webaudio/MediaElementAudioSourceNode.cpp',
       'webaudio/MediaElementAudioSourceNode.h',
       'webaudio/MediaStreamAudioDestinationNode.cpp',
@@ -1828,6 +1838,12 @@
       'webusb/USBInterface.cpp',
       'webusb/USBInterface.h',
       'webusb/USBOutTransferResult.h',
+      'worklet/DOMWindowWorklet.cpp',
+      'worklet/DOMWindowWorklet.h',
+      'worklet/Worklet.cpp',
+      'worklet/Worklet.h',
+      'worklet/WorkletGlobalScope.cpp',
+      'worklet/WorkletGlobalScope.h',
     ],
     # 'partial interface' or target (right side of) 'implements'
     'modules_testing_dependency_idl_files' : [

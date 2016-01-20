@@ -51,6 +51,7 @@ PassOwnPtrWillBeRawPtr<ScrollAnimatorBase> ScrollAnimatorBase::create(Scrollable
 ScrollAnimator::ScrollAnimator(ScrollableArea* scrollableArea, WTF::TimeFunction timeFunction)
     : ScrollAnimatorBase(scrollableArea)
     , m_timeFunction(timeFunction)
+    , m_lastGranularity(ScrollByPixel)
 {
 }
 
@@ -62,6 +63,11 @@ FloatPoint ScrollAnimator::desiredTargetPosition() const
 {
     return (m_animationCurve || m_runState == RunState::WaitingToSendToCompositor)
         ? m_targetOffset : currentPosition();
+}
+
+bool ScrollAnimator::hasRunningAnimation() const
+{
+    return (m_animationCurve || m_runState == RunState::WaitingToSendToCompositor);
 }
 
 float ScrollAnimator::computeDeltaToConsume(
@@ -89,8 +95,13 @@ ScrollResultOneDimensional ScrollAnimator::userScroll(
 
     TRACE_EVENT0("blink", "ScrollAnimator::scroll");
 
-    if (granularity == ScrollByPrecisePixel)
+    if (granularity == ScrollByPrecisePixel) {
+        if (hasRunningAnimation()) {
+            abortAnimation();
+            resetAnimationState();
+        }
         return ScrollAnimatorBase::userScroll(orientation, granularity, step, delta);
+    }
 
     float usedPixelDelta = computeDeltaToConsume(orientation, step * delta);
     FloatPoint pixelDelta = (orientation == VerticalScrollbar
@@ -133,6 +144,7 @@ ScrollResultOneDimensional ScrollAnimator::userScroll(
 
     m_targetOffset = targetPos;
     m_startTime = m_timeFunction();
+    m_lastGranularity = granularity;
 
     if (registerAndScheduleAnimation())
         m_runState = RunState::WaitingToSendToCompositor;
@@ -216,7 +228,9 @@ void ScrollAnimator::updateCompositorAnimations()
                 ->createScrollOffsetAnimationCurve(
                     m_targetOffset,
                     WebCompositorAnimationCurve::TimingFunctionTypeEaseInOut,
-                    WebScrollOffsetAnimationCurve::ScrollDurationConstant));
+                    m_lastGranularity == ScrollByPixel ?
+                        WebScrollOffsetAnimationCurve::ScrollDurationInverseDelta :
+                        WebScrollOffsetAnimationCurve::ScrollDurationConstant));
             m_animationCurve->setInitialValue(currentPosition());
         }
 
@@ -253,6 +267,13 @@ void ScrollAnimator::updateCompositorAnimations()
                 m_runState = RunState::RunningOnMainThread;
         }
     }
+}
+
+void ScrollAnimator::notifyCompositorAnimationAborted(int groupId)
+{
+    // An animation aborted by the compositor is treated as a finished
+    // animation.
+    ScrollAnimatorCompositorCoordinator::compositorAnimationFinished(groupId);
 }
 
 void ScrollAnimator::notifyCompositorAnimationFinished(int groupId)

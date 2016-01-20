@@ -20,7 +20,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/animation/animation_events.h"
+#include "cc/animation/animation.h"
 #include "cc/base/cc_export.h"
 #include "cc/debug/frame_timing_tracker.h"
 #include "cc/debug/micro_benchmark.h"
@@ -51,6 +51,8 @@ class GpuMemoryBufferManager;
 }
 
 namespace cc {
+
+class AnimationEvents;
 class AnimationRegistrar;
 class AnimationHost;
 class BeginFrameSource;
@@ -71,6 +73,10 @@ class UIResourceRequest;
 struct PendingPageScaleAnimation;
 struct RenderingStats;
 struct ScrollAndScaleSet;
+
+namespace proto {
+class LayerTreeHost;
+}
 
 class CC_EXPORT LayerTreeHost : public MutatorHostClient {
  public:
@@ -179,7 +185,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void SetNextCommitForcesRedraw();
 
-  void SetAnimationEvents(scoped_ptr<AnimationEventsVector> events);
+  void SetAnimationEvents(scoped_ptr<AnimationEvents> events);
 
   void SetRootLayer(scoped_refptr<Layer> root_layer);
   Layer* root_layer() { return root_layer_.get(); }
@@ -366,6 +372,16 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool HasAnyAnimation(const Layer* layer) const;
   bool HasActiveAnimation(const Layer* layer) const;
 
+  // Serializes the parts of this LayerTreeHost that is needed for a commit to a
+  // protobuf message. Not all members are serialized as they are not helpful
+  // for remote usage.
+  void ToProtobufForCommit(proto::LayerTreeHost* proto) const;
+
+  // Deserializes the protobuf into this LayerTreeHost before a commit. The
+  // expected input is a serialized remote LayerTreeHost. After deserializing
+  // the protobuf, the normal commit-flow should continue.
+  void FromProtobufForCommit(const proto::LayerTreeHost& proto);
+
  protected:
   LayerTreeHost(InitParams* params, CompositorMode mode);
   void InitializeThreaded(
@@ -404,6 +420,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void RecordGpuRasterizationHistogram();
 
  private:
+  friend class LayerTreeHostSerializationTest;
+
   void InitializeProxy(
       scoped_ptr<Proxy> proxy,
       scoped_ptr<BeginFrameSource> external_begin_frame_source);

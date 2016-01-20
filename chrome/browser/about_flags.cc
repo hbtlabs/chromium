@@ -755,7 +755,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-web-bluetooth",
      IDS_FLAGS_WEB_BLUETOOTH_NAME,
      IDS_FLAGS_WEB_BLUETOOTH_DESCRIPTION,
-     kOsCrOS | kOsMac | kOsAndroid,
+     kOsCrOS | kOsMac | kOsAndroid | kOsLinux,
      SINGLE_VALUE_TYPE(switches::kEnableWebBluetooth)},
 #if defined(ENABLE_EXTENSIONS)
     {"enable-ble-advertising-in-apps",
@@ -824,7 +824,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-download-resumption",
      IDS_FLAGS_DOWNLOAD_RESUMPTION_NAME,
      IDS_FLAGS_DOWNLOAD_RESUMPTION_DESCRIPTION,
-     kOsDesktop,
+     kOsAll,
      FEATURE_VALUE_TYPE(features::kDownloadResumption)},
 #if defined(OS_CHROMEOS)
     {"download-notification",
@@ -1016,7 +1016,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-password-change-support",
      IDS_FLAGS_PASSWORD_CHANGE_SUPPORT_NAME,
      IDS_FLAGS_PASSWORD_CHANGE_SUPPORT_DESCRIPTION,
-     kOsMac,
+     kOsAndroid,
      FEATURE_VALUE_TYPE(
          password_manager::features::kEnablePasswordChangeSupport)},
     {"enable-password-force-saving",

@@ -88,6 +88,11 @@ int GetWebMouseEventModifierForButton(WebMouseEvent::Button button) {
 const int kButtonsInModifiers = WebMouseEvent::LeftButtonDown
     | WebMouseEvent::MiddleButtonDown | WebMouseEvent::RightButtonDown;
 
+int modifiersWithButtons(int modifiers, int buttons) {
+  return (modifiers & ~kButtonsInModifiers)
+      | (buttons & kButtonsInModifiers);
+}
+
 void InitMouseEvent(WebInputEvent::Type t,
                     WebMouseEvent::Button b,
                     int current_buttons,
@@ -98,8 +103,7 @@ void InitMouseEvent(WebInputEvent::Type t,
                     WebMouseEvent* e) {
   e->type = t;
   e->button = b;
-  e->modifiers = (modifiers & ~kButtonsInModifiers)
-      | (current_buttons & kButtonsInModifiers);
+  e->modifiers = modifiersWithButtons(modifiers, current_buttons);
   e->x = pos.x;
   e->y = pos.y;
   e->globalX = pos.x;
@@ -406,6 +410,30 @@ bool IsSystemKeyEvent(const WebKeyboardEvent& event) {
 #else
   return !!(event.modifiers & WebInputEvent::AltKey);
 #endif
+}
+
+bool GetScrollUnits(gin::Arguments* args, WebGestureEvent::ScrollUnits* units) {
+  std::string units_string;
+  if (!args->PeekNext().IsEmpty()) {
+    if (args->PeekNext()->IsString())
+      args->GetNext(&units_string);
+    if (units_string == "Page") {
+      *units = WebGestureEvent::Page;
+      return true;
+    } else if (units_string == "Pixels") {
+      *units = WebGestureEvent::Pixels;
+      return true;
+    } else if (units_string == "PrecisePixels") {
+      *units = WebGestureEvent::PrecisePixels;
+      return true;
+    } else {
+      args->ThrowError();
+      return false;
+    }
+  } else {
+    *units = WebGestureEvent::PrecisePixels;
+    return true;
+  }
 }
 
 const char* kSourceDeviceStringTouchpad = "touchpad";
@@ -1257,7 +1285,7 @@ void EventSender::DoDragDrop(const WebDragData& drag_data,
       client_point,
       screen_point,
       current_drag_effects_allowed_,
-      modifiers_);
+      modifiersWithButtons(modifiers_, current_buttons_));
 
   // Finish processing events.
   ReplaySavedEvents();
@@ -2142,6 +2170,8 @@ void EventSender::GestureEvent(WebInputEvent::Type type,
           return;
         }
       }
+      if (!GetScrollUnits(args, &event.data.scrollUpdate.deltaUnits))
+        return;
 
       event.data.scrollUpdate.deltaX = static_cast<float>(x);
       event.data.scrollUpdate.deltaY = static_cast<float>(y);

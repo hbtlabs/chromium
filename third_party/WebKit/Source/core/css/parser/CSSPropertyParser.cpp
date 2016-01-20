@@ -107,21 +107,16 @@ bool CSSPropertyParser::parseValueStart(CSSPropertyID unresolvedProperty, bool i
     CSSParserTokenRange originalRange = m_range;
     CSSPropertyID propertyId = resolveCSSPropertyID(unresolvedProperty);
 
-    if (RefPtrWillBeRawPtr<CSSValue> parsedValue = parseSingleValue(unresolvedProperty)) {
-        if (!m_range.atEnd())
-            return false;
-        addProperty(propertyId, parsedValue.release(), important);
-        return true;
-    }
-
-    if (parseShorthand(unresolvedProperty, important))
-        return true;
-
-    CSSParserValueList valueList(m_range);
-    if (valueList.size()) {
-        m_valueList = &valueList;
-        if (parseValue(unresolvedProperty, important))
+    if (isShorthandProperty(propertyId)) {
+        if (parseShorthand(unresolvedProperty, important))
             return true;
+    } else {
+        if (RefPtrWillBeRawPtr<CSSValue> parsedValue = parseSingleValue(unresolvedProperty)) {
+            if (!m_range.atEnd())
+                return false;
+            addProperty(propertyId, parsedValue.release(), important);
+            return true;
+        }
     }
 
     if (RuntimeEnabledFeatures::cssVariablesEnabled() && CSSVariableParser::containsValidVariableReferences(originalRange)) {
@@ -293,6 +288,13 @@ template<CSSValueID... names> PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeI
     if (range.peek().type() != IdentToken || !identMatches<names...>(range.peek().id()))
         return nullptr;
     return cssValuePool().createIdentifierValue(range.consumeIncludingWhitespace().id());
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeIdentRange(CSSParserTokenRange& range, CSSValueID lower, CSSValueID upper)
+{
+    if (range.peek().id() < lower || range.peek().id() > upper)
+        return nullptr;
+    return consumeIdent(range);
 }
 
 static PassRefPtrWillBeRawPtr<CSSCustomIdentValue> consumeCustomIdent(CSSParserTokenRange& range)
@@ -1107,7 +1109,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeFamilyName(CSSParserTokenRange& r
 
 static PassRefPtrWillBeRawPtr<CSSValue> consumeGenericFamily(CSSParserTokenRange& range)
 {
-    return consumeIdent<CSSValueSerif, CSSValueSansSerif, CSSValueCursive, CSSValueFantasy, CSSValueMonospace, CSSValueWebkitBody>(range);
+    return consumeIdentRange(range, CSSValueSerif, CSSValueWebkitBody);
 }
 
 static PassRefPtrWillBeRawPtr<CSSValueList> consumeFontFamily(CSSParserTokenRange& range)
@@ -2004,27 +2006,27 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeOutlineColor(CSSParserTokenRange&
     return consumeColor(range, cssParserMode);
 }
 
-static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeLineWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeLineWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless)
 {
     CSSValueID id = range.peek().id();
     if (id == CSSValueThin || id == CSSValueMedium || id == CSSValueThick)
         return consumeIdent(range);
-    return consumeLength(range, cssParserMode, ValueRangeNonNegative);
+    return consumeLength(range, cssParserMode, ValueRangeNonNegative, unitless);
 }
 
-static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeBorderWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeBorderWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless)
 {
-    return consumeLineWidth(range, cssParserMode);
+    return consumeLineWidth(range, cssParserMode, unitless);
 }
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeTextStrokeWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
 {
-    return consumeLineWidth(range, cssParserMode);
+    return consumeLineWidth(range, cssParserMode, UnitlessQuirk::Forbid);
 }
 
 static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeColumnRuleWidth(CSSParserTokenRange& range, CSSParserMode cssParserMode)
 {
-    return consumeLineWidth(range, cssParserMode);
+    return consumeLineWidth(range, cssParserMode, UnitlessQuirk::Forbid);
 }
 
 static bool consumeTranslate3d(CSSParserTokenRange& args, CSSParserMode cssParserMode, RefPtrWillBeRawPtr<CSSFunctionValue>& transformValue)
@@ -2191,7 +2193,7 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumePositionLonghand(CSSParserTokenRa
         range.consumeIncludingWhitespace();
         return cssValuePool().createValue(percent, CSSPrimitiveValue::UnitType::Percentage);
     }
-    return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll, UnitlessQuirk::Forbid);
+    return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll);
 }
 
 static PassRefPtrWillBeRawPtr<CSSValue> consumePositionX(CSSParserTokenRange& range, CSSParserMode cssParserMode)
@@ -2316,7 +2318,7 @@ static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeBaselineShift(CSSParserT
     CSSValueID id = range.peek().id();
     if (id == CSSValueBaseline || id == CSSValueSub || id == CSSValueSuper)
         return consumeIdent(range);
-    return consumeLengthOrPercent(range, SVGAttributeMode, ValueRangeAll, UnitlessQuirk::Forbid);
+    return consumeLengthOrPercent(range, SVGAttributeMode, ValueRangeAll);
 }
 
 static PassRefPtrWillBeRawPtr<CSSValue> consumeImageSet(CSSParserTokenRange& range, const CSSParserContext& context)
@@ -2923,9 +2925,33 @@ static PassRefPtrWillBeRawPtr<CSSValue> consumeScrollSnapPoints(CSSParserTokenRa
     return nullptr;
 }
 
+static PassRefPtrWillBeRawPtr<CSSValue> consumeBorderRadiusCorner(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    RefPtrWillBeRawPtr<CSSValue> parsedValue1 = consumeLengthOrPercent(range, cssParserMode, ValueRangeNonNegative);
+    if (!parsedValue1)
+        return nullptr;
+    RefPtrWillBeRawPtr<CSSValue> parsedValue2 = consumeLengthOrPercent(range, cssParserMode, ValueRangeNonNegative);
+    if (!parsedValue2)
+        parsedValue2 = parsedValue1;
+    return CSSValuePair::create(parsedValue1.release(), parsedValue2.release(), CSSValuePair::DropIdenticalValues);
+}
+
+static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> consumeVerticalAlign(CSSParserTokenRange& range, CSSParserMode cssParserMode)
+{
+    RefPtrWillBeRawPtr<CSSPrimitiveValue> parsedValue = consumeIdentRange(range, CSSValueBaseline, CSSValueWebkitBaselineMiddle);
+    if (!parsedValue)
+        parsedValue = consumeLengthOrPercent(range, cssParserMode, ValueRangeAll, UnitlessQuirk::Allow);
+    return parsedValue.release();
+}
+
 PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID unresolvedProperty)
 {
     CSSPropertyID property = resolveCSSPropertyID(unresolvedProperty);
+    if (CSSParserFastPaths::isKeywordPropertyID(property)) {
+        if (!CSSParserFastPaths::isValidKeywordPropertyAndValue(property, m_range.peek().id()))
+            return nullptr;
+        return consumeIdent(m_range);
+    }
     switch (property) {
     case CSSPropertyWillChange:
         return consumeWillChange(m_range);
@@ -3080,7 +3106,24 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyWebkitBorderEndWidth:
     case CSSPropertyWebkitBorderBeforeWidth:
     case CSSPropertyWebkitBorderAfterWidth:
-        return consumeBorderWidth(m_range, m_context.mode());
+        return consumeBorderWidth(m_range, m_context.mode(), UnitlessQuirk::Forbid);
+    case CSSPropertyBorderBottomColor:
+    case CSSPropertyBorderLeftColor:
+    case CSSPropertyBorderRightColor:
+    case CSSPropertyBorderTopColor: {
+        bool allowQuirkyColors = inQuirksMode()
+            && (m_currentShorthand == CSSPropertyInvalid || m_currentShorthand == CSSPropertyBorderColor);
+        return consumeColor(m_range, m_context.mode(), allowQuirkyColors);
+    }
+    case CSSPropertyBorderBottomWidth:
+    case CSSPropertyBorderLeftWidth:
+    case CSSPropertyBorderRightWidth:
+    case CSSPropertyBorderTopWidth: {
+        bool allowQuirkyLengths = inQuirksMode()
+            && (m_currentShorthand == CSSPropertyInvalid || m_currentShorthand == CSSPropertyBorderWidth);
+        UnitlessQuirk unitless = allowQuirkyLengths ? UnitlessQuirk::Allow : UnitlessQuirk::Forbid;
+        return consumeBorderWidth(m_range, m_context.mode(), unitless);
+    }
     case CSSPropertyZIndex:
         return consumeZIndex(m_range);
     case CSSPropertyTextShadow: // CSS2 property, dropped in CSS2.1, back in CSS3, so treat as CSS3
@@ -3089,6 +3132,9 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyWebkitFilter:
     case CSSPropertyBackdropFilter:
         return consumeFilter(m_range, m_context.mode());
+    case CSSPropertyTextDecoration:
+        ASSERT(!RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        // fallthrough
     case CSSPropertyWebkitTextDecorationsInEffect:
     case CSSPropertyTextDecorationLine:
         return consumeTextDecorationLine(m_range);
@@ -3107,7 +3153,7 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyOutlineOffset:
         return consumeLength(m_range, m_context.mode(), ValueRangeAll);
     case CSSPropertyOutlineWidth:
-        return consumeLineWidth(m_range, m_context.mode());
+        return consumeLineWidth(m_range, m_context.mode(), UnitlessQuirk::Forbid);
     case CSSPropertyTransform:
         return consumeTransform(m_range, m_context.mode(), unresolvedProperty == CSSPropertyAliasWebkitTransform);
     case CSSPropertyWebkitTransformOriginX:
@@ -3143,6 +3189,8 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyFillOpacity:
     case CSSPropertyStopOpacity:
     case CSSPropertyFloodOpacity:
+    case CSSPropertyOpacity:
+    case CSSPropertyWebkitBoxFlex:
         return consumeNumber(m_range, ValueRangeAll);
     case CSSPropertyBaselineShift:
         return consumeBaselineShift(m_range);
@@ -3175,7 +3223,31 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSProperty
     case CSSPropertyScrollSnapPointsX:
     case CSSPropertyScrollSnapPointsY:
         return consumeScrollSnapPoints(m_range, m_context.mode());
+    case CSSPropertyBorderTopRightRadius:
+    case CSSPropertyBorderTopLeftRadius:
+    case CSSPropertyBorderBottomLeftRadius:
+    case CSSPropertyBorderBottomRightRadius:
+        return consumeBorderRadiusCorner(m_range, m_context.mode());
+    case CSSPropertyWebkitBoxFlexGroup:
+        return consumeInteger(m_range, 0);
+    case CSSPropertyOrder:
+        return consumeInteger(m_range);
+    case CSSPropertyTextUnderlinePosition:
+        // auto | [ under || [ left | right ] ], but we only support auto | under for now
+        ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        return consumeIdent<CSSValueAuto, CSSValueUnder>(m_range);
+    case CSSPropertyVerticalAlign:
+        return consumeVerticalAlign(m_range, m_context.mode());
     default:
+        CSSParserValueList valueList(m_range);
+        if (valueList.size()) {
+            m_valueList = &valueList;
+            if (RefPtrWillBeRawPtr<CSSValue> result = legacyParseValue(unresolvedProperty)) {
+                while (!m_range.atEnd())
+                    m_range.consume();
+                return result.release();
+            }
+        }
         return nullptr;
     }
 }
@@ -3546,13 +3618,7 @@ bool CSSPropertyParser::consumeShorthandGreedily(const StylePropertyShorthand& s
         for (size_t i = 0; !foundLonghand && i < shorthand.length(); ++i) {
             if (longhands[i])
                 continue;
-            // TODO: parseSingleValue needs to handle fastpath keywords.
-            if (CSSParserFastPaths::isKeywordPropertyID(shorthandProperties[i])) {
-                if (CSSParserFastPaths::isValidKeywordPropertyAndValue(shorthandProperties[i], m_range.peek().id()))
-                    longhands[i] = consumeIdent(m_range);
-            } else {
-                longhands[i] = parseSingleValue(shorthandProperties[i]);
-            }
+            longhands[i] = parseSingleValue(shorthandProperties[i]);
             if (longhands[i])
                 foundLonghand = true;
         }
@@ -3625,6 +3691,40 @@ bool CSSPropertyParser::consumeFlex(bool important)
     return true;
 }
 
+bool CSSPropertyParser::consumeBorder(bool important)
+{
+    RefPtrWillBeRawPtr<CSSValue> width = nullptr;
+    RefPtrWillBeRawPtr<CSSValue> style = nullptr;
+    RefPtrWillBeRawPtr<CSSValue> color = nullptr;
+
+    while (!width || !style || !color) {
+        if (!width && (width = consumeLineWidth(m_range, m_context.mode(), UnitlessQuirk::Forbid)))
+            continue;
+        if (!style && (style = parseSingleValue(CSSPropertyBorderLeftStyle)))
+            continue;
+        if (!color && (color = consumeColor(m_range, m_context.mode())))
+            continue;
+        break;
+    }
+
+    if (!width && !style && !color)
+        return false;
+
+    if (!width)
+        width = cssValuePool().createImplicitInitialValue();
+    if (!style)
+        style = cssValuePool().createImplicitInitialValue();
+    if (!color)
+        color = cssValuePool().createImplicitInitialValue();
+
+    addExpandedPropertyForValue(CSSPropertyBorderWidth, width.release(), important);
+    addExpandedPropertyForValue(CSSPropertyBorderStyle, style.release(), important);
+    addExpandedPropertyForValue(CSSPropertyBorderColor, color.release(), important);
+    addExpandedPropertyForValue(CSSPropertyBorderImage, cssValuePool().createImplicitInitialValue(), important);
+
+    return m_range.atEnd();
+}
+
 bool CSSPropertyParser::consume4Values(const StylePropertyShorthand& shorthand, bool important)
 {
     ASSERT(shorthand.length() == 4);
@@ -3654,6 +3754,49 @@ bool CSSPropertyParser::consume4Values(const StylePropertyShorthand& shorthand, 
     addProperty(longhands[3], left.release(), important);
 
     return m_range.atEnd();
+}
+
+static bool consumeRadii(RefPtrWillBeRawPtr<CSSPrimitiveValue> horizontalRadii[4], RefPtrWillBeRawPtr<CSSPrimitiveValue> verticalRadii[4], CSSParserTokenRange& range, CSSParserMode cssParserMode, bool useLegacyParsing)
+{
+#if ENABLE(OILPAN)
+    // Unconditionally zero initialize the arrays of raw pointers.
+    memset(horizontalRadii, 0, 4 * sizeof(horizontalRadii[0]));
+    memset(verticalRadii, 0, 4 * sizeof(verticalRadii[0]));
+#endif
+    unsigned i = 0;
+    for (; i < 4 && !range.atEnd() && range.peek().type() != DelimiterToken; ++i) {
+        horizontalRadii[i] = consumeLengthOrPercent(range, cssParserMode, ValueRangeNonNegative);
+        if (!horizontalRadii[i])
+            return false;
+    }
+    if (!horizontalRadii[0])
+        return false;
+    if (range.atEnd()) {
+        // Legacy syntax: -webkit-border-radius: l1 l2; is equivalent to border-radius: l1 / l2;
+        if (useLegacyParsing && i == 2) {
+            verticalRadii[0] = horizontalRadii[1];
+            horizontalRadii[1] = nullptr;
+        } else {
+            completeBorderRadii(horizontalRadii);
+            for (unsigned i = 0; i < 4; ++i)
+                verticalRadii[i] = horizontalRadii[i];
+            return true;
+        }
+    } else {
+        if (range.peek().type() != DelimiterToken || range.peek().delimiter() != '/')
+            return false;
+        range.consumeIncludingWhitespace();
+        for (i = 0; i < 4 && !range.atEnd(); ++i) {
+            verticalRadii[i] = consumeLengthOrPercent(range, cssParserMode, ValueRangeNonNegative);
+            if (!verticalRadii[i])
+                return false;
+        }
+        if (!verticalRadii[0] || !range.atEnd())
+            return false;
+    }
+    completeBorderRadii(horizontalRadii);
+    completeBorderRadii(verticalRadii);
+    return true;
 }
 
 bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool important)
@@ -3719,19 +3862,9 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool im
         return consumeAnimationShorthand(animationShorthandForParsing(), unresolvedProperty == CSSPropertyAliasWebkitAnimation, important);
     case CSSPropertyTransition:
         return consumeAnimationShorthand(transitionShorthandForParsing(), false, important);
-    case CSSPropertyTextDecoration: {
-        // Fall through 'text-decoration-line' parsing if CSS 3 Text Decoration
-        // is disabled to match CSS 2.1 rules for parsing 'text-decoration'.
-        if (RuntimeEnabledFeatures::css3TextDecorationsEnabled())
-            return consumeShorthandGreedily(textDecorationShorthand(), important);
-        // TODO(rwlbuis): investigate if this shorthand hack can be removed.
-        m_currentShorthand = oldShorthand;
-        RefPtrWillBeRawPtr<CSSValue> textDecoration = consumeTextDecorationLine(m_range);
-        if (!textDecoration || !m_range.atEnd())
-            return false;
-        addProperty(CSSPropertyTextDecoration, textDecoration.release(), important);
-        return true;
-    }
+    case CSSPropertyTextDecoration:
+        ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+        return consumeShorthandGreedily(textDecorationShorthand(), important);
     case CSSPropertyMargin:
         return consume4Values(marginShorthand(), important);
     case CSSPropertyPadding:
@@ -3770,9 +3903,40 @@ bool CSSPropertyParser::parseShorthand(CSSPropertyID unresolvedProperty, bool im
         return consumeShorthandGreedily(webkitColumnRuleShorthand(), important);
     case CSSPropertyListStyle:
         return consumeShorthandGreedily(listStyleShorthand(), important);
+    case CSSPropertyBorderRadius: {
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> horizontalRadii[4];
+        RefPtrWillBeRawPtr<CSSPrimitiveValue> verticalRadii[4];
+        if (!consumeRadii(horizontalRadii, verticalRadii, m_range, m_context.mode(), unresolvedProperty == CSSPropertyAliasWebkitBorderRadius))
+            return false;
+        addProperty(CSSPropertyBorderTopLeftRadius, CSSValuePair::create(horizontalRadii[0].release(), verticalRadii[0].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderTopRightRadius, CSSValuePair::create(horizontalRadii[1].release(), verticalRadii[1].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderBottomRightRadius, CSSValuePair::create(horizontalRadii[2].release(), verticalRadii[2].release(), CSSValuePair::DropIdenticalValues), important);
+        addProperty(CSSPropertyBorderBottomLeftRadius, CSSValuePair::create(horizontalRadii[3].release(), verticalRadii[3].release(), CSSValuePair::DropIdenticalValues), important);
+        return true;
+    }
+    case CSSPropertyBorderColor:
+        return consume4Values(borderColorShorthand(), important);
+    case CSSPropertyBorderStyle:
+        return consume4Values(borderStyleShorthand(), important);
+    case CSSPropertyBorderWidth:
+        return consume4Values(borderWidthShorthand(), important);
+    case CSSPropertyBorderTop:
+        return consumeShorthandGreedily(borderTopShorthand(), important);
+    case CSSPropertyBorderRight:
+        return consumeShorthandGreedily(borderRightShorthand(), important);
+    case CSSPropertyBorderBottom:
+        return consumeShorthandGreedily(borderBottomShorthand(), important);
+    case CSSPropertyBorderLeft:
+        return consumeShorthandGreedily(borderLeftShorthand(), important);
+    case CSSPropertyBorder:
+        return consumeBorder(important);
     default:
         m_currentShorthand = oldShorthand;
-        return false;
+        CSSParserValueList valueList(m_range);
+        if (!valueList.size())
+            return false;
+        m_valueList = &valueList;
+        return legacyParseShorthand(unresolvedProperty, important);
     }
 }
 

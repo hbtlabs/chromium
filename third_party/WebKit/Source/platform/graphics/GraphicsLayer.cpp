@@ -1059,12 +1059,12 @@ void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidation
         m_linkHighlights[i]->invalidate();
 }
 
-void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason paintInvalidationReason, const IntRect* visualRect)
+void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason)
 {
     if (!drawsContent())
         return;
 
-    paintController().invalidate(displayItemClient, paintInvalidationReason, visualRect);
+    paintController().invalidate(displayItemClient);
     if (isTrackingPaintInvalidations())
         trackPaintInvalidationObject(displayItemClient.debugName());
 }
@@ -1211,6 +1211,12 @@ void GraphicsLayer::notifyAnimationFinished(double, int group)
 {
     if (m_scrollableArea)
         m_scrollableArea->notifyCompositorAnimationFinished(group);
+}
+
+void GraphicsLayer::notifyAnimationAborted(double, int group)
+{
+    if (m_scrollableArea)
+        m_scrollableArea->notifyCompositorAnimationAborted(group);
 }
 
 void GraphicsLayer::didScroll()

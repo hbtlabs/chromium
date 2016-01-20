@@ -15,7 +15,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "cc/animation/animation_events.h"
 #include "cc/base/region.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer_client.h"
@@ -28,6 +27,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/compositor/layer_delegate.h"
+#include "ui/compositor/layer_threaded_animation_delegate.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
@@ -68,6 +68,7 @@ class LayerOwner;
 // NULL, but the children are not deleted.
 class COMPOSITOR_EXPORT Layer
     : public LayerAnimationDelegate,
+      public LayerThreadedAnimationDelegate,
       NON_EXPORTED_BASE(public cc::ContentLayerClient),
       NON_EXPORTED_BASE(public cc::TextureLayerClient),
       NON_EXPORTED_BASE(public cc::LayerClient) {
@@ -374,9 +375,7 @@ class COMPOSITOR_EXPORT Layer
       cc::Layer* layer) override;
 
   // Whether this layer has animations waiting to get sent to its cc::Layer.
-  bool HasPendingThreadedAnimations() {
-    return pending_threaded_animations_.size() != 0;
-  }
+  bool HasPendingThreadedAnimationsForTesting() const;
 
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();
@@ -410,10 +409,13 @@ class COMPOSITOR_EXPORT Layer
   float GetGrayscaleForAnimation() const override;
   SkColor GetColorForAnimation() const override;
   float GetDeviceScaleFactor() const override;
+  cc::Layer* GetCcLayer() const override;
+  LayerThreadedAnimationDelegate* GetThreadedAnimationDelegate() override;
+  LayerAnimatorCollection* GetLayerAnimatorCollection() override;
+
+  // Implementation of LayerThreadedAnimationDelegate.
   void AddThreadedAnimation(scoped_ptr<cc::Animation> animation) override;
   void RemoveThreadedAnimation(int animation_id) override;
-  LayerAnimatorCollection* GetLayerAnimatorCollection() override;
-  cc::Layer* GetCcLayer() const override;
 
   // Creates a corresponding composited layer for |type_|.
   void CreateCcLayer();

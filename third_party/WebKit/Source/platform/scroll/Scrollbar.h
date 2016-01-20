@@ -38,6 +38,7 @@
 namespace blink {
 
 class GraphicsContext;
+class HostWindow;
 class IntRect;
 class PlatformGestureEvent;
 class PlatformMouseEvent;
@@ -47,7 +48,7 @@ class ScrollbarTheme;
 
 class PLATFORM_EXPORT Scrollbar : public Widget, public ScrollbarThemeClient {
 public:
-    static PassRefPtrWillBeRawPtr<Scrollbar> create(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize);
+    static PassRefPtrWillBeRawPtr<Scrollbar> create(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, HostWindow*);
 
     // Theme object ownership remains with the caller and it must outlive the scrollbar.
     static PassRefPtrWillBeRawPtr<Scrollbar> createForTesting(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, ScrollbarTheme*);
@@ -93,7 +94,10 @@ public:
     bool enabled() const override { return m_enabled; }
     void setEnabled(bool) override;
 
+    int scrollbarThickness() const;
+
     // Called by the ScrollableArea when the scroll offset changes.
+    // Will trigger paint invalidation if required.
     void offsetDidChange();
 
     void disconnectFromScrollableArea();
@@ -167,7 +171,7 @@ public:
     // Even if no parts are invalidated, the scrollbar may need to be redrawn
     // if, for instance, the thumb moves without changing the appearance of any
     // part.
-    void setNeedsPaintInvalidation(ScrollbarPart invalidParts = NoPart);
+    void setNeedsPaintInvalidation(ScrollbarPart invalidParts);
 
     // Promptly unregister from the theme manager + run finalizers of derived Scrollbars.
     EAGERLY_FINALIZE();
@@ -177,7 +181,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    Scrollbar(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, ScrollbarTheme* = 0);
+    Scrollbar(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, HostWindow* = 0, ScrollbarTheme* = 0);
 
     void autoscrollTimerFired(Timer<Scrollbar>*);
     void startTimerIfNeeded(double delay);
@@ -190,6 +194,7 @@ protected:
     ScrollbarOrientation m_orientation;
     ScrollbarControlSize m_controlSize;
     ScrollbarTheme& m_theme;
+    RawPtrWillBeMember<HostWindow> m_hostWindow;
 
     int m_visibleSize;
     int m_totalSize;
@@ -213,8 +218,8 @@ protected:
 private:
     bool isScrollbar() const override { return true; }
 
-    void invalidate() override { setNeedsPaintInvalidation(); }
-    void invalidateRect(const IntRect&) override { setNeedsPaintInvalidation(); }
+    void invalidate() override { setNeedsPaintInvalidation(AllParts); }
+    void invalidateRect(const IntRect&) override { setNeedsPaintInvalidation(AllParts); }
 
     float scrollableAreaCurrentPos() const;
 

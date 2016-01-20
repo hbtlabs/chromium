@@ -37,6 +37,7 @@ CrExtensionsBrowserTest.prototype = {
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'extension_test_util.js',
     'extension_item_test.js',
+    'extension_item_list_test.js',
     'extension_service_test.js',
     'extension_sidebar_test.js',
     'extension_manager_test.js',
@@ -124,6 +125,21 @@ TEST_F('CrExtensionsBrowserTest', 'ExtensionItemClickableItemsTest',
   extension_item_tests.registerTests();
   var TestNames = extension_item_tests.TestNames;
   mocha.grep(assert(TestNames.ClickableItems)).run();
+});
+
+TEST_F('CrExtensionsBrowserTest', 'ExtensionItemWarningsTest',
+       function() {
+  extension_item_tests.registerTests();
+  mocha.grep(assert(extension_item_tests.TestNames.Warnings)).run();
+});
+
+////////////////////////////////////////////////////////////////////////////////
+// Extension Item List Tests
+
+TEST_F('CrExtensionsBrowserTest', 'ExtensionItemList', function() {
+  extension_item_list_tests.registerTests();
+  mocha.grep(
+      assert(extension_item_list_tests.TestNames.ItemListFiltering)).run();
 });
 
 ////////////////////////////////////////////////////////////////////////////////

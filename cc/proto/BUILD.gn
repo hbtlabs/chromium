@@ -29,6 +29,8 @@ proto_library("proto_internal") {
   sources = [
     # TODO(dtrainor): Move protos to their correct packages once it's possible
     # to include protos from other directories/targets (crbug.com/542423).
+    "begin_main_frame_and_commit_state.proto",
+    "commit_earlyout_reason.proto",
     "compositor_message.proto",
     "display_item.proto",
     "display_list_recording_source.proto",
@@ -36,6 +38,7 @@ proto_library("proto_internal") {
     "layer_position_constraint.proto",
     "layer_selection_bound.proto",
     "layer_tree_debug_state.proto",
+    "layer_tree_host.proto",
     "layer_tree_settings.proto",
     "managed_memory_policy.proto",
     "memory_allocation.proto",
@@ -54,6 +57,7 @@ proto_library("proto_internal") {
     "skrrect.proto",
     "skxfermode.proto",
     "transform.proto",
+    "vector2d.proto",
     "vector2df.proto",
   ]
 

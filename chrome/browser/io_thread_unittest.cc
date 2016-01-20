@@ -234,7 +234,9 @@ TEST_F(IOThreadTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_EQ(net::kIdleConnectionTimeoutSeconds,
             params.quic_idle_connection_timeout_seconds);
   EXPECT_FALSE(params.quic_disable_preconnect_if_0rtt);
+  EXPECT_FALSE(params.quic_migrate_sessions_on_network_change);
   EXPECT_FALSE(IOThread::ShouldEnableQuicForDataReductionProxy());
+  EXPECT_TRUE(params.quic_host_whitelist.empty());
 }
 
 TEST_F(IOThreadTest, EnableQuicFromQuicProxyFieldTrialGroup) {
@@ -346,6 +348,15 @@ TEST_F(IOThreadTest, QuicDisablePreConnectIfZeroRtt) {
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_TRUE(params.quic_disable_preconnect_if_0rtt);
+}
+
+TEST_F(IOThreadTest, QuicMigrateSessionsOnNetworkChangeFromFieldTrialParams) {
+  field_trial_group_ = "Enabled";
+  field_trial_params_["migrate_sessions_on_network_change"] = "true";
+  ConfigureQuicGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_TRUE(params.quic_migrate_sessions_on_network_change);
 }
 
 TEST_F(IOThreadTest, PacketLengthFromFieldTrialParams) {
@@ -566,6 +577,32 @@ TEST_F(IOThreadTest, AlternativeServiceProbabilityThresholdFromParams) {
   net::HttpNetworkSession::Params params;
   InitializeNetworkSessionParams(&params);
   EXPECT_EQ(.5, params.alternative_service_probability_threshold);
+}
+
+TEST_F(IOThreadTest, QuicWhitelistFromCommandLinet) {
+  command_line_.AppendSwitch("enable-quic");
+  command_line_.AppendSwitchASCII("quic-host-whitelist",
+                                  "www.example.org, www.example.com");
+
+  ConfigureQuicGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_EQ(2u, params.quic_host_whitelist.size());
+  EXPECT_TRUE(ContainsKey(params.quic_host_whitelist, "www.example.org"));
+  EXPECT_TRUE(ContainsKey(params.quic_host_whitelist, "www.example.com"));
+}
+
+TEST_F(IOThreadTest, QuicWhitelistFromParams) {
+  field_trial_group_ = "Enabled";
+  field_trial_params_["quic_host_whitelist"] =
+      "www.example.org, www.example.com";
+
+  ConfigureQuicGlobals();
+  net::HttpNetworkSession::Params params;
+  InitializeNetworkSessionParams(&params);
+  EXPECT_EQ(2u, params.quic_host_whitelist.size());
+  EXPECT_TRUE(ContainsKey(params.quic_host_whitelist, "www.example.org"));
+  EXPECT_TRUE(ContainsKey(params.quic_host_whitelist, "www.example.com"));
 }
 
 TEST_F(IOThreadTest, QuicDisallowedByPolicy) {

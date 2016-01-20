@@ -110,6 +110,8 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
      IDR_ALLOWED_DOWNLOADS},
     {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, IDS_WEBSITE_SETTINGS_TYPE_MIDI_SYSEX,
      IDR_BLOCKED_MIDI_SYSEX, IDR_ALLOWED_MIDI_SYSEX},
+    {CONTENT_SETTINGS_TYPE_KEYGEN, IDS_WEBSITE_SETTINGS_TYPE_KEYGEN,
+     IDR_BLOCKED_KEYGEN, IDR_ALLOWED_KEYGEN},
 };
 
 }  // namespace
@@ -122,8 +124,8 @@ WebsiteSettingsUI::PermissionInfo::PermissionInfo()
     : type(CONTENT_SETTINGS_TYPE_DEFAULT),
       setting(CONTENT_SETTING_DEFAULT),
       default_setting(CONTENT_SETTING_DEFAULT),
-      source(content_settings::SETTING_SOURCE_NONE) {
-}
+      source(content_settings::SETTING_SOURCE_NONE),
+      is_incognito(false) {}
 
 WebsiteSettingsUI::ChosenObjectInfo::ChosenObjectInfo(
     const WebsiteSettings::ChooserUIInfo& ui_info,

@@ -899,7 +899,11 @@ String UseCounter::deprecationMessage(Feature feature)
         return "The deviceorientationabsolute event is deprecated on insecure origins, and support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
 
     case GeolocationInsecureOrigin:
-        return "getCurrentPosition() and watchPosition() are deprecated on insecure origins, and support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
+        // TODO(jww): This message should be made less ambigous after WebView
+        // is fixed so geolocation can be removed there. After that, this
+        // should be updated to read similarly to GetUserMediaInsecureOrigin's
+        // message.
+        return "getCurrentPosition() and watchPosition() are deprecated on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
 
     case GetUserMediaInsecureOrigin:
         return "getUserMedia() no longer works on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
@@ -918,12 +922,6 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case CSSSelectorPseudoShadow:
         return "::shadow pseudo-element is deprecated. See https://www.chromestatus.com/features/6750456638341120 for more details.";
-
-    case PrefixedMouseEventMovementX:
-        return replacedBy("'webkitMovementX'", "'movementX'");
-
-    case PrefixedMouseEventMovementY:
-        return replacedBy("'webkitMovementY'", "'movementY'");
 
     case SVGSMILElementInDocument:
     case SVGSMILAnimationInImageRegardlessOfCache:
@@ -958,9 +956,6 @@ String UseCounter::deprecationMessage(Feature feature)
 
     case MediaStreamTrackGetSources:
         return "MediaStreamTrack.getSources is deprecated. See https://www.chromestatus.com/feature/4765305641369600 for more details.";
-
-    case CSSXGetComputedStyleQueries:
-        return replacedWillBeRemoved("'getComputedStyle(e).cssXx' (except .cssFloat)", "'getComputedStyle(e).xx'", 50, "5006796888473600");
 
     case DocumentDefaultCharset:
         return willBeRemoved("'Document.defaultCharset'", 50, "6217124578066432");

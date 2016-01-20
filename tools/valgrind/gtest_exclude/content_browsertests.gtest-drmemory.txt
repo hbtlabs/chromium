@@ -53,11 +53,11 @@ WebRtcBrowserTest.CallInsideIframe
 # https://crbug.com/536881
 IndexedDBBrowserTest.DiskFullOnCommit
 
-# https://crbug.com/569752
-SitePerProcessBrowserTest.*
-
 # https://crbug.com/571264
 WebRtcMediaRecorderTest.MediaRecorderPausePreventsDataavailableFromBeingFired
 
 # https://crbug.com/571548
 RenderWidgetHostViewAuraCopyRequestTest.DedupeFrameSubscriberRequests
+
+# https://crbug.com/577796
+WebRtcMediaRecorderTest.MediaRecorderPeerConnection

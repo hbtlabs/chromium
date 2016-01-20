@@ -58,12 +58,11 @@ bool PrintMockRenderThread::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPrintedPagesCount,
                         OnDidGetPrintedPagesCount)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrintPage, OnDidPrintPage)
+#if defined(ENABLE_PRINT_PREVIEW)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetPreviewPageCount,
                         OnDidGetPreviewPageCount)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
     IPC_MESSAGE_HANDLER(PrintHostMsg_CheckForCancel, OnCheckForCancel)
-#if defined(OS_WIN)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DuplicateSection, OnDuplicateSection)
 #endif
 #endif  // defined(ENABLE_PRINTING)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -97,6 +96,7 @@ void PrintMockRenderThread::OnDidPrintPage(
   printer_->PrintPage(params);
 }
 
+#if defined(ENABLE_PRINT_PREVIEW)
 void PrintMockRenderThread::OnDidGetPreviewPageCount(
     const PrintHostMsg_DidGetPreviewPageCount_Params& params) {
   print_preview_pages_remaining_ = params.page_count;
@@ -114,6 +114,7 @@ void PrintMockRenderThread::OnCheckForCancel(int32_t preview_ui_id,
   *cancel =
       (print_preview_pages_remaining_ == print_preview_cancel_page_number_);
 }
+#endif  // defined(ENABLE_PRINT_PREVIEW)
 
 void PrintMockRenderThread::OnUpdatePrintSettings(
     int document_cookie,

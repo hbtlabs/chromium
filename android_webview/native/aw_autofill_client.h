@@ -35,6 +35,10 @@ namespace gfx {
 class RectF;
 }
 
+namespace sync_driver {
+class SyncService;
+}
+
 class PersonalDataManager;
 class PrefService;
 
@@ -59,6 +63,7 @@ class AwAutofillClient : public autofill::AutofillClient,
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   scoped_refptr<autofill::AutofillWebDataService> GetDatabase() override;
   PrefService* GetPrefs() override;
+  sync_driver::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
   rappor::RapporService* GetRapporService() override;
   void HideRequestAutocompleteDialog() override;
@@ -67,10 +72,12 @@ class AwAutofillClient : public autofill::AutofillClient,
       const autofill::CreditCard& card,
       base::WeakPtr<autofill::CardUnmaskDelegate> delegate) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
-  void ConfirmSaveCreditCardLocally(const base::Closure& callback) override;
+  void ConfirmSaveCreditCardLocally(const autofill::CreditCard& card,
+                                    const base::Closure& callback) override;
   void ConfirmSaveCreditCardToCloud(
-      const base::Closure& callback,
-      scoped_ptr<base::DictionaryValue> legal_message) override;
+      const autofill::CreditCard& card,
+      scoped_ptr<base::DictionaryValue> legal_message,
+      const base::Closure& callback) override;
   void LoadRiskData(
       const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;

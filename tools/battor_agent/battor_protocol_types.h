@@ -88,6 +88,7 @@ struct BattOrControlMessageAck {
 struct BattOrEEPROM {
   uint8_t magic[4];
   uint16_t version;
+  char serial_num[20];
   uint32_t timestamp;
   float r1;
   float r2;
@@ -99,7 +100,8 @@ struct BattOrEEPROM {
   float high_gain;
   float high_gain_correction_factor;
   float high_gain_correction_offset;
-  uint32_t sd_sr;
+  uint16_t high_gain_amppot;
+  uint32_t sd_sample_rate;
   uint16_t sd_tdiv;
   uint16_t sd_tovf;
   uint16_t sd_filpot;
@@ -107,14 +109,13 @@ struct BattOrEEPROM {
   uint16_t uart_tdiv;
   uint16_t uart_tovf;
   uint16_t uart_filpot;
-  uint16_t high_gain_amppot;
   uint32_t crc32;
 };
 
 // The BattOrFrameHeader begins every frame containing BattOr samples.
 struct BattOrFrameHeader {
   // The number of frames that have preceded this one.
-  uint32_t sequence_no;
+  uint32_t sequence_number;
   // The number of bytes of raw samples in this frame.
   uint16_t length;
 };
@@ -127,8 +128,10 @@ struct RawBattOrSample {
   int16_t current_raw;
 };
 
-// A single BattOr sample after conversion to a real number with units.
+// A single BattOr sample after timestamp assignment and conversion to unitful
+// numbers.
 struct BattOrSample {
+  double time_ms;
   double voltage_mV;
   double current_mA;
 };

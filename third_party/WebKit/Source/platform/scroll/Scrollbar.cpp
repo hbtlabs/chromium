@@ -26,6 +26,7 @@
 #include "platform/scroll/Scrollbar.h"
 
 #include <algorithm>
+#include "platform/HostWindow.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/graphics/paint/CullRect.h"
@@ -40,21 +41,22 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<Scrollbar> Scrollbar::create(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size)
+PassRefPtrWillBeRawPtr<Scrollbar> Scrollbar::create(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size, HostWindow* hostWindow)
 {
-    return adoptRefWillBeNoop(new Scrollbar(scrollableArea, orientation, size));
+    return adoptRefWillBeNoop(new Scrollbar(scrollableArea, orientation, size, hostWindow));
 }
 
 PassRefPtrWillBeRawPtr<Scrollbar> Scrollbar::createForTesting(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size, ScrollbarTheme* theme)
 {
-    return adoptRefWillBeNoop(new Scrollbar(scrollableArea, orientation, size, theme));
+    return adoptRefWillBeNoop(new Scrollbar(scrollableArea, orientation, size, nullptr, theme));
 }
 
-Scrollbar::Scrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize controlSize, ScrollbarTheme* theme)
+Scrollbar::Scrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize controlSize, HostWindow* hostWindow, ScrollbarTheme* theme)
     : m_scrollableArea(scrollableArea)
     , m_orientation(orientation)
     , m_controlSize(controlSize)
     , m_theme(theme ? *theme : ScrollbarTheme::theme())
+    , m_hostWindow(hostWindow)
     , m_visibleSize(0)
     , m_totalSize(0)
     , m_currentPos(0)
@@ -78,6 +80,8 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orient
     // scrollbar thickness and use it when sizing scrollbars (rather than leaving one dimension of the scrollbar
     // alone when sizing).
     int thickness = m_theme.scrollbarThickness(controlSize);
+    if (m_hostWindow)
+        thickness = m_hostWindow->screenToViewport(thickness);
     Widget::setFrameRect(IntRect(0, 0, thickness, thickness));
 
     m_currentPos = scrollableAreaCurrentPos();
@@ -91,6 +95,7 @@ Scrollbar::~Scrollbar()
 DEFINE_TRACE(Scrollbar)
 {
     visitor->trace(m_scrollableArea);
+    visitor->trace(m_hostWindow);
     Widget::trace(visitor);
 }
 
@@ -100,7 +105,7 @@ void Scrollbar::setFrameRect(const IntRect& frameRect)
         return;
 
     Widget::setFrameRect(frameRect);
-    setNeedsPaintInvalidation();
+    setNeedsPaintInvalidation(AllParts);
 }
 
 ScrollbarOverlayStyle Scrollbar::scrollbarOverlayStyle() const
@@ -134,9 +139,14 @@ void Scrollbar::offsetDidChange()
     if (position == m_currentPos)
         return;
 
+    float oldPosition = m_currentPos;
     int oldThumbPosition = theme().thumbPosition(*this);
     m_currentPos = position;
-    setNeedsPaintInvalidation();
+
+    ScrollbarPart invalidParts = theme().invalidateOnThumbPositionChange(
+        *this, oldPosition, position);
+    setNeedsPaintInvalidation(invalidParts);
+
     if (m_pressedPart == ThumbPart)
         setPressedPos(m_pressedPos + theme().thumbPosition(*this) - oldThumbPosition);
 }
@@ -154,7 +164,7 @@ void Scrollbar::setProportion(int visibleSize, int totalSize)
     m_visibleSize = visibleSize;
     m_totalSize = totalSize;
 
-    setNeedsPaintInvalidation();
+    setNeedsPaintInvalidation(AllParts);
 }
 
 void Scrollbar::paint(GraphicsContext& context, const CullRect& cullRect) const
@@ -186,7 +196,6 @@ void Scrollbar::autoscrollPressedPart(double delay)
 
     // Handle the track.
     if ((m_pressedPart == BackTrackPart || m_pressedPart == ForwardTrackPart) && thumbUnderMouse(*this)) {
-        setNeedsPaintInvalidation();
         setHoveredPart(ThumbPart);
         return;
     }
@@ -205,7 +214,6 @@ void Scrollbar::startTimerIfNeeded(double delay)
     // Handle the track.  We halt track scrolling once the thumb is level
     // with us.
     if ((m_pressedPart == BackTrackPart || m_pressedPart == ForwardTrackPart) && thumbUnderMouse(*this)) {
-        setNeedsPaintInvalidation();
         setHoveredPart(ThumbPart);
         return;
     }
@@ -302,7 +310,7 @@ void Scrollbar::setHoveredPart(ScrollbarPart part)
     if (((m_hoveredPart == NoPart || part == NoPart) && theme().invalidateOnMouseEnterExit())
         // When there's a pressed part, we don't draw a hovered state, so there's no reason to invalidate.
         || m_pressedPart == NoPart)
-        setNeedsPaintInvalidation();
+        setNeedsPaintInvalidation(static_cast<ScrollbarPart>(m_hoveredPart | part));
 
     m_hoveredPart = part;
 }
@@ -312,7 +320,7 @@ void Scrollbar::setPressedPart(ScrollbarPart part)
     if (m_pressedPart != NoPart
         // When we no longer have a pressed part, we can start drawing a hovered state on the hovered part.
         || m_hoveredPart != NoPart)
-        setNeedsPaintInvalidation();
+        setNeedsPaintInvalidation(static_cast<ScrollbarPart>(m_pressedPart | m_hoveredPart | part));
     m_pressedPart = part;
 }
 
@@ -383,12 +391,10 @@ void Scrollbar::mouseMoved(const PlatformMouseEvent& evt)
                 // The mouse is moving back over the pressed part.  We
                 // need to start up the timer action again.
                 startTimerIfNeeded(theme().autoscrollTimerDelay());
-                setNeedsPaintInvalidation();
             } else if (m_hoveredPart == m_pressedPart) {
                 // The mouse is leaving the pressed part.  Kill our timer
                 // if needed.
                 stopTimerIfNeeded();
-                setNeedsPaintInvalidation();
             }
         }
 
@@ -468,8 +474,17 @@ void Scrollbar::setEnabled(bool e)
         return;
     m_enabled = e;
     theme().updateEnabledState(*this);
-    setNeedsPaintInvalidation();
+    setNeedsPaintInvalidation(AllParts);
 }
+
+int Scrollbar::scrollbarThickness() const
+{
+    int thickness = orientation() == HorizontalScrollbar ? height() : width();
+    if (!thickness || !m_hostWindow)
+        return thickness;
+    return m_hostWindow->screenToViewport(m_theme.scrollbarThickness(controlSize()));
+}
+
 
 bool Scrollbar::isOverlayScrollbar() const
 {

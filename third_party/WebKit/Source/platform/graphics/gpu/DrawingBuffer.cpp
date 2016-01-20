@@ -314,9 +314,11 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
     m_contentsChanged = false;
 
     m_context->produceTextureDirectCHROMIUM(frontColorBufferMailbox->textureInfo.textureId, m_target, frontColorBufferMailbox->mailbox.name);
+    const WGC3Duint64 fenceSync = m_context->insertFenceSyncCHROMIUM();
     m_context->flush();
-    frontColorBufferMailbox->mailbox.validSyncToken = m_context->insertSyncPoint(frontColorBufferMailbox->mailbox.syncToken);
+    frontColorBufferMailbox->mailbox.validSyncToken = m_context->genSyncTokenCHROMIUM(fenceSync, frontColorBufferMailbox->mailbox.syncToken);
     frontColorBufferMailbox->mailbox.allowOverlay = frontColorBufferMailbox->textureInfo.imageId != 0;
+    frontColorBufferMailbox->mailbox.textureTarget = m_target;
     setBufferClearNeeded(true);
 
     // set m_parentDrawingBuffer to make sure 'this' stays alive as long as it has live mailboxes
@@ -530,11 +532,13 @@ bool DrawingBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platfor
         textureId = m_colorBuffer.textureId;
         m_context->genMailboxCHROMIUM(mailbox.name);
         m_context->produceTextureDirectCHROMIUM(textureId, m_target, mailbox.name);
+        const WGC3Duint64 fenceSync = m_context->insertFenceSyncCHROMIUM();
         m_context->flush();
-        mailbox.validSyncToken = m_context->insertSyncPoint(mailbox.syncToken);
+        mailbox.validSyncToken = m_context->genSyncTokenCHROMIUM(fenceSync, mailbox.syncToken);
     }
 
-    context->waitSyncTokenCHROMIUM(mailbox.syncToken);
+    if (mailbox.validSyncToken)
+        context->waitSyncTokenCHROMIUM(mailbox.syncToken);
     Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(m_target, mailbox.name);
 
     GLboolean unpackPremultiplyAlphaNeeded = GL_FALSE;
@@ -548,9 +552,11 @@ bool DrawingBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platfor
 
     context->deleteTexture(sourceTexture);
 
+    const WGC3Duint64 fenceSync = context->insertFenceSyncCHROMIUM();
+
     context->flush();
     GLbyte syncToken[24];
-    if (context->insertSyncPoint(syncToken))
+    if (context->genSyncTokenCHROMIUM(fenceSync, syncToken))
         m_context->waitSyncTokenCHROMIUM(syncToken);
 
     return true;

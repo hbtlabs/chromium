@@ -144,6 +144,7 @@
 #include "content/public/browser/worker_service.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/process_type.h"
@@ -1024,7 +1025,6 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(new MemoryMessageFilter(this));
   AddFilter(new PushMessagingMessageFilter(
       GetID(), storage_partition_impl_->GetServiceWorkerContext()));
-  // TODO(mfomitchev): Screen Orientation APIs on Aura - crbug.com/546719.
 #if defined(OS_ANDROID) && !defined(USE_AURA)
   AddFilter(new ScreenOrientationMessageFilterAndroid());
 #endif
@@ -1742,8 +1742,8 @@ void RenderProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
 #endif
 
   // Inform AudioInputRendererHost about the new render process PID.
-  // AudioInputRendererHost is reference counted, so it's lifetime is
-  // guarantueed during the lifetime of the closure.
+  // AudioInputRendererHost is reference counted, so its lifetime is
+  // guaranteed during the lifetime of the closure.
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::Bind(&AudioInputRendererHost::set_renderer_pid,
                                      audio_input_renderer_host_, peer_pid));
@@ -1937,11 +1937,14 @@ void RenderProcessHostImpl::EnableAudioDebugRecordings(
   }
 
   // Enable mic input recording. AudioInputRendererHost is reference counted, so
-  // it's lifetime is guarantueed during the lifetime of the closure.
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&AudioInputRendererHost::EnableDebugRecording,
-                 audio_input_renderer_host_, file));
+  // its lifetime is guaranteed during the lifetime of the closure.
+  if (audio_input_renderer_host_) {
+    // Not null if RenderProcessHostImpl::Init has already been called.
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&AudioInputRendererHost::EnableDebugRecording,
+                   audio_input_renderer_host_, file));
+  }
 }
 
 void RenderProcessHostImpl::DisableAudioDebugRecordings() {
@@ -1957,10 +1960,13 @@ void RenderProcessHostImpl::DisableAudioDebugRecordings() {
 
   // AudioInputRendererHost is reference counted, so it's lifetime is
   // guaranteed during the lifetime of the closure.
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&AudioInputRendererHost::DisableDebugRecording,
-                 audio_input_renderer_host_));
+  if (audio_input_renderer_host_) {
+    // Not null if RenderProcessHostImpl::Init has already been called.
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&AudioInputRendererHost::DisableDebugRecording,
+                   audio_input_renderer_host_));
+  }
 }
 
 void RenderProcessHostImpl::EnableEventLogRecordings(
@@ -2495,7 +2501,17 @@ void RenderProcessHostImpl::OnProcessLaunched() {
     is_process_backgrounded_ =
         child_process_launcher_->GetProcess().IsProcessBackgrounded();
 
+#if defined(OS_WIN)
+    // Experiment with not setting the initial priority of a renderer, as this
+    // might be a visible tab but since no widgets are currently present, it
+    // will get backgrounded. See https://crbug.com/560446.
+    if (base::FeatureList::IsEnabled(
+            features::kUpdateRendererPriorityOnStartup)) {
+      UpdateProcessPriority();
+    }
+#else
     UpdateProcessPriority();
+#endif
   }
 
   // NOTE: This needs to be before sending queued messages because

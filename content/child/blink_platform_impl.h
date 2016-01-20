@@ -79,7 +79,8 @@ class CONTENT_EXPORT BlinkPlatformImpl
   blink::WebString signedPublicKeyAndChallengeString(
       unsigned key_size_index,
       const blink::WebString& challenge,
-      const blink::WebURL& url) override;
+      const blink::WebURL& url,
+      const blink::WebURL& top_origin) override;
   size_t memoryUsageMB() override;
   size_t actualMemoryUsageMB() override;
   size_t physicalMemoryMB() override;
@@ -118,26 +119,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
                             int sample,
                             int boundary_value) override;
   void histogramSparse(const char* name, int sample) override;
-  const unsigned char* getTraceCategoryEnabledFlag(
-      const char* category_name) override;
-  TraceEventAPIAtomicWord* getTraceSamplingState(
-      const unsigned thread_bucket) override;
-  TraceEventHandle addTraceEvent(
-      char phase,
-      const unsigned char* category_group_enabled,
-      const char* name,
-      unsigned long long id,
-      unsigned long long bind_id,
-      double timestamp,
-      int num_args,
-      const char** arg_names,
-      const unsigned char* arg_types,
-      const unsigned long long* arg_values,
-      blink::WebConvertableToTraceFormat* convertable_values,
-      unsigned int flags) override;
-  void updateTraceEventDuration(const unsigned char* category_group_enabled,
-                                const char* name,
-                                TraceEventHandle) override;
   void registerMemoryDumpProvider(blink::WebMemoryDumpProvider* wmdp,
                                   const char* name) override;
   void unregisterMemoryDumpProvider(
@@ -170,8 +151,8 @@ class CONTENT_EXPORT BlinkPlatformImpl
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) override;
-  void didStartWorkerRunLoop() override;
-  void didStopWorkerRunLoop() override;
+  void didStartWorkerThread() override;
+  void willStopWorkerThread() override;
   blink::WebCrypto* crypto() override;
   blink::WebGeofencingProvider* geofencingProvider() override;
   blink::WebNotificationManager* notificationManager() override;
@@ -186,19 +167,14 @@ class CONTENT_EXPORT BlinkPlatformImpl
   blink::WebString domKeyStringFromEnum(int dom_key) override;
   int domKeyEnumFromString(const blink::WebString& key_string) override;
 
-  scoped_ptr<scheduler::WebThreadBase> createThreadWithOptions(
-      const char* name,
-      base::Thread::Options);
-
-  // This class does *not* own |compositor_thread|. It is the responsibility of
-  // the caller to ensure that the compositor thread is cleared before it is
+  // This class does *not* own the compositor thread. It is the responsibility
+  // of the caller to ensure that the compositor thread is cleared before it is
   // destructed.
-  void set_compositor_thread(scheduler::WebThreadBase* compositor_thread) {
-    compositor_thread_ = compositor_thread;
-  }
+  void SetCompositorThread(scheduler::WebThreadBase* compositor_thread);
 
  private:
   void InternalInit();
+  void WaitUntilWebThreadTLSUpdate(scheduler::WebThreadBase* thread);
   void UpdateWebThreadTLS(blink::WebThread* thread, base::WaitableEvent* event);
 
   bool IsMainThread() const;

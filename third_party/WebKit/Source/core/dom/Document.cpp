@@ -83,6 +83,7 @@
 #include "core/dom/NodeChildRemovalTracker.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeFilter.h"
+#include "core/dom/NodeIntersectionObserverData.h"
 #include "core/dom/NodeIterator.h"
 #include "core/dom/NodeRareData.h"
 #include "core/dom/NodeTraversal.h"
@@ -608,6 +609,9 @@ void Document::dispose()
 
     if (svgExtensions())
         accessSVGExtensions().pauseAnimations();
+
+    if (m_intersectionObserverData)
+        m_intersectionObserverData->dispose();
 
     m_lifecycle.advanceTo(DocumentLifecycle::Disposed);
     DocumentLifecycleNotifier::notifyDocumentWasDisposed();
@@ -2495,7 +2499,7 @@ PassRefPtrWillBeRawPtr<DocumentParser> Document::implicitOpen(ParserSynchronizat
 
 HTMLElement* Document::body() const
 {
-    if (!documentElement())
+    if (!documentElement() || !isHTMLHtmlElement(documentElement()))
         return 0;
 
     for (HTMLElement* child = Traversal<HTMLElement>::firstChild(*documentElement()); child; child = Traversal<HTMLElement>::nextSibling(*child)) {
@@ -3107,6 +3111,9 @@ bool Document::shouldMergeWithLegacyDescription(ViewportDescription::Type origin
 
 void Document::setViewportDescription(const ViewportDescription& viewportDescription)
 {
+    if (viewportDescription == m_viewportDescription)
+        return;
+
     // The UA-defined min-width is used by the processing of legacy meta tags.
     if (!viewportDescription.isSpecifiedByAuthor())
         m_viewportDefaultMinWidth = viewportDescription.minWidth;
@@ -4153,7 +4160,9 @@ const KURL& Document::firstPartyForCookies() const
             currentDocument = currentDocument->parentDocument();
         ASSERT(currentDocument);
 
-        if (accessEntry.matchesOrigin(*currentDocument->securityOrigin()) == OriginAccessEntry::DoesNotMatchOrigin)
+        // We use 'matchesDomain' here, as it turns out that some folks embed HTTPS login forms
+        // into HTTP pages; we should allow this kind of upgrade.
+        if (accessEntry.matchesDomain(*currentDocument->securityOrigin()) == OriginAccessEntry::DoesNotMatchOrigin)
             return SecurityOrigin::urlWithUniqueSecurityOrigin();
 
         currentDocument = currentDocument->parentDocument();
@@ -4760,8 +4769,6 @@ Vector<IconURL> Document::iconURLs(int iconTypesMask)
             continue;
         if (linkElement->href().isEmpty())
             continue;
-        if (!RuntimeEnabledFeatures::touchIconLoadingEnabled() && linkElement->iconType() != Favicon)
-            continue;
 
         IconURL newURL(linkElement->href(), linkElement->iconSizes(), linkElement->type(), linkElement->iconType());
         if (linkElement->iconType() == Favicon) {
@@ -5079,6 +5086,13 @@ IntersectionObserverController& Document::ensureIntersectionObserverController()
     if (!m_intersectionObserverController)
         m_intersectionObserverController = IntersectionObserverController::create(this);
     return *m_intersectionObserverController;
+}
+
+NodeIntersectionObserverData& Document::ensureIntersectionObserverData()
+{
+    if (!m_intersectionObserverData)
+        m_intersectionObserverData = new NodeIntersectionObserverData();
+    return *m_intersectionObserverData;
 }
 
 void Document::reportBlockedScriptExecutionToInspector(const String& directiveText)
@@ -5885,6 +5899,7 @@ DEFINE_TRACE(Document)
     visitor->trace(m_contextDocument);
     visitor->trace(m_canvasFontCache);
     visitor->trace(m_intersectionObserverController);
+    visitor->trace(m_intersectionObserverData);
     WillBeHeapSupplementable<Document>::trace(visitor);
 #endif
     TreeScope::trace(visitor);

@@ -32,6 +32,7 @@
 #include "chrome/browser/permissions/chooser_context_base.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -161,6 +162,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
 #if defined(OS_CHROMEOS)
   {CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER, "protectedContent"},
 #endif
+  {CONTENT_SETTINGS_TYPE_KEYGEN, "keygen"},
 };
 
 ChooserContextBase* GetUsbChooserContext(Profile* profile) {
@@ -234,6 +236,10 @@ const ExceptionsInfoMap& GetExceptionsInfoMap() {
             UserMetricsAction(
                 "Options_DefaultProtectedMediaIdentifierSettingChanged"))));
 #endif
+    exceptions_info_map.insert(std::make_pair(
+        CONTENT_SETTINGS_TYPE_KEYGEN,
+        ContentSettingWithExceptions(
+            true, UserMetricsAction("Options_DefaultKeygenSettingChanged"))));
 
     // Without OTR exceptions.
     exceptions_info_map.insert(std::make_pair(
@@ -625,6 +631,11 @@ void ContentSettingsHandler::GetLocalizedValues(
     {"usbDevicesManage", IDS_USB_DEVICES_MANAGE_BUTTON},
     {"zoomlevelsHeader", IDS_ZOOMLEVELS_HEADER_AND_TAB_LABEL},
     {"zoomLevelsManage", IDS_ZOOMLEVELS_MANAGE_BUTTON},
+    // Keygen filter.
+    {"keygenTabLabel", IDS_KEYGEN_TAB_LABEL},
+    {"keygenHeader", IDS_KEYGEN_HEADER},
+    {"keygenAllow", IDS_KEYGEN_ALLOW_RADIO},
+    {"keygenBlock", IDS_KEYGEN_DONOTALLOW_RADIO},
   };
 
   RegisterStrings(localized_strings, resources, arraysize(resources));
@@ -681,6 +692,7 @@ void ContentSettingsHandler::GetLocalizedValues(
                 IDS_USB_DEVICES_HEADER_AND_TAB_LABEL);
   RegisterTitle(localized_strings, "zoomlevels",
                 IDS_ZOOMLEVELS_HEADER_AND_TAB_LABEL);
+  RegisterTitle(localized_strings, "keygen", IDS_KEYGEN_TAB_LABEL);
 
   localized_strings->SetString("exceptionsLearnMoreUrl",
                                kExceptionsLearnMoreUrl);
@@ -761,6 +773,13 @@ void ContentSettingsHandler::InitializePage() {
   UpdateAllExceptionsViewsFromModel();
   UpdateAllChooserExceptionsViewsFromModel();
   UpdateProtectedContentExceptionsButton();
+
+  // Fullscreen and mouselock settings are not shown in simplified fullscreen
+  // mode (always allow).
+  web_ui()->CallJavascriptFunction(
+      "ContentSettings.setExclusiveAccessVisible",
+      base::FundamentalValue(
+          !ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled()));
 }
 
 void ContentSettingsHandler::OnContentSettingChanged(

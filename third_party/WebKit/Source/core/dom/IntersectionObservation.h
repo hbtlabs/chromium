@@ -12,7 +12,9 @@ namespace blink {
 
 class Element;
 class IntersectionObserver;
+class Node;
 
+// TODO(oilpan): Switch to GarbageCollected<> after oilpan ships.
 class IntersectionObservation : public GarbageCollectedFinalized<IntersectionObservation> {
 public:
     IntersectionObservation(IntersectionObserver&, Element&, bool shouldReportRootBounds);
@@ -24,15 +26,15 @@ public:
     };
 
     IntersectionObserver& observer() const { return *m_observer; }
-    Element* target() const { return m_target.get(); }
+    Element* target() const;
     bool isActive() const { return m_active; }
     void setActive(bool active) { m_active = active; }
     unsigned lastThresholdIndex() const { return m_lastThresholdIndex; }
     void setLastThresholdIndex(unsigned index) { m_lastThresholdIndex = index; }
     bool shouldReportRootBounds() const { return m_shouldReportRootBounds; }
-
     void computeIntersectionObservations(double timestamp);
     void disconnect();
+    void clearRootAndRemoveFromTarget();
 
     DECLARE_TRACE();
 
@@ -43,7 +45,12 @@ private:
     bool computeGeometry(IntersectionGeometry&);
 
     Member<IntersectionObserver> m_observer;
-    WeakPtrWillBeWeakMember<Element> m_target;
+
+    // TODO(szager): Why Node instead of Element?  Because NodeIntersectionObserverData::createWeakPtr()
+    // returns a WeakPtr<Node>, which cannot be coerced into a WeakPtr<Element>.  When oilpan rolls out,
+    // this can be changed to WeakMember<Element>.
+    WeakPtrWillBeWeakMember<Node> m_target;
+
     unsigned m_active : 1;
     unsigned m_shouldReportRootBounds : 1;
     unsigned m_lastThresholdIndex : 30;

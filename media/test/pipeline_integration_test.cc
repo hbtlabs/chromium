@@ -97,7 +97,7 @@ const uint8_t kKeyId[] = {
   0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35
 };
 
-const int kAppendWholeFile = -1;
+const size_t kAppendWholeFile = std::numeric_limits<size_t>::max();
 
 // Constants for the Media Source config change tests.
 const int kAppendTimeSec = 1;
@@ -471,7 +471,7 @@ class MockMediaSource {
  public:
   MockMediaSource(const std::string& filename,
                   const std::string& mimetype,
-                  int initial_append_size)
+                  size_t initial_append_size)
       : current_position_(0),
         initial_append_size_(initial_append_size),
         mimetype_(mimetype),
@@ -487,7 +487,7 @@ class MockMediaSource {
     if (initial_append_size_ == kAppendWholeFile)
       initial_append_size_ = file_data_->data_size();
 
-    DCHECK_GT(initial_append_size_, 0);
+    DCHECK_GT(initial_append_size_, 0u);
     DCHECK_LE(initial_append_size_, file_data_->data_size());
   }
 
@@ -500,14 +500,15 @@ class MockMediaSource {
     encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
   }
 
-  void Seek(base::TimeDelta seek_time, int new_position, int seek_append_size) {
+  void Seek(base::TimeDelta seek_time,
+            size_t new_position,
+            size_t seek_append_size) {
     chunk_demuxer_->StartWaitingForSeek(seek_time);
 
     chunk_demuxer_->ResetParserState(
         kSourceId,
         base::TimeDelta(), kInfiniteDuration(), &last_timestamp_offset_);
 
-    DCHECK_GE(new_position, 0);
     DCHECK_LT(new_position, file_data_->data_size());
     current_position_ = new_position;
 
@@ -518,7 +519,7 @@ class MockMediaSource {
     chunk_demuxer_->StartWaitingForSeek(seek_time);
   }
 
-  void AppendData(int size) {
+  void AppendData(size_t size) {
     DCHECK(chunk_demuxer_);
     DCHECK_LT(current_position_, file_data_->data_size());
     DCHECK_LE(current_position_ + size, file_data_->data_size());
@@ -558,6 +559,19 @@ class MockMediaSource {
                                base::Bind(&MockMediaSource::InitSegmentReceived,
                                           base::Unretained(this)));
     last_timestamp_offset_ = timestamp_offset;
+  }
+
+  void SetMemoryLimits(size_t limit_bytes) {
+    chunk_demuxer_->SetMemoryLimits(DemuxerStream::AUDIO, limit_bytes);
+    chunk_demuxer_->SetMemoryLimits(DemuxerStream::VIDEO, limit_bytes);
+  }
+
+  void EvictCodedFrames(base::TimeDelta currentMediaTime, size_t newDataSize) {
+    chunk_demuxer_->EvictCodedFrames(kSourceId, currentMediaTime, newDataSize);
+  }
+
+  void RemoveRange(base::TimeDelta start, base::TimeDelta end) {
+    chunk_demuxer_->Remove(kSourceId, start, end);
   }
 
   void EndOfStream() {
@@ -626,8 +640,8 @@ class MockMediaSource {
 
  private:
   scoped_refptr<DecoderBuffer> file_data_;
-  int current_position_;
-  int initial_append_size_;
+  size_t current_position_;
+  size_t initial_append_size_;
   std::string mimetype_;
   ChunkDemuxer* chunk_demuxer_;
   scoped_ptr<Demuxer> owned_chunk_demuxer_;
@@ -1084,6 +1098,60 @@ TEST_F(PipelineIntegrationTest, MediaSource_ConfigChange_WebM) {
   Play();
 
   EXPECT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+
+TEST_F(PipelineIntegrationTest, MediaSource_Remove_Updates_BufferedRanges) {
+  const char* input_filename = "bear-320x240.webm";
+  MockMediaSource source(input_filename, kWebM, kAppendWholeFile);
+  StartPipelineWithMediaSource(&source);
+
+  auto buffered_ranges = pipeline_->GetBufferedTimeRanges();
+  EXPECT_EQ(1u, buffered_ranges.size());
+  EXPECT_EQ(0, buffered_ranges.start(0).InMilliseconds());
+  EXPECT_EQ(k320WebMFileDurationMs, buffered_ranges.end(0).InMilliseconds());
+
+  source.RemoveRange(base::TimeDelta::FromMilliseconds(1000),
+                     base::TimeDelta::FromMilliseconds(k320WebMFileDurationMs));
+  buffered_ranges = pipeline_->GetBufferedTimeRanges();
+  EXPECT_EQ(1u, buffered_ranges.size());
+  EXPECT_EQ(0, buffered_ranges.start(0).InMilliseconds());
+  EXPECT_EQ(1001, buffered_ranges.end(0).InMilliseconds());
+
+  source.Shutdown();
+  Stop();
+}
+
+// This test case imitates media playback with advancing media_time and
+// continuously adding new data. At some point we should reach the buffering
+// limit, after that MediaSource should evict some buffered data and that
+// evicted data shold be reflected in the change of media::Pipeline buffered
+// ranges (returned by GetBufferedTimeRanges). At that point the buffered ranges
+// will no longer start at 0.
+TEST_F(PipelineIntegrationTest, MediaSource_FillUp_Buffer) {
+  const char* input_filename = "bear-320x240.webm";
+  MockMediaSource source(input_filename, kWebM, kAppendWholeFile);
+  StartPipelineWithMediaSource(&source);
+  source.SetMemoryLimits(1048576);
+
+  scoped_refptr<DecoderBuffer> file = ReadTestDataFile(input_filename);
+
+  auto buffered_ranges = pipeline_->GetBufferedTimeRanges();
+  EXPECT_EQ(1u, buffered_ranges.size());
+  do {
+    // Advance media_time to the end of the currently buffered data
+    base::TimeDelta media_time = buffered_ranges.end(0);
+    source.Seek(media_time);
+    // Ask MediaSource to evict buffered data if buffering limit has been
+    // reached (the data will be evicted from the front of the buffered range).
+    source.EvictCodedFrames(media_time, file->data_size());
+    source.AppendAtTime(media_time, file->data(), file->data_size());
+    buffered_ranges = pipeline_->GetBufferedTimeRanges();
+  } while (buffered_ranges.size() == 1 &&
+           buffered_ranges.start(0) == base::TimeDelta::FromSeconds(0));
+
+  EXPECT_EQ(1u, buffered_ranges.size());
   source.Shutdown();
   Stop();
 }
@@ -1790,14 +1858,14 @@ TEST_F(PipelineIntegrationTest, ChunkDemuxerAbortRead_VideoOnly) {
 
 // Verify that Opus audio in WebM containers can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_AudioOnly_Opus_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-opus-end-trimming.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-opus-end-trimming.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
 // Verify that VP9 video in WebM containers can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_VideoOnly_VP9_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
 }
@@ -1805,14 +1873,14 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_VideoOnly_VP9_WebM) {
 // Verify that VP9 video and Opus audio in the same WebM container can be played
 // back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_VP9_Opus_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-opus.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-opus.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
 // Verify that VP8 video with alpha channel can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_VP8A_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp8a.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp8a.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV12A);
@@ -1820,7 +1888,7 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_VP8A_WebM) {
 
 // Verify that VP8A video with odd width/height can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_VP8A_Odd_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp8a-odd-dimensions.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp8a-odd-dimensions.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV12A);
@@ -1828,9 +1896,25 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_VP8A_Odd_WebM) {
 
 // Verify that VP9 video with odd width/height can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_VP9_Odd_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-odd-dimensions.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-odd-dimensions.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+// Verify that VP9 video with alpha channel can be played back.
+TEST_F(PipelineIntegrationTest, BasicPlayback_VP9A_WebM) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9a.webm", kClockless));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV12A);
+}
+
+// Verify that VP9A video with odd width/height can be played back.
+TEST_F(PipelineIntegrationTest, BasicPlayback_VP9A_Odd_WebM) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9a-odd-dimensions.webm", kClockless));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV12A);
 }
 
 #if !defined(DISABLE_TEXT_TRACK_TESTS)
@@ -1845,7 +1929,7 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_VP8_WebVTT_WebM) {
 
 // Verify that VP9 video with 4:4:4 subsampling can be played back.
 TEST_F(PipelineIntegrationTest, P444_VP9_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240-P444.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240-P444.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV24);
@@ -1854,7 +1938,7 @@ TEST_F(PipelineIntegrationTest, P444_VP9_WebM) {
 // Verify that frames of VP9 video in the BT.709 color space have the YV12HD
 // format.
 TEST_F(PipelineIntegrationTest, BT709_VP9_WebM) {
-  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-bt709.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("bear-vp9-bt709.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   EXPECT_VIDEO_FORMAT_EQ(last_video_frame_format_, PIXEL_FORMAT_YV12);
@@ -1863,7 +1947,7 @@ TEST_F(PipelineIntegrationTest, BT709_VP9_WebM) {
 
 // Verify that videos with an odd frame size playback successfully.
 TEST_F(PipelineIntegrationTest, BasicPlayback_OddVideoSize) {
-  ASSERT_EQ(PIPELINE_OK, Start("butterfly-853x480.webm"));
+  ASSERT_EQ(PIPELINE_OK, Start("butterfly-853x480.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
 }

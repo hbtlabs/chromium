@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "cc/layers/empty_content_layer_client.h"
+#include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_layer.h"
@@ -31,7 +32,8 @@ scoped_refptr<Layer> LayerProtoConverter::DeserializeLayerHierarchy(
     scoped_refptr<Layer> existing_root,
     const proto::LayerNode& root_node) {
   LayerIdMap layer_id_map;
-  RecursivelyFindAllLayers(existing_root, &layer_id_map);
+  if (existing_root)
+    RecursivelyFindAllLayers(existing_root, &layer_id_map);
 
   scoped_refptr<Layer> new_root = existing_root;
   if (!existing_root ||
@@ -55,6 +57,7 @@ void LayerProtoConverter::SerializeLayerProperties(
 void LayerProtoConverter::DeserializeLayerProperties(
     Layer* existing_root,
     const proto::LayerUpdate& layer_update) {
+  DCHECK(existing_root);
   LayerIdMap layer_id_map;
   RecursivelyFindAllLayers(existing_root, &layer_id_map);
 
@@ -114,6 +117,8 @@ scoped_refptr<Layer> LayerProtoConverter::FindOrAllocateAndConstruct(
     case proto::PICTURE_LAYER:
       return PictureLayer::Create(LayerSettings(),
                                   EmptyContentLayerClient::GetInstance());
+    case proto::HEADS_UP_DISPLAY_LAYER:
+      return HeadsUpDisplayLayer::Create(LayerSettings());
   }
   // TODO(nyquist): Add the rest of the necessary LayerTypes. This function
   // should not return null.

@@ -210,11 +210,6 @@ void WebRuntimeFeatures::enableRequestAutocomplete(bool enable)
     RuntimeEnabledFeatures::setRequestAutocompleteEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableScreenOrientation(bool enable)
-{
-    RuntimeEnabledFeatures::setScreenOrientationEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableScriptedSpeech(bool enable)
 {
     RuntimeEnabledFeatures::setScriptedSpeechEnabled(enable);
@@ -228,11 +223,6 @@ void WebRuntimeFeatures::enableSlimmingPaintV2(bool enable)
 void WebRuntimeFeatures::enableTouch(bool enable)
 {
     RuntimeEnabledFeatures::setTouchEnabled(enable);
-}
-
-void WebRuntimeFeatures::enableTouchIconLoading(bool enable)
-{
-    RuntimeEnabledFeatures::setTouchIconLoadingEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableWebAudio(bool enable)

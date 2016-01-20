@@ -31,9 +31,12 @@ class ArcAppModelBuilder : public AppListModelBuilder,
   // ArcAppListPrefs::Observer
   void OnAppRegistered(const std::string& app_id,
                        const ArcAppListPrefs::AppInfo& app_info) override;
+  void OnAppRemoved(const std::string& id) override;
   void OnAppReadyChanged(const std::string& app_id, bool ready) override;
   void OnAppIconUpdated(const std::string& app_id,
                         ui::ScaleFactor scale_factor) override;
+  void OnAppNameUpdated(const std::string& app_id,
+                        const std::string& name) override;
 
   // AppListItemListObserver.
   void OnListItemMoved(size_t from_index,

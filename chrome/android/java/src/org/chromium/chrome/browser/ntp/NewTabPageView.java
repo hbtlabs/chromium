@@ -77,7 +77,7 @@ public class NewTabPageView extends FrameLayout
     private View mSearchBoxView;
     private TextView mSearchBoxTextView;
     private ImageView mVoiceSearchButton;
-    private ViewGroup mMostVisitedLayout;
+    private MostVisitedLayout mMostVisitedLayout;
     private View mMostVisitedPlaceholder;
     private View mOptOutView;
     private View mNoSearchLogoSpacer;
@@ -259,9 +259,7 @@ public class NewTabPageView extends FrameLayout
         mContentView = (ViewGroup) findViewById(R.id.ntp_content);
 
         mMostVisitedDesign = new MostVisitedDesign(getContext());
-        ViewStub mostVisitedLayoutStub = (ViewStub) findViewById(R.id.most_visited_layout_stub);
-        mostVisitedLayoutStub.setLayoutResource(R.layout.icon_most_visited_layout);
-        mMostVisitedLayout = (ViewGroup) mostVisitedLayoutStub.inflate();
+        mMostVisitedLayout = (MostVisitedLayout) findViewById(R.id.most_visited_layout);
         mMostVisitedDesign.initMostVisitedLayout(mMostVisitedLayout, searchProviderHasLogo);
 
         mSearchProviderLogoView = (LogoView) findViewById(R.id.search_provider_logo);
@@ -878,7 +876,7 @@ public class NewTabPageView extends FrameLayout
     }
 
     /**
-     * The new-fangled design for most visited tiles, where each tile shows a large icon and title.
+     * The design for most visited tiles: each tile shows a large icon and the site's title.
      */
     private class MostVisitedDesign {
 
@@ -900,8 +898,8 @@ public class NewTabPageView extends FrameLayout
         MostVisitedDesign(Context context) {
             Resources res = context.getResources();
             mMostVisitedLayoutBleed = res.getDimensionPixelSize(
-                    R.dimen.icon_most_visited_layout_bleed);
-            mDesiredIconSize = res.getDimensionPixelSize(R.dimen.icon_most_visited_icon_size);
+                    R.dimen.most_visited_layout_bleed);
+            mDesiredIconSize = res.getDimensionPixelSize(R.dimen.most_visited_icon_size);
             // On ldpi devices, mDesiredIconSize could be even smaller than ICON_MIN_SIZE_PX.
             mMinIconSize = Math.min(mDesiredIconSize, ICON_MIN_SIZE_PX);
             int desiredIconSizeDp = Math.round(
@@ -919,17 +917,16 @@ public class NewTabPageView extends FrameLayout
             return mMostVisitedLayoutBleed;
         }
 
-        public void initMostVisitedLayout(ViewGroup mostVisitedLayout,
+        public void initMostVisitedLayout(MostVisitedLayout mostVisitedLayout,
                 boolean searchProviderHasLogo) {
-            ((IconMostVisitedLayout) mostVisitedLayout).setMaxRows(
-                    searchProviderHasLogo ? MAX_ROWS : MAX_ROWS_NO_LOGO);
+            mostVisitedLayout.setMaxRows(searchProviderHasLogo ? MAX_ROWS : MAX_ROWS_NO_LOGO);
         }
 
         public void setSearchProviderHasLogo(View mostVisitedLayout, boolean hasLogo) {
             int paddingTop = getResources().getDimensionPixelSize(hasLogo
-                    ? R.dimen.icon_most_visited_layout_padding_top
-                    : R.dimen.icon_most_visited_layout_no_logo_padding_top);
-            mostVisitedLayout.setPadding(0, paddingTop, 0, 0);
+                    ? R.dimen.most_visited_layout_padding_top
+                    : R.dimen.most_visited_layout_no_logo_padding_top);
+            mostVisitedLayout.setPadding(0, paddingTop, 0, mMostVisitedLayout.getPaddingBottom());
         }
 
         class LargeIconCallbackImpl implements LargeIconCallback {
@@ -943,7 +940,7 @@ public class NewTabPageView extends FrameLayout
 
             @Override
             public void onLargeIconAvailable(Bitmap icon, int fallbackColor) {
-                IconMostVisitedItemView view = (IconMostVisitedItemView) mItem.getView();
+                MostVisitedItemView view = (MostVisitedItemView) mItem.getView();
                 if (icon == null) {
                     mIconGenerator.setBackgroundColor(fallbackColor);
                     icon = mIconGenerator.generateIconForUrl(mItem.getUrl());
@@ -970,8 +967,8 @@ public class NewTabPageView extends FrameLayout
         public View createMostVisitedItemView(LayoutInflater inflater, final String url,
                 String displayTitle, MostVisitedItem item,
                 final boolean isInitialLoad) {
-            final IconMostVisitedItemView view = (IconMostVisitedItemView) inflater.inflate(
-                    R.layout.icon_most_visited_item, mMostVisitedLayout, false);
+            final MostVisitedItemView view = (MostVisitedItemView) inflater.inflate(
+                    R.layout.most_visited_item, mMostVisitedLayout, false);
             view.setTitle(displayTitle);
             view.setOfflineAvailable(mManager.isOfflineAvailable(url)
                     && !OfflinePageUtils.isConnected(getContext()));

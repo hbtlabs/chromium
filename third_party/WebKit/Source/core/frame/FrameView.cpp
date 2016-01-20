@@ -96,6 +96,7 @@
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/scheduler/CancellableTaskFactory.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
+#include "platform/scroll/ScrollbarTheme.h"
 #include "platform/text/TextStream.h"
 #include "public/platform/WebDisplayItemList.h"
 #include "public/platform/WebFrameScheduler.h"
@@ -224,6 +225,8 @@ void FrameView::reset()
     m_layoutSubtreeRootList.clear();
 }
 
+// Call function for each non-throttled frame view in pre tree order.
+// Note it needs a null check of the frame's layoutView to access it in case of detached frames.
 template <typename Function>
 void FrameView::forAllNonThrottledFrameViews(Function function)
 {
@@ -509,7 +512,7 @@ PassRefPtrWillBeRawPtr<Scrollbar> FrameView::createScrollbar(ScrollbarOrientatio
         return LayoutScrollbar::createCustomScrollbar(this, orientation, customScrollbarElement, customScrollbarFrame);
 
     // Nobody set a custom style, so we just use a native scrollbar.
-    return Scrollbar::create(this, orientation, RegularScrollbar);
+    return Scrollbar::create(this, orientation, RegularScrollbar, &frame().page()->chromeClient());
 }
 
 void FrameView::setContentsSize(const IntSize& size)
@@ -765,8 +768,10 @@ void FrameView::performPreLayoutTasks()
     bool wasResized = wasViewportResized();
     Document* document = m_frame->document();
 
-    // Viewport-dependent media queries may cause us to need completely different style information.
-    if (!document->styleResolver() || (wasResized && document->styleResolver()->mediaQueryAffectedByViewportChange())) {
+    // Viewport-dependent or device-dependent media queries may cause us to need completely different style information.
+    if (!document->styleResolver()
+        || (wasResized && document->styleResolver()->mediaQueryAffectedByViewportChange())
+        || (wasResized && m_frame->settings() && m_frame->settings()->resizeIsDeviceSizeChange() && document->styleResolver()->mediaQueryAffectedByDeviceChange())) {
         document->mediaQueryAffectingValueChanged();
     } else if (wasResized) {
         document->evaluateMediaQueryList();
@@ -2461,7 +2466,8 @@ void FrameView::synchronizedPaint()
 
     forAllNonThrottledFrameViews([](FrameView& frameView) {
         frameView.lifecycle().advanceTo(DocumentLifecycle::PaintClean);
-        frameView.layoutView()->layer()->clearNeedsRepaintRecursively();
+        if (LayoutView* layoutView = frameView.layoutView())
+            layoutView->layer()->clearNeedsRepaintRecursively();
     });
 }
 
@@ -3233,12 +3239,13 @@ void FrameView::computeScrollbarExistence(bool& newHasHorizontalScrollbar, bool&
 void FrameView::updateScrollbarGeometry()
 {
     if (m_horizontalScrollbar) {
+        int thickness = m_horizontalScrollbar->scrollbarThickness();
         int clientWidth = visibleWidth();
         IntRect oldRect(m_horizontalScrollbar->frameRect());
         IntRect hBarRect((shouldPlaceVerticalScrollbarOnLeft() && m_verticalScrollbar) ? m_verticalScrollbar->width() : 0,
-            height() - m_horizontalScrollbar->height(),
+            height() - thickness,
             width() - (m_verticalScrollbar ? m_verticalScrollbar->width() : 0),
-            m_horizontalScrollbar->height());
+            thickness);
         m_horizontalScrollbar->setFrameRect(adjustScrollbarRectForResizer(hBarRect, *m_horizontalScrollbar));
         if (oldRect != m_horizontalScrollbar->frameRect())
             setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
@@ -3249,11 +3256,12 @@ void FrameView::updateScrollbarGeometry()
     }
 
     if (m_verticalScrollbar) {
+        int thickness = m_verticalScrollbar->scrollbarThickness();
         int clientHeight = visibleHeight();
         IntRect oldRect(m_verticalScrollbar->frameRect());
-        IntRect vBarRect(shouldPlaceVerticalScrollbarOnLeft() ? 0 : (width() - m_verticalScrollbar->width()),
+        IntRect vBarRect(shouldPlaceVerticalScrollbarOnLeft() ? 0 : (width() - thickness),
             0,
-            m_verticalScrollbar->width(),
+            thickness,
             height() - (m_horizontalScrollbar ? m_horizontalScrollbar->height() : 0));
         m_verticalScrollbar->setFrameRect(adjustScrollbarRectForResizer(vBarRect, *m_verticalScrollbar));
         if (oldRect != m_verticalScrollbar->frameRect())

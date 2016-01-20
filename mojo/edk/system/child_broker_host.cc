@@ -38,7 +38,7 @@ ChildBrokerHost::ChildBrokerHost(base::ProcessHandle child_process,
                   GetCurrentProcess(), &child_process,
                   0, FALSE, DUPLICATE_SAME_ACCESS);
   child_process_ = base::Process(child_process);
-  sync_channel_ = pipe.Pass();
+  sync_channel_ = std::move(pipe);
   memset(&read_context_.overlapped, 0, sizeof(read_context_.overlapped));
   read_context_.handler = this;
   memset(&write_context_.overlapped, 0, sizeof(write_context_.overlapped));

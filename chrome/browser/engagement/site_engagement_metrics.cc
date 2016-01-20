@@ -7,6 +7,17 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 
+namespace {
+
+// These numbers are used as suffixes for the
+// SiteEngagementService.EngagementScoreBucket_* histogram. If these bases
+// change, the EngagementScoreBuckets suffix in histograms.xml should be
+// updated.
+const int kEngagementBucketHistogramBuckets[] = {0,  10, 20, 30, 40,
+                                                 50, 60, 70, 80, 90};
+
+}  // namespace
+
 const char SiteEngagementMetrics::kTotalEngagementHistogram[] =
     "SiteEngagementService.TotalEngagement";
 
@@ -40,8 +51,7 @@ const char SiteEngagementMetrics::kEngagementBucketHistogramBase[] =
 const char SiteEngagementMetrics::kDaysSinceLastShortcutLaunchHistogram[] =
     "SiteEngagementService.DaysSinceLastShortcutLaunch";
 
-void SiteEngagementMetrics::RecordTotalSiteEngagement(
-    double total_engagement) {
+void SiteEngagementMetrics::RecordTotalSiteEngagement(double total_engagement) {
   UMA_HISTOGRAM_COUNTS_10000(kTotalEngagementHistogram, total_engagement);
 }
 
@@ -59,17 +69,14 @@ void SiteEngagementMetrics::RecordMedianEngagement(double median_engagement) {
 
 void SiteEngagementMetrics::RecordEngagementScores(
     std::map<GURL, double> score_map) {
-  // Record the percentage of sites that fall in each 10-point wide range. These
-  // numbers are used as suffixes for the
-  // SiteEngagementService.EngagementScoreBucket_* histogram. If these bases
-  // change, the EngagementScoreBuckets suffix in histograms.xml should be
-  // updated.
-  static const int kBucketBases[] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
-  std::map<int, int> score_buckets;
-  for (size_t i = 0; i < arraysize(kBucketBases); ++i)
-    score_buckets[kBucketBases[i]] = 0;
+  if (score_map.size() == 0)
+    return;
 
-  for (const auto& value: score_map) {
+  std::map<int, int> score_buckets;
+  for (size_t i = 0; i < arraysize(kEngagementBucketHistogramBuckets); ++i)
+    score_buckets[kEngagementBucketHistogramBuckets[i]] = 0;
+
+  for (const auto& value : score_map) {
     UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogram, value.second);
     score_buckets.lower_bound(value.second)->second++;
   }
@@ -107,4 +114,17 @@ void SiteEngagementMetrics::RecordEngagement(EngagementType type) {
 
 void SiteEngagementMetrics::RecordDaysSinceLastShortcutLaunch(int days) {
   UMA_HISTOGRAM_COUNTS_100(kDaysSinceLastShortcutLaunchHistogram, days);
+}
+
+// static
+std::vector<std::string>
+SiteEngagementMetrics::GetEngagementBucketHistogramNames() {
+  std::vector<std::string> histogram_names;
+  for (size_t i = 0; i < arraysize(kEngagementBucketHistogramBuckets); ++i) {
+    histogram_names.push_back(
+        kEngagementBucketHistogramBase +
+        base::IntToString(kEngagementBucketHistogramBuckets[i]));
+  }
+
+  return histogram_names;
 }

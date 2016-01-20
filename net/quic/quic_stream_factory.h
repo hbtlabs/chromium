@@ -45,7 +45,7 @@ class HostResolver;
 class HttpServerProperties;
 class QuicClock;
 class QuicChromiumClientSession;
-class QuicConnectionHelper;
+class QuicChromiumConnectionHelper;
 class QuicCryptoClientStreamFactory;
 class QuicRandom;
 class QuicServerId;
@@ -112,6 +112,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 // QuicChromiumClientSessions.
 class NET_EXPORT_PRIVATE QuicStreamFactory
     : public NetworkChangeNotifier::IPAddressObserver,
+      public NetworkChangeNotifier::NetworkObserver,
       public SSLConfigService::Observer,
       public CertDatabase::Observer {
  public:
@@ -146,9 +147,10 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       int threshold_public_resets_post_handshake,
       int socket_receive_buffer_size,
       bool delay_tcp_race,
-      bool store_server_configs_in_properties,
+      int max_server_configs_stored_in_properties,
       bool close_sessions_on_ip_change,
       int idle_connection_timeout_seconds,
+      bool migrate_sessions_on_network_change,
       const QuicTagVector& connection_options);
   ~QuicStreamFactory() override;
 
@@ -208,19 +210,46 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // Cancels a pending request.
   void CancelRequest(QuicStreamRequest* request);
 
-  // Closes all current sessions.
-  void CloseAllSessions(int error);
+  // Closes all current sessions with specified network and QUIC error codes.
+  void CloseAllSessions(int error, QuicErrorCode quic_error);
 
   scoped_ptr<base::Value> QuicStreamFactoryInfoToValue() const;
 
   // Delete all cached state objects in |crypto_config_|.
   void ClearCachedStatesInCryptoConfig();
 
+  // Helper method that configures a DatagramClientSocket. Socket is
+  // bound to the default network if the |network| param is
+  // NetworkChangeNotifier::kInvalidNetworkHandle.
+  // Returns net_error code.
+  int ConfigureSocket(DatagramClientSocket* socket,
+                      IPEndPoint addr,
+                      NetworkChangeNotifier::NetworkHandle network);
+
+  // Helper method that initiates migration of active sessions
+  // currently bound to |network| to an alternate network, if one
+  // exists. Idle sessions bound to |network| are closed. If there is
+  // no alternate network to migrate active sessions onto, active
+  // sessions are closed if |force_close| is true, and continue using
+  // |network| otherwise. Sessions not bound to |network| are left unchanged.
+  void MaybeMigrateOrCloseSessions(NetworkChangeNotifier::NetworkHandle network,
+                                   bool force_close);
+
   // NetworkChangeNotifier::IPAddressObserver methods:
 
   // Until the servers support roaming, close all connections when the local
   // IP address changes.
   void OnIPAddressChanged() override;
+
+  // NetworkChangeNotifier::NetworkObserver methods:
+  void OnNetworkConnected(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkDisconnected(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkSoonToDisconnect(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkMadeDefault(
+      NetworkChangeNotifier::NetworkHandle network) override;
 
   // SSLConfigService::Observer methods:
 
@@ -242,12 +271,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // It returns the amount of time waiting job should be delayed.
   base::TimeDelta GetTimeDelayForWaitingJob(const QuicServerId& server_id);
 
-  QuicConnectionHelper* helper() { return helper_.get(); }
+  QuicChromiumConnectionHelper* helper() { return helper_.get(); }
 
   bool enable_port_selection() const { return enable_port_selection_; }
 
   bool has_quic_server_info_factory() {
-    return !quic_server_info_factory_.get();
+    return quic_server_info_factory_.get() != nullptr;
   }
 
   void set_quic_server_info_factory(
@@ -261,10 +290,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int socket_receive_buffer_size() const { return socket_receive_buffer_size_; }
 
   bool delay_tcp_race() const { return delay_tcp_race_; }
-
-  bool store_server_configs_in_properties() const {
-    return store_server_configs_in_properties_;
-  }
 
  private:
   class Job;
@@ -360,7 +385,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   SocketPerformanceWatcherFactory* socket_performance_watcher_factory_;
 
   // The helper used for all connections.
-  scoped_ptr<QuicConnectionHelper> helper_;
+  scoped_ptr<QuicChromiumConnectionHelper> helper_;
 
   // Contains owning pointers to all sessions that currently exist.
   SessionIdMap all_sessions_;
@@ -453,11 +478,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int yield_after_packets_;
   QuicTime::Delta yield_after_duration_;
 
-  // Set if server configs are to be stored in HttpServerProperties.
-  bool store_server_configs_in_properties_;
-
   // Set if all sessions should be closed when any local IP address changes.
   const bool close_sessions_on_ip_change_;
+
+  // Set if migration should be attempted on active sessions when primary
+  // interface changes.
+  const bool migrate_sessions_on_network_change_;
 
   // Each profile will (probably) have a unique port_seed_ value.  This value
   // is used to help seed a pseudo-random number generator (PortSuggester) so

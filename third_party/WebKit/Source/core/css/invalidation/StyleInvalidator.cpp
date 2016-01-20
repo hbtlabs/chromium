@@ -168,27 +168,23 @@ bool StyleInvalidator::SiblingData::matchCurrentInvalidationSets(Element& elemen
         }
 
         const SiblingInvalidationSet& invalidationSet = *m_invalidationEntries[index].m_invalidationSet;
+        ++index;
+        if (!invalidationSet.invalidatesElement(element))
+            continue;
 
-        if (invalidationSet.invalidatesElement(element)) {
-            const DescendantInvalidationSet& descendants = invalidationSet.descendants();
-            if (descendants.wholeSubtreeInvalid()) {
-                // Avoid directly setting SubtreeStyleChange on element, or ContainerNode::checkForChildrenAdjacentRuleChanges()
-                // may propagate the SubtreeStyleChange to our own siblings' subtrees.
+        if (invalidationSet.invalidatesSelf())
+            thisElementNeedsStyleRecalc = true;
 
-                for (Element* child = ElementTraversal::firstChild(element); child; child = ElementTraversal::nextSibling(*child)) {
-                    child->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
-                }
+        if (const DescendantInvalidationSet* descendants = invalidationSet.siblingDescendants()) {
+            if (descendants->wholeSubtreeInvalid()) {
+                element.setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleInvalidator));
                 return true;
             }
 
-            if (descendants.invalidatesSelf())
-                thisElementNeedsStyleRecalc = true;
-
-            if (!descendants.isEmpty())
-                recursionData.pushInvalidationSet(descendants);
+            if (!descendants->isEmpty())
+                recursionData.pushInvalidationSet(*descendants);
         }
 
-        ++index;
     }
     return thisElementNeedsStyleRecalc;
 }
@@ -200,6 +196,9 @@ void StyleInvalidator::pushInvalidationSetsForElement(Element& element, Recursio
 
     for (const auto& invalidationSet : pendingInvalidations->siblings())
         siblingData.pushInvalidationSet(toSiblingInvalidationSet(*invalidationSet));
+
+    if (element.styleChangeType() >= SubtreeStyleChange)
+        return;
 
     if (!pendingInvalidations->descendants().isEmpty()) {
         for (const auto& invalidationSet : pendingInvalidations->descendants())
@@ -215,17 +214,21 @@ void StyleInvalidator::pushInvalidationSetsForElement(Element& element, Recursio
 
 ALWAYS_INLINE bool StyleInvalidator::checkInvalidationSetsAgainstElement(Element& element, RecursionData& recursionData, SiblingData& siblingData)
 {
-    if (element.styleChangeType() >= SubtreeStyleChange || recursionData.wholeSubtreeInvalid()) {
-        recursionData.setWholeSubtreeInvalid();
+    if (recursionData.wholeSubtreeInvalid())
         return false;
-    }
 
-    bool thisElementNeedsStyleRecalc = recursionData.matchesCurrentInvalidationSets(element);
-    if (UNLIKELY(!siblingData.isEmpty()))
-        thisElementNeedsStyleRecalc |= siblingData.matchCurrentInvalidationSets(element, recursionData);
+    bool thisElementNeedsStyleRecalc = false;
+    if (element.styleChangeType() >= SubtreeStyleChange) {
+        recursionData.setWholeSubtreeInvalid();
+    } else {
+        thisElementNeedsStyleRecalc = recursionData.matchesCurrentInvalidationSets(element);
+        if (UNLIKELY(!siblingData.isEmpty()))
+            thisElementNeedsStyleRecalc |= siblingData.matchCurrentInvalidationSets(element, recursionData);
+    }
 
     if (UNLIKELY(element.needsStyleInvalidation()))
         pushInvalidationSetsForElement(element, recursionData, siblingData);
+
     return thisElementNeedsStyleRecalc;
 }
 

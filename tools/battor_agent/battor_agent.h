@@ -26,8 +26,9 @@ namespace battor {
 // same BattOrAgent for multiple commands and thus avoid having to reinitialize
 // the serial connection.
 //
-// This class is NOT thread safe, and must be interacted with only from the IO
-// thread. The IO thread must also have a running MessageLoop.
+// This class is NOT thread safe. Any interactions with this class that involve
+// IO (i.e. any interactions that require a callback) must be done from the
+// same IO thread, which must also have a running MessageLoop.
 class BattOrAgent : public BattOrConnection::Listener,
                     public base::SupportsWeakPtr<BattOrAgent> {
  public:
@@ -52,7 +53,7 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // Returns whether the BattOr is able to record clock sync markers in its own
   // trace log.
-  static bool SupportsExplicitClockSync() { return true; }
+  static bool SupportsExplicitClockSync() { return false; }
 
   // BattOrConnection::Listener implementation.
   void OnConnectionOpened(bool success) override;
@@ -112,6 +113,9 @@ class BattOrAgent : public BattOrConnection::Listener,
 
   // Completes the command with the specified error.
   void CompleteCommand(BattOrError error);
+
+  // Returns a formatted version of samples_ with timestamps and real units.
+  std::string SamplesToString();
 
   // The listener that handles the commands' results. It must outlive the agent.
   Listener* listener_;

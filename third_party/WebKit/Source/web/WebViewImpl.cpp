@@ -1645,8 +1645,8 @@ bool WebViewImpl::scrollViewWithKeyboard(int keyCode, int modifiers)
     ScrollDirectionPhysical scrollDirectionPhysical;
     ScrollGranularity scrollGranularity;
 #if OS(MACOSX)
-    // Control-Up/Down should be PageUp/Down on Mac.
-    if (modifiers & WebMouseEvent::ControlKey) {
+    // Alt-Up/Down should be PageUp/Down on Mac.
+    if (modifiers & WebMouseEvent::AltKey) {
       if (keyCode == VKEY_UP)
         keyCode = VKEY_PRIOR;
       else if (keyCode == VKEY_DOWN)
@@ -1848,16 +1848,6 @@ void WebViewImpl::performResize()
         if (!mainFrameImpl()->frameView()->needsLayout())
             postLayoutResize(mainFrameImpl());
     }
-
-    // When device emulation is enabled, device size values may change - they are
-    // usually set equal to the view size. These values are not considered viewport-dependent
-    // (see MediaQueryExp::isViewportDependent), since they are only viewport-dependent in emulation mode,
-    // and thus will not be invalidated in |FrameView::performPreLayoutTasks|.
-    // Therefore we should force explicit media queries invalidation here.
-    if (m_devToolsEmulator->resizeIsDeviceSizeChange()) {
-        if (Document* document = mainFrameImpl()->frame()->document())
-            document->mediaQueryAffectingValueChanged();
-    }
 }
 
 void WebViewImpl::setTopControlsHeight(float height, bool topControlsShrinkLayoutSize)
@@ -1912,9 +1902,9 @@ void WebViewImpl::resizeViewWhileAnchored(FrameView* view)
 
     m_fullscreenController->updateSize();
 
-    // Relayout immediately to recalculate the minimum scale limit for rotation anchoring.
-    if (view->needsLayout())
-        view->layout();
+    // Update lifecyle phases immediately to recalculate the minimum scale limit for rotation anchoring,
+    // and to make sure that no lifecycle states are stale if this WebView is embedded in another one.
+    updateAllLifecyclePhases();
 }
 
 void WebViewImpl::resize(const WebSize& newSize)
@@ -1991,7 +1981,7 @@ void WebViewImpl::beginFrame(double lastFrameTimeMonotonic)
             PlatformGestureEvent endScrollEvent(PlatformEvent::GestureScrollEnd,
                 m_positionOnFlingStart, m_globalPositionOnFlingStart,
                 IntSize(), 0, PlatformEvent::NoModifiers, lastFlingSourceDevice == WebGestureDeviceTouchpad ? PlatformGestureSourceTouchpad : PlatformGestureSourceTouchscreen);
-            endScrollEvent.setScrollGestureData(0, 0, 0, 0, true, false, -1 /* null plugin id */);
+            endScrollEvent.setScrollGestureData(0, 0, ScrollByPrecisePixel, 0, 0, true, false, -1 /* null plugin id */);
 
             mainFrameImpl()->frame()->eventHandler().handleGestureScrollEnd(endScrollEvent);
         }
@@ -2770,8 +2760,11 @@ void WebViewImpl::setTextDirection(WebTextDirection direction)
 
 bool WebViewImpl::isAcceleratedCompositingActive() const
 {
+    // For SPv2, accelerated compositing is managed by the
+    // PaintArtifactCompositor.
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
-        return m_paintArtifactCompositor.webLayer();
+        return m_paintArtifactCompositor.rootLayer();
+
     return m_rootLayer;
 }
 
@@ -3213,14 +3206,6 @@ void WebViewImpl::setPageScaleFactor(float scaleFactor)
         return;
 
     page()->frameHost().visualViewport().setScale(scaleFactor);
-}
-
-float WebViewImpl::deviceScaleFactor() const
-{
-    if (!page())
-        return 1;
-
-    return page()->deviceScaleFactor();
 }
 
 void WebViewImpl::setDeviceScaleFactor(float scaleFactor)
@@ -4388,6 +4373,9 @@ void WebViewImpl::initializeLayerTreeView()
         m_linkHighlightsTimeline = adoptPtr(Platform::current()->compositorSupport()->createAnimationTimeline());
         attachCompositorAnimationTimeline(m_linkHighlightsTimeline.get());
     }
+
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        attachPaintArtifactCompositor();
 }
 
 void WebViewImpl::applyViewportDeltas(
@@ -4634,6 +4622,16 @@ void WebViewImpl::detachPaintArtifactCompositor()
 
     m_layerTreeView->setDeferCommits(true);
     m_layerTreeView->clearRootLayer();
+}
+
+float WebViewImpl::deviceScaleFactor() const
+{
+    // TODO(oshima): Investigate if this should return the ScreenInfo's scale factor rather than
+    // page's scale factor, which can be 1 in use-zoom-for-dsf mode.
+    if (!page())
+        return 1;
+
+    return page()->deviceScaleFactor();
 }
 
 } // namespace blink

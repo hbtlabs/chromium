@@ -48,6 +48,7 @@ public:
     explicit ScrollAnimator(ScrollableArea*, WTF::TimeFunction = WTF::monotonicallyIncreasingTime);
     ~ScrollAnimator() override;
 
+    bool hasRunningAnimation() const;
     float computeDeltaToConsume(ScrollbarOrientation, float pixelDelta) const override;
 
     ScrollResultOneDimensional userScroll(ScrollbarOrientation, ScrollGranularity, float step, float delta) override;
@@ -59,6 +60,7 @@ public:
     void resetAnimationState() override;
     void updateCompositorAnimations() override;
     void notifyCompositorAnimationFinished(int groupId) override;
+    void notifyCompositorAnimationAborted(int groupId) override;
     void layerForCompositedScrollingDidChange(WebCompositorAnimationTimeline*) override;
 
     DECLARE_VIRTUAL_TRACE();
@@ -77,6 +79,7 @@ private:
     bool registerAndScheduleAnimation();
 
     FloatPoint m_targetOffset;
+    ScrollGranularity m_lastGranularity;
 };
 
 } // namespace blink

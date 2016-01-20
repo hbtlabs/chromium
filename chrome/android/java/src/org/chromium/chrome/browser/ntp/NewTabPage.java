@@ -13,6 +13,7 @@ import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Build;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
@@ -47,6 +48,7 @@ import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage.InterestsClickListener;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.preferences.DocumentModePreference;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
@@ -335,6 +337,14 @@ public class NewTabPage
 
         @Override
         public void open(String url) {
+            if (mIsDestroyed) return;
+            if (isNtpOfflinePagesEnabled()) {
+                if (mOfflinePageBridge == null) {
+                    mOfflinePageBridge = new OfflinePageBridge(mProfile);
+                }
+                url = OfflinePageUtils.getLaunchUrlFromOnlineUrl(
+                        mNewTabPageView.getContext(), mOfflinePageBridge, url);
+            }
             mTab.loadUrl(new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
         }
 
@@ -450,11 +460,16 @@ public class NewTabPage
                     mProfile, mTab.getWebContents(), pageUrl, iconUrl, isLargeIcon, callback);
         }
 
+        private boolean isLocalUrl(String url) {
+            return "file".equals(Uri.parse(url).getScheme());
+        }
+
         @Override
         public boolean isOfflineAvailable(String pageUrl) {
             if (mIsDestroyed || !isNtpOfflinePagesEnabled()) return false;
+            if (isLocalUrl(pageUrl)) return true;
             if (mOfflinePageBridge == null) mOfflinePageBridge = new OfflinePageBridge(mProfile);
-            return mOfflinePageBridge.getPageByOnlineURL(pageUrl) != null;
+            return mOfflinePageBridge.getOfflineUrlForOnlineUrl(pageUrl) != null;
         }
 
         @Override

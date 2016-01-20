@@ -28,7 +28,6 @@
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
-#include "content/browser/media/capture/web_contents_capture_util.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
 #include "content/browser/renderer_host/media/audio_output_device_enumerator.h"
 #include "content/browser/renderer_host/media/media_capture_devices_impl.h"
@@ -41,6 +40,7 @@
 #include "content/public/browser/media_observer.h"
 #include "content/public/browser/media_request_state.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/media_stream_request.h"
@@ -739,10 +739,8 @@ void MediaStreamManager::AudioOutputDevicesEnumerated(
   DVLOG(1) << "AudioOutputDevicesEnumerated()";
   StreamDeviceInfoArray device_infos;
 
-  // If the enumeration contains only one entry, it means there are no devices.
-  // The single entry contains default parameters from the audio manager.
-  if (device_enumeration.size() > 1) {
-    for (const auto& entry : device_enumeration) {
+  if (device_enumeration.has_actual_devices) {
+    for (const auto& entry : device_enumeration.devices) {
       StreamDeviceInfo device_info(MEDIA_DEVICE_AUDIO_OUTPUT, entry.device_name,
                                    entry.unique_id);
       device_infos.push_back(device_info);
@@ -1269,7 +1267,7 @@ bool MediaStreamManager::SetupTabCaptureRequest(DeviceRequest* request) {
   int target_render_process_id = 0;
   int target_render_frame_id = 0;
 
-  bool has_valid_device_id = WebContentsCaptureUtil::ExtractTabCaptureTarget(
+  bool has_valid_device_id = WebContentsMediaCaptureId::ExtractTabCaptureTarget(
       capture_device_id, &target_render_process_id, &target_render_frame_id);
   if (!has_valid_device_id ||
       (request->audio_type() != MEDIA_TAB_AUDIO_CAPTURE &&

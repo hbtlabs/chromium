@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "net/base/chunked_upload_data_stream.h"
 #include "net/base/network_quality_estimator.h"
 #include "net/base/socket_performance_watcher.h"
 #include "net/base/test_completion_callback.h"
@@ -431,6 +432,12 @@ class QuicNetworkTransactionTest
     params_.http_auth_handler_factory = auth_handler_factory_.get();
     params_.http_server_properties = http_server_properties_.GetWeakPtr();
     params_.quic_supported_versions = SupportedVersions(GetParam());
+    for (const char* host :
+         {kDefaultServerHostName, "www.example.com", "news.example.com",
+          "bar.example.com", "foo.example.com", "www.example.org",
+          "invalid.example.org", "docs.example.org"}) {
+      params_.quic_host_whitelist.insert(host);
+    }
 
     test_network_quality_estimator_->AddRTTObserver(&rtt_observer_);
 
@@ -2251,6 +2258,35 @@ TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
   AddQuicAlternateProtocolMapping(MockCryptoClientStream::CONFIRM_HANDSHAKE);
   SendRequestAndExpectQuicResponse("hello!");
   EXPECT_TRUE(rtt_observer_.rtt_notification_received());
+}
+
+TEST_P(QuicNetworkTransactionTest, QuicUpload) {
+  params_.origin_to_force_quic_on =
+      HostPortPair::FromString("mail.example.com:443");
+
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
+  MockWrite writes[] = {MockWrite(SYNCHRONOUS, ERR_FAILED, 1)};
+  SequencedSocketData socket_data(reads, arraysize(reads), writes,
+                                  arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  // The non-alternate protocol job needs to hang in order to guarantee that
+  // the alternate-protocol job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  CreateSession();
+  request_.method = "POST";
+  ChunkedUploadDataStream upload_data(0);
+  upload_data.AppendData("1", 1, true);
+
+  request_.upload_data_stream = &upload_data;
+
+  scoped_ptr<HttpNetworkTransaction> trans(
+      new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
+  TestCompletionCallback callback;
+  int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_NE(OK, callback.WaitForResult());
 }
 
 }  // namespace test

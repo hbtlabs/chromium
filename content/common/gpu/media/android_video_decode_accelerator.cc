@@ -196,14 +196,17 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
     return false;
   }
 
-  // Only use MediaCodec for VP8/9 if it's likely backed by hardware.
+  // Only use MediaCodec for VP8/9 if it's likely backed by hardware
+  // or if the stream is encrypted.
   if ((codec_ == media::kCodecVP8 || codec_ == media::kCodecVP9) &&
-      media::VideoCodecBridge::IsKnownUnaccelerated(
-          codec_, media::MEDIA_CODEC_DECODER)) {
-    DVLOG(1) << "Initialization failed: "
-             << (codec_ == media::kCodecVP8 ? "vp8" : "vp9")
-             << " is not hardware accelerated";
-    return false;
+      !is_encrypted_) {
+    if (media::VideoCodecBridge::IsKnownUnaccelerated(
+            codec_, media::MEDIA_CODEC_DECODER)) {
+      DVLOG(1) << "Initialization failed: "
+               << (codec_ == media::kCodecVP8 ? "vp8" : "vp9")
+               << " is not hardware accelerated";
+      return false;
+    }
   }
 
   if (!make_context_current_.Run()) {
@@ -678,12 +681,12 @@ bool AndroidVideoDecodeAccelerator::ConfigureMediaCodec() {
 void AndroidVideoDecodeAccelerator::ResetCodecState() {
   DCHECK(thread_checker_.CalledOnValidThread());
   bitstream_buffers_in_decoder_.clear();
-  // The MediaCodec buffers will be invalidated so tell the backing strategy to
-  // stop referring to them. We don't tell the client to dismiss our assigned
-  // picture buffers because after flushing MediaCodec we need to reuse them if
-  // the size doesn't change.
-  for (const auto& pb : output_picture_buffers_)
-    strategy_->DismissOnePictureBuffer(pb.second);
+
+  // We don't dismiss picture buffers here since we might not get a format
+  // changed message to re-request them, such as during a seek.  In that case,
+  // we want to reuse the existing buffers.  However, we're about to invalidate
+  // all the output buffers, so we must be sure that the strategy no longer
+  // refers to them.
 
   // When codec is not in error state we can quickly reset (internally calls
   // flush()) for JB-MR2 and beyond. Prior to JB-MR2, flush() had several bugs
@@ -694,11 +697,16 @@ void AndroidVideoDecodeAccelerator::ResetCodecState() {
       base::android::BuildInfo::GetInstance()->sdk_int() >= 18) {
     DVLOG(3) << __FUNCTION__ << " Doing fast MediaCodec reset (flush).";
     media_codec_->Reset();
+    // Since we just flushed all the output buffers, make sure that nothing is
+    // using them.
+    strategy_->CodecChanged(media_codec_.get(), output_picture_buffers_);
   } else {
     DVLOG(3) << __FUNCTION__
              << " Doing slow MediaCodec reset (stop/re-configure).";
     io_timer_.Stop();
     media_codec_->Stop();
+    // Changing the codec will also notify the strategy to forget about any
+    // output buffers it has currently.
     ConfigureMediaCodec();
     state_ = NO_ERROR;
   }
@@ -747,7 +755,11 @@ void AndroidVideoDecodeAccelerator::Reset() {
 void AndroidVideoDecodeAccelerator::Destroy() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  strategy_->Cleanup(output_picture_buffers_);
+  bool have_context = make_context_current_.Run();
+  if (!have_context)
+    LOG(WARNING) << "Failed make GL context current for Destroy, continuing.";
+
+  strategy_->Cleanup(have_context, output_picture_buffers_);
 
   // If we have an OnFrameAvailable handler, tell it that we're going away.
   if (on_frame_available_handler_) {
@@ -887,23 +899,17 @@ AndroidVideoDecodeAccelerator::GetCapabilities() {
   Capabilities capabilities;
   SupportedProfiles& profiles = capabilities.supported_profiles;
 
-  if (!media::VideoCodecBridge::IsKnownUnaccelerated(
-          media::kCodecVP8, media::MEDIA_CODEC_DECODER)) {
-    SupportedProfile profile;
-    profile.profile = media::VP8PROFILE_ANY;
-    profile.min_resolution.SetSize(0, 0);
-    profile.max_resolution.SetSize(1920, 1088);
-    profiles.push_back(profile);
-  }
+  SupportedProfile profile;
 
-  if (!media::VideoCodecBridge::IsKnownUnaccelerated(
-          media::kCodecVP9, media::MEDIA_CODEC_DECODER)) {
-    SupportedProfile profile;
-    profile.profile = media::VP9PROFILE_ANY;
-    profile.min_resolution.SetSize(0, 0);
-    profile.max_resolution.SetSize(1920, 1088);
-    profiles.push_back(profile);
-  }
+  profile.profile = media::VP8PROFILE_ANY;
+  profile.min_resolution.SetSize(0, 0);
+  profile.max_resolution.SetSize(1920, 1088);
+  profiles.push_back(profile);
+
+  profile.profile = media::VP9PROFILE_ANY;
+  profile.min_resolution.SetSize(0, 0);
+  profile.max_resolution.SetSize(1920, 1088);
+  profiles.push_back(profile);
 
   for (const auto& supported_profile : kSupportedH264Profiles) {
     SupportedProfile profile;

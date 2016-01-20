@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/field_trial.h"
@@ -26,6 +27,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
+#include "base/time/tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/memory/oom_memory_details.h"
@@ -39,8 +41,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/metrics/system_memory_stats_recorder.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
@@ -110,7 +114,8 @@ TabManager::TabManager()
     : discard_count_(0),
       recent_tab_discard_(false),
       discard_once_(false),
-      browser_tab_strip_tracker_(this, nullptr, nullptr) {
+      browser_tab_strip_tracker_(this, nullptr, nullptr),
+      test_tick_clock_(nullptr) {
 #if defined(OS_CHROMEOS)
   delegate_.reset(new TabManagerDelegate);
 #endif
@@ -122,8 +127,26 @@ TabManager::~TabManager() {
   Stop();
 }
 
-void TabManager::Start(bool discard_once) {
-  discard_once_ = discard_once;
+void TabManager::Start() {
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // If the feature is not enabled, do nothing.
+  if (!base::FeatureList::IsEnabled(features::kAutomaticTabDiscarding))
+    return;
+
+  // Check the variation parameter to see if a tab be discarded more than once.
+  // Default is to only discard once per tab.
+  std::string allow_multiple_discards = variations::GetVariationParamValue(
+      features::kAutomaticTabDiscarding.name, "AllowMultipleDiscards");
+  if (allow_multiple_discards == "true")
+    discard_once_ = true;
+  else
+    discard_once_ = false;
+#elif defined(OS_CHROMEOS)
+  // On Chrome OS, tab manager is always started and tabs can be discarded more
+  // than once.
+  discard_once_ = false;
+#endif
+
   if (!update_timer_.IsRunning()) {
     update_timer_.Start(FROM_HERE,
                         TimeDelta::FromSeconds(kAdjustmentIntervalSeconds),
@@ -134,7 +157,7 @@ void TabManager::Start(bool discard_once) {
         FROM_HERE, TimeDelta::FromSeconds(kRecentTabDiscardIntervalSeconds),
         this, &TabManager::RecordRecentTabDiscard);
   }
-  start_time_ = TimeTicks::Now();
+  start_time_ = NowTicks();
   // Create a |MemoryPressureListener| to listen for memory events.
   base::MemoryPressureMonitor* monitor = base::MemoryPressureMonitor::Get();
   if (monitor) {
@@ -230,6 +253,10 @@ void TabManager::LogMemory(const std::string& title,
   OomMemoryDetails::Log(title, callback);
 }
 
+void TabManager::set_test_tick_clock(base::TickClock* test_tick_clock) {
+  test_tick_clock_ = test_tick_clock;
+}
+
 void TabManager::TabChangedAt(content::WebContents* contents,
                               int index,
                               TabChangeType change_type) {
@@ -240,7 +267,7 @@ void TabManager::TabChangedAt(content::WebContents* contents,
   bool current_state = contents->WasRecentlyAudible();
   if (old_state != current_state) {
     data->SetRecentlyAudible(current_state);
-    data->SetLastAudioChangeTime(TimeTicks::Now());
+    data->SetLastAudioChangeTime(NowTicks());
   }
 }
 
@@ -252,7 +279,7 @@ void TabManager::ActiveTabChanged(content::WebContents* old_contents,
   // If |old_contents| is set, that tab has switched from being active to
   // inactive, so record the time of that transition.
   if (old_contents)
-    GetWebContentsData(old_contents)->SetLastInactiveTime(TimeTicks::Now());
+    GetWebContentsData(old_contents)->SetLastInactiveTime(NowTicks());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -305,14 +332,14 @@ void TabManager::RecordDiscardStatistics() {
   // Bin into <= 1, <= 2, <= 4, <= 8, etc.
   if (last_discard_time_.is_null()) {
     // This is the first discard this session.
-    TimeDelta interval = TimeTicks::Now() - start_time_;
+    TimeDelta interval = NowTicks() - start_time_;
     int interval_seconds = static_cast<int>(interval.InSeconds());
     // Record time in seconds over an interval of approximately 1 day.
     UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.Discard.InitialTime2", interval_seconds,
                                 1, 100000, 50);
   } else {
     // Not the first discard, so compute time since last discard.
-    TimeDelta interval = TimeTicks::Now() - last_discard_time_;
+    TimeDelta interval = NowTicks() - last_discard_time_;
     int interval_ms = static_cast<int>(interval.InMilliseconds());
     // Record time in milliseconds over an interval of approximately 1 day.
     // Start at 100 ms to get extra resolution in the target 750 ms range.
@@ -326,7 +353,7 @@ void TabManager::RecordDiscardStatistics() {
   metrics::RecordMemoryStats(metrics::RECORD_MEMORY_STATS_TAB_DISCARDED);
 #endif
   // Set up to record the next interval.
-  last_discard_time_ = TimeTicks::Now();
+  last_discard_time_ = NowTicks();
 }
 
 void TabManager::RecordRecentTabDiscard() {
@@ -421,7 +448,7 @@ void TabManager::UpdateTimerCallback() {
 
   // Check for a discontinuity in time caused by the machine being suspended.
   if (!last_adjust_time_.is_null()) {
-    TimeDelta suspend_time = TimeTicks::Now() - last_adjust_time_;
+    TimeDelta suspend_time = NowTicks() - last_adjust_time_;
     if (suspend_time.InSeconds() > kSuspendThresholdSeconds) {
       // System was probably suspended, move the event timers forward in time so
       // when they get subtracted out later, "uptime" is being counted.
@@ -430,7 +457,7 @@ void TabManager::UpdateTimerCallback() {
         last_discard_time_ += suspend_time;
     }
   }
-  last_adjust_time_ = TimeTicks::Now();
+  last_adjust_time_ = NowTicks();
 
 #if defined(OS_CHROMEOS)
   TabStatsList stats_list = GetTabStats();
@@ -546,8 +573,7 @@ void TabManager::OnMemoryPressure(
 bool TabManager::IsAudioTab(WebContents* contents) const {
   if (contents->WasRecentlyAudible())
     return true;
-  auto delta =
-      TimeTicks::Now() - GetWebContentsData(contents)->LastAudioChangeTime();
+  auto delta = NowTicks() - GetWebContentsData(contents)->LastAudioChangeTime();
   return delta < TimeDelta::FromSeconds(kAudioProtectionTimeSeconds);
 }
 
@@ -595,6 +621,13 @@ bool TabManager::CompareTabStats(TabStats first, TabStats second) {
 
   // Being more recently active is more important.
   return first.last_active > second.last_active;
+}
+
+TimeTicks TabManager::NowTicks() const {
+  if (!test_tick_clock_)
+    return TimeTicks::Now();
+
+  return test_tick_clock_->NowTicks();
 }
 
 }  // namespace memory

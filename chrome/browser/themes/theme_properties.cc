@@ -51,9 +51,9 @@ const SkColor kDefaultColorToolbarIncognito[] = {
     SkColorSetRGB(223, 223, 223), SkColorSetRGB(0x50, 0x50, 0x50)};
 #endif  // OS_MACOSX
 const SkColor kDefaultDetachedBookmarkBarBackground[] = {
-    SK_ColorWHITE, SkColorSetRGB(0xF1, 0xF1, 0xF1)};
+    SkColorSetRGB(0xF1, 0xF1, 0xF1), SK_ColorWHITE};
 const SkColor kDefaultDetachedBookmarkBarBackgroundIncognito[] = {
-    SK_ColorWHITE, SkColorSetRGB(0x32, 0x32, 0x32)};
+    SkColorSetRGB(0xF1, 0xF1, 0xF1), SkColorSetRGB(0x32, 0x32, 0x32)};
 
 const SkColor kDefaultColorTabText = SK_ColorBLACK;
 
@@ -90,12 +90,12 @@ const SkColor kDefaultColorButtonBackground = SkColorSetARGB(0, 0, 0, 0);
 
 // Default tints.
 const color_utils::HSL kDefaultTintButtons = { -1, -1, -1 };
-const color_utils::HSL kDefaultTintButtonsIncognito = { -1, -1, 0.85f };
+const color_utils::HSL kDefaultTintButtonsIncognito = { -1, -1, 0.85 };
 const color_utils::HSL kDefaultTintFrame = { -1, -1, -1 };
-const color_utils::HSL kDefaultTintFrameInactive = { -1, -1, 0.75f };
-const color_utils::HSL kDefaultTintFrameIncognito = { -1, 0.2f, 0.35f };
-const color_utils::HSL kDefaultTintFrameIncognitoInactive = { -1, 0.3f, 0.6f };
-const color_utils::HSL kDefaultTintBackgroundTab = { -1, 0.5, 0.75 };
+const color_utils::HSL kDefaultTintFrameInactive = { -1, -1, 0.75 };
+const color_utils::HSL kDefaultTintFrameIncognito = { -1, 0.2, 0.35 };
+const color_utils::HSL kDefaultTintFrameIncognitoInactive = { -1, 0.3, 0.6 };
+const color_utils::HSL kDefaultTintBackgroundTab = { -1, -1, 0.75 };
 
 // ----------------------------------------------------------------------------
 // Defaults for properties which are not stored in the browser theme pack.

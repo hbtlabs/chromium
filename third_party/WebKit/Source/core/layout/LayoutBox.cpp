@@ -1563,14 +1563,14 @@ LayoutUnit LayoutBox::shrinkLogicalWidthToAvoidFloats(LayoutUnit childMarginStar
     LayoutUnit logicalTopPosition = logicalTop();
     LayoutUnit startOffsetForContent = cb->startOffsetForContent();
     LayoutUnit endOffsetForContent = cb->endOffsetForContent();
-    LayoutUnit startOffsetForLine = cb->startOffsetForLine(logicalTopPosition, false);
-    LayoutUnit endOffsetForLine = cb->endOffsetForLine(logicalTopPosition, false);
+    LayoutUnit startOffsetForLine = cb->startOffsetForLine(logicalTopPosition, DoNotIndentText);
+    LayoutUnit endOffsetForLine = cb->endOffsetForLine(logicalTopPosition, DoNotIndentText);
 
     // If there aren't any floats constraining us then allow the margins to shrink/expand the width as much as they want.
     if (startOffsetForContent == startOffsetForLine && endOffsetForContent == endOffsetForLine)
-        return cb->availableLogicalWidthForLine(logicalTopPosition, false) - childMarginStart - childMarginEnd;
+        return cb->availableLogicalWidthForLine(logicalTopPosition, DoNotIndentText) - childMarginStart - childMarginEnd;
 
-    LayoutUnit width = cb->availableLogicalWidthForLine(logicalTopPosition, false) - std::max(LayoutUnit(), childMarginStart) - std::max(LayoutUnit(), childMarginEnd);
+    LayoutUnit width = cb->availableLogicalWidthForLine(logicalTopPosition, DoNotIndentText) - std::max(LayoutUnit(), childMarginStart) - std::max(LayoutUnit(), childMarginEnd);
     // We need to see if margins on either the start side or the end side can contain the floats in question. If they can,
     // then just using the line width is inaccurate. In the case where a float completely fits, we don't need to use the line
     // offset at all, but can instead push all the way to the content edge of the containing block. In the case where the float
@@ -1618,7 +1618,7 @@ LayoutUnit LayoutBox::containingBlockAvailableLineWidth() const
 {
     LayoutBlock* cb = containingBlock();
     if (cb->isLayoutBlockFlow())
-        return toLayoutBlockFlow(cb)->availableLogicalWidthForLine(logicalTop(), false, availableLogicalHeight(IncludeMarginBorderPadding));
+        return toLayoutBlockFlow(cb)->availableLogicalWidthForLine(logicalTop(), DoNotIndentText, availableLogicalHeight(IncludeMarginBorderPadding));
     return LayoutUnit();
 }
 
@@ -2068,8 +2068,9 @@ void LayoutBox::computeLogicalWidth(LogicalExtentComputedValues& computedValues)
     // https://bugs.webkit.org/show_bug.cgi?id=46418
     bool inVerticalBox = parent()->isDeprecatedFlexibleBox() && (parent()->style()->boxOrient() == VERTICAL);
     bool stretching = (parent()->style()->boxAlign() == BSTRETCH);
-    bool treatAsReplaced = shouldComputeSizeAsReplaced() && (!inVerticalBox || !stretching);
-
+    // TODO (lajava): Stretching is the only reason why we don't want the box to be treated as a replaced element, so we could perhaps
+    // refactor all this logic, not only for flex and grid since alignment is intended to be applied to any block.
+    bool treatAsReplaced = shouldComputeSizeAsReplaced() && (!inVerticalBox || !stretching) && (!isGridItem() || !hasStretchedLogicalWidth());
     const ComputedStyle& styleToUse = styleRef();
     Length logicalWidthLength = treatAsReplaced ? Length(computeReplacedLogicalWidth(), Fixed) : styleToUse.logicalWidth();
 
@@ -2220,16 +2221,30 @@ static bool isStretchingColumnFlexItem(const LayoutObject* flexitem)
     return false;
 }
 
+// TODO (lajava) Can/Should we move this inside specific layout classes (flex. grid)? Can we refactor columnFlexItemHasStretchAlignment logic?
+bool LayoutBox::hasStretchedLogicalWidth() const
+{
+    auto& style = styleRef();
+    if (!style.logicalWidth().isAuto() || style.marginStart().isAuto() || style.marginEnd().isAuto())
+        return false;
+    LayoutBlock* cb = containingBlock();
+    if (!cb) {
+        // We are evaluating align-self/justify-self, which default to 'normal' for the root element.
+        // The 'normal' value behaves like 'start' except for Flexbox Items, which obviously should have a container.
+        return false;
+    }
+    if (cb->isHorizontalWritingMode() != isHorizontalWritingMode())
+        return ComputedStyle::resolveAlignment(cb->styleRef(), style, ItemPositionStretch) == ItemPositionStretch;
+    return ComputedStyle::resolveJustification(cb->styleRef(), style, ItemPositionStretch) == ItemPositionStretch;
+}
+
 bool LayoutBox::sizesLogicalWidthToFitContent(const Length& logicalWidth) const
 {
     if (isFloating() || isInlineBlockOrInlineTable())
         return true;
 
-    if (parent()->isLayoutGrid()) {
-        bool hasAutoSizeInRowAxis = isHorizontalWritingMode() ? styleRef().width().isAuto() : styleRef().height().isAuto();
-        bool allowedToStretchChildAlongRowAxis = hasAutoSizeInRowAxis && !styleRef().marginStartUsing(parent()->style()).isAuto() && !styleRef().marginEndUsing(parent()->style()).isAuto();
-        return !allowedToStretchChildAlongRowAxis || ComputedStyle::resolveJustification(parent()->styleRef(), styleRef(), ItemPositionStretch) != ItemPositionStretch;
-    }
+    if (isGridItem())
+        return !hasStretchedLogicalWidth();
 
     // Flexible box items should shrink wrap, so we lay them out at their intrinsic widths.
     // In the case of columns that have a stretch alignment, we go ahead and layout at the

@@ -41,7 +41,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
 
   // RendererScheduler implementation:
   scoped_ptr<blink::WebThread> CreateMainThread() override;
-  scoped_refptr<TaskQueue> DefaultTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> LoadingTaskRunner() override;
@@ -91,6 +91,8 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void RegisterTimeDomain(TimeDomain* time_domain);
   void UnregisterTimeDomain(TimeDomain* time_domain);
 
+  void SetExpensiveTaskBlockingAllowed(bool allowed);
+
   // Test helpers.
   SchedulerHelper* GetSchedulerHelperForTesting();
   TaskCostEstimator* GetLoadingTaskCostEstimatorForTesting();
@@ -104,26 +106,43 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     return helper_.real_time_domain();
   }
 
-  ThrottlingHelper* throttling_helper() { return &throttling_helper_; }
+  ThrottlingHelper* throttling_helper() { return throttling_helper_.get(); }
 
  private:
   friend class RendererSchedulerImplTest;
   friend class RendererSchedulerImplForTest;
   friend class RenderWidgetSchedulingState;
 
-  struct Policy {
-    Policy();
+  enum class TimeDomainType {
+    REAL,
+    THROTTLED,
+  };
 
-    TaskQueue::QueuePriority compositor_queue_priority;
-    TaskQueue::QueuePriority loading_queue_priority;
-    TaskQueue::QueuePriority timer_queue_priority;
-    TaskQueue::QueuePriority default_queue_priority;
+  struct TaskQueuePolicy {
+    TaskQueuePolicy()
+        : priority(TaskQueue::NORMAL_PRIORITY),
+          time_domain_type(TimeDomainType::REAL) {}
+
+    TaskQueue::QueuePriority priority;
+    TimeDomainType time_domain_type;
+
+    bool operator==(const TaskQueuePolicy& other) const {
+      return priority == other.priority &&
+             time_domain_type == other.time_domain_type;
+    }
+  };
+
+  struct Policy {
+    TaskQueuePolicy compositor_queue_policy;
+    TaskQueuePolicy loading_queue_policy;
+    TaskQueuePolicy timer_queue_policy;
+    TaskQueuePolicy default_queue_policy;
 
     bool operator==(const Policy& other) const {
-      return compositor_queue_priority == other.compositor_queue_priority &&
-             loading_queue_priority == other.loading_queue_priority &&
-             timer_queue_priority == other.timer_queue_priority &&
-             default_queue_priority == other.default_queue_priority;
+      return compositor_queue_policy == other.compositor_queue_policy &&
+             loading_queue_policy == other.loading_queue_policy &&
+             timer_queue_policy == other.timer_queue_policy &&
+             default_queue_policy == other.default_queue_policy;
     }
   };
 
@@ -248,9 +267,17 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   // nagigation. This function does that. Must be called from the main thread.
   void ResetForNavigationLocked();
 
+  // Estimates the maximum task length that won't cause a jank based on the
+  // current system state. Must be called from the main thread.
+  base::TimeDelta EstimateLongestJankFreeTaskDuration() const;
+
+  void ApplyTaskQueuePolicy(TaskQueue* task_queue,
+                            const TaskQueuePolicy& old_task_queue_policy,
+                            const TaskQueuePolicy& new_task_queue_policy) const;
+
   SchedulerHelper helper_;
   IdleHelper idle_helper_;
-  ThrottlingHelper throttling_helper_;
+  scoped_ptr<ThrottlingHelper> throttling_helper_;
   RenderWidgetSignals render_widget_scheduler_signals_;
 
   const scoped_refptr<TaskQueue> control_task_runner_;
@@ -281,7 +308,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     base::TimeTicks current_policy_expiration_time;
     base::TimeTicks estimated_next_frame_begin;
     base::TimeDelta compositor_frame_interval;
-    base::TimeDelta expected_idle_duration;
+    base::TimeDelta longest_jank_free_task_duration;
     int timer_queue_suspend_count;  // TIMER_TASK_QUEUE suspended if non-zero.
     int navigation_task_expected_count;
     bool renderer_hidden;
@@ -295,6 +322,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     bool have_seen_a_begin_main_frame;
     bool has_visible_render_widget_with_touch_handler;
     bool begin_frame_not_expected_soon;
+    bool expensive_task_blocking_allowed;
   };
 
   struct AnyThread {

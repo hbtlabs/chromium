@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_controller.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
@@ -38,6 +39,7 @@
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
 #include "components/user_prefs/user_prefs.h"
@@ -51,6 +53,12 @@
 #else
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "components/ui/zoom/zoom_controller.h"
+#endif
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+#include "components/autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h"
+#include "components/autofill/core/browser/autofill_save_card_infobar_mobile.h"
+#include "components/infobars/core/infobar.h"
 #endif
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(autofill::ChromeAutofillClient);
@@ -127,6 +135,12 @@ PrefService* ChromeAutofillClient::GetPrefs() {
       ->GetPrefs();
 }
 
+sync_driver::SyncService* ChromeAutofillClient::GetSyncService() {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  return ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
+}
+
 IdentityProvider* ChromeAutofillClient::GetIdentityProvider() {
   if (!identity_provider_) {
     Profile* profile =
@@ -174,35 +188,45 @@ void ChromeAutofillClient::OnUnmaskVerificationResult(
 }
 
 void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
+    const CreditCard& card,
     const base::Closure& callback) {
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  InfoBarService::FromWebContents(web_contents())->AddInfoBar(
+      CreateSaveCardInfoBarMobile(
+          make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(
+              false, card, scoped_ptr<base::DictionaryValue>(nullptr),
+              callback))));
+#else
   if (IsSaveCardBubbleEnabled()) {
     // Do lazy initialization of SaveCardBubbleControllerImpl.
     autofill::SaveCardBubbleControllerImpl::CreateForWebContents(
         web_contents());
     autofill::SaveCardBubbleControllerImpl* controller =
         autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
-    controller->ShowBubbleForLocalSave(callback);
+    controller->ShowBubbleForLocalSave(card, callback);
     return;
   }
-#endif
+
   AutofillCCInfoBarDelegate::CreateForLocalSave(
       InfoBarService::FromWebContents(web_contents()), callback);
+#endif
 }
 
 void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
-    const base::Closure& callback,
-    scoped_ptr<base::DictionaryValue> legal_message) {
-// TODO(jdonnelly): Implement save card prompt for OS_IOS.
-#if defined(OS_ANDROID)
-  AutofillCCInfoBarDelegate::CreateForUpload(
-      InfoBarService::FromWebContents(web_contents()), callback);
+    const CreditCard& card,
+    scoped_ptr<base::DictionaryValue> legal_message,
+    const base::Closure& callback) {
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  InfoBarService::FromWebContents(web_contents())->AddInfoBar(
+      CreateSaveCardInfoBarMobile(
+          make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(
+              true, card, std::move(legal_message), callback))));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
-  controller->ShowBubbleForUpload(callback, std::move(legal_message));
+  controller->ShowBubbleForUpload(card, std::move(legal_message), callback);
 #endif
 }
 

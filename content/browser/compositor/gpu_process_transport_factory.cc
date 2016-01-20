@@ -124,7 +124,6 @@ GpuProcessTransportFactory::~GpuProcessTransportFactory() {
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
 GpuProcessTransportFactory::CreateOffscreenCommandBufferContext() {
 #if defined(OS_ANDROID)
-  // TODO(mfomitchev): crbug.com/546716
   return CreateContextCommon(scoped_refptr<GpuChannelHost>(nullptr), 0);
 #else
   CauseForGpuLaunch cause =
@@ -149,8 +148,7 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
   return scoped_ptr<cc::SoftwareOutputDevice>(
       new SoftwareOutputDeviceWin(software_backing_.get(), compositor));
 #elif defined(USE_OZONE)
-  return scoped_ptr<cc::SoftwareOutputDevice>(new SoftwareOutputDeviceOzone(
-      compositor));
+  return SoftwareOutputDeviceOzone::Create(compositor);
 #elif defined(USE_X11)
   return scoped_ptr<cc::SoftwareOutputDevice>(new SoftwareOutputDeviceX11(
       compositor));

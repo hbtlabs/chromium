@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
-#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_registrar.h"
 #include "cc/animation/scrollbar_animation_controller.h"
 #include "cc/base/cc_export.h"
@@ -51,6 +50,7 @@ class ScrollOffset;
 
 namespace cc {
 
+class AnimationEvents;
 class AnimationHost;
 class CompletionEvent;
 class CompositorFrameMetadata;
@@ -111,7 +111,7 @@ class LayerTreeHostImplClient {
   virtual void SetNeedsPrepareTilesOnImplThread() = 0;
   virtual void SetVideoNeedsBeginFrames(bool needs_begin_frames) = 0;
   virtual void PostAnimationEventsToMainThreadOnImplThread(
-      scoped_ptr<AnimationEventsVector> events) = 0;
+      scoped_ptr<AnimationEvents> events) = 0;
   virtual bool IsInsideDraw() = 0;
   virtual void RenewTreePriority() = 0;
   virtual void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
@@ -683,7 +683,9 @@ class CC_EXPORT LayerTreeHostImpl
       InputHandler::ScrollInputType type,
       LayerImpl* layer_hit_by_point,
       bool* scroll_on_main_thread,
-      bool* optional_has_ancestor_scroll_handler) const;
+      bool* optional_has_ancestor_scroll_handler,
+      InputHandler::MainThreadScrollingReason* main_thread_scrolling_reason)
+      const;
   float DeviceSpaceDistanceToLayer(const gfx::PointF& device_viewport_point,
                                    LayerImpl* layer_impl);
   void StartScrollbarFadeRecursive(LayerImpl* layer);
@@ -696,6 +698,8 @@ class CC_EXPORT LayerTreeHostImpl
   void NotifySwapPromiseMonitorsOfForwardingToMainThread();
 
   void UpdateRootLayerStateForSynchronousInputHandler();
+
+  void ScrollAnimationAbort(LayerImpl* layer_impl);
 
   void ScrollAnimationCreate(LayerImpl* layer_impl,
                              const gfx::ScrollOffset& target_offset,

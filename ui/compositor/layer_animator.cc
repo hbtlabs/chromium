@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
 #include "cc/animation/animation_timeline.h"
@@ -208,6 +209,11 @@ void LayerAnimator::AddThreadedAnimation(scoped_ptr<cc::Animation> animation) {
 void LayerAnimator::RemoveThreadedAnimation(int animation_id) {
   DCHECK(animation_player_);
   animation_player_->RemoveAnimation(animation_id);
+}
+
+bool LayerAnimator::HasPendingThreadedAnimationsForTesting() const {
+  DCHECK(animation_player_);
+  return animation_player_->has_pending_animations_for_testing();
 }
 
 void LayerAnimator::StartAnimation(LayerAnimationSequence* animation) {

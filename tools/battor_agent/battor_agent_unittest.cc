@@ -104,6 +104,7 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
                              BattOrError error) override {
     is_command_complete_ = true;
     command_error_ = error;
+    trace_ = trace;
   }
 
  protected:
@@ -216,8 +217,17 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
     if (end_state == BattOrAgentState::EEPROM_REQUEST_SENT)
       return;
 
+    BattOrEEPROM eeprom;
+    eeprom.r1 = 1;
+    eeprom.r2 = 1;
+    eeprom.r3 = 1;
+    eeprom.low_gain = 1;
+    eeprom.low_gain_correction_offset = 0;
+    eeprom.low_gain_correction_factor = 1;
+    eeprom.sd_sample_rate = 1000;
+
     GetAgent()->OnMessageRead(true, BATTOR_MESSAGE_TYPE_CONTROL_ACK,
-                              ToCharVector(BattOrEEPROM()));
+                              ToCharVector(eeprom));
     GetTaskRunner()->RunUntilIdle();
 
     if (end_state == BattOrAgentState::EEPROM_RECEIVED)
@@ -246,6 +256,7 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
 
   bool IsCommandComplete() { return is_command_complete_; }
   BattOrError GetCommandError() { return command_error_; }
+  std::string GetTrace() { return trace_; }
 
  private:
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
@@ -255,7 +266,7 @@ class BattOrAgentTest : public testing::Test, public BattOrAgent::Listener {
   scoped_ptr<TestableBattOrAgent> agent_;
   bool is_command_complete_;
   BattOrError command_error_;
-  std::string stop_tracing_trace_;
+  std::string trace_;
 };
 
 TEST_F(BattOrAgentTest, StartTracing) {
@@ -467,6 +478,8 @@ TEST_F(BattOrAgentTest, StopTracing) {
 
   EXPECT_TRUE(IsCommandComplete());
   EXPECT_EQ(BATTOR_ERROR_NONE, GetCommandError());
+  EXPECT_EQ("0.00 -0.3 -0.6\n1.00 0.3 0.6\n2.00 0.9 1.8\n3.00 -0.3 -0.6\n",
+            GetTrace());
 }
 
 TEST_F(BattOrAgentTest, StopTracingFailsWithoutConnection) {
@@ -614,6 +627,37 @@ TEST_F(BattOrAgentTest, StopTracingFailsWithManyDataFrameReadFailures) {
 
   EXPECT_TRUE(IsCommandComplete());
   EXPECT_EQ(BATTOR_ERROR_RECEIVE_ERROR, GetCommandError());
+}
+
+TEST_F(BattOrAgentTest, StopTracingRetriesResetEachFrame) {
+  RunStopTracingTo(BattOrAgentState::CALIBRATION_FRAME_SENT);
+
+  // Send 11 failures on two different reads: because the retry count should
+  // reset after a successful read, this should still be okay.
+  for (int i = 0; i < 11; i++) {
+    GetAgent()->OnMessageRead(false, BATTOR_MESSAGE_TYPE_SAMPLES, nullptr);
+    GetTaskRunner()->RunUntilIdle();
+  }
+
+  BattOrFrameHeader frame_header1{0, 1 * sizeof(RawBattOrSample)};
+  RawBattOrSample frame1[] = {RawBattOrSample{1, 1}};
+  GetAgent()->OnMessageRead(true, BATTOR_MESSAGE_TYPE_SAMPLES,
+                            CreateFrame(frame_header1, frame1, 1));
+  GetTaskRunner()->RunUntilIdle();
+
+  for (int i = 0; i < 11; i++) {
+    GetAgent()->OnMessageRead(false, BATTOR_MESSAGE_TYPE_SAMPLES, nullptr);
+    GetTaskRunner()->RunUntilIdle();
+  }
+
+  BattOrFrameHeader frame_header2{0, 0};
+  RawBattOrSample frame2[] = {};
+  GetAgent()->OnMessageRead(true, BATTOR_MESSAGE_TYPE_SAMPLES,
+                            CreateFrame(frame_header2, frame2, 0));
+  GetTaskRunner()->RunUntilIdle();
+
+  EXPECT_TRUE(IsCommandComplete());
+  EXPECT_EQ(BATTOR_ERROR_NONE, GetCommandError());
 }
 
 TEST_F(BattOrAgentTest, StopTracingFailsIfSamplesReadHasWrongType) {

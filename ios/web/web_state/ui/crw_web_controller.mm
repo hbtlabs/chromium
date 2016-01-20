@@ -6,7 +6,9 @@
 
 #import <objc/runtime.h>
 #include <stddef.h>
+
 #include <cmath>
+#include <utility>
 
 #include "base/ios/block_types.h"
 #import "base/ios/ns_error_util.h"
@@ -585,7 +587,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (instancetype)initWithWebState:(scoped_ptr<WebStateImpl>)webState {
   self = [super init];
   if (self) {
-    _webStateImpl = webState.Pass();
+    _webStateImpl = std::move(webState);
     DCHECK(_webStateImpl);
     _webStateImpl->SetWebController(self);
     _webStateImpl->InitializeRequestTracker(self);
@@ -894,7 +896,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 }
 
 - (void)setDOMElementForLastTouch:(scoped_ptr<base::DictionaryValue>)element {
-  _DOMElementForLastTouch = element.Pass();
+  _DOMElementForLastTouch = std::move(element);
 }
 
 - (void)showContextMenu:(UIGestureRecognizer*)gestureRecognizer {
@@ -1192,12 +1194,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   [self.containerView displayWebViewContentView:webViewContentView];
 }
 
-- (CRWWebController*)createChildWebControllerWithReferrerURL:
-    (const GURL&)referrerURL {
-  web::Referrer referrer(referrerURL, web::ReferrerPolicyDefault);
-  CRWWebController* result =
-      [self.delegate webPageOrderedOpenBlankWithReferrer:referrer
-                                            inBackground:NO];
+- (CRWWebController*)createChildWebController {
+  CRWWebController* result = [self.delegate webPageOrderedOpen];
   DCHECK(!result || result.sessionController.openedByDOM);
   return result;
 }
@@ -1884,7 +1882,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
          if (handler) {
            scoped_ptr<base::Value> result(
                base::JSONReader::Read(base::SysNSStringToUTF8(stringResult)));
-           handler(result.Pass(), error);
+           handler(std::move(result), error);
          }
        }];
 }
@@ -2813,9 +2811,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
       return NO;
     }
 
-    // Abort load if navigation is believed to be happening on the main frame.
+    // Stop load if navigation is believed to be happening on the main frame.
     if ([self isPutativeMainFrameRequest:request targetFrame:targetFrame])
-      [self abortLoad];
+      [self stopLoading];
 
     if ([_delegate openExternalURL:requestURL]) {
       // Record the URL so that errors reported following the 'NO' reply can be
@@ -2994,7 +2992,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   base::WeakNSObject<CRWWebController> weakSelf(self);
   [self fetchDOMElementAtPoint:[touch locationInView:self.webView]
              completionHandler:^(scoped_ptr<base::DictionaryValue> element) {
-               [weakSelf setDOMElementForLastTouch:element.Pass()];
+               [weakSelf setDOMElementForLastTouch:std::move(element)];
              }];
   return YES;
 }
@@ -3584,7 +3582,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                    // |element| scoped_ptr.
                    elementAsDict.reset(elementAsDictPtr);
                  }
-                 handler(elementAsDict.Pass());
+                 handler(std::move(elementAsDict));
                }];
   }];
 }

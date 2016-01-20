@@ -621,8 +621,11 @@ class MHTMLPartsGenerationDelegate
 
   WebString getContentID(const WebFrame& frame) override {
     int routing_id = GetRoutingIdForFrameOrProxy(const_cast<WebFrame*>(&frame));
+
     auto it = params_.frame_routing_id_to_content_id.find(routing_id);
-    DCHECK(it != params_.frame_routing_id_to_content_id.end());
+    if (it == params_.frame_routing_id_to_content_id.end())
+      return WebString();
+
     const std::string& content_id = it->second;
     return WebString::fromUTF8(content_id);
   }
@@ -665,6 +668,40 @@ bool IsContentWithCertificateErrorsRelevantToUI(
           main_resource_ssl_status.connection_status !=
               ssl_status.connection_status);
 }
+
+#if defined(OS_ANDROID)
+// Returns true if WMPI is enabled and is expected to be able to play the URL,
+// false if WMPA should be used instead.
+//
+// Note that HLS and WebM detection are pre-redirect and path-based. It is
+// possible to load such a URL and find different content, in which case
+// playback may fail.
+bool CanUseWebMediaPlayerImpl(const GURL& url) {
+  // WMPI does not support HLS.
+  if (media::MediaCodecUtil::IsHLSPath(url))
+    return false;
+
+  // If --enable-unified-media-pipeline was passed, always use WMPI. (This
+  // allows for testing the new path.)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableUnifiedMediaPipeline)) {
+    return true;
+  }
+
+  // Don't use WMPI for blob URLs (MSE in particular) yet.
+  if (url.SchemeIsBlob())
+    return false;
+
+  // WMPI can play VPX even without AVDA.
+  if (base::EndsWith(url.path(), ".webm", base::CompareCase::INSENSITIVE_ASCII))
+    return true;
+
+  // Only use WMPI if AVDA is available.
+  return (media::MediaCodecUtil::IsMediaCodecAvailable() &&
+          !base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kDisableAcceleratedVideoDecode));
+}
+#endif  // defined(OS_ANDROID)
 
 }  // namespace
 
@@ -1497,7 +1534,19 @@ void RenderFrameImpl::OnSwapOut(
   // Now that all of the cleanup is complete and the browser side is notified,
   // start using the RenderFrameProxy, if one is created.
   if (proxy && swapped_out_forbidden) {
+    // The swap call deletes this RenderFrame via frameDetached.  Do not access
+    // any members after this call.
+    // TODO(creis): WebFrame::swap() can return false.  Most of those cases
+    // should be due to the frame being detached during unload (in which case
+    // the necessary cleanup has happened anyway), but it might be possible for
+    // it to return false without detaching.  Catch those cases below to track
+    // down https://crbug.com/575245.
     frame_->swap(proxy->web_frame());
+
+    // For main frames, the swap should have cleared the RenderView's pointer to
+    // this frame.
+    if (is_main_frame)
+      CHECK(!render_view->main_render_frame_);
 
     if (is_loading)
       proxy->OnDidStartLoading();
@@ -2363,12 +2412,7 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
       GetMediaPermission(), initial_cdm);
 
 #if defined(OS_ANDROID)
-  // We must use WMPA in when accelerated video decode is disabled becuase WMPI
-  // is unlikely to have a fallback decoder.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableAcceleratedVideoDecode) ||
-      !media::MediaCodecUtil::IsMediaCodecAvailable() ||
-      media::MediaCodecUtil::IsHLSPath(url)) {
+  if (!CanUseWebMediaPlayerImpl(url)) {
     return CreateAndroidWebMediaPlayer(client, encrypted_client, params);
   } else {
     // TODO(dalecurtis): This experiment is temporary and should be removed once
@@ -2409,9 +2453,16 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
   if (!url_index_.get() || url_index_->frame() != frame)
     url_index_.reset(new media::UrlIndex(frame));
 
-  return new media::WebMediaPlayerImpl(
+  media::WebMediaPlayerImpl* media_player = new media::WebMediaPlayerImpl(
       frame, client, encrypted_client, GetWebMediaPlayerDelegate()->AsWeakPtr(),
       std::move(media_renderer_factory), GetCdmFactory(), url_index_, params);
+
+#if defined(OS_ANDROID)  // WMPI_CAST
+  media_player->SetMediaPlayerManager(GetMediaPlayerManager());
+  media_player->SetDeviceScaleFactor(render_view_->GetDeviceScaleFactor());
+#endif
+
+  return media_player;
 }
 
 blink::WebMediaSession* RenderFrameImpl::createMediaSession() {
@@ -3563,7 +3614,8 @@ void RenderFrameImpl::willSendRequest(
     return;
 
   // Set the first party for cookies url if it has not been set yet (new
-  // requests). For redirects, it is updated by WebURLLoaderImpl.
+  // requests). This value will be updated during redirects, consistent with
+  // https://tools.ietf.org/html/draft-west-first-party-cookies-04#section-2.1.1
   if (request.firstPartyForCookies().isEmpty()) {
     if (request.frameType() == blink::WebURLRequest::FrameTypeTopLevel) {
       request.setFirstPartyForCookies(request.url());
@@ -3576,6 +3628,10 @@ void RenderFrameImpl::willSendRequest(
             frame->top()->document().firstPartyForCookies());
       }
     }
+
+    // If we need to set the first party, then we need to set the request's
+    // initiator as well; it will not be updated during redirects.
+    request.setRequestorOrigin(frame->document().securityOrigin());
   }
 
   WebDataSource* provisional_data_source = frame->provisionalDataSource();
@@ -5004,6 +5060,8 @@ void RenderFrameImpl::NavigateInternal(
 
   // Create parameters for a standard navigation.
   blink::WebFrameLoadType load_type = blink::WebFrameLoadType::Standard;
+  blink::WebHistoryLoadType history_load_type =
+      blink::WebHistoryDifferentDocumentLoad;
   bool should_load_request = false;
   WebHistoryItem item_for_history_navigation;
   WebURLRequest request =
@@ -5051,48 +5109,41 @@ void RenderFrameImpl::NavigateInternal(
       // browser should never be telling us to navigate to swappedout://.
       CHECK(entry->root().urlString() != kSwappedOutURL);
 
-      if (!browser_side_navigation) {
+      if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+        // By default, tell the HistoryController to go the deserialized
+        // HistoryEntry.  This only works if all frames are in the same
+        // process.
+        DCHECK(!frame_->parent());
+        DCHECK(!browser_side_navigation);
         scoped_ptr<NavigationParams> navigation_params(
             new NavigationParams(*pending_navigation_params_.get()));
-        if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-          // By default, tell the HistoryController to go the deserialized
-          // HistoryEntry.  This only works if all frames are in the same
-          // process.
-          DCHECK(!frame_->parent());
-          render_view_->history_controller()->GoToEntry(
-              frame_, std::move(entry), std::move(navigation_params),
-              cache_policy);
-        } else {
-          // In --site-per-process, the browser process sends a single
-          // WebHistoryItem destined for this frame.
-          // TODO(creis): Change PageState to FrameState.  In the meantime, we
-          // store the relevant frame's WebHistoryItem in the root of the
-          // PageState.
-          SetPendingNavigationParams(std::move(navigation_params));
-          blink::WebHistoryItem history_item = entry->root();
-          blink::WebHistoryLoadType load_type =
-              request_params.is_same_document_history_load
-                  ? blink::WebHistorySameDocumentLoad
-                  : blink::WebHistoryDifferentDocumentLoad;
-
-          // Navigate the frame directly.
-          // TODO(creis): Use InitialHistoryLoad rather than BackForward for a
-          // history navigation in a newly created subframe.
-          WebURLRequest request =
-              frame_->requestFromHistoryItem(history_item, cache_policy);
-          frame_->load(request, blink::WebFrameLoadType::BackForward,
-                       history_item, load_type);
-        }
+        render_view_->history_controller()->GoToEntry(
+            frame_, std::move(entry), std::move(navigation_params),
+            cache_policy);
       } else {
-        // TODO(clamy): this should be set to the HistoryItem sent by the
-        // browser once the HistoryController has moved to the browser.
-        // TODO(clamy): distinguish between different document and same document
-        // loads.
-        // TODO(clamy): update this for subframes history loads.
-        item_for_history_navigation =
-            entry->GetHistoryNodeForFrame(this)->item();
+        // In --site-per-process, the browser process sends a single
+        // WebHistoryItem destined for this frame.
+        // TODO(creis): Change PageState to FrameState.  In the meantime, we
+        // store the relevant frame's WebHistoryItem in the root of the
+        // PageState.
+        item_for_history_navigation = entry->root();
+        history_load_type = request_params.is_same_document_history_load
+                                ? blink::WebHistorySameDocumentLoad
+                                : blink::WebHistoryDifferentDocumentLoad;
+
+        // TODO(creis): Use InitialHistoryLoad rather than BackForward for a
+        // history navigation in a newly created subframe.
         load_type = blink::WebFrameLoadType::BackForward;
         should_load_request = true;
+
+        // Generate the request for the load from the HistoryItem.
+        // PlzNavigate: use the data sent by the browser for the url and the
+        // HTTP state. The restoration of user state such as scroll position
+        // will be done based on the history item during the load.
+        if (!browser_side_navigation) {
+          request = frame_->requestFromHistoryItem(item_for_history_navigation,
+                                                   cache_policy);
+        }
       }
     }
   } else {
@@ -5142,7 +5193,8 @@ void RenderFrameImpl::NavigateInternal(
     } else {
       // Load the request.
       frame_->toWebLocalFrame()->load(request, load_type,
-                                      item_for_history_navigation);
+                                      item_for_history_navigation,
+                                      history_load_type);
     }
   }
 

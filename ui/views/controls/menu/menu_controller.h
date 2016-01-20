@@ -151,6 +151,7 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   void OnMouseEntered(SubmenuView* source, const ui::MouseEvent& event);
   bool OnMouseWheel(SubmenuView* source, const ui::MouseWheelEvent& event);
   void OnGestureEvent(SubmenuView* source, ui::GestureEvent* event);
+  void OnTouchEvent(SubmenuView* source, ui::TouchEvent* event);
   View* GetTooltipHandlerForPoint(SubmenuView* source, const gfx::Point& point);
   void ViewHierarchyChanged(SubmenuView* source,
                             const View::ViewHierarchyChangedDetails& details);
@@ -307,7 +308,7 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   void SetSelection(MenuItemView* menu_item, int types);
 
   void SetSelectionOnPointerDown(SubmenuView* source,
-                                 const ui::LocatedEvent& event);
+                                 const ui::LocatedEvent* event);
   void StartDrag(SubmenuView* source, const gfx::Point& location);
 
   // Key processing.
@@ -502,7 +503,15 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   // On non-aura Windows, a new mouse event is generated and posted to
   // the window (if there is one) at the location of the event. On
   // aura, the event is reposted on the RootWindow.
-  void RepostEvent(SubmenuView* source, const ui::LocatedEvent& event);
+  void RepostEvent(SubmenuView* source,
+                   const ui::LocatedEvent* event,
+                   const gfx::Point& screen_loc,
+                   gfx::NativeView native_view,
+                   gfx::NativeWindow window);
+
+  // For Windows and Aura we repost an event which dismisses the |source| menu.
+  // The menu is also canceled dependent on the target of the event.
+  void RepostEventAndCancel(SubmenuView* source, const ui::LocatedEvent* event);
 
   // Sets the drop target to new_item.
   void SetDropMenuItem(MenuItemView* new_item,
@@ -542,6 +551,11 @@ class VIEWS_EXPORT MenuController : public WidgetObserver {
   // Terminates the current nested message-loop, if there is any. Returns |true|
   // if any message loop is terminated.
   bool TerminateNestedMessageLoopIfNecessary();
+
+  // Performs the teardown of menus launched with |async_run_|. This will
+  // notifiy the |delegate_|. If |exit_type_| is EXIT_ALL all nested
+  // asynchronous runs will be exited.
+  void ExitAsyncRun();
 
   // Performs the teardown of the menu launched by Run(). The selected item is
   // returned.

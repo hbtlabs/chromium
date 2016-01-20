@@ -43,13 +43,6 @@
         '../../net/net.gyp:net_extras',
         '../../ui/base/ui_base.gyp:ui_base',
       ],
-      'mac_bundle_resources': [
-        'shell/Default.png',
-        'shell/MainView.xib',
-        'shell/textfield_background@2x.png',
-        'shell/toolbar_back@2x.png',
-        'shell/toolbar_forward@2x.png',
-      ],
       'export_dependent_settings': [
         'ios_web.gyp:ios_web',
         'ios_web.gyp:ios_web_app',
@@ -81,6 +74,13 @@
           '$(SDKROOT)/System/Library/Frameworks/CoreFoundation.framework',
           '$(SDKROOT)/System/Library/Frameworks/Foundation.framework',
           '$(SDKROOT)/System/Library/Frameworks/UIKit.framework',
+        ],
+        'mac_bundle_resources': [
+          'shell/Default.png',
+          'shell/MainView.xib',
+          'shell/textfield_background@2x.png',
+          'shell/toolbar_back@2x.png',
+          'shell/toolbar_forward@2x.png',
         ],
       },
     },

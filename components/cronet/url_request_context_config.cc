@@ -11,9 +11,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
 #include "base/values.h"
 #include "net/cert/cert_verifier.h"
 #include "net/dns/host_resolver.h"
+#include "net/http/http_server_properties.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_utils.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -27,12 +29,15 @@ const char kQuicFieldTrialName[] = "QUIC";
 const char kQuicConnectionOptions[] = "connection_options";
 const char kQuicStoreServerConfigsInProperties[] =
     "store_server_configs_in_properties";
+const char kQuicMaxServerConfigsStoredInProperties[] =
+    "max_server_configs_stored_in_properties";
 const char kQuicDelayTcpRace[] = "delay_tcp_race";
 const char kQuicMaxNumberOfLossyConnections[] =
     "max_number_of_lossy_connections";
 const char kQuicPacketLossThreshold[] = "packet_loss_threshold";
 const char kQuicIdleConnectionTimeoutSeconds[] =
     "idle_connection_timeout_seconds";
+const char kQuicHostWhitelist[] = "host_whitelist";
 
 // AsyncDNS experiment dictionary name.
 const char kAsyncDnsFieldTrialName[] = "AsyncDNS";
@@ -74,11 +79,20 @@ void ParseAndSetExperimentalOptions(
           net::QuicUtils::ParseQuicConnectionOptions(quic_connection_options));
     }
 
+    // TODO(rtenneti): Delete this option after apps stop using it.
+    // Added this for backward compatibility.
     bool quic_store_server_configs_in_properties = false;
     if (quic_args->GetBoolean(kQuicStoreServerConfigsInProperties,
                               &quic_store_server_configs_in_properties)) {
-      context_builder->set_quic_store_server_configs_in_properties(
-          quic_store_server_configs_in_properties);
+      context_builder->set_quic_max_server_configs_stored_in_properties(
+          net::kMaxQuicServersToPersist);
+    }
+
+    int quic_max_server_configs_stored_in_properties = 0;
+    if (quic_args->GetInteger(kQuicMaxServerConfigsStoredInProperties,
+                              &quic_max_server_configs_stored_in_properties)) {
+      context_builder->set_quic_max_server_configs_stored_in_properties(
+          static_cast<size_t>(quic_max_server_configs_stored_in_properties));
     }
 
     bool quic_delay_tcp_race = false;
@@ -105,6 +119,17 @@ void ParseAndSetExperimentalOptions(
                               &quic_idle_connection_timeout_seconds)) {
       context_builder->set_quic_idle_connection_timeout_seconds(
           quic_idle_connection_timeout_seconds);
+    }
+
+    std::string quic_host_whitelist;
+    if (quic_args->GetString(kQuicHostWhitelist, &quic_host_whitelist)) {
+      std::unordered_set<std::string> hosts;
+      for (const std::string& host :
+           base::SplitString(quic_host_whitelist, ",", base::TRIM_WHITESPACE,
+                             base::SPLIT_WANT_ALL)) {
+        hosts.insert(host);
+      }
+      context_builder->set_quic_host_whitelist(hosts);
     }
   }
 

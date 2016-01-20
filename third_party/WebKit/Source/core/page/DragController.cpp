@@ -512,7 +512,7 @@ bool DragController::concludeEditDrag(DragData* dragData)
                 if (chosePlainText)
                     options |= ReplaceSelectionCommand::MatchStyle;
                 ASSERT(m_documentUnderMouse);
-                ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), fragment, options)->apply();
+                ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), fragment, options, EditActionDrag)->apply();
             }
         }
     } else {
@@ -522,7 +522,7 @@ bool DragController::concludeEditDrag(DragData* dragData)
 
         if (setSelectionToDragCaret(innerFrame.get(), dragCaret, range, point)) {
             ASSERT(m_documentUnderMouse);
-            ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), createFragmentFromText(EphemeralRange(range.get()), text),  ReplaceSelectionCommand::SelectReplacement | ReplaceSelectionCommand::MatchStyle | ReplaceSelectionCommand::PreventNesting)->apply();
+            ReplaceSelectionCommand::create(*m_documentUnderMouse.get(), createFragmentFromText(EphemeralRange(range.get()), text),  ReplaceSelectionCommand::SelectReplacement | ReplaceSelectionCommand::MatchStyle | ReplaceSelectionCommand::PreventNesting, EditActionDrag)->apply();
         }
     }
 
@@ -918,6 +918,9 @@ bool DragController::startDrag(LocalFrame* src, const DragState& state, const Pl
 
 void DragController::doSystemDrag(DragImage* image, const IntPoint& dragLocation, const IntPoint& eventPos, DataTransfer* dataTransfer, LocalFrame* frame, bool forLink)
 {
+    // TODO(dcheng): Drag and drop is not yet supported for OOPI.
+    if (m_page->mainFrame()->isRemoteFrame())
+        return;
     m_didInitiateDrag = true;
     m_dragInitiator = frame->document();
     // Protect this frame and view, as a load may occur mid drag and attempt to unload this frame

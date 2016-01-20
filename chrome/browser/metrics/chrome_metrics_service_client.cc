@@ -76,6 +76,7 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
+#include "chrome/installer/util/browser_distribution.h"
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #endif
 
@@ -133,7 +134,9 @@ bool ShouldClearSavedMetrics() {
 ChromeMetricsServiceClient::ChromeMetricsServiceClient(
     metrics::MetricsStateManager* state_manager)
     : metrics_state_manager_(state_manager),
+#if defined(OS_CHROMEOS)
       chromeos_metrics_provider_(nullptr),
+#endif
       waiting_for_collect_final_metrics_step_(false),
       num_async_histogram_fetches_in_progress_(0),
       profiler_metrics_provider_(nullptr),
@@ -278,7 +281,8 @@ base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
 
 base::string16 ChromeMetricsServiceClient::GetRegistryBackupKey() {
 #if defined(OS_WIN)
-  return L"Software\\" PRODUCT_STRING_PATH L"\\StabilityMetrics";
+  BrowserDistribution* distribution = BrowserDistribution::GetDistribution();
+  return distribution->GetRegistryPath().append(L"\\StabilityMetrics");
 #else
   return base::string16();
 #endif

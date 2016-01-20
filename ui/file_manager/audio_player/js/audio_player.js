@@ -208,6 +208,7 @@ AudioPlayer.prototype.loadMetadata_ = function(track) {
  */
 AudioPlayer.prototype.displayMetadata_ = function(track, metadata, opt_error) {
   this.player_.tracks[track].setMetadata(metadata, opt_error);
+  this.player_.notifyTrackMetadataUpdated(track);
 };
 
 /**
@@ -327,6 +328,10 @@ AudioPlayer.prototype.onResize_ = function(event) {
  */
 AudioPlayer.prototype.onKeyDown_ = function(event) {
   switch (util.getKeyModifiers(event) + event.keyIdentifier) {
+    case 'Ctrl-U+0057': // Ctrl+W => Close the player.
+      chrome.app.window.current().close();
+      break;
+
     // Handle debug shortcut keys.
     case 'Ctrl-Shift-U+0049': // Ctrl+Shift+I
       chrome.fileManagerPrivate.openInspector('normal');
@@ -350,7 +355,14 @@ AudioPlayer.prototype.onKeyDown_ = function(event) {
  * @type {number}
  * @const
  */
-AudioPlayer.HEADER_HEIGHT = 36;  // 32px + border 4px
+AudioPlayer.HEADER_HEIGHT = 33;  // 32px + border 1px
+
+/**
+ * Top padding height of audio player in pixels.
+ * @type {number}
+ * @const
+ */
+AudioPlayer.TOP_PADDING_HEIGHT = 4;
 
 /**
  * Track height in pixels.
@@ -378,8 +390,9 @@ AudioPlayer.DEFAULT_EXPANDED_ITEMS = 5;
  * @type {number}
  * @const
  */
-AudioPlayer.EXPANDED_MODE_MIN_HEIGHT = AudioPlayer.CONTROLS_HEIGHT +
-                                       AudioPlayer.TRACK_HEIGHT * 2;
+AudioPlayer.EXPANDED_MODE_MIN_HEIGHT = AudioPlayer.TOP_PADDING_HEIGHT +
+                                       AudioPlayer.TRACK_HEIGHT * 2 +
+                                       AudioPlayer.CONTROLS_HEIGHT;
 
 /**
  * Invoked when the 'expanded' property in the model is changed.
@@ -392,7 +405,7 @@ AudioPlayer.prototype.onExpandedChanged_ = function(newValue) {
     return;
 
   if (this.isExpanded_ && !newValue)
-    this.lastExpandedHeight_ = window.innerHeight;
+    this.lastExpandedInnerHeight_ = window.innerHeight;
 
   if (this.isExpanded_ !== newValue) {
     this.isExpanded_ = newValue;
@@ -408,26 +421,30 @@ AudioPlayer.prototype.onExpandedChanged_ = function(newValue) {
  * @private
  */
 AudioPlayer.prototype.syncHeight_ = function() {
-  var targetHeight;
+  var targetInnerHeight;
 
   if (this.player_.expanded) {
     // Expanded.
-    if (!this.lastExpandedHeight_ ||
-        this.lastExpandedHeight_ < AudioPlayer.EXPANDED_MODE_MIN_HEIGHT) {
+    if (!this.lastExpandedInnerHeight_ ||
+        this.lastExpandedInnerHeight_ < AudioPlayer.EXPANDED_MODE_MIN_HEIGHT) {
       var expandedListHeight =
           Math.min(this.entries_.length, AudioPlayer.DEFAULT_EXPANDED_ITEMS) *
               AudioPlayer.TRACK_HEIGHT;
-      targetHeight = AudioPlayer.CONTROLS_HEIGHT + expandedListHeight;
-      this.lastExpandedHeight_ = targetHeight;
+      targetInnerHeight = AudioPlayer.TOP_PADDING_HEIGHT +
+                          expandedListHeight +
+                          AudioPlayer.CONTROLS_HEIGHT;
+      this.lastExpandedInnerHeight_ = targetInnerHeight;
     } else {
-      targetHeight = this.lastExpandedHeight_;
+      targetInnerHeight = this.lastExpandedInnerHeight_;
     }
   } else {
     // Not expanded.
-    targetHeight = AudioPlayer.CONTROLS_HEIGHT + AudioPlayer.TRACK_HEIGHT;
+    targetInnerHeight = AudioPlayer.TOP_PADDING_HEIGHT +
+                        AudioPlayer.TRACK_HEIGHT +
+                        AudioPlayer.CONTROLS_HEIGHT;
   }
-
-  window.resizeTo(window.innerWidth, targetHeight + AudioPlayer.HEADER_HEIGHT);
+  window.resizeTo(window.outerWidth,
+                  AudioPlayer.HEADER_HEIGHT + targetInnerHeight);
 };
 
 /**

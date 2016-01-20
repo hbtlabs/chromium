@@ -4,8 +4,10 @@
 
 #import "ios/web/web_state/ui/crw_wk_web_view_web_controller.h"
 
-#include <stddef.h>
 #import <WebKit/WebKit.h>
+#include <stddef.h>
+
+#include <utility>
 
 #include "base/containers/mru_cache.h"
 #include "base/ios/ios_util.h"
@@ -414,7 +416,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 - (instancetype)initWithWebState:(scoped_ptr<web::WebStateImpl>)webState {
   DCHECK(webState);
   web::BrowserState* browserState = webState->GetBrowserState();
-  self = [super initWithWebState:webState.Pass()];
+  self = [super initWithWebState:std::move(webState)];
   if (self) {
     _certVerificationController.reset([[CRWCertVerificationController alloc]
         initWithBrowserState:browserState]);
@@ -468,6 +470,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
 - (void)stopLoading {
   _stoppedWKNavigation.reset(_latestWKNavigation);
+  [super stopLoading];
 }
 
 #pragma mark -
@@ -1969,19 +1972,20 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
                forNavigationAction:(WKNavigationAction*)navigationAction
                     windowFeatures:(WKWindowFeatures*)windowFeatures {
   GURL requestURL = net::GURLWithNSURL(navigationAction.request.URL);
-  NSString* referer = GetRefererFromNavigationAction(navigationAction);
-  GURL referrerURL = referer ? GURL(base::SysNSStringToUTF8(referer)) :
-                               [self currentURL];
 
-  if (![self userIsInteracting] &&
-      [self shouldBlockPopupWithURL:requestURL sourceURL:referrerURL]) {
-    [self didBlockPopupWithURL:requestURL sourceURL:referrerURL];
-    // Desktop Chrome does not return a window for the blocked popups;
-    // follow the same approach by returning nil;
-    return nil;
+  if (![self userIsInteracting]) {
+    NSString* referer = GetRefererFromNavigationAction(navigationAction);
+    GURL referrerURL =
+        referer ? GURL(base::SysNSStringToUTF8(referer)) : [self currentURL];
+    if ([self shouldBlockPopupWithURL:requestURL sourceURL:referrerURL]) {
+      [self didBlockPopupWithURL:requestURL sourceURL:referrerURL];
+      // Desktop Chrome does not return a window for the blocked popups;
+      // follow the same approach by returning nil;
+      return nil;
+    }
   }
 
-  id child = [self createChildWebControllerWithReferrerURL:referrerURL];
+  id child = [self createChildWebController];
   // WKWebView requires WKUIDelegate to return a child view created with
   // exactly the same |configuration| object (exception is raised if config is
   // different). |configuration| param and config returned by

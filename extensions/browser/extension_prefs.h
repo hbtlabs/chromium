@@ -630,12 +630,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // pref store. Does nothing if extensions_disabled_ is true.
   void InitPrefStore();
 
-  // Migrates the permissions data in the pref store.
-  void MigratePermissions(const ExtensionIdList& extension_ids);
-
-  // Migrates the disable reasons from a single enum to a bit mask.
-  void MigrateDisableReasons(const ExtensionIdList& extension_ids);
-
   // Checks whether there is a state pref for the extension and if so, whether
   // it matches |check_state|.
   bool DoesExtensionHaveState(const std::string& id,

@@ -189,10 +189,7 @@ public:
 
     void setContentsNeedsDisplay();
 
-    // If |visualRect| is not nullptr, it contains all pixels within the GraphicsLayer which might be painted into by
-    // the display item client, in coordinate space of the GraphicsLayer.
-    // |visualRect| can be nullptr if we know it's unchanged and PaintController has cached the previous value.
-    void invalidateDisplayItemClient(const DisplayItemClient&, PaintInvalidationReason, const IntRect* visualRect);
+    void invalidateDisplayItemClient(const DisplayItemClient&, PaintInvalidationReason);
 
     // Set that the position/size of the contents (image or video).
     void setContentsRect(const IntRect&);
@@ -248,6 +245,7 @@ public:
     // WebCompositorAnimationDelegate implementation.
     void notifyAnimationStarted(double monotonicTime, int group) override;
     void notifyAnimationFinished(double monotonicTime, int group) override;
+    void notifyAnimationAborted(double monotonicTime, int group) override;
 
     // WebLayerScrollClient implementation.
     void didScroll() override;

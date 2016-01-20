@@ -79,12 +79,11 @@
 #issue-banner {
   margin-top: var(--container-header-height);
   width: 100%;
-  z-index: 1;
 }
 
 #issue-banner.non-blocking {
   bottom: 0;
-  position: fixed;
+  margin-top: 0;
 }
 
 paper-item {
@@ -127,6 +126,11 @@ paper-menu {
   font-weight: normal;
 }
 
+.sink-domain {
+  -webkit-padding-start: 6px;
+  color: rgb(150, 150, 150);
+}
+
 .sink-subtext {
   color: rgb(150, 150, 150);
   padding-top: 8px;
@@ -134,6 +138,7 @@ paper-menu {
 
 .sink-text {
   -webkit-padding-end: 26px;
+  flex-direction: row;
   line-height: normal;
   overflow: hidden;
   text-overflow: ellipsis;

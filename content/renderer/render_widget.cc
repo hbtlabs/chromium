@@ -180,7 +180,9 @@ bool IsDateTimeInput(ui::TextInputType type) {
 content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
     content::RenderWidget* widget) {
 #if defined(MOJO_SHELL_CLIENT)
-  if (content::MojoShellConnection::Get()) {
+  const base::CommandLine& cmdline = *base::CommandLine::ForCurrentProcess();
+  if (content::MojoShellConnection::Get() &&
+      cmdline.HasSwitch(switches::kUseMusInRenderer)) {
     return content::RenderWidgetMusConnection::GetOrCreate(
         widget->routing_id());
   }
@@ -333,6 +335,10 @@ void RenderWidget::ScreenMetricsEmulator::Apply(
   } else {
     scale_ = params_.scale;
     offset_.SetPoint(params_.offset.x, params_.offset.y);
+    if (!params_.viewSize.width && !params_.viewSize.height && scale_) {
+      applied_widget_rect_.set_size(gfx::ScaleToRoundedSize(
+          original_size_, 1.f / scale_));
+    }
   }
 
   if (params_.screenPosition == WebDeviceEmulationParams::Desktop) {

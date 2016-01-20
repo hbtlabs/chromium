@@ -22,19 +22,19 @@
 #include "net/base/socket_performance_watcher.h"
 #include "net/cert/ct_verify_result.h"
 #include "net/proxy/proxy_server.h"
+#include "net/quic/quic_chromium_client_stream.h"
 #include "net/quic/quic_client_session_base.h"
 #include "net/quic/quic_connection_logger.h"
 #include "net/quic/quic_crypto_client_stream.h"
 #include "net/quic/quic_packet_reader.h"
 #include "net/quic/quic_protocol.h"
-#include "net/quic/quic_reliable_client_stream.h"
 #include "net/quic/quic_time.h"
 
 namespace net {
 
 class CertVerifyResult;
 class DatagramClientSocket;
-class QuicConnectionHelper;
+class QuicChromiumConnectionHelper;
 class QuicCryptoClientStreamFactory;
 class QuicServerId;
 class QuicServerInfo;
@@ -81,7 +81,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     // ERR_IO_PENDING is returned, then when the request is eventuallly
     // complete |callback| will be called.
     int StartRequest(const base::WeakPtr<QuicChromiumClientSession>& session,
-                     QuicReliableClientStream** stream,
+                     QuicChromiumClientStream** stream,
                      const CompletionCallback& callback);
 
     // Cancels any pending stream creation request. May be called
@@ -93,7 +93,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Called by |session_| for an asynchronous request when the stream
     // request has finished successfully.
-    void OnRequestCompleteSuccess(QuicReliableClientStream* stream);
+    void OnRequestCompleteSuccess(QuicChromiumClientStream* stream);
 
     // Called by |session_| for an asynchronous request when the stream
     // request has finished with an error. Also called with ERR_ABORTED
@@ -102,7 +102,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     base::WeakPtr<QuicChromiumClientSession> session_;
     CompletionCallback callback_;
-    QuicReliableClientStream** stream_;
+    QuicChromiumClientStream** stream_;
 
     DISALLOW_COPY_AND_ASSIGN(StreamRequest);
   };
@@ -142,7 +142,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // TODO(rch): remove |stream| from this and use setter on |request|
   // and fix in spdy too.
   int TryCreateStream(StreamRequest* request,
-                      QuicReliableClientStream** stream);
+                      QuicChromiumClientStream** stream);
 
   // Cancels the pending stream creation request.
   void CancelRequest(StreamRequest* request);
@@ -152,7 +152,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // QuicSession methods:
   void OnStreamFrame(const QuicStreamFrame& frame) override;
-  QuicReliableClientStream* CreateOutgoingDynamicStream(
+  QuicChromiumClientStream* CreateOutgoingDynamicStream(
       SpdyPriority priority) override;
   QuicCryptoClientStream* GetCryptoStream() override;
   void CloseStream(QuicStreamId stream_id) override;
@@ -192,7 +192,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Resumes a crypto handshake with the server after a timeout.
   int ResumeCryptoConnect(const CompletionCallback& callback);
 
-  // Causes the QuicConnectionHelper to start reading from the socket
+  // Causes the QuicConnectionHelper to start reading from all sockets
   // and passing the data along to the QuicConnection.
   void StartReading();
 
@@ -225,6 +225,21 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   QuicDisabledReason disabled_reason() const { return disabled_reason_; }
 
+  // Migrates session onto new socket, i.e., starts reading from |socket|
+  // in addition to any previous sockets, and sets |writer| to be the new
+  // default writer. Returns true if socket was successfully added to the
+  // session and the session was successfully migrated to using the new socket.
+  // Returns false if number of migrations exceeds kMaxReadersPerQuicSession.
+  // Takes ownership of |socket|, |reader|, and |writer|.
+  bool MigrateToSocket(scoped_ptr<DatagramClientSocket> socket,
+                       scoped_ptr<QuicPacketReader> reader,
+                       scoped_ptr<QuicPacketWriter> writer);
+
+  // Returns current default socket. This is the socket over which all
+  // QUIC packets are sent. This default socket can change, so do not store the
+  // returned socket.
+  const DatagramClientSocket* GetDefaultSocket() const;
+
  protected:
   // QuicSession methods:
   QuicSpdyStream* CreateIncomingDynamicStream(QuicStreamId id) override;
@@ -235,7 +250,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   typedef std::set<Observer*> ObserverSet;
   typedef std::list<StreamRequest*> StreamRequestQueue;
 
-  QuicReliableClientStream* CreateOutgoingReliableStreamImpl();
+  QuicChromiumClientStream* CreateOutgoingReliableStreamImpl();
   // A completion callback invoked when a read completes.
   void OnReadComplete(int result);
 
@@ -274,7 +289,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool require_confirmation_;
   scoped_ptr<QuicCryptoClientStream> crypto_stream_;
   QuicStreamFactory* stream_factory_;
-  scoped_ptr<DatagramClientSocket> socket_;
+  std::vector<scoped_ptr<DatagramClientSocket>> sockets_;
   TransportSecurityState* transport_security_state_;
   scoped_ptr<QuicServerInfo> server_info_;
   scoped_ptr<CertVerifyResult> cert_verify_result_;
@@ -286,7 +301,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   size_t num_total_streams_;
   base::TaskRunner* task_runner_;
   BoundNetLog net_log_;
-  QuicPacketReader packet_reader_;
+  std::vector<scoped_ptr<QuicPacketReader>> packet_readers_;
   base::TimeTicks dns_resolution_end_time_;
   base::TimeTicks handshake_start_;  // Time the handshake was started.
   scoped_ptr<QuicConnectionLogger> logger_;

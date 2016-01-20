@@ -365,37 +365,13 @@ void AssemblyProgram::AssignRemainingIndexes(RVAToLabel* labels) {
           << "  infill " << fill_infill_count;
 }
 
-typedef CheckBool (EncodedProgram::*DefineLabelMethod)(int index, RVA value);
-
-#if defined(OS_WIN)
-__declspec(noinline)
-#endif
-static CheckBool DefineLabels(const RVAToLabel& labels,
-                              EncodedProgram* encoded_format,
-                              DefineLabelMethod define_label) {
-  bool ok = true;
-  for (RVAToLabel::const_iterator p = labels.begin();
-       ok && p != labels.end();
-       ++p) {
-    Label* label = p->second;
-    ok = (encoded_format->*define_label)(label->index_, label->rva_);
-  }
-  return ok;
-}
-
 EncodedProgram* AssemblyProgram::Encode() const {
   scoped_ptr<EncodedProgram> encoded(new EncodedProgram());
 
   encoded->set_image_base(image_base_);
 
-  if (!DefineLabels(abs32_labels_, encoded.get(),
-                    &EncodedProgram::DefineAbs32Label) ||
-      !DefineLabels(rel32_labels_, encoded.get(),
-                    &EncodedProgram::DefineRel32Label)) {
+  if (!encoded->DefineLabels(abs32_labels_, rel32_labels_))
     return NULL;
-  }
-
-  encoded->EndLabels();
 
   for (size_t i = 0;  i < instructions_.size();  ++i) {
     Instruction* instruction = instructions_[i];
@@ -502,7 +478,7 @@ Instruction* AssemblyProgram::GetByteInstruction(uint8_t byte) {
 const int AssemblyProgram::kLabelLowerLimit = 5;
 
 CheckBool AssemblyProgram::TrimLabels() {
-  // For now only trim for ARM binaries
+  // For now only trim for ARM binaries.
   if (kind() != EXE_ELF_32_ARM)
     return true;
 
@@ -510,22 +486,8 @@ CheckBool AssemblyProgram::TrimLabels() {
 
   VLOG(1) << "TrimLabels: threshold " << lower_limit;
 
-  // Remove underused labels from the list of labels
-  RVAToLabel::iterator it = rel32_labels_.begin();
-  while (it != rel32_labels_.end()) {
-    if (it->second->count_ <= lower_limit) {
-      // Note: it appears to me (grt) that this leaks the Label instances. I
-      // *think* the right thing would be to add it->second to a collection for
-      // which all elements are freed via UncheckedDelete after the instruction
-      // fixup loop below.
-      rel32_labels_.erase(it++);
-    } else {
-      ++it;
-    }
-  }
-
   // Walk through the list of instructions, replacing trimmed labels
-  // with the original machine instruction
+  // with the original machine instruction.
   for (size_t i = 0; i < instructions_.size(); ++i) {
     Instruction* instruction = instructions_[i];
     switch (instruction->op()) {
@@ -549,6 +511,17 @@ CheckBool AssemblyProgram::TrimLabels() {
       }
       default:
         break;
+    }
+  }
+
+  // Remove and deallocate underused Labels.
+  RVAToLabel::iterator it = rel32_labels_.begin();
+  while (it != rel32_labels_.end()) {
+    if (it->second->count_ <= lower_limit) {
+      UncheckedDelete(it->second);
+      rel32_labels_.erase(it++);
+    } else {
+      ++it;
     }
   }
 

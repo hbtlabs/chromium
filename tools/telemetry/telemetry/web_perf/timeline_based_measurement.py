@@ -169,8 +169,8 @@ class Options(object):
         DEBUG_OVERHEAD_LEVEL.
     """
     self._config = tracing_config.TracingConfig()
-    self._config.tracing_options.enable_chrome_trace = True
-    self._config.tracing_options.enable_platform_display_trace = True
+    self._config.enable_chrome_trace = True
+    self._config.enable_platform_display_trace = True
 
     if isinstance(overhead_level,
                   tracing_category_filter.TracingCategoryFilter):
@@ -202,14 +202,6 @@ class Options(object):
   @property
   def config(self):
     return self._config
-
-  @property
-  def tracing_options(self):
-    return self._config.tracing_options
-
-  @tracing_options.setter
-  def tracing_options(self, value):
-    self._config.tracing_options = value
 
   def SetTimelineBasedMetrics(self, metrics):
     assert isinstance(metrics, collections.Iterable)
@@ -258,16 +250,16 @@ class TimelineBasedMeasurement(story_test.StoryTest):
     """Configure and start tracing."""
     if not platform.tracing_controller.IsChromeTracingSupported():
       raise Exception('Not supported')
-    platform.tracing_controller.Start(self._tbm_options.config)
+    platform.tracing_controller.StartTracing(self._tbm_options.config)
 
   def Measure(self, platform, results):
     """Collect all possible metrics and added them to results."""
-    trace_result = platform.tracing_controller.Stop()
+    trace_result = platform.tracing_controller.StopTracing()
     results.AddValue(trace.TraceValue(results.current_page, trace_result))
     model = model_module.TimelineModel(trace_result)
     threads_to_records_map = _GetRendererThreadsToInteractionRecordsMap(model)
     if (len(threads_to_records_map.values()) == 0 and
-        self._tbm_options.tracing_options.enable_chrome_trace):
+        self._tbm_options.config.enable_chrome_trace):
       logging.warning(
           'No timeline interaction records were recorded in the trace. '
           'This could be caused by console.time() & console.timeEnd() execution'
@@ -289,4 +281,4 @@ class TimelineBasedMeasurement(story_test.StoryTest):
   def DidRunStory(self, platform):
     """Clean up after running the story."""
     if platform.tracing_controller.is_tracing_running:
-      platform.tracing_controller.Stop()
+      platform.tracing_controller.StopTracing()

@@ -249,20 +249,20 @@ bool AUAudioInputStream::Open() {
     HandleError(result);
     return false;
   }
-  DLOG_IF(WARNING, buffer_size_was_changed_) << "IO buffer size was changed to "
-                                             << number_of_frames_;
 
-  // Verify that the IO buffer size is set correctly. We just log a warning if
-  // this happens since there is logic in AUAudioInputStream::InputProc() which
-  // us able to compensate for minor differences.
-  // TODO(henrika): perhaps add to UMA stat to track if this can happen.
-  UInt32 io_buffer_size_frames;
-  property_size = sizeof(io_buffer_size_frames);
-  result = AudioUnitGetProperty(
-      audio_unit_, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global,
-      1, &io_buffer_size_frames, &property_size);
-  LOG_IF(WARNING, io_buffer_size_frames != number_of_frames_)
-      << "AUHAL uses an invalid IO buffer size: " << io_buffer_size_frames;
+  // If |number_of_frames_| is out of range, the closest valid buffer size will
+  // be set instead. Check the current setting and log a warning for a non
+  // perfect match. Any such mismatch will be compensated for in InputProc().
+  if (buffer_size_was_changed_) {
+    UInt32 io_buffer_size_frames;
+    property_size = sizeof(io_buffer_size_frames);
+    result = AudioUnitGetProperty(
+        audio_unit_, kAudioDevicePropertyBufferFrameSize,
+        kAudioUnitScope_Global, 0, &io_buffer_size_frames, &property_size);
+    LOG_IF(WARNING, io_buffer_size_frames != number_of_frames_)
+        << "AUHAL is using best match of IO buffer size: "
+        << io_buffer_size_frames;
+  }
 
   // Channel mapping should be supported but add a warning just in case.
   // TODO(henrika): perhaps add to UMA stat to track if this can happen.
@@ -794,7 +794,9 @@ bool AUAudioInputStream::GetInputCallbackIsActive() {
 
 void AUAudioInputStream::CheckInputStartupSuccess() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (started_) {
+  // Only add UMA stat related to failing input audio for streams where
+  // the AGC has been enabled, e.g. WebRTC audio input streams.
+  if (started_ && GetAutomaticGainControl()) {
     // Check if we have called Start() and input callbacks have actually
     // started in time as they should. If that is not the case, we have a
     // problem and the stream is considered dead.
@@ -802,17 +804,10 @@ void AUAudioInputStream::CheckInputStartupSuccess() {
     UMA_HISTOGRAM_BOOLEAN("Media.Audio.InputStartupSuccessMac",
                           input_callback_is_active);
     DVLOG(1) << "input_callback_is_active: " << input_callback_is_active;
-
     if (!input_callback_is_active) {
-      const bool agc = GetAutomaticGainControl();
-      UMA_HISTOGRAM_BOOLEAN("Media.Audio.AutomaticGainControlMac", agc);
-      // Only add UMA stat related to failing input audio for streams where
-      // the AGC has been enabled, e.g. WebRTC audio input streams.
-      if (agc) {
-        // Now when we know that startup has failed for some reason, add extra
-        // UMA stats in an attempt to figure out the exact reason.
-        AddHistogramsForFailedStartup();
-      }
+      // Now when we know that startup has failed for some reason, add extra
+      // UMA stats in an attempt to figure out the exact reason.
+      AddHistogramsForFailedStartup();
     }
   }
 }
@@ -843,6 +838,10 @@ void AUAudioInputStream::AddHistogramsForFailedStartup() {
                             manager_->low_latency_input_streams());
   UMA_HISTOGRAM_COUNTS_1000("Media.Audio.NumberOfBasicInputStreamsMac",
                             manager_->basic_input_streams());
+  // TODO(henrika): this value will currently always report true. It should be
+  // fixed when we understand the problem better.
+  UMA_HISTOGRAM_BOOLEAN("Media.Audio.AutomaticGainControlMac",
+                        GetAutomaticGainControl());
 }
 
 }  // namespace media

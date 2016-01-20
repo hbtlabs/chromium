@@ -12,6 +12,7 @@
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/PromiseTracker.h"
 #include "core/inspector/v8/ScriptBreakpoint.h"
+#include "core/inspector/v8/SourceMap.h"
 #include "core/inspector/v8/V8DebuggerAgent.h"
 #include "core/inspector/v8/V8DebuggerImpl.h"
 #include "platform/heap/Handle.h"
@@ -156,6 +157,7 @@ private:
 
     SkipPauseRequest shouldSkipExceptionPause();
     SkipPauseRequest shouldSkipStepPause();
+    bool isMuteBreakpointInstalled();
 
     void schedulePauseOnNextStatementIfSteppingInto();
 
@@ -186,9 +188,10 @@ private:
     void increaseCachedSkipStackGeneration();
     PassRefPtr<TypeBuilder::Debugger::ExceptionDetails> createExceptionDetails(v8::Isolate*, v8::Local<v8::Message>);
 
-    typedef HashMap<String, V8DebuggerScript> ScriptsMap;
-    typedef HashMap<String, Vector<String>> BreakpointIdToDebuggerBreakpointIdsMap;
-    typedef HashMap<String, std::pair<String, BreakpointSource>> DebugServerBreakpointToBreakpointIdAndSourceMap;
+    using ScriptsMap = HashMap<String, V8DebuggerScript>;
+    using BreakpointIdToDebuggerBreakpointIdsMap = HashMap<String, Vector<String>>;
+    using DebugServerBreakpointToBreakpointIdAndSourceMap = HashMap<String, std::pair<String, BreakpointSource>>;
+    using MuteBreakpoins = HashMap<String, std::pair<String, int>>;
 
     enum DebuggerStep {
         NoStep = 0,
@@ -209,6 +212,7 @@ private:
     ScriptsMap m_scripts;
     BreakpointIdToDebuggerBreakpointIdsMap m_breakpointIdToDebuggerBreakpointIds;
     DebugServerBreakpointToBreakpointIdAndSourceMap m_serverBreakpoints;
+    MuteBreakpoins m_muteBreakpoints;
     String m_continueToLocationBreakpointId;
     InspectorFrontend::Debugger::Reason::Enum m_breakReason;
     RefPtr<JSONObject> m_breakAuxData;
@@ -243,6 +247,7 @@ private:
     bool m_pendingTraceAsyncOperationCompleted;
     bool m_startingStepIntoAsync;
     V8GlobalValueMap<String, v8::Script, v8::kNotWeak> m_compiledScripts;
+    HashMap<String, OwnPtr<SourceMap>> m_sourceMaps;
 };
 
 } // namespace blink

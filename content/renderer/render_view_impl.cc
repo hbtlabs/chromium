@@ -925,7 +925,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setJavaScriptCanAccessClipboard(
       prefs.javascript_can_access_clipboard);
   WebRuntimeFeatures::enableXSLT(prefs.xslt_enabled);
-  WebRuntimeFeatures::enableSlimmingPaintV2(prefs.slimming_paint_v2_enabled);
   settings->setXSSAuditorEnabled(prefs.xss_auditor_enabled);
   settings->setDNSPrefetchingEnabled(prefs.dns_prefetching_enabled);
   settings->setDataSaverEnabled(prefs.data_saver_enabled);
@@ -1005,6 +1004,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
 
   settings->setStrictPowerfulFeatureRestrictions(
       prefs.strict_powerful_feature_restrictions);
+  settings->setAllowGeolocationOnInsecureOrigins(
+      prefs.allow_geolocation_on_insecure_origins);
   settings->setPasswordEchoEnabled(prefs.password_echo_enabled);
   settings->setShouldPrintBackgrounds(prefs.should_print_backgrounds);
   settings->setShouldClearDocumentBackground(
@@ -2246,6 +2247,10 @@ int RenderViewImpl::GetRoutingID() const {
 
 gfx::Size RenderViewImpl::GetSize() const {
   return size();
+}
+
+float RenderViewImpl::GetDeviceScaleFactor() const {
+  return device_scale_factor_;
 }
 
 WebPreferences& RenderViewImpl::GetWebkitPreferences() {

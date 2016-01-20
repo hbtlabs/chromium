@@ -6,7 +6,6 @@
 #define SVGLengthInterpolationType_h
 
 #include "core/animation/SVGInterpolationType.h"
-
 #include "core/svg/SVGLength.h"
 
 namespace blink {
@@ -22,11 +21,14 @@ public:
         , m_negativeValuesForbidden(SVGLength::negativeValuesForbiddenForAnimatedLengthAttribute(attribute))
     { }
 
+    static PassOwnPtr<InterpolableValue> neutralInterpolableValue();
+    static InterpolationComponent convertSVGLength(const SVGLength&);
+    static PassRefPtrWillBeRawPtr<SVGLength> resolveInterpolableSVGLength(const InterpolableValue&, const SVGLengthContext&, SVGLengthMode, bool negativeValuesForbidden);
+
 private:
     PassOwnPtr<InterpolationValue> maybeConvertNeutral(const UnderlyingValue&, ConversionCheckers&) const final;
     PassOwnPtr<InterpolationValue> maybeConvertSVGValue(const SVGPropertyBase& svgValue) const final;
     PassRefPtrWillBeRawPtr<SVGPropertyBase> appliedSVGValue(const InterpolableValue&, const NonInterpolableValue*) const final;
-    PassRefPtrWillBeRawPtr<SVGPropertyBase> appliedSVGValue(const InterpolableValue&, const NonInterpolableValue*, const SVGLengthContext&) const;
     void apply(const InterpolableValue&, const NonInterpolableValue*, InterpolationEnvironment&) const final;
 
     const SVGLengthMode m_unitMode;

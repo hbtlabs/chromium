@@ -63,10 +63,11 @@ public:
     }
 
     template<typename BufferType>
-    void appendTextTo(BufferType& output, unsigned position = 0) const
+    void appendTextTo(BufferType& output, unsigned position, unsigned lengthToAppend) const
     {
-        ASSERT_WITH_SECURITY_IMPLICATION(position <= static_cast<unsigned>(length()));
-        unsigned lengthToAppend = length() - position;
+        ASSERT_WITH_SECURITY_IMPLICATION(position + lengthToAppend <= static_cast<unsigned>(length()));
+        // Make sure there's no integer overflow.
+        ASSERT_WITH_SECURITY_IMPLICATION(position + lengthToAppend >= position);
         if (!lengthToAppend)
             return;
         if (m_singleCharacterBuffer) {

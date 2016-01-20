@@ -309,6 +309,9 @@ are declared in build/common.gypi.
       <message name="IDS_WEBSITE_SETTINGS_TYPE_JAVASCRIPT" desc="The label used for JavaScript permission controls in the Website Settings popup.">
         JavaScript
       </message>
+      <message name="IDS_WEBSITE_SETTINGS_TYPE_KEYGEN" desc="The label used for the key generation permission controls in the Website Settings popup.">
+        Key Generation
+      </message>
       <message name="IDS_WEBSITE_SETTINGS_TYPE_POPUPS" desc="The label used for popups permission controls in the Website Settings popup.">
         Popups
       </message>
@@ -466,9 +469,6 @@ are declared in build/common.gypi.
       </message>
       <message name="IDS_EDIT" desc="Edit menu item">
         &amp;Edit
-      </message>
-      <message name="IDS_CLOSE" desc="A generic term for Close on buttons and menus.">
-        Close
       </message>
       <if expr="is_macosx">
         <message name="IDS_ACCNAME_TAB" desc="A generic description of a tab button's role">
@@ -1023,9 +1023,6 @@ are declared in build/common.gypi.
           <message name="IDS_DISTILL_PAGE" desc="The text label of the 'Distill page' menu item">
             Distill page
           </message>
-          <message name="IDS_PRINT" desc="The text label of the Print... menu item. Opens a dialog box to select print settings">
-            &amp;Print...
-          </message>
           <message name="IDS_MORE_TOOLS_MENU" desc="The text label of the Tools submenu for touch">
             More too&amp;ls
           </message>
@@ -1099,9 +1096,6 @@ are declared in build/common.gypi.
           </message>
           <message name="IDS_DISTILL_PAGE" desc="The text label of the 'Distill Page' menu item">
             Distill Page
-          </message>
-          <message name="IDS_PRINT" desc="In Title Case: The text label of the Print... menu item. Opens a dialog box to select print settings">
-            &amp;Print...
           </message>
           <message name="IDS_MORE_TOOLS_MENU" desc="In Title Case: The text label of the Tools submenu for touch">
             More Too&amp;ls
@@ -3907,6 +3901,12 @@ Even if you have downloaded files from this website before, the website might ha
         </message>
         <message name="IDS_EXTENSION_PROMPT_WARNING_HOSTS_LIST_READ_ONLY" desc="Permission string for read-only access to data for an arbitrary list of websites.">
           Read your data on a number of websites
+        </message>
+        <message name="IDS_EXTENSION_PROMPT_WARNING_HOST_AND_SUBDOMAIN" desc="Permission string requesting access to data on a website and its sub-domains.">
+          all <ph name="WEBSITE_1">$1<ex>google.com</ex></ph> sites
+        </message>
+        <message name="IDS_EXTENSION_PROMPT_WARNING_HOST_AND_SUBDOMAIN_LIST" desc="Single entry permission string requesting access to data on a website and its sub-domains.">
+          All <ph name="WEBSITE_1">$1<ex>google.com</ex></ph> sites
         </message>
         <message name="IDS_EXTENSION_PROMPT_WARNING_INPUT" desc="Permission string for access to input.">
           Read and change anything you type
@@ -7142,12 +7142,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_ACCNAME_APP_UPGRADE_RECOMMENDED" desc="The accessible name for the app menu when software update is available.">
         <ph name="ACCNAME_APP">$1<ex>Chrome</ex></ph> (Update is available)
       </message>
-      <message name="IDS_ACCNAME_BACK" desc="The accessible name for the back button.">
-        Back
-      </message>
-      <message name="IDS_ACCNAME_FORWARD" desc="The accessible name for the forward button.">
-        Forward
-      </message>
       <message name="IDS_ACCNAME_FULLSCREEN" desc="The accessible name of the fullscreen button in the new merged menu">
         Full screen
       </message>
@@ -7156,9 +7150,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_ACCNAME_RELOAD" desc="The accessible name for the reload/stop button.">
         Reload
-      </message>
-      <message name="IDS_ACCNAME_LOCATION" desc="The accessible name for the editable-text portion of the omnibox.">
-        Address and search bar
       </message>
       <message name="IDS_ACCNAME_ZOOM" desc="The accessible name for the zoom button.">
         Zoom
@@ -7202,20 +7193,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_ACCNAME_RESTORE" desc="The accessible name for the Restore button.">
         Restore
       </message>
-      <message name="IDS_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
-        Close
-      </message>
       <message name="IDS_ACCNAME_CLOSE_TAB" desc="The accessible name for the button that is used to close a specific tab.">
         Close <ph name="TAB_NAME">$1<ex>Google Search</ex></ph>
       </message>
-      <if expr="is_ios">
-        <message name="IDS_ACCNAME_CLEAR_TEXT" desc="The accessibility label for the clear text button in the location bar [Length: unlimited].">
-          Clear Text
-        </message>
-        <message name="IDS_ACCNAME_VOICE_SEARCH" desc="The accessibility label for the voice search button in the location bar [Length: unlimited]">
-          Voice Search
-        </message>
-      </if>
 
       <!-- Browser Hung Plugin Detector -->
       <if expr="is_win">
@@ -7922,6 +7902,18 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_JS_DONOTALLOW_RADIO" desc="A radio button in the Content Settings dialog for preventing JavaScript use on any site.">
         Do not allow any site to run JavaScript
+      </message>
+      <message name="IDS_KEYGEN_TAB_LABEL" desc="Label for key generation tab on Content Settings dialog">
+        Key generation
+      </message>
+      <message name="IDS_KEYGEN_HEADER" desc="Label for key generation exception management page on Content Settings dialog">
+        Key generation exceptions
+      </message>
+      <message name="IDS_KEYGEN_ALLOW_RADIO" desc="A radio button in the Content Settings dialog for allowing forms to use key generation on any site.">
+        Allow all sites to use key generation in forms.
+      </message>
+      <message name="IDS_KEYGEN_DONOTALLOW_RADIO" desc="A radio button in the Content Settings dialog for preventing forms from using key generation on any site.">
+        Do not allow any site to use key generation in forms (recommended)
       </message>
       <message name="IDS_HANDLERS_TAB_LABEL" desc="Label for Handlers tab on Content Settings dialog">
         Handlers
@@ -9535,8 +9527,8 @@ I don't think this site should be blocked!
         <message name="IDS_AUTOFILL_ADD_CREDITCARD_CAPTION" desc="The caption on the edit Autofill credit card dialog the new entry.">
           Add a credit card
         </message>
-        <message name="IDS_AUTOFILL_USE_WALLET_DATA" desc="The text for the checkbox that controls the Autofill/Wallet integration feature.">
-          Sync credit cards and addresses using Google Payments
+        <message name="IDS_AUTOFILL_USE_PAYMENTS_DATA" desc="The text for the checkbox that controls the Autofill/Payments integration feature.">
+          Credit cards and addresses using Google Payments
         </message>
 
         <message name="IDS_AUTOFILL_FIELD_LABEL_EMAIL" desc="The label of the Email entry.">
@@ -10447,8 +10439,8 @@ I don't think this site should be blocked!
           Learn more
         </message>
         <message name="IDS_NEW_TAB_OTR_MESSAGE_WARNING"
-                 desc="OTR window warning message">
-          Going incognito doesn’t hide your browsing from your employer, your internet service provider, or the websites you visit.
+                 desc="OTR window warning message. This follows the IDS_NEW_TAB_OTR_DESCRIPTION paragraph">
+          However, you aren’t invisible. Going incognito doesn’t hide your browsing from your employer, your internet service provider, or the websites you visit.
         </message>
         <message name="IDS_NEW_TAB_GUEST_SESSION_HEADING"
               desc="Heading used when a person enters Guest Session">
@@ -13542,6 +13534,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_DESTOP_MEDIA_PICKER_VIRTUAL_SCREEN_NAME" desc="The name of the virtual display which is shown in the picker">
         Virtual Display
       </message>
+      <message name="IDS_DESKTOP_MEDIA_PICKER_CHROME_TAB_TITLE" desc="Chrome tab's title shown in window picker dialog">
+        Tab: <ph name="CHROME_TAB_TITLE">$1<ex>YouTube</ex></ph>
+      </message>
 
       <!-- Local Device Discovery display strings -->
       <if expr="enable_service_discovery">
@@ -14537,40 +14532,40 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
 
       <!-- Update Menu Item Flags -->
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NAME" desc="Name of the flag to force show the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NAME" desc="Name of the flag to force show the update menu item." translateable="false">
         Force show update menu item
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DESCRIPTION" desc="Description of the flag to force show the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DESCRIPTION" desc="Description of the flag to force show the update menu item." translateable="false">
         When enabled, an "Update Chrome" item will be shown in the app menu.
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_NAME" desc="Name of the flag to show a summary below the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_NAME" desc="Name of the flag to show a summary below the update menu item." translateable="false">
         Update menu item summary
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_DESCRIPTION" desc="Description of the flag to show a summary below the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_SUMMARY_DESCRIPTION" desc="Description of the flag to show a summary below the update menu item." translateable="false">
         When this flag and the force show update menu item flag are enabled, a summary will be displayed below the update menu item.
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NO_SUMMARY" desc="Option to not show a summary for the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NO_SUMMARY" desc="Option to not show a summary for the update menu item." translateable="false">
         No summary
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DEFAULT_SUMMARY" desc="Option to show the default summary for the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_DEFAULT_SUMMARY" desc="Option to show the default summary for the update menu item." translateable="false">
         Default summary
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NEW_FEATURES_SUMMARY" desc="Option to show a summary for the update menu item prompting users to 'get the latest features'.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_NEW_FEATURES_SUMMARY" desc="Option to show a summary for the update menu item prompting users to 'get the latest features'." translateable="false">
         New features summary
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_CUSTOM_SUMMARY" desc="Option to show a custom summary for the update menu item.">
+      <message name="IDS_FLAGS_UPDATE_MENU_ITEM_CUSTOM_SUMMARY" desc="Option to show a custom summary for the update menu item." translateable="false">
         Custom summary
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_NAME" desc="Name of the flag to force show the update menu badge.">
+      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_NAME" desc="Name of the flag to force show the update menu badge." translateable="false">
         Force show update menu badge
       </message>
-      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_DESCRIPTION" desc="Description of the flag to force show the update menu badge.">
+      <message name="IDS_FLAGS_UPDATE_MENU_BADGE_DESCRIPTION" desc="Description of the flag to force show the update menu badge." translateable="false">
         When enabled, an update badge will be shown on the app menu button.
       </message>
-      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_NAME" desc="Name of the flag to set a market URL for testing the update menu item.">
+      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_NAME" desc="Name of the flag to set a market URL for testing the update menu item." translateable="false">
         Set market URL for testing
       </message>
-      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_DESCRIPTION" desc="Description of the flag to set a market URL for testing the update menu item.">
+      <message name="IDS_FLAGS_SET_MARKET_URL_FOR_TESTING_DESCRIPTION" desc="Description of the flag to set a market URL for testing the update menu item." translateable="false">
         When enabled, sets the market URL for use in testing the update menu item.
       </message>
     </if>

@@ -9,9 +9,9 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.media.MediaPlayer;
 import android.os.Build;
-import android.util.Log;
 
 import org.chromium.base.CommandLine;
+import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -27,9 +27,11 @@ import org.chromium.media.MediaPlayerBridge;
  */
 @JNINamespace("remote_media")
 public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
-    private final long mStartPositionMillis;
+    private long mStartPositionMillis;
     private long mNativeRemoteMediaPlayerBridge;
 
+    // TODO(dgn) We don't create MediaPlayerListener using a RemoteMediaPlayerBridge anymore so
+    //           the inheritance and the extra listeners can now go away. (https://crbug.com/577110)
     private MediaPlayer.OnCompletionListener mOnCompletionListener;
     private MediaPlayer.OnSeekCompleteListener mOnSeekCompleteListener;
     private MediaPlayer.OnErrorListener mOnErrorListener;
@@ -73,8 +75,8 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
 
         @Override
         public void onSeekCompleted() {
-            if (mActive && mOnSeekCompleteListener != null) {
-                mOnSeekCompleteListener.onSeekComplete(null);
+            if (mActive && mNativeRemoteMediaPlayerBridge != 0) {
+                nativeOnSeekCompleted(mNativeRemoteMediaPlayerBridge);
             }
         }
 
@@ -172,14 +174,12 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
         }
     };
 
-    private RemoteMediaPlayerBridge(long nativeRemoteMediaPlayerBridge, long startPositionMillis,
-            String sourceUrl, String frameUrl, String userAgent) {
-
+    private RemoteMediaPlayerBridge(long nativeRemoteMediaPlayerBridge, String sourceUrl,
+            String frameUrl, String userAgent) {
         mDebug = CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_CAST_DEBUG_LOGS);
 
         if (mDebug) Log.i(TAG, "Creating RemoteMediaPlayerBridge");
         mNativeRemoteMediaPlayerBridge = nativeRemoteMediaPlayerBridge;
-        mStartPositionMillis = startPositionMillis;
         mSourceUrl = sourceUrl;
         mFrameUrl = frameUrl;
         mUserAgent = userAgent;
@@ -190,9 +190,9 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
 
     @CalledByNative
     private static RemoteMediaPlayerBridge create(long nativeRemoteMediaPlayerBridge,
-            long startPositionMillis, String sourceUrl, String frameUrl, String userAgent) {
-        return new RemoteMediaPlayerBridge(nativeRemoteMediaPlayerBridge, startPositionMillis,
-                sourceUrl, frameUrl, userAgent);
+            String sourceUrl, String frameUrl, String userAgent) {
+        return new RemoteMediaPlayerBridge(
+                nativeRemoteMediaPlayerBridge, sourceUrl, frameUrl, userAgent);
     }
 
     /**
@@ -200,12 +200,13 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
      * from Blink when the cast button is pressed on the default video controls.
      */
     @CalledByNative
-    private void requestRemotePlayback() {
-        if (mDebug) Log.i(TAG, "requestRemotePlayback");
+    private void requestRemotePlayback(long startPositionMillis) {
+        if (mDebug) Log.i(TAG, "requestRemotePlayback at t=%d", startPositionMillis);
         if (mRouteController == null) return;
         // Clear out the state
         mPauseRequested = false;
         mSeekRequested = false;
+        mStartPositionMillis = startPositionMillis;
         RemoteMediaPlayerController.instance().requestRemotePlayback(
                 mMediaStateListener, mRouteController);
     }
@@ -223,7 +224,6 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
     private void setNativePlayer() {
         if (mDebug) Log.i(TAG, "setNativePlayer");
         if (mRouteController == null) return;
-        mRouteController.setMediaStateListener(mMediaStateListener);
         mActive = true;
     }
 
@@ -383,4 +383,5 @@ public class RemoteMediaPlayerBridge extends MediaPlayerBridge {
     private native void nativeOnCastStarting(long nativeRemoteMediaPlayerBridge,
             String castingMessage);
     private native void nativeOnCastStopping(long nativeRemoteMediaPlayerBridge);
+    private native void nativeOnSeekCompleted(long nativeRemoteMediaPlayerBridge);
 }

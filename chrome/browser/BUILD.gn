@@ -109,7 +109,6 @@ source_set("browser") {
     "//components/certificate_reporting",
     "//components/cloud_devices/common",
     "//components/component_updater",
-    "//components/compression",
     "//components/content_settings/content/common",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
@@ -199,6 +198,7 @@ source_set("browser") {
     "//third_party/libxml",
     "//third_party/widevine/cdm:version_h",
     "//third_party/zlib",
+    "//third_party/zlib:compression_utils",
     "//third_party/zlib:minizip",
     "//third_party/zlib:zip",
     "//ui/base",
@@ -853,12 +853,12 @@ source_set("browser") {
       "//chrome_elf:dll_hash",
       "//components/browser_watcher",
       "//components/browser_watcher:browser_watcher_client",
+      "//components/startup_metric_utils/common",
       "//google_update",
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
       "//third_party/wtl",
       "//ui/metro_viewer",
-      "//win8:metro_viewer",
     ]
 
     all_dependent_configs = [ ":browser_win_linker_flags" ]
@@ -1311,6 +1311,8 @@ source_set("test_support_ui") {
   sources = [
     "password_manager/password_manager_test_base.cc",
     "password_manager/password_manager_test_base.h",
+    "signin/token_revoker_test_utils.cc",
+    "signin/token_revoker_test_utils.h",
     "ui/webui/signin/login_ui_test_utils.cc",
     "ui/webui/signin/login_ui_test_utils.h",
   ]

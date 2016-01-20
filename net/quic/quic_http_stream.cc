@@ -12,8 +12,8 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/quic/quic_chromium_client_session.h"
+#include "net/quic/quic_chromium_client_stream.h"
 #include "net/quic/quic_http_utils.h"
-#include "net/quic/quic_reliable_client_stream.h"
 #include "net/quic/quic_utils.h"
 #include "net/quic/spdy_utils.h"
 #include "net/socket/next_proto.h"
@@ -448,6 +448,10 @@ int QuicHttpStream::DoSendHeaders() {
 int QuicHttpStream::DoSendHeadersComplete(int rv) {
   if (rv < 0)
     return rv;
+
+  // If the stream is already closed, don't read the request the body.
+  if (!stream_)
+    return response_status_;
 
   next_state_ = request_body_stream_ ? STATE_READ_REQUEST_BODY : STATE_OPEN;
 

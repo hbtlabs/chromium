@@ -50,18 +50,35 @@ public:
 
     int length() const { return m_textLength; }
 
+    // Note: |characterAt()| returns characters in the reversed order, since
+    // the iterator is backwards. For example, if the current text is "abc",
+    // then |characterAt(0)| returns 'c'.
+    UChar characterAt(unsigned index) const;
+
     Node* node() const { return m_node; }
 
+    // Prepend characters with offset range [position, position + copyLength)
+    // to the output buffer.
     template<typename BufferType>
-    void prependTextTo(BufferType& output)
+    void copyTextTo(BufferType& output, int position, int copyLength) const
     {
+        ASSERT(position >= 0);
+        ASSERT(copyLength >= 0);
+        ASSERT(position + copyLength <= m_textLength);
+        // Make sure there's no integer overflow.
+        ASSERT(position + copyLength >= position);
         if (!m_textLength)
+            return;
+        if (!copyLength)
             return;
         if (m_singleCharacterBuffer)
             output.prepend(&m_singleCharacterBuffer, 1);
         else
-            m_textContainer.prependTo(output, m_textOffset, m_textLength);
+            m_textContainer.prependTo(output, m_textOffset + m_textLength - position - copyLength, copyLength);
     }
+
+    template<typename BufferType>
+    void copyTextTo(BufferType& output, int position = 0) const { copyTextTo(output, position, m_textLength - position); }
 
     Node* startContainer() const;
     int endOffset() const;

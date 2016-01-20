@@ -4,6 +4,8 @@
 
 #include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -133,7 +135,7 @@ IOSChromeSyncClient::IOSChromeSyncClient(ios::ChromeBrowserState* browser_state)
 
 IOSChromeSyncClient::~IOSChromeSyncClient() {}
 
-void IOSChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
+void IOSChromeSyncClient::Initialize() {
   DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
 
   web_data_service_ =
@@ -163,12 +165,11 @@ void IOSChromeSyncClient::Initialize(sync_driver::SyncService* sync_service) {
         token_service, url_request_context_getter, web_data_service_,
         password_store_));
   }
-  sync_service_ = sync_service;
 }
 
 sync_driver::SyncService* IOSChromeSyncClient::GetSyncService() {
   DCHECK_CURRENTLY_ON_WEB_THREAD(web::WebThread::UI);
-  return sync_service_;
+  return IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state_);
 }
 
 PrefService* IOSChromeSyncClient::GetPrefService() {
@@ -377,5 +378,5 @@ void IOSChromeSyncClient::ClearBrowsingData(base::Time start, base::Time end) {
 
 void IOSChromeSyncClient::SetSyncApiComponentFactoryForTesting(
     scoped_ptr<sync_driver::SyncApiComponentFactory> component_factory) {
-  component_factory_ = component_factory.Pass();
+  component_factory_ = std::move(component_factory);
 }

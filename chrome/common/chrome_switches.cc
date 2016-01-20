@@ -336,9 +336,6 @@ const char kDisableSiteEngagementService[] = "disable-site-engagement-service";
 const char kDisableWebNotificationCustomLayouts[] =
     "disable-web-notification-custom-layouts";
 
-// Disables the backend service for web resources.
-const char kDisableWebResources[]           = "disable-web-resources";
-
 // Some tests seem to require the application to close when the last
 // browser window is closed. Thus, we need a switch to force this behavior
 // for ChromeOS Aura, disable "zero window mode".
@@ -888,6 +885,9 @@ const char kProxyServer[]                   = "proxy-server";
 // the server.
 const char kQuicConnectionOptions[]         = "quic-connection-options";
 
+// Specifies a comma separated list of hosts to whitelist QUIC for.
+const char kQuicHostWhitelist[]             = "quic-host-whitelist";
+
 // Specifies the maximum length for a QUIC packet.
 const char kQuicMaxPacketLength[]           = "quic-max-packet-length";
 
@@ -1281,6 +1281,9 @@ const char kViewerLaunchViaAppId[]          = "viewer-launch-via-appid";
 // Waits for the given handle to be signaled before relaunching metro Chrome on
 // Windows 8 and higher.
 const char kWaitForMutex[]                  = "wait-for-mutex";
+
+// Causes the process to run as a watcher process.
+const char kWatcherProcess[]                = "watcher";
 
 // Indicates that chrome was launched to service a search request in Windows 8.
 const char kWindows8Search[]                = "windows8-search";

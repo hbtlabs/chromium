@@ -5,6 +5,7 @@
 #include "modules/webgl/WebGL2RenderingContextBase.h"
 
 #include "bindings/modules/v8/WebGLAny.h"
+#include "core/frame/ImageBitmap.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
@@ -308,10 +309,24 @@ void WebGL2RenderingContextBase::framebufferTextureLayer(ScriptState* scriptStat
         synthesizeGLError(GL_INVALID_OPERATION, "framebufferTextureLayer", "no framebuffer bound");
         return;
     }
-    webContext()->framebufferTextureLayer(target, attachment, objectOrZero(texture), level, layer);
-    framebufferBinding->setAttachmentForBoundFramebuffer(target, attachment, textarget, texture, level, layer);
+    if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+        webContext()->framebufferTextureLayer(target, GL_DEPTH_ATTACHMENT, objectOrZero(texture), level, layer);
+        webContext()->framebufferTextureLayer(target, GL_STENCIL_ATTACHMENT, objectOrZero(texture), level, layer);
+    } else {
+        webContext()->framebufferTextureLayer(target, attachment, objectOrZero(texture), level, layer);
+    }
+    if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+        // On ES3, DEPTH_STENCIL_ATTACHMENT is like an alias for DEPTH_ATTACHMENT + STENCIL_ATTACHMENT.
+        // We divide it here so in WebGLFramebuffer, we don't have to handle DEPTH_STENCIL_ATTACHMENT in WebGL 2.
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_DEPTH_ATTACHMENT, textarget, texture, level, layer);
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, GL_STENCIL_ATTACHMENT, textarget, texture, level, layer);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_DEPTH_ATTACHMENT, texture);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", GL_STENCIL_ATTACHMENT, texture);
+    } else {
+        framebufferBinding->setAttachmentForBoundFramebuffer(target, attachment, textarget, texture, level, layer);
+        preserveObjectWrapper(scriptState, framebufferBinding, "attachment", attachment, texture);
+    }
     applyStencilTest();
-    preserveObjectWrapper(scriptState, framebufferBinding, "attachment", attachment, texture);
 }
 
 ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(ScriptState* scriptState, GLenum target, GLenum internalformat, GLenum pname)
@@ -993,7 +1008,6 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
     GLenum internalformat = texture->getInternalFormat(target, level);
 
     if (!canvas->renderingContext() || !canvas->renderingContext()->isAccelerated() || !canUseTexImageCanvasByGPU(internalformat, type)) {
-        ASSERT(!canvas->renderingContext() || canvas->renderingContext()->is2d());
         // 2D canvas has only FrontBuffer.
         texSubImage3DImpl(target, level, xoffset, yoffset, zoffset, format, type, canvas->copiedImage(FrontBuffer, PreferAcceleration).get(),
             WebGLImageConversion::HtmlDomCanvas, m_unpackFlipY, m_unpackPremultiplyAlpha);
@@ -1014,6 +1028,18 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint
     if (!image)
         return;
     texSubImage3DImpl(target, level, xoffset, yoffset, zoffset, format, type, image.get(), WebGLImageConversion::HtmlDomVideo, m_unpackFlipY, m_unpackPremultiplyAlpha);
+}
+
+void WebGL2RenderingContextBase::texSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap> bitmap, ExceptionState& exceptionState)
+{
+    ASSERT(bitmap->bitmapImage());
+    if (isContextLost() || !validateImageBitmap("texSubImage3D", bitmap.get(), exceptionState)
+        || !validateTexFunc3DTarget("texSubImage3D", target)
+        || !validateTexFunc("texSubImage3D", TexSubImage, SourceImageBitmap, target, level, 0, bitmap->width(), bitmap->height(), 1, 0, format, type, xoffset, yoffset, zoffset))
+        return;
+
+    StaticBitmapImage* imageForRender = bitmap->bitmapImage();
+    texSubImage3DImpl(target, level, xoffset, yoffset, zoffset, format, type, imageForRender, WebGLImageConversion::HtmlDomImage, m_unpackFlipY, m_unpackPremultiplyAlpha);
 }
 
 void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height)
@@ -1499,9 +1525,6 @@ bool WebGL2RenderingContextBase::validateClearBuffer(const char* functionName, G
 {
     switch (buffer) {
     case GL_COLOR:
-    case GL_FRONT:
-    case GL_BACK:
-    case GL_FRONT_AND_BACK:
         if (size < 4) {
             synthesizeGLError(GL_INVALID_VALUE, functionName, "invalid array size");
             return false;
@@ -2096,6 +2119,12 @@ void WebGL2RenderingContextBase::beginTransformFeedback(GLenum primitiveMode)
     // have a buffer object bound", and "if no binding points would be used".
     // crbug.com/448164
     setTransformFeedbackActive(true);
+
+    if (m_currentProgram)
+        m_currentProgram->increaseActiveTransformFeedbackCount();
+
+    if (m_transformFeedbackBinding)
+        m_transformFeedbackBinding->setProgram(m_currentProgram);
 }
 
 void WebGL2RenderingContextBase::endTransformFeedback()
@@ -2112,6 +2141,9 @@ void WebGL2RenderingContextBase::endTransformFeedback()
 
     setTransformFeedbackPaused(false);
     setTransformFeedbackActive(false);
+
+    if (m_currentProgram)
+        m_currentProgram->decreaseActiveTransformFeedbackCount();
 }
 
 void WebGL2RenderingContextBase::transformFeedbackVaryings(WebGLProgram* program, const Vector<String>& varyings, GLenum bufferMode)
@@ -2199,6 +2231,11 @@ void WebGL2RenderingContextBase::resumeTransformFeedback()
 
     if (!transformFeedbackActive() || !transformFeedbackPaused()) {
         synthesizeGLError(GL_INVALID_OPERATION, "resumeTransformFeedback", "transform feedback is not active or is not paused");
+        return;
+    }
+
+    if (m_transformFeedbackBinding && m_transformFeedbackBinding->getProgram() != m_currentProgram) {
+        synthesizeGLError(GL_INVALID_OPERATION, "resumeTransformFeedback", "the program object is not active");
         return;
     }
 
@@ -2733,13 +2770,13 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* scriptState, G
     case GL_TEXTURE_BINDING_3D:
         return WebGLAny(scriptState, m_textureUnits[m_activeTextureUnit].m_texture3DBinding.get());
     case GL_TRANSFORM_FEEDBACK_ACTIVE:
-        return getBooleanParameter(scriptState, pname);
+        return WebGLAny(scriptState, transformFeedbackActive());
     case GL_TRANSFORM_FEEDBACK_BUFFER_BINDING:
         return WebGLAny(scriptState, m_boundTransformFeedbackBuffer.get());
     case GL_TRANSFORM_FEEDBACK_BINDING:
         return WebGLAny(scriptState, m_transformFeedbackBinding.get());
     case GL_TRANSFORM_FEEDBACK_PAUSED:
-        return getBooleanParameter(scriptState, pname);
+        return WebGLAny(scriptState, transformFeedbackPaused());
     case GL_UNIFORM_BUFFER_BINDING:
         return WebGLAny(scriptState, m_boundUniformBuffer.get());
     case GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT:

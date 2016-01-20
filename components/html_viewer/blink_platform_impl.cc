@@ -153,12 +153,6 @@ blink::WebScrollbarBehavior* BlinkPlatformImpl::scrollbarBehavior() {
   return &scrollbar_behavior_;
 }
 
-const unsigned char* BlinkPlatformImpl::getTraceCategoryEnabledFlag(
-    const char* category_name) {
-  static const unsigned char buf[] = "*";
-  return buf;
-}
-
 blink::WebGraphicsContext3D*
 BlinkPlatformImpl::createOffscreenGraphicsContext3D(
     const blink::WebGraphicsContext3D::Attributes& attributes,
@@ -255,6 +249,7 @@ bool BlinkPlatformImpl::isReservedIPAddress(
 blink::WebThread* BlinkPlatformImpl::createThread(const char* name) {
   scheduler::WebThreadImplForWorkerScheduler* thread =
       new scheduler::WebThreadImplForWorkerScheduler(name);
+  thread->Init();
   thread->TaskRunner()->PostTask(
       FROM_HERE, base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS,
                             base::Unretained(this), thread));

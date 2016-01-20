@@ -54,7 +54,6 @@
 #include "core/dom/ClientRectList.h"
 #include "core/dom/DatasetDOMStringMap.h"
 #include "core/dom/ElementDataCache.h"
-#include "core/dom/ElementIntersectionObserverData.h"
 #include "core/dom/ElementRareData.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
@@ -65,6 +64,7 @@
 #include "core/dom/MutationRecord.h"
 #include "core/dom/NamedNodeMap.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/dom/NodeIntersectionObserverData.h"
 #include "core/dom/PresentationAttributeStyle.h"
 #include "core/dom/PseudoElement.h"
 #include "core/dom/ScriptableDocumentParser.h"
@@ -571,7 +571,7 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
     // Handle the scrollingElement separately, as it scrolls the viewport.
     if (this == document().scrollingElement()) {
         FloatSize delta(deltaX, deltaY);
-        if (document().frame()->applyScrollDelta(delta, scrollState.isBeginning()).didScroll()) {
+        if (document().frame()->applyScrollDelta(ScrollByPrecisePixel, delta, scrollState.isBeginning()).didScroll()) {
             scrolled = true;
             scrollState.consumeDeltaNative(scrollState.deltaX(), scrollState.deltaY());
         }
@@ -1530,6 +1530,9 @@ void Element::removedFrom(ContainerNode* insertionPoint)
 
         if (isUpgradedCustomElement())
             CustomElement::didDetach(this, insertionPoint->document());
+
+        if (needsStyleInvalidation())
+            document().styleEngine().styleInvalidator().clearInvalidation(*this);
     }
 
     document().removeFromTopLayer(this);
@@ -1633,7 +1636,8 @@ void Element::detach(const AttachContext& context)
         document().userActionElements().didDetach(*this);
     }
 
-    document().styleEngine().styleInvalidator().clearInvalidation(*this);
+    if (context.clearInvalidation)
+        document().styleEngine().styleInvalidator().clearInvalidation(*this);
 
     if (svgFilterNeedsLayerUpdate())
         document().unscheduleSVGFilterLayerUpdateHack(*this);
@@ -2596,14 +2600,14 @@ Node* Element::insertAdjacent(const String& where, Node* newChild, ExceptionStat
     return nullptr;
 }
 
-ElementIntersectionObserverData* Element::intersectionObserverData() const
+NodeIntersectionObserverData* Element::intersectionObserverData() const
 {
     if (elementRareData())
         return elementRareData()->intersectionObserverData();
     return nullptr;
 }
 
-ElementIntersectionObserverData& Element::ensureIntersectionObserverData()
+NodeIntersectionObserverData& Element::ensureIntersectionObserverData()
 {
     return ensureElementRareData().ensureIntersectionObserverData();
 }

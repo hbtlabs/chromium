@@ -8,17 +8,12 @@ import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
+import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/chrome_repack_locales.gni")
 import("//chrome/version.gni")
 
 declare_args() {
-  # If true, builds as a console app (rather than a windowed app), which allows
-  # logging to be printed to the user. This will cause a terminal window to pop
-  # up when Chrome is not run from the command line, so should only be used for
-  # development. Only has an effect on Windows builds.
-  win_console_app = false
-
   # Specify the current PGO phase, only used for the Windows MSVS build. Here's
   # the different values that can be used:
   #     0 : Means that PGO is turned off.
@@ -57,12 +52,6 @@ if (is_win) {
     deps = [
       ":chrome_initial",
     ]
-  }
-
-  # The AddressSanitizer build should be a console program as it prints out
-  # stuff on stderr.
-  if (is_asan) {
-    win_console_app = true
   }
 }
 
@@ -148,6 +137,7 @@ if (!is_android) {
         "//components/crash/content/app",
         "//components/crash/core/common",
         "//components/flags_ui:switches",
+        "//components/startup_metric_utils/common",
         "//content:sandbox_helper_win",
         "//content/public/common:static_switches",
         "//crypto",
@@ -421,7 +411,15 @@ if (is_mac || is_win) {
           configs += [ "//build/config/win:no_incremental_linking" ]
         }
         if (chrome_pgo_phase > 0) {
-          configs += [ "//build/config/compiler:optimize_max" ]
+          cflags += [
+            "/GL",  # Whole program optimization.
+
+            # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+            # Probably anything that this would catch that wouldn't be caught in
+            # a normal build isn't going to actually be a bug, so the
+            # incremental value of C4702 for PGO builds is likely very small.
+            "/wd4702",
+          ]
         }
         if (chrome_pgo_phase == 1) {
           ldflags = [

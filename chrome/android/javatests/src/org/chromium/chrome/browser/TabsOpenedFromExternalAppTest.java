@@ -369,26 +369,23 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
 
     /**
      * Tests that a tab is not reused when launched from the same app as an already opened tab and
-     * when the user typed in the location bar.
+     * when the user has navigated elsewhere manually in the same tab.
      * @throws InterruptedException
      */
-    /**
-     * @LargeTest
-     * @Feature({"Navigation"})
-     * Bug 6467101
-     */
-    @FlakyTest
-    public void testNewTabWhenLocationBarEdited() throws InterruptedException {
+    @LargeTest
+    @Feature({"Navigation"})
+    public void testNewTabAfterNavigation() throws InterruptedException {
         startMainActivityFromLauncher();
 
         String url1 = TestHttpServerClient.getUrl("chrome/test/data/android/google.html");
         String url2 = TestHttpServerClient.getUrl("chrome/test/data/android/about.html");
+        String url3 = TestHttpServerClient.getUrl("chrome/test/data/android/test.html");
 
         // Launch a first URL from an app.
         launchUrlFromExternalApp(url1, EXTERNAL_APP_1_ID, false);
 
-        // Now simulate the user typing something in the location bar.
-        typeInOmnibox("hi", true);
+        // Now simulate the user manually navigating to another URL.
+        loadUrl(url3);
 
         // Launch a second URL from the same app, it should open in a new tab.
         int originalTabCount = ChromeTabUtils.getNumOpenTabs(getActivity());
@@ -419,9 +416,9 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
         // Launch a first URL from an app.
         launchUrlFromExternalApp(url1, EXTERNAL_APP_1_ID, false);
 
-        // Click the text-field and type something.
+        // Focus the text-field and type something.
         Tab tab = getActivity().getActivityTab();
-        DOMUtils.clickNode(this, tab.getContentViewCore(), "textField");
+        DOMUtils.focusNode(tab.getContentViewCore().getWebContents(), "textField");
 
         // Some processing needs to happen before the test-field has the focus.
         CriteriaHelper.pollForCriteria(new ElementFocusedCriteria(

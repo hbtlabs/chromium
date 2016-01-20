@@ -153,7 +153,7 @@ class PingAlarm : public QuicAlarm::Delegate {
   explicit PingAlarm(QuicConnection* connection) : connection_(connection) {}
 
   QuicTime OnAlarm() override {
-    connection_->SendPing();
+    connection_->OnPingTimeout();
     return QuicTime::Zero();
   }
 
@@ -237,7 +237,7 @@ class MtuDiscoveryAckListener : public QuicAckListenerInterface {
 QuicConnection::QuicConnection(QuicConnectionId connection_id,
                                IPEndPoint address,
                                QuicConnectionHelperInterface* helper,
-                               const PacketWriterFactory& writer_factory,
+                               QuicPacketWriter* writer,
                                bool owns_writer,
                                Perspective perspective,
                                const QuicVersionVector& supported_versions)
@@ -245,7 +245,7 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
               helper->GetClock()->ApproximateNow(),
               perspective),
       helper_(helper),
-      writer_(writer_factory.Create(this)),
+      writer_(writer),
       owns_writer_(owns_writer),
       encryption_level_(ENCRYPTION_NONE),
       has_forward_secure_encrypter_(false),
@@ -1811,10 +1811,13 @@ PeerAddressChangeType QuicConnection::DeterminePeerAddressChangeType() {
   return UNKNOWN;
 }
 
-void QuicConnection::SendPing() {
-  if (retransmission_alarm_->IsSet()) {
-    return;
+void QuicConnection::OnPingTimeout() {
+  if (!retransmission_alarm_->IsSet()) {
+    SendPing();
   }
+}
+
+void QuicConnection::SendPing() {
   packet_generator_.AddControlFrame(QuicFrame(QuicPingFrame()));
 }
 

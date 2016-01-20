@@ -44,6 +44,7 @@
       'autofill/core/browser/credit_card_unittest.cc',
       'autofill/core/browser/form_field_unittest.cc',
       'autofill/core/browser/form_structure_unittest.cc',
+      'autofill/core/browser/legal_message_line_unittest.cc',
       'autofill/core/browser/name_field_unittest.cc',
       'autofill/core/browser/options_util_unittest.cc',
       'autofill/core/browser/password_generator_unittest.cc',
@@ -111,9 +112,6 @@
     'component_updater_unittest_sources': [
       'component_updater/component_updater_service_unittest.cc',
       'component_updater/timer_unittest.cc',
-    ],
-    'compression_unittest_sources': [
-      'compression/compression_utils_unittest.cc',
     ],
     'content_settings_unittest_sources': [
       'content_settings/core/browser/content_settings_mock_provider.cc',
@@ -411,6 +409,7 @@
       'omnibox/browser/autocomplete_provider_unittest.cc',
       'omnibox/browser/autocomplete_result_unittest.cc',
       'omnibox/browser/base_search_provider_unittest.cc',
+      'omnibox/browser/bookmark_provider_unittest.cc',
       'omnibox/browser/clipboard_url_provider_unittest.cc',
       'omnibox/browser/in_memory_url_index_types_unittest.cc',
       'omnibox/browser/keyword_provider_unittest.cc',
@@ -420,6 +419,7 @@
       'omnibox/browser/scored_history_match_unittest.cc',
       'omnibox/browser/shortcuts_database_unittest.cc',
       'omnibox/browser/suggestion_answer_unittest.cc',
+      'omnibox/browser/zero_suggest_provider_unittest.cc',
     ],
     'open_from_clipboard_unittest_sources': [
       'open_from_clipboard/clipboard_recent_content_ios_unittest.mm',
@@ -756,6 +756,7 @@
     ],
     'tracing_unittest_sources': [
       'tracing/graphics_memory_dump_provider_android_unittest.cc',
+      'tracing/process_metrics_memory_dump_provider_unittest.cc',
       'tracing/trace_config_file_unittest.cc',
     ],
     'translate_unittest_sources': [
@@ -905,7 +906,6 @@
         '<@(child_trace_message_filter_unittest_sources)',
         '<@(cloud_devices_unittest_sources)',
         '<@(component_updater_unittest_sources)',
-        '<@(compression_unittest_sources)',
         '<@(content_settings_unittest_sources)',
         '<@(crash_unittest_sources)',
         '<@(crx_file_unittest_sources)',
@@ -1012,7 +1012,6 @@
         'components.gyp:cloud_devices_common',
         'components.gyp:component_updater',
         'components.gyp:component_updater_test_support',
-        'components.gyp:compression',
         'components.gyp:content_settings_core_browser',
         'components.gyp:content_settings_core_common',
         'components.gyp:content_settings_core_test_support',

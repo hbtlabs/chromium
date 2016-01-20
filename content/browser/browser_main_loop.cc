@@ -32,6 +32,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/tracing/process_metrics_memory_dump_provider.h"
 #include "components/tracing/trace_config_file.h"
 #include "components/tracing/trace_to_console.h"
 #include "components/tracing/tracing_switches.h"
@@ -644,7 +645,6 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
           BrowserSurfaceTextureManager::GetInstance());
     }
   }
-  // TODO(mfomitchev): Screen Orientation APIs on Aura - crbug.com/546719.
 #if !defined(USE_AURA)
   if (!parsed_command_line_.HasSwitch(
       switches::kDisableScreenOrientationLock)) {
@@ -688,6 +688,8 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
 
   // Enable memory-infra dump providers.
   InitSkiaEventTracer();
+  tracing::ProcessMetricsMemoryDumpProvider::RegisterForProcess(
+      base::kNullProcessId);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       HostSharedBitmapManager::current(), "HostSharedBitmapManager", nullptr);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(

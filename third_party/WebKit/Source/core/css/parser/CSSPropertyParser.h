@@ -119,7 +119,9 @@ private:
     bool consumeCSSWideKeyword(CSSPropertyID unresolvedProperty, bool important);
     PassRefPtrWillBeRawPtr<CSSValue> parseSingleValue(CSSPropertyID);
 
-    bool parseValue(CSSPropertyID, bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> legacyParseValue(CSSPropertyID);
+    bool legacyParseAndApplyValue(CSSPropertyID, bool important);
+    bool legacyParseShorthand(CSSPropertyID, bool important);
 
     bool inShorthand() const { return m_inParseShorthand; }
     bool inQuirksMode() const { return isQuirksModeBehavior(m_context.mode()); }
@@ -130,14 +132,13 @@ private:
     void addProperty(CSSPropertyID, PassRefPtrWillBeRawPtr<CSSValue>, bool important, bool implicit = false);
     void addExpandedPropertyForValue(CSSPropertyID propId, PassRefPtrWillBeRawPtr<CSSValue>, bool);
 
+    bool consumeBorder(bool important);
+
     PassRefPtrWillBeRawPtr<CSSPrimitiveValue> parseValidPrimitive(CSSValueID ident, CSSParserValue*);
 
-    bool parseShorthand(CSSPropertyID, const StylePropertyShorthand&, bool important);
     bool parseShorthand(CSSPropertyID, bool important);
     bool consumeShorthandGreedily(const StylePropertyShorthand&, bool important);
     bool consume4Values(const StylePropertyShorthand&, bool important);
-
-    bool parse4Values(CSSPropertyID, const CSSPropertyID* properties, bool important);
 
     bool parseFillImage(CSSParserValueList*, RefPtrWillBeRawPtr<CSSValue>&);
 
@@ -185,8 +186,8 @@ private:
     bool parseGridLineNames(CSSParserValueList&, CSSValueList&, CSSGridLineNamesValue* = nullptr);
     PassRefPtrWillBeRawPtr<CSSValue> parseGridAutoFlow(CSSParserValueList&);
 
-    bool parseLegacyPosition(CSSPropertyID, bool important);
-    bool parseItemPositionOverflowPosition(CSSPropertyID, bool important);
+    PassRefPtrWillBeRawPtr<CSSValue> parseLegacyPosition();
+    PassRefPtrWillBeRawPtr<CSSValue> parseItemPositionOverflowPosition();
     PassRefPtrWillBeRawPtr<CSSValue> parseContentDistributionOverflowPosition();
 
     PassRefPtrWillBeRawPtr<CSSValue> parseShapeProperty(CSSPropertyID propId);
@@ -327,6 +328,9 @@ private:
 
 CSSPropertyID unresolvedCSSPropertyID(const CSSParserString&);
 CSSValueID cssValueKeywordID(const CSSParserString&);
+
+// TODO(rwlbuis): move to CSSPropertyParser.cpp once CSSParserToken conversion is done.
+void completeBorderRadii(RefPtrWillBeRawPtr<CSSPrimitiveValue> radii[4]);
 
 } // namespace blink
 

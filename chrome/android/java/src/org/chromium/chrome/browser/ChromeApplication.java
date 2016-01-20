@@ -263,9 +263,7 @@ public class ChromeApplication extends ContentApplication {
         updateAcceptLanguages();
         changeAppStatus(true);
         mVariationsSession.start(getApplicationContext());
-
-        mPowerBroadcastReceiver.registerReceiver(this);
-        mPowerBroadcastReceiver.runActions(this, true);
+        mPowerBroadcastReceiver.onForegroundSessionStart();
 
         // Track the ratio of Chrome startups that are caused by notification clicks.
         // TODO(johnme): Add other reasons (and switch to recordEnumeratedHistogram).
@@ -286,12 +284,7 @@ public class ChromeApplication extends ContentApplication {
         flushPersistentData();
         mIsStarted = false;
         changeAppStatus(false);
-
-        try {
-            mPowerBroadcastReceiver.unregisterReceiver(this);
-        } catch (IllegalArgumentException e) {
-            // This may happen when onStop get called very early in UI test.
-        }
+        mPowerBroadcastReceiver.onForegroundSessionEnd();
 
         ChildProcessLauncher.onSentToBackground();
         IntentHandler.clearPendingReferrer();
@@ -832,7 +825,7 @@ public class ChromeApplication extends ContentApplication {
             // So cache-clearing may not be effective if URL rendering can happen before
             // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as well.
             // Check if it can happen.
-            instance.clearBrowsingData(null, false, true /* cache */, false, false, false);
+            instance.clearBrowsingData(null, new int[]{ BrowsingDataType.CACHE });
         }
     }
 

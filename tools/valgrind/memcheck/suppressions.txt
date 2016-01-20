@@ -935,13 +935,23 @@
    fun:_ZN14GpuProcessHost4InitEv
 }
 {
-   bug_67261
+   bug_67261a
    Memcheck:Leak
    fun:_Znw*
    ...
    fun:_ZN3sql10Connection18GetUniqueStatementEPKc
    fun:_ZN3sql10Connection18GetCachedStatementERKNS_11StatementIDEPKc
    fun:_ZN8appcache16AppCacheDatabase22PrepareCachedStatementERKN3sql11StatementIDEPKcPNS1_9StatementE
+}
+{
+   bug_67261b
+   Memcheck:Leak
+   fun:_Znw*
+   fun:_ZN3sql10Connection18GetUniqueStatementEPKc
+   fun:_ZN3sql10Connection18GetCachedStatementERKNS_11StatementIDEPKc
+   fun:_ZN3sql9MetaTable19PrepareGetStatementEPNS_9StatementEPKc
+   fun:_ZN3sql9MetaTable8GetValueEPKcPi
+   fun:_ZN7storage13QuotaDatabase28IsOriginDatabaseBootstrappedEv
 }
 {
    bug_67553
@@ -3165,6 +3175,7 @@
    bug_542543a
    Memcheck:Leak
    fun:_Znw*
+   ...
    fun:_ZN8IOThread34ConstructProxyScriptFetcherContextEPNS_7GlobalsEPN3net6NetLogE
    fun:_ZN8IOThread4InitEv
    fun:_ZN7content17BrowserThreadImpl4InitEv
@@ -3393,16 +3404,4 @@
    ...
    fun:_ZN2cc10GLRenderer18DrawRenderPassQuadEPNS_14DirectRenderer12DrawingFrameEPKNS_18RenderPassDrawQuadEPKN3gfx5QuadFE
    fun:_ZN2cc10GLRenderer10DoDrawQuadEPNS_14DirectRenderer12DrawingFrameEPKNS_8DrawQuadEPKN3gfx5QuadFE
-}
-{
-   bug_577333a
-   Memcheck:Uninitialized
-   ...
-   fun:_ZN47AccountInfoTest_UpdateWithSuccessfulUpdate_Test8TestBodyEv
-}
-{
-   bug_577333b
-   Memcheck:Uninitialized
-   ...
-   fun:_ZN50AccountTrackerServiceTest_SeedAccountInfoFull_Test8TestBodyEv
 }

@@ -28,6 +28,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/user_metrics.h"
 #include "grit/components_scaled_resources.h"
+#include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -438,12 +439,55 @@ void Tab::ThrobberView::OnPaint(gfx::Canvas* canvas) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ImageCacheEntry
+// Tab::ImageCacheEntryMetadata
 
-Tab::ImageCacheEntry::ImageCacheEntry()
-    : resource_id(-1),
-      scale_factor(ui::SCALE_FACTOR_NONE) {
+struct Tab::ImageCacheEntryMetadata {
+  ImageCacheEntryMetadata(int resource_id,
+                          ui::ScaleFactor scale_factor,
+                          const gfx::Size& size);
+  ~ImageCacheEntryMetadata();
+
+  // Making this a non-member would require a friend declaration in Tab.  Bleh.
+  bool operator==(const ImageCacheEntryMetadata& rhs) const;
+
+  int resource_id;
+  ui::ScaleFactor scale_factor;
+  gfx::Size size;
+};
+
+Tab::ImageCacheEntryMetadata::ImageCacheEntryMetadata(
+    int resource_id,
+    ui::ScaleFactor scale_factor,
+    const gfx::Size& size)
+    : resource_id(resource_id),
+      scale_factor(scale_factor),
+      size(size) {
+  DCHECK_NE(ui::SCALE_FACTOR_NONE, scale_factor);
 }
+
+Tab::ImageCacheEntryMetadata::~ImageCacheEntryMetadata() {}
+
+bool Tab::ImageCacheEntryMetadata::operator==(
+    const ImageCacheEntryMetadata& rhs) const {
+  return resource_id == rhs.resource_id && scale_factor == rhs.scale_factor &&
+      size == rhs.size;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tab::ImageCacheEntry
+
+struct Tab::ImageCacheEntry {
+  ImageCacheEntry(const ImageCacheEntryMetadata& metadata,
+                  const gfx::ImageSkia& image);
+  ~ImageCacheEntry();
+
+  ImageCacheEntryMetadata metadata;
+  gfx::ImageSkia image;
+};
+
+Tab::ImageCacheEntry::ImageCacheEntry(const ImageCacheEntryMetadata& metadata,
+                                      const gfx::ImageSkia& image)
+    : metadata(metadata), image(image) {}
 
 Tab::ImageCacheEntry::~ImageCacheEntry() {}
 
@@ -545,6 +589,7 @@ bool Tab::IsActive() const {
 void Tab::ActiveStateChanged() {
   OnButtonColorMaybeChanged();
   media_indicator_button_->UpdateEnabledForMuteToggle();
+  Layout();
 }
 
 bool Tab::IsSelected() const {
@@ -1176,18 +1221,9 @@ void Tab::DataChanged(const TabRendererData& old) {
 }
 
 void Tab::PaintTab(gfx::Canvas* canvas) {
-  // See if the model changes whether the icons should be painted.
-  const bool show_icon = ShouldShowIcon();
-  const bool show_media_indicator = ShouldShowMediaIndicator();
-  const bool show_close_button = ShouldShowCloseBox();
-  if (show_icon != showing_icon_ ||
-      show_media_indicator != showing_media_indicator_ ||
-      show_close_button != showing_close_button_)
-    Layout();
-
   PaintTabBackground(canvas);
 
-  if (show_icon)
+  if (showing_icon_)
     PaintIcon(canvas);
 }
 
@@ -1314,22 +1350,27 @@ void Tab::PaintInactiveTabBackground(gfx::Canvas* canvas) {
 
   // We only cache the image when it's the default image and we're not hovered,
   // to avoid caching a background image that isn't the same for all tabs.
-  if (!has_custom_image && !hover_controller_.ShouldDraw()) {
-    ui::ScaleFactor scale_factor =
-        ui::GetSupportedScaleFactor(canvas->image_scale());
-    gfx::ImageSkia cached_image(GetCachedImage(fill_id, size(), scale_factor));
-    if (cached_image.width() == 0) {
-      gfx::Canvas tmp_canvas(size(), canvas->image_scale(), false);
-      PaintTabBackgroundUsingFillId(&tmp_canvas, false, fill_id, false,
-                                    y_offset);
-      cached_image = gfx::ImageSkia(tmp_canvas.ExtractImageRep());
-      SetCachedImage(fill_id, scale_factor, cached_image);
-    }
-    canvas->DrawImageInt(cached_image, 0, 0);
-  } else {
+  if (has_custom_image || hover_controller_.ShouldDraw()) {
     PaintTabBackgroundUsingFillId(canvas, false, fill_id, has_custom_image,
                                   y_offset);
+    return;
   }
+
+  ImageCacheEntryMetadata metadata(
+      fill_id, ui::GetSupportedScaleFactor(canvas->image_scale()), size());
+  auto it = std::find_if(
+      image_cache_->begin(), image_cache_->end(),
+      [&metadata](const ImageCacheEntry& e) { return e.metadata == metadata; });
+  if (it == image_cache_->end()) {
+    gfx::Canvas tmp_canvas(size(), canvas->image_scale(), false);
+    PaintTabBackgroundUsingFillId(&tmp_canvas, false, fill_id, false, y_offset);
+    image_cache_->emplace_front(metadata,
+                                gfx::ImageSkia(tmp_canvas.ExtractImageRep()));
+    if (image_cache_->size() > kMaxImageCacheSize)
+      image_cache_->pop_back();
+    it = image_cache_->begin();
+  }
+  canvas->DrawImageInt(it->image, 0, 0);
 }
 
 void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
@@ -1343,9 +1384,10 @@ void Tab::PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
   // position within the frame background image.
   const int x_offset = GetMirroredX() + background_offset_.x();
 
-  const SkScalar radius = SkFloatToScalar(width() / 3.f);
-  const bool draw_hover =
-      !is_active && hover_controller_.ShouldDraw() && radius > 0;
+  const SkScalar kMinHoverRadius = 16;
+  const SkScalar radius =
+      std::max(SkFloatToScalar(width() / 4.f), kMinHoverRadius);
+  const bool draw_hover = !is_active && hover_controller_.ShouldDraw();
   SkPoint hover_location(PointToSkPoint(hover_controller_.location()));
   const SkAlpha hover_alpha = hover_controller_.GetAlpha();
 
@@ -1743,32 +1785,4 @@ void Tab::LoadTabImages() {
   mask_images_.image_r = rb.GetImageSkiaNamed(IDR_TAB_ALPHA_RIGHT);
   mask_images_.l_width = mask_images_.image_l->width();
   mask_images_.r_width = mask_images_.image_r->width();
-}
-
-// static
-gfx::ImageSkia Tab::GetCachedImage(int resource_id,
-                                   const gfx::Size& size,
-                                   ui::ScaleFactor scale_factor) {
-  for (ImageCache::const_iterator i = image_cache_->begin();
-       i != image_cache_->end(); ++i) {
-    if (i->resource_id == resource_id && i->scale_factor == scale_factor &&
-        i->image.size() == size) {
-      return i->image;
-    }
-  }
-  return gfx::ImageSkia();
-}
-
-// static
-void Tab::SetCachedImage(int resource_id,
-                         ui::ScaleFactor scale_factor,
-                         const gfx::ImageSkia& image) {
-  DCHECK_NE(scale_factor, ui::SCALE_FACTOR_NONE);
-  ImageCacheEntry entry;
-  entry.resource_id = resource_id;
-  entry.scale_factor = scale_factor;
-  entry.image = image;
-  image_cache_->push_front(entry);
-  if (image_cache_->size() > kMaxImageCacheSize)
-    image_cache_->pop_back();
 }

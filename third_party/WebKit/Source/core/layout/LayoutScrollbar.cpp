@@ -42,7 +42,7 @@ PassRefPtrWillBeRawPtr<Scrollbar> LayoutScrollbar::createCustomScrollbar(Scrolla
 }
 
 LayoutScrollbar::LayoutScrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, Node* ownerNode, LocalFrame* owningFrame)
-    : Scrollbar(scrollableArea, orientation, RegularScrollbar, LayoutScrollbarTheme::layoutScrollbarTheme())
+    : Scrollbar(scrollableArea, orientation, RegularScrollbar, nullptr, LayoutScrollbarTheme::layoutScrollbarTheme())
     , m_owner(ownerNode)
     , m_owningFrame(owningFrame)
 {
@@ -361,10 +361,10 @@ int LayoutScrollbar::minimumThumbLength() const
     return orientation() == HorizontalScrollbar ? partLayoutObject->size().width() : partLayoutObject->size().height();
 }
 
-void LayoutScrollbar::invalidateDisplayItemClientsOfScrollbarParts(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect& paintInvalidationRect)
+void LayoutScrollbar::invalidateDisplayItemClientsOfScrollbarParts(const LayoutBoxModelObject& paintInvalidationContainer)
 {
     for (auto& part : m_parts)
-        part.value->invalidateDisplayItemClientsIncludingNonCompositingDescendants(&paintInvalidationContainer, PaintInvalidationScroll, &paintInvalidationRect);
+        part.value->invalidateDisplayItemClientsIncludingNonCompositingDescendants(&paintInvalidationContainer, PaintInvalidationScroll);
 }
 
 }

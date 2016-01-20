@@ -9,7 +9,8 @@ import android.content.Context;
 import android.net.Uri;
 import android.support.v7.media.MediaItemStatus;
 import android.support.v7.media.MediaSessionStatus;
-import android.util.Log;
+
+import org.chromium.base.Log;
 
 /**
  * RemoteSessionManager emulates the session management of the playback of media items on
@@ -20,8 +21,7 @@ import android.util.Log;
  * outside this class.
  */
 public class RemoteSessionManager implements DummyPlayer.Callback {
-    private static final String TAG = "RemoteSessionManager";
-    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
+    private static final String TAG = "CastEmulator";
 
     /**
      * Connect a local session manager to the unique remote session manager, creating it if needed.
@@ -61,10 +61,11 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * @param uri the URI of the video
      * @param mime the mime type
      * @param receiver the pending intent to use to send state changes
+     * @param contentPosition
      * @return the new media item
      */
-    public MediaItem add(Uri uri, String mime, PendingIntent receiver) {
-        if (DEBUG) log("add: uri=" + uri + ", receiver=" + receiver);
+    public MediaItem add(Uri uri, String mime, PendingIntent receiver, long contentPosition) {
+        Log.v(TAG, "%s: add: uri=%s, receiver=%s, pos=%d", mName, uri, receiver, contentPosition);
         // create new session if needed
         startSession(false);
         checkPlayerAndSession();
@@ -73,7 +74,9 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
         mItemId++;
         mCurrentItem = new MediaItem(Integer.toString(mSessionId), Integer.toString(mItemId), uri,
                 mime, receiver);
-        if (DEBUG) log("add: new item id = " + mCurrentItem);
+        mCurrentItem.setPosition(contentPosition);
+
+        Log.v(TAG, "%s: add: new item id = %s", mName, mCurrentItem);
         return mCurrentItem;
     }
 
@@ -109,13 +112,13 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * @return the status
      */
     public MediaSessionStatus getSessionStatus(String sid) {
-        Log.d(TAG, "Getting session status for session " + sid);
+        Log.v(TAG, "Getting session status for session %s", sid);
         int sessionState =
                 (sid != null && sid.equals(Integer.toString(mSessionId)))
                 ? MediaSessionStatus.SESSION_STATE_ACTIVE
                 : MediaSessionStatus.SESSION_STATE_INVALIDATED;
 
-        Log.d(TAG, "Session state is " + sessionState);
+        Log.v(TAG, "Session state is %s", sessionState);
 
         return new MediaSessionStatus.Builder(sessionState).setQueuePaused(mPaused).build();
     }
@@ -182,7 +185,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * Pause the current video
      */
     public void pause() {
-        if (DEBUG) log("pause");
+        Log.v(TAG, "%s: pause", mName);
         if (!mSessionValid) {
             return;
         }
@@ -195,7 +198,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * Resume the current video
      */
     public void resume() {
-        if (DEBUG) log("resume");
+        Log.v(TAG, "%s: resume", mName);
         if (!mSessionValid) {
             return;
         }
@@ -212,7 +215,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * @return the Media item.
      */
     public MediaItem seek(String iid, long pos) {
-        if (DEBUG) log("seek: iid=" + iid + ", pos=" + pos);
+        Log.v(TAG, "%s: seek: iid=%s, pos=%s", mName, iid, pos);
         checkPlayerAndSession();
         checkItemCurrent(iid);
 
@@ -245,7 +248,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
             mPlayer = DummyPlayer.create(mContext, null);
             mPlayer.setCallback(this);
             mCurrentItem = null;
-            Log.d(TAG, "Starting session " + mSessionId);
+            Log.v(TAG, "Starting session %s", mSessionId);
         }
         return Integer.toString(mSessionId);
     }
@@ -254,7 +257,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
      * Stop the current video
      */
     public void stop() {
-        if (DEBUG) log("stop");
+        Log.v(TAG, "%s: stop", mName);
         if (!mSessionValid) {
             return;
         }
@@ -267,7 +270,7 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
 
     // Updates the playlist.
     public void updateStatus() {
-        if (DEBUG) log("updateStatus");
+        Log.v(TAG, "%s: updateStatus", mName);
         checkPlayer();
 
         if (mCurrentItem != null) {
@@ -304,10 +307,6 @@ public class RemoteSessionManager implements DummyPlayer.Callback {
                     : MediaItemStatus.PLAYBACK_STATE_FINISHED);
             updateStatus();
         }
-    }
-
-    private void log(String message) {
-        Log.d(TAG, mName + ": " + message);
     }
 
     private MediaItem removeItem(String iid, int state) {

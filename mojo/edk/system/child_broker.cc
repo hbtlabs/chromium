@@ -34,7 +34,7 @@ void ChildBroker::SetChildBrokerHostHandle(ScopedPlatformHandle handle)  {
   // parent's help if it is sandboxed. The second is the same as POSIX, which is
   // used for multiplexing related messages. So on Windows, we send the second
   // pipe as the first string over the first one.
-  parent_sync_channel_ = handle.Pass();
+  parent_sync_channel_ = std::move(handle);
 
   HANDLE parent_handle = INVALID_HANDLE_VALUE;
   DWORD bytes_read = 0;

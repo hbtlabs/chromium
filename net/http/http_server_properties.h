@@ -66,10 +66,9 @@ NET_EXPORT void HistogramBrokenAlternateProtocolLocation(
     BrokenAlternateProtocolLocation location);
 
 enum AlternateProtocol {
-  NPN_SPDY_3,
-  ALTERNATE_PROTOCOL_MINIMUM_VALID_VERSION = NPN_SPDY_3,
-  NPN_SPDY_MINIMUM_VERSION = NPN_SPDY_3,
   NPN_SPDY_3_1,
+  ALTERNATE_PROTOCOL_MINIMUM_VALID_VERSION = NPN_SPDY_3_1,
+  NPN_SPDY_MINIMUM_VERSION = NPN_SPDY_3_1,
   NPN_HTTP_2,
   NPN_SPDY_MAXIMUM_VERSION = NPN_HTTP_2,
   QUIC,
@@ -379,6 +378,13 @@ class NET_EXPORT HttpServerProperties {
 
   // Returns all persistent QuicServerInfo objects.
   virtual const QuicServerInfoMap& quic_server_info_map() const = 0;
+
+  // Returns the number of server configs (QuicServerInfo objects) persisted.
+  virtual size_t max_server_configs_stored_in_properties() const = 0;
+
+  // Sets the number of server configs (QuicServerInfo objects) to be persisted.
+  virtual void SetMaxServerConfigsStoredInProperties(
+      size_t max_server_configs_stored_in_properties) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HttpServerProperties);

@@ -80,6 +80,7 @@ public:
     }
 
     BLINK_PLATFORM_EXPORT bool matches(long value) const;
+    BLINK_PLATFORM_EXPORT bool isEmpty() const;
 
 private:
     long m_min;
@@ -136,6 +137,7 @@ public:
     }
 
     BLINK_PLATFORM_EXPORT bool matches(double value) const;
+    BLINK_PLATFORM_EXPORT bool isEmpty() const;
 
 private:
     double m_min;
@@ -159,12 +161,20 @@ public:
     }
 
     StringConstraint(const WebVector<WebString>& exact, const WebVector<WebString>& ideal)
-        : m_exact(ideal)
-        , m_ideal(exact)
+        : m_exact(exact)
+        , m_ideal(ideal)
     {
     }
 
+    void setExact(const WebString& exact)
+    {
+        m_exact.assign(&exact, 1);
+    }
+
     BLINK_PLATFORM_EXPORT bool matches(WebString value) const;
+    BLINK_PLATFORM_EXPORT bool isEmpty() const;
+    BLINK_PLATFORM_EXPORT const WebVector<WebString>& exact() const;
+    BLINK_PLATFORM_EXPORT const WebVector<WebString>& ideal() const;
 
 private:
     WebVector<WebString> m_exact;
@@ -194,6 +204,7 @@ public:
     }
 
     BLINK_PLATFORM_EXPORT bool matches(bool value) const;
+    BLINK_PLATFORM_EXPORT bool isEmpty() const;
 
 private:
     unsigned m_ideal : 1;
@@ -217,6 +228,48 @@ public:
     LongConstraint channelCount;
     StringConstraint deviceId;
     StringConstraint groupId;
+    // Constraints not exposed in Blink at the moment, only through
+    // the legacy name interface.
+    StringConstraint mediaStreamSource; // tab, screen, desktop, system
+    BooleanConstraint renderToAssociatedSink;
+    BooleanConstraint hotwordEnabled;
+    BooleanConstraint googEchoCancellation;
+    BooleanConstraint googExperimentalEchoCancellation;
+    BooleanConstraint googAutoGainControl;
+    BooleanConstraint googExperimentalAutoGainControl;
+    BooleanConstraint googNoiseSuppression;
+    BooleanConstraint googHighpassFilter;
+    BooleanConstraint googTypingNoiseDetection;
+    BooleanConstraint googExperimentalNoiseSuppression;
+    BooleanConstraint googBeamforming;
+    StringConstraint googArrayGeometry;
+    BooleanConstraint googAudioMirroring;
+    BooleanConstraint googDAEchoCancellation;
+    BooleanConstraint googAecDump;
+    BooleanConstraint googNoiseReduction;
+    StringConstraint offerToReceiveAudio;
+    StringConstraint offerToReceiveVideo;
+    BooleanConstraint voiceActivityDetection;
+    BooleanConstraint iceRestart;
+    BooleanConstraint googUseRtpMux;
+    BooleanConstraint enableDtlsSrtp;
+    BooleanConstraint enableRtpDataChannels;
+    BooleanConstraint enableDscp;
+    BooleanConstraint enableIPv6;
+    BooleanConstraint googEnableVideoSuspendBelowMinBitrate;
+    LongConstraint googNumUnsignalledRecvStreams;
+    BooleanConstraint googCombinedAudioVideoBwe;
+    LongConstraint googScreencastMinBitrate;
+    BooleanConstraint googCpuOveruseDetection;
+    LongConstraint googCpuUnderuseThreshold;
+    LongConstraint googCpuOveruseThreshold;
+    LongConstraint googCpuUnderuseEncodeRsdThreshold;
+    LongConstraint googCpuOveruseEncodeRsdThreshold;
+    BooleanConstraint googCpuOveruseEncodeUsage;
+    LongConstraint googHighStartBitrate;
+    BooleanConstraint googPayloadPadding;
+
+    BLINK_PLATFORM_EXPORT bool isEmpty() const;
 };
 
 // Old type/value form of constraint. Will be deprecated.
@@ -253,7 +306,6 @@ public:
     bool isNull() const { return m_private.isNull(); }
 
     BLINK_PLATFORM_EXPORT bool isEmpty() const;
-
     // Old accessors, will be deprecated
     BLINK_PLATFORM_EXPORT void getOptionalConstraints(WebVector<WebMediaConstraint>&) const;
     BLINK_PLATFORM_EXPORT void getMandatoryConstraints(WebVector<WebMediaConstraint>&) const;
@@ -263,8 +315,8 @@ public:
     // End of will be deprecated
 
     BLINK_PLATFORM_EXPORT void initialize();
-    // Old initializer, will be deprecated
-    BLINK_PLATFORM_EXPORT void initialize(const WebVector<WebMediaConstraint>& optional, const WebVector<WebMediaConstraint>& mandatory);
+    // Transition initializer, will be removed
+    BLINK_PLATFORM_EXPORT void initialize(const WebVector<WebMediaConstraint>& optional, const WebVector<WebMediaConstraint>& mandatory, const WebMediaTrackConstraintSet& basic, const WebVector<WebMediaTrackConstraintSet>& advanced);
 
     BLINK_PLATFORM_EXPORT void initialize(const WebMediaTrackConstraintSet& basic, const WebVector<WebMediaTrackConstraintSet>& advanced);
 

@@ -24,6 +24,7 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.media.remote.MediaRouteController.MediaStateListener;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
 import org.chromium.ui.widget.Toast;
 
@@ -53,8 +54,6 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
 
     // points to mDefaultRouteSelector, mYouTubeRouteSelector or null
     private MediaRouteController mCurrentRouteController;
-
-    private boolean mFirstConnection = true;
 
     // This is a key for meta-data in the package manifest.
     private static final String REMOTE_MEDIA_PLAYERS_KEY =
@@ -161,11 +160,6 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
 
         if (!controller.initialize()) return;
 
-        if (mFirstConnection) {
-            controller.reconnectAnyExistingRoute();
-            mFirstConnection = false;
-        }
-
         if (mNotificationControl != null) {
             mNotificationControl.setRouteController(controller);
         }
@@ -194,8 +188,7 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
 
         onStateReset(controller);
         if (controller.shouldResetState(player)) {
-            controller.setMediaStateListener(player);
-            showMediaRouteDialog(controller, currentActivity);
+            showMediaRouteDialog(player, controller, currentActivity);
         }
 
     }
@@ -213,18 +206,19 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
         if (mCurrentRouteController == null) return;
         if (mCurrentRouteController.getMediaStateListener() != player) return;
 
-        showMediaRouteControlDialog(mCurrentRouteController,
-                ApplicationStatus.getLastTrackedFocusedActivity());
+        showMediaRouteControlDialog(ApplicationStatus.getLastTrackedFocusedActivity());
     }
 
-    private void showMediaRouteDialog(MediaRouteController controller, Activity activity) {
+    private void showMediaRouteDialog(MediaStateListener player, MediaRouteController controller,
+            Activity activity) {
 
         FragmentManager fm = ((FragmentActivity) activity).getSupportFragmentManager();
         if (fm == null) {
             throw new IllegalStateException("The activity must be a subclass of FragmentActivity");
         }
 
-        MediaRouteDialogFactory factory = new ChromeMediaRouteDialogFactory();
+        MediaRouteDialogFactory factory = new MediaRouteChooserDialogFactory(player, controller,
+                activity);
 
         if (fm.findFragmentByTag(
                 "android.support.v7.mediarouter:MediaRouteChooserDialogFragment") != null) {
@@ -237,13 +231,13 @@ public class RemoteMediaPlayerController implements MediaRouteController.UiListe
         f.show(fm, "android.support.v7.mediarouter:MediaRouteChooserDialogFragment");
     }
 
-    private void showMediaRouteControlDialog(MediaRouteController controller, Activity activity) {
+    private void showMediaRouteControlDialog(Activity activity) {
 
         FragmentManager fm = ((FragmentActivity) activity).getSupportFragmentManager();
         if (fm == null) {
             throw new IllegalStateException("The activity must be a subclass of FragmentActivity");
         }
-        MediaRouteDialogFactory factory = new ChromeMediaRouteDialogFactory();
+        MediaRouteDialogFactory factory = new MediaRouteControllerDialogFactory();
 
         if (fm.findFragmentByTag(
                 "android.support.v7.mediarouter:MediaRouteControllerDialogFragment") != null) {

@@ -44,7 +44,7 @@ class TraceValidatorBase(gpu_test_base.ValidatorBase):
     raise NotImplementedError("GetCategoryName() Not implemented!")
 
   def ValidateAndMeasurePage(self, page, tab, results):
-    timeline_data = tab.browser.platform.tracing_controller.Stop()
+    timeline_data = tab.browser.platform.tracing_controller.StopTracing()
     timeline_model = model_module.TimelineModel(timeline_data)
 
     category_name = self.GetCategoryName()
@@ -64,8 +64,8 @@ class TraceValidatorBase(gpu_test_base.ValidatorBase):
     config = tracing_config.TracingConfig()
     for cat in TOPLEVEL_CATEGORIES:
       config.tracing_category_filter.AddDisabledByDefault(cat)
-    config.tracing_options.enable_chrome_trace = True
-    tab.browser.platform.tracing_controller.Start(config, 60)
+    config.enable_chrome_trace = True
+    tab.browser.platform.tracing_controller.StartTracing(config, 60)
 
   def _FormatException(self, category):
     return 'Trace markers for GPU category was not found: %s' % category

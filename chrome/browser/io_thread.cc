@@ -1178,7 +1178,10 @@ void IOThread::InitializeNetworkSessionParamsFromGlobals(
       &params->quic_idle_connection_timeout_seconds);
   globals.quic_disable_preconnect_if_0rtt.CopyToIfSet(
       &params->quic_disable_preconnect_if_0rtt);
-
+  if (!globals.quic_host_whitelist.empty())
+    params->quic_host_whitelist = globals.quic_host_whitelist;
+  globals.quic_migrate_sessions_on_network_change.CopyToIfSet(
+      &params->quic_migrate_sessions_on_network_change);
   globals.origin_to_force_quic_on.CopyToIfSet(
       &params->origin_to_force_quic_on);
   params->enable_user_alternate_protocol_ports =
@@ -1317,6 +1320,10 @@ void IOThread::ConfigureQuicGlobals(
     }
     globals->quic_disable_preconnect_if_0rtt.set(
         ShouldQuicDisablePreConnectIfZeroRtt(quic_trial_params));
+    globals->quic_host_whitelist =
+        GetQuicHostWhitelist(command_line, quic_trial_params);
+    globals->quic_migrate_sessions_on_network_change.set(
+        ShouldQuicMigrateSessionsOnNetworkChange(quic_trial_params));
   }
 
   size_t max_packet_length = GetQuicMaxPacketLength(command_line,
@@ -1573,6 +1580,32 @@ bool IOThread::ShouldQuicDisablePreConnectIfZeroRtt(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params, "disable_preconnect_if_0rtt"),
+      "true");
+}
+
+std::unordered_set<std::string> IOThread::GetQuicHostWhitelist(
+    const base::CommandLine& command_line,
+    const VariationParameters& quic_trial_params) {
+  std::string whitelist;
+  if (command_line.HasSwitch(switches::kQuicHostWhitelist)) {
+    whitelist = command_line.GetSwitchValueASCII(switches::kQuicHostWhitelist);
+  } else {
+    whitelist = GetVariationParam(quic_trial_params, "quic_host_whitelist");
+  }
+  std::unordered_set<std::string> hosts;
+  for (const std::string& host :base::SplitString(whitelist, ",",
+                                                  base::TRIM_WHITESPACE,
+                                                  base::SPLIT_WANT_ALL)) {
+    hosts.insert(host);
+  }
+  return hosts;
+}
+
+bool IOThread::ShouldQuicMigrateSessionsOnNetworkChange(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "migrate_sessions_on_network_change"),
       "true");
 }
 

@@ -98,7 +98,6 @@ extern const char kDisableQuicPortSelection[];
 extern const char kDisableSessionCrashedBubble[];
 extern const char kDisableSiteEngagementService[];
 extern const char kDisableWebNotificationCustomLayouts[];
-extern const char kDisableWebResources[];
 extern const char kDisableZeroBrowsersOpenForTests[];
 extern const char kDiskCacheDir[];
 extern const char kDiskCacheSize[];
@@ -239,6 +238,7 @@ extern const char kProxyBypassList[];
 extern const char kProxyPacUrl[];
 extern const char kProxyServer[];
 extern const char kQuicConnectionOptions[];
+extern const char kQuicHostWhitelist[];
 extern const char kQuicMaxPacketLength[];
 extern const char kQuicVersion[];
 extern const char kRemoteDebuggingTargets[];
@@ -365,6 +365,7 @@ extern const char kShowIcons[];
 extern const char kUninstall[];
 extern const char kViewerLaunchViaAppId[];
 extern const char kWaitForMutex[];
+extern const char kWatcherProcess[];
 extern const char kWindows8Search[];
 #endif  // defined(OS_WIN)
 

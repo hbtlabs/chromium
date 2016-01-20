@@ -382,8 +382,11 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
   }
 
 #if defined(OS_WIN)
+  // TODO(gab): This could now run only during Active Setup (i.e. on explicit
+  // Active Setup versioning and on OS upgrades) instead of every startup.
+  // http://crbug.com/577697
   if (process_startup)
-    ShellIntegration::MigrateChromiumShortcuts();
+    ShellIntegration::MigrateTaskbarPins();
 #endif  // defined(OS_WIN)
 
   return true;

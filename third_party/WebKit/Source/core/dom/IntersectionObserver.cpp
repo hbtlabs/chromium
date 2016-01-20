@@ -7,13 +7,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/css/parser/CSSTokenizer.h"
-#include "core/dom/ElementIntersectionObserverData.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/IntersectionObserverCallback.h"
 #include "core/dom/IntersectionObserverController.h"
 #include "core/dom/IntersectionObserverEntry.h"
 #include "core/dom/IntersectionObserverInit.h"
+#include "core/dom/NodeIntersectionObserverData.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutView.h"
 #include "platform/Timer.h"
@@ -81,17 +81,17 @@ static void parseThresholds(const DoubleOrDoubleArray& thresholdParameter, Vecto
 
 IntersectionObserver* IntersectionObserver::create(const IntersectionObserverInit& observerInit, IntersectionObserverCallback& callback, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<Element> root = observerInit.root();
+    RefPtrWillBeRawPtr<Node> root = observerInit.root();
     if (!root) {
         // TODO(szager): Use Document instead of document element for implicit root. (crbug.com/570538)
         ExecutionContext* context = callback.executionContext();
         ASSERT(context->isDocument());
         Frame* mainFrame = toDocument(context)->frame()->tree().top();
         if (mainFrame && mainFrame->isLocalFrame())
-            root = toLocalFrame(mainFrame)->document()->documentElement();
+            root = toLocalFrame(mainFrame)->document();
     }
     if (!root) {
-        exceptionState.throwDOMException(HierarchyRequestError, "Unable to get root element in main frame to track.");
+        exceptionState.throwDOMException(HierarchyRequestError, "Unable to get root node in main frame to track.");
         return nullptr;
     }
 
@@ -112,15 +112,18 @@ IntersectionObserver* IntersectionObserver::create(const IntersectionObserverIni
     return new IntersectionObserver(callback, *root, rootMargin, thresholds);
 }
 
-IntersectionObserver::IntersectionObserver(IntersectionObserverCallback& callback, Element& root, const Vector<Length>& rootMargin, const Vector<float>& thresholds)
+IntersectionObserver::IntersectionObserver(IntersectionObserverCallback& callback, Node& root, const Vector<Length>& rootMargin, const Vector<float>& thresholds)
     : m_callback(&callback)
-    , m_root(root.ensureIntersectionObserverData().createWeakPtr(&root))
     , m_thresholds(thresholds)
     , m_topMargin(Fixed)
     , m_rightMargin(Fixed)
     , m_bottomMargin(Fixed)
     , m_leftMargin(Fixed)
 {
+    if (root.isDocumentNode())
+        m_root = toDocument(root).ensureIntersectionObserverData().createWeakPtr(&root);
+    else
+        m_root = toElement(root).ensureIntersectionObserverData().createWeakPtr(&root);
     switch (rootMargin.size()) {
     case 0:
         break;
@@ -149,24 +152,34 @@ IntersectionObserver::IntersectionObserver(IntersectionObserverCallback& callbac
     root.document().ensureIntersectionObserverController().addTrackedObserver(*this);
 }
 
-LayoutObject* IntersectionObserver::rootLayoutObject()
+#if ENABLE(OILPAN)
+void IntersectionObserver::clearWeakMembers(Visitor* visitor)
 {
-    Element* rootElement = root();
-    if (rootElement == rootElement->document().documentElement())
-        return rootElement->document().layoutView();
-    return rootElement->layoutObject();
+    if (Heap::isHeapObjectAlive(m_root))
+        return;
+    disconnect();
+    m_root = nullptr;
+}
+#endif
+
+LayoutObject* IntersectionObserver::rootLayoutObject() const
+{
+    Node* rootNode = root();
+    if (rootNode->isDocumentNode())
+        return toDocument(rootNode)->layoutView();
+    return toElement(rootNode)->layoutObject();
 }
 
 bool IntersectionObserver::isDescendantOfRoot(const Element* target) const
 {
     // Is m_root an ancestor, through the DOM and frame trees, of target?
-    Element* rootElement = m_root.get();
-    if (!rootElement || !target || target == rootElement)
+    Node* rootNode = root();
+    if (!rootNode || !target || target == rootNode)
         return false;
-    if (!target->inDocument() || !rootElement->inDocument())
+    if (!target->inDocument() || !rootNode->inDocument())
         return false;
 
-    Document* rootDocument = &rootElement->document();
+    Document* rootDocument = &rootNode->document();
     Document* targetDocument = &target->document();
     while (targetDocument != rootDocument) {
         target = targetDocument->ownerElement();
@@ -174,12 +187,15 @@ bool IntersectionObserver::isDescendantOfRoot(const Element* target) const
             return false;
         targetDocument = &target->document();
     }
-    return target->isDescendantOf(rootElement);
+    if (rootNode->isDocumentNode()) {
+        ASSERT(targetDocument == rootNode);
+        return true;
+    }
+    return target->isDescendantOf(rootNode);
 }
 
 void IntersectionObserver::observe(Element* target, ExceptionState& exceptionState)
 {
-    checkRootAndDetachIfNeeded();
     if (!m_root) {
         exceptionState.throwDOMException(HierarchyRequestError, "Invalid observer: root element or containing document has been deleted.");
         return;
@@ -214,7 +230,6 @@ void IntersectionObserver::observe(Element* target, ExceptionState& exceptionSta
 
 void IntersectionObserver::unobserve(Element* target, ExceptionState&)
 {
-    checkRootAndDetachIfNeeded();
     if (!target || !target->intersectionObserverData())
         return;
     // TODO(szager): unobserve callback
@@ -224,7 +239,6 @@ void IntersectionObserver::unobserve(Element* target, ExceptionState&)
 
 void IntersectionObserver::computeIntersectionObservations(double timestamp)
 {
-    checkRootAndDetachIfNeeded();
     if (!m_root)
         return;
     for (auto& observation : m_observations)
@@ -233,11 +247,9 @@ void IntersectionObserver::computeIntersectionObservations(double timestamp)
 
 void IntersectionObserver::disconnect()
 {
-    HeapVector<Member<IntersectionObservation>> observationsToDisconnect;
-    copyToVector(m_observations, observationsToDisconnect);
-    for (auto& observation : observationsToDisconnect)
-        observation->disconnect();
-    ASSERT(m_observations.isEmpty());
+    for (auto& observation : m_observations)
+        observation->clearRootAndRemoveFromTarget();
+    m_observations.clear();
 }
 
 void IntersectionObserver::removeObservation(IntersectionObservation& observation)
@@ -247,7 +259,6 @@ void IntersectionObserver::removeObservation(IntersectionObservation& observatio
 
 HeapVector<Member<IntersectionObserverEntry>> IntersectionObserver::takeRecords()
 {
-    checkRootAndDetachIfNeeded();
     HeapVector<Member<IntersectionObserverEntry>> entries;
     entries.swap(m_entries);
     return entries;
@@ -292,7 +303,6 @@ unsigned IntersectionObserver::firstThresholdGreaterThan(float ratio) const
 
 void IntersectionObserver::deliver()
 {
-    checkRootAndDetachIfNeeded();
 
     if (m_entries.isEmpty())
         return;
@@ -304,7 +314,6 @@ void IntersectionObserver::deliver()
 
 void IntersectionObserver::setActive(bool active)
 {
-    checkRootAndDetachIfNeeded();
     for (auto& observation : m_observations)
         observation->setActive(m_root && active && isDescendantOfRoot(observation->target()));
 }
@@ -317,27 +326,12 @@ bool IntersectionObserver::hasPercentMargin() const
         || m_leftMargin.type() == Percent);
 }
 
-void IntersectionObserver::checkRootAndDetachIfNeeded()
-{
-#if ENABLE(OILPAN)
-    // TODO(szager): Pre-oilpan, ElementIntersectionObserverData::dispose() will take
-    // care of this cleanup.  When oilpan ships, there will be a potential leak of the
-    // callback's execution context when the root goes away.  For a detailed explanation:
-    //
-    //   https://goo.gl/PC2Baj
-    //
-    // When that happens, this method should catch most potential leaks, but a complete
-    // solution will still be needed, along the lines described in the above link.
-    if (m_root)
-        return;
-    disconnect();
-#endif
-}
-
 DEFINE_TRACE(IntersectionObserver)
 {
+#if ENABLE(OILPAN)
+    visitor->template registerWeakMembers<IntersectionObserver, &IntersectionObserver::clearWeakMembers>(this);
+#endif
     visitor->trace(m_callback);
-    visitor->trace(m_root);
     visitor->trace(m_observations);
     visitor->trace(m_entries);
 }

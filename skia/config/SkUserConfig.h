@@ -206,6 +206,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 //
 // Remove these as we update our sites.
 //
+#ifndef    SK_SUPPORT_LEGACY_CONIC_MEASURE
+#   define SK_SUPPORT_LEGACY_CONIC_MEASURE
+#endif
+
 #ifndef    SK_SUPPORT_LEGACY_GETTOPDEVICE
 #   define SK_SUPPORT_LEGACY_GETTOPDEVICE
 #endif
@@ -236,6 +240,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #ifndef    SK_SUPPORT_LEGACY_BITMAP_FILTER
 #   define SK_SUPPORT_LEGACY_BITMAP_FILTER
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_TRANSLATEROUNDHACK
+#   define SK_SUPPORT_LEGACY_TRANSLATEROUNDHACK
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

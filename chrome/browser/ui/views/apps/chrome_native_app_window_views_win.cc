@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_win.h"
 
 #include "apps/ui/views/app_window_frame_view.h"
-#include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,7 +24,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/extension.h"
-#include "ui/aura/remote_window_tree_host_win.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
@@ -40,16 +38,6 @@ ChromeNativeAppWindowViewsWin::~ChromeNativeAppWindowViewsWin() {
 
 HWND ChromeNativeAppWindowViewsWin::GetNativeAppWindowHWND() const {
   return views::HWNDForWidget(widget()->GetTopLevelWidget());
-}
-
-bool ChromeNativeAppWindowViewsWin::IsRunningInAsh() {
-  if (!ash::Shell::HasInstance())
-    return false;
-
-  views::Widget* widget = GetWidget();
-  chrome::HostDesktopType host_desktop_type =
-      chrome::GetHostDesktopTypeForNativeWindow(widget->GetNativeWindow());
-  return host_desktop_type == chrome::HOST_DESKTOP_TYPE_ASH;
 }
 
 void ChromeNativeAppWindowViewsWin::EnsureCaptionStyleSet() {
@@ -90,10 +78,7 @@ void ChromeNativeAppWindowViewsWin::OnBeforeWidgetInit(
       desktop_type = chrome::GetActiveDesktop();
     }
   }
-  if (desktop_type == chrome::HOST_DESKTOP_TYPE_ASH)
-    init_params->context = ash::Shell::GetPrimaryRootWindow();
-  else
-    init_params->native_widget = new AppWindowDesktopNativeWidgetAuraWin(this);
+  init_params->native_widget = new AppWindowDesktopNativeWidgetAuraWin(this);
 
   is_translucent_ =
       init_params->opacity == views::Widget::InitParams::TRANSLUCENT_WINDOW;
@@ -102,11 +87,6 @@ void ChromeNativeAppWindowViewsWin::OnBeforeWidgetInit(
 void ChromeNativeAppWindowViewsWin::InitializeDefaultWindow(
     const extensions::AppWindow::CreateParams& create_params) {
   ChromeNativeAppWindowViewsAura::InitializeDefaultWindow(create_params);
-
-  // Remaining initialization is for Windows shell integration, which doesn't
-  // apply to app windows in Ash.
-  if (IsRunningInAsh())
-    return;
 
   const extensions::Extension* extension = app_window()->GetExtension();
   if (!extension)

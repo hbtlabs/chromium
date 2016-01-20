@@ -7,6 +7,8 @@
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/ios/ios_util.h"
 #import "base/mac/bind_objc_block.h"
@@ -117,7 +119,7 @@ using web::NavigationManagerImpl;
 @synthesize recoverable = _recoverable;
 @synthesize shouldContinueCallback = _shouldContinueCallback;
 
-typedef void (^webPageOrderedOpenBlankBlockType)(const web::Referrer&, BOOL);
+typedef void (^webPageOrderedOpenBlankBlockType)();
 typedef void (^webPageOrderedOpenBlockType)(const GURL&,
                                             const web::Referrer&,
                                             NSString*,
@@ -131,11 +133,8 @@ typedef void (^webPageOrderedOpenBlockType)(const GURL&,
   return self;
 }
 
-- (CRWWebController*)webPageOrderedOpenBlankWithReferrer:
-    (const web::Referrer&)referrer
-                                            inBackground:(BOOL)inBackground {
-  static_cast<webPageOrderedOpenBlankBlockType>([self blockForSelector:_cmd])(
-      referrer, inBackground);
+- (CRWWebController*)webPageOrderedOpen {
+  static_cast<webPageOrderedOpenBlankBlockType>([self blockForSelector:_cmd])();
   return _childWebController;
 }
 
@@ -1118,7 +1117,7 @@ TEST_F(CRWUIWebViewWebControllerTest, POSTRequestCache) {
   item->SetTransitionType(ui::PAGE_TRANSITION_FORM_SUBMIT);
   item->set_is_renderer_initiated(true);
   base::scoped_nsobject<CRWSessionEntry> currentEntry(
-      [[CRWSessionEntry alloc] initWithNavigationItem:item.Pass()]);
+      [[CRWSessionEntry alloc] initWithNavigationItem:std::move(item)]);
   base::scoped_nsobject<NSMutableURLRequest> request(
       [[NSMutableURLRequest alloc] initWithURL:net::NSURLWithGURL(url)]);
   [request setHTTPMethod:@"POST"];
@@ -1434,12 +1433,9 @@ TEST_F(CRWWKWebControllerWindowOpenTest, NoDelegate) {
 TEST_F(CRWWKWebControllerWindowOpenTest, OpenWithUserGesture) {
   CR_TEST_REQUIRES_WK_WEB_VIEW();
 
-  SEL selector = @selector(webPageOrderedOpenBlankWithReferrer:inBackground:);
+  SEL selector = @selector(webPageOrderedOpen);
   [delegate_ onSelector:selector
-      callBlockExpectation:^(const web::Referrer& referrer,
-                             BOOL in_background) {
-        EXPECT_EQ("", referrer.url.spec());
-        EXPECT_FALSE(in_background);
+      callBlockExpectation:^(){
       }];
 
   [webController_ touched:YES];
@@ -1483,12 +1479,9 @@ TEST_F(CRWWKWebControllerWindowOpenTest, DontBlockPopup) {
   CR_TEST_REQUIRES_WK_WEB_VIEW();
 
   [delegate_ setBlockPopups:NO];
-  SEL selector = @selector(webPageOrderedOpenBlankWithReferrer:inBackground:);
+  SEL selector = @selector(webPageOrderedOpen);
   [delegate_ onSelector:selector
-      callBlockExpectation:^(const web::Referrer& referrer,
-                             BOOL in_background) {
-        EXPECT_EQ("", referrer.url.spec());
-        EXPECT_FALSE(in_background);
+      callBlockExpectation:^(){
       }];
 
   EXPECT_NSEQ(@"[object Window]", OpenWindowByDOM());

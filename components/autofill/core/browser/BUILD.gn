@@ -84,6 +84,8 @@ source_set("browser") {
     "form_group.h",
     "form_structure.cc",
     "form_structure.h",
+    "legal_message_line.cc",
+    "legal_message_line.h",
     "name_field.cc",
     "name_field.h",
     "options_util.cc",
@@ -151,6 +153,14 @@ source_set("browser") {
     ]
   }
 
+  if (is_ios || is_android) {
+    sources += [
+      "autofill_save_card_infobar_delegate_mobile.cc",
+      "autofill_save_card_infobar_delegate_mobile.h",
+      "autofill_save_card_infobar_mobile.h",
+    ]
+  }
+
   configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
@@ -158,7 +168,6 @@ source_set("browser") {
     "//base:i18n",
     "//base:prefs",
     "//components/autofill/core/common",
-    "//components/compression",
     "//components/data_use_measurement/core",
     "//components/infobars/core",
     "//components/keyed_service/core",
@@ -183,6 +192,7 @@ source_set("browser") {
     "//third_party/libphonenumber",
     "//third_party/libxml",
     "//third_party/re2",
+    "//third_party/zlib:compression_utils",
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -266,6 +276,7 @@ source_set("unit_tests") {
     "credit_card_unittest.cc",
     "form_field_unittest.cc",
     "form_structure_unittest.cc",
+    "legal_message_line_unittest.cc",
     "name_field_unittest.cc",
     "options_util_unittest.cc",
     "password_generator_unittest.cc",
@@ -290,7 +301,6 @@ source_set("unit_tests") {
     "//base:prefs_test_support",
     "//base/test:test_support",
     "//components/autofill/core/common",
-    "//components/compression",
     "//components/os_crypt",
     "//components/rappor:test_support",
     "//components/resources",
@@ -313,6 +323,7 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/libaddressinput:util",
     "//third_party/libphonenumber",
+    "//third_party/zlib:compression_utils",
     "//ui/base",
     "//url",
   ]

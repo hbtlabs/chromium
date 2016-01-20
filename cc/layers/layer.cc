@@ -16,7 +16,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/animation/animation.h"
-#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_registrar.h"
 #include "cc/animation/keyframed_animation_curve.h"
 #include "cc/animation/layer_animation_controller.h"
@@ -67,8 +66,8 @@ Layer::Layer(const LayerSettings& settings)
       property_tree_sequence_number_(-1),
       element_id_(0),
       mutable_properties_(kMutablePropertyNone),
+      main_thread_scrolling_reasons_(InputHandler::NOT_SCROLLING_ON_MAIN),
       should_flatten_transform_from_property_tree_(false),
-      should_scroll_on_main_thread_(false),
       have_wheel_event_handlers_(false),
       have_scroll_event_handlers_(false),
       user_scrollable_horizontal_(true),
@@ -948,11 +947,21 @@ void Layer::SetUserScrollable(bool horizontal, bool vertical) {
   SetNeedsCommit();
 }
 
-void Layer::SetShouldScrollOnMainThread(bool should_scroll_on_main_thread) {
+void Layer::AddMainThreadScrollingReasons(
+    InputHandler::MainThreadScrollingReason main_thread_scrolling_reasons) {
   DCHECK(IsPropertyChangeAllowed());
-  if (should_scroll_on_main_thread_ == should_scroll_on_main_thread)
+  DCHECK(main_thread_scrolling_reasons);
+  if (main_thread_scrolling_reasons_ == main_thread_scrolling_reasons)
     return;
-  should_scroll_on_main_thread_ = should_scroll_on_main_thread;
+  main_thread_scrolling_reasons_ |= main_thread_scrolling_reasons;
+  SetNeedsCommit();
+}
+
+void Layer::ClearMainThreadScrollingReasons() {
+  DCHECK(IsPropertyChangeAllowed());
+  if (!main_thread_scrolling_reasons_)
+    return;
+  main_thread_scrolling_reasons_ = InputHandler::NOT_SCROLLING_ON_MAIN;
   SetNeedsCommit();
 }
 
@@ -1163,6 +1172,7 @@ static void PostCopyCallbackToMainThread(
 }
 
 void Layer::PushPropertiesTo(LayerImpl* layer) {
+  TRACE_EVENT0("cc", "Layer::PushPropertiesTo");
   DCHECK(layer_tree_host_);
 
   // If we did not SavePaintProperties() for the layer this frame, then push the
@@ -1196,7 +1206,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   DCHECK(!(FilterIsAnimating() && layer->FilterIsAnimatingOnImplOnly()));
   layer->SetBackgroundFilters(background_filters());
   layer->SetMasksToBounds(masks_to_bounds_);
-  layer->SetShouldScrollOnMainThread(should_scroll_on_main_thread_);
+  layer->set_main_thread_scrolling_reasons(main_thread_scrolling_reasons_);
   layer->SetHaveWheelEventHandlers(have_wheel_event_handlers_);
   layer->SetHaveScrollEventHandlers(have_scroll_event_handlers_);
   layer->SetNonFastScrollableRegion(non_fast_scrollable_region_);
@@ -1285,26 +1295,28 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
     layer->PushScrollOffsetFromMainThread(scroll_offset_);
   layer->SetScrollCompensationAdjustment(ScrollCompensationAdjustment());
 
-  // Wrap the copy_requests_ in a PostTask to the main thread.
-  std::vector<scoped_ptr<CopyOutputRequest>> main_thread_copy_requests;
-  for (auto it = copy_requests_.begin(); it != copy_requests_.end(); ++it) {
-    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
-        layer_tree_host()->task_runner_provider()->MainThreadTaskRunner();
-    scoped_ptr<CopyOutputRequest> original_request = std::move(*it);
-    const CopyOutputRequest& original_request_ref = *original_request;
-    scoped_ptr<CopyOutputRequest> main_thread_request =
-        CopyOutputRequest::CreateRelayRequest(
-            original_request_ref,
-            base::Bind(&PostCopyCallbackToMainThread,
-                       main_thread_task_runner,
-                       base::Passed(&original_request)));
-    main_thread_copy_requests.push_back(std::move(main_thread_request));
-  }
-  if (!copy_requests_.empty() && layer_tree_host_)
-    layer_tree_host_->property_trees()->needs_rebuild = true;
+  {
+    TRACE_EVENT0("cc", "Layer::PushPropertiesTo::CopyOutputRequests");
+    // Wrap the copy_requests_ in a PostTask to the main thread.
+    std::vector<scoped_ptr<CopyOutputRequest>> main_thread_copy_requests;
+    for (auto it = copy_requests_.begin(); it != copy_requests_.end(); ++it) {
+      scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
+          layer_tree_host()->task_runner_provider()->MainThreadTaskRunner();
+      scoped_ptr<CopyOutputRequest> original_request = std::move(*it);
+      const CopyOutputRequest& original_request_ref = *original_request;
+      scoped_ptr<CopyOutputRequest> main_thread_request =
+          CopyOutputRequest::CreateRelayRequest(
+              original_request_ref,
+              base::Bind(&PostCopyCallbackToMainThread, main_thread_task_runner,
+                         base::Passed(&original_request)));
+      main_thread_copy_requests.push_back(std::move(main_thread_request));
+    }
+    if (!copy_requests_.empty() && layer_tree_host_)
+      layer_tree_host_->property_trees()->needs_rebuild = true;
 
-  copy_requests_.clear();
-  layer->PassCopyRequests(&main_thread_copy_requests);
+    copy_requests_.clear();
+    layer->PassCopyRequests(&main_thread_copy_requests);
+  }
 
   // If the main thread commits multiple times before the impl thread actually
   // draws, then damage tracking will become incorrect if we simply clobber the
@@ -1465,7 +1477,7 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
   // |filters_| and |background_filters_|. See crbug.com/541321.
 
   base->set_masks_to_bounds(masks_to_bounds_);
-  base->set_should_scroll_on_main_thread(should_scroll_on_main_thread_);
+  base->set_main_thread_scrolling_reasons(main_thread_scrolling_reasons_);
   base->set_have_wheel_event_handlers(have_wheel_event_handlers_);
   base->set_have_scroll_event_handlers(have_scroll_event_handlers_);
   RegionToProto(non_fast_scrollable_region_,
@@ -1551,7 +1563,9 @@ void Layer::FromLayerSpecificPropertiesProto(
   hide_layer_and_subtree_ = base.hide_layer_and_subtree();
   has_render_surface_ = base.has_render_surface();
   masks_to_bounds_ = base.masks_to_bounds();
-  should_scroll_on_main_thread_ = base.should_scroll_on_main_thread();
+  main_thread_scrolling_reasons_ =
+      static_cast<InputHandler::MainThreadScrollingReason>(
+          base.main_thread_scrolling_reasons());
   have_wheel_event_handlers_ = base.have_wheel_event_handlers();
   have_scroll_event_handlers_ = base.have_scroll_event_handlers();
   non_fast_scrollable_region_ =

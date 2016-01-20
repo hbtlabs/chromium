@@ -281,21 +281,13 @@ class NET_EXPORT_PRIVATE QuicConnection
     BUNDLE_PENDING_ACK = 2,
   };
 
-  class PacketWriterFactory {
-   public:
-    virtual ~PacketWriterFactory() {}
-
-    virtual QuicPacketWriter* Create(QuicConnection* connection) const = 0;
-  };
-
-  // Constructs a new QuicConnection for |connection_id| and |address|. Invokes
-  // writer_factory->Create() to get a writer; |owns_writer| specifies whether
-  // the connection takes ownership of the returned writer. |helper| must
-  // outlive this connection.
+  // Constructs a new QuicConnection for |connection_id| and |address| using
+  // |writer| to write packets. |owns_writer| specifies whether the connection
+  // takes ownership of |writer|. |helper| must outlive this connection.
   QuicConnection(QuicConnectionId connection_id,
                  IPEndPoint address,
                  QuicConnectionHelperInterface* helper,
-                 const PacketWriterFactory& writer_factory,
+                 QuicPacketWriter* writer,
                  bool owns_writer,
                  Perspective perspective,
                  const QuicVersionVector& supported_versions);
@@ -389,6 +381,10 @@ class NET_EXPORT_PRIVATE QuicConnection
 
   // Set the packet writer.
   void SetQuicPacketWriter(QuicPacketWriter* writer, bool owns_writer) {
+    DCHECK(writer != nullptr);
+    if (writer_ != nullptr && owns_writer_) {
+      delete writer_;
+    }
     writer_ = writer;
     owns_writer_ = owns_writer;
   }
@@ -505,7 +501,11 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Otherwise, it will reschedule the timeout alarm.
   void CheckForTimeout();
 
-  // Sends a ping, and resets the ping alarm.
+  // Called when the ping alarm fires. Causes a ping frame to be sent only
+  // if the retransmission alarm is not running.
+  void OnPingTimeout();
+
+  // Sends a ping frame.
   void SendPing();
 
   // Sets up a packet with an QuicAckFrame and sends it out.

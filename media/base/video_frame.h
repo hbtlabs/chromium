@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
@@ -203,6 +204,23 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::GpuMemoryBufferHandle& y_handle,
       const gfx::GpuMemoryBufferHandle& u_handle,
       const gfx::GpuMemoryBufferHandle& v_handle,
+      base::TimeDelta timestamp);
+
+  // Wraps external YUVA data of the given parameters with a VideoFrame.
+  // The returned VideoFrame does not own the data passed in.
+  static scoped_refptr<VideoFrame> WrapExternalYuvaData(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      int32_t y_stride,
+      int32_t u_stride,
+      int32_t v_stride,
+      int32_t a_stride,
+      uint8_t* y_data,
+      uint8_t* u_data,
+      uint8_t* v_data,
+      uint8_t* a_data,
       base::TimeDelta timestamp);
 
 #if defined(OS_LINUX)
@@ -408,6 +426,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // VideoFrame.
   // This method is thread safe. Both blink and compositor threads can call it.
   void UpdateReleaseSyncToken(SyncTokenClient* client);
+
+  // Returns a human-readable string describing |*this|.
+  std::string AsHumanReadableString();
 
  private:
   friend class base::RefCountedThreadSafe<VideoFrame>;

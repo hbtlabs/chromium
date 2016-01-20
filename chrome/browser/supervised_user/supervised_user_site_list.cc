@@ -16,11 +16,13 @@
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
-const int kSitelistFormatVersion = 2;
+const int kLegacyWhitelistFormatVersion = 2;
+const int kWhitelistFormatVersion = 1;
 
 const char kEntryPointUrlKey[] = "entry_point_url";
 const char kHostnameHashesKey[] = "hostname_hashes";
-const char kSitelistFormatVersionKey[] = "version";
+const char kLegacyWhitelistFormatVersionKey[] = "version";
+const char kWhitelistFormatVersionKey[] = "whitelist_version";
 const char kWhitelistKey[] = "whitelist";
 
 namespace {
@@ -37,6 +39,22 @@ scoped_ptr<base::Value> ReadFileOnBlockingThread(const base::FilePath& path) {
                << error_msg;
   }
   return value;
+}
+
+std::vector<std::string> ConvertListValues(const base::ListValue* list_values) {
+  std::vector<std::string> converted;
+  if (list_values) {
+    for (const base::Value* entry : *list_values) {
+      std::string entry_string;
+      if (!entry->GetAsString(&entry_string)) {
+        LOG(ERROR) << "Invalid whitelist entry";
+        continue;
+      }
+
+      converted.push_back(entry_string);
+    }
+  }
+  return converted;
 }
 
 }  // namespace
@@ -83,44 +101,30 @@ SupervisedUserSiteList::SupervisedUserSiteList(
     const GURL& entry_point,
     const base::ListValue* patterns,
     const base::ListValue* hostname_hashes)
-    : id_(id), title_(title), entry_point_(entry_point) {
-  if (patterns) {
-    for (const base::Value* entry : *patterns) {
-      std::string pattern;
-      if (!entry->GetAsString(&pattern)) {
-        LOG(ERROR) << "Invalid whitelist entry";
-        continue;
-      }
-
-      patterns_.push_back(pattern);
-    }
-  }
-
-  if (hostname_hashes) {
-    for (const base::Value* entry : *hostname_hashes) {
-      // |hash_str| should be a hex-encoded SHA1 hash string.
-      std::string hash_str;
-      std::vector<uint8_t> hash_bytes;
-      if (!entry->GetAsString(&hash_str) ||
-          hash_str.size() != 2 * base::kSHA1Length ||
-          !base::HexStringToBytes(hash_str, &hash_bytes)) {
-        LOG(ERROR) << "Invalid hostname_hashes entry";
-        continue;
-      }
-      DCHECK_EQ(base::kSHA1Length, hash_bytes.size());
-      hostname_hashes_.push_back(HostnameHash(hash_bytes));
-    }
-  }
-
-  if (patterns_.empty() && hostname_hashes_.empty())
-    LOG(WARNING) << "Site list is empty!";
-}
+    : SupervisedUserSiteList(id,
+                             title,
+                             entry_point,
+                             ConvertListValues(patterns),
+                             ConvertListValues(hostname_hashes)) {}
 
 SupervisedUserSiteList::SupervisedUserSiteList(
     const std::string& id,
     const base::string16& title,
-    const std::vector<std::string>& patterns)
-    : id_(id), title_(title), patterns_(patterns) {}
+    const GURL& entry_point,
+    const std::vector<std::string>& patterns,
+    const std::vector<std::string>& hostname_hashes)
+    : id_(id), title_(title), entry_point_(entry_point), patterns_(patterns) {
+  for (const std::string& hostname_hash : hostname_hashes) {
+    std::vector<uint8_t> hash_bytes;
+    if (hostname_hash.size() != 2 * base::kSHA1Length ||
+        !base::HexStringToBytes(hostname_hash, &hash_bytes)) {
+      LOG(ERROR) << "Invalid hostname_hashes entry";
+      continue;
+    }
+    DCHECK_EQ(base::kSHA1Length, hash_bytes.size());
+    hostname_hashes_.push_back(HostnameHash(hash_bytes));
+  }
+}
 
 SupervisedUserSiteList::~SupervisedUserSiteList() {
 }
@@ -143,18 +147,27 @@ void SupervisedUserSiteList::OnJsonLoaded(
 
   base::DictionaryValue* dict = nullptr;
   if (!value->GetAsDictionary(&dict)) {
-    LOG(ERROR) << "Site list " << path.value() << " is invalid";
+    LOG(ERROR) << "Whitelist " << path.value() << " is invalid";
     return;
   }
 
   int version = 0;
-  if (!dict->GetInteger(kSitelistFormatVersionKey, &version)) {
-    LOG(ERROR) << "Site list " << path.value() << " has invalid version";
-    return;
-  }
-  if (version != kSitelistFormatVersion) {
-    LOG(ERROR) << "Site list " << path.value() << " has wrong version "
-               << version << ", expected " << kSitelistFormatVersion;
+  if (!dict->GetInteger(kWhitelistFormatVersionKey, &version)) {
+    // TODO(bauerb): Remove this code once all whitelists have been updated to
+    // the new version.
+    if (!dict->GetInteger(kLegacyWhitelistFormatVersionKey, &version)) {
+      LOG(ERROR) << "Whitelist " << path.value() << " has invalid or missing "
+                 << "version";
+      return;
+    }
+    if (version != kLegacyWhitelistFormatVersion) {
+      LOG(ERROR) << "Whitelist " << path.value() << " has wrong legacy version "
+                 << version << ", expected " << kLegacyWhitelistFormatVersion;
+      return;
+    }
+  } else if (version != kWhitelistFormatVersion) {
+    LOG(ERROR) << "Whitelist " << path.value() << " has wrong version "
+               << version << ", expected " << kWhitelistFormatVersion;
     return;
   }
 
