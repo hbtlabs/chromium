@@ -699,10 +699,10 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
 // StartNotifySession fails if characteristic doesn't have Notify or Indicate
 // property.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
-  StartNotifyBoilerplate(
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
       /* properties: NOTIFY */ 0x10,
       /* expected_config_descriptor_value: NOTIFY */ 1,
-      StartNotifySetupError::CHARACTERISTIC_PROPERTIES);
+      StartNotifySetupError::CHARACTERISTIC_PROPERTIES));
 
   EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
 
