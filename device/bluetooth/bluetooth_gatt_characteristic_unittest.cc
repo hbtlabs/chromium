@@ -50,6 +50,7 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
   enum class StartNotifySetupError {
     CHARACTERISTIC_PROPERTIES,
     CONFIG_DESCRIPTOR_MISSING,
+    SET_NOTIFY_FAILS,
     NUMBER_OF_ERRORS,  // Add any new error enums above this.
     NONE
   };
@@ -75,6 +76,10 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     }
 
     switch (error) {
+      case StartNotifySetupError::SET_NOTIFY_FAILS:
+        SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
+            characteristic1_);
+      // Fall through to next block:
       case StartNotifySetupError::CHARACTERISTIC_PROPERTIES:
       case StartNotifySetupError::CONFIG_DESCRIPTOR_MISSING:
         characteristic1_->StartNotifySession(
@@ -742,18 +747,11 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoConfigDescriptor) {
 // Android: This is mBluetoothGatt.setCharacteristicNotification failing.
 TEST_F(BluetoothGattCharacteristicTest,
        StartNotifySession_FailToSetCharacteristicNotification) {
-  ASSERT_NO_FATAL_FAILURE(
-      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
-  SimulateGattDescriptor(
-      characteristic1_,
-      /* Client Characteristic Configuration descriptor's standard UUID: */
-      "00002902-0000-1000-8000-00805F9B34FB");
-  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
+      /* properties: NOTIFY */ 0x10,
+      /* expected_config_descriptor_value: NOTIFY */ 1,
+      StartNotifySetupError::SET_NOTIFY_FAILS));
 
-  SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
-      characteristic1_);
-  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
-                                       GetGattErrorCallback(Call::EXPECTED));
   EXPECT_EQ(0, error_callback_count_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, error_callback_count_);
