@@ -81,21 +81,21 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     }
 
     if (error == StartNotifySetupError::WRITE_DESCRIPTOR) {
-      // Fail to write to config descriptor synchronously.
       SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
           characteristic1_->GetDescriptors()[0]);
     }
 
-    if (error == StartNotifySetupError::NONE) {
-      characteristic1_->StartNotifySession(
-          GetNotifyCallback(Call::EXPECTED),
-          GetGattErrorCallback(Call::NOT_EXPECTED));
-    } else {
+    if (error != StartNotifySetupError::NONE) {
       characteristic1_->StartNotifySession(
           GetNotifyCallback(Call::NOT_EXPECTED),
           GetGattErrorCallback(Call::EXPECTED));
       return;
     }
+
+    characteristic1_->StartNotifySession(
+        GetNotifyCallback(Call::EXPECTED),
+        GetGattErrorCallback(Call::NOT_EXPECTED));
+
     EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
     EXPECT_EQ(0, callback_count_);
     SimulateGattNotifySessionStarted(characteristic1_);
