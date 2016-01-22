@@ -1,9 +1,9 @@
 Bluetooth
 =========
 
-`device/bluetooth` abstracts [Bluetooth
-Classic](https://en.wikipedia.org/wiki/Bluetooth) and [Low
-Energy](https://en.wikipedia.org/wiki/Bluetooth_low_energy) features
+`device/bluetooth` abstracts
+[Bluetooth Classic](https://en.wikipedia.org/wiki/Bluetooth) and
+[Low Energy](https://en.wikipedia.org/wiki/Bluetooth_low_energy) features
 across multiple platforms.
 
 Classic and Low Energy based profiles differ substantially. Platform
