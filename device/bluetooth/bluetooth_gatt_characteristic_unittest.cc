@@ -52,7 +52,6 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     CONFIG_DESCRIPTOR_MISSING,
     SET_NOTIFY,
     WRITE_DESCRIPTOR,
-    NUMBER_OF_ERRORS,  // Add any new error enums above this.
     NONE
   };
   // Constructs characteristics with |properties|, calls StartNotifySession,
@@ -87,19 +86,15 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
           characteristic1_->GetDescriptors()[0]);
     }
 
-    switch (error) {
-      case StartNotifySetupError::CHARACTERISTIC_PROPERTIES:
-      case StartNotifySetupError::CONFIG_DESCRIPTOR_MISSING:
-      case StartNotifySetupError::SET_NOTIFY:
-      case StartNotifySetupError::WRITE_DESCRIPTOR:
-        characteristic1_->StartNotifySession(
-            GetNotifyCallback(Call::NOT_EXPECTED),
-            GetGattErrorCallback(Call::EXPECTED));
-        return;
-      default:
-        characteristic1_->StartNotifySession(
-            GetNotifyCallback(Call::EXPECTED),
-            GetGattErrorCallback(Call::NOT_EXPECTED));
+    if (error == StartNotifySetupError::NONE) {
+      characteristic1_->StartNotifySession(
+          GetNotifyCallback(Call::EXPECTED),
+          GetGattErrorCallback(Call::NOT_EXPECTED));
+    } else {
+      characteristic1_->StartNotifySession(
+          GetNotifyCallback(Call::NOT_EXPECTED),
+          GetGattErrorCallback(Call::EXPECTED));
+      return;
     }
     EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
     EXPECT_EQ(0, callback_count_);
