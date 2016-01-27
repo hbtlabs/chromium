@@ -7,7 +7,7 @@ Bluetooth
 across multiple platforms.
 
 Classic and Low Energy based profiles differ substantially. Platform
-implementations may support only one or the other. even though several classes
+implementations may support only one or the other, even though several classes
 have interfaces for both, e.g. `BluetoothAdapter` & `BluetoothDevice`.
 
   |          | Classic |  Low Energy |
@@ -54,7 +54,13 @@ uses Mock Bluetooth objects:
 New feature development uses cross platform unit tests. This reduces test code
 redundancy and produces consistency across all implementations.
 
-`test/bluetooth_test.h` defines a cross platform test fixture
+Unit tests operate at the public `device/bluetooth` API layer and the
+`BluetoothTest` fixture controls fake operating system behavior as close to the
+platfom as possible. The resulting test coverage spans the cross platform API,
+common implementation, and platform specific implementation as close to
+operating system APIs as possible.
+
+`test/bluetooth_test.h` defines the cross platform test fixture
 `BluetoothTestBase`. Platform implementations provide subclasses, such as
 `test/bluetooth_test_android.h` and typedef to the name `BluetoothTest`.
 
@@ -64,17 +70,27 @@ redundancy and produces consistency across all implementations.
 
 Early code (Classic on most platforms, and Low Energy on BlueZ) was tested with
 platform specific unit tests, e.g. `bluetooth_bluez_unittest.cc` &
-`bluetooth_adapter_win_unittest.cc`.
+`bluetooth_adapter_win_unittest.cc`. The BlueZ style has platform specific
+methods to create fake devices and the public API is used to interact with them.
 
-Maintenance of these earlier implementations should update tests in place. Long
-term these tests should be
-[refactored into cross platform tests](https://crbug.com/580403).
+Maintenance of these earlier implementation featuress should update tests in
+place. Long term these tests should be [refactored into cross platform
+tests](https://crbug.com/580403).
 
 
 ### Mock Bluetooth Objects
 
-`test/mock_bluetooth_*` files provide GMOCK based fake objects for use in client
-code.
+`test/mock_bluetooth_*` files provide GoogleMock based fake objects for use in
+client code.
+
+
+### ChromeOS Blueooth Controller Tests
+
+Bluetooth controller system tests generating radio signals are run and managed
+by the ChromeOS team. See:
+https://chromium.googlesource.com/chromiumos/third_party/autotest/+/master/server/site_tests/
+https://chromium.googlesource.com/chromiumos/third_party/autotest/+/master/server/cros/bluetooth/
+https://chromium.googlesource.com/chromiumos/third_party/autotest/+/master/client/cros/bluetooth/
 
 
 --------------------------------------------------------------------------------
@@ -90,7 +106,7 @@ Bluetooth objects. E.g.
 
 For testing, the Android objects are __wrapped__ in:
 `android/java/src/org/chromium/device/bluetooth/Wrappers.java`. <br>
-and __fakes__ implemenated in:
+and __fakes__ implemented in:
 `test/android/java/src/org/chromium/device/bluetooth/Fakes.java`.
 
 Thus:
@@ -107,5 +123,6 @@ Thus:
             * `android/.../ChromeBluetoothService.java` uses:
                 * `android/.../Wrappers.java`: `BluetoothServiceWrapper`
                     * Which under test is a `FakeBluetoothService`
+            * ... and so on for characteristics and descriptors.
 
 Fake objects are controlled by `bluetooth_test_android.cc`.
