@@ -64,7 +64,7 @@ operating system APIs as possible.
 `BluetoothTestBase`. Platform implementations provide subclasses, such as
 `test/bluetooth_test_android.h` and typedef to the name `BluetoothTest`.
 
-[More information](https://docs.google.com/document/d/1mBipxn1sJu6jMqP0RQZpkYXC1o601bzLCpCxwTA2yGA/edit?usp=sharing)
+[More testing information](https://docs.google.com/document/d/1mBipxn1sJu6jMqP0RQZpkYXC1o601bzLCpCxwTA2yGA/edit?usp=sharing)
 
 ### Legacy Platform Specific Unit Tests
 
