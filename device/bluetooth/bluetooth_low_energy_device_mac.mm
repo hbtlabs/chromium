@@ -12,6 +12,7 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_adapter_mac.h"
 #include "device/bluetooth/bluetooth_device.h"
 
@@ -213,10 +214,12 @@ void BluetoothLowEnergyDeviceMac::ConnectToServiceInsecurely(
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::CreateGattConnection(
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothLowEnergyDeviceMac::CreateGattConnection(
     const GattConnectionCallback& callback,
     const ConnectErrorCallback& error_callback) {
   NOTIMPLEMENTED();
+  return nullptr;
 }
 
 NSDate* BluetoothLowEnergyDeviceMac::GetLastUpdateTime() const {
@@ -227,10 +230,20 @@ std::string BluetoothLowEnergyDeviceMac::GetDeviceName() const {
   return base::SysNSStringToUTF8([peripheral_ name]);
 }
 
-void BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {
   // Mac implementation does not yet use the default CreateGattConnection
   // implementation. http://crbug.com/520774
   NOTIMPLEMENTED();
+  return nullptr;
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothLowEnergyDeviceMac::ExistingGattConnection() {
+  // Mac implementation does not yet use the default CreateGattConnection
+  // implementation. http://crbug.com/520774
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 void BluetoothLowEnergyDeviceMac::DisconnectGatt() {

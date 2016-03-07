@@ -8,10 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/thread_task_runner_handle.h"
 #include "dbus/bus.h"
 #include "device/bluetooth/bluetooth_adapter_bluez.h"
 #include "device/bluetooth/bluetooth_gatt_connection_bluez.h"
@@ -200,10 +202,20 @@ std::string BluetoothDeviceBlueZ::GetDeviceName() const {
   return properties->alias.value();
 }
 
-void BluetoothDeviceBlueZ::CreateGattConnectionImpl() {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceBlueZ::CreateGattConnectionImpl() {
   // BlueZ implementation does not use the default CreateGattConnection
   // implementation.
   NOTIMPLEMENTED();
+  return nullptr;
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceBlueZ::ExistingGattConnection() {
+  // BlueZ implementation does not use the default CreateGattConnection
+  // implementation.
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 void BluetoothDeviceBlueZ::DisconnectGatt() {
@@ -490,7 +502,8 @@ void BluetoothDeviceBlueZ::ConnectToServiceInsecurely(
                   base::Bind(callback, socket), error_callback);
 }
 
-void BluetoothDeviceBlueZ::CreateGattConnection(
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceBlueZ::CreateGattConnection(
     const GattConnectionCallback& callback,
     const ConnectErrorCallback& error_callback) {
   // TODO(sacomoto): Workaround to retrieve the connection for already connected
@@ -499,8 +512,12 @@ void BluetoothDeviceBlueZ::CreateGattConnection(
   // should be removed once the correct behavour is implemented and the GATT
   // connections are reference counted (see todo below).
   if (IsConnected()) {
-    OnCreateGattConnection(callback);
-    return;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&BluetoothDeviceBlueZ::OnCreateGattConnection,
+                              base::Unretained(this), callback));
+
+    return make_scoped_ptr(
+        new BluetoothGattConnectionBlueZ(adapter_, GetAddress(), object_path_));
   }
 
   // TODO(armansito): Until there is a way to create a reference counted GATT
@@ -508,6 +525,9 @@ void BluetoothDeviceBlueZ::CreateGattConnection(
   Connect(NULL, base::Bind(&BluetoothDeviceBlueZ::OnCreateGattConnection,
                            weak_ptr_factory_.GetWeakPtr(), callback),
           error_callback);
+
+  return make_scoped_ptr(
+      new BluetoothGattConnectionBlueZ(adapter_, GetAddress(), object_path_));
 }
 
 BluetoothPairingBlueZ* BluetoothDeviceBlueZ::BeginPairing(
@@ -635,9 +655,7 @@ void BluetoothDeviceBlueZ::OnConnect(bool after_pairing,
 
 void BluetoothDeviceBlueZ::OnCreateGattConnection(
     const GattConnectionCallback& callback) {
-  scoped_ptr<device::BluetoothGattConnection> conn(
-      new BluetoothGattConnectionBlueZ(adapter_, GetAddress(), object_path_));
-  callback.Run(std::move(conn));
+  callback.Run();
 }
 
 void BluetoothDeviceBlueZ::OnConnectError(

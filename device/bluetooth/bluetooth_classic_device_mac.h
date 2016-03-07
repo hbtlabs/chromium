@@ -66,7 +66,7 @@ class BluetoothClassicDeviceMac : public BluetoothDeviceMac {
       const BluetoothUUID& uuid,
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
-  void CreateGattConnection(
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnection(
       const GattConnectionCallback& callback,
       const ConnectErrorCallback& error_callback) override;
 
@@ -80,7 +80,9 @@ class BluetoothClassicDeviceMac : public BluetoothDeviceMac {
  protected:
   // BluetoothDevice override
   std::string GetDeviceName() const override;
-  void CreateGattConnectionImpl() override;
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnectionImpl()
+      override;
+  scoped_ptr<device::BluetoothGattConnection> ExistingGattConnection() override;
   void DisconnectGatt() override;
 
  private:

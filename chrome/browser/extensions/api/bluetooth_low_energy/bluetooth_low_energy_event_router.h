@@ -319,12 +319,10 @@ class BluetoothLowEnergyEventRouter
                       const std::vector<uint8_t>& value);
 
   // Called by BluetoothDevice in response to a call to CreateGattConnection.
-  void OnCreateGattConnection(
-      bool persistent,
-      const std::string& extension_id,
-      const std::string& device_address,
-      const base::Closure& callback,
-      scoped_ptr<device::BluetoothGattConnection> connection);
+  void OnCreateGattConnection(bool persistent,
+                              const std::string& extension_id,
+                              const std::string& device_address,
+                              const base::Closure& callback);
 
   // Called by BluetoothGattCharacteristic and BluetoothGattDescriptor in
   // case of an error during the read/write operations.
@@ -406,11 +404,6 @@ class BluetoothLowEnergyEventRouter
   // Pointer to the current BluetoothAdapter instance. This represents a local
   // Bluetooth adapter of the system.
   scoped_refptr<device::BluetoothAdapter> adapter_;
-
-  // Set of extension ID + device addresses to which a connect/disconnect is
-  // currently pending.
-  std::set<std::string> connecting_devices_;
-  std::set<std::string> disconnecting_devices_;
 
   // Set of extension ID + characteristic ID to which a request to start a
   // notify session is currently pending.

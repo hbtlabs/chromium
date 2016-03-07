@@ -137,10 +137,7 @@ class BluetoothGattBlueZTest : public testing::Test {
     last_read_value_ = value;
   }
 
-  void GattConnectionCallback(scoped_ptr<BluetoothGattConnection> conn) {
-    ++success_callback_count_;
-    gatt_conn_ = std::move(conn);
-  }
+  void GattConnectionCallback() { ++success_callback_count_; }
 
   void NotifySessionCallback(scoped_ptr<BluetoothGattNotifySession> session) {
     ++success_callback_count_;
@@ -177,8 +174,7 @@ class BluetoothGattBlueZTest : public testing::Test {
   bluez::FakeBluetoothGattServiceClient* fake_bluetooth_gatt_service_client_;
   bluez::FakeBluetoothGattCharacteristicClient*
       fake_bluetooth_gatt_characteristic_client_;
-  bluez::FakeBluetoothGattDescriptorClient*
-      fake_bluetooth_gatt_descriptor_client_;
+  FakeBluetoothGattDescriptorClient* fake_bluetooth_gatt_descriptor_client_;
   scoped_ptr<device::BluetoothGattConnection> gatt_conn_;
   ScopedVector<BluetoothGattNotifySession> update_sessions_;
   scoped_refptr<BluetoothAdapter> adapter_;
@@ -197,20 +193,22 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
       adapter_->GetDevice(bluez::FakeBluetoothDeviceClient::kLowEnergyAddress);
   ASSERT_TRUE(device);
   ASSERT_FALSE(device->IsConnected());
-  ASSERT_FALSE(gatt_conn_.get());
   ASSERT_EQ(0, success_callback_count_);
   ASSERT_EQ(0, error_callback_count_);
 
-  device->CreateGattConnection(
-      base::Bind(&BluetoothGattBlueZTest::GattConnectionCallback,
-                 base::Unretained(this)),
-      base::Bind(&BluetoothGattBlueZTest::ConnectErrorCallback,
-                 base::Unretained(this)));
+  scoped_ptr<device::BluetoothGattConnection> gatt_conn_ =
+      device->CreateGattConnection(
+          base::Bind(&BluetoothGattBlueZTest::GattConnectionCallback,
+                     base::Unretained(this)),
+          base::Bind(&BluetoothGattBlueZTest::ConnectErrorCallback,
+                     base::Unretained(this)));
 
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_TRUE(device->IsConnected());
   ASSERT_TRUE(gatt_conn_.get());
+  EXPECT_FALSE(gatt_conn_->InProgress());
   EXPECT_TRUE(gatt_conn_->IsConnected());
   EXPECT_EQ(bluez::FakeBluetoothDeviceClient::kLowEnergyAddress,
             gatt_conn_->GetDeviceAddress());
@@ -219,16 +217,18 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(gatt_conn_->IsConnected());
 
-  device->CreateGattConnection(
+  gatt_conn_ = device->CreateGattConnection(
       base::Bind(&BluetoothGattBlueZTest::GattConnectionCallback,
                  base::Unretained(this)),
       base::Bind(&BluetoothGattBlueZTest::ConnectErrorCallback,
                  base::Unretained(this)));
 
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(2, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_TRUE(device->IsConnected());
   ASSERT_TRUE(gatt_conn_.get());
+  EXPECT_FALSE(gatt_conn_->InProgress());
   EXPECT_TRUE(gatt_conn_->IsConnected());
 
   device->Disconnect(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
@@ -236,12 +236,13 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
                      base::Bind(&BluetoothGattBlueZTest::ErrorCallback,
                                 base::Unretained(this)));
 
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   ASSERT_TRUE(gatt_conn_.get());
   EXPECT_FALSE(gatt_conn_->IsConnected());
 
-  device->CreateGattConnection(
+  gatt_conn_ = device->CreateGattConnection(
       base::Bind(&BluetoothGattBlueZTest::GattConnectionCallback,
                  base::Unretained(this)),
       base::Bind(&BluetoothGattBlueZTest::ConnectErrorCallback,
@@ -250,6 +251,7 @@ TEST_F(BluetoothGattBlueZTest, GattConnection) {
   EXPECT_EQ(4, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_TRUE(device->IsConnected());
+  EXPECT_FALSE(gatt_conn_->InProgress());
   EXPECT_TRUE(gatt_conn_->IsConnected());
 
   fake_bluetooth_device_client_->RemoveDevice(

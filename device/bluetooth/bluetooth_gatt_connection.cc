@@ -37,6 +37,10 @@ bool BluetoothGattConnection::IsConnected() {
   return true;
 }
 
+bool BluetoothGattConnection::InProgress() {
+  return device_->IsConnecting();
+}
+
 void BluetoothGattConnection::Disconnect() {
   if (!owns_reference_for_connection_)
     return;

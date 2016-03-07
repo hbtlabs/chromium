@@ -118,7 +118,7 @@ void BluetoothLowEnergyConnection::CreateGattConnection() {
     PA_LOG(INFO) << "Creating GATT connection with "
                  << remote_device->GetAddress();
 
-    remote_device->CreateGattConnection(
+    gatt_connection_ = remote_device->CreateGattConnection(
         base::Bind(&BluetoothLowEnergyConnection::OnGattConnectionCreated,
                    weak_ptr_factory_.GetWeakPtr()),
         base::Bind(&BluetoothLowEnergyConnection::OnCreateGattConnectionError,
@@ -335,17 +335,15 @@ void BluetoothLowEnergyConnection::OnCreateGattConnectionError(
   Disconnect();
 }
 
-void BluetoothLowEnergyConnection::OnGattConnectionCreated(
-    scoped_ptr<device::BluetoothGattConnection> gatt_connection) {
+void BluetoothLowEnergyConnection::OnGattConnectionCreated() {
   DCHECK(sub_status() == SubStatus::WAITING_GATT_CONNECTION);
-  PA_LOG(INFO) << "GATT connection with " << gatt_connection->GetDeviceAddress()
-               << " created.";
+  PA_LOG(INFO) << "GATT connection with "
+               << gatt_connection_->GetDeviceAddress() << " created.";
   PrintTimeElapsed();
 
   // Informing |bluetooth_trottler_| a new connection was established.
   bluetooth_throttler_->OnConnection(this);
 
-  gatt_connection_ = std::move(gatt_connection);
   SetSubStatus(SubStatus::WAITING_CHARACTERISTICS);
   characteristic_finder_.reset(CreateCharacteristicsFinder(
       base::Bind(&BluetoothLowEnergyConnection::OnCharacteristicsFound,

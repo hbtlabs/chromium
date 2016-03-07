@@ -12,6 +12,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "device/bluetooth/bluetooth_adapter_win.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_service_record_win.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
 #include "device/bluetooth/bluetooth_socket_win.h"
@@ -179,11 +180,13 @@ void BluetoothDeviceWin::ConnectToServiceInsecurely(
   error_callback.Run(kApiUnavailable);
 }
 
-void BluetoothDeviceWin::CreateGattConnection(
-      const GattConnectionCallback& callback,
-      const ConnectErrorCallback& error_callback) {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceWin::CreateGattConnection(
+    const GattConnectionCallback& callback,
+    const ConnectErrorCallback& error_callback) {
   // TODO(armansito): Implement.
   error_callback.Run(ERROR_UNSUPPORTED_DEVICE);
+  return NULL;
 }
 
 const BluetoothServiceRecordWin* BluetoothDeviceWin::GetServiceRecord(
@@ -270,10 +273,20 @@ std::string BluetoothDeviceWin::GetDeviceName() const {
   return name_;
 }
 
-void BluetoothDeviceWin::CreateGattConnectionImpl() {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceWin::CreateGattConnectionImpl() {
   // Windows implementation does not use the default CreateGattConnection
   // implementation.
   NOTIMPLEMENTED();
+  return NULL;
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceWin::ExistingGattConnection() {
+  // Windows implementation does not use the default ExistingGattConnection
+  // implementation.
+  NOTIMPLEMENTED();
+  return NULL;
 }
 
 void BluetoothDeviceWin::DisconnectGatt() {

@@ -72,7 +72,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
       const BluetoothUUID& uuid,
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
-  void CreateGattConnection(
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnection(
       const GattConnectionCallback& callback,
       const ConnectErrorCallback& error_callback) override;
 
@@ -92,7 +92,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
  protected:
   // BluetoothDevice override
   std::string GetDeviceName() const override;
-  void CreateGattConnectionImpl() override;
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnectionImpl()
+      override;
+  scoped_ptr<device::BluetoothGattConnection>
+  BluetoothDeviceWin::ExistingGattConnection() override;
   void DisconnectGatt() override;
 
  private:

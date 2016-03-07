@@ -249,17 +249,17 @@ void BluetoothLowEnergyEventRouter::Connect(
   }
 
   const std::string extension_id = extension->id();
-  const std::string connect_id = extension_id + device_address;
 
-  if (connecting_devices_.count(connect_id) != 0) {
-    error_callback.Run(kStatusErrorInProgress);
-    return;
-  }
-
-  BluetoothLowEnergyConnection* conn =
+  BluetoothLowEnergyConnection* extension_connection =
       FindConnection(extension_id, device_address);
-  if (conn) {
-    if (conn->GetConnection()->IsConnected()) {
+
+  if (extension_connection) {
+    if (extension_connection->GetConnection()->InProgress()) {
+      error_callback.Run(kStatusErrorInProgress);
+      return;
+    }
+
+    if (extension_connection->GetConnection()->IsConnected()) {
       VLOG(1) << "Application already connected to device: " << device_address;
       error_callback.Run(kStatusErrorAlreadyConnected);
       return;
@@ -276,19 +276,26 @@ void BluetoothLowEnergyEventRouter::Connect(
     return;
   }
 
-  connecting_devices_.insert(connect_id);
-  device->CreateGattConnection(
-      base::Bind(&BluetoothLowEnergyEventRouter::OnCreateGattConnection,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 persistent,
-                 extension_id,
-                 device_address,
-                 callback),
-      base::Bind(&BluetoothLowEnergyEventRouter::OnConnectError,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 extension_id,
-                 device_address,
-                 error_callback));
+  scoped_ptr<device::BluetoothGattConnection> gatt_connection =
+      device->CreateGattConnection(
+          base::Bind(&BluetoothLowEnergyEventRouter::OnCreateGattConnection,
+                     weak_ptr_factory_.GetWeakPtr(), persistent, extension_id,
+                     device_address, callback),
+          base::Bind(&BluetoothLowEnergyEventRouter::OnConnectError,
+                     weak_ptr_factory_.GetWeakPtr(), extension_id,
+                     device_address, error_callback));
+
+  /* If creating connection failed right away, just return. Error will be
+   * handled in OnConnectError callback*/
+  if (!gatt_connection) {
+    return;
+  }
+
+  extension_connection = new BluetoothLowEnergyConnection(
+      persistent, extension_id, std::move(gatt_connection));
+  ConnectionResourceManager* manager =
+      GetConnectionResourceManager(browser_context_);
+  manager->Add(extension_connection);
 }
 
 void BluetoothLowEnergyEventRouter::Disconnect(
@@ -304,10 +311,13 @@ void BluetoothLowEnergyEventRouter::Disconnect(
   }
 
   const std::string extension_id = extension->id();
+  const std::string connect_id = extension_id + device_address;
 
   BluetoothLowEnergyConnection* conn =
       FindConnection(extension_id, device_address);
-  if (!conn || !conn->GetConnection()->IsConnected()) {
+
+  if (!conn || (!conn->GetConnection()->IsConnected() &&
+                !conn->GetConnection()->InProgress())) {
     VLOG(1) << "Application not connected to device: " << device_address;
     error_callback.Run(kStatusErrorNotConnected);
     return;
@@ -1269,23 +1279,10 @@ void BluetoothLowEnergyEventRouter::OnCreateGattConnection(
     bool persistent,
     const std::string& extension_id,
     const std::string& device_address,
-    const base::Closure& callback,
-    scoped_ptr<BluetoothGattConnection> connection) {
+    const base::Closure& callback) {
   VLOG(2) << "GATT connection created.";
-  DCHECK(connection.get());
-  DCHECK(!FindConnection(extension_id, device_address));
-  DCHECK_EQ(device_address, connection->GetDeviceAddress());
+  DCHECK(FindConnection(extension_id, device_address));
 
-  const std::string connect_id = extension_id + device_address;
-  DCHECK_NE(0U, connecting_devices_.count(connect_id));
-
-  BluetoothLowEnergyConnection* conn = new BluetoothLowEnergyConnection(
-      persistent, extension_id, std::move(connection));
-  ConnectionResourceManager* manager =
-      GetConnectionResourceManager(browser_context_);
-  manager->Add(conn);
-
-  connecting_devices_.erase(connect_id);
   callback.Run();
 }
 
@@ -1304,10 +1301,8 @@ void BluetoothLowEnergyEventRouter::OnConnectError(
     BluetoothDevice::ConnectErrorCode error_code) {
   VLOG(2) << "Failed to create GATT connection: " << error_code;
 
-  const std::string connect_id = extension_id + device_address;
-  DCHECK_NE(0U, connecting_devices_.count(connect_id));
+  RemoveConnection(extension_id, device_address);
 
-  connecting_devices_.erase(connect_id);
   Status error_status = kStatusErrorFailed;
   if (error_code == BluetoothDevice::ERROR_INPROGRESS) {
     error_status = kStatusErrorInProgress;

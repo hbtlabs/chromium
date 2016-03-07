@@ -16,6 +16,7 @@ MockBluetoothGattConnection::MockBluetoothGattConnection(
     : BluetoothGattConnection(adapter, device_address) {
   ON_CALL(*this, GetDeviceAddress()).WillByDefault(Return(device_address));
   ON_CALL(*this, IsConnected()).WillByDefault(Return(true));
+  ON_CALL(*this, InProgress()).WillByDefault(Return(false));
 }
 
 MockBluetoothGattConnection::~MockBluetoothGattConnection() {}

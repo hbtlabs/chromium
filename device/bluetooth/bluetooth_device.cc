@@ -6,9 +6,13 @@
 
 #include <string>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/location.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
@@ -202,16 +206,21 @@ bool BluetoothDevice::IsTrustable() const {
   return false;
 }
 
-void BluetoothDevice::CreateGattConnection(
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDevice::CreateGattConnection(
     const GattConnectionCallback& callback,
     const ConnectErrorCallback& error_callback) {
   create_gatt_connection_success_callbacks_.push_back(callback);
   create_gatt_connection_error_callbacks_.push_back(error_callback);
 
-  if (IsGattConnected())
-    return DidConnectGatt();
+  if (IsGattConnected()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&BluetoothDevice::DidConnectGatt, base::Unretained(this)));
+    return ExistingGattConnection();
+  }
 
-  CreateGattConnectionImpl();
+  return CreateGattConnectionImpl();
 }
 
 std::vector<BluetoothGattService*>
@@ -285,8 +294,7 @@ BluetoothDevice::UUIDList BluetoothDevice::GetServiceDataUUIDs() const {
 
 void BluetoothDevice::DidConnectGatt() {
   for (const auto& callback : create_gatt_connection_success_callbacks_) {
-    callback.Run(
-        make_scoped_ptr(new BluetoothGattConnection(adapter_, GetAddress())));
+    callback.Run();
   }
   create_gatt_connection_success_callbacks_.clear();
   create_gatt_connection_error_callbacks_.clear();

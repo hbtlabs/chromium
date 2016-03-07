@@ -410,19 +410,18 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
     const ConnectToServiceCallback& callback,
     const ConnectToServiceErrorCallback& error_callback) = 0;
 
-  // Opens a new GATT connection to this device. On success, a new
-  // BluetoothGattConnection will be handed to the caller via |callback|. On
-  // error, |error_callback| will be called. The connection will be kept alive,
-  // as long as there is at least one active GATT connection. In the case that
-  // the underlying connection gets terminated, either due to a call to
-  // BluetoothDevice::Disconnect or other unexpected circumstances, the
+  // Opens a new GATT connection to this device. On success, |callback| will be
+  // called. On error, |error_callback| will be called. The connection will be
+  // kept alive, as long as there is at least one active GATT connection. In the
+  // case that the underlying connection gets terminated, either due to a call
+  // to BluetoothDevice::Disconnect or other unexpected circumstances, the
   // returned BluetoothGattConnection will be automatically marked as inactive.
   // To monitor the state of the connection, observe the
   // BluetoothAdapter::Observer::DeviceChanged method.
-  typedef base::Callback<void(scoped_ptr<BluetoothGattConnection>)>
-      GattConnectionCallback;
-  virtual void CreateGattConnection(const GattConnectionCallback& callback,
-                                    const ConnectErrorCallback& error_callback);
+  typedef base::Callback<void()> GattConnectionCallback;
+  virtual scoped_ptr<device::BluetoothGattConnection> CreateGattConnection(
+      const GattConnectionCallback& callback,
+      const ConnectErrorCallback& error_callback);
 
   // Returns the list of discovered GATT services.
   virtual std::vector<BluetoothGattService*> GetGattServices() const;
@@ -464,7 +463,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Subclasses must also call DidConnectGatt, DidFailToConnectGatt, or
   // DidDisconnectGatt immediately or asynchronously as the connection state
   // changes.
-  virtual void CreateGattConnectionImpl() = 0;
+  virtual scoped_ptr<device::BluetoothGattConnection>
+  CreateGattConnectionImpl() = 0;
+
+  // Return new BluetoothGattConnection for already connected BluetoothDevice.
+  virtual scoped_ptr<device::BluetoothGattConnection>
+  ExistingGattConnection() = 0;
 
   // Disconnects GATT connection on platforms that maintain a specific GATT
   // connection.

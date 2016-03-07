@@ -38,11 +38,13 @@ using device::MockBluetoothGattCharacteristic;
 using device::MockBluetoothGattConnection;
 using device::MockBluetoothGattNotifySession;
 using device::MockBluetoothGattService;
+using testing::DoAll;
 using testing::ElementsAre;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::ResultOf;
 using testing::Return;
+using testing::WithArg;
 using testing::_;
 
 typedef testing::NiceMock<MockBluetoothAdapter> NiceMockBluetoothAdapter;
@@ -93,6 +95,22 @@ ACTION_TEMPLATE(RunCallbackWithResult,
                 HAS_1_TEMPLATE_PARAMS(int, k),
                 AND_1_VALUE_PARAMS(func)) {
   return ::testing::get<k>(args).Run(func());
+}
+
+// Shedule Run() on the k-th argument of the function with no arguments.
+ACTION_TEMPLATE(RunCallbackDelayed,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_0_VALUE_PARAMS()) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(::testing::get<k>(args)));
+}
+
+// Shedule Run() on the k-th argument of the function with 1 argument.
+ACTION_TEMPLATE(RunCallbackDelayed,
+                HAS_1_TEMPLATE_PARAMS(int, k),
+                AND_1_VALUE_PARAMS(p1)) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(::testing::get<k>(args), p1));
 }
 
 // Function to iterate over the adapter's devices and return the one
@@ -434,12 +452,11 @@ LayoutTestBluetoothAdapterProvider::GetDelayedServicesDiscoveryAdapter() {
   // Override the previous mock implementation of CreateGattConnection that
   // this a NotifyServicesDiscovered task. Instead thsi adapter will not post
   // that task until GetGattServices is called.
-  ON_CALL(*device, CreateGattConnection(_, _))
-      .WillByDefault(RunCallbackWithResult<0 /* success_callback */>(
-          [adapter_ptr, device_ptr]() {
-            return make_scoped_ptr(new NiceMockBluetoothGattConnection(
-                adapter_ptr, device_ptr->GetAddress()));
-          }));
+  ON_CALL(*device, CreateGattConnectionRaw(_, _))
+      .WillByDefault(DoAll(RunCallbackDelayed<0 /* success_callback */>(),
+                           Return(static_cast<MockBluetoothGattConnection*>(
+                               new NiceMockBluetoothGattConnection(
+                                   adapter_ptr, device_ptr->GetAddress())))));
 
   ON_CALL(*device, GetGattServices())
       .WillByDefault(Invoke([adapter_ptr, device_ptr] {
@@ -611,15 +628,20 @@ LayoutTestBluetoothAdapterProvider::GetConnectableDevice(
 
   MockBluetoothDevice* device_ptr = device.get();
 
-  ON_CALL(*device, CreateGattConnection(_, _))
-      .WillByDefault(RunCallbackWithResult<0 /* success_callback */>(
-          [adapter, device_ptr]() {
-            base::ThreadTaskRunnerHandle::Get()->PostTask(
-                FROM_HERE, base::Bind(&NotifyServicesDiscovered,
-                                      make_scoped_refptr(adapter), device_ptr));
-            return make_scoped_ptr(new NiceMockBluetoothGattConnection(
-                adapter, device_ptr->GetAddress()));
-          }));
+  ON_CALL(*device, CreateGattConnectionRaw(_, _))
+      .WillByDefault(WithArg<0>(Invoke([adapter, device_ptr](
+          BluetoothDevice::GattConnectionCallback connect_callback) {
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::Bind(connect_callback));
+
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::Bind(&NotifyServicesDiscovered,
+                                  make_scoped_refptr(adapter), device_ptr));
+
+        return static_cast<MockBluetoothGattConnection*>(
+            new NiceMockBluetoothGattConnection(adapter,
+                                                device_ptr->GetAddress()));
+      })));
 
   return device;
 }
@@ -636,9 +658,12 @@ LayoutTestBluetoothAdapterProvider::GetUnconnectableDevice(
   scoped_ptr<NiceMockBluetoothDevice> device(
       GetBaseDevice(adapter, device_name, uuids, makeMACAddress(error_code)));
 
-  ON_CALL(*device, CreateGattConnection(_, _))
-      .WillByDefault(RunCallback<1 /* error_callback */>(error_code));
-
+  ON_CALL(*device, CreateGattConnectionRaw(_, _))
+      .WillByDefault(
+          DoAll(RunCallbackDelayed<1 /* success_callback */>(error_code),
+                Return(static_cast<MockBluetoothGattConnection*>(
+                    new NiceMockBluetoothGattConnection(
+                        adapter, device->GetAddress())))));
   return device;
 }
 

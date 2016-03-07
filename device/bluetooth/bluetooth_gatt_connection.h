@@ -38,6 +38,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattConnection {
   // to.
   const std::string& GetDeviceAddress() const;
 
+  // Returns true if this GATT connection is still in proggress, that is it was
+  // not established yet.
+  bool InProgress();
+
   // Returns true if this GATT connection is open.
   virtual bool IsConnected();
 

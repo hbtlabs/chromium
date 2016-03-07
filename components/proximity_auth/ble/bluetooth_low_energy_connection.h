@@ -149,8 +149,7 @@ class BluetoothLowEnergyConnection : public Connection,
   void CreateGattConnection();
 
   // Called when a GATT connection is created.
-  void OnGattConnectionCreated(
-      scoped_ptr<device::BluetoothGattConnection> gatt_connection);
+  void OnGattConnectionCreated();
 
   // Callback called when there is an error creating the GATT connection.
   void OnCreateGattConnectionError(

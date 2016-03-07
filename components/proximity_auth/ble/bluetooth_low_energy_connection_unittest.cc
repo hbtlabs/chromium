@@ -34,6 +34,7 @@
 
 using testing::_;
 using testing::AtLeast;
+using testing::DoAll;
 using testing::NiceMock;
 using testing::Return;
 using testing::StrictMock;
@@ -193,9 +194,12 @@ class ProximityAuthBluetoothLowEnergyConnectionTest : public testing::Test {
   // state, without an existing GATT connection.
   void ConnectGatt(MockBluetoothLowEnergyConnection* connection) {
     // Preparing |connection| for a CreateGattConnection call.
-    EXPECT_CALL(*device_, CreateGattConnection(_, _))
-        .WillOnce(DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
-                        SaveArg<1>(&create_gatt_connection_error_callback_)));
+    EXPECT_CALL(*device_, CreateGattConnectionRaw(_, _))
+        .WillOnce(
+            DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
+                  SaveArg<1>(&create_gatt_connection_error_callback_),
+                  Return(new NiceMock<device::MockBluetoothGattConnection>(
+                      adapter_, kTestRemoteDeviceBluetoothAddress))));
 
     // No throttling by default
     EXPECT_CALL(*bluetooth_throttler_, GetDelay())
@@ -216,9 +220,7 @@ class ProximityAuthBluetoothLowEnergyConnectionTest : public testing::Test {
             SaveArg<1>(&characteristics_finder_error_callback_),
             Return(new NiceMock<MockBluetoothLowEnergyCharacteristicsFinder>)));
 
-    create_gatt_connection_success_callback_.Run(
-        make_scoped_ptr(new NiceMock<device::MockBluetoothGattConnection>(
-            adapter_, kTestRemoteDeviceBluetoothAddress)));
+    create_gatt_connection_success_callback_.Run();
 
     EXPECT_EQ(connection->sub_status(),
               BluetoothLowEnergyConnection::SubStatus::WAITING_CHARACTERISTICS);
@@ -649,10 +651,11 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionTest,
 
   EXPECT_CALL(*bluetooth_throttler_, GetDelay())
       .WillOnce(Return(base::TimeDelta(base::TimeDelta::FromSeconds(1))));
-  EXPECT_CALL(*device_, CreateGattConnection(_, _))
+  EXPECT_CALL(*device_, CreateGattConnectionRaw(_, _))
       .WillOnce(DoAll(SaveArg<0>(&create_gatt_connection_success_callback_),
-                      SaveArg<1>(&create_gatt_connection_error_callback_)));
-
+                      SaveArg<1>(&create_gatt_connection_error_callback_),
+                      Return(new NiceMock<device::MockBluetoothGattConnection>(
+                          adapter_, kTestRemoteDeviceBluetoothAddress))));
   // No GATT connection should be created before the delay.
   connection->Connect();
   EXPECT_EQ(connection->sub_status(),
@@ -673,9 +676,7 @@ TEST_F(ProximityAuthBluetoothLowEnergyConnectionTest,
           SaveArg<1>(&characteristics_finder_error_callback_),
           Return(new NiceMock<MockBluetoothLowEnergyCharacteristicsFinder>)));
 
-  create_gatt_connection_success_callback_.Run(
-      make_scoped_ptr(new NiceMock<device::MockBluetoothGattConnection>(
-          adapter_, kTestRemoteDeviceBluetoothAddress)));
+  create_gatt_connection_success_callback_.Run();
 
   CharacteristicsFound(connection.get());
   NotifySessionStarted(connection.get());

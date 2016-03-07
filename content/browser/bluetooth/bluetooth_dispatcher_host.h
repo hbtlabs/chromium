@@ -152,12 +152,10 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
                             const std::string& device_id);
 
   // Callbacks for BluetoothDevice::CreateGattConnection.
-  void OnGATTConnectionCreated(
-      int thread_id,
-      int request_id,
-      const std::string& device_id,
-      base::TimeTicks start_time,
-      scoped_ptr<device::BluetoothGattConnection> connection);
+  void OnGATTConnectionCreated(int thread_id,
+                               int request_id,
+                               const std::string& device_id,
+                               base::TimeTicks start_time);
   void OnCreateGATTConnectionError(
       int thread_id,
       int request_id,

@@ -10,6 +10,7 @@
 #include "base/android/jni_string.h"
 #include "base/strings/stringprintf.h"
 #include "device/bluetooth/bluetooth_adapter_android.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothDevice_jni.h"
 
@@ -263,10 +264,22 @@ std::string BluetoothDeviceAndroid::GetDeviceName() const {
       AttachCurrentThread(), j_device_.obj()));
 }
 
-void BluetoothDeviceAndroid::CreateGattConnectionImpl() {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceAndroid::CreateGattConnectionImpl() {
   Java_ChromeBluetoothDevice_createGattConnectionImpl(
       AttachCurrentThread(), j_device_.obj(),
       base::android::GetApplicationContext());
+  // TODO(ortuno): in_progress is currently not used at all for Android. If
+  // LE disconnect is implemented on Android, create new subclass of
+  // BluetoothGattConnection and track progress properly. crbug.com/570370
+  return make_scoped_ptr(new device::BluetoothGattConnection(
+      GetAdapter(), GetAddress(), false /* in_progress */));
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothDeviceAndroid::ExistingGattConnection() {
+  return make_scoped_ptr(new device::BluetoothGattConnection(
+      GetAdapter(), GetAddress(), false /* in_progress */));
 }
 
 void BluetoothDeviceAndroid::DisconnectGatt() {

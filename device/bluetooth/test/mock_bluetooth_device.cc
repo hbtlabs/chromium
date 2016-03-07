@@ -62,6 +62,23 @@ MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
 
 MockBluetoothDevice::~MockBluetoothDevice() {}
 
+scoped_ptr<device::BluetoothGattConnection>
+MockBluetoothDevice::CreateGattConnection(
+    const GattConnectionCallback& callback,
+    const ConnectErrorCallback& error_callback) {
+  return make_scoped_ptr(CreateGattConnectionRaw(callback, error_callback));
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+MockBluetoothDevice::CreateGattConnectionImpl() {
+  return make_scoped_ptr(CreateGattConnectionImplRaw());
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+MockBluetoothDevice::ExistingGattConnection() {
+  return make_scoped_ptr(ExistingGattConnectionRaw());
+}
+
 void MockBluetoothDevice::AddMockService(
     scoped_ptr<MockBluetoothGattService> mock_service) {
   mock_services_.push_back(std::move(mock_service));

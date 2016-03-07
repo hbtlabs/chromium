@@ -13,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/bluetooth_socket_mac.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 
@@ -74,9 +75,18 @@ std::string BluetoothClassicDeviceMac::GetDeviceName() const {
   return base::SysNSStringToUTF8([device_ name]);
 }
 
-void BluetoothClassicDeviceMac::CreateGattConnectionImpl() {
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothClassicDeviceMac::CreateGattConnectionImpl() {
   // Classic devices do not support GATT connection.
   DidFailToConnectGatt(ERROR_UNSUPPORTED_DEVICE);
+  return nullptr;
+}
+
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothClassicDeviceMac::ExistingGattConnection() {
+  // Classic devices do not support GATT connection.
+  DidFailToConnectGatt(ERROR_UNSUPPORTED_DEVICE);
+  return nullptr;
 }
 
 void BluetoothClassicDeviceMac::DisconnectGatt() {}
@@ -238,11 +248,13 @@ void BluetoothClassicDeviceMac::ConnectToServiceInsecurely(
   error_callback.Run(kApiUnavailable);
 }
 
-void BluetoothClassicDeviceMac::CreateGattConnection(
+scoped_ptr<device::BluetoothGattConnection>
+BluetoothClassicDeviceMac::CreateGattConnection(
     const GattConnectionCallback& callback,
     const ConnectErrorCallback& error_callback) {
   // TODO(armansito): Implement.
   error_callback.Run(ERROR_UNSUPPORTED_DEVICE);
+  return nullptr;
 }
 
 NSDate* BluetoothClassicDeviceMac::GetLastUpdateTime() const {

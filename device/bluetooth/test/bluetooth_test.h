@@ -177,8 +177,7 @@ class BluetoothTestBase : public testing::Test {
   void Callback(Call expected);
   void DiscoverySessionCallback(Call expected,
                                 scoped_ptr<BluetoothDiscoverySession>);
-  void GattConnectionCallback(Call expected,
-                              scoped_ptr<BluetoothGattConnection>);
+  void GattConnectionCallback(Call expected);
   void NotifyCallback(Call expected, scoped_ptr<BluetoothGattNotifySession>);
   void ReadValueCallback(Call expected, const std::vector<uint8_t>& value);
   void ErrorCallback(Call expected);

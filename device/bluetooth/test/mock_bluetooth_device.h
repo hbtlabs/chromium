@@ -13,6 +13,7 @@
 #include "base/strings/string16.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_uuid.h"
+#include "device/bluetooth/test/mock_bluetooth_gatt_connection.h"
 #include "device/bluetooth/test/mock_bluetooth_gatt_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -82,14 +83,28 @@ class MockBluetoothDevice : public BluetoothDevice {
                void(const BluetoothUUID& uuid,
                     const ConnectToServiceCallback& callback,
                     const ConnectToServiceErrorCallback& error_callback));
-  MOCK_METHOD2(CreateGattConnection,
-               void(const GattConnectionCallback& callback,
-                    const ConnectErrorCallback& error_callback));
+  MOCK_METHOD2(CreateGattConnectionRaw,
+               device::MockBluetoothGattConnection*(
+                   const GattConnectionCallback& callback,
+                   const ConnectErrorCallback& error_callback));
 
   MOCK_CONST_METHOD0(GetGattServices, std::vector<BluetoothGattService*>());
   MOCK_CONST_METHOD1(GetGattService, BluetoothGattService*(const std::string&));
-  MOCK_METHOD0(CreateGattConnectionImpl, void());
+
+  /* GMock doesn't support returning scoped_ptr<> from mocked method (C++11
+   * feature) yet. Once it's there, remove all *Raw methods. */
+  MOCK_METHOD0(CreateGattConnectionImplRaw,
+               device::MockBluetoothGattConnection*());
+  MOCK_METHOD0(ExistingGattConnectionRaw,
+               device::MockBluetoothGattConnection*());
   MOCK_METHOD0(DisconnectGatt, void());
+
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnection(
+      const GattConnectionCallback& callback,
+      const ConnectErrorCallback& error_callback);
+
+  scoped_ptr<device::BluetoothGattConnection> CreateGattConnectionImpl();
+  scoped_ptr<device::BluetoothGattConnection> ExistingGattConnection();
 
   // BluetoothDevice manages the lifetime of its BluetoothGATTServices.
   // This method takes ownership of the MockBluetoothGATTServices. This is only

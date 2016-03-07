@@ -90,11 +90,8 @@ void BluetoothTestBase::DiscoverySessionCallback(
     unexpected_success_callback_ = true;
 }
 
-void BluetoothTestBase::GattConnectionCallback(
-    Call expected,
-    scoped_ptr<BluetoothGattConnection> connection) {
+void BluetoothTestBase::GattConnectionCallback(Call expected) {
   ++callback_count_;
-  gatt_connections_.push_back(connection.release());
 
   if (expected == Call::EXPECTED)
     ++actual_success_callback_calls_;

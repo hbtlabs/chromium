@@ -708,13 +708,16 @@ void BluetoothDispatcherHost::OnConnectGATT(int thread_id,
     return;
   }
 
-  query_result.device->CreateGattConnection(
-      base::Bind(&BluetoothDispatcherHost::OnGATTConnectionCreated,
-                 weak_ptr_on_ui_thread_, thread_id, request_id, device_id,
-                 start_time),
-      base::Bind(&BluetoothDispatcherHost::OnCreateGATTConnectionError,
-                 weak_ptr_on_ui_thread_, thread_id, request_id, device_id,
-                 start_time));
+  scoped_ptr<device::BluetoothGattConnection> connection =
+      query_result.device->CreateGattConnection(
+          base::Bind(&BluetoothDispatcherHost::OnGATTConnectionCreated,
+                     weak_ptr_on_ui_thread_, thread_id, request_id, device_id,
+                     start_time),
+          base::Bind(&BluetoothDispatcherHost::OnCreateGATTConnectionError,
+                     weak_ptr_on_ui_thread_, thread_id, request_id, device_id,
+                     start_time));
+
+  connections_.push_back(std::move(connection));
 }
 
 void BluetoothDispatcherHost::OnGetPrimaryService(
@@ -1135,10 +1138,8 @@ void BluetoothDispatcherHost::OnGATTConnectionCreated(
     int thread_id,
     int request_id,
     const std::string& device_id,
-    base::TimeTicks start_time,
-    scoped_ptr<device::BluetoothGattConnection> connection) {
+    base::TimeTicks start_time) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  connections_.push_back(std::move(connection));
   RecordConnectGATTTimeSuccess(base::TimeTicks::Now() - start_time);
   RecordConnectGATTOutcome(UMAConnectGATTOutcome::SUCCESS);
   Send(new BluetoothMsg_ConnectGATTSuccess(thread_id, request_id, device_id));
