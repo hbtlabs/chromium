@@ -408,32 +408,7 @@ int HashUUID(const std::string& uuid_in) {
 }
 
 TEST_F(BluetoothBlacklistTest, Hash) {
-  LOG(INFO) << HashUUID("713d0000-503e-4c75-ba94-3148f18d941e") << " blendmicro";
-  LOG(INFO) << HashUUID("6e400001-b5a3-f393-e0a9-e50e24dcca9e") << " nordic service";
-  LOG(INFO) << HashUUID("6e400002-b5a3-f393-e0a9-e50e24dcca9e") << " nordic TX Char";
-  LOG(INFO) << HashUUID("6e400003-b5a3-f393-e0a9-e50e24dcca9e") << " nordic RX Char";
-  LOG(INFO) << HashUUID("0000110a-0000-1000-8000-00805f9b34fb") << " ";
-  LOG(INFO) << HashUUID("b9407f30-f5f8-466e-aff9-25556b57fe6d") << " ";
-  LOG(INFO) << HashUUID("b9407f30-f5f8-466e-aff9-25556b57fe6d") << " ";
-  LOG(INFO) << HashUUID("30dff168-62de-11e4-b116-123b93f75cba") << " ";
-  LOG(INFO) << HashUUID("0000110a-0000-1000-8000-00805f9b34fb") << " ";
-  LOG(INFO) << HashUUID("67ba48da-b1a4-11e5-bf7f-feff819cdc9f") << " ";
-  LOG(INFO) << HashUUID("67ba48da-b1a4-11e5-bf7f-feff819cdc9f") << " ";
-  LOG(INFO) << HashUUID("FF02") << " playbulb candle ";
-  LOG(INFO) << BluetoothUUID("ff02").canonical_value();
-  LOG(INFO) << HashUUID("FFfc") << " FFfc";
-  LOG(INFO) << HashUUID("FFfb") << " FFfb";
-  LOG(INFO) << HashUUID("FF0c") << " FF0c";
-  LOG(INFO) << HashUUID("FF0b") << " FF0b";
-  LOG(INFO) << HashUUID("fda50693-a4e2-4fb1-afcf-c6eb07647825") << " pwatest/tpl/states/home.html";
-  LOG(INFO) << HashUUID("10002") << " pwatest/tpl/states/home.html";
-  LOG(INFO) << HashUUID("8479") << " pwatest/tpl/states/home.html";
-  LOG(INFO) << HashUUID("f000aa10") << " tisensortag.js";
-  LOG(INFO) << HashUUID("ffe0") << " light-dimmer.js";
-  LOG(INFO) << HashUUID("ee0c2080-8786-40ba-ab96-99b91ac981d8") << " edy config";
-  LOG(INFO) << HashUUID("22bb746f-2ba0-7554-2d6f-726568705327") << " bb8 a 22bb746f-2ba0-7554-2d6f-726568705327";
-  LOG(INFO) << HashUUID("22bb746f-2bb0-7554-2d6f-726568705327") << " ";
-  LOG(INFO) << HashUUID("0009180d-0000-1000-8000-00705f9b34fb") << " ";
+  LOG(INFO) << HashUUID("fee0") << " mi";
   LOG(INFO) << HashUUID("") << " ";
   LOG(INFO) << HashUUID("") << " ";
 }
