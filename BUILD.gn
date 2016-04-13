@@ -607,7 +607,7 @@ group("gn_only") {
   testonly = true
 
   deps = [
-    "content/browser/bluetooth/tools:bluetooth_metrics_hash"
+    "content/browser/bluetooth/tools:bluetooth_metrics_hash",
   ]
 
   if (!is_ios) {
