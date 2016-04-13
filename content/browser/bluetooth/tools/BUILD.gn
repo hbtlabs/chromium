@@ -10,4 +10,9 @@ executable("bluetooth_metrics_hash") {
   sources = [
     "bluetooth_metrics_hash.cc",
   ]
+
+  deps = [
+  "//base",
+  "//device/bluetooth"
+  ]
 }

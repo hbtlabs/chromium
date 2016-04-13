@@ -7,8 +7,6 @@
 #include "content/common/bluetooth/bluetooth_scan_filter.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "base/hash.h"
-#include "base/logging.h"
 
 using device::BluetoothUUID;
 
@@ -395,22 +393,6 @@ TEST_F(BluetoothBlacklistTest, VerifyDefaultExcludeWriteList) {
   EXPECT_TRUE(list_.IsExcludedFromWrites(BluetoothUUID("2903")));
   EXPECT_TRUE(list_.IsExcludedFromWrites(
       BluetoothUUID("bad2ddcf-60db-45cd-bef9-fd72b153cf7c")));
-}
-
-int HashUUID(const std::string& uuid_in) {
-  BluetoothUUID bu(uuid_in);
-  std::string uuid = bu.canonical_value();
-  uint32_t data = base::SuperFastHash(uuid.data(), uuid.size());
-
-  // Strip off the signed bit because UMA doesn't support negative values,
-  // but takes a signed int as input.
-  return static_cast<int>(data & 0x7fffffff);
-}
-
-TEST_F(BluetoothBlacklistTest, Hash) {
-  LOG(INFO) << HashUUID("fee0") << " mi";
-  LOG(INFO) << HashUUID("") << " ";
-  LOG(INFO) << HashUUID("") << " ";
 }
 
 }  // namespace content
