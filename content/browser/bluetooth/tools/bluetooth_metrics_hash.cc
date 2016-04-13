@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
                  "label=\"0000feff-0000-1000-8000-00805f9b34fb\"/>\n"
               << "  <int value=\"643543662\" "
                  "label=\"0000fefe-0000-1000-8000-00805f9b34fb\"/>\n";
-    return 0;
+    return 1;
   }
 
   for (int i = 1; i < argc; i++) {
