@@ -15,7 +15,13 @@ int main(int argc, char** argv) {
               << "\n"
               << "Usage: " << argv[0] << " <uuid> [uuid2 ...]\n"
               << "       The UUIDs may be short UUIDs, and will be made\n"
-              << "       canonical before being hashed.\n";
+              << "       canonical before being hashed.\n"
+              << "\n"
+              << "Example: " << argv[0] << " FEFF FEFE\n"
+              << "  <int value=\"62669585\" "
+                 "label=\"0000feff-0000-1000-8000-00805f9b34fb\"/>\n"
+              << "  <int value=\"643543662\" "
+                 "label=\"0000fefe-0000-1000-8000-00805f9b34fb\"/>\n";
     return 0;
   }
 
@@ -29,8 +35,9 @@ int main(int argc, char** argv) {
     // Strip off the signed bit because UMA doesn't support negative values,
     // but takes a signed int as input.
     hash &= 0x7fffffff;
-    std::cout << input_string << "\t" << uuid_canonical_string << "\t" << hash
-              << std::endl;
+
+    std::cout << "  <int value=\"" << hash << "\" label=\""
+              << uuid_canonical_string << "\"/>\n";
   }
   return 0;
 }
