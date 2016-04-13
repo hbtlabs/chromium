@@ -65,6 +65,7 @@ group("gn_all") {
     ":both_gn_and_gyp",
     ":gn_only",
     ":gn_visibility",
+    "content/browser/bluetooth/tools:bluetooth_metrics_hash",
   ]
 }
 
