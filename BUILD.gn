@@ -65,7 +65,6 @@ group("gn_all") {
     ":both_gn_and_gyp",
     ":gn_only",
     ":gn_visibility",
-    "content/browser/bluetooth/tools:bluetooth_metrics_hash",
   ]
 }
 
@@ -607,7 +606,9 @@ group("mojo_apptests") {
 group("gn_only") {
   testonly = true
 
-  deps = []
+  deps = [
+    "content/browser/bluetooth/tools:bluetooth_metrics_hash"
+  ]
 
   if (!is_ios) {
     deps += [ "//mojo/common:mojo_common_perftests" ]
