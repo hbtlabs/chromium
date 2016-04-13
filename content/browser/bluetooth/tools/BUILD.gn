@@ -12,7 +12,7 @@ executable("bluetooth_metrics_hash") {
   ]
 
   deps = [
-  "//base",
-  "//device/bluetooth"
+    "//base",
+    "//device/bluetooth",
   ]
 }
