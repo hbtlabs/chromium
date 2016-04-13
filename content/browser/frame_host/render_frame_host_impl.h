@@ -149,10 +149,6 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   blink::WebPageVisibilityState GetVisibilityState() override;
   bool IsRenderFrameLive() override;
   int GetProxyCount() override;
-#if defined(OS_ANDROID)
-  void ActivateNearestFindResult(int request_id, float x, float y) override;
-  void RequestFindMatchRects(int current_version) override;
-#endif
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
@@ -751,7 +747,7 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
 
   // Allows tests to disable the swapout event timer to simulate bugs that
   // happen before it fires (to avoid flakiness).
-  void ResetSwapOutTimerForTesting();
+  void DisableSwapOutTimerForTesting();
 
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
@@ -884,7 +880,7 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
 
   // Used to swap out or shut down this RFH when the unload event is taking too
   // long to execute, depending on the number of active frames in the
-  // SiteInstance.
+  // SiteInstance.  May be null in tests.
   std::unique_ptr<TimeoutMonitor> swapout_event_monitor_timeout_;
 
   std::unique_ptr<ServiceRegistryImpl> service_registry_;

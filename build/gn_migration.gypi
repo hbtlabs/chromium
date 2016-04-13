@@ -71,7 +71,6 @@
         '../media/media.gyp:media_perftests',
         '../media/media.gyp:media_unittests',
         '../media/midi/midi.gyp:midi_unittests',
-        '../mojo/mojo_base.gyp:mojo_application_base',
         '../net/net.gyp:dump_cache',
         '../net/net.gyp:net_perftests',
         '../net/net.gyp:net_unittests',
@@ -152,7 +151,6 @@
         }],
         ['use_aura==1', {
           'dependencies': [
-            '../ui/app_list/shower/app_list_shower.gyp:app_list_shower_unittests',
             '../ui/aura/aura.gyp:aura_demo',
             '../ui/aura/aura.gyp:aura_unittests',
             '../ui/keyboard/keyboard.gyp:keyboard_unittests',
@@ -621,6 +619,7 @@
             }],
             ['use_aura==1', {
               'dependencies': [
+                '../ui/app_list/shower/app_list_shower.gyp:app_list_shower_unittests_run',
                 '../ui/aura/aura.gyp:aura_unittests_run',
                 '../ui/wm/wm.gyp:wm_unittests_run',
               ],

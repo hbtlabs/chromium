@@ -4,6 +4,9 @@
 
 #include "bindings/core/v8/ScriptValueSerializer.h"
 
+#include "bindings/core/v8/Transferable.h"
+#include "bindings/core/v8/TransferableArrayBuffer.h"
+#include "bindings/core/v8/TransferableImageBitmap.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8Blob.h"
@@ -685,7 +688,7 @@ static bool isHostObject(v8::Local<v8::Object> object)
     return object->InternalFieldCount();
 }
 
-ScriptValueSerializer::ScriptValueSerializer(SerializedScriptValueWriter& writer, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ImageBitmapArray* imageBitmaps, WebBlobInfoArray* blobInfo, BlobDataHandleMap& blobDataHandles, v8::TryCatch& tryCatch, ScriptState* scriptState)
+ScriptValueSerializer::ScriptValueSerializer(SerializedScriptValueWriter& writer, MessagePortArray* messagePorts, TransferableArray* transferables, WebBlobInfoArray* blobInfo, BlobDataHandleMap& blobDataHandles, v8::TryCatch& tryCatch, ScriptState* scriptState)
     : m_scriptState(scriptState)
     , m_writer(writer)
     , m_tryCatch(tryCatch)
@@ -701,17 +704,19 @@ ScriptValueSerializer::ScriptValueSerializer(SerializedScriptValueWriter& writer
         for (size_t i = 0; i < messagePorts->size(); i++)
             m_transferredMessagePorts.set(toV8Object(messagePorts->at(i).get(), creationContext, isolate()), i);
     }
-    if (arrayBuffers) {
-        for (size_t i = 0; i < arrayBuffers->size(); i++)  {
-            v8::Local<v8::Object> v8ArrayBuffer = toV8Object(arrayBuffers->at(i).get(), creationContext, isolate());
+    if (!transferables)
+        return;
+    if (auto* arrayBuffers = TransferableArrayBuffer::get(*transferables)) {
+        for (size_t i = 0; i < arrayBuffers->getArray().size(); i++)  {
+            v8::Local<v8::Object> v8ArrayBuffer = toV8Object(arrayBuffers->getArray().at(i).get(), creationContext, isolate());
             // Coalesce multiple occurences of the same buffer to the first index.
             if (!m_transferredArrayBuffers.contains(v8ArrayBuffer))
                 m_transferredArrayBuffers.set(v8ArrayBuffer, i);
         }
     }
-    if (imageBitmaps) {
-        for (size_t i = 0; i < imageBitmaps->size(); i++) {
-            v8::Local<v8::Object> v8ImageBitmap = toV8Object(imageBitmaps->at(i).get(), creationContext, isolate());
+    if (auto* imageBitmaps = TransferableImageBitmap::get(*transferables)) {
+        for (size_t i = 0; i < imageBitmaps->getArray().size(); i++) {
+            v8::Local<v8::Object> v8ImageBitmap = toV8Object(imageBitmaps->getArray().at(i).get(), creationContext, isolate());
             if (!m_transferredImageBitmaps.contains(v8ImageBitmap))
                 m_transferredImageBitmaps.set(v8ImageBitmap, i);
         }
@@ -1636,10 +1641,10 @@ bool SerializedScriptValueReader::readImageBitmap(v8::Local<v8::Value>* value)
         return false;
     ImageBitmapOptions options;
     options.setPremultiplyAlpha("none");
-    RawPtr<ImageBitmap> imageBitmap = ImageBitmap::create(imageData, IntRect(0, 0, imageData->width(), imageData->height()), options, true);
-    if (!imageBitmap.get())
+    ImageBitmap* imageBitmap = ImageBitmap::create(imageData, IntRect(0, 0, imageData->width(), imageData->height()), options, true);
+    if (!imageBitmap)
         return false;
-    *value = toV8(imageBitmap.get(), m_scriptState->context()->Global(), isolate());
+    *value = toV8(imageBitmap, m_scriptState->context()->Global(), isolate());
     return !value->IsEmpty();
 }
 
@@ -1657,7 +1662,7 @@ bool SerializedScriptValueReader::readCompositorProxy(v8::Local<v8::Value>* valu
     return !value->IsEmpty();
 }
 
-PassRefPtr<DOMArrayBuffer> SerializedScriptValueReader::doReadArrayBuffer()
+DOMArrayBuffer* SerializedScriptValueReader::doReadArrayBuffer()
 {
     uint32_t byteLength;
     if (!doReadUint32(&byteLength))
@@ -1671,10 +1676,10 @@ PassRefPtr<DOMArrayBuffer> SerializedScriptValueReader::doReadArrayBuffer()
 
 bool SerializedScriptValueReader::readArrayBuffer(v8::Local<v8::Value>* value)
 {
-    RefPtr<DOMArrayBuffer> arrayBuffer = doReadArrayBuffer();
+    DOMArrayBuffer* arrayBuffer = doReadArrayBuffer();
     if (!arrayBuffer)
         return false;
-    *value = toV8(arrayBuffer.release(), m_scriptState->context()->Global(), isolate());
+    *value = toV8(arrayBuffer, m_scriptState->context()->Global(), isolate());
     return !value->IsEmpty();
 }
 
@@ -1683,7 +1688,7 @@ bool SerializedScriptValueReader::readArrayBufferView(v8::Local<v8::Value>* valu
     ArrayBufferViewSubTag subTag;
     uint32_t byteOffset;
     uint32_t byteLength;
-    RefPtr<DOMArrayBufferBase> arrayBuffer;
+    DOMArrayBufferBase* arrayBuffer = nullptr;
     v8::Local<v8::Value> arrayBufferV8Value;
     if (!readArrayBufferViewSubTag(&subTag))
         return false;
@@ -1753,34 +1758,34 @@ bool SerializedScriptValueReader::readArrayBufferView(v8::Local<v8::Value>* valu
     v8::Local<v8::Object> creationContext = m_scriptState->context()->Global();
     switch (subTag) {
     case ByteArrayTag:
-        *value = toV8(DOMInt8Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMInt8Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case UnsignedByteArrayTag:
-        *value = toV8(DOMUint8Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext,  isolate());
+        *value = toV8(DOMUint8Array::create(arrayBuffer, byteOffset, numElements), creationContext,  isolate());
         break;
     case UnsignedByteClampedArrayTag:
-        *value = toV8(DOMUint8ClampedArray::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMUint8ClampedArray::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case ShortArrayTag:
-        *value = toV8(DOMInt16Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMInt16Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case UnsignedShortArrayTag:
-        *value = toV8(DOMUint16Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMUint16Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case IntArrayTag:
-        *value = toV8(DOMInt32Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMInt32Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case UnsignedIntArrayTag:
-        *value = toV8(DOMUint32Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMUint32Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case FloatArrayTag:
-        *value = toV8(DOMFloat32Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMFloat32Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case DoubleArrayTag:
-        *value = toV8(DOMFloat64Array::create(arrayBuffer.release(), byteOffset, numElements), creationContext, isolate());
+        *value = toV8(DOMFloat64Array::create(arrayBuffer, byteOffset, numElements), creationContext, isolate());
         break;
     case DataViewTag:
-        *value = toV8(DOMDataView::create(arrayBuffer.release(), byteOffset, byteLength), creationContext, isolate());
+        *value = toV8(DOMDataView::create(arrayBuffer, byteOffset, byteLength), creationContext, isolate());
         break;
     }
     return !value->IsEmpty();
@@ -2154,10 +2159,10 @@ bool ScriptValueDeserializer::tryGetTransferredArrayBuffer(uint32_t index, v8::L
         return false;
     v8::Local<v8::Value> result = m_arrayBuffers.at(index);
     if (result.IsEmpty()) {
-        RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::create(m_arrayBufferContents->at(index));
+        DOMArrayBuffer* buffer = DOMArrayBuffer::create(m_arrayBufferContents->at(index));
         v8::Isolate* isolate = m_reader.getScriptState()->isolate();
         v8::Local<v8::Object> creationContext = m_reader.getScriptState()->context()->Global();
-        result = toV8(buffer.get(), creationContext, isolate);
+        result = toV8(buffer, creationContext, isolate);
         if (result.IsEmpty())
             return false;
         m_arrayBuffers[index] = result;
@@ -2174,10 +2179,10 @@ bool ScriptValueDeserializer::tryGetTransferredImageBitmap(uint32_t index, v8::L
         return false;
     v8::Local<v8::Value> result = m_imageBitmaps.at(index);
     if (result.IsEmpty()) {
-        RawPtr<ImageBitmap> bitmap = ImageBitmap::create(m_imageBitmapContents->at(index));
+        ImageBitmap* bitmap = ImageBitmap::create(m_imageBitmapContents->at(index));
         v8::Isolate* isolate = m_reader.getScriptState()->isolate();
         v8::Local<v8::Object> creationContext = m_reader.getScriptState()->context()->Global();
-        result = toV8(bitmap.get(), creationContext, isolate);
+        result = toV8(bitmap, creationContext, isolate);
         if (result.IsEmpty())
             return false;
         m_imageBitmaps[index] = result;
@@ -2195,10 +2200,10 @@ bool ScriptValueDeserializer::tryGetTransferredSharedArrayBuffer(uint32_t index,
         return false;
     v8::Local<v8::Value> result = m_arrayBuffers.at(index);
     if (result.IsEmpty()) {
-        RefPtr<DOMSharedArrayBuffer> buffer = DOMSharedArrayBuffer::create(m_arrayBufferContents->at(index));
+        DOMSharedArrayBuffer* buffer = DOMSharedArrayBuffer::create(m_arrayBufferContents->at(index));
         v8::Isolate* isolate = m_reader.getScriptState()->isolate();
         v8::Local<v8::Object> creationContext = m_reader.getScriptState()->context()->Global();
-        result = toV8(buffer.get(), creationContext, isolate);
+        result = toV8(buffer, creationContext, isolate);
         if (result.IsEmpty())
             return false;
         m_arrayBuffers[index] = result;

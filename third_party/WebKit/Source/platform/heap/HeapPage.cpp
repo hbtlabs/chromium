@@ -47,9 +47,9 @@
 #include "wtf/ContainerAnnotations.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/PageAllocator.h"
-#include "wtf/Partitions.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/allocator/PageAllocator.h"
+#include "wtf/allocator/Partitions.h"
 
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
 // FIXME: have ContainerAnnotations.h define an ENABLE_-style name instead.
@@ -735,7 +735,7 @@ Address NormalPageArena::allocateFromFreeList(size_t allocationSize, size_t gcIn
     // off as a large a free block as possible in one go; a block that will
     // service this block and let following allocations be serviced quickly
     // by bump allocation.
-    size_t bucketSize = 1 << m_freeList.m_biggestFreeListIndex;
+    size_t bucketSize = static_cast<size_t>(1) << m_freeList.m_biggestFreeListIndex;
     int index = m_freeList.m_biggestFreeListIndex;
     for (; index > 0; --index, bucketSize >>= 1) {
         FreeListEntry* entry = m_freeList.m_freeLists[index];

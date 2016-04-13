@@ -405,8 +405,8 @@
             'common_mojo_bindings',
             '<(DEPTH)/components/components.gyp:autofill_core_common',
             '<(DEPTH)/components/components.gyp:autofill_content_common',
+            '<(DEPTH)/components/components.gyp:password_manager_content_mojo_bindings',
             '<(DEPTH)/components/components.gyp:password_manager_core_common',
-            '<(DEPTH)/components/components.gyp:password_manager_content_common',
             '<(DEPTH)/components/components.gyp:signin_core_common',
             '<(DEPTH)/components/components.gyp:translate_content_common',
             '<(DEPTH)/components/components.gyp:visitedlink_common',
@@ -622,8 +622,8 @@
     },
     {
       # Protobuf compiler / generator for the safebrowsing client
-      # model proto and the client-side detection (csd) request
-      # protocol buffer.
+      # model proto, the client-side detection (csd) request
+      # proto, and the download file types proto.
 
       # GN version: //chrome/common/safe_browsing:proto
       'target_name': 'safe_browsing_proto',
@@ -631,7 +631,8 @@
       'sources': [
         'common/safe_browsing/client_model.proto',
         'common/safe_browsing/crx_info.proto',
-        'common/safe_browsing/csd.proto'
+        'common/safe_browsing/csd.proto',
+        'common/safe_browsing/download_file_types.proto',
       ],
       'variables': {
         'proto_in_dir': 'common/safe_browsing',

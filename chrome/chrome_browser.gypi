@@ -85,6 +85,8 @@
       'browser/browsing_data/browsing_data_database_helper.h',
       'browser/browsing_data/browsing_data_file_system_helper.cc',
       'browser/browsing_data/browsing_data_file_system_helper.h',
+      'browser/browsing_data/browsing_data_filter_builder.cc',
+      'browser/browsing_data/browsing_data_filter_builder.h',
       'browser/browsing_data/browsing_data_helper.cc',
       'browser/browsing_data/browsing_data_helper.h',
       'browser/browsing_data/browsing_data_indexed_db_helper.cc',
@@ -111,8 +113,6 @@
       'browser/browsing_data/history_counter.h',
       'browser/browsing_data/local_data_container.cc',
       'browser/browsing_data/local_data_container.h',
-      'browser/browsing_data/origin_filter_builder.cc',
-      'browser/browsing_data/origin_filter_builder.h',
       'browser/browsing_data/passwords_counter.cc',
       'browser/browsing_data/passwords_counter.h',
       'browser/character_encoding.cc',
@@ -502,12 +502,12 @@
       'browser/prerender/prerender_util.h',
       'browser/private_working_set_snapshot.h',
       'browser/private_working_set_snapshot_win.cc',
-      'browser/process_info_snapshot.h',
-      'browser/process_info_snapshot_mac.cc',
       'browser/process_resource_usage.cc',
       'browser/process_resource_usage.h',
       'browser/process_singleton.h',
       'browser/process_singleton_win.cc',
+      'browser/push_messaging/background_budget_service.h',
+      'browser/push_messaging/background_budget_service.cc',
       'browser/push_messaging/push_messaging_app_identifier.cc',
       'browser/push_messaging/push_messaging_app_identifier.h',
       'browser/push_messaging/push_messaging_constants.cc',
@@ -579,6 +579,7 @@
       'browser/shell_integration_android.cc',
       'browser/shell_integration_chromeos.cc',
       'browser/shell_integration_mac.mm',
+      'browser/shell_integration_win.h',
       'browser/shell_integration_win.cc',
       'browser/site_details.cc',
       'browser/site_details.h',
@@ -1201,6 +1202,8 @@
       'browser/download/download_crx_util.h',
       'browser/download/download_danger_prompt.cc',
       'browser/download/download_danger_prompt.h',
+      'browser/download/download_dir_policy_handler.cc',
+      'browser/download/download_dir_policy_handler.h',
       'browser/download/download_permission_request.cc',
       'browser/download/download_permission_request.h',
       'browser/download/download_shelf.cc',
@@ -2517,8 +2520,7 @@
       'browser/safe_browsing/safe_browsing_blocking_page.h',
       'browser/safe_browsing/safe_browsing_service.cc',
       'browser/safe_browsing/safe_browsing_service.h',
-      'browser/safe_browsing/safe_browsing_util.cc',
-      'browser/safe_browsing/safe_browsing_util.h',
+      'browser/safe_browsing/services_delegate.h',
       'browser/safe_browsing/threat_details.cc',
       'browser/safe_browsing/threat_details.h',
       'browser/safe_browsing/threat_details_cache.cc',
@@ -2533,6 +2535,8 @@
     'chrome_browser_safe_browsing_mobile_sources': [
       'browser/renderer_host/safe_browsing_resource_throttle.cc',
       'browser/renderer_host/safe_browsing_resource_throttle.h',
+      'browser/safe_browsing/services_delegate_stub.cc',
+      'browser/safe_browsing/services_delegate_stub.h',
     ],
     # "Safe Browsing Full" files in addition to the "basic" ones to use for
     # full safe browsing. This has some in common with "mobile."
@@ -2634,10 +2638,14 @@
       'browser/safe_browsing/safe_browsing_store.h',
       'browser/safe_browsing/safe_browsing_store_file.cc',
       'browser/safe_browsing/safe_browsing_store_file.h',
+      'browser/safe_browsing/safe_browsing_util.cc',
+      'browser/safe_browsing/safe_browsing_util.h',
       'browser/safe_browsing/sandboxed_dmg_analyzer_mac.cc',
       'browser/safe_browsing/sandboxed_dmg_analyzer_mac.h',
       'browser/safe_browsing/sandboxed_zip_analyzer.cc',
       'browser/safe_browsing/sandboxed_zip_analyzer.h',
+      'browser/safe_browsing/services_delegate_impl.cc',
+      'browser/safe_browsing/services_delegate_impl.h',
       'browser/safe_browsing/signature_evaluator_mac.h',
       'browser/safe_browsing/signature_evaluator_mac.mm',
       'browser/safe_browsing/two_phase_uploader.cc',
@@ -3114,6 +3122,10 @@
     ],
     'chrome_browser_webrtc_sources': [
       # TODO(brettw) should webrtc_log_list.cc go here?
+      'browser/media/audio_debug_recordings_handler.cc',
+      'browser/media/audio_debug_recordings_handler.h',
+      'browser/media/webrtc_event_log_handler.cc',
+      'browser/media/webrtc_event_log_handler.h',
       'browser/media/webrtc_log_uploader.cc',
       'browser/media/webrtc_log_uploader.h',
       'browser/media/webrtc_log_util.cc',
@@ -3275,12 +3287,10 @@
       'conditions': [
         ['OS != "ios"', {
           'dependencies': [
-            'apps',
             'common_mojo_bindings',
             'common_net',
             'debugger',
             'installer_util',
-            '../third_party/re2/re2.gyp:re2',
             '../cc/cc.gyp:cc',
             '../components/components.gyp:about_handler',
             '../components/components.gyp:autofill_content_browser',
@@ -3329,7 +3339,6 @@
             '../components/components.gyp:visitedlink_common',
             '../components/components.gyp:wallpaper',
             '../components/components.gyp:web_cache_browser',
-            '../components/components.gyp:web_modal',
             '../components/components.gyp:web_resource',
             '../components/components.gyp:webusb',
             '../components/components_resources.gyp:components_resources',
@@ -3343,7 +3352,6 @@
             '../media/media.gyp:media',
             '../media/midi/midi.gyp:midi',
             '../media/mojo/interfaces/mojo_bindings.gyp:platform_verification_api',
-            '../mojo/mojo_base.gyp:mojo_application_base',
             '../mojo/mojo_base.gyp:mojo_common_lib',
             '../mojo/mojo_base.gyp:mojo_url_type_converters',
             '../mojo/mojo_edk.gyp:mojo_system_impl',
@@ -3352,8 +3360,10 @@
             '../mojo/mojo_public.gyp:mojo_message_pump_lib',
             '../net/net.gyp:net_extras',
             '../net/net.gyp:net_with_v8',
+            '../services/shell/shell.gyp:shell_public',
             '../storage/storage_browser.gyp:storage',
             '../storage/storage_common.gyp:storage_common',
+            '../third_party/re2/re2.gyp:re2',
             '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput',
             '../third_party/libyuv/libyuv.gyp:libyuv',
@@ -3442,12 +3452,6 @@
           'sources': [
             'browser/net/disk_cache_dir_policy_handler.cc',
             'browser/net/disk_cache_dir_policy_handler.h',
-          ],
-        }],
-        ['OS!="android" and OS!="ios"', {
-          'sources': [
-            'browser/download/download_dir_policy_handler.cc',
-            'browser/download/download_dir_policy_handler.h',
           ],
         }],
         ['OS=="mac"', {
@@ -3665,6 +3669,15 @@
             '../components/components.gyp:generate_version_info',
           ],
         }],
+        ['OS == "win" and kasko_failed_rdv_reports == 1', {
+          'sources': [
+            'app/chrome_crash_reporter_client.cc',
+            'app/chrome_crash_reporter_client.h',
+          ],
+          'dependencies': [
+            '../components/components.gyp:crash_component_lib',
+          ],
+        }],
         ['use_nss_certs==1', {
           'sources': [ '<@(chrome_browser_nss_sources)' ],
           'conditions': [
@@ -3729,10 +3742,12 @@
         }, {  # OS!="android" and OS!="ios" (non-Mobile).
           'sources': [ '<@(chrome_browser_non_mobile_sources)' ],
           'dependencies': [
-            '../components/components.gyp:feedback_component',
-            '../net/net.gyp:net_browser_services',
+            'apps',
             'policy_path_parser',
             'profile_reset_report_proto',
+            '../components/components.gyp:feedback_component',
+            '../components/components.gyp:web_modal',
+            '../net/net.gyp:net_browser_services',
           ]
         }],
         ['OS=="android"', {
@@ -3745,7 +3760,6 @@
           ],
           'dependencies!': [
             '../components/components.gyp:storage_monitor',
-            '../components/components.gyp:web_modal',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput',
           ],
           'sources': [
@@ -3824,6 +3838,7 @@
             'chrome_process_finder',
             'chrome_watcher_client',
             'installer_util_strings',
+            'kasko_util',
             '../chrome/common_constants.gyp:version_header',
             '../chrome_elf/chrome_elf.gyp:chrome_elf',
             '../chrome_elf/chrome_elf.gyp:chrome_elf_constants',

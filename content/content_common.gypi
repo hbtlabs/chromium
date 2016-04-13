@@ -30,11 +30,11 @@
     '../media/gpu/ipc/media_ipc.gyp:media_gpu_ipc_client',
     '../media/gpu/ipc/media_ipc.gyp:media_gpu_ipc_common',
     '../media/midi/midi.gyp:midi',
-    '../mojo/mojo_base.gyp:mojo_application_bindings',
     '../mojo/mojo_edk.gyp:mojo_system_impl',
     '../mojo/mojo_public.gyp:mojo_cpp_bindings',
-    '../mojo/mojo_shell.gyp:mojo_runner_common_lib',
     '../net/net.gyp:net',
+    '../services/shell/shell.gyp:shell_public',
+    '../services/shell/shell.gyp:shell_runner_common_lib',
     '../skia/skia.gyp:skia',
     '../storage/storage_common.gyp:storage_common',
     '../third_party/WebKit/public/blink.gyp:blink',
@@ -45,7 +45,7 @@
     '../ui/accessibility/accessibility.gyp:ax_gen',
     '../ui/base/ime/ui_base_ime.gyp:ui_base_ime',
     '../ui/base/ui_base.gyp:ui_base',
-    '../ui/events/events.gyp:events_ipc',
+    '../ui/latency_info/latency_info.gyp:latency_info_ipc',
     '../ui/gfx/gfx.gyp:gfx',
     '../ui/gfx/gfx.gyp:gfx_geometry',
     '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
@@ -86,8 +86,8 @@
   ],
   'export_dependent_settings': [
     '../base/base.gyp:base',
-    '../mojo/mojo_base.gyp:mojo_application_bindings',
     '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+    '../services/shell/shell.gyp:shell_public',
     # The public content API headers directly include Blink API headers, so we
     # have to export the blink header settings so that relative paths in these
     # headers resolve correctly.
@@ -463,8 +463,8 @@
       'common/mime_registry_messages.h',
       'common/mojo/channel_init.cc',
       'common/mojo/channel_init.h',
-      'common/mojo/current_thread_loader.cc',
-      'common/mojo/current_thread_loader.h',
+      'common/mojo/embedded_application_runner.cc',
+      'common/mojo/embedded_application_runner.h',
       'common/mojo/mojo_messages.h',
       'common/mojo/mojo_shell_connection_impl.cc',
       'common/mojo/mojo_shell_connection_impl.h',
@@ -539,8 +539,6 @@
       'common/sandbox_linux/sandbox_seccomp_bpf_linux.h',
       'common/sandbox_mac.h',
       'common/sandbox_mac.mm',
-      'common/sandbox_util.cc',
-      'common/sandbox_util.h',
       'common/sandbox_win.cc',
       'common/sandbox_win.h',
       'common/savable_subframe.h',
@@ -604,6 +602,7 @@
     ['OS=="mac"', {
       'dependencies': [
         '../media/media.gyp:media',
+        '../sandbox/sandbox.gyp:seatbelt',
         'app/resources/content_resources.gyp:content_resources',
         '../ui/accelerated_widget_mac/accelerated_widget_mac.gyp:accelerated_widget_mac'
       ],
@@ -706,7 +705,6 @@
         'common/pepper_renderer_instance_data.h',
         'common/plugin_list.cc',
         'common/plugin_list.h',
-        'common/sandbox_util.cc',
         'public/common/pepper_plugin_info.cc',
         'public/common/pepper_plugin_info.h',
       ],

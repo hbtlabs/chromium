@@ -31,7 +31,6 @@
 #include "core/html/parser/PreloadRequest.h"
 #include "core/html/parser/ResourcePreloader.h"
 #include "core/loader/NetworkHintsInterface.h"
-#include "wtf/CurrentTime.h"
 #include "wtf/text/TextPosition.h"
 
 namespace blink {
@@ -40,7 +39,7 @@ class CORE_EXPORT HTMLResourcePreloader final : public GarbageCollected<HTMLReso
     WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader);
     friend class HTMLResourcePreloaderTest;
 public:
-    static RawPtr<HTMLResourcePreloader> create(Document&);
+    static HTMLResourcePreloader* create(Document&);
     DECLARE_TRACE();
 
 protected:

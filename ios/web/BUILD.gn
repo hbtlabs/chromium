@@ -126,8 +126,6 @@ source_set("web") {
     "public/web_capabilities.h",
     "public/web_client.h",
     "public/web_client.mm",
-    "public/web_controller_factory.h",
-    "public/web_controller_factory.mm",
     "public/web_kit_constants.h",
     "public/web_state/credential.h",
     "public/web_state/crw_web_controller_observer.h",
@@ -158,8 +156,6 @@ source_set("web") {
     "public/web_ui_ios_data_source.h",
     "public/web_view_creation_util.h",
     "string_util.cc",
-    "ui_web_view_util.h",
-    "ui_web_view_util.mm",
     "url_scheme_util.mm",
     "url_util.cc",
     "user_metrics.cc",
@@ -341,8 +337,23 @@ source_set("test_support") {
   ]
 }
 
+bundle_data("ios_web_unittests_bundle_data") {
+  testonly = true
+  sources = [
+    "test/data/chrome.html",
+    "test/data/testbadpass.pkpass",
+    "test/data/testfavicon.png",
+    "test/data/testpass.pkpass",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
+        "{{source_file_part}}",
+  ]
+}
+
 test("ios_web_unittests") {
   deps = [
+    ":ios_web_unittests_bundle_data",
     ":test_support",
     ":web",
     "//base",
@@ -380,7 +391,6 @@ test("ios_web_unittests") {
     "string_util_unittest.cc",
     "test/crw_fake_web_controller_observer_unittest.mm",
     "test/run_all_unittests.cc",
-    "ui_web_view_util_unittest.mm",
     "url_scheme_util_unittest.mm",
     "url_util_unittest.cc",
     "web_state/crw_pass_kit_downloader_unittest.mm",
@@ -448,6 +458,7 @@ js_compile_checked("js_resources") {
 
   sources = [
     "web_state/js/resources/plugin_placeholder.js",
+    "web_state/js/resources/post_request.js",
     "web_state/js/resources/window_id.js",
     "webui/resources/web_ui.js",
   ]

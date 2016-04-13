@@ -82,7 +82,7 @@ using namespace HTMLNames;
 
 class ListAttributeTargetObserver : public IdTargetObserver {
 public:
-    static RawPtr<ListAttributeTargetObserver> create(const AtomicString& id, HTMLInputElement*);
+    static ListAttributeTargetObserver* create(const AtomicString& id, HTMLInputElement*);
     DECLARE_VIRTUAL_TRACE();
     void idTargetChanged() override;
 
@@ -130,12 +130,12 @@ HTMLInputElement::HTMLInputElement(Document& document, HTMLFormElement* form, bo
     setHasCustomStyleCallbacks();
 }
 
-RawPtr<HTMLInputElement> HTMLInputElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+HTMLInputElement* HTMLInputElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
-    RawPtr<HTMLInputElement> inputElement = new HTMLInputElement(document, form, createdByParser);
+    HTMLInputElement* inputElement = new HTMLInputElement(document, form, createdByParser);
     if (!createdByParser)
         inputElement->ensureUserAgentShadowRoot();
-    return inputElement.release();
+    return inputElement;
 }
 
 DEFINE_TRACE(HTMLInputElement)
@@ -168,19 +168,6 @@ void HTMLInputElement::willAddFirstAuthorShadowRoot()
 
 HTMLInputElement::~HTMLInputElement()
 {
-#if !ENABLE(OILPAN)
-    // Need to remove form association while this is still an HTMLInputElement
-    // so that virtual functions are called correctly.
-    setForm(0);
-    // setForm(0) may register this to a TreeScope-level radio button group.
-    // We should unregister it to avoid accessing a deleted object.
-    if (type() == InputTypeNames::radio)
-        treeScope().radioButtonGroupScope().removeButton(this);
-
-    // TODO(dtapuska): Make this passive touch listener see crbug.com/584438
-    if (m_hasTouchEventHandler && document().frameHost())
-        document().frameHost()->eventHandlerRegistry().didRemoveEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
-#endif
 }
 
 const AtomicString& HTMLInputElement::name() const
@@ -474,7 +461,7 @@ void HTMLInputElement::updateType()
     if (m_inputType->formControlType() == newTypeName)
         return;
 
-    RawPtr<InputType> newType = InputType::create(*this, newTypeName);
+    InputType* newType = InputType::create(*this, newTypeName);
     removeFromRadioButtonGroup();
 
     bool didStoreValue = m_inputType->storesValueSeparateFromAttribute();
@@ -484,7 +471,7 @@ void HTMLInputElement::updateType()
     m_inputTypeView->destroyShadowSubtree();
     lazyReattachIfAttached();
 
-    m_inputType = newType.release();
+    m_inputType = newType;
     if (openShadowRoot())
         m_inputTypeView = InputTypeView::create(*this);
     else
@@ -925,7 +912,6 @@ void HTMLInputElement::setChecked(bool nowChecked, TextFieldEventBehavior eventB
     if (checked() == nowChecked)
         return;
 
-    RawPtr<HTMLInputElement> protector(this);
     m_reflectsCheckedAttribute = false;
     m_isChecked = nowChecked;
 
@@ -1082,7 +1068,6 @@ void HTMLInputElement::setValue(const String& value, TextFieldEventBehavior even
     if (!m_inputType->canSetValue(value))
         return;
 
-    RawPtr<HTMLInputElement> protector(this);
     EventQueueScope scope;
     String sanitizedValue = sanitizeValue(value);
     bool valueChanged = sanitizedValue != this->value();
@@ -1171,6 +1156,7 @@ void HTMLInputElement::setValueFromRenderer(const String& value)
     setAutofilled(false);
 }
 
+// TODO(Oilpan): It's nasty to return a void* pointer. Return ClickHandlingState* instead.
 void* HTMLInputElement::preDispatchEventHandler(Event* event)
 {
     if (event->type() == EventTypeNames::textInput && m_inputTypeView->shouldSubmitImplicitly(event)) {
@@ -1181,21 +1167,14 @@ void* HTMLInputElement::preDispatchEventHandler(Event* event)
         return nullptr;
     if (!event->isMouseEvent() || toMouseEvent(event)->button() != LeftButton)
         return nullptr;
-#if ENABLE(OILPAN)
     return m_inputTypeView->willDispatchClick();
-#else
-    // FIXME: Check whether there are any cases where this actually ends up leaking.
-    return m_inputTypeView->willDispatchClick().leakPtr();
-#endif
 }
 
 void HTMLInputElement::postDispatchEventHandler(Event* event, void* dataFromPreDispatch)
 {
-    RawPtr<ClickHandlingState> state = static_cast<ClickHandlingState*>(dataFromPreDispatch);
+    ClickHandlingState* state = static_cast<ClickHandlingState*>(dataFromPreDispatch);
     if (!state)
         return;
-    // m_inputTypeView could be freed if the type attribute is modified through a change event handler.
-    RawPtr<InputTypeView> protect(m_inputTypeView.get());
     m_inputTypeView->didDispatchClick(event, *state);
 }
 
@@ -1255,13 +1234,13 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
         // FIXME: Remove type check.
         if (type() == InputTypeNames::search)
-            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, RawPtr<HTMLInputElement>(this)));
+            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, this));
         // Form submission finishes editing, just as loss of focus does.
         // If there was a change, send the event now.
         if (wasChangedSinceLastFormControlChangeEvent())
             dispatchFormControlChangeEvent();
 
-        RawPtr<HTMLFormElement> formForSubmission = m_inputTypeView->formForSubmission();
+        HTMLFormElement* formForSubmission = m_inputTypeView->formForSubmission();
         // Form may never have been present, or may have been destroyed by code responding to the change event.
         if (formForSubmission)
             formForSubmission->submitImplicitly(evt, canTriggerImplicitSubmission());
@@ -1615,7 +1594,7 @@ bool HTMLInputElement::hasValidDataListOptions() const
     HTMLDataListElement* dataList = this->dataList();
     if (!dataList)
         return false;
-    RawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+    HTMLDataListOptionsCollection* options = dataList->options();
     for (unsigned i = 0; HTMLOptionElement* option = options->item(i); ++i) {
         if (isValidValue(option->value()))
             return true;
@@ -1623,7 +1602,7 @@ bool HTMLInputElement::hasValidDataListOptions() const
     return false;
 }
 
-void HTMLInputElement::setListAttributeTargetObserver(RawPtr<ListAttributeTargetObserver> newObserver)
+void HTMLInputElement::setListAttributeTargetObserver(ListAttributeTargetObserver* newObserver)
 {
     if (m_listAttributeTargetObserver)
         m_listAttributeTargetObserver->unregister();
@@ -1809,7 +1788,7 @@ void HTMLInputElement::setWidth(unsigned width)
     setUnsignedIntegralAttribute(widthAttr, width);
 }
 
-RawPtr<ListAttributeTargetObserver> ListAttributeTargetObserver::create(const AtomicString& id, HTMLInputElement* element)
+ListAttributeTargetObserver* ListAttributeTargetObserver::create(const AtomicString& id, HTMLInputElement* element)
 {
     return new ListAttributeTargetObserver(id, element);
 }
@@ -1882,7 +1861,7 @@ bool HTMLInputElement::setupDateTimeChooserParameters(DateTimeChooserParameters&
     parameters.doubleValue = m_inputType->valueAsDouble();
     parameters.isAnchorElementRTL = m_inputType->computedTextDirection() == RTL;
     if (HTMLDataListElement* dataList = this->dataList()) {
-        RawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+        HTMLDataListOptionsCollection* options = dataList->options();
         for (unsigned i = 0; HTMLOptionElement* option = options->item(i); ++i) {
             if (!isValidValue(option->value()))
                 continue;

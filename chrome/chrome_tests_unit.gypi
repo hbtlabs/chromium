@@ -49,6 +49,7 @@
       'browser/browsing_data/browsing_data_counter_utils_unittest.cc',
       'browser/browsing_data/browsing_data_database_helper_unittest.cc',
       'browser/browsing_data/browsing_data_file_system_helper_unittest.cc',
+      'browser/browsing_data/browsing_data_filter_builder_unittest.cc',
       'browser/browsing_data/browsing_data_helper_unittest.cc',
       'browser/browsing_data/browsing_data_indexed_db_helper_unittest.cc',
       'browser/browsing_data/browsing_data_local_storage_helper_unittest.cc',
@@ -58,7 +59,6 @@
       'browser/browsing_data/browsing_data_remover_unittest.cc',
       'browser/browsing_data/browsing_data_service_worker_helper_unittest.cc',
       'browser/browsing_data/cookies_tree_model_unittest.cc',
-      'browser/browsing_data/origin_filter_builder_unittest.cc',
       'browser/chrome_browser_application_mac_unittest.mm',
       'browser/chrome_content_browser_client_unittest.cc',
       'browser/chrome_elf_init_unittest_win.cc',
@@ -196,7 +196,6 @@
       'browser/prerender/prerender_unittest.cc',
       'browser/prerender/prerender_util_unittest.cc',
       'browser/private_working_set_snapshot_win_unittest.cc',
-      'browser/process_info_snapshot_mac_unittest.cc',
       'browser/process_singleton_win_unittest.cc',
       'browser/profiles/gaia_info_update_service_unittest.cc',
       'browser/profiles/incognito_mode_policy_handler_unittest.cc',
@@ -208,6 +207,7 @@
       'browser/profiles/profile_manager_unittest.cc',
       'browser/profiles/profile_shortcut_manager_unittest_win.cc',
       'browser/push_messaging/push_messaging_app_identifier_unittest.cc',
+      'browser/push_messaging/background_budget_service_unittest.cc',
       'browser/push_messaging/push_messaging_notification_manager_unittest.cc',
       'browser/push_messaging/push_messaging_permission_context_unittest.cc',
       'browser/push_messaging/push_messaging_service_unittest.cc',
@@ -1278,7 +1278,6 @@
       'browser/ui/cocoa/omnibox/omnibox_popup_separator_view_unittest.mm',
       'browser/ui/cocoa/omnibox/omnibox_popup_view_mac_unittest.mm',
       'browser/ui/cocoa/omnibox/omnibox_view_mac_unittest.mm',
-      'browser/ui/cocoa/one_click_signin_bubble_controller_unittest.mm',
       'browser/ui/cocoa/panels/panel_cocoa_unittest.mm',
       'browser/ui/cocoa/passwords/account_chooser_view_controller_unittest.mm',
       'browser/ui/cocoa/passwords/autosignin_prompt_view_controller_unittest.mm',
@@ -1345,7 +1344,7 @@
     'chrome_unit_tests_views_non_chromeos_sources': [
       'browser/ui/views/app_list/linux/app_list_linux_unittest.cc',
       'browser/ui/views/frame/opaque_browser_frame_view_layout_unittest.cc',
-      'browser/ui/views/sync/one_click_signin_bubble_view_unittest.cc',
+      'browser/ui/views/sync/one_click_signin_dialog_view_unittest.cc',
     ],
     # Cross-platform (except Mac) views unit tests. Assumes app list is enabled.
     'chrome_unit_tests_views_non_mac_sources': [

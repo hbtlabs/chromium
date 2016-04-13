@@ -16,7 +16,7 @@
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "mojo/shell/public/interfaces/interface_provider.mojom.h"
+#include "services/shell/public/interfaces/interface_provider.mojom.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -64,8 +64,10 @@ class Window {
 
   WindowTreeConnection* connection() { return connection_; }
 
-  // Configuration.
-  Id id() const { return id_; }
+  // The local_id is provided for client code. The local_id is not set or
+  // manipulated by mus. The default value is -1.
+  void set_local_id(int id) { local_id_ = id; }
+  int local_id() const { return local_id_; }
 
   // Geometric disposition relative to parent window.
   const gfx::Rect& bounds() const { return bounds_; }
@@ -190,7 +192,7 @@ class Window {
   void SetModal();
   bool is_modal() const { return is_modal_; }
 
-  Window* GetChildById(Id id);
+  Window* GetChildByLocalId(int id);
 
   void SetTextInputState(mojo::TextInputStatePtr state);
   void SetImeVisibility(bool visible, mojo::TextInputStatePtr state);
@@ -226,6 +228,10 @@ class Window {
   friend class WindowTreeClientImpl;
 
   Window(WindowTreeConnection* connection, Id id);
+
+  // Used to identify this Window on the server. Clients can not change this
+  // value.
+  Id server_id() const { return server_id_; }
 
   WindowTreeClientImpl* tree_client();
 
@@ -295,7 +301,8 @@ class Window {
   static Window** GetStackingTarget(Window* window);
 
   WindowTreeConnection* connection_;
-  Id id_;
+  Id server_id_;
+  int local_id_ = -1;
   Window* parent_;
   Children children_;
 

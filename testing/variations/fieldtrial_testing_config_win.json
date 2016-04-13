@@ -59,6 +59,11 @@
             "group_name": "Enabled"
         }
     ],
+    "DefaultBrowserInfobar": [
+        {
+            "group_name": "SettingsText"
+        }
+    ],
     "DocumentWriteEvaluator": [
         {
             "enable_features": [
@@ -242,6 +247,38 @@
     "SSLCommonNameMismatchHandling": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "SafeBrowsingIncidentReportingService": [
+        {
+            "enable_features": [
+                "IncidentReportingDisableUpload"
+            ],
+            "group_name": "Enabled",
+            "params": {
+                "collect_reg_data": "true"
+            }
+        },
+        {
+            "group_name": "Default"
+        }
+    ],
+    "SafeBrowsingIncidentReportingServiceFeatures": [
+        {
+            "enable_features": [
+                "IncidentReportingModuleLoadAnalysis",
+                "IncidentReportingSuspiciousModuleReporting"
+            ],
+            "group_name": "WithSuspiciousModuleReporting"
+        },
+        {
+            "enable_features": [
+                "IncidentReportingModuleLoadAnalysis"
+            ],
+            "group_name": "WithModuleLoadAnalysis"
+        },
+        {
+            "group_name": "Default"
         }
     ],
     "SafeBrowsingReportPhishingErrorLink": [

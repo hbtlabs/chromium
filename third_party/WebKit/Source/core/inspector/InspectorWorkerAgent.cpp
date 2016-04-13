@@ -46,7 +46,7 @@ static const char workerInspectionEnabled[] = "workerInspectionEnabled";
 static const char waitForDebuggerOnStart[] = "waitForDebuggerOnStart";
 };
 
-RawPtr<InspectorWorkerAgent> InspectorWorkerAgent::create(InspectedFrames* inspectedFrames, PageConsoleAgent* consoleAgent)
+InspectorWorkerAgent* InspectorWorkerAgent::create(InspectedFrames* inspectedFrames, PageConsoleAgent* consoleAgent)
 {
     return new InspectorWorkerAgent(inspectedFrames, consoleAgent);
 }
@@ -60,9 +60,6 @@ InspectorWorkerAgent::InspectorWorkerAgent(InspectedFrames* inspectedFrames, Pag
 
 InspectorWorkerAgent::~InspectorWorkerAgent()
 {
-#if !ENABLE(OILPAN)
-    m_instrumentingAgents->setInspectorWorkerAgent(nullptr);
-#endif
 }
 
 void InspectorWorkerAgent::restore()

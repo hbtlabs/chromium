@@ -97,6 +97,7 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
     {"delayBeforeClickLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG},
     {"delayBeforeClickVeryLong", IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG},
     {"onScreenKeyboardLabel", IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL},
+    {"monoAudioLabel", IDS_SETTINGS_MONO_AUDIO_LABEL},
     {"a11yExplanation", IDS_SETTINGS_ACCESSIBILITY_EXPLANATION},
     {"caretHighlightLabel",
      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION},
@@ -530,9 +531,9 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source) {
       {"displayInThisLanguage",
        IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE},
       {"offerToTranslateInThisLanguage",
-       IDS_OPTIONS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE},
+       IDS_SETTINGS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE},
       {"cannotTranslateInThisLanguage",
-       IDS_OPTIONS_LANGUAGES_CANNOT_TRANSLATE_IN_THIS_LANGUAGE},
+       IDS_SETTINGS_LANGUAGES_CANNOT_TRANSLATE_IN_THIS_LANGUAGE},
       {"editDictionaryPageTitle", IDS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_TITLE},
       {"addDictionaryWordLabel", IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD},
       {"addDictionaryWordButton",
@@ -749,6 +750,7 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
 
 void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
+      {"embeddedOnHost", IDS_EXCEPTIONS_GEOLOCATION_EMBEDDED_ON_HOST},
       {"siteSettingsCategoryPageTitle", IDS_SETTINGS_SITE_SETTINGS_CATEGORY},
       {"siteSettingsCategoryAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
       {"siteSettingsCategoryCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
@@ -880,6 +882,7 @@ void AddWebContentStrings(content::WebUIDataSource* html_source) {
       {"loremIpsum", IDS_SETTINGS_LOREM_IPSUM},
       {"loading", IDS_SETTINGS_LOADING},
       {"advancedFontSettings", IDS_SETTINGS_ADVANCED_FONT_SETTINGS},
+      {"openAdvancedFontSettings", IDS_SETTINGS_OPEN_ADVANCED_FONT_SETTINGS},
       {"requiresWebStoreExtension", IDS_SETTINGS_REQUIRES_WEB_STORE_EXTENSION},
       {"quickBrownFox", IDS_SETTINGS_QUICK_BROWN_FOX},
   };

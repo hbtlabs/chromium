@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Environment;
 
+import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -131,20 +132,6 @@ public class OfflinePageUtils {
     }
 
     /**
-     * Whenever we reload an offline page, if we are online, load the online version of the page
-     * instead, on the theory that the user prefers the online version of the page.
-     */
-    public static void preferOnlineVersion(Tab tab, String newUrl) {
-        // If we are reloading an offline page, but are online, get the online version.
-        if (newUrl.equals(tab.getUrl()) && isConnected()) {
-            Log.i(TAG, "Refreshing to the online version of an offline page, since we are online");
-            LoadUrlParams params =
-                    new LoadUrlParams(tab.getOfflinePageOriginalUrl(), PageTransition.RELOAD);
-            tab.loadUrl(params);
-        }
-    }
-
-    /**
      * Strips scheme from the original URL of the offline page. This is meant to be used by UI.
      * @param onlineUrl an online URL to from which the scheme is removed
      * @return onlineUrl without the scheme
@@ -230,8 +217,20 @@ public class OfflinePageUtils {
             @Override
             public void onAction(Object actionData) {
                 RecordUserAction.record("OfflinePages.SaveStatusSnackbar.FreeUpSpaceButtonClicked");
-                OfflinePageStorageSpacePolicy policy =
-                        new OfflinePageStorageSpacePolicy(offlinePageBridge);
+                Callback<OfflinePageStorageSpacePolicy> callback =
+                        getStorageSpacePolicyCallback(offlinePageBridge, snackbarManager, activity);
+
+                OfflinePageStorageSpacePolicy.create(offlinePageBridge, callback);
+            }
+        };
+    }
+
+    private static Callback<OfflinePageStorageSpacePolicy> getStorageSpacePolicyCallback(
+            final OfflinePageBridge offlinePageBridge, final SnackbarManager snackbarManager,
+            final Activity activity) {
+        return new Callback<OfflinePageStorageSpacePolicy>() {
+            @Override
+            public void onResult(OfflinePageStorageSpacePolicy policy) {
                 if (policy.hasPagesToCleanUp()) {
                     OfflinePageFreeUpSpaceCallback callback = new OfflinePageFreeUpSpaceCallback() {
                         @Override

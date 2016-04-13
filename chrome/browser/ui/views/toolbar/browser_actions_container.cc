@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
-#include "chrome/browser/ui/views/extensions/extension_message_bubble_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
@@ -309,38 +308,26 @@ void BrowserActionsContainer::ShowToolbarActionBubble(
     std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller) {
   // The container shouldn't be asked to show a bubble if it's animating.
   DCHECK(!animating());
+  DCHECK(!active_bubble_);
+
   views::View* anchor_view = nullptr;
   if (!controller->GetAnchorActionId().empty()) {
     ToolbarActionView* action_view =
         GetViewForId(controller->GetAnchorActionId());
-    anchor_view =
-        action_view->visible() ? action_view : GetOverflowReferenceView();
+    if (action_view) {
+      anchor_view =
+          action_view->visible() ? action_view : GetOverflowReferenceView();
+    } else {
+      anchor_view = BrowserView::GetBrowserViewForBrowser(browser_)
+                        ->toolbar()
+                        ->app_menu_button();
+    }
   } else {
     anchor_view = this;
   }
+
   ToolbarActionsBarBubbleViews* bubble =
       new ToolbarActionsBarBubbleViews(anchor_view, std::move(controller));
-  views::BubbleDelegateView::CreateBubble(bubble);
-  bubble->Show();
-}
-
-void BrowserActionsContainer::ShowExtensionMessageBubble(
-    std::unique_ptr<extensions::ExtensionMessageBubbleController> controller,
-    ToolbarActionViewController* anchor_action) {
-  // The container shouldn't be asked to show a bubble if it's animating.
-  DCHECK(!animating());
-
-  views::View* reference_view =
-      anchor_action
-          ? static_cast<views::View*>(GetViewForId(anchor_action->GetId()))
-          : BrowserView::GetBrowserViewForBrowser(browser_)
-                ->toolbar()
-                ->app_menu_button();
-
-  extensions::ExtensionMessageBubbleView* bubble =
-      new extensions::ExtensionMessageBubbleView(reference_view,
-                                                 views::BubbleBorder::TOP_RIGHT,
-                                                 std::move(controller));
   views::BubbleDelegateView::CreateBubble(bubble);
   active_bubble_ = bubble;
   active_bubble_->GetWidget()->AddObserver(this);
@@ -766,4 +753,5 @@ void BrowserActionsContainer::ClearActiveBubble(views::Widget* widget) {
   DCHECK_EQ(active_bubble_->GetWidget(), widget);
   widget->RemoveObserver(this);
   active_bubble_ = nullptr;
+  toolbar_actions_bar_->OnBubbleClosed();
 }

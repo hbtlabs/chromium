@@ -37,6 +37,7 @@ source_set("blimp_client") {
     "//blimp/common/proto",
     "//blimp/net:blimp_net",
     "//cc",
+    "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/skia_bindings",
     "//net",
     "//third_party/libwebp",
@@ -326,7 +327,10 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
       "app/android/java/src/org/chromium/blimp/input/WebInputBox.java",
       "app/android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
+      "app/android/java/src/org/chromium/blimp/session/EngineInfo.java",
       "app/android/java/src/org/chromium/blimp/session/TabControlFeature.java",
+      "app/android/java/src/org/chromium/blimp/settings/AboutBlimpPreferences.java",
+      "app/android/java/src/org/chromium/blimp/settings/Preferences.java",
       "app/android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
       "app/android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
     ]
@@ -382,6 +386,8 @@ if (is_android) {
       "app/android/toolbar.h",
       "app/android/web_input_box.cc",
       "app/android/web_input_box.h",
+      "app/user_agent.cc",
+      "app/user_agent.h",
     ]
 
     libs = [ "android" ]

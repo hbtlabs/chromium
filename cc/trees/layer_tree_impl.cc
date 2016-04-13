@@ -867,7 +867,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
          it != end; ++it) {
       occlusion_tracker.EnterLayer(it);
 
-      bool inside_replica = it->render_target()->InsideReplica();
+      bool inside_replica = it->InsideReplica();
 
       // Don't use occlusion if a layer will appear in a replica, since the
       // tile raster code does not know how to look for the replica and would
@@ -913,7 +913,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
     }
 
     unoccluded_screen_space_region_ =
-        occlusion_tracker.ComputeVisibleRegionInScreen();
+        occlusion_tracker.ComputeVisibleRegionInScreen(this);
   }
 
   // It'd be ideal if this could be done earlier, but when the raster source
@@ -1755,8 +1755,9 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
   }
 }
 
-static bool ScrollsAnyDrawnRenderSurfaceLayerListMember(LayerImpl* layer) {
-  if (!layer->scrollable())
+static bool ScrollsOrScrollbarAnyDrawnRenderSurfaceLayerListMember(
+    LayerImpl* layer) {
+  if (!layer->scrollable() && !layer->ToScrollbarLayer())
     return false;
   if (layer->layer_or_descendant_is_drawn())
     return true;
@@ -1772,25 +1773,27 @@ static bool ScrollsAnyDrawnRenderSurfaceLayerListMember(LayerImpl* layer) {
   return false;
 }
 
-struct FindScrollingLayerFunctor {
+struct FindScrollingLayerOrScrollbarLayerFunctor {
   bool operator()(LayerImpl* layer) const {
-    return ScrollsAnyDrawnRenderSurfaceLayerListMember(layer);
+    return ScrollsOrScrollbarAnyDrawnRenderSurfaceLayerListMember(layer);
   }
 };
 
-LayerImpl* LayerTreeImpl::FindFirstScrollingLayerThatIsHitByPoint(
+LayerImpl*
+LayerTreeImpl::FindFirstScrollingLayerOrScrollbarLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
   FindClosestMatchingLayerState state;
-  FindClosestMatchingLayer(
-      screen_space_point, root_layer(), FindScrollingLayerFunctor(),
-      property_trees_.transform_tree, property_trees_.clip_tree, &state);
+  FindClosestMatchingLayer(screen_space_point, root_layer(),
+                           FindScrollingLayerOrScrollbarLayerFunctor(),
+                           property_trees_.transform_tree,
+                           property_trees_.clip_tree, &state);
   return state.closest_match;
 }
 
 struct HitTestVisibleScrollableOrTouchableFunctor {
   bool operator()(LayerImpl* layer) const {
     return layer->IsDrawnRenderSurfaceLayerListMember() ||
-           ScrollsAnyDrawnRenderSurfaceLayerListMember(layer) ||
+           ScrollsOrScrollbarAnyDrawnRenderSurfaceLayerListMember(layer) ||
            !layer->touch_event_handler_region().IsEmpty();
   }
 };

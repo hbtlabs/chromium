@@ -902,6 +902,59 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Autofill_FilledCreditCardSuggestion">
+  <owner>sebsg@chromium.org</owner>
+  <description>A credit card suggestion was filled in a form.</description>
+</action>
+
+<action name="Autofill_FilledProfileSuggestion">
+  <owner>sebsg@chromium.org</owner>
+  <description>A profile suggestion was filled in a form.</description>
+</action>
+
+<action name="Autofill_FormSubmitted">
+  <owner>sebsg@chromium.org</owner>
+  <description>An autofillable form was submitted by the user.</description>
+</action>
+
+<action name="Autofill_OnWillSubmitForm">
+  <owner>sebsg@chromium.org</owner>
+  <description>An autofillable form will be submitted by the user.</description>
+</action>
+
+<action name="Autofill_PolledCreditCardSuggestions">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user focused on an autofillable credit card field.
+  </description>
+</action>
+
+<action name="Autofill_PolledProfileSuggestions">
+  <owner>sebsg@chromium.org</owner>
+  <description>The user focused on an autofillable profile field.</description>
+</action>
+
+<action name="Autofill_SelectedSuggestion">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The user selected one of the proposed Autofill suggestions.
+  </description>
+</action>
+
+<action name="Autofill_ShowedCreditCardSuggestions">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The autofill credit card suggestions popup was shown to the user.
+  </description>
+</action>
+
+<action name="Autofill_ShowedProfileSuggestions">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    The autofill profile suggestions popup was shown to the user.
+  </description>
+</action>
+
 <action name="AutomaticReset_WebUIBanner_BannerShown">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2665,11 +2718,26 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="DefaultBrowserInfoBar_Cancel">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user clicked &quot;Don't ask again&quot; on the info bar.
+  </description>
+</action>
+
+<action name="DefaultBrowserInfoBar_Dismiss">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user dismissed the default browser info bar via the 'x'.
+  </description>
+</action>
+
 <action name="DefaultBrowserInfoBar_DontAskAgain">
   <owner>pmonette@chromium.org</owner>
   <description>
     The user clicked &quot;Don't ask again&quot; on the info bar.
   </description>
+  <obsolete>Renamed to DefaultBrowserInfoBar_Cancel in M52.</obsolete>
 </action>
 
 <action name="Delete">
@@ -9011,11 +9079,13 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the NPAPI removal infobar link is clicked.
   </description>
+  <obsolete>Deprecated due to NPAPI removal.</obsolete>
 </action>
 
 <action name="NPAPIRemovalInfobar.Shown">
   <owner>wfh@chromium.org</owner>
   <description>Recorded when the NPAPI removal infobar is shown.</description>
+  <obsolete>Deprecated due to NPAPI removal.</obsolete>
 </action>
 
 <action name="NTPPromoClosed">
@@ -9501,6 +9571,20 @@ should be able to be added at any place in this file.
 <action name="Options_AccessibilityLearnMore">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Accessibility: Learn More</description>
+</action>
+
+<action name="Options_AccessibilityMonoAudio_Disable">
+  <owner>warx@chromium.org</owner>
+  <description>
+    Settings: Disable play the same audio through all speakers (mono audio)
+  </description>
+</action>
+
+<action name="Options_AccessibilityMonoAudio_Enable">
+  <owner>warx@chromium.org</owner>
+  <description>
+    Settings: Enable play the same audio through all speakers (mono audio)
+  </description>
 </action>
 
 <action name="Options_AccessibilityOnScreenKeyboard_Disable">
@@ -11672,11 +11756,13 @@ should be able to be added at any place in this file.
 <action name="PluginLoaderPosix.LaunchUtilityProcess">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated due to NPAPI removal.</obsolete>
 </action>
 
 <action name="PluginLoaderPosix.UtilityProcessCrashed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated due to NPAPI removal.</obsolete>
 </action>
 
 <action name="Plugin_200ForByteRange">
@@ -11729,6 +11815,7 @@ should be able to be added at any place in this file.
 <action name="Plugin_NPAPINotSupported">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated due to NPAPI removal.</obsolete>
 </action>
 
 <action name="Precache.Fetch.IntentReceived" not_user_triggered="true">

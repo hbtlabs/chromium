@@ -8,14 +8,20 @@
 #include <sys/mman.h>
 #include <wayland-client.h>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/vsync_provider.h"
+#include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/platform/wayland/wayland_display.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 #include "ui/ozone/public/surface_ozone_egl.h"
+
+#if defined(USE_WAYLAND_EGL)
+#include "ui/ozone/platform/wayland/wayland_egl_surface.h"
+#endif
 
 namespace ui {
 
@@ -32,7 +38,7 @@ class WaylandCanvasSurface : public SurfaceOzoneCanvas {
   skia::RefPtr<SkSurface> GetSurface() override;
   void ResizeCanvas(const gfx::Size& viewport_size) override;
   void PresentCanvas(const gfx::Rect& damage) override;
-  scoped_ptr<gfx::VSyncProvider> CreateVSyncProvider() override;
+  std::unique_ptr<gfx::VSyncProvider> CreateVSyncProvider() override;
 
  private:
   WaylandDisplay* display_;
@@ -57,7 +63,7 @@ skia::RefPtr<SkSurface> WaylandCanvasSurface::GetSurface() {
     return sk_surface_;
 
   size_t length = size_.width() * size_.height() * 4;
-  auto shared_memory = make_scoped_ptr(new base::SharedMemory);
+  auto shared_memory = base::WrapUnique(new base::SharedMemory);
   if (!shared_memory->CreateAndMapAnonymous(length))
     return nullptr;
 
@@ -111,7 +117,8 @@ void WaylandCanvasSurface::PresentCanvas(const gfx::Rect& damage) {
   display_->ScheduleFlush();
 }
 
-scoped_ptr<gfx::VSyncProvider> WaylandCanvasSurface::CreateVSyncProvider() {
+std::unique_ptr<gfx::VSyncProvider>
+WaylandCanvasSurface::CreateVSyncProvider() {
   // TODO(forney): This can be implemented with information from frame
   // callbacks, and possibly output refresh rate.
   NOTIMPLEMENTED();
@@ -124,30 +131,43 @@ WaylandSurfaceFactory::WaylandSurfaceFactory(WaylandDisplay* display)
 WaylandSurfaceFactory::~WaylandSurfaceFactory() {}
 
 intptr_t WaylandSurfaceFactory::GetNativeDisplay() {
-  NOTIMPLEMENTED();
-  return 0;
+  return reinterpret_cast<intptr_t>(display_->display());
 }
 
 bool WaylandSurfaceFactory::LoadEGLGLES2Bindings(
     AddGLLibraryCallback add_gl_library,
     SetGLGetProcAddressProcCallback set_gl_get_proc_address) {
-  // This Ozone implementation does not support multi-process rendering so
-  // disable EGL unconditionally for now.
+#if defined(USE_WAYLAND_EGL)
+  if (!display_)
+    return false;
+  setenv("EGL_PLATFORM", "wayland", 0);
+  return LoadDefaultEGLGLES2Bindings(add_gl_library, set_gl_get_proc_address);
+#else
   return false;
+#endif
 }
 
-scoped_ptr<SurfaceOzoneCanvas> WaylandSurfaceFactory::CreateCanvasForWidget(
-    gfx::AcceleratedWidget widget) {
-  DCHECK(display_);
+std::unique_ptr<SurfaceOzoneCanvas>
+WaylandSurfaceFactory::CreateCanvasForWidget(gfx::AcceleratedWidget widget) {
   WaylandWindow* window = display_->GetWindow(widget);
   DCHECK(window);
-  return make_scoped_ptr(new WaylandCanvasSurface(display_, window));
+  return base::WrapUnique(new WaylandCanvasSurface(display_, window));
 }
 
-scoped_ptr<SurfaceOzoneEGL> WaylandSurfaceFactory::CreateEGLSurfaceForWidget(
+std::unique_ptr<SurfaceOzoneEGL>
+WaylandSurfaceFactory::CreateEGLSurfaceForWidget(
     gfx::AcceleratedWidget widget) {
-  NOTREACHED();
+#if defined(USE_WAYLAND_EGL)
+  WaylandWindow* window = display_->GetWindow(widget);
+  DCHECK(window);
+  auto surface = base::WrapUnique(
+      new WaylandEGLSurface(window, window->GetBounds().size()));
+  if (!surface->Initialize())
+    return nullptr;
+  return std::move(surface);
+#else
   return nullptr;
+#endif
 }
 
 scoped_refptr<NativePixmap> WaylandSurfaceFactory::CreateNativePixmap(

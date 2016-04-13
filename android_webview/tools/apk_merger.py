@@ -163,6 +163,9 @@ def GetSecondaryAbi(apk_zipfile, shared_library):
 
 def MergeBinaries(apk, out_apk, secondary_abi_out_dir, shared_library):
   shutil.copyfile(apk, out_apk)
+  # Remove existing signatures
+  subprocess.check_call(['zip', '-d', out_apk, 'META-INF/*.SF',
+                         'META-INF/*.RSA'])
   with zipfile.ZipFile(out_apk, 'a') as apk_zip:
     secondary_abi = GetSecondaryAbi(apk_zip, shared_library)
     build_utils.AddToZipHermetic(
@@ -198,11 +201,10 @@ def MergeApk(args, tmp_apk, tmp_dir_32, tmp_dir_64):
   UnpackApk(args.apk_64bit, tmp_dir_64)
   UnpackApk(args.apk_32bit, tmp_dir_32)
 
-  # TODO(sgurun) remove WebViewPlatformBridge.apk from this list crbug/580678
   dcmp = filecmp.dircmp(
       tmp_dir_64,
       tmp_dir_32,
-      ignore=['META-INF', 'AndroidManifest.xml', 'WebViewPlatformBridge.apk'])
+      ignore=['META-INF', 'AndroidManifest.xml'])
 
   diff_files = GetDiffFiles(dcmp, tmp_dir_32)
 

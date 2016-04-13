@@ -78,14 +78,22 @@ USB::USB(LocalFrame& frame)
     : ContextLifecycleObserver(frame.document())
     , m_client(USBController::from(frame).client())
 {
+    ThreadState::current()->registerPreFinalizer(this);
     if (m_client)
         m_client->addObserver(this);
 }
 
 USB::~USB()
 {
+}
+
+void USB::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
     if (m_client)
         m_client->removeObserver(this);
+    m_client = nullptr;
 }
 
 ScriptPromise USB::getDevices(ScriptState* scriptState)
@@ -155,7 +163,7 @@ void USB::onDeviceDisconnected(std::unique_ptr<WebUSBDevice> device)
 
 DEFINE_TRACE(USB)
 {
-    RefCountedGarbageCollectedEventTargetWithInlineData<USB>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ContextLifecycleObserver::trace(visitor);
 }
 

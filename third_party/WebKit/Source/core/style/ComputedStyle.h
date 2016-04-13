@@ -112,7 +112,6 @@ class AppliedTextDecoration;
 class BorderData;
 struct BorderEdge;
 class CSSVariableData;
-class CounterContent;
 class Font;
 class FontMetrics;
 class RotateTransformOperation;
@@ -501,7 +500,7 @@ public:
     EPosition position() const { return static_cast<EPosition>(noninherited_flags.position); }
     bool hasOutOfFlowPosition() const { return position() == AbsolutePosition || position() == FixedPosition; }
     bool hasInFlowPosition() const { return position() == RelativePosition || position() == StickyPosition; }
-    bool hasViewportConstrainedPosition() const { return position() == FixedPosition; }
+    bool hasViewportConstrainedPosition() const { return position() == FixedPosition || position() == StickyPosition; }
     EFloat floating() const { return static_cast<EFloat>(noninherited_flags.floating); }
 
     const Length& width() const { return m_box->width(); }
@@ -1589,11 +1588,7 @@ public:
     bool hasContent() const { return contentData(); }
     ContentData* contentData() const { return rareNonInheritedData->m_content.get(); }
     bool contentDataEquivalent(const ComputedStyle* otherStyle) const { return const_cast<ComputedStyle*>(this)->rareNonInheritedData->contentDataEquivalent(*const_cast<ComputedStyle*>(otherStyle)->rareNonInheritedData); }
-    void clearContent();
-    void setContent(const String&);
-    void setContent(StyleImage*);
-    void setContent(PassOwnPtr<CounterContent>);
-    void setContent(QuoteType);
+    void setContent(ContentData*);
 
     const CounterDirectiveMap* counterDirectives() const;
     CounterDirectiveMap& accessCounterDirectives();
@@ -1926,7 +1921,6 @@ private:
     Color floodColor() const { return svgStyle().floodColor(); }
     Color lightingColor() const { return svgStyle().lightingColor(); }
 
-    void appendContent(ContentData*);
     void addAppliedTextDecoration(const AppliedTextDecoration&);
     void applyMotionPathTransform(float originX, float originY, TransformationMatrix&) const;
 

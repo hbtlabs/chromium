@@ -108,9 +108,7 @@ MediaSource::MediaSource(ExecutionContext* context)
 MediaSource::~MediaSource()
 {
     WTF_LOG(Media, "MediaSource::~MediaSource %p", this);
-#if !ENABLE(OILPAN)
     ASSERT(isClosed());
-#endif
 }
 
 void MediaSource::logAndThrowDOMException(ExceptionState& exceptionState, const ExceptionCode& error, const String& message)
@@ -282,7 +280,7 @@ DEFINE_TRACE(MediaSource)
     visitor->trace(m_attachedElement);
     visitor->trace(m_sourceBuffers);
     visitor->trace(m_activeSourceBuffers);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MediaSource>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

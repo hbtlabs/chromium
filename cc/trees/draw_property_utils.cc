@@ -267,34 +267,6 @@ static bool IsLayerBackFaceVisible(LayerType* layer,
              : node->data.to_target.IsBackFaceVisible();
 }
 
-template <typename LayerType>
-static bool IsSurfaceBackFaceVisible(LayerType* layer,
-                                     const TransformTree& tree) {
-  if (HasSingularTransform(layer->transform_tree_index(), tree))
-    return false;
-  const TransformNode* node = tree.Node(layer->transform_tree_index());
-  // If the render_surface is not part of a new or existing rendering context,
-  // then the layers that contribute to this surface will decide back-face
-  // visibility for themselves.
-  if (!node->data.sorting_context_id)
-    return false;
-
-  const TransformNode* parent_node = tree.parent(node);
-  if (parent_node &&
-      parent_node->data.sorting_context_id == node->data.sorting_context_id) {
-    // Draw transform as a contributing render surface.
-    // TODO(enne): we shouldn't walk the tree during a tree walk.
-    gfx::Transform surface_draw_transform;
-    tree.ComputeTransform(node->id, node->data.target_id,
-                          &surface_draw_transform);
-    return surface_draw_transform.IsBackFaceVisible();
-  }
-
-  // We use layer's transform to determine back face visibility when its the
-  // root of a new rendering context.
-  return layer->transform().IsBackFaceVisible();
-}
-
 static inline bool TransformToScreenIsKnown(Layer* layer,
                                             int transform_tree_index,
                                             const TransformTree& tree) {
@@ -306,12 +278,6 @@ static inline bool TransformToScreenIsKnown(LayerImpl* layer,
                                             int transform_tree_index,
                                             const TransformTree& tree) {
   return true;
-}
-
-template <typename LayerType>
-static bool HasInvertibleOrAnimatedTransform(LayerType* layer) {
-  return layer->transform_is_invertible() ||
-         layer->HasPotentiallyRunningTransformAnimation();
 }
 
 template <typename LayerType>
@@ -392,6 +358,7 @@ void UpdateRenderSurfaceForLayer(EffectTree* effect_tree,
     layer->SetHasRenderSurface(IsRootLayer(layer));
     return;
   }
+
   EffectNode* node = effect_tree->Node(layer->effect_tree_index());
 
   if (node->owner_id == layer->id() && node->data.has_render_surface)
@@ -420,11 +387,7 @@ static inline bool LayerShouldBeSkipped(Layer* layer,
   const EffectNode* effect_node = effect_tree.Node(layer->effect_tree_index());
 
   // If the layer transform is not invertible, it should not be drawn.
-  bool has_inherited_invertible_or_animated_transform =
-      (transform_node->data.is_invertible &&
-       transform_node->data.ancestors_are_invertible) ||
-      transform_node->data.to_screen_is_potentially_animated;
-  if (!has_inherited_invertible_or_animated_transform)
+  if (!transform_node->data.node_and_ancestors_are_animated_or_invertible)
     return true;
 
   // When we need to do a readback/copy of a layer's output, we can not skip
@@ -466,11 +429,7 @@ bool LayerShouldBeSkipped(LayerImpl* layer,
   // TODO(ajuma): Correctly process subtrees with singular transform for the
   // case where we may animate to a non-singular transform and wish to
   // pre-raster.
-  bool has_inherited_invertible_or_animated_transform =
-      (transform_node->data.is_invertible &&
-       transform_node->data.ancestors_are_invertible) ||
-      transform_node->data.to_screen_is_potentially_animated;
-  if (!has_inherited_invertible_or_animated_transform)
+  if (!transform_node->data.node_and_ancestors_are_animated_or_invertible)
     return true;
 
   // When we need to do a readback/copy of a layer's output, we can not skip
@@ -687,6 +646,23 @@ void ComputeTransforms(TransformTree* transform_tree) {
   transform_tree->set_needs_update(false);
 }
 
+void UpdateRenderTarget(EffectTree* effect_tree,
+                        bool can_render_to_separate_surface) {
+  for (int i = 1; i < static_cast<int>(effect_tree->size()); ++i) {
+    EffectNode* node = effect_tree->Node(i);
+    if (i == 1) {
+      // Render target on the first effect node is root.
+      node->data.target_id = 0;
+    } else if (!can_render_to_separate_surface) {
+      node->data.target_id = 1;
+    } else if (effect_tree->parent(node)->data.has_render_surface) {
+      node->data.target_id = node->parent_id;
+    } else {
+      node->data.target_id = effect_tree->parent(node)->data.target_id;
+    }
+  }
+}
+
 void ComputeEffects(EffectTree* effect_tree) {
   if (!effect_tree->needs_update())
     return;
@@ -708,6 +684,8 @@ static void ComputeVisibleRectsInternal(
   }
   if (property_trees->transform_tree.needs_update())
     property_trees->clip_tree.set_needs_update(true);
+  UpdateRenderTarget(&property_trees->effect_tree,
+                     property_trees->non_root_surfaces_enabled);
   ComputeTransforms(&property_trees->transform_tree);
   ComputeClips(&property_trees->clip_tree, property_trees->transform_tree,
                can_render_to_separate_surface);
@@ -782,6 +760,10 @@ void ComputeVisibleRects(LayerImpl* root_layer,
   for (auto* layer : *root_layer->layer_tree_impl()) {
     UpdateRenderSurfaceForLayer(&property_trees->effect_tree,
                                 can_render_to_separate_surface, layer);
+    EffectNode* node =
+        property_trees->effect_tree.Node(layer->effect_tree_index());
+    if (node->owner_id == layer->id())
+      node->data.render_surface = layer->render_surface();
 #if DCHECK_IS_ON()
     if (can_render_to_separate_surface)
       ValidateRenderSurfaceForLayer(layer);
@@ -921,7 +903,7 @@ static float LayerDrawOpacity(const LayerImpl* layer, const EffectTree& tree) {
     return 0.f;
 
   const EffectNode* target_node =
-      tree.Node(layer->render_target()->effect_tree_index());
+      tree.Node(layer->render_target()->EffectTreeIndex());
   const EffectNode* node = tree.Node(layer->effect_tree_index());
   if (node == target_node)
     return 1.f;

@@ -66,8 +66,8 @@ source_set("test_support") {
     "//ipc/mojo",
     "//media",
     "//mojo/edk/test:test_support",
-    "//mojo/shell/public/cpp:cpp_for_chromium",
     "//net:test_support",
+    "//services/shell/public/cpp:cpp_for_chromium",
     "//skia",
     "//storage/browser",
     "//storage/common",
@@ -305,6 +305,7 @@ static_library("layouttest_support") {
     ":test_support",
     "//cc",
     "//cc/blink",
+    "//components/scheduler:test_support",
     "//components/test_runner:test_runner",
     "//content/browser:for_content_tests",
     "//content/public/common",
@@ -468,9 +469,9 @@ test("content_browsertests") {
     "//mojo/edk/test:test_support",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
-    "//mojo/shell/public/cpp:cpp_for_chromium",
     "//mojo/test:test_support",
     "//net:test_support",
+    "//services/shell/public/cpp:cpp_for_chromium",
     "//storage/browser",
     "//testing/gmock",
     "//testing/gtest",
@@ -753,6 +754,13 @@ test("content_unittests") {
         "../renderer/media/video_track_recorder_unittest.cc",
       ]
     }
+  }
+
+  if (enable_webrtc && enable_plugins) {
+    sources += rebase_path(
+            content_tests_gypi_values.content_unittests_plugin_webrtc_sources,
+            ".",
+            "//content")
   }
 
   if (enable_web_speech) {

@@ -119,9 +119,8 @@ WebGraphicsContext3DCommandBufferImpl::WebGraphicsContext3DCommandBufferImpl(
 
 WebGraphicsContext3DCommandBufferImpl::
     ~WebGraphicsContext3DCommandBufferImpl() {
-  if (real_gl_) {
-    real_gl_->SetErrorMessageCallback(NULL);
-  }
+  if (real_gl_)
+    real_gl_->SetLostContextCallback(base::Closure());
 
   Destroy();
 }
@@ -147,15 +146,11 @@ bool WebGraphicsContext3DCommandBufferImpl::MaybeInitializeGL() {
     return false;
   }
 
-  command_buffer_->SetContextLostCallback(
+  real_gl_->SetLostContextCallback(
       base::Bind(&WebGraphicsContext3DCommandBufferImpl::OnContextLost,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 // The callback is unset in the destructor.
+                 base::Unretained(this)));
 
-  command_buffer_->SetOnConsoleMessageCallback(
-      base::Bind(&WebGraphicsContext3DCommandBufferImpl::OnErrorMessage,
-                 weak_ptr_factory_.GetWeakPtr()));
-
-  real_gl_->SetErrorMessageCallback(getErrorMessageCallback());
   real_gl_->TraceBeginCHROMIUM("WebGraphicsContext3D",
                                "CommandBufferContext");
 

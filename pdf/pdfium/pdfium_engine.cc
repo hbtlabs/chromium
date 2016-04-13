@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/i18n/icu_encoding_detection.h"
@@ -16,7 +17,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -2296,7 +2296,7 @@ std::string PDFiumEngine::GetPageAsJSON(int index) {
   if (index < 0 || static_cast<size_t>(index) > pages_.size() - 1)
     return "{}";
 
-  scoped_ptr<base::Value> node(
+  std::unique_ptr<base::Value> node(
       pages_[index]->GetAccessibleContentAsValue(current_rotation_));
   std::string page_json;
   base::JSONWriter::Write(*node, &page_json);
@@ -3185,8 +3185,8 @@ void PDFiumEngine::TransformPDFPageForPrinting(
           gfx_content_rect, src_page_width, src_page_height, rotated) : 1.0;
 
   // Calculate positions for the clip box.
-  printing::ClipBox media_box;
-  printing::ClipBox crop_box;
+  printing::PdfRectangle media_box;
+  printing::PdfRectangle crop_box;
   bool has_media_box = !!FPDFPage_GetMediaBox(page,
                                               &media_box.left,
                                               &media_box.bottom,
@@ -3199,9 +3199,9 @@ void PDFiumEngine::TransformPDFPageForPrinting(
                                             &crop_box.top);
   printing::CalculateMediaBoxAndCropBox(
       rotated, has_media_box, has_crop_box, &media_box, &crop_box);
-  printing::ClipBox source_clip_box =
+  printing::PdfRectangle source_clip_box =
       printing::CalculateClipBoxBoundary(media_box, crop_box);
-  printing::ScaleClipBox(scale_factor, &source_clip_box);
+  printing::ScalePdfRectangle(scale_factor, &source_clip_box);
 
   // Calculate the translation offset values.
   double offset_x = 0;

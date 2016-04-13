@@ -52,23 +52,6 @@ enum TrackSizeRestriction { FixedSizeOnly, AllowAll };
 class CSSPropertyParser {
     STACK_ALLOCATED();
 public:
-
-    enum Units {
-        FUnknown = 0x0000,
-        FInteger = 0x0001,
-        FNumber = 0x0002, // Real Numbers
-        FPercent = 0x0004,
-        FLength = 0x0008,
-        FAngle = 0x0010,
-        FTime = 0x0020,
-        FFrequency = 0x0040,
-        FPositiveInteger = 0x0080,
-        FRelative = 0x0100,
-        FResolution = 0x0200,
-        FNonNeg = 0x0400,
-        FUnitlessQuirk = 0x0800
-    };
-
     static bool parseValue(CSSPropertyID, bool important,
         const CSSParserTokenRange&, const CSSParserContext&,
         HeapVector<CSSProperty, 256>&, StyleRule::RuleType);
@@ -90,8 +73,6 @@ private:
     bool consumeCSSWideKeyword(CSSPropertyID unresolvedProperty, bool important);
     CSSValue* parseSingleValue(CSSPropertyID);
 
-    CSSValue* legacyParseValue(CSSPropertyID);
-    bool legacyParseAndApplyValue(CSSPropertyID, bool important);
     bool legacyParseShorthand(CSSPropertyID, bool important);
 
     bool inShorthand() const { return m_inParseShorthand; }
@@ -116,17 +97,11 @@ private:
     bool consumeColumns(bool important);
 
     bool consumeGridItemPositionShorthand(CSSPropertyID, bool important);
-    CSSValue* parseGridTemplateColumns(bool important);
-    bool parseGridTemplateRowsAndAreasAndColumns(bool important);
-    bool parseGridTemplateShorthand(bool important);
+    bool consumeGridTemplateRowsAndAreasAndColumns(bool important);
+    bool consumeGridTemplateShorthand(bool important);
     bool parseGridShorthand(bool important);
     bool consumeGridAreaShorthand(bool important);
-    CSSValue* parseGridTrackList();
-    bool parseGridTrackRepeatFunction(CSSValueList&, bool& isAutoRepeat);
-    CSSValue* parseGridTrackSize(CSSParserValueList& inputList, TrackSizeRestriction = AllowAll);
-    CSSPrimitiveValue* parseGridBreadth(CSSParserValue*, TrackSizeRestriction = AllowAll);
     bool parseGridLineNames(CSSParserValueList&, CSSValueList&, CSSGridLineNamesValue* = nullptr);
-    CSSValue* parseGridAutoFlow(CSSParserValueList&);
 
     bool consumeFont(bool important);
     bool consumeSystemFont(bool important);
@@ -139,11 +114,6 @@ private:
     bool consumeFlex(bool important);
 
     bool consumeLegacyBreakProperty(CSSPropertyID, bool important);
-
-    bool parseCalculation(CSSParserValue*, ValueRange);
-
-    CSSPrimitiveValue* createPrimitiveNumericValue(CSSParserValue*);
-    CSSCustomIdentValue* createPrimitiveCustomIdentValue(CSSParserValue*);
 
     class ShorthandScope {
         STACK_ALLOCATED();
@@ -163,23 +133,6 @@ private:
         CSSPropertyParser* m_parser;
     };
 
-    enum ReleaseParsedCalcValueCondition {
-        ReleaseParsedCalcValue,
-        DoNotReleaseParsedCalcValue
-    };
-
-    friend inline Units operator|(Units a, Units b)
-    {
-        return static_cast<Units>(static_cast<unsigned>(a) | static_cast<unsigned>(b));
-    }
-
-    bool validCalculationUnit(CSSParserValue*, Units, ReleaseParsedCalcValueCondition releaseCalc = DoNotReleaseParsedCalcValue);
-
-    bool shouldAcceptUnitLessValues(CSSParserValue*, Units, CSSParserMode);
-
-    inline bool validUnit(CSSParserValue* value, Units unitflags, ReleaseParsedCalcValueCondition releaseCalc = DoNotReleaseParsedCalcValue) { return validUnit(value, unitflags, m_context.mode(), releaseCalc); }
-    bool validUnit(CSSParserValue*, Units, CSSParserMode, ReleaseParsedCalcValueCondition releaseCalc = DoNotReleaseParsedCalcValue);
-
 private:
     // Inputs:
     CSSParserValueList* m_valueList;
@@ -198,6 +151,8 @@ private:
 // TODO(rob.buis): should move to CSSPropertyParser after conversion.
 bool allTracksAreFixedSized(CSSValueList&);
 bool parseGridTemplateAreasRow(const String&, NamedGridAreaMap&, const size_t, size_t&);
+CSSValueList* consumeGridAutoFlow(CSSParserTokenRange&);
+CSSValue* consumeGridTrackSize(CSSParserTokenRange&, CSSParserMode, TrackSizeRestriction = AllowAll);
 
 CSSPropertyID unresolvedCSSPropertyID(const CSSParserString&);
 CSSValueID cssValueKeywordID(const CSSParserString&);

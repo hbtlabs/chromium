@@ -285,7 +285,7 @@ class HTMLMediaElement::AutoplayHelperClientImpl :
     public AutoplayExperimentHelper::Client {
 
 public:
-    static RawPtr<AutoplayHelperClientImpl> create(HTMLMediaElement* element)
+    static AutoplayHelperClientImpl* create(HTMLMediaElement* element)
     {
         return new AutoplayHelperClientImpl(element);
     }
@@ -417,7 +417,6 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tagName, Document& docum
     , m_processingPreferenceChange(false)
     , m_remoteRoutesAvailable(false)
     , m_playingRemotely(false)
-    , m_isFinalizing(false)
     , m_inOverlayFullscreenVideo(false)
     , m_audioTracks(AudioTrackList::create(*this))
     , m_videoTracks(VideoTrackList::create(*this))
@@ -428,13 +427,8 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tagName, Document& docum
     , m_autoplayHelperClient(AutoplayHelperClientImpl::create(this))
     , m_autoplayHelper(AutoplayExperimentHelper::create(m_autoplayHelperClient.get()))
     , m_remotePlaybackClient(nullptr)
-#if !ENABLE(OILPAN)
-    , m_weakPtrFactory(this)
-#endif
 {
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 
     WTF_LOG(Media, "HTMLMediaElement::HTMLMediaElement(%p)", this);
 
@@ -451,41 +445,6 @@ HTMLMediaElement::~HTMLMediaElement()
 {
     WTF_LOG(Media, "HTMLMediaElement::~HTMLMediaElement(%p)", this);
 
-#if !ENABLE(OILPAN)
-    // Destruction of the autoplay helper requires the client, so be sure that
-    // this happens before the client is destructed.
-    if (m_autoplayHelper)
-        m_autoplayHelper.clear();
-
-    // HTMLMediaElement and m_asyncEventQueue always become unreachable
-    // together. So HTMLMediaElement and m_asyncEventQueue are destructed in
-    // the same GC. We don't need to close it explicitly in Oilpan.
-    m_asyncEventQueue->close();
-
-    setShouldDelayLoadEvent(false);
-
-    if (m_textTracks)
-        m_textTracks->clearOwner();
-    m_audioTracks->shutdown();
-    m_videoTracks->shutdown();
-
-    closeMediaSource();
-
-    removeElementFromDocumentMap(this, &document());
-
-    // Destroying the player may cause a resource load to be canceled,
-    // which could result in LocalDOMWindow::dispatchWindowLoadEvent() being
-    // called via ResourceFetch::didLoadResource() then
-    // FrameLoader::checkCompleted(). To prevent load event dispatching during
-    // object destruction, we use Document::incrementLoadEventDelayCount().
-    // See http://crbug.com/275223 for more details.
-    document().incrementLoadEventDelayCount();
-
-    clearMediaPlayerAndAudioSourceProviderClientWithoutLocking();
-
-    document().decrementLoadEventDelayCount();
-#endif
-
     // m_audioSourceNode is explicitly cleared by AudioNode::dispose().
     // Since AudioNode::dispose() is guaranteed to be always called before
     // the AudioNode is destructed, m_audioSourceNode is explicitly cleared
@@ -493,51 +452,22 @@ HTMLMediaElement::~HTMLMediaElement()
     ASSERT(!m_audioSourceNode);
 }
 
-#if ENABLE(OILPAN)
 void HTMLMediaElement::dispose()
 {
-    // This must happen before we're destructed.
-    if (m_autoplayHelper)
-        m_autoplayHelper->dispose();
+    closeMediaSource();
 
-    // If the HTMLMediaElement dies with the Document we are not
-    // allowed to touch the Document to adjust delay load event counts
-    // from the destructor, as the Document could have been already
-    // destructed.
-    //
-    // Work around that restriction by accessing the Document from
-    // a prefinalizer action instead, updating its delayed load count.
-    // If needed - if the Document has been detached and informed its
-    // ContextLifecycleObservers (which HTMLMediaElement is) that
-    // it is being destroyed, the connection to the Document will
-    // have been severed already, but in that case there is no need
-    // to update the delayed load count. But if the Document hasn't
-    // been detached cleanly from any frame or it isn't dying in the
-    // same GC, we do update the delayed load count from the prefinalizer.
-    if (ActiveDOMObject::getExecutionContext())
-        setShouldDelayLoadEvent(false);
-
-    // If the MediaSource object survived, notify that the media element
-    // didn't.
-    if (Heap::isHeapObjectAlive(m_mediaSource))
-        closeMediaSource();
-
-    // Oilpan: the player must be released, but the player object
-    // cannot safely access this player client any longer as parts of
-    // it may have been finalized already (like the media element's
-    // supplementable table.)  Handled for now by entering an
-    // is-finalizing state, which is explicitly checked for if the
-    // player tries to access the media element during shutdown.
-    //
-    // FIXME: Oilpan: move the media player to the heap instead and
-    // avoid having to finalize it from here; this whole #if block
-    // could then be removed (along with the state bit it depends on.)
-    // crbug.com/378229
-    m_isFinalizing = true;
+    // Destroying the player may cause a resource load to be canceled,
+    // which could result in LocalDOMWindow::dispatchWindowLoadEvent() being
+    // called via ResourceFetch::didLoadResource() then
+    // FrameLoader::checkCompleted(). To prevent load event dispatching during
+    // object destruction, we use Document::incrementLoadEventDelayCount().
+    // See http://crbug.com/275223 for more details.
+    setShouldDelayLoadEvent(true);
 
     clearMediaPlayerAndAudioSourceProviderClientWithoutLocking();
+
+    setShouldDelayLoadEvent(false);
 }
-#endif
 
 void HTMLMediaElement::didMoveToNewDocument(Document& oldDocument)
 {
@@ -695,7 +625,7 @@ void HTMLMediaElement::scheduleEvent(const AtomicString& eventName)
     scheduleEvent(Event::createCancelable(eventName));
 }
 
-void HTMLMediaElement::scheduleEvent(RawPtr<Event> event)
+void HTMLMediaElement::scheduleEvent(Event* event)
 {
 #if LOG_MEDIA_EVENTS
     WTF_LOG(Media, "HTMLMediaElement::scheduleEvent(%p) - scheduling '%s'", this, event->type().ascii().data());
@@ -2685,8 +2615,8 @@ bool HTMLMediaElement::havePotentialSourceChild()
 {
     // Stash the current <source> node and next nodes so we can restore them after checking
     // to see there is another potential.
-    RawPtr<HTMLSourceElement> currentSourceNode = m_currentSourceNode;
-    RawPtr<Node> nextNode = m_nextChildNodeToConsider;
+    HTMLSourceElement* currentSourceNode = m_currentSourceNode;
+    Node* nextNode = m_nextChildNodeToConsider;
 
     KURL nextURL = selectNextSourceChild(0, DoNothing);
 
@@ -3371,7 +3301,7 @@ TextTrackContainer& HTMLMediaElement::ensureTextTrackContainer()
     if (firstChild && firstChild->isTextTrackContainer())
         return toTextTrackContainer(*firstChild);
 
-    RawPtr<TextTrackContainer> textTrackContainer = TextTrackContainer::create(document());
+    TextTrackContainer* textTrackContainer = TextTrackContainer::create(document());
 
     // The text track container should be inserted before the media controls,
     // so that they are rendered behind them.
@@ -3517,7 +3447,7 @@ void HTMLMediaElement::ensureMediaControls()
     if (mediaControls())
         return;
 
-    RawPtr<MediaControls> mediaControls = MediaControls::create(*this);
+    MediaControls* mediaControls = MediaControls::create(*this);
 
     mediaControls->reset();
     if (isFullscreen())
@@ -3645,11 +3575,7 @@ void HTMLMediaElement::setWebLayer(WebLayer* webLayer)
         return;
 
     // If either of the layers is null we need to enable or disable compositing. This is done by triggering a style recalc.
-    if ((!m_webLayer || !webLayer)
-#if ENABLE(OILPAN)
-        && !m_isFinalizing
-#endif
-        )
+    if (!m_webLayer || !webLayer)
         setNeedsCompositingUpdate();
 
     if (m_webLayer)
@@ -3938,12 +3864,5 @@ IntRect HTMLMediaElement::AutoplayHelperClientImpl::absoluteBoundingBoxRect() co
         result = object->absoluteBoundingBoxRect();
     return result;
 }
-
-#if !ENABLE(OILPAN)
-WeakPtr<HTMLMediaElement> HTMLMediaElement::createWeakPtr()
-{
-    return m_weakPtrFactory.createWeakPtr();
-}
-#endif
 
 } // namespace blink

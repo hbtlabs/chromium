@@ -23,9 +23,9 @@
 #include "components/mus/ws/window_tree_host_factory.h"
 #include "components/resource_provider/public/cpp/resource_loader.h"
 #include "mojo/public/c/system/main.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/connection.h"
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/connector.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/events/event_switches.h"
@@ -89,20 +89,20 @@ void MandolineUIServicesApp::InitializeResources(mojo::Connector* connector) {
   resource_paths.insert(kResourceFile100);
   resource_paths.insert(kResourceFile200);
 
-  resource_provider::ResourceLoader resource_loader(connector, resource_paths);
-  if (!resource_loader.BlockUntilLoaded())
+  resource_provider::ResourceLoader loader(connector, resource_paths);
+  if (!loader.BlockUntilLoaded())
     return;
-  CHECK(resource_loader.loaded());
   ui::RegisterPathProvider();
 
   // Initialize resource bundle with 1x and 2x cursor bitmaps.
   ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
-      resource_loader.ReleaseFile(kResourceFileStrings),
+      loader.ReleaseFile(kResourceFileStrings),
       base::MemoryMappedFile::Region::kWholeFile);
-  ui::ResourceBundle::GetSharedInstance().AddDataPackFromFile(
-      resource_loader.ReleaseFile(kResourceFile100), ui::SCALE_FACTOR_100P);
-  ui::ResourceBundle::GetSharedInstance().AddDataPackFromFile(
-      resource_loader.ReleaseFile(kResourceFile200), ui::SCALE_FACTOR_200P);
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  rb.AddDataPackFromFile(loader.ReleaseFile(kResourceFile100),
+                         ui::SCALE_FACTOR_100P);
+  rb.AddDataPackFromFile(loader.ReleaseFile(kResourceFile200),
+                         ui::SCALE_FACTOR_200P);
 }
 
 MandolineUIServicesApp::UserState* MandolineUIServicesApp::GetUserState(

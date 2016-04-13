@@ -34,16 +34,11 @@ class ValidityState final : public GarbageCollectedFinalized<ValidityState>, pub
     DEFINE_WRAPPERTYPEINFO();
     WTF_MAKE_NONCOPYABLE(ValidityState);
 public:
-    static RawPtr<ValidityState> create(FormAssociatedElement* control)
+    static ValidityState* create(FormAssociatedElement* control)
     {
         return new ValidityState(control);
     }
     DEFINE_INLINE_TRACE() { visitor->trace(m_control); }
-
-#if !ENABLE(OILPAN)
-    void ref() { m_control->ref(); }
-    void deref() { m_control->deref(); }
-#endif
 
     String validationMessage() const;
 

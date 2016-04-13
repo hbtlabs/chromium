@@ -37,8 +37,7 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
+#include "wtf/Forward.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -295,8 +294,8 @@ public:
     ClientRectList* draggableRegions(Document*, ExceptionState&);
     ClientRectList* nonDraggableRegions(Document*, ExceptionState&);
 
-    PassRefPtr<DOMArrayBuffer> serializeObject(PassRefPtr<SerializedScriptValue>) const;
-    PassRefPtr<SerializedScriptValue> deserializeBuffer(PassRefPtr<DOMArrayBuffer>) const;
+    DOMArrayBuffer* serializeObject(PassRefPtr<SerializedScriptValue>) const;
+    PassRefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
 
     String getCurrentCursorInfo();
 

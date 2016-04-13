@@ -24,7 +24,6 @@ crbug.com/417181 http/tests/xmlhttprequest/abort-on-changestate-headers-received
 
 crbug.com/420008 inspector/tracing/worker-js-frames.html [ Pass Timeout Failure ]
 crbug.com/420008 virtual/threaded/inspector/tracing/worker-js-frames.html [ Pass Timeout Failure ]
-crbug.com/572723 inspector/sources/debugger/debugger-autocontinue-on-syntax-error.html [ Pass Failure ]
 crbug.com/596940 inspector-protocol/runtime/runtime-execution-contexts-events.html [ Pass Timeout ]
 crbug.com/597572 [ Debug ] http/tests/inspector/resource-tree/resource-tree-reload.html [ Pass Failure ]
 
@@ -50,7 +49,8 @@ crbug.com/581990 [ Win ] fast/writing-mode/english-lr-text.html [ Pass Failure ]
 # See also crbug.com/521730 for the these two text/emphasis tests (non-Oilpan) Win10 failures.
 crbug.com/574660 [ Win7 ] fast/text/emphasis-combined-text.html [ Pass Failure ]
 
-crbug.com/584211 [ Mac ] svg/transforms/animated-path-inside-transformed-html.xhtml [ Pass Failure ]
+# TODO(wangxianzhu): verify this after rebaseline for crbug.com/602483
+# crbug.com/584211 [ Mac ] svg/transforms/animated-path-inside-transformed-html.xhtml [ Pass Failure ]
 
 # ====== Oilpan-only failures until here ======
 
@@ -217,6 +217,7 @@ crbug.com/445100 fast/block/float/marquee-shrink-to-avoid-floats.html [ Failure 
 crbug.com/548226 [ Win ] fast/events/pointerevents/mouse-pointer-event-properties.html [ Failure Pass ]
 crbug.com/548226 [ Win ] virtual/pointerevent/fast/events/pointerevents/mouse-pointer-event-properties.html [ Failure Pass ]
 crbug.com/548226 [ Win ] virtual/trustedeventsdefaultaction/fast/events/pointerevents/mouse-pointer-event-properties.html [ Failure Pass ]
+crbug.com/548226 [ Win ] virtual/pointerevent/fast/events/pointerevents/multi-pointer-preventdefault.html [ Failure Pass ]
 
 crbug.com/432129 fast/html/marquee-scroll.html [ Failure Pass ]
 crbug.com/518929 [ Precise Debug ] http/tests/appcache/obsolete-error-events.html [ Failure Pass Timeout ]
@@ -263,8 +264,8 @@ crbug.com/567837 [ Mac Android ] virtual/scalefactor200withzoom/fast/hidpi/stati
 
 # TODO(oshima): Debug build generates slightly different image for these tests.
 #crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
-#crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/data-suggestion-picker-appearance.html [ Skip ]
-#crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/popup-menu-appearance.html [ Skip ]
+crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/data-suggestion-picker-appearance.html [ Skip ]
+crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/popup-menu-appearance.html [ Skip ]
 
 # Mac does not support fractional scale factor.
 crbug.com/567837 [ Mac ] virtual/scalefactor150/fast/hidpi/static [ Skip ]
@@ -290,8 +291,6 @@ crbug.com/569139 fast/js/string-replace-2.html [ NeedsManualRebaseline ]
 crbug.com/569139 fast/js/regexp-caching.html [ NeedsManualRebaseline ]
 crbug.com/597221 fast/dom/Window/window-postmessage-clone-deep-array.html [ NeedsManualRebaseline ]
 
-crbug.com/601726 [ Win7 ] http/tests/incremental/frame-focus-before-load.html [ Timeout ]
-
 crbug.com/498539 http/tests/inspector/elements/styles/selector-line.html [ Pass Timeout ]
 crbug.com/498539 http/tests/inspector/network/network-datareceived.html [ Pass Timeout ]
 crbug.com/498539 [ Win ] inspector/tracing/decode-resize.html [ Failure Timeout ]
@@ -314,7 +313,6 @@ crbug.com/498539 [ Win7 ] inspector/sources/debugger-pause/debugger-eval-on-call
 crbug.com/498539 [ Win7 ] inspector/sources/debugger-ui/source-frame-count.html [ Pass Timeout ]
 crbug.com/498539 [ Win7 ] inspector/sources/debugger-ui/source-url-comment.html [ Pass Timeout ]
 crbug.com/498539 [ Trusty ] http/tests/inspector/sources/ui-source-code-highlight.php [ Crash Pass Timeout ]
-crbug.com/498539 [ Trusty ] inspector/sources/debugger-pause/pause-on-elements-panel.html [ Pass Timeout ]
 crbug.com/498539 [ Mac10.10 ] inspector/sources/debugger-ui/reveal-not-skipped.html [ Failure Pass ]
 crbug.com/498539 [ Mac10.10 ] inspector/sources/debugger/rethrow-error-from-bindings-crash.html [ Failure Pass ]
 crbug.com/498539 [ Win7 ] inspector/console/console-log-short-hand-method.html [ Failure Pass ]
@@ -355,10 +353,6 @@ crbug.com/552433 svg/W3C-SVG-1.1/coords-units-02-b.svg [ Pass Failure ]
 crbug.com/552433 [ Linux Mac Win10 Win7 ] svg/dom/length-list-parser.html [ Failure Pass ]
 crbug.com/552433 [ Linux Mac Win10 Win7 ] svg/transforms/text-with-pattern-with-svg-transform.svg [ Failure Pass ]
 crbug.com/552433 [ Linux Mac Win10 Win7 ] svg/hixie/perf/006.xml [ Failure Pass ]
-
-crbug.com/581661 svg/hixie/perf/002.xml [ NeedsManualRebaseline ]
-crbug.com/581661 svg/batik/text/textOnPath.svg [ NeedsManualRebaseline ]
-crbug.com/581661 svg/hixie/perf/001.xml [ NeedsManualRebaseline ]
 
 crbug.com/530044 transforms/2d/transform-borderbox.html [ NeedsManualRebaseline ]
 
@@ -433,7 +427,8 @@ crbug.com/600618 virtual/spv2/svg/custom/object-current-scale.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-height.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-width-height.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-width.xhtml [ Pass ]
-crbug.com/600618 virtual/spv2/svg/custom/object-sizing-no-width-height-change-content-box-size.xhtml [ Pass ]
+# TODO(wangxianzhu): restore this after rebaseline for crbug.com/602483
+# crbug.com/600618 virtual/spv2/svg/custom/object-sizing-no-width-height-change-content-box-size.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/svg-root-padding-left.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/svg-root-padding-top.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/viewport-em.svg [ Pass ]
@@ -508,7 +503,7 @@ crbug.com/596780 virtual/spv2/compositing/rtl/rtl-iframe-relative.html [ Failure
 crbug.com/596780 virtual/spv2/compositing/visibility/layer-visible-content.html [ Failure ]
 
 # This test has a paint invalidation failure that needs to be investigated.
-crbug.com/600618 virtual/spv2/svg/as-image/svg-image-with-data-uri.html [ Failure ]
+crbug.com/600618 virtual/spv2/svg/as-image/svg-image-with-data-uri.html [ Failure Crash ]
 
 # In imported/web-platform-tests/html/, we prefer checking in failure
 # expectation files. The following tests with [ Failure ] don't have failure
@@ -541,6 +536,8 @@ crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/styles/css-var
 crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/styles/test-003.html [ Failure ]
 crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/styles/test-010.html [ Failure Crash ]
 crbug.com/413731 imported/web-platform-tests/shadow-dom/untriaged/user-interaction/ranges-and-selections/test-002.html [ Failure Crash ]
+
+crbug.com/602483 fast/repaint/delete-into-nested-block.html [ Pass Failure ]
 
 crbug.com/552532 [ Win10 ] fast/replaced/no-focus-ring-embed.html [ Pass Crash ]
 crbug.com/552532 [ Win10 ] fast/replaced/no-focus-ring-object.html [ Pass Crash ]
@@ -825,6 +822,8 @@ crbug.com/555703 [ Android ] http/tests/media/media-source/mediasource-config-ch
 
 crbug.com/517449 [ Android ] css3/images/optimize-contrast-image.html [ Failure ]
 
+crbug.com/602268 [ Android ] svg/overflow/overflow-on-outermost-svg-element-in-xhtml-defaults.xhtml [ Pass Failure ]
+
 crbug.com/309675 compositing/gestures/gesture-tapHighlight-simple-longPress.html [ Failure ]
 
 crbug.com/245556 compositing/transitions/transform-on-large-layer.html [ Failure ]
@@ -871,10 +870,6 @@ crbug.com/528062 [ Win ] http/tests/security/XFrameOptions/x-frame-options-cache
 crbug.com/528062 [ Win ] http/tests/security/contentSecurityPolicy/cached-frame-csp.html [ Failure ]
 crbug.com/528062 [ Win ] http/tests/security/xssAuditor/cached-frame.html [ Failure ]
 crbug.com/528062 [ Win ] http/tests/security/xssAuditor/chunked-big-script.html [ Failure ]
-
-crbug.com/539725 [ Linux Debug ] inspector/elements/shadow/elements-panel-shadow-selection-on-refresh.html [ Failure ]
-crbug.com/577870 [ Win ] inspector/elements/shadow/elements-panel-shadow-selection-on-refresh.html [ Pass Failure Timeout ]
-crbug.com/577870 [ Linux Release ] inspector/elements/shadow/elements-panel-shadow-selection-on-refresh.html [ Pass Failure Timeout ]
 
 crbug.com/392706 virtual/threaded/animations/play-state-initially-paused.html [ Failure ]
 
@@ -971,7 +966,6 @@ crbug.com/498021 [ Linux ] fast/text/selection-multiple-runs.html [ Failure ]
 crbug.com/498021 [ Linux ] editing/pasteboard/4944770-2.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/encoding/invalid-UTF-8.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/emoticons.html [ Failure ]
-crbug.com/498021 [ Linux ] fast/text/international/complex-character-based-fallback.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/international/hindi-spacing.html [ Failure ]
 
 # Significant Slimming Paint failure.
@@ -1071,6 +1065,8 @@ crbug.com/582230 fast/repaint/align-items-overflow-change.html [ Skip ]
 
 crbug.com/548695 fast/forms/datalist/update-range-with-datalist.html [ Failure ]
 
+crbug.com/602618 [ Linux ] svg/custom/use-disappears-after-style-update.svg [ Pass Failure ]
+
 # Temporarily disabled after chromium change
 crbug.com/492511 [ Mac ] fast/text/atsui-negative-spacing-features.html [ Failure ]
 crbug.com/492511 [ Mac ] fast/text/international/arabic-justify.html [ Failure ]
@@ -1101,7 +1097,6 @@ crbug.com/505387 [ Win ] virtual/prefer_compositing_to_lcd_text/scrollbars/rtl/o
 #crbug.com/509025 [ Mac10.10 ] compositing/layer-creation/should-invoke-deferred-compositing.html [ Failure ]
 # TODO(chrishtr): uncomment/inspect rebaseline of this after fixing crbug.com/516016
 # crbug.com/509025 [ Mac10.10 ] compositing/repaint/should-not-clip-composited-overflow-scrolling-layer.html [ Failure ]
-crbug.com/509025 [ Mac10.10 ] css3/flexbox/repaint-rtl-column.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] fast/css/css2-system-fonts.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] fast/forms/select/hidden-listbox.html [ Failure ]
 crbug.com/509025 [ Mac10.10 ] fast/forms/textarea/textarea-newline.html [ Failure ]
@@ -1197,6 +1192,10 @@ crbug.com/353746 virtual/android/fullscreen/video-specified-size.html [ Failure 
 
 crbug.com/527270 accessibility/name-calc-img.html [ Failure Pass Timeout ]
 
+crbug.com/602616 svg/filters/filter-refresh.svg [ NeedsManualRebaseline ]
+
+crbug.com/602483 svg/transforms/animated-path-inside-transformed-html.xhtml [ NeedsManualRebaseline ]
+
 # This test has different results in Debug and Release.
 crbug.com/529038 [ Debug ] virtual/gpu/fast/canvas/canvas-composite-repaint-by-all-imagesource.html [ Failure ]
 
@@ -1238,8 +1237,6 @@ crbug.com/563694 [ Linux Mac Debug ] svg/hixie/perf/005.xml [ Failure ]
 
 crbug.com/564109 [ Win7 ]  http/tests/webfont/font-display.html [ Pass Timeout Failure ]
 
-crbug.com/558574 [ Win7 ] fast/text/emphasis.html [ Failure ]
-
 crbug.com/568867 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-deep.html [ Failure ]
 crbug.com/568867 [ Win Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
 
@@ -1249,27 +1246,20 @@ crbug.com/571376 http/tests/webfont/font-display-intervention.html [ Pass Failur
 
 crbug.com/320139 fast/repaint/block-layout-inline-children-replaced.html [ Pass Failure ]
 
-crbug.com/596486 inspector/elements/edit/edit-dom-actions.html [ Timeout Pass ]
-
 crbug.com/575766 http/tests/inspector/resource-tree/resource-tree-frame-add.html [ Timeout Pass ]
 crbug.com/581468 http/tests/inspector/resource-tree/resource-tree-non-unique-url.html [ Pass Failure ]
 
 crbug.com/571710 http/tests/inspector/search/source-frame-search.html [ Timeout Pass ]
 
-crbug.com/571716 inspector/audits/audits-panel-functional.html [ Crash Pass ]
 crbug.com/571721 inspector/console/console-xpath.html [ Timeout Pass ]
 
 crbug.com/580378 [ Mac ] fast/replaced/width100percent-searchfield.html [ Failure Pass ]
-crbug.com/571765 [ Linux Trusty Mac10.9 ] inspector/console/worker-eval-contains-stack.html [ Timeout Crash Pass ]
 
-crbug.com/571773 inspector/console/worker-exception-message-contains-stack.html [ Failure Timeout Crash Pass ]
 crbug.com/551843 fast/text/fallback-traits-fixup.html [ NeedsManualRebaseline ]
 
 crbug.com/399951 http/tests/mime/javascript-mimetype-usecounters.html [ Pass Failure ]
 
-crbug.com/572710 [ Debug ] inspector/extensions/extensions-sidebar.html [ Timeout Pass ]
-
-crbug.com/572714 [ Linux ] inspector/sources/debugger/debug-inlined-scripts.html [ Timeout Crash Pass ]
+crbug.com/602193 inspector/extensions/extensions-resources.html [ Pass Failure ]
 
 crbug.com/579493 http/tests/security/xss-DENIED-xsl-document-securityOrigin.xml [ Timeout ]
 
@@ -1285,6 +1275,8 @@ crbug.com/581038 fast/text/first-letter-bad-line-boxes-crash.html [ Crash Pass ]
 crbug.com/587136 [ Linux Debug ] http/tests/security/xss-DENIED-cross-origin-stack-overflow.html [ Timeout Pass ]
 
 crbug.com/587593 [ Android ] fast/js/pic/cached-single-entry-transition.html [ Pass Failure ]
+
+crbug.com/602614 [ Win ] svg/carto.net/tabgroup.svg [ Pass Failure ]
 
 crbug.com/587779 [ Linux Mac10.10 Mac10.11 Retina ] fast/dynamic/window-resize-scrollbars-test.html [ Timeout Failure Pass ]
 crbug.com/588103 fast/xmlhttprequest/xmlhttprequest-responsetype-arraybuffer.html [ Pass Failure ]
@@ -1306,20 +1298,8 @@ crbug.com/593568 [ Win Debug ] virtual/threaded/fast/scroll-behavior/smooth-scro
 
 #crbug.com/591825 [ Mac10.11 Debug ] fast/text/selection-multiple-runs.html [ Failure ]
 
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/layer-creation/compositing-reason-removed.html [ Failure ]
 crbug.com/591832 [ Mac10.11 Retina ] compositing/overflow/do-not-paint-outline-into-composited-scrolling-contents.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/overflow/fixed-scroll-in-empty-root-layer.html [ Failure ]
 crbug.com/591832 [ Mac10.11 Retina ] compositing/overflow/update-widget-positions-on-nested-frames-and-scrollers.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/overflow/updating-scrolling-container.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/invalidate-when-leaving-squashed-layer.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/invalidation-for-subpixel-offset-of-squashed-layer.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/invalidations-with-large-negative-margin.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/repaint-overflow-scrolled-squashed-content.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/repaint-squashed-layer-in-rect.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/repaint-via-layout-offset.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/resize-squashing-layer-that-needs-full-repaint.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/squash-partial-repaint-inside-squashed-layer.html [ Failure ]
-crbug.com/591832 [ Mac10.10 Mac10.11 Retina ] compositing/squashing/squashing-inside-preserve-3d-element.html [ Failure ]
 
 crbug.com/591902 [ Linux Mac10.10 Mac10.11 Retina ] http/tests/security/contentTypeOptions/nosniff-script-without-content-type-blocked.html [ Failure ]
 
@@ -1358,7 +1338,7 @@ crbug.com/601166 [ Mac10.9 ]  fast/text-autosizing/tables/table-cell-inflation.h
 crbug.com/601166 [ Mac10.9 ]  fast/text-autosizing/tables/table-for-layout.html [ Failure ]
 crbug.com/601166 [ Mac10.9 ]  fast/text-autosizing/tables/wide-percentage-width.html [ Failure ]
 crbug.com/601166 [ Mac10.9 ]  fast/text-autosizing/tables/wide-specified-width.html [ Failure ]
-crbug.com/601166 [ Mac10.9 ]  fast/text/aat-morx.html [ Failure Failure Failure Failure ]
+crbug.com/601166 [ Mac10.9 ]  fast/text/aat-morx.html [ Failure ]
 crbug.com/601166 [ Mac10.9 ]  fast/text/atsui-kerning-and-ligatures.html [ Failure ]
 crbug.com/601166 [ Mac10.9 ]  fast/text/atsui-multiple-renderers.html [ Failure ]
 crbug.com/601166 [ Mac10.9 ]  fast/text/atsui-partial-selection.html [ Failure ]
@@ -1545,6 +1525,6 @@ crbug.com/600261 imported/web-platform-tests/mediacapture-streams/GUM-deny.html 
 crbug.com/600261 imported/web-platform-tests/mediacapture-streams/MediaDevices-getUserMedia.html [ Failure ]
 crbug.com/600261 imported/web-platform-tests/mediacapture-streams/MediaStream-MediaElement-srcObject.html [ Failure ]
 
-crbug.com/593679 virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ] 
-crbug.com/593679 virtual/scalefactor200/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ] 
-crbug.com/593679 virtual/scalefactor200withzoom/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ] 
+crbug.com/593679 virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ]
+crbug.com/593679 virtual/scalefactor200/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ]
+crbug.com/593679 virtual/scalefactor200withzoom/fast/hidpi/static/calendar-picker-appearance.html [ NeedsManualRebaseline ]

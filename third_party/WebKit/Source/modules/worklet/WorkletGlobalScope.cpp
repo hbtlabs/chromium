@@ -77,18 +77,17 @@ void WorkletGlobalScope::reportBlockedScriptExecutionToInspector(const String& d
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void WorkletGlobalScope::addConsoleMessage(RawPtr<ConsoleMessage> prpConsoleMessage)
+void WorkletGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage)
 {
-    RawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
-    frame()->console().addMessage(consoleMessage.release());
+    frame()->console().addMessage(consoleMessage);
 }
 
 void WorkletGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
 {
-    RawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
     consoleMessage->setScriptId(scriptId);
     consoleMessage->setCallStack(callStack);
-    addConsoleMessage(consoleMessage.release());
+    addConsoleMessage(consoleMessage);
 }
 
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const

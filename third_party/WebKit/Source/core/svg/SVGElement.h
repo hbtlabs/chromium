@@ -126,11 +126,6 @@ public:
     void setCursorElement(SVGCursorElement*);
     void setCursorImageValue(CSSCursorImageValue*);
 
-#if !ENABLE(OILPAN)
-    void cursorElementRemoved();
-    void cursorImageValueRemoved();
-#endif
-
     SVGElement* correspondingElement() const;
     void setCorrespondingElement(SVGElement*);
     SVGUseElement* correspondingUseElement() const;
@@ -139,7 +134,7 @@ public:
 
     PassRefPtr<ComputedStyle> customStyleForLayoutObject() final;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     virtual bool isAnimatableAttribute(const QualifiedName&) const;
 #endif
 

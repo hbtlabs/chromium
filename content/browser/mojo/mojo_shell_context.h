@@ -12,10 +12,9 @@
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/single_thread_task_runner.h"
 #include "content/common/content_export.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
-#include "mojo/shell/shell.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/shell.h"
 
 namespace catalog {
 class Factory;
@@ -35,8 +34,7 @@ class CONTENT_EXPORT MojoShellContext {
       std::map<std::string,
                base::Callback<std::unique_ptr<mojo::ShellClient>()>>;
 
-  MojoShellContext(scoped_refptr<base::SingleThreadTaskRunner> file_thread,
-                   scoped_refptr<base::SingleThreadTaskRunner> db_thread);
+  MojoShellContext();
   ~MojoShellContext();
 
   // Connects an application at |name| and gets a handle to its exposed

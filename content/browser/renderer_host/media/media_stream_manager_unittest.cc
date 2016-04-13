@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
@@ -177,9 +178,6 @@ class MediaStreamManagerTest : public ::testing::Test {
   MediaStreamManagerTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
         task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-    // Create our own MediaStreamManager. Use fake devices to run on the bots.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kUseFakeDeviceForMediaStream);
     audio_manager_.reset(new MockAudioManager());
     media_stream_manager_.reset(new MediaStreamManager(audio_manager_.get()));
 }
@@ -304,7 +302,7 @@ TEST_F(MediaStreamManagerTest, DeviceID) {
   EXPECT_NE(unique_other_id, hashed_other_id);
   EXPECT_EQ(hashed_other_id.size(), 64U);
   for (const char& c : hashed_other_id)
-    EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
+    EXPECT_TRUE(base::IsAsciiDigit(c) || (c >= 'a' && c <= 'f'));
 }
 
 TEST_F(MediaStreamManagerTest, EnumerationOutputDevices) {

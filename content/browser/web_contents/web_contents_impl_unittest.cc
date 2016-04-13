@@ -33,6 +33,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
@@ -3041,8 +3042,14 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   controller().LoadURL(
       main_url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   int entry_id = controller().GetPendingEntry()->GetUniqueID();
-  orig_rfh->OnMessageReceived(
-      FrameHostMsg_DidStartLoading(orig_rfh->GetRoutingID(), false));
+
+  // PlzNavigate: the RenderFrameHost does not expect to receive
+  // DidStartLoading IPCs for navigations to different documents.
+  if (!IsBrowserSideNavigationEnabled()) {
+    orig_rfh->OnMessageReceived(
+        FrameHostMsg_DidStartLoading(orig_rfh->GetRoutingID(), false));
+  }
+  contents()->GetMainFrame()->PrepareForCommit();
   contents()->TestDidNavigate(orig_rfh, 1, entry_id, true, main_url,
                               ui::PAGE_TRANSITION_TYPED);
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
@@ -3056,8 +3063,10 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   // Navigate the child frame to about:blank, which will send both
   // DidStartLoading and DidStopLoading messages.
   {
-    subframe->OnMessageReceived(
-        FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    if (!IsBrowserSideNavigationEnabled()) {
+      subframe->OnMessageReceived(
+          FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    }
     subframe->SendNavigateWithTransition(1, 0, false, initial_url,
                                          ui::PAGE_TRANSITION_AUTO_SUBFRAME);
     subframe->OnMessageReceived(
@@ -3069,8 +3078,10 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   {
     subframe->SendRendererInitiatedNavigationRequest(foo_url, false);
     subframe->PrepareForCommit();
-    subframe->OnMessageReceived(
-        FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    if (!IsBrowserSideNavigationEnabled()) {
+      subframe->OnMessageReceived(
+          FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    }
     subframe->SendNavigateWithTransition(1, 0, false, foo_url,
                                          ui::PAGE_TRANSITION_AUTO_SUBFRAME);
     subframe->OnMessageReceived(
@@ -3099,8 +3110,10 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
     controller().LoadURLWithParams(load_params);
     entry_id = controller().GetPendingEntry()->GetUniqueID();
 
-    subframe->OnMessageReceived(
-        FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    if (!IsBrowserSideNavigationEnabled()) {
+      subframe->OnMessageReceived(
+          FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+    }
 
     // Commit the navigation in the child frame and send the DidStopLoading
     // message.

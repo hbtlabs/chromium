@@ -38,6 +38,11 @@
       '../extensions/renderer/console_apitest.cc',
       '../extensions/renderer/script_context_browsertest.cc'
     ],
+    'chrome_browser_tests_display_source_apitest': [
+      'browser/extensions/api/display_source/display_source_wifi_display_apitest.cc',
+      '../extensions/browser/api/display_source/display_source_apitestbase.h',
+      '../extensions/browser/api/display_source/display_source_apitestbase.cc',
+    ],
     'chrome_browser_tests_sources': [
       # The list of sources which is only used by chrome browser tests.
       '../apps/app_restore_service_browsertest.cc',
@@ -208,6 +213,7 @@
       'browser/extensions/api/web_request/web_request_apitest.cc',
       'browser/extensions/api/webrtc_audio_private/webrtc_audio_private_browsertest.cc',
       'browser/extensions/api/webrtc_from_web_accessible_resource_browsertest.cc',
+      'browser/extensions/api/webrtc_logging_private/webrtc_event_log_apitest.cc',
       'browser/extensions/api/webrtc_logging_private/webrtc_logging_private_apitest.cc',
       'browser/extensions/api/webstore_private/webstore_private_apitest.cc',
       'browser/extensions/app_background_page_apitest.cc',
@@ -495,7 +501,7 @@
       'browser/ui/settings_window_manager_browsertest.cc',
       'browser/ui/startup/startup_browser_creator_browsertest.cc',
       'browser/ui/startup/startup_browser_creator_triggered_reset_browsertest_win.cc',
-      'browser/ui/sync/one_click_signin_bubble_links_delegate_browsertest.cc',
+      'browser/ui/sync/one_click_signin_links_delegate_impl_browsertest.cc',
       'browser/ui/sync/profile_signin_confirmation_helper_browsertest.cc',
       'browser/ui/tab_modal_confirm_dialog_browsertest.cc',
       'browser/ui/tab_modal_confirm_dialog_browsertest.h',
@@ -622,8 +628,6 @@
       'browser/ui/cocoa/find_bar/find_bar_browsertest.mm',
       'browser/ui/cocoa/location_bar/zoom_decoration_browsertest.mm',
       'browser/ui/cocoa/omnibox/omnibox_view_mac_browsertest.mm',
-      'browser/ui/cocoa/one_click_signin_bubble_controller_browsertest.mm',
-      'browser/ui/cocoa/one_click_signin_dialog_controller_browsertest.mm',
       'browser/ui/cocoa/passwords/passwords_bubble_browsertest.mm',
       'browser/ui/cocoa/profiles/profile_signin_confirmation_view_controller_browsertest.mm',
       'browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac_browsertest.mm',
@@ -1007,10 +1011,8 @@
       'test/data/webui/print_preview.js',
       'test/data/webui/sandboxstatus_browsertest.js',
       'test/data/webui/settings/advanced_page_browsertest.js',
-      'test/data/webui/settings/appearance_browsertest.js',
       'test/data/webui/settings/basic_page_browsertest.js',
       'test/data/webui/settings/bluetooth_page_browsertest_chromeos.js',
-      'test/data/webui/settings/change_picture_browsertest_chromeos.js',
       'test/data/webui/settings/cr_settings_browsertest.js',
       'test/data/webui/settings/easy_unlock_browsertest_chromeos.js',
       'test/data/webui/settings/languages_page_browsertest.js',
@@ -1060,6 +1062,7 @@
       'browser/password_manager/password_manager_interactive_uitest.cc',
       'browser/renderer_context_menu/render_view_context_menu_browsertest_util.cc',
       'browser/renderer_context_menu/render_view_context_menu_browsertest_util.h',
+      'browser/site_per_process_interactive_browsertest.cc',
       'browser/task_manager/task_manager_browsertest_util.cc',
       'browser/ui/autofill/autofill_popup_controller_interactive_uitest.cc',
       'browser/ui/browser_focus_uitest.cc',
@@ -2284,6 +2287,11 @@
             }]
           ]
         }],
+        ['enable_wifi_display==1', {
+          'sources': [
+            '<@(chrome_browser_tests_display_source_apitest)',
+          ],
+        }],
         [ 'cld_version==2', {
           'dependencies': [
             # Because the browser_tests use translate, they need CLD data.
@@ -2291,7 +2299,7 @@
         }],
         ['enable_one_click_signin==0', {
           'sources!': [
-            'browser/ui/sync/one_click_signin_bubble_links_delegate_browsertest.cc',
+            'browser/ui/sync/one_click_signin_links_delegate_impl_browsertest.cc',
           ]
         }],
         ['enable_autofill_dialog==0', {
@@ -2443,7 +2451,6 @@
             'test/data/webui/certificate_viewer_dialog_test.js',
             'test/data/webui/certificate_viewer_ui_test-inl.h',
             'test/data/webui/settings/bluetooth_page_browsertest_chromeos.js',
-            'test/data/webui/settings/change_picture_browsertest_chromeos.js',
             'test/data/webui/settings/easy_unlock_browsertest_chromeos.js',
           ],
           'conditions': [
@@ -2470,6 +2477,7 @@
         ['enable_webrtc==0', {
           'sources!': [
             'browser/extensions/api/webrtc_audio_private/webrtc_audio_private_browsertest.cc',
+            'browser/extensions/api/webrtc_logging_private/webrtc_event_log_apitest.cc',
             'browser/extensions/api/webrtc_logging_private/webrtc_logging_private_apitest.cc',
             'browser/media/webrtc_apprtc_browsertest.cc',
             'browser/media/webrtc_audio_quality_browsertest.cc',

@@ -179,9 +179,6 @@ Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& reques
         break;
     case Resource::Font:
         resource = FontResource::fetch(request, fetcher());
-        // This is needed for fonts as loading doesn't start until there's usage.
-        if (resource)
-            toFontResource(resource)->beginLoadIfNeeded(fetcher());
         break;
     case Resource::Media:
         resource = RawResource::fetchMedia(request, fetcher());
@@ -208,6 +205,14 @@ void DocumentLoader::didChangePerformanceTiming()
 {
     if (frame() && frame()->isMainFrame() && m_state >= Committed) {
         frameLoader()->client()->didChangePerformanceTiming();
+    }
+}
+
+void DocumentLoader::didObserveLoadingBehavior(WebLoadingBehaviorFlag behavior)
+{
+    if (frame() && frame()->isMainFrame()) {
+        ASSERT(m_state >= Committed);
+        frameLoader()->client()->didObserveLoadingBehavior(behavior);
     }
 }
 

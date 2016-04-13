@@ -27,6 +27,7 @@
 #include "core/css/resolver/ElementResolveContext.h"
 #include "core/css/resolver/MatchRequest.h"
 #include "core/css/resolver/MatchResult.h"
+#include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
@@ -68,7 +69,7 @@ public:
     }
 
 private:
-    // FIXME: Oilpan: RuleData is in the oilpan heap and this pointer
+    // TODO(Oilpan): RuleData is in the oilpan heap and this pointer
     // really should be traced. However, RuleData objects are
     // allocated inside larger TerminatedArray objects and we cannot
     // trace a raw rule data pointer at this point.

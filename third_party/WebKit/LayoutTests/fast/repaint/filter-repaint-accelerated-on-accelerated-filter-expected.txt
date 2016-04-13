@@ -16,12 +16,12 @@
               "contentsOpaque": true,
               "drawsContent": true,
               "backgroundColor": "#008000",
-              "repaintRects": [
-                [-12, -12, 256, 256],
-                [-12, -12, 156, 256]
-              ],
-              "paintInvalidationClients": [
-                "LayoutBlockFlow DIV id='resize' class='drop-shadow accelerated'"
+              "paintInvalidations": [
+                {
+                  "object": "LayoutBlockFlow DIV id='resize' class='drop-shadow accelerated'",
+                  "rect": [-13, -13, 258, 258],
+                  "reason": "border box change"
+                }
               ]
             }
           ]

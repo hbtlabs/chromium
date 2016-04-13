@@ -174,6 +174,14 @@ void SelectRightNameType(const ServerFieldTypeSet& old_types,
   }
 }
 
+bool IsCreditCardExpirationType(ServerFieldType type) {
+  return type == CREDIT_CARD_EXP_MONTH ||
+         type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_4_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
+}
+
 }  // namespace
 
 AutofillManager::AutofillManager(
@@ -712,10 +720,11 @@ void AutofillManager::DidShowSuggestions(bool is_new_popup,
           AutofillMetrics::SUGGESTIONS_SHOWN_ONCE);
     }
 
-    if (autofill_field->Type().group() == CREDIT_CARD)
+    if (autofill_field->Type().group() == CREDIT_CARD) {
       credit_card_form_event_logger_->OnDidShowSuggestions();
-    else
+    } else {
       address_form_event_logger_->OnDidShowSuggestions();
+    }
   }
 }
 
@@ -1450,6 +1459,12 @@ void AutofillManager::FillOrPreviewDataModelForm(
       // should be non-empty and vice versa.
       value = unmask_request_.user_response.cvc;
       DCHECK_EQ(&unmask_request_.card == &data_model, !value.empty());
+    } else if (is_credit_card && IsCreditCardExpirationType(
+                                     cached_field->Type().GetStorableType()) &&
+               static_cast<const CreditCard*>(&data_model)
+                   ->IsExpired(base::Time::Now())) {
+      // Don't fill expired cards expiration date.
+      value = base::string16();
     }
 
     // Must match ForEachMatchingFormField() in form_autofill_util.cc.
@@ -1646,6 +1661,8 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
     const FormStructure& form,
     const FormFieldData& field,
     const AutofillField& autofill_field) const {
+  address_form_event_logger_->OnDidPollSuggestions();
+
   std::vector<ServerFieldType> field_types(form.field_count());
   for (size_t i = 0; i < form.field_count(); ++i) {
     field_types.push_back(form.field(i)->Type().GetStorableType());
@@ -1672,6 +1689,8 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
 std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
     const FormFieldData& field,
     const AutofillType& type) const {
+  credit_card_form_event_logger_->OnDidPollSuggestions();
+
   // The field value is sanitized before attempting to match it to the user's
   // data.
   std::vector<Suggestion> suggestions =

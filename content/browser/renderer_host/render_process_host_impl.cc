@@ -170,9 +170,9 @@
 #include "ipc/mojo/ipc_channel_mojo.h"
 #include "media/base/media_switches.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/shell/runner/common/switches.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/shell/runner/common/switches.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/ui_base_switches.h"
@@ -1534,6 +1534,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableBeginFrameScheduling,
     cc::switches::kEnableGpuBenchmarking,
+    cc::switches::kEnableLayerLists,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kEnableTileCompression,
     cc::switches::kShowCompositedLayerBorders,

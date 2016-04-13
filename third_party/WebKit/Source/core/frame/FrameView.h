@@ -201,6 +201,11 @@ public:
     const ViewportConstrainedObjectSet* viewportConstrainedObjects() const { return m_viewportConstrainedObjects.get(); }
     bool hasViewportConstrainedObjects() const { return m_viewportConstrainedObjects && m_viewportConstrainedObjects->size() > 0; }
 
+    // Sticky objects.
+    void addStickyPositionObject() { ++m_stickyPositionObjectCount; }
+    void removeStickyPositionObject() { --m_stickyPositionObjectCount; }
+    bool hasStickyPositionObjects() const { return m_stickyPositionObjectCount; }
+
     // Objects with background-attachment:fixed.
     void addBackgroundAttachmentFixedObject(LayoutObject*);
     void removeBackgroundAttachmentFixedObject(LayoutObject*);
@@ -224,9 +229,6 @@ public:
     void updateWidgetGeometries();
 
     void addPartToUpdate(LayoutEmbeddedObject&);
-
-    void setIsPainting(bool val) const { m_isPainting = val; }
-    bool isPainting() const;
 
     Color documentBackgroundColor() const;
 
@@ -814,9 +816,6 @@ private:
 
     bool m_isTrackingPaintInvalidations; // Used for testing.
 
-    // TODO(wangxianzhu): Use document cycle state for spv2 and synchronzied painting.
-    mutable bool m_isPainting;
-
     unsigned m_visuallyNonEmptyCharacterCount;
     unsigned m_visuallyNonEmptyPixelCount;
     bool m_isVisuallyNonEmpty;
@@ -830,6 +829,7 @@ private:
     Member<ScrollableAreaSet> m_animatingScrollableAreas;
     OwnPtr<ResizerAreaSet> m_resizerAreas;
     OwnPtr<ViewportConstrainedObjectSet> m_viewportConstrainedObjects;
+    unsigned m_stickyPositionObjectCount;
     ViewportConstrainedObjectSet m_backgroundAttachmentFixedObjects;
     Member<FrameViewAutoSizeInfo> m_autoSizeInfo;
 

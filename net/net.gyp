@@ -370,6 +370,8 @@
                     'data/verify_certificate_chain_unittest/',
                     'data/verify_name_match_unittest/names/',
                     'data/verify_signed_data_unittest/',
+                    'third_party/nist-pkits/certs/',
+                    'third_party/nist-pkits/crls/',
                   ],
                   'test_data_prefix': 'net',
                 },
@@ -1581,6 +1583,7 @@
             'isolate_file': 'net_unittests.isolate',
             'android_manifest_path': 'android/unittest_support/AndroidManifest.xml',
             'resource_dir': 'android/unittest_support/res',
+            'shard_timeout': 300,
             'conditions': [
               ['v8_use_external_startup_data==1', {
                 'asset_location': '<(PRODUCT_DIR)/net_unittests_apk/assets',

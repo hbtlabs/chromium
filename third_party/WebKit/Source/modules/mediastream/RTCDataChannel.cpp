@@ -75,13 +75,20 @@ RTCDataChannel::RTCDataChannel(ExecutionContext* context, PassOwnPtr<WebRTCDataC
     , m_scheduledEventTimer(this, &RTCDataChannel::scheduledEventTimerFired)
     , m_bufferedAmountLowThreshold(0U)
 {
+    ThreadState::current()->registerPreFinalizer(this);
     m_handler->setClient(this);
 }
 
 RTCDataChannel::~RTCDataChannel()
 {
-    // Notify the client that the channel is gone.
-    m_handler->setClient(0);
+}
+
+void RTCDataChannel::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
+    m_handler->setClient(nullptr);
+    m_handler.clear();
 }
 
 RTCDataChannel::ReadyState RTCDataChannel::getHandlerState() const
@@ -195,14 +202,12 @@ void RTCDataChannel::send(const String& data, ExceptionState& exceptionState)
     }
 }
 
-void RTCDataChannel::send(PassRefPtr<DOMArrayBuffer> prpData, ExceptionState& exceptionState)
+void RTCDataChannel::send(DOMArrayBuffer* data, ExceptionState& exceptionState)
 {
     if (m_readyState != ReadyStateOpen) {
         throwNotOpenException(exceptionState);
         return;
     }
-
-    RefPtr<DOMArrayBuffer> data = prpData;
 
     size_t dataLength = data->byteLength();
     if (!dataLength)
@@ -214,7 +219,7 @@ void RTCDataChannel::send(PassRefPtr<DOMArrayBuffer> prpData, ExceptionState& ex
     }
 }
 
-void RTCDataChannel::send(PassRefPtr<DOMArrayBufferView> data, ExceptionState& exceptionState)
+void RTCDataChannel::send(DOMArrayBufferView* data, ExceptionState& exceptionState)
 {
     if (!m_handler->sendRawData(static_cast<const char*>(data->baseAddress()), data->byteLength())) {
         // FIXME: This should not throw an exception but instead forcefully close the data channel.
@@ -272,8 +277,8 @@ void RTCDataChannel::didReceiveRawData(const char* data, size_t dataLength)
         return;
     }
     if (m_binaryType == BinaryTypeArrayBuffer) {
-        RefPtr<DOMArrayBuffer> buffer = DOMArrayBuffer::create(data, dataLength);
-        scheduleDispatchEvent(MessageEvent::create(buffer.release()));
+        DOMArrayBuffer* buffer = DOMArrayBuffer::create(data, dataLength);
+        scheduleDispatchEvent(MessageEvent::create(buffer));
         return;
     }
     NOTREACHED();
@@ -318,7 +323,7 @@ DEFINE_TRACE(RTCDataChannel)
 {
     visitor->trace(m_executionContext);
     visitor->trace(m_scheduledEvents);
-    RefCountedGarbageCollectedEventTargetWithInlineData<RTCDataChannel>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
 }
 
 } // namespace blink

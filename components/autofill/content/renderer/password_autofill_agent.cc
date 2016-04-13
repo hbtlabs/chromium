@@ -927,7 +927,7 @@ bool PasswordAutofillAgent::ShowSuggestions(
   // password form and that the request to show suggestions has been handled (as
   // a no-op).
   if (!element.isTextField() || !IsElementAutocompletable(element) ||
-      !IsElementAutocompletable(password_info->password_field))
+      !IsElementAutocompletable(password_element))
     return true;
 
   if (element.nameForAutofill().isEmpty() &&
@@ -1375,7 +1375,8 @@ void PasswordAutofillAgent::OnFillPasswordForm(
     password_info.key = key;
     password_info.password_field = password_element;
     web_input_to_password_info_[main_element] = password_info;
-    password_to_username_[password_element] = username_element;
+    if (!main_element.isPasswordField())
+      password_to_username_[password_element] = username_element;
   }
 }
 

@@ -36,9 +36,9 @@
 #include "public/platform/WebData.h"
 #include "public/platform/WebSize.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/ArrayBuffer.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/typed_arrays/ArrayBuffer.h"
 
 namespace blink {
 
@@ -68,8 +68,8 @@ void downsample(size_t maxDecodedBytes, unsigned* outputWidth, unsigned* outputH
 
     ImageFrame* frame = decoder->frameBufferAtIndex(0);
     ASSERT_TRUE(frame);
-    *outputWidth = frame->getSkBitmap().width();
-    *outputHeight = frame->getSkBitmap().height();
+    *outputWidth = frame->bitmap().width();
+    *outputHeight = frame->bitmap().height();
     EXPECT_EQ(IntSize(*outputWidth, *outputHeight), decoder->decodedSize());
 }
 

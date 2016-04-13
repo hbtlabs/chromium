@@ -74,21 +74,6 @@ SVGElement::SVGElement(const QualifiedName& tagName, Document& document, Constru
 SVGElement::~SVGElement()
 {
     ASSERT(inShadowIncludingDocument() || !hasRelativeLengths());
-
-    // The below teardown is all handled by weak pointer processing in oilpan.
-#if !ENABLE(OILPAN)
-    if (hasSVGRareData()) {
-        if (SVGCursorElement* cursorElement = svgRareData()->cursorElement())
-            cursorElement->removeReferencedElement(this);
-        if (CSSCursorImageValue* cursorImageValue = svgRareData()->cursorImageValue())
-            cursorImageValue->removeReferencedElement(this);
-
-        // With Oilpan, either removedFrom has been called or the document is dead
-        // as well and there is no reason to clear out the references.
-        rebuildAllIncomingReferences();
-        removeAllIncomingReferences();
-    }
-#endif
 }
 
 void SVGElement::detach(const AttachContext& context)
@@ -560,32 +545,10 @@ void SVGElement::setCursorElement(SVGCursorElement* cursorElement)
     rareData->setCursorElement(cursorElement);
 }
 
-#if !ENABLE(OILPAN)
-void SVGElement::cursorElementRemoved()
-{
-    svgRareData()->setCursorElement(0);
-}
-#endif
-
 void SVGElement::setCursorImageValue(CSSCursorImageValue* cursorImageValue)
 {
-    SVGElementRareData* rareData = ensureSVGRareData();
-#if !ENABLE(OILPAN)
-    if (CSSCursorImageValue* oldCursorImageValue = rareData->cursorImageValue()) {
-        if (cursorImageValue == oldCursorImageValue)
-            return;
-        oldCursorImageValue->removeReferencedElement(this);
-    }
-#endif
-    rareData->setCursorImageValue(cursorImageValue);
+    ensureSVGRareData()->setCursorImageValue(cursorImageValue);
 }
-
-#if !ENABLE(OILPAN)
-void SVGElement::cursorImageValueRemoved()
-{
-    svgRareData()->setCursorImageValue(0);
-}
-#endif
 
 SVGElement* SVGElement::correspondingElement() const
 {
@@ -717,8 +680,7 @@ AnimatedPropertyType SVGElement::animatedPropertyTypeForCSSAttribute(const Quali
 
 void SVGElement::addToPropertyMap(SVGAnimatedPropertyBase* property)
 {
-    QualifiedName attributeName = property->attributeName();
-    m_attributeToPropertyMap.set(attributeName, property);
+    m_attributeToPropertyMap.set(property->attributeName(), property);
 }
 
 SVGAnimatedPropertyBase* SVGElement::propertyFromAttribute(const QualifiedName& attributeName) const
@@ -1033,7 +995,7 @@ SVGElement::InstanceUpdateBlocker::~InstanceUpdateBlocker()
         m_targetElement->setInstanceUpdatesBlocked(false);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 {
     // This static is atomically initialized to dodge a warning about
@@ -1143,7 +1105,7 @@ bool SVGElement::isAnimatableAttribute(const QualifiedName& name) const
 
     return animatableAttributes.contains(name);
 }
-#endif
+#endif // DCHECK_IS_ON()
 
 SVGElementSet* SVGElement::setOfIncomingReferences() const
 {

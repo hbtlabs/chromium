@@ -63,10 +63,6 @@ void InspectorResourceContentLoader::ResourceClient::resourceFinished(Resource* 
         resource->removeClient(static_cast<RawResourceClient*>(this));
     else
         resource->removeClient(static_cast<StyleSheetResourceClient*>(this));
-
-#if !ENABLE(OILPAN)
-    delete this;
-#endif
 }
 
 void InspectorResourceContentLoader::ResourceClient::setCSSStyleSheet(const String&, const KURL& url, const String&, const CSSStyleSheetResource* resource)
@@ -92,7 +88,7 @@ void InspectorResourceContentLoader::start()
 {
     m_started = true;
     HeapVector<Member<Document>> documents;
-    RawPtr<InspectedFrames> inspectedFrames = InspectedFrames::create(m_inspectedFrame);
+    InspectedFrames* inspectedFrames = InspectedFrames::create(m_inspectedFrame);
     for (LocalFrame* frame : *inspectedFrames) {
         documents.append(frame->document());
         documents.appendVector(InspectorPageAgent::importsForFrame(frame));
@@ -113,13 +109,13 @@ void InspectorResourceContentLoader::start()
         if (!resourceRequest.url().getString().isEmpty()) {
             urlsToFetch.add(resourceRequest.url().getString());
             FetchRequest request(resourceRequest, FetchInitiatorTypeNames::internal);
-            RawPtr<Resource> resource = RawResource::fetch(request, document->fetcher());
+            Resource* resource = RawResource::fetch(request, document->fetcher());
             if (resource) {
                 // Prevent garbage collection by holding a reference to this resource.
-                m_resources.append(resource.get());
+                m_resources.append(resource);
                 ResourceClient* resourceClient = new ResourceClient(this);
                 m_pendingResourceClients.add(resourceClient);
-                resourceClient->waitForResource(resource.get());
+                resourceClient->waitForResource(resource);
             }
         }
 
@@ -134,14 +130,14 @@ void InspectorResourceContentLoader::start()
             urlsToFetch.add(url);
             FetchRequest request(ResourceRequest(url), FetchInitiatorTypeNames::internal);
             request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextInternal);
-            RawPtr<Resource> resource = CSSStyleSheetResource::fetch(request, document->fetcher());
+            Resource* resource = CSSStyleSheetResource::fetch(request, document->fetcher());
             if (!resource)
                 continue;
             // Prevent garbage collection by holding a reference to this resource.
-            m_resources.append(resource.get());
+            m_resources.append(resource);
             ResourceClient* resourceClient = new ResourceClient(this);
             m_pendingResourceClients.add(resourceClient);
-            resourceClient->waitForResource(resource.get());
+            resourceClient->waitForResource(resource);
         }
     }
 

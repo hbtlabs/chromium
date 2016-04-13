@@ -149,6 +149,9 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
     settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
 
+  settings.use_layer_lists =
+      command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
+
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
@@ -229,7 +232,7 @@ Compositor::~Compositor() {
 }
 
 void Compositor::SetOutputSurface(
-    scoped_ptr<cc::OutputSurface> output_surface) {
+    std::unique_ptr<cc::OutputSurface> output_surface) {
   output_surface_requested_ = false;
   host_->SetOutputSurface(std::move(output_surface));
 }
@@ -283,7 +286,7 @@ void Compositor::DisableSwapUntilResize() {
 }
 
 void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
-  scoped_ptr<cc::SwapPromise> swap_promise(
+  std::unique_ptr<cc::SwapPromise> swap_promise(
       new cc::LatencyInfoSwapPromise(latency_info));
   host_->QueueSwapPromise(std::move(swap_promise));
 }

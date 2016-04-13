@@ -24,9 +24,8 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/dom/TreeScope.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -46,10 +45,6 @@ public:
 
     Document* document() { return m_treeScope ? &m_treeScope->document() : nullptr; }
 
-#if !ENABLE(OILPAN)
-    void detachFromDocument();
-#endif
-
     CSSStyleSheet* anonymousNamedGetter(const AtomicString&);
 
     DECLARE_TRACE();
@@ -59,9 +54,6 @@ private:
     const HeapVector<Member<StyleSheet>>& styleSheets();
 
     Member<TreeScope> m_treeScope;
-#if !ENABLE(OILPAN)
-    Vector<RefPtr<StyleSheet>> m_detachedStyleSheets;
-#endif
 };
 
 } // namespace blink

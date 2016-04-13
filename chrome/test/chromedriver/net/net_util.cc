@@ -4,10 +4,11 @@
 
 #include "chrome/test/chromedriver/net/net_util.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
@@ -54,7 +55,7 @@ class SyncUrlFetcher : public net::URLFetcherDelegate {
   URLRequestContextGetter* getter_;
   std::string* response_;
   base::WaitableEvent event_;
-  scoped_ptr<net::URLFetcher> fetcher_;
+  std::unique_ptr<net::URLFetcher> fetcher_;
   bool success_;
 };
 
@@ -62,7 +63,7 @@ class SyncUrlFetcher : public net::URLFetcherDelegate {
 
 NetAddress::NetAddress() : port_(-1) {}
 
-NetAddress::NetAddress(int port) : host_("localhost"), port_(port) {}
+NetAddress::NetAddress(int port) : host_("127.0.0.1"), port_(port) {}
 
 NetAddress::NetAddress(const std::string& host, int port)
     : host_(host), port_(port) {}

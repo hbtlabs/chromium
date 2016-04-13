@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.os.Handler;
 import android.os.Looper;
+import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.text.TextUtils;
@@ -117,6 +118,7 @@ public class ImeTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"TextInput", "Main"})
+    @FlakyTest
     public void testDoesNotHang_getTextAfterKeyboardHides() throws Throwable {
         setComposingText("hello", 1);
         waitAndVerifyUpdateSelection(0, 5, 5, 0, 5);
@@ -130,6 +132,23 @@ public class ImeTest extends ContentShellTestBase {
         }
 
         assertWaitForKeyboardStatus(false);
+    }
+
+    @SmallTest
+    @Feature({"TextInput", "Main"})
+    public void testDeleteSurroundingTextWithZeroValue() throws Throwable {
+        commitText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
+        deleteSurroundingText(0, 0);
+
+        setSelection(0, 0);
+        waitAndVerifyUpdateSelection(1, 0, 0, -1, -1);
+        deleteSurroundingText(0, 0);
+
+        setSelection(2, 2);
+        waitAndVerifyUpdateSelection(2, 2, 2, -1, -1);
+        deleteSurroundingText(0, 0);
+        assertTextsAroundCursor("he", "", "llo");
     }
 
     @SmallTest
@@ -659,6 +678,7 @@ public class ImeTest extends ContentShellTestBase {
 
     @SmallTest
     @Feature({"TextInput", "Main"})
+    @FlakyTest
     public void testSwipingText() throws Throwable {
         focusElement("textarea");
 

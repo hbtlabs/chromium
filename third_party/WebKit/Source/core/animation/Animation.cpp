@@ -66,7 +66,7 @@ Animation* Animation::create(AnimationEffect* effect, AnimationTimeline* timelin
         return nullptr;
     }
 
-    Animation* animation = new Animation(timeline->document()->contextDocument().get(), *timeline, effect);
+    Animation* animation = new Animation(timeline->document()->contextDocument(), *timeline, effect);
     animation->suspendIfNeeded();
 
     if (timeline) {
@@ -1087,7 +1087,7 @@ DEFINE_TRACE(Animation)
     visitor->trace(m_pendingCancelledEvent);
     visitor->trace(m_finishedPromise);
     visitor->trace(m_readyPromise);
-    RefCountedGarbageCollectedEventTargetWithInlineData<Animation>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

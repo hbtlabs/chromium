@@ -69,6 +69,7 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
   NavigationFeature* GetNavigationFeature() const;
   ImeFeature* GetImeFeature() const;
   RenderWidgetFeature* GetRenderWidgetFeature() const;
+  SettingsFeature* GetSettingsFeature() const;
 
   // The AssignmentCallback for when an assignment is ready. This will trigger
   // a connection to the engine.
@@ -80,7 +81,8 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
 
   // Notified every time the AssignmentSource returns the result of an attempted
   // assignment request.
-  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result);
+  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result,
+                                               const Assignment& assignment);
 
  private:
   void RegisterFeatures();

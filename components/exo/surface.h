@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "third_party/skia/include/core/SkRegion.h"
@@ -101,8 +102,8 @@ class Surface : public aura::Window,
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
 
-  // Returns the visible bounds of the surface from the user's perspective.
-  gfx::Rect GetVisibleBounds() const;
+  // Returns the bounds of the current input region of surface.
+  gfx::Rect GetHitTestBounds() const;
 
   // Returns true if |rect| intersects this surface's bounds.
   bool HitTestRect(const gfx::Rect& rect) const;

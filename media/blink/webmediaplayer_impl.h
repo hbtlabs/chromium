@@ -207,7 +207,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
     GONE,
     PLAYING,
     PAUSED,
-    PAUSED_SEEK,
+    PAUSED_BUT_NOT_IDLE,
     ENDED,
   };
 
@@ -489,6 +489,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // started; prevents us from spuriously logging errors that are transient or
   // unimportant.
   bool suppress_destruction_errors_;
+
+  // State indicating if it's okay to suspend or not. Updated on the first time
+  // OnSuspendRequested() is called. If the state is UNKNOWN, the current frame
+  // from the compositor will be queried to see if suspend is supported; the
+  // state will be set to YES or NO respectively if a frame is available.
+  enum class CanSuspendState { UNKNOWN, YES, NO };
+  CanSuspendState can_suspend_state_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

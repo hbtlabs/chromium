@@ -7,10 +7,10 @@
 // http://w3c.github.io/mediacapture-main/#mediadevices-interface-extensions
 
 [
-    GarbageCollected,
     RuntimeEnabled=MediaDevices
 ]
 interface MediaDevices {
     [CallWith=ScriptState, MeasureAs=MediaDevicesEnumerateDevices] Promise<sequence<MediaDeviceInfo>> enumerateDevices();
+    [RuntimeEnabled=MediaConstraints] MediaTrackSupportedConstraints getSupportedConstraints();
     [RuntimeEnabled=GetUserMedia, CallWith=ScriptState, RaisesException] Promise<MediaStream> getUserMedia(MediaStreamConstraints options);
 };

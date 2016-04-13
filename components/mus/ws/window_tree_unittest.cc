@@ -31,7 +31,7 @@
 #include "components/mus/ws/window_tree.h"
 #include "components/mus/ws/window_tree_binding.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/shell/public/interfaces/connector.mojom.h"
+#include "services/shell/public/interfaces/connector.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -110,10 +110,6 @@ class WindowTreeTest : public testing::Test {
   TestWindowTreeBinding* last_binding() { return delegate_.last_binding(); }
 
   WindowServer* window_server() { return window_server_.get(); }
-
-  ServerWindow* GetWindowById(const WindowId& id) {
-    return window_server_->GetWindow(id);
-  }
 
   TestWindowTreeClient* wm_client() { return wm_client_; }
   mus::mojom::Cursor cursor_id() {

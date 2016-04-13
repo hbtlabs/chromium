@@ -113,7 +113,6 @@ crbug.com/243492 http/tests/inspector-enabled/injected-script-discard.html [ Slo
 crbug.com/327078 http/tests/inspector/network/long-script-content.html [ Slow ]
 crbug.com/420008 [ Release ] inspector/editor/text-editor-word-jumps.html [ Slow ]
 crbug.com/420008 [ Release ] http/tests/inspector/console-xhr-logging.html [ Slow ]
-webkit.org/b/60109 inspector/elements/edit/edit-dom-actions.html [ Slow ]
 crbug.com/596486 [ Linux ] inspector/elements/insert-node.html [ Slow ]
 webkit.org/b/84735 [ Win ] http/tests/inspector/change-iframe-src.html [ Slow ]
 crbug.com/504565 [ Mac ] http/tests/inspector/search/sources-search-scope.html [ Slow ]
@@ -235,7 +234,6 @@ crbug.com/357427 http/tests/workers/terminate-during-sync-operation-file.html [ 
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-filesystem.html [ Slow ]
 crbug.com/364250 [ Debug ] virtual/threaded/animations/interpolation/transform-interpolation.html [ Slow ]
 crbug.com/364250 [ Debug ] virtual/threaded/animations/interpolation/webkit-transform-interpolation.html [ Slow ]
-crbug.com/539725 [ Linux Debug ] inspector/elements/shadow/elements-panel-shadow-selection-on-refresh.html [ Slow ]
 crbug.com/402379 [ Win7 Debug ] storage/indexeddb/cursor-continue-validity.html [ Slow ]
 crbug.com/402379 [ Win7 Debug ] storage/indexeddb/mozilla/indexes.html [ Slow ]
 crbug.com/504706 [ Linux ] inspector/profiler/heap-snapshot-containment-expansion-preserved-when-sorting.html [ Slow ]
@@ -285,3 +283,6 @@ crbug.com/584807 virtual/threaded/printing/webgl-oversized-printing.html [ Slow 
 crbug.com/592183 usb/usbDevice.html [ Slow ]
 
 crbug.com/594189 virtual/spv2/fast/overflow/lots-of-sibling-inline-boxes.html [ Slow ]
+
+crbug.com/601726 http/tests/incremental/frame-focus-before-load.html [ Slow ]
+

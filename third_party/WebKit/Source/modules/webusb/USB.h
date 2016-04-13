@@ -20,12 +20,12 @@ class USBDeviceRequestOptions;
 class WebUSBDevice;
 
 class USB final
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<USB>
+    : public EventTargetWithInlineData
     , public ContextLifecycleObserver
     , public WebUSBClient::Observer {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(USB);
     USING_GARBAGE_COLLECTED_MIXIN(USB);
+    USING_PRE_FINALIZER(USB, dispose);
 public:
     static USB* create(LocalFrame& frame)
     {
@@ -52,10 +52,10 @@ public:
     void onDeviceDisconnected(std::unique_ptr<WebUSBDevice>) override;
 
     DECLARE_VIRTUAL_TRACE();
-    EAGERLY_FINALIZE();
 
 private:
     explicit USB(LocalFrame& frame);
+    void dispose();
 
     WebUSBClient* m_client;
 };

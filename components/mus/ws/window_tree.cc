@@ -260,10 +260,10 @@ std::vector<const ServerWindow*> WindowTree::GetWindowTree(
 bool WindowTree::SetWindowVisibility(const ClientWindowId& window_id,
                                      bool visible) {
   ServerWindow* window = GetWindowByClientId(window_id);
-  if (!window || window->visible() == visible ||
-      !access_policy_->CanChangeWindowVisibility(window)) {
+  if (!window || !access_policy_->CanChangeWindowVisibility(window))
     return false;
-  }
+  if (window->visible() == visible)
+    return true;
   Operation op(this, window_server_, OperationType::SET_WINDOW_VISIBILITY);
   window->SetVisible(visible);
   return true;
@@ -496,8 +496,8 @@ void WindowTree::ProcessWindowHierarchyChanged(const ServerWindow* window,
   const ClientWindowId client_window_id =
       window ? ClientWindowIdForWindow(window) : ClientWindowId();
   client()->OnWindowHierarchyChanged(
-      client_window_id.id, new_parent_client_window_id.id,
-      old_parent_client_window_id.id, WindowsToWindowDatas(to_send));
+      client_window_id.id, old_parent_client_window_id.id,
+      new_parent_client_window_id.id, WindowsToWindowDatas(to_send));
   window_server_->OnTreeMessagedClient(id_);
 }
 

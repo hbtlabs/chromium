@@ -53,6 +53,7 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
+#include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
@@ -160,12 +161,12 @@
 #include "device/usb/public/interfaces/chooser_service.mojom.h"
 #include "device/usb/public/interfaces/device_manager.mojom.h"
 #include "gin/v8_initializer.h"
-#include "mojo/shell/public/cpp/shell_client.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_options.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "ppapi/host/ppapi_host.h"
+#include "services/shell/public/cpp/shell_client.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -290,6 +291,8 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
+#include "chrome/browser/media/audio_debug_recordings_handler.h"
+#include "chrome/browser/media/webrtc_event_log_handler.h"
 #include "chrome/browser/media/webrtc_logging_handler_host.h"
 #endif
 
@@ -948,8 +951,22 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       new WebRtcLoggingHandlerHost(id, profile,
                                    g_browser_process->webrtc_log_uploader());
   host->AddFilter(webrtc_logging_handler_host);
-  host->SetUserData(host, new base::UserDataAdapter<WebRtcLoggingHandlerHost>(
-      webrtc_logging_handler_host));
+  host->SetUserData(WebRtcLoggingHandlerHost::kWebRtcLoggingHandlerHostKey,
+                    new base::UserDataAdapter<WebRtcLoggingHandlerHost>(
+                        webrtc_logging_handler_host));
+
+  AudioDebugRecordingsHandler* audio_debug_recordings_handler =
+      new AudioDebugRecordingsHandler(profile);
+  host->SetUserData(
+      AudioDebugRecordingsHandler::kAudioDebugRecordingsHandlerKey,
+      new base::UserDataAdapter<AudioDebugRecordingsHandler>(
+          audio_debug_recordings_handler));
+
+  WebRtcEventLogHandler* webrtc_event_log_handler =
+      new WebRtcEventLogHandler(profile);
+  host->SetUserData(WebRtcEventLogHandler::kWebRtcEventLogHandlerKey,
+                    new base::UserDataAdapter<WebRtcEventLogHandler>(
+                        webrtc_event_log_handler));
 #endif
 #if !defined(DISABLE_NACL)
   host->AddFilter(new nacl::NaClHostMessageFilter(
@@ -2766,6 +2783,13 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
         base::Bind(&CreateUsbDeviceManager, render_frame_host));
     registry->AddService(
         base::Bind(&CreateWebUsbChooserService, render_frame_host));
+  }
+
+  // Register mojo CredentialManager service only for main frame.
+  if (!render_frame_host->GetParent()) {
+    registry->AddService(
+        base::Bind(&ChromePasswordManagerClient::BindCredentialManager,
+                   render_frame_host));
   }
 
 #if BUILDFLAG(ANDROID_JAVA_UI)

@@ -53,9 +53,6 @@ InspectorConsoleAgent::InspectorConsoleAgent(V8RuntimeAgent* runtimeAgent, V8Deb
 
 InspectorConsoleAgent::~InspectorConsoleAgent()
 {
-#if !ENABLE(OILPAN)
-    m_instrumentingAgents->setInspectorConsoleAgent(0);
-#endif
 }
 
 void InspectorConsoleAgent::enable(ErrorString*)
@@ -70,9 +67,9 @@ void InspectorConsoleAgent::enable(ErrorString*)
 
     ConsoleMessageStorage* storage = messageStorage();
     if (storage->expiredCount()) {
-        RawPtr<ConsoleMessage> expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
+        ConsoleMessage* expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
         expiredMessage->setTimestamp(0);
-        sendConsoleMessageToFrontend(expiredMessage.get(), false);
+        sendConsoleMessageToFrontend(expiredMessage, false);
     }
 
     size_t messageCount = storage->size();
@@ -194,7 +191,7 @@ void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* console
         jsonObj->setExecutionContextId(scriptState->contextIdInDebugger());
     if (consoleMessage->source() == NetworkMessageSource && consoleMessage->requestIdentifier())
         jsonObj->setNetworkRequestId(IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
-    RawPtr<ScriptArguments> arguments = consoleMessage->scriptArguments();
+    ScriptArguments* arguments = consoleMessage->scriptArguments();
     if (arguments && arguments->argumentCount()) {
         ScriptState::Scope scope(arguments->getScriptState());
         v8::Local<v8::Context> context = arguments->getScriptState()->context();

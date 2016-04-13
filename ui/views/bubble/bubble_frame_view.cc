@@ -220,7 +220,6 @@ void BubbleFrameView::UpdateWindowIcon() {
   title_icon_->SetImage(&image);
 }
 
-
 void BubbleFrameView::UpdateWindowTitle() {
   title_->SetText(GetWidget()->widget_delegate()->GetWindowTitle());
   title_->SetVisible(GetWidget()->widget_delegate()->ShouldShowWindowTitle());
@@ -364,7 +363,7 @@ void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
   }
 }
 
-void BubbleFrameView::SetBubbleBorder(scoped_ptr<BubbleBorder> border) {
+void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   bubble_border_ = border.get();
   SetBorder(std::move(border));
 

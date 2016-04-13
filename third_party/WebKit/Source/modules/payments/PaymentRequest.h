@@ -29,9 +29,8 @@ class ScriptPromiseResolver;
 class ScriptState;
 class ShippingAddress;
 
-class MODULES_EXPORT PaymentRequest final : public RefCountedGarbageCollectedEventTargetWithInlineData<PaymentRequest>, WTF_NON_EXPORTED_BASE(public mojom::wtf::PaymentRequestClient), public PaymentCompleter {
+class MODULES_EXPORT PaymentRequest final : public EventTargetWithInlineData, WTF_NON_EXPORTED_BASE(public mojom::wtf::PaymentRequestClient), public PaymentCompleter {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PaymentRequest);
     USING_GARBAGE_COLLECTED_MIXIN(PaymentRequest)
     WTF_MAKE_NONCOPYABLE(PaymentRequest);
 

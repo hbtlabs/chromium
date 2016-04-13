@@ -27,8 +27,8 @@
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/gpu_export.h"
 #include "ipc/ipc_listener.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/latency_info/latency_info.h"
 
 struct GPUCommandBufferConsoleMessage;
 
@@ -87,6 +87,7 @@ class GPU_EXPORT CommandBufferProxyImpl
   void DestroyTransferBuffer(int32_t id) override;
 
   // gpu::GpuControl implementation:
+  void SetGpuControlClient(GpuControlClient* client) override;
   gpu::Capabilities GetCapabilities() override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
@@ -113,7 +114,6 @@ class GPU_EXPORT CommandBufferProxyImpl
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;
 
   bool ProduceFrontBuffer(const gpu::Mailbox& mailbox);
-  void SetContextLostCallback(const base::Closure& callback);
 
   void AddDeletionObserver(DeletionObserver* observer);
   void RemoveDeletionObserver(DeletionObserver* observer);
@@ -197,6 +197,9 @@ class GPU_EXPORT CommandBufferProxyImpl
 
   base::Lock* lock_;
 
+  // Client that wants to listen for important events on the GpuControl.
+  gpu::GpuControlClient* gpu_control_client_;
+
   // Unowned list of DeletionObservers.
   base::ObserverList<DeletionObserver> deletion_observers_;
 
@@ -227,8 +230,6 @@ class GPU_EXPORT CommandBufferProxyImpl
 
   // Last verified fence sync.
   uint64_t verified_fence_sync_release_;
-
-  base::Closure context_lost_callback_;
 
   GpuConsoleMessageCallback console_message_callback_;
 

@@ -26,7 +26,6 @@
 #include "cc/input/top_controls_manager.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
-#include "cc/layers/io_surface_layer_impl.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/render_surface_impl.h"
@@ -403,8 +402,8 @@ class LayerTreeHostImplTest : public testing::Test,
   std::unique_ptr<ScrollState> BeginState(const gfx::Point& point) {
     ScrollStateData scroll_state_data;
     scroll_state_data.is_beginning = true;
-    scroll_state_data.start_position_x = point.x();
-    scroll_state_data.start_position_y = point.y();
+    scroll_state_data.position_x = point.x();
+    scroll_state_data.position_y = point.y();
     std::unique_ptr<ScrollState> scroll_state(
         new ScrollState(scroll_state_data));
     return scroll_state;
@@ -415,8 +414,8 @@ class LayerTreeHostImplTest : public testing::Test,
     ScrollStateData scroll_state_data;
     scroll_state_data.delta_x = delta.x();
     scroll_state_data.delta_y = delta.y();
-    scroll_state_data.start_position_x = point.x();
-    scroll_state_data.start_position_y = point.y();
+    scroll_state_data.position_x = point.x();
+    scroll_state_data.position_y = point.y();
     std::unique_ptr<ScrollState> scroll_state(
         new ScrollState(scroll_state_data));
     return scroll_state;
@@ -937,6 +936,78 @@ TEST_F(LayerTreeHostImplTest, ShouldScrollOnMainThread) {
   EXPECT_EQ(InputHandler::SCROLL_ON_MAIN_THREAD, status.thread);
   EXPECT_EQ(MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects,
             status.main_thread_scrolling_reasons);
+}
+
+TEST_F(LayerTreeHostImplTest, ScrollWithOverlappingNonScrollableLayer) {
+  LayerTreeImpl* layer_tree_impl = host_impl_->active_tree();
+  gfx::Size content_size = gfx::Size(360, 600);
+  gfx::Size scroll_content_size = gfx::Size(345, 3800);
+  gfx::Size scrollbar_size = gfx::Size(15, 600);
+
+  host_impl_->SetViewportSize(content_size);
+  std::unique_ptr<LayerImpl> root = LayerImpl::Create(layer_tree_impl, 1);
+  root->SetBounds(content_size);
+  root->SetPosition(gfx::PointF());
+
+  std::unique_ptr<LayerImpl> clip = LayerImpl::Create(layer_tree_impl, 2);
+  clip->SetBounds(content_size);
+  clip->SetPosition(gfx::PointF());
+
+  std::unique_ptr<LayerImpl> scroll = LayerImpl::Create(layer_tree_impl, 3);
+  scroll->SetBounds(scroll_content_size);
+  scroll->SetScrollClipLayer(clip->id());
+  scroll->SetDrawsContent(true);
+
+  std::unique_ptr<SolidColorScrollbarLayerImpl> scrollbar =
+      SolidColorScrollbarLayerImpl::Create(layer_tree_impl, 4, VERTICAL, 10, 0,
+                                           false, true);
+  scrollbar->SetBounds(scrollbar_size);
+  scrollbar->SetPosition(gfx::PointF(345, 0));
+  scrollbar->SetScrollLayerId(scroll->id());
+  scrollbar->set_layer_or_descendant_is_drawn(true);
+  scrollbar->SetDrawsContent(true);
+
+  std::unique_ptr<LayerImpl> squash1 = LayerImpl::Create(layer_tree_impl, 5);
+  squash1->SetBounds(gfx::Size(140, 300));
+  squash1->SetPosition(gfx::PointF(220, 0));
+  squash1->SetDrawsContent(true);
+
+  std::unique_ptr<LayerImpl> squash2 = LayerImpl::Create(layer_tree_impl, 6);
+  squash2->SetBounds(gfx::Size(140, 300));
+  squash2->SetPosition(gfx::PointF(220, 300));
+  squash2->SetDrawsContent(true);
+
+  scroll->AddChild(std::move(squash2));
+  clip->AddChild(std::move(scroll));
+  clip->AddChild(std::move(scrollbar));
+  clip->AddChild(std::move(squash1));
+  root->AddChild(std::move(clip));
+
+  layer_tree_impl->SetRootLayer(std::move(root));
+  SetNeedsRebuildPropertyTrees();
+  RebuildPropertyTrees();
+  layer_tree_impl->DidBecomeActive();
+
+  // The point hits squash1 layer and also scroll layer, because scroll layer is
+  // not an ancestor of squash1 layer, we cannot scroll on impl thread.
+  InputHandler::ScrollStatus status = host_impl_->ScrollBegin(
+      BeginState(gfx::Point(230, 150)).get(), InputHandler::WHEEL);
+  EXPECT_EQ(InputHandler::SCROLL_UNKNOWN, status.thread);
+  EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
+            status.main_thread_scrolling_reasons);
+
+  // The point hits squash1 layer and also scrollbar layer.
+  status = host_impl_->ScrollBegin(BeginState(gfx::Point(350, 150)).get(),
+                                   InputHandler::WHEEL);
+  EXPECT_EQ(InputHandler::SCROLL_UNKNOWN, status.thread);
+  EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
+            status.main_thread_scrolling_reasons);
+
+  // The point hits squash2 layer and also scroll layer, because scroll layer is
+  // an ancestor of squash2 layer, we should scroll on impl.
+  status = host_impl_->ScrollBegin(BeginState(gfx::Point(230, 450)).get(),
+                                   InputHandler::WHEEL);
+  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD, status.thread);
 }
 
 TEST_F(LayerTreeHostImplTest, NonFastScrollableRegionBasic) {
@@ -7194,13 +7265,6 @@ TEST_F(LayerTreeHostImplTest, LayersFreeTextures) {
   video_layer->SetBounds(gfx::Size(10, 10));
   video_layer->SetDrawsContent(true);
   root_layer->AddChild(std::move(video_layer));
-
-  std::unique_ptr<IOSurfaceLayerImpl> io_surface_layer =
-      IOSurfaceLayerImpl::Create(host_impl_->active_tree(), 5);
-  io_surface_layer->SetBounds(gfx::Size(10, 10));
-  io_surface_layer->SetDrawsContent(true);
-  io_surface_layer->SetIOSurfaceProperties(1, gfx::Size(10, 10));
-  root_layer->AddChild(std::move(io_surface_layer));
 
   host_impl_->active_tree()->SetRootLayer(std::move(root_layer));
 

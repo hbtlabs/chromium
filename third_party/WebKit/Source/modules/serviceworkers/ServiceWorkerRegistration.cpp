@@ -106,6 +106,7 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(ExecutionContext* execution
 {
     ASSERT(m_handle);
     ASSERT(!m_handle->registration()->proxy());
+    ThreadState::current()->registerPreFinalizer(this);
 
     if (!executionContext)
         return;
@@ -118,12 +119,19 @@ ServiceWorkerRegistration::~ServiceWorkerRegistration()
 {
 }
 
+void ServiceWorkerRegistration::dispose()
+{
+    // Promptly clears a raw reference from content/ to an on-heap object
+    // so that content/ doesn't access it in a lazy sweeping phase.
+    m_handle.clear();
+}
+
 DEFINE_TRACE(ServiceWorkerRegistration)
 {
     visitor->trace(m_installing);
     visitor->trace(m_waiting);
     visitor->trace(m_active);
-    RefCountedGarbageCollectedEventTargetWithInlineData<ServiceWorkerRegistration>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
     Supplementable<ServiceWorkerRegistration>::trace(visitor);
 }

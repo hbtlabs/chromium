@@ -191,7 +191,7 @@ class WebGraphicsContext3DCommandBufferImpl
   // unnecessary complexity at the moment.
   bool CreateContext();
 
-  virtual void OnContextLost();
+  void OnContextLost();
 
   bool automatic_flushes_;
   gpu::gles2::ContextCreationAttribHelper attributes_;

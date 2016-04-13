@@ -89,7 +89,7 @@
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "wtf/Partitions.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 #include <algorithm>
@@ -1219,7 +1219,7 @@ void LayoutObject::invalidatePaintUsingContainer(const LayoutBoxModelObject& pai
         invalidatePaintRectangleOnWindow(paintInvalidationContainer, enclosingIntRect(dirtyRect));
 
     if (paintInvalidationContainer.view()->usesCompositing() && paintInvalidationContainer.isPaintInvalidationContainer())
-        paintInvalidationContainer.setBackingNeedsPaintInvalidationInRect(dirtyRect, invalidationReason);
+        paintInvalidationContainer.setBackingNeedsPaintInvalidationInRect(dirtyRect, invalidationReason, *this);
 }
 
 void LayoutObject::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient) const
@@ -1389,13 +1389,11 @@ inline void LayoutObject::invalidateSelectionIfNeeded(const LayoutBoxModelObject
 
     setPreviousSelectionRectForPaintInvalidation(newSelectionRect);
 
+    // TODO(wangxianzhu): Combine the following two conditions when removing LayoutView::doingFullPaintInvalidation().
+    if (!fullInvalidation)
+        fullyInvalidatePaint(paintInvalidationContainer, PaintInvalidationSelection, oldSelectionRect, newSelectionRect);
     if (shouldInvalidateSelection())
         invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, PaintInvalidationSelection);
-
-    if (fullInvalidation)
-        return;
-
-    fullyInvalidatePaint(paintInvalidationContainer, PaintInvalidationSelection, oldSelectionRect, newSelectionRect);
 }
 
 PaintInvalidationReason LayoutObject::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
@@ -1464,15 +1462,12 @@ PaintInvalidationReason LayoutObject::invalidatePaintIfNeeded(const PaintInvalid
         return invalidationReason;
     }
 
-    invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, invalidationReason);
-
-    if (invalidationReason == PaintInvalidationIncremental) {
+    if (invalidationReason == PaintInvalidationIncremental)
         incrementallyInvalidatePaint(paintInvalidationContainer, oldBounds, newBounds, newLocation);
-        return invalidationReason;
-    }
+    else
+        fullyInvalidatePaint(paintInvalidationContainer, invalidationReason, oldBounds, newBounds);
 
-    fullyInvalidatePaint(paintInvalidationContainer, invalidationReason, oldBounds, newBounds);
-
+    invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, invalidationReason);
     return invalidationReason;
 }
 
@@ -1581,15 +1576,19 @@ void LayoutObject::incrementallyInvalidatePaint(const LayoutBoxModelObject& pain
 
 void LayoutObject::fullyInvalidatePaint(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason, const LayoutRect& oldBounds, const LayoutRect& newBounds)
 {
-    // Otherwise do full paint invalidation.
-    LayoutRect invalidationRect = oldBounds;
-    adjustInvalidationRectForCompositedScrolling(invalidationRect, paintInvalidationContainer);
-    invalidatePaintUsingContainer(paintInvalidationContainer, invalidationRect, invalidationReason);
-    if (newBounds != oldBounds) {
-        invalidationRect = newBounds;
+    // The following logic avoids invalidating twice if one set of bounds contains the other.
+    if (!newBounds.contains(oldBounds)) {
+        LayoutRect invalidationRect = oldBounds;
         adjustInvalidationRectForCompositedScrolling(invalidationRect, paintInvalidationContainer);
         invalidatePaintUsingContainer(paintInvalidationContainer, invalidationRect, invalidationReason);
+
+        if (oldBounds.contains(newBounds))
+            return;
     }
+
+    LayoutRect invalidationRect = newBounds;
+    adjustInvalidationRectForCompositedScrolling(invalidationRect, paintInvalidationContainer);
+    invalidatePaintUsingContainer(paintInvalidationContainer, invalidationRect, invalidationReason);
 }
 
 void LayoutObject::invalidatePaintForOverflow()
@@ -3569,8 +3568,8 @@ void LayoutObject::invalidatePaintOfPreviousPaintInvalidationRect(const LayoutBo
 
     LayoutRect invalidationRect = previousPaintInvalidationRect();
     adjustInvalidationRectForCompositedScrolling(invalidationRect, paintInvalidationContainer);
-    invalidatePaintUsingContainer(paintInvalidationContainer, invalidationRect, PaintInvalidationLayer);
-    invalidateDisplayItemClients(paintInvalidationContainer, PaintInvalidationLayer);
+    invalidatePaintUsingContainer(paintInvalidationContainer, invalidationRect, reason);
+    invalidateDisplayItemClients(paintInvalidationContainer, reason);
 
     // This method may be used to invalidate paint of an object changing paint invalidation container.
     // Clear previous paint invalidation rect on the original paint invalidation container to avoid

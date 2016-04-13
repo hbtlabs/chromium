@@ -136,6 +136,7 @@ FrameView::FrameView(LocalFrame* frame)
     , m_safeToPropagateScrollToParent(true)
     , m_isTrackingPaintInvalidations(false)
     , m_scrollCorner(nullptr)
+    , m_stickyPositionObjectCount(0)
     , m_inputEventsScaleFactorForEmulation(1)
     , m_layoutSizeFixedToFrameSize(true)
     , m_didScrollTimer(this, &FrameView::didScrollTimerFired)
@@ -218,7 +219,6 @@ void FrameView::reset()
     m_lastViewportSize = IntSize();
     m_lastZoomFactor = 1.0f;
     m_isTrackingPaintInvalidations = s_initialTrackAllPaintInvalidations;
-    m_isPainting = false;
     m_visuallyNonEmptyCharacterCount = 0;
     m_visuallyNonEmptyPixelCount = 0;
     m_isVisuallyNonEmpty = false;
@@ -934,8 +934,6 @@ void FrameView::layout()
     m_hasPendingLayout = false;
     DocumentLifecycle::Scope lifecycleScope(lifecycle(), DocumentLifecycle::LayoutClean);
 
-    RELEASE_ASSERT(!isPainting());
-
     TRACE_EVENT_BEGIN1("devtools.timeline", "Layout", "beginData", InspectorLayoutEvent::beginData(this));
 
     performPreLayoutTasks();
@@ -1380,7 +1378,7 @@ bool FrameView::invalidateViewportConstrainedObjects()
 
         // If the fixed layer has a blur/drop-shadow filter applied on at least one of its parents, we cannot
         // scroll using the fast path, otherwise the outsets of the filter will be moved around the page.
-        if (layer->hasAncestorWithFilterOutsets())
+        if (layer->hasAncestorWithFilterThatMovesPixels())
             return false;
 
         TRACE_EVENT_INSTANT1(
@@ -1604,6 +1602,14 @@ void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
     if (!hasViewportConstrainedObjects())
         return;
 
+    // Update sticky position objects which are stuck to the viewport.
+    for (const auto& viewportConstrainedObject : *m_viewportConstrainedObjects) {
+        LayoutObject* layoutObject = viewportConstrainedObject;
+        PaintLayer* layer = toLayoutBoxModelObject(layoutObject)->layer();
+        if (layoutObject->style()->position() == StickyPosition)
+            layer->updateLayerPosition();
+    }
+
     // If there fixed position elements, scrolling may cause compositing layers to change.
     // Update widget and layer positions after scrolling, but only if we're not inside of
     // layout.
@@ -1616,6 +1622,9 @@ void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
 
 bool FrameView::computeCompositedSelection(LocalFrame& frame, CompositedSelection& selection)
 {
+    if (frame.view()->shouldThrottleRendering())
+        return false;
+
     const VisibleSelection& visibleSelection = frame.selection().selection();
     if (!visibleSelection.isCaretOrRange())
         return false;
@@ -2351,11 +2360,6 @@ FrameView* FrameView::parentFrameView() const
     return nullptr;
 }
 
-bool FrameView::isPainting() const
-{
-    return m_isPainting;
-}
-
 void FrameView::updateWidgetGeometriesIfNeeded()
 {
     if (!m_needsUpdateWidgetGeometries)
@@ -2994,7 +2998,7 @@ void FrameView::removeChild(Widget* child)
 
 bool FrameView::visualViewportSuppliesScrollbars() const
 {
-    return m_frame->isMainFrame() && m_frame->settings() && m_frame->settings()->viewportMetaEnabled();
+    return m_frame->isMainFrame() && m_frame->settings() && m_frame->settings()->viewportEnabled();
 }
 
 AXObjectCache* FrameView::axObjectCache() const

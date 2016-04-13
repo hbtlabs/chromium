@@ -8,6 +8,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
 import("//media/media_options.gni")
+import("//third_party/kasko/kasko.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 # //build/config/android/rules.gni imports //tools/grit/grit_rule.gni, which
@@ -321,7 +322,6 @@ source_set("browser") {
     }
 
     deps += [
-      "//apps",
       "//cc",
       "//chrome/app/theme:theme_resources",
       "//chrome/browser/devtools",
@@ -363,7 +363,6 @@ source_set("browser") {
       "//components/visitedlink/browser",
       "//components/visitedlink/common",
       "//components/web_cache/browser",
-      "//components/web_modal",
       "//components/webusb",
       "//content/app/resources",
       "//device/core",
@@ -375,9 +374,9 @@ source_set("browser") {
       "//mojo/edk/system",
       "//mojo/public/cpp/bindings",
       "//mojo/public/js",
-      "//mojo/shell/public/cpp",
       "//net:extras",
       "//net:net_with_v8",
+      "//services/shell/public/cpp",
       "//skia/public",
       "//storage/browser",
       "//storage/common",
@@ -430,16 +429,6 @@ source_set("browser") {
     sources += [
       "net/disk_cache_dir_policy_handler.cc",
       "net/disk_cache_dir_policy_handler.h",
-    ]
-  }
-  if (!is_android && !is_ios) {
-    sources += [
-      "download/download_dir_policy_handler.cc",
-      "download/download_dir_policy_handler.h",
-    ]
-    deps += [
-      "//chrome/browser/policy:path_parser",
-      "//net:net_browser_services",
     ]
   }
   if (is_mac) {
@@ -609,6 +598,8 @@ source_set("browser") {
     # These files are only built in a GN build because they bring in
     # dependencies that don't build with GYP.
     sources += [
+      "ui/ash/launcher/chrome_mash_shelf_controller.cc",
+      "ui/ash/launcher/chrome_mash_shelf_controller.h",
       "ui/views/frame/browser_frame_mus.cc",
       "ui/views/frame/browser_frame_mus.h",
       "ui/views/frame/browser_non_client_frame_view_mus.cc",
@@ -616,8 +607,11 @@ source_set("browser") {
     ]
     deps += [
       "//components/mus/public/cpp",
+      "//components/prefs",
       "//content/public/common",
-      "//mojo/shell/runner/common",
+      "//mash/shelf/public/interfaces",
+      "//services/shell/runner/common",
+      "//skia/public",
       "//ui/aura",
       "//ui/compositor",
       "//ui/keyboard",
@@ -652,6 +646,13 @@ source_set("browser") {
       "//components/crash/content/browser",
       "//components/version_info:generate_version_info",
     ]
+  }
+  if (is_win && enable_kasko_failed_rdv_reports) {
+    sources += [
+      "//chrome/app/chrome_crash_reporter_client.cc",
+      "//chrome/app/chrome_crash_reporter_client.h",
+    ]
+    deps += [ "//components/crash/content/app:lib" ]
   }
   if (use_nss_certs) {
     sources +=
@@ -731,13 +732,17 @@ source_set("browser") {
         rebase_path(gypi_values.chrome_browser_mobile_sources, ".", "//chrome")
   } else {
     # Non-mobile.
+    deps += [
+      "//apps",
+      "//chrome/browser/policy:path_parser",
+      "//chrome/browser/profile_resetter:profile_reset_report_proto",
+      "//components/feedback",
+      "//components/web_modal",
+      "//net:net_browser_services",
+    ]
     sources += rebase_path(gypi_values.chrome_browser_non_mobile_sources,
                            ".",
                            "//chrome")
-    deps += [
-      "//chrome/browser/profile_resetter:profile_reset_report_proto",
-      "//components/feedback",
-    ]
   }
 
   if (!is_chrome_branded) {
@@ -784,7 +789,6 @@ source_set("browser") {
 
     deps -= [
       "//components/storage_monitor",
-      "//components/web_modal",
       "//third_party/libaddressinput",
     ]
 
@@ -833,6 +837,7 @@ source_set("browser") {
     deps += [
       ":chrome_process_finder",
       "//chrome/chrome_watcher:client",
+      "//chrome/chrome_watcher:kasko_util",
       "//chrome/common:version_header",
       "//chrome/installer/util:strings",
       "//chrome_elf",
@@ -1028,6 +1033,7 @@ grit("resources") {
 
   deps = [
     ":chrome_internal_resources_gen",
+    "//chrome/browser/resources/safe_browsing:make_file_types_protobuf",
 
     # Depend only on the generated mojo bindings since we read the .mojom.js
     # file, rather than the whole mojo target which will link the C++ bindings.
@@ -1317,6 +1323,7 @@ source_set("test_support_ui") {
 
   deps = [
     "//components/metrics:test_support",
+    "//components/password_manager/content/public/interfaces",
     "//components/password_manager/core/browser:test_support",
     "//skia",
     "//testing/gtest",

@@ -38,6 +38,7 @@
 
 using SavePageResult = offline_pages::OfflinePageModel::SavePageResult;
 using DeletePageResult = offline_pages::OfflinePageModel::DeletePageResult;
+using GetAllPagesResult = offline_pages::OfflinePageModel::GetAllPagesResult;
 
 namespace offline_pages {
 
@@ -50,6 +51,11 @@ const GURL kFileUrl("file:///foo");
 const ClientId kTestPageBookmarkId2(BOOKMARK_NAMESPACE, "5678");
 const ClientId kTestPageBookmarkId3(BOOKMARK_NAMESPACE, "42");
 const int64_t kTestFileSize = 876543LL;
+
+bool URLSpecContains(std::string contains_value, const GURL& url) {
+  std::string spec = url.spec();
+  return spec.find(contains_value) != std::string::npos;
+}
 
 }  // namespace
 
@@ -75,6 +81,7 @@ class OfflinePageModelTest
   void SetLastPathCreatedByArchiver(const base::FilePath& file_path) override;
 
   // OfflinePageModel callbacks.
+  void OnGetAllPagesDone(const GetAllPagesResult& result);
   void OnSavePageDone(SavePageResult result, int64_t offline_id);
   void OnDeletePageDone(DeletePageResult result);
   void OnClearAllDone();
@@ -101,10 +108,18 @@ class OfflinePageModelTest
 
   OfflinePageTestStore* GetStore();
 
+  const GetAllPagesResult& GetAllPages();
   void SavePage(const GURL& url, ClientId client_id);
   void SavePageWithArchiverResult(const GURL& url,
                                   ClientId client_id,
                                   OfflinePageArchiver::ArchiverResult result);
+
+  void DeletePage(int64_t offline_id,
+                  const OfflinePageModel::DeletePageCallback& callback) {
+    std::vector<int64_t> offline_ids;
+    offline_ids.push_back(offline_id);
+    model()->DeletePagesByOfflineId(offline_ids, callback);
+  }
 
   OfflinePageModel* model() { return model_.get(); }
 
@@ -130,6 +145,7 @@ class OfflinePageModelTest
   base::ScopedTempDir temp_dir_;
 
   scoped_ptr<OfflinePageModel> model_;
+  GetAllPagesResult all_pages_;
   SavePageResult last_save_result_;
   int64_t last_save_offline_id_;
   DeletePageResult last_delete_result_;
@@ -186,6 +202,11 @@ void OfflinePageModelTest::OnSavePageDone(
     int64_t offline_id) {
   last_save_result_ = result;
   last_save_offline_id_ = offline_id;
+}
+
+void OfflinePageModelTest::OnGetAllPagesDone(
+    const OfflinePageModel::GetAllPagesResult& result) {
+  all_pages_ = result;
 }
 
 void OfflinePageModelTest::OnDeletePageDone(DeletePageResult result) {
@@ -262,6 +283,13 @@ void OfflinePageModelTest::SavePageWithArchiverResult(
   PumpLoop();
 }
 
+const std::vector<OfflinePageItem>& OfflinePageModelTest::GetAllPages() {
+  model()->GetAllPages(
+      base::Bind(&OfflinePageModelTest::OnGetAllPagesDone, AsWeakPtr()));
+  PumpLoop();
+  return all_pages_;
+}
+
 TEST_F(OfflinePageModelTest, SavePageSuccessful) {
   EXPECT_FALSE(model()->HasOfflinePages());
   SavePage(kTestUrl, kTestPageBookmarkId1);
@@ -279,7 +307,7 @@ TEST_F(OfflinePageModelTest, SavePageSuccessful) {
   EXPECT_EQ(SavePageResult::SUCCESS, last_save_result());
   ResetResults();
 
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
   EXPECT_EQ(1UL, offline_pages.size());
   EXPECT_EQ(kTestUrl, offline_pages[0].url);
@@ -391,7 +419,7 @@ TEST_F(OfflinePageModelTest, SavePageOfflineArchiverTwoPages) {
 
   ResetResults();
 
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
   EXPECT_EQ(2UL, offline_pages.size());
   // Offline IDs are random, so the order of the pages is also random
@@ -427,7 +455,7 @@ TEST_F(OfflinePageModelTest, MarkPageAccessed) {
   model()->MarkPageAccessed(last_save_offline_id());
   PumpLoop();
 
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
   EXPECT_EQ(1UL, offline_pages.size());
   EXPECT_EQ(kTestUrl, offline_pages[0].url);
@@ -439,7 +467,7 @@ TEST_F(OfflinePageModelTest, MarkPageAccessed) {
 TEST_F(OfflinePageModelTest, MarkPageForDeletion) {
   SavePage(kTestUrl, kTestPageBookmarkId1);
 
-  GURL offline_url = model()->GetAllPages().begin()->GetOfflineURL();
+  GURL offline_url = GetAllPages().begin()->GetOfflineURL();
 
   // Delete the page with undo tiggerred.
   model()->MarkPageForDeletion(
@@ -448,7 +476,7 @@ TEST_F(OfflinePageModelTest, MarkPageForDeletion) {
   PumpLoop();
 
   // GetAllPages will not return the page that is marked for deletion.
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
   EXPECT_EQ(0UL, offline_pages.size());
 
   EXPECT_FALSE(model()->HasOfflinePages());
@@ -461,8 +489,7 @@ TEST_F(OfflinePageModelTest, MarkPageForDeletion) {
   PumpLoop();
 
   // GetAllPages will now return the restored page.
-  const std::vector<OfflinePageItem>& offline_pages_after_undo =
-      model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages_after_undo = GetAllPages();
   EXPECT_EQ(1UL, offline_pages_after_undo.size());
 }
 
@@ -515,7 +542,7 @@ TEST_F(OfflinePageModelTest, SavePageAfterMarkingPageForDeletion) {
   FastForwardBy(OfflinePageModel::GetFinalDeletionDelayForTesting());
 
   // The re-saved page should still exist.
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
   ASSERT_EQ(1UL, offline_pages.size());
   EXPECT_EQ(kTestUrl, offline_pages[0].url);
   EXPECT_EQ(kTestPageBookmarkId1, offline_pages[0].client_id);
@@ -524,7 +551,7 @@ TEST_F(OfflinePageModelTest, SavePageAfterMarkingPageForDeletion) {
 }
 
 TEST_F(OfflinePageModelTest, GetAllPagesStoreEmpty) {
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
   EXPECT_EQ(0UL, offline_pages.size());
 }
@@ -532,7 +559,7 @@ TEST_F(OfflinePageModelTest, GetAllPagesStoreEmpty) {
 TEST_F(OfflinePageModelTest, GetAllPagesStoreFailure) {
   GetStore()->set_test_scenario(
       OfflinePageTestStore::TestScenario::LOAD_FAILED);
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
 
   EXPECT_EQ(0UL, offline_pages.size());
 }
@@ -557,9 +584,8 @@ TEST_F(OfflinePageModelTest, DeletePageSuccessful) {
   ResetResults();
 
   // Delete one page.
-  model()->DeletePageByOfflineId(
-      offline1,
-      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+  DeletePage(offline1,
+             base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
 
   PumpLoop();
 
@@ -570,9 +596,8 @@ TEST_F(OfflinePageModelTest, DeletePageSuccessful) {
   EXPECT_EQ(kTestUrl2, store->GetAllPages()[0].url);
 
   // Delete another page.
-  model()->DeletePageByOfflineId(
-      offline2,
-      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+  DeletePage(offline2,
+             base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
 
   ResetResults();
 
@@ -584,9 +609,63 @@ TEST_F(OfflinePageModelTest, DeletePageSuccessful) {
   EXPECT_EQ(0u, store->GetAllPages().size());
 }
 
+TEST_F(OfflinePageModelTest, DeletePageByPredicate) {
+  OfflinePageTestStore* store = GetStore();
+
+  // Save one page.
+  SavePage(kTestUrl, kTestPageBookmarkId1);
+  int64_t offline1 = last_save_offline_id();
+  EXPECT_EQ(SavePageResult::SUCCESS, last_save_result());
+  EXPECT_EQ(1u, store->GetAllPages().size());
+
+  ResetResults();
+
+  // Save another page.
+  SavePage(kTestUrl2, kTestPageBookmarkId2);
+  int64_t offline2 = last_save_offline_id();
+  EXPECT_EQ(SavePageResult::SUCCESS, last_save_result());
+  EXPECT_EQ(2u, store->GetAllPages().size());
+
+  ResetResults();
+
+  // Delete the second page.
+  model()->DeletePagesByURLPredicate(
+      base::Bind(&URLSpecContains, "page.com"),
+      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+
+  PumpLoop();
+
+  EXPECT_EQ(last_deleted_offline_id(), offline2);
+  EXPECT_EQ(last_deleted_client_id(), kTestPageBookmarkId2);
+  EXPECT_EQ(DeletePageResult::SUCCESS, last_delete_result());
+  ASSERT_EQ(1u, store->GetAllPages().size());
+  EXPECT_EQ(kTestUrl, store->GetAllPages()[0].url);
+
+  ResetResults();
+
+  // Delete the first page.
+  model()->DeletePagesByURLPredicate(
+      base::Bind(&URLSpecContains, "example.com"),
+      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+
+  PumpLoop();
+
+  EXPECT_EQ(last_deleted_offline_id(), offline1);
+  EXPECT_EQ(last_deleted_client_id(), kTestPageBookmarkId1);
+  EXPECT_EQ(DeletePageResult::SUCCESS, last_delete_result());
+  EXPECT_EQ(0u, store->GetAllPages().size());
+}
+
 TEST_F(OfflinePageModelTest, DeletePageNotFound) {
-  model()->DeletePageByOfflineId(
-      1234LL, base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+  DeletePage(1234LL,
+             base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+  EXPECT_EQ(DeletePageResult::NOT_FOUND, last_delete_result());
+
+  ResetResults();
+
+  model()->DeletePagesByURLPredicate(
+      base::Bind(&URLSpecContains, "page.com"),
+      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
   EXPECT_EQ(DeletePageResult::NOT_FOUND, last_delete_result());
 }
 
@@ -599,9 +678,8 @@ TEST_F(OfflinePageModelTest, DeletePageStoreFailureOnRemove) {
   // Try to delete this page.
   GetStore()->set_test_scenario(
       OfflinePageTestStore::TestScenario::REMOVE_FAILED);
-  model()->DeletePageByOfflineId(
-      offline_id,
-      base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
+  DeletePage(offline_id,
+             base::Bind(&OfflinePageModelTest::OnDeletePageDone, AsWeakPtr()));
   PumpLoop();
   EXPECT_EQ(DeletePageResult::STORE_FAILURE, last_delete_result());
 }
@@ -621,7 +699,7 @@ TEST_F(OfflinePageModelTest, DetectThatOfflineCopyIsMissing) {
   PumpLoop();
 
   EXPECT_EQ(last_deleted_offline_id(), offline_id);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelTest, DetectThatOfflineCopyIsMissingAfterLoad) {
@@ -640,8 +718,7 @@ TEST_F(OfflinePageModelTest, DetectThatOfflineCopyIsMissingAfterLoad) {
   PumpLoop();
 
   EXPECT_EQ(last_deleted_offline_id(), offline_id);
-  EXPECT_EQ(last_deleted_client_id(), kTestPageBookmarkId1);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelTest, DeleteMultiplePages) {
@@ -810,7 +887,7 @@ TEST_F(OfflinePageModelTest, ClearAll) {
   SavePage(kTestUrl, kTestPageBookmarkId1);
   SavePage(kTestUrl2, kTestPageBookmarkId2);
 
-  const std::vector<OfflinePageItem>& offline_pages = model()->GetAllPages();
+  const std::vector<OfflinePageItem>& offline_pages = GetAllPages();
   EXPECT_EQ(2UL, offline_pages.size());
   EXPECT_EQ(2UL, GetStore()->GetAllPages().size());
   base::FilePath archiver_path = offline_pages[0].file_path;
@@ -820,14 +897,14 @@ TEST_F(OfflinePageModelTest, ClearAll) {
   model()->ClearAll(
       base::Bind(&OfflinePageModelTest::OnClearAllDone, AsWeakPtr()));
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
   EXPECT_EQ(0UL, GetStore()->GetAllPages().size());
   EXPECT_FALSE(base::PathExists(archiver_path));
 
   // The model should reload the store after the reset. All model operations
   // should continue to work.
   SavePage(kTestUrl2, kTestPageBookmarkId2);
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
   EXPECT_EQ(1UL, GetStore()->GetAllPages().size());
 }
 
@@ -917,71 +994,71 @@ void OfflinePageModelBookmarkChangeTest::UndoBookmarkRemoval() {
 TEST_F(OfflinePageModelBookmarkChangeTest, ChangeBookmakeTitle) {
   // Creates a bookmark without offline copy.
   const bookmarks::BookmarkNode* bookmark_node = CreateBookmarkNode(kTestUrl);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Changing the bookmark title should have no effect.
   bookmark_model()->SetTitle(
       bookmark_node, base::string16(base::ASCIIToUTF16("foo")));
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Adds an offline copy for the bookmark.
   SavePage(kTestUrl, ClientId(BOOKMARK_NAMESPACE,
                               base::Int64ToString(bookmark_node->id())));
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 
   // Changes the bookmark title. The offline copy was not affected.
   bookmark_model()->SetTitle(
       bookmark_node, base::string16(base::ASCIIToUTF16("bar")));
   PumpLoop();
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelBookmarkChangeTest, ChangeBookmakeURL) {
   // Creates a bookmark without offline copy.
   const bookmarks::BookmarkNode* bookmark_node = CreateBookmarkNode(kTestUrl2);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Changing the bookmark URL should have no effect. Chrome should not crash.
   // (http://crbug.com/560518)
   bookmark_model()->SetURL(bookmark_node, kTestUrl);
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Adds an offline copy for the bookmark.
   SavePage(kTestUrl, ClientId(BOOKMARK_NAMESPACE,
                               base::Int64ToString(bookmark_node->id())));
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 
   // The offline copy should be removed upon the bookmark URL change.
   // (http://crbug.com/558929)
   bookmark_model()->SetURL(bookmark_node, kTestUrl2);
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelBookmarkChangeTest, RemoveBookmark) {
   // Creates a bookmark without offline copy.
   const bookmarks::BookmarkNode* bookmark_node = CreateBookmarkNode(kTestUrl2);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Removing the bookmark should have no effect.
   bookmark_model()->Remove(bookmark_node);
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Creates a bookmark with offline copy.
   bookmark_node = CreateBookmarkNode(kTestUrl);
   ClientId client_id =
       ClientId(BOOKMARK_NAMESPACE, base::Int64ToString(bookmark_node->id()));
   SavePage(kTestUrl, client_id);
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 
   // The offline copy should also be removed upon the bookmark removal.
   bookmark_model()->Remove(bookmark_node);
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
   EXPECT_EQ(client_id, last_deleted_client_id());
+  EXPECT_EQ(0UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelBookmarkChangeTest, UndoBookmarkRemoval) {
@@ -990,30 +1067,30 @@ TEST_F(OfflinePageModelBookmarkChangeTest, UndoBookmarkRemoval) {
 
   // Creates a bookmark without offline copy.
   const bookmarks::BookmarkNode* bookmark_node = CreateBookmarkNode(kTestUrl2);
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Removing the bookmark and undoing the removal should have no effect.
   bookmark_model()->Remove(bookmark_node);
   PumpLoop();
   UndoBookmarkRemoval();
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // Creates a bookmark with offline copy.
   bookmark_node = CreateBookmarkNode(kTestUrl);
   SavePage(kTestUrl, ClientId(BOOKMARK_NAMESPACE,
                               base::Int64ToString(bookmark_node->id())));
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 
   // The offline copy should also be removed upon the bookmark removal.
   bookmark_model()->Remove(bookmark_node);
   PumpLoop();
-  EXPECT_EQ(0UL, model()->GetAllPages().size());
+  EXPECT_EQ(0UL, GetAllPages().size());
 
   // The offline copy should be restored upon the bookmark restore.
   UndoBookmarkRemoval();
   PumpLoop();
-  EXPECT_EQ(1UL, model()->GetAllPages().size());
+  EXPECT_EQ(1UL, GetAllPages().size());
 }
 
 TEST_F(OfflinePageModelTest, SaveRetrieveMultipleClientIds) {

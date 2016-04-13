@@ -5,13 +5,17 @@
 #ifndef UI_VIEWS_MUS_AURA_INIT_H_
 #define UI_VIEWS_MUS_AURA_INIT_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "build/build_config.h"
 #include "skia/ext/refptr.h"
 #include "ui/views/mus/mus_export.h"
+
+namespace aura {
+class Env;
+}
 
 namespace font_service {
 class FontLoader;
@@ -40,7 +44,8 @@ class VIEWS_MUS_EXPORT AuraInit {
 
   const std::string resource_file_;
 
-  scoped_ptr<ViewsDelegate> views_delegate_;
+  std::unique_ptr<aura::Env> env_;
+  std::unique_ptr<ViewsDelegate> views_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AuraInit);
 };

@@ -378,6 +378,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.NTP.Impression" enum="NTPImpressionType">
+  <owner>finkm@chromium.org</owner>
+  <summary>
+    Counts impressions of the NTP on Android. It also counts potential
+    impressions. A potential impression is a place where it would make sense to
+    open the NTP instead of the current view. E.g. the no-tab view is counted as
+    a potential impression since this view could be replaced with the NTP. For
+    better comparison regular impressions are also counted. The no-tab view
+    counting happens right after the user closed the last tab and the regular
+    impression counting happens at construction time of the NTP (=whenever a new
+    tab is opened).
+  </summary>
+</histogram>
+
 <histogram name="Android.SeccompStatus.Prctl" enum="AndroidSeccompStatus">
   <owner>rsesek@chromium.org</owner>
   <summary>
@@ -5919,6 +5933,38 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ContentSettings.NumberOfAllowCookiesExceptions">
+  <owner>battre@chromium.org</owner>
+  <summary>
+    The number of user defined cookies setting exceptions for allowing cookies
+    at browser start.
+  </summary>
+</histogram>
+
+<histogram name="ContentSettings.NumberOfBlockCookiesExceptions">
+  <owner>battre@chromium.org</owner>
+  <summary>
+    The number of user defined cookies setting exceptions for blocking cookies
+    at browser start.
+  </summary>
+</histogram>
+
+<histogram name="ContentSettings.NumberOfExceptions">
+  <owner>battre@chromium.org</owner>
+  <summary>
+    The number of user defined hostname patterns for content settings at browser
+    start.
+  </summary>
+</histogram>
+
+<histogram name="ContentSettings.NumberOfSessionOnlyCookiesExceptions">
+  <owner>battre@chromium.org</owner>
+  <summary>
+    The number of user defined cookies setting exceptions for 'clearing cookies
+    on browser exit' at browser start.
+  </summary>
+</histogram>
+
 <histogram name="ContentSettings.PermissionActions" enum="PermissionAction">
   <obsolete>
     Removed 11/2015 in favor of Permissions.Action.*
@@ -7629,6 +7675,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>pmonette@chromium.org</owner>
   <summary>
     The outcome of an attempt to set Chrome as the user's default browser.
+  </summary>
+</histogram>
+
+<histogram name="DefaultBrowser.SettingsInteraction.ConcludeReason"
+    enum="SettingsInteractionConcludeReason">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The reason why the default browser settings interaction concluded on Windows
+    10.
+  </summary>
+</histogram>
+
+<histogram name="DefaultBrowser.SettingsInteraction.RegistryWatcherDuration"
+    units="ms">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    The registry keys for the default browser protocols (http/https) are
+    monitored to know when the user finished interacting with the system
+    settings. This is how long it took for the last registry watcher to get
+    signaled.
   </summary>
 </histogram>
 
@@ -12372,7 +12438,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="ExtensionBlacklist.BlacklistInstalled"
     enum="ExtensionLocation">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>nparker@chromium.org</owner>
   <summary>
     The number of extensions that were blacklisted when already installed,
     grouped by Extension::Location. Logged when ExtensionService blackists and
@@ -12381,7 +12447,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="ExtensionBlacklist.BlockCRX" enum="ExtensionLocation">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>nparker@chromium.org</owner>
   <summary>
     The number of extensions that have been blocked from installing grouped by
     Extension::Location. Logged when ExtensionService refuses to install a
@@ -12390,7 +12456,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="ExtensionBlacklist.SilentInstall" enum="ExtensionLocation">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>nparker@chromium.org</owner>
   <summary>
     The number of extensions that have been silently installed in a blacklisted
     state, grouped by Extension::Location. Logged when ExtensionService installs
@@ -12402,7 +12468,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="ExtensionBlacklist.UnblacklistInstalled"
     enum="ExtensionLocation">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>nparker@chromium.org</owner>
   <summary>
     The number of extensions that were unblacklisted when installed, grouped by
     Extension::Location. Logged when ExtensionService unblacklists and loads a
@@ -21800,6 +21866,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Memory.Plugin" units="KB">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
@@ -21810,6 +21879,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Memory.PluginProcessCount">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
@@ -22212,6 +22284,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Memory.Swap.Plugin" units="KB">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
@@ -22441,11 +22516,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="MobileDownload.BytesDownloaded" units="KB">
+  <owner>qinmin@chromium.org</owner>
+  <summary>
+    Android: Records the total data downloaded by completion status.
+  </summary>
+</histogram>
+
 <histogram name="MobileDownload.DownloadResumption"
     enum="MobileDownloadResumption">
   <owner>qinmin@chromium.org</owner>
   <summary>
     Android: Records user interaction on the download resumption button.
+  </summary>
+</histogram>
+
+<histogram name="MobileDownload.DownloadTime" units="ms">
+  <owner>qinmin@chromium.org</owner>
+  <summary>
+    Android: Records the total time for a download by completion status.
   </summary>
 </histogram>
 
@@ -22455,6 +22544,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Android: Records the reason that Chrome fails to intercept a download and
     pass it to the Android DownloadManager.
+  </summary>
+</histogram>
+
+<histogram name="MobileDownload.InterruptionsCount">
+  <owner>qinmin@chromium.org</owner>
+  <summary>
+    Android: Records the total interruptions for a download by completion
+    status.
   </summary>
 </histogram>
 
@@ -28009,6 +28106,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The largest packet which the client received from the server during the
     session.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.StreamCloseErrorCodeClient.HandshakeConfirmed"
+    enum="QuicErrorCodes">
+  <owner>rch@chromium.org</owner>
+  <summary>
+    The QUIC error code which resulted in the stream (and connection) being
+    closed by the client after the handshake was confirmed.
+  </summary>
+</histogram>
+
+<histogram name="Net.QuicSession.StreamCloseErrorCodeServer.HandshakeConfirmed"
+    enum="QuicErrorCodes">
+  <owner>rch@chromium.org</owner>
+  <summary>
+    The QUIC error code which resulted in the stream (and connection) being
+    closed by the client after the handshake was confirmed.
   </summary>
 </histogram>
 
@@ -38397,6 +38512,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Plugin.NpapiRemovalInfobar.Removed.PluginGroup"
     enum="PluginGroup">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>wfh@chromium.org</owner>
   <summary>
     The plugin group of an NPAPI plugin that is no longer supported. Recorded
@@ -38407,6 +38525,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Plugin.NpapiRemovalInfobar.RemovedSoon.PluginGroup"
     enum="PluginGroup">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>wfh@chromium.org</owner>
   <summary>
     The plugin group of an NPAPI plugin that will be unsupported soon. Recorded
@@ -38416,6 +38537,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Plugin.NPAPIStatus" enum="NPAPIPluginStatus">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>wfh@chromium.org</owner>
   <summary>
     Records whether NPAPI plugins are supported by the platform, and if so,
@@ -38490,6 +38614,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Plugin.SyncMessageTime" units="ms">
+  <obsolete>
+    Deprecated due to NPAPI removal.
+  </obsolete>
   <owner>gab@chromium.org</owner>
   <summary>
     Roundtrip times for synchronous IPC calls from the renderer to NPAPI plugin
@@ -46488,6 +46615,34 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Search.ContextualSearchRecentScrollNotSeen" units="ms">
+  <owner>donnd@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The duration since a recent scroll when the results were not seen. Recorded
+    when the UX is hidden. Implemented for Android.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchRecentScrollSeen" units="ms">
+  <owner>donnd@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    The duration since a recent scroll when the results were seen. Recorded when
+    the UX is hidden. Implemented for Android.
+  </summary>
+</histogram>
+
+<histogram name="Search.ContextualSearchRecentScrollSuppression"
+    enum="ContextualSearchTapSuppression">
+  <owner>donnd@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Whether showing the Tap to Search UX in response to a Tap was suppressed by
+    a recent scroll. Implemented for Android.
+  </summary>
+</histogram>
+
 <histogram name="Search.ContextualSearchResolutionDuration" units="ms">
   <owner>donnd@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -51217,7 +51372,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Storage.Blob.Broken" units="BooleanBroken">
+<histogram name="Storage.Blob.Broken" enum="BooleanBroken">
   <owner>dmurph@chromium.org</owner>
   <summary>
     If a newly constructed blob is broken. See Storage.Blob.BrokenReason for a
@@ -51225,7 +51380,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Storage.Blob.BrokenReason" units="BlobBrokenReason">
+<histogram name="Storage.Blob.BrokenReason" enum="BlobBrokenReason">
   <owner>dmurph@chromium.org</owner>
   <summary>
     The reason a blob is broken, reported only for broken blobs upon
@@ -54952,7 +55107,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="UMA.LogUpload.Canceled.CellularConstraint">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>gayane@chromium.org</owner>
+  <summary>
+    Logs whether a log was not uploaded due to cellular log throttling logic.
+    Android only.
+  </summary>
+</histogram>
+
 <histogram name="UMA.LogUpload.ConnetionType" enum="NetworkConnectionType">
+  <obsolete>
+    Used for analyzing UMA log uploads on cellular connection, but necessary
+    after the analysis is finished.
+  </obsolete>
   <owner>asvitkine@chromium.org</owner>
   <owner>gayane@chromium.org</owner>
   <summary>
@@ -55147,6 +55315,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     would appear when a bogus XML tag is included, or the XML is not balanced
     and well structured.
   </details>
+</histogram>
+
+<histogram name="UMA.UnsentLogs.Dropped">
+  <owner>asvitkine@chromium.org</owner>
+  <owner>gayane@chromium.org</owner>
+  <summary>
+    Counter for number of UMA unsent logs removed from persistent storage.
+  </summary>
 </histogram>
 
 <histogram name="UMA.UploadCreation" enum="BooleanSuccess">
@@ -57650,6 +57826,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="WebCore.PreloadDelayMs" units="ms">
+  <obsolete>
+    Removed in April 2016, due to lack of use.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <summary>
     The delay between when the preload scanner discovers a resource on the
@@ -61456,7 +61635,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="114" label="RFH_INVALID_ORIGIN_ON_COMMIT"/>
   <int value="115" label="BDH_UUID_REGISTERED"/>
   <int value="116" label="BDH_CONSTRUCTION_FAILED"/>
-  <int value="117" label="BDH_INVALID_OPERATION"/>
+  <int value="117" label="BDH_INVALID_REFCOUNT_OPERATION"/>
+  <int value="118" label="BDH_INVALID_URL_OPERATION"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions" type="int">
@@ -64120,6 +64300,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="Would force a translation (if not disabled)"/>
 </enum>
 
+<enum name="ContextualSearchTapSuppression" type="int">
+  <int value="0" label="Tap suppressed"/>
+  <int value="1" label="Tap not suppressed"/>
+</enum>
+
 <enum name="CookieDeleteEquivalent" type="int">
   <int value="0"
       label="Attempt to delete an equivalent cookie during a set cookie
@@ -64832,13 +65017,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="DefaultBrowserInfoBarUserInteraction" type="int">
-  <int value="0" label="Start set as default">
+  <int value="0" label="Accept">
     The user clicked the &quot;Set as default&quot; button.
   </int>
-  <int value="1" label="Don't ask again">
-    The user doesn't want to be reminded again.
+  <int value="1" label="Cancel">
+    The user clicked the &quot;Don't ask again&quot; button.
   </int>
-  <int value="2" label="Ignore info bar">
+  <int value="2" label="Ignore">
     The user did not interact with the info bar.
   </int>
 </enum>
@@ -65055,9 +65240,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <enum name="DirectWriteFontLoaderType" type="int">
   <int value="0" label="File: system font directory"/>
-  <int value="1" label="File: sandbox whitelisted"/>
-  <int value="2" label="File: outside sandbox whitelist"/>
-  <int value="3" label="Other"/>
+  <int value="1" label="File: outside sandbox whitelist"/>
+  <int value="2" label="Non-file loader"/>
 </enum>
 
 <enum name="DirectWriteLoadFamilyResult" type="int">
@@ -66720,7 +66904,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="316"
       label="Configure the required domain name for remote access clients"/>
   <int value="317" label="ARC Enabled"/>
-  <int value="318" label="Configure ARC apps"/>
+  <int value="318" label="Configure ARC"/>
   <int value="319"
       label="Allow the auto launched with zero delay kiosk app to control
              ChromeOS version"/>
@@ -68650,6 +68834,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1112" label="INPUT_IME_HIDEWINDOW"/>
   <int value="1113" label="INPUTMETHODPRIVATE_SHOWINPUTVIEW"/>
   <int value="1114" label="WALLPAPERPRIVATE_RECORDWALLPAPERUMA"/>
+  <int value="1115" label="AUTOTESTPRIVATE_GETVISIBLENOTIFICATIONS"/>
+  <int value="1116" label="WEBRTCLOGGINGPRIVATE_STARTRTCEVENTLOGGING"/>
+  <int value="1117" label="WEBRTCLOGGINGPRIVATE_STOPRTCEVENTLOGGING"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -70575,6 +70762,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1294" label="FormValidationShowedMessage"/>
   <int value="1295" label="WebAnimationsEasingAsFunctionLinear"/>
   <int value="1296" label="WebAnimationsEasingAsFunctionOther"/>
+  <int value="1297" label="V8Document_Images_AttributeGetter"/>
+  <int value="1298" label="V8Document_Embeds_AttributeGetter"/>
+  <int value="1299" label="V8Document_Plugins_AttributeGetter"/>
+  <int value="1300" label="V8Document_Links_AttributeGetter"/>
+  <int value="1301" label="V8Document_Forms_AttributeGetter"/>
+  <int value="1302" label="V8Document_Scripts_AttributeGetter"/>
+  <int value="1303" label="V8Document_Anchors_AttributeGetter"/>
+  <int value="1304" label="V8Document_Applets_AttributeGetter"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -74799,6 +74994,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1172204005" label="enable-offline-auto-reload-visible-only"/>
   <int value="-1160026273" label="enable-web-notification-custom-layouts"/>
   <int value="-1159563774" label="enable-accessibility-script-injection"/>
+  <int value="-1151766565" label="enable-fullscreen-tab-detaching"/>
   <int value="-1137442543" label="enable-slimming-paint"/>
   <int value="-1136627751" label="ignore-autocomplete-off-autofill"/>
   <int value="-1136509631" label="ssl-interstitial-v1"/>
@@ -75446,6 +75642,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="12" label="Non-invertible transform"/>
   <int value="13" label="Page based scrolling"/>
   <int value="14" label="Animating scroll on main thread"/>
+  <int value="15" label="Has sticky position objects"/>
 </enum>
 
 <enum name="MakeChromeDefaultResult" type="int">
@@ -77736,6 +77933,11 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="11" label="Clicked on a tile."/>
   <int value="12" label="Clicked to other NTP pane."/>
   <int value="13" label="Other action"/>
+</enum>
+
+<enum name="NTPImpressionType" type="int">
+  <int value="0" label="regular NTP impression"/>
+  <int value="1" label="potential NTP impression - no open tab"/>
 </enum>
 
 <enum name="NtpMostVisitedScheme" type="int">
@@ -82623,6 +82825,15 @@ To add a new entry, add it with any value and run test to compute valid value.
   </int>
   <int value="7" label="No errors, not default">
     No errors were encountered yet Chrome is still not the default web client.
+  </int>
+</enum>
+
+<enum name="SettingsInteractionConcludeReason" type="int">
+  <int value="0" label="Registry watcher">
+    A change to the protocol registry key was detected.
+  </int>
+  <int value="1" label="Timeout">
+    The timer fired before a change to the protocol registry key was detected.
   </int>
 </enum>
 
@@ -87635,6 +87846,10 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Net.DailyContentLength"/>
   <affected-histogram name="Net.DailyContentLength_DataReductionProxyEnabled"/>
   <affected-histogram name="Net.DailyContentLength_ViaDataReductionProxy"/>
+  <affected-histogram
+      name="Net.DailyContentSavingPercent_DataReductionProxyEnabled"/>
+  <affected-histogram
+      name="Net.DailyContentSavingPercent_ViaDataReductionProxy"/>
   <affected-histogram name="Net.DailyOriginalContentLength"/>
   <affected-histogram
       name="Net.DailyOriginalContentLength_DataReductionProxyEnabled"/>
@@ -89018,6 +89233,30 @@ To add a new entry, add it with any value and run test to compute valid value.
              capabilities, between EnumerateDevices() and
              OnDevicesInfoEnumerated()."/>
   <affected-histogram name="Media.VideoCaptureManager"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="MobileDownloadBytesDownloadedTypes" separator=".">
+  <suffix name="ChromeNetworkStack.Failure"/>
+  <suffix name="ChromeNetworkStack.Success"/>
+  <suffix name="DownloadManager.Failure"/>
+  <suffix name="DownloadManager.Success"/>
+  <affected-histogram name="MobileDownload.BytesDownloaded"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="MobileDownloadDownloadTimeTypes" separator=".">
+  <suffix name="ChromeNetworkStack.Cancel"/>
+  <suffix name="ChromeNetworkStack.Failure"/>
+  <suffix name="ChromeNetworkStack.Success"/>
+  <suffix name="DownloadManager.Failure"/>
+  <suffix name="DownloadManager.Success"/>
+  <affected-histogram name="MobileDownload.DownloadTime"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="MobileDownloadInterruptionsCountTypes" separator=".">
+  <suffix name="ChromeNetworkStack.Cancel"/>
+  <suffix name="ChromeNetworkStack.Failure"/>
+  <suffix name="ChromeNetworkStack.Success"/>
+  <affected-histogram name="MobileDownload.InterruptionsCount"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="MobileFreSignInChoiceEntryType" separator=".">

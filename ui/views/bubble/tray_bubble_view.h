@@ -5,8 +5,9 @@
 #ifndef UI_VIEWS_BUBBLE_TRAY_BUBBLE_VIEW_H_
 #define UI_VIEWS_BUBBLE_TRAY_BUBBLE_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/views/bubble/bubble_delegate.h"
 #include "ui/views/mouse_watcher.h"
 #include "ui/views/views_export.h"
@@ -103,6 +104,10 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
     int max_height;
     bool can_activate;
     bool close_on_deactivate;
+    // When true the bubble starts event capture when it opens and closes itself
+    // on mouse events outside its bounds. Used on mus. Can be combined with
+    // close_on_deactivate. Defaults to false.
+    bool close_via_capture;
     SkColor arrow_color;
     bool first_item_has_no_margin;
     views::BubbleBorder::Arrow arrow;
@@ -161,6 +166,8 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   gfx::Size GetPreferredSize() const override;
   gfx::Size GetMaximumSize() const override;
   int GetHeightForWidth(int width) const override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnMouseCaptureLost() override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void GetAccessibleState(ui::AXViewState* state) override;
@@ -189,8 +196,8 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   // |bubble_border_| and |owned_bubble_border_| point to the same thing, but
   // the latter ensures we don't leak it before passing off ownership.
   internal::TrayBubbleBorder* bubble_border_;
-  scoped_ptr<views::BubbleBorder> owned_bubble_border_;
-  scoped_ptr<internal::TrayBubbleContentMask> bubble_content_mask_;
+  std::unique_ptr<views::BubbleBorder> owned_bubble_border_;
+  std::unique_ptr<internal::TrayBubbleContentMask> bubble_content_mask_;
   bool is_gesture_dragging_;
 
   // True once the mouse cursor was actively moved by the user over the bubble.
@@ -198,7 +205,7 @@ class VIEWS_EXPORT TrayBubbleView : public views::BubbleDelegateView,
   bool mouse_actively_entered_;
 
   // Used to find any mouse movements.
-  scoped_ptr<MouseWatcher> mouse_watcher_;
+  std::unique_ptr<MouseWatcher> mouse_watcher_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayBubbleView);
 };

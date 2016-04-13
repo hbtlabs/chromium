@@ -64,9 +64,6 @@ using namespace HTMLNames;
 
 HTMLFormElement::HTMLFormElement(Document& document)
     : HTMLElement(formTag, document)
-#if !ENABLE(OILPAN)
-    , m_weakPtrFactory(this)
-#endif
     , m_associatedElementsAreDirty(false)
     , m_imageElementsAreDirty(false)
     , m_hasElementsAssociatedByParser(false)
@@ -80,7 +77,7 @@ HTMLFormElement::HTMLFormElement(Document& document)
 {
 }
 
-RawPtr<HTMLFormElement> HTMLFormElement::create(Document& document)
+HTMLFormElement* HTMLFormElement::create(Document& document)
 {
     UseCounter::count(document, UseCounter::FormElement);
     return new HTMLFormElement(document);
@@ -88,12 +85,6 @@ RawPtr<HTMLFormElement> HTMLFormElement::create(Document& document)
 
 HTMLFormElement::~HTMLFormElement()
 {
-#if !ENABLE(OILPAN)
-    // With Oilpan, either removedFrom is called or the document and
-    // form controller are dead as well and there is no need to remove
-    // this form element from it.
-    document().formController().willDeleteForm(this);
-#endif
 }
 
 DEFINE_TRACE(HTMLFormElement)
@@ -189,9 +180,7 @@ void HTMLFormElement::removedFrom(ContainerNode* insertionPoint)
             notifyFormRemovedFromTree(images, root);
         }
     }
-#if ENABLE(OILPAN)
     document().formController().willDeleteForm(this);
-#endif
     HTMLElement::removedFrom(insertionPoint);
 }
 
@@ -280,7 +269,6 @@ bool HTMLFormElement::validateInteractively()
     // has !layoutObject()->needsLayout() assertion.
     document().updateLayoutIgnorePendingStylesheets();
 
-    RawPtr<HTMLFormElement> protector(this);
     // Focus on the first focusable control and show a validation message.
     for (unsigned i = 0; i < unhandledInvalidControls.size(); ++i) {
         HTMLFormControlElement* unhandled = unhandledInvalidControls[i].get();
@@ -306,7 +294,6 @@ bool HTMLFormElement::validateInteractively()
 
 void HTMLFormElement::prepareForSubmission(Event* event)
 {
-    RawPtr<HTMLFormElement> protector(this);
     LocalFrame* frame = document().frame();
     if (!frame || m_isSubmittingOrInUserJSSubmitEvent)
         return;
@@ -341,7 +328,7 @@ void HTMLFormElement::submitFromJavaScript()
     submit(0, false);
 }
 
-void HTMLFormElement::submitDialog(RawPtr<FormSubmission> formSubmission)
+void HTMLFormElement::submitDialog(FormSubmission* formSubmission)
 {
     for (Node* node = this; node; node = node->parentOrShadowHostNode()) {
         if (isHTMLDialogElement(*node)) {
@@ -365,7 +352,7 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
 
     m_isSubmittingOrInUserJSSubmitEvent = true;
 
-    RawPtr<HTMLFormControlElement> firstSuccessfulSubmitButton = nullptr;
+    HTMLFormControlElement* firstSuccessfulSubmitButton = nullptr;
     bool needButtonActivation = activateSubmitButton; // do we need to activate a submit button?
 
     const FormAssociatedElement::List& elements = associatedElements();
@@ -385,12 +372,12 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(true);
 
-    RawPtr<FormSubmission> formSubmission = FormSubmission::create(this, m_attributes, event);
+    FormSubmission* formSubmission = FormSubmission::create(this, m_attributes, event);
     EventQueueScope scopeForDialogClose; // Delay dispatching 'close' to dialog until done submitting.
     if (formSubmission->method() == FormSubmission::DialogMethod)
-        submitDialog(formSubmission.release());
+        submitDialog(formSubmission);
     else
-        scheduleFormSubmission(formSubmission.release());
+        scheduleFormSubmission(formSubmission);
 
     if (needButtonActivation && firstSuccessfulSubmitButton)
         firstSuccessfulSubmitButton->setActivatedSubmit(false);
@@ -399,7 +386,7 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
     m_isSubmittingOrInUserJSSubmitEvent = false;
 }
 
-void HTMLFormElement::scheduleFormSubmission(RawPtr<FormSubmission> submission)
+void HTMLFormElement::scheduleFormSubmission(FormSubmission* submission)
 {
     ASSERT(submission->method() == FormSubmission::PostMethod || submission->method() == FormSubmission::GetMethod);
     ASSERT(submission->data());
@@ -482,7 +469,7 @@ void HTMLFormElement::requestAutocomplete()
 
 void HTMLFormElement::finishRequestAutocomplete(AutocompleteResult result)
 {
-    RawPtr<Event> event = nullptr;
+    Event* event = nullptr;
     if (result == AutocompleteResultSuccess)
         event = Event::createBubble(EventTypeNames::autocomplete);
     else if (result == AutocompleteResultErrorDisabled)
@@ -495,7 +482,7 @@ void HTMLFormElement::finishRequestAutocomplete(AutocompleteResult result)
         ASSERT_NOT_REACHED();
 
     event->setTarget(this);
-    m_pendingAutocompleteEventsQueue->enqueueEvent(event.release());
+    m_pendingAutocompleteEventsQueue->enqueueEvent(event);
 }
 
 void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
@@ -563,13 +550,6 @@ void HTMLFormElement::disassociate(HTMLImageElement& e)
     removeFromPastNamesMap(e);
 }
 
-#if !ENABLE(OILPAN)
-WeakPtr<HTMLFormElement> HTMLFormElement::createWeakPtr()
-{
-    return m_weakPtrFactory.createWeakPtr();
-}
-#endif
-
 void HTMLFormElement::didAssociateByParser()
 {
     if (!m_didFinishParsingChildren)
@@ -578,7 +558,7 @@ void HTMLFormElement::didAssociateByParser()
     UseCounter::count(document(), UseCounter::FormAssociationByParser);
 }
 
-RawPtr<HTMLFormControlsCollection> HTMLFormElement::elements()
+HTMLFormControlsCollection* HTMLFormElement::elements()
 {
     return ensureCachedCollection<HTMLFormControlsCollection>(FormControls);
 }
@@ -687,7 +667,6 @@ bool HTMLFormElement::checkValidity()
 
 bool HTMLFormElement::checkInvalidControlsAndCollectUnhandled(HeapVector<Member<HTMLFormControlElement>>* unhandledInvalidControls, CheckValidityEventBehavior eventBehavior)
 {
-    RawPtr<HTMLFormElement> protector(this);
     // Copy associatedElements because event handlers called from
     // HTMLFormControlElement::checkValidity() might change associatedElements.
     const FormAssociatedElement::List& associatedElements = this->associatedElements();

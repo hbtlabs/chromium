@@ -5,11 +5,12 @@
 #include "device/usb/mojo/device_manager_impl.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "device/core/device_client.h"
 #include "device/usb/mojo/device_impl.h"
@@ -75,10 +76,9 @@ void DeviceManagerImpl::GetDevice(
   if (!device)
     return;
 
-  DeviceInfoPtr device_info = DeviceInfo::From(*device);
   if (permission_provider_ &&
-      permission_provider_->HasDevicePermission(*device_info)) {
-    new DeviceImpl(device, std::move(device_info), permission_provider_,
+      permission_provider_->HasDevicePermission(device)) {
+    new DeviceImpl(device, DeviceInfo::From(*device), permission_provider_,
                    std::move(device_request));
   }
 }
@@ -94,10 +94,9 @@ void DeviceManagerImpl::OnGetDevices(
   mojo::Array<DeviceInfoPtr> device_infos;
   for (const auto& device : devices) {
     if (filters.empty() || UsbDeviceFilter::MatchesAny(device, filters)) {
-      DeviceInfoPtr device_info = DeviceInfo::From(*device);
       if (permission_provider_ &&
-          permission_provider_->HasDevicePermission(*device_info)) {
-        device_infos.push_back(std::move(device_info));
+          permission_provider_->HasDevicePermission(device)) {
+        device_infos.push_back(DeviceInfo::From(*device));
       }
     }
   }
@@ -106,20 +105,18 @@ void DeviceManagerImpl::OnGetDevices(
 }
 
 void DeviceManagerImpl::OnDeviceAdded(scoped_refptr<UsbDevice> device) {
-  DeviceInfoPtr device_info = DeviceInfo::From(*device);
   if (permission_provider_ &&
-      permission_provider_->HasDevicePermission(*device_info)) {
-    devices_added_[device->guid()] = std::move(device_info);
+      permission_provider_->HasDevicePermission(device)) {
+    devices_added_[device->guid()] = DeviceInfo::From(*device);
     MaybeRunDeviceChangesCallback();
   }
 }
 
 void DeviceManagerImpl::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
   if (devices_added_.erase(device->guid()) == 0) {
-    DeviceInfoPtr device_info = DeviceInfo::From(*device);
     if (permission_provider_ &&
-        permission_provider_->HasDevicePermission(*device_info)) {
-      devices_removed_.push_back(std::move(device_info));
+        permission_provider_->HasDevicePermission(device)) {
+      devices_removed_.push_back(DeviceInfo::From(*device));
       MaybeRunDeviceChangesCallback();
     }
   }

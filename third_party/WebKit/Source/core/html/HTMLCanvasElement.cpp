@@ -151,10 +151,6 @@ DEFINE_NODE_FACTORY(HTMLCanvasElement)
 HTMLCanvasElement::~HTMLCanvasElement()
 {
     v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(-m_externallyAllocatedMemory);
-#if !ENABLE(OILPAN)
-    // Ensure these go away before the ImageBuffer.
-    m_context.clear();
-#endif
 }
 
 void HTMLCanvasElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
@@ -646,16 +642,12 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
     // imageData unref its data, which we still keep alive for the async toBlob thread
     ScopedDisposal<ImageData> disposer(imageData);
-    // Add a ref to keep image data alive until completion of encoding
-    RefPtr<DOMUint8ClampedArray> imageDataRef(imageData->data());
+    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback);
 
-    RefPtr<CanvasAsyncBlobCreator> asyncCreatorRef = CanvasAsyncBlobCreator::create(imageDataRef.release(), encodingMimeType, imageData->size(), callback);
-
-    if (encodingMimeType == DefaultMimeType) {
-        asyncCreatorRef->scheduleAsyncBlobCreation(true);
-    } else {
-        asyncCreatorRef->scheduleAsyncBlobCreation(false, quality);
-    }
+    if (encodingMimeType == DefaultMimeType)
+        asyncCreator->scheduleAsyncBlobCreation(true);
+    else
+        asyncCreator->scheduleAsyncBlobCreation(false, quality);
 }
 
 void HTMLCanvasElement::addListener(CanvasDrawListener* listener)

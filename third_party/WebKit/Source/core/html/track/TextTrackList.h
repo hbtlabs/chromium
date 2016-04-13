@@ -32,7 +32,6 @@
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -40,9 +39,8 @@ namespace blink {
 class GenericEventQueue;
 class TextTrack;
 
-class CORE_EXPORT TextTrackList final : public RefCountedGarbageCollectedEventTargetWithInlineData<TextTrackList> {
+class CORE_EXPORT TextTrackList final : public EventTargetWithInlineData {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(TextTrackList);
 public:
     static TextTrackList* create(HTMLMediaElement* owner)
     {
@@ -68,9 +66,6 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(change);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(removetrack);
 
-#if !ENABLE(OILPAN)
-    void clearOwner();
-#endif
     HTMLMediaElement* owner() const;
 
     void scheduleChangeEvent();

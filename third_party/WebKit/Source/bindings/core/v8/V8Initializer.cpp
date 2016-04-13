@@ -59,9 +59,9 @@
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "wtf/AddressSanitizer.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 #include <v8-debug.h>
 #include <v8-profiler.h>
 
@@ -132,6 +132,17 @@ static String extractMessageForConsole(v8::Isolate* isolate, v8::Local<v8::Value
     return emptyString();
 }
 
+static ErrorEvent* createErrorEventFromMesssage(ScriptState* scriptState, v8::Local<v8::Message> message, String resourceName)
+{
+    String errorMessage = toCoreStringWithNullCheck(message->Get());
+    int lineNumber = 0;
+    int columnNumber = 0;
+    if (v8Call(message->GetLineNumber(scriptState->context()), lineNumber)
+        && v8Call(message->GetStartColumn(scriptState->context()), columnNumber))
+        ++columnNumber;
+    return ErrorEvent::create(errorMessage, resourceName, lineNumber, columnNumber, &scriptState->world());
+}
+
 static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local<v8::Value> data)
 {
     ASSERT(isMainThread());
@@ -144,7 +155,7 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
 
     int scriptId = 0;
     RefPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
-    String resourceName = extractResourceName(message, enteredWindow->document());
+
     AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
     if (message->IsOpaque())
         accessControlStatus = OpaqueResource;
@@ -152,13 +163,9 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
         accessControlStatus = SharableCrossOrigin;
 
     ScriptState* scriptState = ScriptState::current(isolate);
-    String errorMessage = toCoreStringWithNullCheck(message->Get());
-    int lineNumber = 0;
-    int columnNumber = 0;
-    if (v8Call(message->GetLineNumber(scriptState->context()), lineNumber)
-        && v8Call(message->GetStartColumn(scriptState->context()), columnNumber))
-        ++columnNumber;
-    RawPtr<ErrorEvent> event = ErrorEvent::create(errorMessage, resourceName, lineNumber, columnNumber, &scriptState->world());
+
+    String resourceName = extractResourceName(message, enteredWindow->document());
+    ErrorEvent* event = createErrorEventFromMesssage(scriptState, message, resourceName);
 
     String messageForConsole = extractMessageForConsole(isolate, data);
     if (!messageForConsole.isEmpty())
@@ -169,7 +176,7 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
     // FIXME: Can we even get here during initialization now that we bail out when GetEntered returns an empty handle?
     LocalFrame* frame = enteredWindow->document()->frame();
     if (frame && frame->script().existingWindowProxy(scriptState->world())) {
-        V8ErrorHandler::storeExceptionOnErrorEventWrapper(scriptState, event.get(), data, scriptState->context()->Global());
+        V8ErrorHandler::storeExceptionOnErrorEventWrapper(scriptState, event, data, scriptState->context()->Global());
     }
 
     if (scriptState->world().isPrivateScriptIsolatedWorld()) {
@@ -180,9 +187,9 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
         // other isolated worlds (which means that the error events won't fire any event listeners
         // in user's scripts).
         EventDispatchForbiddenScope::AllowUserAgentEvents allowUserAgentEvents;
-        enteredWindow->document()->reportException(event.release(), scriptId, callStack, accessControlStatus);
+        enteredWindow->document()->reportException(event, scriptId, callStack, accessControlStatus);
     } else {
-        enteredWindow->document()->reportException(event.release(), scriptId, callStack, accessControlStatus);
+        enteredWindow->document()->reportException(event, scriptId, callStack, accessControlStatus);
     }
 }
 
@@ -421,24 +428,19 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message, v8::Local<v8:
     ScriptState* scriptState = ScriptState::current(isolate);
     // During the frame teardown, there may not be a valid context.
     if (ExecutionContext* context = scriptState->getExecutionContext()) {
-        String errorMessage = toCoreStringWithNullCheck(message->Get());
-        TOSTRING_VOID(V8StringResource<>, sourceURL, message->GetScriptOrigin().ResourceName());
+        TOSTRING_VOID(V8StringResource<>, resourceName, message->GetScriptOrigin().ResourceName());
+        ErrorEvent* event = createErrorEventFromMesssage(scriptState, message, resourceName);
+
         int scriptId = 0;
         RefPtr<ScriptCallStack> callStack = extractCallStack(isolate, message, &scriptId);
 
-        int lineNumber = 0;
-        int columnNumber = 0;
-        if (v8Call(message->GetLineNumber(scriptState->context()), lineNumber)
-            && v8Call(message->GetStartColumn(scriptState->context()), columnNumber))
-            ++columnNumber;
-        RawPtr<ErrorEvent> event = ErrorEvent::create(errorMessage, sourceURL, lineNumber, columnNumber, &DOMWrapperWorld::current(isolate));
         AccessControlStatus corsStatus = message->IsSharedCrossOrigin() ? SharableCrossOrigin : NotSharableCrossOrigin;
 
         // If execution termination has been triggered as part of constructing
         // the error event from the v8::Message, quietly leave.
         if (!isolate->IsExecutionTerminating()) {
-            V8ErrorHandler::storeExceptionOnErrorEventWrapper(scriptState, event.get(), data, scriptState->context()->Global());
-            context->reportException(event.release(), scriptId, callStack, corsStatus);
+            V8ErrorHandler::storeExceptionOnErrorEventWrapper(scriptState, event, data, scriptState->context()->Global());
+            context->reportException(event, scriptId, callStack, corsStatus);
         }
     }
 

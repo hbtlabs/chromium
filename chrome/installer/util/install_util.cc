@@ -12,13 +12,13 @@
 #include <shlwapi.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -271,13 +271,10 @@ void InstallUtil::GetCriticalUpdateVersion(BrowserDistribution* dist,
 }
 
 bool InstallUtil::IsOSSupported() {
-  // We do not support Win2K or older, or XP without service pack 2.
+  // We do not support anything prior to Windows 7.
   VLOG(1) << base::SysInfo::OperatingSystemName() << ' '
           << base::SysInfo::OperatingSystemVersion();
-  base::win::Version version = base::win::GetVersion();
-  return (version > base::win::VERSION_XP) ||
-      ((version == base::win::VERSION_XP) &&
-       (base::win::OSInfo::GetInstance()->service_pack().major >= 2));
+  return base::win::GetVersion() >= base::win::VERSION_WIN7;
 }
 
 void InstallUtil::AddInstallerResultItems(
@@ -364,7 +361,7 @@ void InstallUtil::UpdateInstallerStage(bool system_install,
 }
 
 bool InstallUtil::IsPerUserInstall(const base::FilePath& exe_path) {
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
 
   static const char kEnvProgramFilesPath[] = "CHROME_PROBED_PROGRAM_FILES_PATH";
   std::string env_program_files_path;

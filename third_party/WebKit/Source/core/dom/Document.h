@@ -209,13 +209,19 @@ enum DocumentClass {
     XMLDocumentClass = 1 << 6,
 };
 
+enum ShadowCascadeOrder {
+    ShadowCascadeNone,
+    ShadowCascadeV0,
+    ShadowCascadeV1
+};
+
 using DocumentClassFlags = unsigned char;
 
 class CORE_EXPORT Document : public ContainerNode, public TreeScope, public SecurityContext, public ExecutionContext, public Supplementable<Document>, public DocumentLifecycleNotifier {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(Document);
 public:
-    static RawPtr<Document> create(const DocumentInit& initializer = DocumentInit())
+    static Document* create(const DocumentInit& initializer = DocumentInit())
     {
         return new Document(initializer);
     }
@@ -266,7 +272,7 @@ public:
 
     String outgoingReferrer() const override;
 
-    void setDoctype(RawPtr<DocumentType>);
+    void setDoctype(DocumentType*);
     DocumentType* doctype() const { return m_docType.get(); }
 
     DOMImplementation& implementation();
@@ -281,21 +287,21 @@ public:
 
     Location* location() const;
 
-    RawPtr<Element> createElement(const AtomicString& name, ExceptionState&);
-    RawPtr<DocumentFragment> createDocumentFragment();
-    RawPtr<Text> createTextNode(const String& data);
-    RawPtr<Comment> createComment(const String& data);
-    RawPtr<CDATASection> createCDATASection(const String& data, ExceptionState&);
-    RawPtr<ProcessingInstruction> createProcessingInstruction(const String& target, const String& data, ExceptionState&);
-    RawPtr<Attr> createAttribute(const AtomicString& name, ExceptionState&);
-    RawPtr<Attr> createAttributeNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&, bool shouldIgnoreNamespaceChecks = false);
-    RawPtr<Node> importNode(Node* importedNode, bool deep, ExceptionState&);
-    RawPtr<Element> createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&);
-    RawPtr<Element> createElement(const QualifiedName&, bool createdByParser);
+    Element* createElement(const AtomicString& name, ExceptionState&);
+    DocumentFragment* createDocumentFragment();
+    Text* createTextNode(const String& data);
+    Comment* createComment(const String& data);
+    CDATASection* createCDATASection(const String& data, ExceptionState&);
+    ProcessingInstruction* createProcessingInstruction(const String& target, const String& data, ExceptionState&);
+    Attr* createAttribute(const AtomicString& name, ExceptionState&);
+    Attr* createAttributeNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&, bool shouldIgnoreNamespaceChecks = false);
+    Node* importNode(Node* importedNode, bool deep, ExceptionState&);
+    Element* createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&);
+    Element* createElement(const QualifiedName&, bool createdByParser);
 
     Element* elementFromPoint(int x, int y) const;
     HeapVector<Member<Element>> elementsFromPoint(int x, int y) const;
-    RawPtr<Range> caretRangeFromPoint(int x, int y);
+    Range* caretRangeFromPoint(int x, int y);
     Element* scrollingElement();
     VisualViewport* visualViewport();
 
@@ -334,20 +340,20 @@ public:
     bool hidden() const;
     void didChangeVisibilityState();
 
-    RawPtr<Node> adoptNode(RawPtr<Node> source, ExceptionState&);
+    Node* adoptNode(Node* source, ExceptionState&);
 
-    RawPtr<HTMLCollection> images();
-    RawPtr<HTMLCollection> embeds();
-    RawPtr<HTMLCollection> applets();
-    RawPtr<HTMLCollection> links();
-    RawPtr<HTMLCollection> forms();
-    RawPtr<HTMLCollection> anchors();
-    RawPtr<HTMLCollection> scripts();
-    RawPtr<HTMLAllCollection> allForBinding();
-    RawPtr<HTMLAllCollection> all();
+    HTMLCollection* images();
+    HTMLCollection* embeds();
+    HTMLCollection* applets();
+    HTMLCollection* links();
+    HTMLCollection* forms();
+    HTMLCollection* anchors();
+    HTMLCollection* scripts();
+    HTMLAllCollection* allForBinding();
+    HTMLAllCollection* all();
 
-    RawPtr<HTMLCollection> windowNamedItems(const AtomicString& name);
-    RawPtr<DocumentNameCollection> documentNamedItems(const AtomicString& name);
+    HTMLCollection* windowNamedItems(const AtomicString& name);
+    DocumentNameCollection* documentNamedItems(const AtomicString& name);
 
     bool isHTMLDocument() const { return m_documentClasses & HTMLDocumentClass; }
     bool isXHTMLDocument() const { return m_documentClasses & XHTMLDocumentClass; }
@@ -405,13 +411,13 @@ public:
 
     float devicePixelRatio() const;
 
-    RawPtr<Range> createRange();
+    Range* createRange();
 
-    RawPtr<NodeIterator> createNodeIterator(Node* root, unsigned whatToShow, RawPtr<NodeFilter>);
-    RawPtr<TreeWalker> createTreeWalker(Node* root, unsigned whatToShow, RawPtr<NodeFilter>);
+    NodeIterator* createNodeIterator(Node* root, unsigned whatToShow, NodeFilter*);
+    TreeWalker* createTreeWalker(Node* root, unsigned whatToShow, NodeFilter*);
 
     // Special support for editing
-    RawPtr<Text> createEditingTextNode(const String&);
+    Text* createEditingTextNode(const String&);
 
     void setupFontBuilder(ComputedStyle& documentStyle);
 
@@ -469,7 +475,7 @@ public:
     void open(Document* enteredDocument, ExceptionState&);
     // This is used internally and does not handle exceptions.
     void open();
-    RawPtr<DocumentParser> implicitOpen(ParserSynchronizationPolicy);
+    DocumentParser* implicitOpen(ParserSynchronizationPolicy);
 
     // This is the DOM API document.close()
     void close(ExceptionState&);
@@ -531,7 +537,7 @@ public:
 
     CSSStyleSheet& elementSheet();
 
-    virtual RawPtr<DocumentParser> createParser();
+    virtual DocumentParser* createParser();
     DocumentParser* parser() const { return m_parser.get(); }
     ScriptableDocumentParser* scriptableDocumentParser() const;
 
@@ -589,7 +595,7 @@ public:
     String selectedStylesheetSet() const;
     void setSelectedStylesheetSet(const String&);
 
-    bool setFocusedElement(RawPtr<Element>, const FocusParams&);
+    bool setFocusedElement(Element*, const FocusParams&);
     void clearFocusedElement();
     Element* focusedElement() const { return m_focusedElement.get(); }
     UserActionElementSet& userActionElements()  { return m_userActionElements; }
@@ -600,7 +606,7 @@ public:
     void setSequentialFocusNavigationStartingPoint(Node*);
     Element* sequentialFocusNavigationStartingPoint(WebFocusType) const;
 
-    void setActiveHoverElement(RawPtr<Element>);
+    void setActiveHoverElement(Element*);
     Element* activeHoverElement() const { return m_activeHoverElement.get(); }
 
     Node* hoverNode() const { return m_hoverNode.get(); }
@@ -649,11 +655,11 @@ public:
     LocalDOMWindow* domWindow() const { return m_domWindow; }
 
     // Helper functions for forwarding LocalDOMWindow event related tasks to the LocalDOMWindow if it exists.
-    void setWindowAttributeEventListener(const AtomicString& eventType, RawPtr<EventListener>);
+    void setWindowAttributeEventListener(const AtomicString& eventType, EventListener*);
     EventListener* getWindowAttributeEventListener(const AtomicString& eventType);
 
     static void registerEventFactory(PassOwnPtr<EventFactoryBase>);
-    static RawPtr<Event> createEvent(ExecutionContext*, const String& eventType, ExceptionState&);
+    static Event* createEvent(ExecutionContext*, const String& eventType, ExceptionState&);
 
     // keep track of what types of event listeners are registered, so we don't
     // dispatch events unnecessarily
@@ -754,7 +760,7 @@ public:
     // That is, the first body child of the document element.
     HTMLBodyElement* firstBodyElement() const;
 
-    void setBody(RawPtr<HTMLElement>, ExceptionState&);
+    void setBody(HTMLElement*, ExceptionState&);
 
     HTMLHeadElement* head() const;
 
@@ -783,13 +789,13 @@ public:
 
     Document* parentDocument() const;
     Document& topDocument() const;
-    RawPtr<Document> contextDocument();
+    Document* contextDocument();
 
     ScriptRunner* scriptRunner() { return m_scriptRunner.get(); }
 
     HTMLScriptElement* currentScript() const { return !m_currentScriptStack.isEmpty() ? m_currentScriptStack.last().get() : nullptr; }
     HTMLScriptElement* currentScriptForBinding() const;
-    void pushCurrentScript(RawPtr<HTMLScriptElement>);
+    void pushCurrentScript(HTMLScriptElement*);
     void popCurrentScript();
 
     void setTransformSource(PassOwnPtr<TransformSource>);
@@ -895,9 +901,9 @@ public:
 
     void enqueueResizeEvent();
     void enqueueScrollEventForNode(Node*);
-    void enqueueAnimationFrameEvent(RawPtr<Event>);
+    void enqueueAnimationFrameEvent(Event*);
     // Only one event for a target/event type combination will be dispatched per frame.
-    void enqueueUniqueAnimationFrameEvent(RawPtr<Event>);
+    void enqueueUniqueAnimationFrameEvent(Event*);
     void enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryListListener>>&);
     void enqueueVisualViewportChangedEvent();
 
@@ -916,8 +922,8 @@ public:
     bool isDelayingLoadEvent();
     void loadPluginsSoon();
 
-    RawPtr<Touch> createTouch(DOMWindow*, EventTarget*, int identifier, double pageX, double pageY, double screenX, double screenY, double radiusX, double radiusY, float rotationAngle, float force) const;
-    RawPtr<TouchList> createTouchList(HeapVector<Member<Touch>>&) const;
+    Touch* createTouch(DOMWindow*, EventTarget*, int identifier, double pageX, double pageY, double screenX, double screenY, double radiusX, double radiusY, float rotationAngle, float force) const;
+    TouchList* createTouchList(HeapVector<Member<Touch>>&) const;
 
     const DocumentTiming& timing() const { return m_documentTiming; }
 
@@ -933,12 +939,12 @@ public:
 
     void initDNSPrefetch();
 
-    bool isInDocumentWrite() { return m_writeRecursionDepth > 0; }
+    bool isInDocumentWrite() const { return m_writeRecursionDepth > 0; }
 
     TextAutosizer* textAutosizer();
 
-    RawPtr<Element> createElement(const AtomicString& localName, const AtomicString& typeExtension, ExceptionState&);
-    RawPtr<Element> createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& typeExtension, ExceptionState&);
+    Element* createElement(const AtomicString& localName, const AtomicString& typeExtension, ExceptionState&);
+    Element* createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& typeExtension, ExceptionState&);
     ScriptValue registerElement(ScriptState*, const AtomicString& name, const ElementRegistrationOptions&, ExceptionState&, CustomElement::NameSet validNames = CustomElement::StandardNames);
     CustomElementRegistrationContext* registrationContext() { return m_registrationContext.get(); }
     CustomElementMicrotaskRunQueue* customElementMicrotaskRunQueue();
@@ -985,7 +991,7 @@ public:
     void didAssociateFormControl(Element*);
     void removeFormAssociation(Element*);
 
-    void addConsoleMessage(RawPtr<ConsoleMessage>) final;
+    void addConsoleMessage(ConsoleMessage*) final;
 
     LocalDOMWindow* executingWindow() final;
     LocalFrame* executingFrame();
@@ -1058,6 +1064,11 @@ public:
 
     void enforceStrictMixedContentChecking();
 
+    bool mayContainV0Shadow() const { return m_mayContainV0Shadow; }
+
+    ShadowCascadeOrder shadowCascadeOrder() const { return m_shadowCascadeOrder; }
+    void setShadowCascadeOrder(ShadowCascadeOrder);
+
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
 
@@ -1069,9 +1080,9 @@ protected:
     void dispose() override;
 #endif
 
-    virtual RawPtr<Document> cloneDocumentWithoutChildren();
+    virtual Document* cloneDocumentWithoutChildren();
 
-    bool importContainerNodeChildren(ContainerNode* oldContainerNode, RawPtr<ContainerNode> newContainerNode, ExceptionState&);
+    bool importContainerNodeChildren(ContainerNode* oldContainerNode, ContainerNode* newContainerNode, ExceptionState&);
     void lockCompatibilityMode() { m_compatibilityModeLocked = true; }
     ParserSynchronizationPolicy getParserSynchronizationPolicy() const { return m_parserSyncPolicy; }
 
@@ -1115,9 +1126,11 @@ private:
     String nodeName() const final;
     NodeType getNodeType() const final;
     bool childTypeAllowed(NodeType) const final;
-    RawPtr<Node> cloneNode(bool deep) final;
+    Node* cloneNode(bool deep) final;
     void cloneDataFromDocument(const Document&);
     bool isSecureContextImpl(String* errorMessage, const SecureContextCheck priviligeContextCheck) const;
+
+    ShadowCascadeOrder m_shadowCascadeOrder = ShadowCascadeNone;
 
 #if !ENABLE(OILPAN)
     void refExecutionContext() final { ref(); }
@@ -1149,7 +1162,7 @@ private:
     bool haveStylesheetsLoaded() const;
     void styleResolverMayHaveChanged();
 
-    void setHoverNode(RawPtr<Node>);
+    void setHoverNode(Node*);
 
     using EventFactorySet = HashSet<OwnPtr<EventFactoryBase>>;
     static EventFactorySet& eventFactories();
@@ -1395,6 +1408,8 @@ private:
     Member<NodeIntersectionObserverData> m_intersectionObserverData;
 
     int m_nodeCount;
+
+    bool m_mayContainV0Shadow = false;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

@@ -26,6 +26,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_control_list_jsons.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
@@ -48,6 +49,9 @@
 #if defined(OS_ANDROID)
 #include "ui/gfx/android/device_display_info.h"
 #endif  // OS_ANDROID
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+#include "content/common/mojo/mojo_shell_connection_impl.h"
+#endif
 
 namespace content {
 
@@ -250,6 +254,16 @@ enum BlockStatusHistogram {
   BLOCK_STATUS_ALL_DOMAINS_BLOCKED,
   BLOCK_STATUS_MAX
 };
+
+bool ShouldDisableHardwareAcceleration() {
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+  // TODO(rjkroege): Remove this when https://crbug.com/602519 is fixed.
+  if (IsRunningInMojoShell())
+    return true;
+#endif
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableGpu);
+}
 
 }  // namespace anonymous
 
@@ -556,7 +570,7 @@ void GpuDataManagerImplPrivate::Initialize() {
   if (command_line->HasSwitch(switches::kSingleProcess) ||
       command_line->HasSwitch(switches::kInProcessGPU)) {
     command_line->AppendSwitch(switches::kDisableGpuWatchdog);
-    AppendGpuCommandLine(command_line);
+    AppendGpuCommandLine(command_line, nullptr);
   }
 }
 
@@ -654,7 +668,8 @@ void GpuDataManagerImplPrivate::AppendRendererCommandLine(
 }
 
 void GpuDataManagerImplPrivate::AppendGpuCommandLine(
-    base::CommandLine* command_line) const {
+    base::CommandLine* command_line,
+    gpu::GpuPreferences* gpu_preferences) const {
   DCHECK(command_line);
 
   std::string use_gl =
@@ -698,12 +713,20 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   }
 
   if (ShouldDisableAcceleratedVideoDecode(command_line)) {
-    command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
+    if (gpu_preferences) {
+      gpu_preferences->disable_accelerated_video_decode = true;
+    } else {
+      command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
+    }
   }
 #if defined(ENABLE_WEBRTC)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
       !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding)) {
-    command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
+    if (gpu_preferences) {
+      gpu_preferences->disable_web_rtc_hw_encoding = true;
+    } else {
+      command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
+    }
   }
 #endif
 
@@ -913,7 +936,7 @@ bool GpuDataManagerImplPrivate::ShouldDisableAcceleratedVideoDecode(
     return true;
 
   // Accelerated decode is never available with --disable-gpu.
-  return command_line->HasSwitch(switches::kDisableGpu);
+  return ShouldDisableHardwareAcceleration();
 }
 
 void GpuDataManagerImplPrivate::GetDisabledExtensions(
@@ -974,7 +997,7 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
   swiftshader_path_ =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
           switches::kSwiftShaderPath);
-  if (command_line->HasSwitch(switches::kDisableGpu))
+  if (ShouldDisableHardwareAcceleration())
     DisableHardwareAcceleration();
 
 #if defined(OS_MACOSX)

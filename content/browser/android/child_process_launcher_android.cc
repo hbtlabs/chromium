@@ -137,7 +137,7 @@ void StartDownloadProcessIfNecessary() {
 
   const base::CommandLine browser_command_line =
       *base::CommandLine::ForCurrentProcess();
-  static const char* kForwardSwitches[] = {
+  static const char* const kForwardSwitches[] = {
       switches::kDisableLogging,
       switches::kEnableLogging,
       switches::kLoggingLevel,
@@ -245,6 +245,13 @@ void UnregisterViewSurface(int surface_id) {
   JNIEnv* env = AttachCurrentThread();
   DCHECK(env);
   Java_ChildProcessLauncher_unregisterViewSurface(env, surface_id);
+}
+
+gfx::ScopedJavaSurface GetViewSurface(int surface_id) {
+  JNIEnv* env = AttachCurrentThread();
+  DCHECK(env);
+  return gfx::ScopedJavaSurface::AcquireExternalSurface(
+      Java_ChildProcessLauncher_getViewSurface(env, surface_id).obj());
 }
 
 void CreateSurfaceTextureSurface(int surface_texture_id,

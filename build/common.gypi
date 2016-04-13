@@ -265,11 +265,6 @@
             'enable_topchrome_md%': 1,
           }],
 
-          # On iOS, use NSS rather than OpenSSL. See http://crbug.com/338886.
-          ['OS=="ios"', {
-            'use_openssl%': 0,
-          }],
-
           # Enable App Launcher everywhere but mobile.
           ['OS!="ios" and OS!="android"', {
             'enable_app_list%': 1,
@@ -1065,18 +1060,23 @@
           # http://crbug.com/574476
           'fastbuild%': 2,
         }],
-
-        # Enable crash reporting via Kasko.
+        # Enable hang report capture. Capture can only be enabled for 32bit
+        # Windows.
         ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
-          # This needs to be enabled with kasko_hang_reports.
-          'kasko%': 0,
+          # Enable hang reports from the watcher process.
+          'kasko_hang_reports%': 0,
+          # Enable failed rendez-vous reports.
+          'kasko_failed_rdv_reports%': 0,
         }, {
-          'kasko%': 0,
+          # Enable hang reports from the watcher process.
+          'kasko_hang_reports%': 0,
+          # Enable failed rendez-vous reports.
+          'kasko_failed_rdv_reports%': 0,
         }],
       ],
 
-      # Enable hang reports in Kasko. Requires Kasko to be enabled.
-      'kasko_hang_reports%': 0,
+      # Kasko reporting is disabled by default, but may get enabled below.
+      'kasko%': 0,
 
       # Setting this to '0' will cause V8's startup snapshot to be
       # embedded in the binary instead of being a external files.
@@ -1228,6 +1228,7 @@
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
     'kasko_hang_reports%': '<(kasko_hang_reports)',
+    'kasko_failed_rdv_reports%': '<(kasko_failed_rdv_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -2023,10 +2024,15 @@
           }, {
             'win_console_app%': 0,
           }],
+          # Disable hang reporting for syzyasan builds.
           ['syzyasan==1', {
-            'kasko%': 1,
-            # Disable hang reports for SyzyASAN builds.
+            # Note: override.
             'kasko_hang_reports': 0,
+            'kasko_failed_rdv_reports': 0,
+          }],
+          # Enable the Kasko reporter for syzyasan builds and hang reporting.
+          ['syzyasan==1 or kasko_hang_reports==1 or kasko_failed_rdv_reports==1', {
+            'kasko': 1,
           }],
           ['component=="shared_library" and "<(GENERATOR)"=="ninja"', {
             # Only enabled by default for ninja because it's buggy in VS.
@@ -2260,7 +2266,7 @@
         'use_allocator%': 'none',
         'use_sanitizer_options%': 1,
       }],
-      ['OS=="linux" and asan==0 and msan==0 and lsan==0 and tsan==0 and build_for_tool==""', {
+      ['(OS=="linux" or OS=="android") and asan==0 and msan==0 and lsan==0 and tsan==0 and build_for_tool==""', {
         'use_experimental_allocator_shim%': 1,
       }],
       ['OS=="linux" and asan==0 and msan==0 and lsan==0 and tsan==0', {
@@ -3213,6 +3219,9 @@
           'VCCLCompilerTool': {
             'AdditionalOptions': [
               '/bigobj',
+              # Tell the compiler to crash on failures. This is undocumented
+              # and unsupported but very handy.
+              '/d2FastFail',
             ],
           },
           'VCLinkerTool': {
@@ -5190,7 +5199,6 @@
           # These should end with %, but there seems to be a bug with % in
           # variables that are intended to be set to different values in
           # different targets, like these.
-          'mac_pie': 1,        # Most executables can be position-independent.
           # Strip debugging symbols from the target.
           'mac_strip': '<(mac_strip_release)',
           'conditions': [
@@ -5283,55 +5291,14 @@
             ],
           }],
           ['_type=="executable"', {
-            'postbuilds': [
-              {
-                # Arranges for data (heap) pages to be protected against
-                # code execution when running on Mac OS X 10.7 ("Lion"), and
-                # ensures that the position-independent executable (PIE) bit
-                # is set for ASLR when running on Mac OS X 10.5 ("Leopard").
-                'variables': {
-                  # Define change_mach_o_flags in a variable ending in _path
-                  # so that GYP understands it's a path and performs proper
-                  # relativization during dict merging.
-                  'change_mach_o_flags_path':
-                      'mac/change_mach_o_flags_from_xcode.sh',
-                  'change_mach_o_flags_options%': [
-                  ],
-                  'target_conditions': [
-                    ['mac_pie==0 or release_valgrind_build==1', {
-                      # Don't enable PIE if it's unwanted. It's unwanted if
-                      # the target specifies mac_pie=0 or if building for
-                      # Valgrind, because Valgrind doesn't understand slide.
-                      # See the similar mac_pie/release_valgrind_build check
-                      # below.
-                      'change_mach_o_flags_options': [
-                        '--no-pie',
-                      ],
-                    }],
-                  ],
-                },
-                'postbuild_name': 'Change Mach-O Flags',
-                'action': [
-                  '<(change_mach_o_flags_path)',
-                  '>@(change_mach_o_flags_options)',
-                ],
-              },
-            ],
-            'target_conditions': [
-              ['mac_pie==1 and release_valgrind_build==0', {
-                # Turn on position-independence (ASLR) for executables. When
-                # PIE is on for the Chrome executables, the framework will
-                # also be subject to ASLR.
-                # Don't do this when building for Valgrind, because Valgrind
-                # doesn't understand slide. TODO: Make Valgrind on Mac OS X
-                # understand slide, and get rid of the Valgrind check.
-                'xcode_settings': {
-                  'OTHER_LDFLAGS': [
-                    '-Wl,-pie',  # Position-independent executable (MH_PIE)
-                  ],
-                },
-              }],
-            ],
+            # Turn on position-independence (ASLR) for executables. When
+            # PIE is on for the Chrome executables, the framework will
+            # also be subject to ASLR.
+            'xcode_settings': {
+              'OTHER_LDFLAGS': [
+                '-Wl,-pie',  # Position-independent executable (MH_PIE)
+              ],
+            },
           }],
           ['(_type=="executable" or _type=="shared_library" or \
              _type=="loadable_module") and mac_strip!=0', {
@@ -5709,10 +5676,11 @@
           # 2015 64-bit warning for integer to larger pointer
           4312,
 
-          # TODO(brucedawson): http://crbug.com/593448 4334 is a 'suspicious
-          # shift' warning and 4595 is an 'illegal inline operator new' warning
-          # Both are new in VS 2015 Update 2 and can safely be deferred for now.
-          4334, 4595,
+          # TODO(brucedawson): http://crbug.com/593448 - C4595 is an 'illegal
+          # inline operator new' warning that is new in VS 2015 Update 2.
+          # This is equivalent to clang's no-inline-new-delete warning.
+          # See http://bugs.icu-project.org/trac/ticket/11122
+          4595,
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {

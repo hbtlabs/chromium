@@ -96,12 +96,12 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
-#include "public/platform/callback/WebClosure.h"
-#include "wtf/ArrayBufferContents.h"
+#include "public/platform/functional/WebFunction.h"
 #include "wtf/Functional.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringUTF8Adaptor.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 
 namespace blink {
 
@@ -204,15 +204,10 @@ void WebGLRenderingContextBase::removeFromEvictedList(WebGLRenderingContextBase*
 
 void WebGLRenderingContextBase::willDestroyContext(WebGLRenderingContextBase* context)
 {
-#if ENABLE(OILPAN)
     // These two sets keep weak references to their contexts;
     // verify that the GC already removed the |context| entries.
     ASSERT(!forciblyEvictedContexts().contains(context));
     ASSERT(!activeContexts().contains(context));
-#else
-    removeFromEvictedList(context);
-    deactivateContext(context);
-#endif
 
     // Try to re-enable the oldest inactive contexts.
     while (activeContexts().size() < maxGLActiveContexts && forciblyEvictedContexts().size()) {
@@ -484,34 +479,6 @@ public:
     }
 
 private:
-    Member<WebGLRenderingContextBase> m_context;
-};
-
-class WebGLRenderingContextErrorMessageCallback final : public GarbageCollectedFinalized<WebGLRenderingContextErrorMessageCallback>, public WebGraphicsContext3D::WebGraphicsErrorMessageCallback {
-public:
-    static WebGLRenderingContextErrorMessageCallback* create(WebGLRenderingContextBase* context)
-    {
-        return new WebGLRenderingContextErrorMessageCallback(context);
-    }
-
-    ~WebGLRenderingContextErrorMessageCallback() override { }
-
-    virtual void onErrorMessage(const WebString& message, GLint)
-    {
-        if (m_context->m_synthesizedErrorsToConsole)
-            m_context->printGLErrorToConsole(message);
-        InspectorInstrumentation::didFireWebGLErrorOrWarning(m_context->canvas(), message);
-    }
-
-    DEFINE_INLINE_TRACE()
-    {
-        visitor->trace(m_context);
-    }
-
-private:
-    explicit WebGLRenderingContextErrorMessageCallback(WebGLRenderingContextBase* context)
-        : m_context(context) { }
-
     Member<WebGLRenderingContextBase> m_context;
 };
 
@@ -836,9 +803,6 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(HTMLCanvasElement* passedCa
     , m_isOESTextureHalfFloatFormatsTypesAdded(false)
     , m_isWebGLDepthTextureFormatsTypesAdded(false)
     , m_isEXTsRGBFormatsTypesAdded(false)
-#if !ENABLE(OILPAN)
-    , m_weakPtrFactory(this)
-#endif
 {
     ASSERT(contextProvider);
 
@@ -971,10 +935,16 @@ void WebGLRenderingContextBase::initializeNewContext()
     contextGL()->Viewport(0, 0, drawingBufferWidth(), drawingBufferHeight());
     contextGL()->Scissor(0, 0, drawingBufferWidth(), drawingBufferHeight());
 
-    m_errorMessageCallbackAdapter = WebGLRenderingContextErrorMessageCallback::create(this);
-
-    drawingBuffer()->contextProvider()->setLostContextCallback(WebClosure(WTF::bind(&WebGLRenderingContextBase::forceLostContext, createWeakThisPointer(), WebGLRenderingContextBase::RealLostContext, WebGLRenderingContextBase::Auto)));
-    webContext()->setErrorMessageCallback(m_errorMessageCallbackAdapter.get());
+    drawingBuffer()->contextProvider()->setLostContextCallback(
+        WebClosure(bind(
+            &WebGLRenderingContextBase::forceLostContext,
+            createWeakThisPointer(),
+            WebGLRenderingContextBase::RealLostContext,
+            WebGLRenderingContextBase::Auto)));
+    drawingBuffer()->contextProvider()->setErrorMessageCallback(
+        WebFunction<void(const char*, int32_t)>(bind<const char*, int32_t>(
+            &WebGLRenderingContextBase::onErrorMessage,
+            createWeakThisPointer())));
 
     // If WebGL 2, the PRIMITIVE_RESTART_FIXED_INDEX should be always enabled.
     // See the section <Primitive Restart is Always Enabled> in WebGL 2 spec:
@@ -1083,7 +1053,7 @@ void WebGLRenderingContextBase::destroyContext()
     m_extensionsUtil.clear();
 
     drawingBuffer()->contextProvider()->setLostContextCallback(WebClosure());
-    webContext()->setErrorMessageCallback(nullptr);
+    drawingBuffer()->contextProvider()->setErrorMessageCallback(WebFunction<void(const char*, int32_t)>());
 
     ASSERT(drawingBuffer());
     m_drawingBuffer->beginDestruction();
@@ -1108,6 +1078,13 @@ void WebGLRenderingContextBase::markContextChanged(ContentChangeType changeType)
             canvas()->didDraw(FloatRect(FloatPoint(0, 0), FloatSize(clampedCanvasSize())));
         }
     }
+}
+
+void WebGLRenderingContextBase::onErrorMessage(const char* message, int32_t id)
+{
+    if (m_synthesizedErrorsToConsole)
+        printGLErrorToConsole(message);
+    InspectorInstrumentation::didFireWebGLErrorOrWarning(canvas(), message);
 }
 
 void WebGLRenderingContextBase::notifyCanvasContextChanged()
@@ -1251,7 +1228,7 @@ ImageData* WebGLRenderingContextBase::paintRenderingResultsToImageData(SourceDra
     WTF::ArrayBufferContents contents;
     if (!drawingBuffer()->paintRenderingResultsToImageData(width, height, sourceBuffer, contents))
         return nullptr;
-    RefPtr<DOMArrayBuffer> imageDataPixels = DOMArrayBuffer::create(contents);
+    DOMArrayBuffer* imageDataPixels = DOMArrayBuffer::create(contents);
 
     return ImageData::create(
         IntSize(width, height),
@@ -6264,7 +6241,6 @@ DEFINE_TRACE(WebGLRenderingContextBase::TextureUnitState)
 DEFINE_TRACE(WebGLRenderingContextBase)
 {
     visitor->trace(m_contextObjects);
-    visitor->trace(m_errorMessageCallbackAdapter);
     visitor->trace(m_boundArrayBuffer);
     visitor->trace(m_defaultVertexArrayObject);
     visitor->trace(m_boundVertexArrayObject);

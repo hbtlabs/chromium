@@ -464,7 +464,7 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::refObject, {{v8_class}}::derefObject, {{v8_class}}::trace, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject, {{v8_class}}::installConditionallyEnabledProperties, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}}, WrapperTypeInfo::{{gc_type}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject, {{v8_class}}::installConditionallyEnabledProperties, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -764,11 +764,11 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
     // copying.
     v8::{{interface_name}}::Contents v8Contents = v8buffer->Externalize();
     WTF::ArrayBufferContents contents(v8Contents.Data(), v8Contents.ByteLength(), WTF::ArrayBufferContents::{% if interface_name == 'ArrayBuffer' %}Not{% endif %}Shared);
-    RefPtr<{{cpp_class}}> buffer = {{cpp_class}}::create(contents);
+    {{cpp_class}}* buffer = {{cpp_class}}::create(contents);
     v8::Local<v8::Object> associatedWrapper = buffer->associateWithWrapper(v8::Isolate::GetCurrent(), buffer->wrapperTypeInfo(), object);
     ASSERT_UNUSED(associatedWrapper, associatedWrapper == object);
 
-    return buffer.get();
+    return buffer;
 }
 
 {% elif interface_name == 'ArrayBufferView' %}
@@ -814,7 +814,7 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
 
     v8::Local<v8::{{interface_name}}> v8View = object.As<v8::{{interface_name}}>();
     v8::Local<v8::Object> arrayBuffer = v8View->Buffer();
-    RefPtr<{{cpp_class}}> typedArray;
+    {{cpp_class}}* typedArray = nullptr;
     if (arrayBuffer->IsArrayBuffer()) {
         typedArray = {{cpp_class}}::create(V8ArrayBuffer::toImpl(arrayBuffer), v8View->ByteOffset(), v8View->{% if interface_name == 'DataView' %}Byte{% endif %}Length());
     } else if (arrayBuffer->IsSharedArrayBuffer()) {
@@ -919,24 +919,6 @@ ActiveScriptWrappable* {{v8_class}}::toActiveScriptWrappable(v8::Local<v8::Objec
 {% endif %}
 {% endblock %}
 
-
-{##############################################################################}
-{% block ref_object_and_deref_object %}
-void {{v8_class}}::refObject(ScriptWrappable* scriptWrappable)
-{
-{% if gc_type == 'RefCountedObject' %}
-    scriptWrappable->toImpl<{{cpp_class}}>()->ref();
-{% endif %}
-}
-
-void {{v8_class}}::derefObject(ScriptWrappable* scriptWrappable)
-{
-{% if gc_type == 'RefCountedObject' %}
-    scriptWrappable->toImpl<{{cpp_class}}>()->deref();
-{% endif %}
-}
-
-{% endblock %}
 
 {##############################################################################}
 {% block partial_interface %}

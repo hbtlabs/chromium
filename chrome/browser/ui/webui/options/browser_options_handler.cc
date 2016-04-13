@@ -436,6 +436,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TOUCHPAD_TAP_DRAGGING_DESCRIPTION },
     { "accessibilityVirtualKeyboard",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION },
+    { "accessibilityMonoAudio",
+      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MONO_AUDIO_DESCRIPTION},
     { "androidAppsTitle", IDS_OPTIONS_ARC_TITLE },
     { "androidAppsEnabled", IDS_OPTIONS_ARC_ENABLE },
     { "autoclickDelayExtremelyShort",
@@ -1157,11 +1159,10 @@ void BrowserOptionsHandler::OnDefaultBrowserWorkerFinished(
     // default browser.
     chrome::ResetDefaultBrowserPrompt(Profile::FromWebUI(web_ui()));
   } else if (state == shell_integration::NOT_DEFAULT) {
-    if (shell_integration::CanSetAsDefaultBrowser() ==
-        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
-      status_string_id = IDS_OPTIONS_DEFAULTBROWSER_SXS;
-    } else {
+    if (shell_integration::CanSetAsDefaultBrowser()) {
       status_string_id = IDS_OPTIONS_DEFAULTBROWSER_NOTDEFAULT;
+    } else {
+      status_string_id = IDS_OPTIONS_DEFAULTBROWSER_SXS;
     }
   } else if (state == shell_integration::UNKNOWN_DEFAULT) {
     status_string_id = IDS_OPTIONS_DEFAULTBROWSER_UNKNOWN;

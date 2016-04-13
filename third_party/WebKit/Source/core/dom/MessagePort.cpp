@@ -210,9 +210,9 @@ void MessagePort::dispatchMessages()
             return;
 
         MessagePortArray* ports = MessagePort::entanglePorts(*getExecutionContext(), channels.release());
-        RawPtr<Event> evt = MessageEvent::create(ports, message.release());
+        Event* evt = MessageEvent::create(ports, message.release());
 
-        dispatchEvent(evt.release());
+        dispatchEvent(evt);
     }
 }
 
@@ -276,7 +276,7 @@ MessagePortArray* MessagePort::entanglePorts(ExecutionContext& context, PassOwnP
 DEFINE_TRACE(MessagePort)
 {
     ActiveDOMObject::trace(visitor);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MessagePort>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
 }
 
 v8::Isolate* MessagePort::scriptIsolate()

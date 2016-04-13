@@ -742,6 +742,9 @@ INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSizeTest, testing::Bool());
 class WebViewVisibilityTest : public WebViewTest {};
 INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewVisibilityTest, testing::Bool());
 
+class WebViewSpeechAPITest : public WebViewTest {};
+INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSpeechAPITest, testing::Bool());
+
 // The following test suits are created to group tests based on specific
 // features of <webview>.
 // These features current would not work with
@@ -752,10 +755,6 @@ INSTANTIATE_TEST_CASE_P(WebViewTests,
                         WebViewAccessibilityTest,
                         testing::Values(false));
 
-class WebViewSpeechAPITest : public WebViewTest {};
-INSTANTIATE_TEST_CASE_P(WebViewTests,
-                        WebViewSpeechAPITest,
-                        testing::Values(false));
 
 class WebViewDPITest : public WebViewTest {
  protected:
@@ -1981,10 +1980,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ScreenCoordinates) {
 
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_P(WebViewTest, ChromeVoxInjection) {
-  // TODO(lfg): https://crbug.com/583071
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
-    return;
-
   EXPECT_FALSE(
       chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 

@@ -52,15 +52,28 @@ void updateLayoutAttributes(LayoutSVGInlineText& text, unsigned& valueListPositi
 
 } // namespace
 
-SVGTextLayoutAttributesBuilder::SVGTextLayoutAttributesBuilder()
-    : m_characterCount(0)
+SVGTextLayoutAttributesBuilder::SVGTextLayoutAttributesBuilder(LayoutSVGText& textRoot)
+    : m_textRoot(textRoot)
+    , m_characterCount(0)
 {
 }
 
-void SVGTextLayoutAttributesBuilder::buildLayoutAttributes(LayoutSVGText& textRoot) const
+void SVGTextLayoutAttributesBuilder::buildLayoutAttributes()
 {
+    m_characterDataMap.clear();
+
+    if (m_textPositions.isEmpty()) {
+        m_characterCount = 0;
+        collectTextPositioningElements(m_textRoot);
+    }
+
+    if (!m_characterCount)
+        return;
+
+    buildCharacterDataMap(m_textRoot);
+
     unsigned valueListPosition = 0;
-    LayoutObject* child = textRoot.firstChild();
+    LayoutObject* child = m_textRoot.firstChild();
     while (child) {
         if (child->isSVGInlineText()) {
             updateLayoutAttributes(toLayoutSVGInlineText(*child), valueListPosition, m_characterDataMap);
@@ -71,24 +84,8 @@ void SVGTextLayoutAttributesBuilder::buildLayoutAttributes(LayoutSVGText& textRo
                 continue;
             }
         }
-        child = child->nextInPreOrderAfterChildren(&textRoot);
+        child = child->nextInPreOrderAfterChildren(&m_textRoot);
     }
-}
-
-void SVGTextLayoutAttributesBuilder::buildLayoutAttributesForTextRoot(LayoutSVGText& textRoot)
-{
-    m_characterDataMap.clear();
-
-    if (m_textPositions.isEmpty()) {
-        m_characterCount = 0;
-        collectTextPositioningElements(textRoot);
-    }
-
-    if (!m_characterCount)
-        return;
-
-    buildCharacterDataMap(textRoot);
-    buildLayoutAttributes(textRoot);
 }
 
 static inline unsigned countCharactersInTextNode(const LayoutSVGInlineText& text)
@@ -116,6 +113,10 @@ static SVGTextPositioningElement* positioningElementFromLayoutObject(LayoutObjec
 void SVGTextLayoutAttributesBuilder::collectTextPositioningElements(LayoutBoxModelObject& start)
 {
     ASSERT(!start.isSVGText() || m_textPositions.isEmpty());
+    SVGTextPositioningElement* element = positioningElementFromLayoutObject(start);
+    unsigned atPosition = m_textPositions.size();
+    if (element)
+        m_textPositions.append(TextPosition(element, m_characterCount));
 
     for (LayoutObject* child = start.slowFirstChild(); child; child = child->nextSibling()) {
         if (child->isSVGInlineText()) {
@@ -123,40 +124,26 @@ void SVGTextLayoutAttributesBuilder::collectTextPositioningElements(LayoutBoxMod
             continue;
         }
 
-        if (!child->isSVGInline())
+        if (child->isSVGInline()) {
+            collectTextPositioningElements(toLayoutSVGInline(*child));
             continue;
-
-        LayoutSVGInline& inlineChild = toLayoutSVGInline(*child);
-        SVGTextPositioningElement* element = positioningElementFromLayoutObject(inlineChild);
-        unsigned atPosition = m_textPositions.size();
-        if (element)
-            m_textPositions.append(TextPosition(element, m_characterCount));
-
-        collectTextPositioningElements(inlineChild);
-
-        if (!element)
-            continue;
-
-        // Update text position, after we're back from recursion.
-        TextPosition& position = m_textPositions[atPosition];
-        ASSERT(!position.length);
-        position.length = m_characterCount - position.start;
+        }
     }
+
+    if (!element)
+        return;
+
+    // Compute the length of the subtree after all children have been visited.
+    TextPosition& position = m_textPositions[atPosition];
+    ASSERT(!position.length);
+    position.length = m_characterCount - position.start;
 }
 
 void SVGTextLayoutAttributesBuilder::buildCharacterDataMap(LayoutSVGText& textRoot)
 {
-    SVGTextPositioningElement* outermostTextElement = positioningElementFromLayoutObject(textRoot);
-    ASSERT(outermostTextElement);
-
-    // Grab outermost <text> element value lists and insert them in the character data map.
-    TextPosition wholeTextPosition(outermostTextElement, 0, m_characterCount);
-    fillCharacterDataMap(wholeTextPosition);
-
-    // Fill character data map using child text positioning elements in top-down order.
-    unsigned size = m_textPositions.size();
-    for (unsigned i = 0; i < size; ++i)
-        fillCharacterDataMap(m_textPositions[i]);
+    // Fill character data map using text positioning elements in top-down order.
+    for (const TextPosition& position : m_textPositions)
+        fillCharacterDataMap(position);
 
     // Handle x/y default attributes.
     SVGCharacterData& data = m_characterDataMap.add(1, SVGCharacterData()).storedValue->value;

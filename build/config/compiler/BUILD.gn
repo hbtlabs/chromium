@@ -80,6 +80,12 @@ declare_args() {
   # If true, gold linker will save symbol table inside object files.
   # This speeds up gdb startup by 60%
   gdb_index = false
+
+  # If true, optimize for size. Does not affect windows builds.
+  # Linux & Mac favor speed over size.
+  # TODO(brettw) it's weird that Mac and desktop Linux are different. We should
+  # explore favoring size over speed in this case as well.
+  optimize_for_size = is_android || is_ios
 }
 
 # Apply the default logic for these values if they were not set explicitly.
@@ -839,10 +845,10 @@ config("default_warnings") {
         # TODO(brucedawson): fix warnings, crbug.com/554200
         "/wd4312",
 
-        # TODO(brucedawson): http://crbug.com/593448 4334 is a 'suspicious
-        # shift' warning and 4595 is an 'illegal inline operator new' warning
-        # Both are new in VS 2015 Update 2 and can safely be deferred for now.
-        "/wd4334",
+        # TODO(brucedawson): http://crbug.com/593448 - C4595 is an 'illegal
+        # inline operator new' warning that is new in VS 2015 Update 2.
+        # This is equivalent to clang's no-inline-new-delete warning.
+        # See http://bugs.icu-project.org/trac/ticket/11122
         "/wd4595",
       ]
     }
@@ -1209,13 +1215,10 @@ config("optimize") {
     # Favor size over speed, /O1 must be before the common flags. The GYP
     # build also specifies /Os and /GF but these are implied by /O1.
     cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
-  } else if (is_android || is_ios) {
+  } else if (optimize_for_size) {
     # Favor size over speed.
     cflags = [ "-Os" ] + common_optimize_on_cflags
   } else {
-    # Linux & Mac favor speed over size.
-    # TODO(brettw) it's weird that Mac and desktop Linux are different. We should
-    # explore favoring size over speed in this case as well.
     cflags = [ "-O2" ] + common_optimize_on_cflags
   }
   ldflags = common_optimize_on_ldflags
@@ -1338,7 +1341,11 @@ config("symbols") {
       ldflags = [ "/DEBUG" ]
     }
   } else {
-    cflags = [ "-g2" ]
+    if (is_ios) {
+      cflags = [ "-gdwarf-2" ]
+    } else {
+      cflags = [ "-g2" ]
+    }
     if (use_debug_fission) {
       cflags += [ "-gsplit-dwarf" ]
     }

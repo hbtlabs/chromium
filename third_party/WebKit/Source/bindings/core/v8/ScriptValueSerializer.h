@@ -9,11 +9,11 @@
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
-#include "wtf/ArrayBufferContents.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
 #include <v8.h>
 
 namespace blink {
@@ -208,7 +208,12 @@ public:
         JSException
     };
 
-    ScriptValueSerializer(SerializedScriptValueWriter&, MessagePortArray* messagePorts, ArrayBufferArray* arrayBuffers, ImageBitmapArray* imageBitmaps, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
+    enum TransferableType {
+        TransferableArrayBufferType,
+        TransferableImageBitmapType
+    };
+
+    ScriptValueSerializer(SerializedScriptValueWriter&, MessagePortArray* messagePorts, TransferableArray*, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
     v8::Isolate* isolate() { return m_scriptState->isolate(); }
     v8::Local<v8::Context> context() { return m_scriptState->context(); }
 
@@ -539,7 +544,7 @@ private:
     bool readImageData(v8::Local<v8::Value>*);
     bool readImageBitmap(v8::Local<v8::Value>*);
     bool readCompositorProxy(v8::Local<v8::Value>*);
-    PassRefPtr<DOMArrayBuffer> doReadArrayBuffer();
+    DOMArrayBuffer* doReadArrayBuffer();
     bool readArrayBuffer(v8::Local<v8::Value>*);
     bool readArrayBufferView(v8::Local<v8::Value>*, ScriptValueCompositeCreator&);
     bool readRegExp(v8::Local<v8::Value>*);

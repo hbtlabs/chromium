@@ -80,10 +80,10 @@
 #include "media/base/user_input_monitor.h"
 #include "media/midi/midi_manager.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/shell/public/cpp/shell.h"
 #include "net/base/network_change_notifier.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/ssl/ssl_config_service.h"
+#include "services/shell/public/cpp/shell.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "sql/sql_memory_dump_provider.h"
@@ -181,7 +181,7 @@
 #endif
 
 #if defined(MOJO_SHELL_CLIENT)
-#include "mojo/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/views/mus/window_manager_connection.h"
 #endif
 
@@ -276,7 +276,8 @@ static void GLibLogHandler(const gchar* log_domain,
 
 static void SetUpGLibLogHandler() {
   // Register GLib-handled assertions to go through our logging system.
-  const char* kLogDomains[] = { NULL, "Gtk", "Gdk", "GLib", "GLib-GObject" };
+  const char* const kLogDomains[] =
+      { nullptr, "Gtk", "Gdk", "GLib", "GLib-GObject" };
   for (size_t i = 0; i < arraysize(kLogDomains); i++) {
     g_log_set_handler(kLogDomains[i],
                       static_cast<GLogLevelFlags>(G_LOG_FLAG_RECURSION |
@@ -981,7 +982,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   }
 
 #if defined(USE_AURA)
-  aura::Env::DeleteInstance();
+  env_.reset();
 #endif
 
   system_stats_monitor_.reset();
@@ -1172,8 +1173,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
           ->task_runner()));
-  mojo_shell_context_.reset(new MojoShellContext(file_thread_->task_runner(),
-                                                 db_thread_->task_runner()));
+  mojo_shell_context_.reset(new MojoShellContext);
 #if defined(OS_MACOSX)
   mojo::edk::SetMachPortProvider(MachBroker::GetInstance());
 #endif  // defined(OS_MACOSX)
@@ -1365,7 +1365,7 @@ bool BrowserMainLoop::InitializeToolkit() {
 
   // Env creates the compositor. Aura widgets need the compositor to be created
   // before they can be initialized by the browser.
-  aura::Env::CreateInstance(true);
+  env_ = aura::Env::CreateInstance();
 #endif  // defined(USE_AURA)
 
   if (parts_)

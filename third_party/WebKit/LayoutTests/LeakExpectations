@@ -68,7 +68,6 @@ crbug.com/405125 media/media-controls-clone-crash.html [ Leak Pass ]
 crbug.com/414163 [ Debug ] inspector/sources/debugger/promise-tracker.html [ Crash ]
 
 crbug.com/417752 storage/websql/sql-error-codes.html [ Pass Leak ]
-crbug.com/427628 inspector/sources/debugger-ui/debugger-save-to-temp-var.html [ Leak ]
 crbug.com/480769 http/tests/inspector/service-workers/user-agent-override.html [ Crash ]
 crbug.com/459576 webaudio/dom-exceptions.html [ Crash ]
 
@@ -121,12 +120,6 @@ crbug.com/506754 http/tests/inspector/service-workers/service-worker-agents.html
 crbug.com/506754 http/tests/security/cross-origin-indexeddb-allowed.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
-
-# -----------------------------------------------------------------
-# Untriaged but known leaks of ActiveDOMObject (inspector).
-# -----------------------------------------------------------------
-crbug.com/506756 inspector/console/console-log-side-effects.html [ Leak ]
-crbug.com/506756 inspector/console/only-one-deprecation-warning.html [ Leak ]
 
 # -----------------------------------------------------------------
 # Untriaged but known leaks of ActiveDOMObject (Web Audio).

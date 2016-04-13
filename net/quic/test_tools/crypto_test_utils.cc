@@ -4,6 +4,7 @@
 
 #include "net/quic/test_tools/crypto_test_utils.h"
 
+#include "base/strings/string_util.h"
 #include "net/quic/crypto/channel_id.h"
 #include "net/quic/crypto/common_cert_set.h"
 #include "net/quic/crypto/crypto_handshake.h"

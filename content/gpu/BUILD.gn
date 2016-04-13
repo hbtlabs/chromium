@@ -54,11 +54,11 @@ source_set("gpu_sources") {
     "//gpu/ipc/service",
     "//ipc",
     "//media/mojo/services:application_factory",
-    "//mojo/shell/public/interfaces",
+    "//services/shell/public/interfaces",
     "//skia",
-    "//ui/events/ipc",
     "//ui/gfx/ipc",
     "//ui/gl",
+    "//ui/latency_info/ipc",
   ]
 
   if (mojo_media_host == "gpu") {

@@ -33,9 +33,6 @@
 #include "platform/graphics/filters/Filter.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -100,6 +97,11 @@ public:
     // True if the the value of one pixel can affect the value of another pixel under this operation, such as blur.
     virtual bool movesPixels() const { return false; }
 
+    // Maps "forward" to determine which pixels in a destination rect are
+    // affected by pixels in the source rect.
+    // See also FilterEffect::mapRect.
+    virtual FloatRect mapRect(const FloatRect& rect) const { return rect; }
+
 protected:
     FilterOperation(OperationType type)
         : m_type(type)
@@ -124,6 +126,7 @@ public:
 
     bool affectsOpacity() const override { return true; }
     bool movesPixels() const override { return true; }
+    FloatRect mapRect(const FloatRect&) const override;
 
     const String& url() const { return m_url; }
     const AtomicString& fragment() const { return m_fragment; }
@@ -252,7 +255,7 @@ public:
 
     bool affectsOpacity() const override { return true; }
     bool movesPixels() const override { return true; }
-
+    FloatRect mapRect(const FloatRect&) const override;
 
 private:
     FilterOperation* blend(const FilterOperation* from, double progress) const override;
@@ -290,7 +293,7 @@ public:
 
     bool affectsOpacity() const override { return true; }
     bool movesPixels() const override { return true; }
-
+    FloatRect mapRect(const FloatRect&) const override;
 
 private:
     FilterOperation* blend(const FilterOperation* from, double progress) const override;
@@ -329,6 +332,7 @@ public:
 
     bool affectsOpacity() const override { return true; }
     bool movesPixels() const override { return true; }
+    FloatRect mapRect(const FloatRect&) const override;
 
 private:
     FilterOperation* blend(const FilterOperation* from, double progress) const override;

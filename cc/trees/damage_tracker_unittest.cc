@@ -69,7 +69,7 @@ void EmulateDrawingOneFrame(LayerImpl* root) {
     RenderSurfaceImpl* target_surface =
         render_surface_layer_list[index]->render_surface();
     target_surface->damage_tracker()->UpdateDamageTrackingState(
-        target_surface->layer_list(), target_surface->OwningLayerId(),
+        target_surface->layer_list(), target_surface,
         target_surface->SurfacePropertyChangedOnlyFromDescendant(),
         target_surface->content_rect(),
         render_surface_layer_list[index]->mask_layer(),
@@ -1472,19 +1472,13 @@ TEST_F(DamageTrackerTest, VerifyDamageForEmptyLayerList) {
   LayerImpl* root_ptr = host_impl_.active_tree()->root_layer();
   root_ptr->layer_tree_impl()->property_trees()->needs_rebuild = true;
   EmulateDrawingOneFrame(root_ptr);
-  root_ptr->draw_properties().render_target = root_ptr;
 
-  ASSERT_EQ(root_ptr, root_ptr->render_target());
+  DCHECK_EQ(root_ptr->render_surface(), root_ptr->render_target());
   RenderSurfaceImpl* target_surface = root_ptr->render_surface();
 
   LayerImplList empty_list;
   target_surface->damage_tracker()->UpdateDamageTrackingState(
-      empty_list,
-      target_surface->OwningLayerId(),
-      false,
-      gfx::Rect(),
-      NULL,
-      FilterOperations());
+      empty_list, target_surface, false, gfx::Rect(), NULL, FilterOperations());
 
   gfx::Rect damage_rect =
       target_surface->damage_tracker()->current_damage_rect();

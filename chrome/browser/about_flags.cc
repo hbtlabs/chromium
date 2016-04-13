@@ -1587,13 +1587,15 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesBackgroundLoadingFeature)},
 #endif  // defined(OS_ANDROID)
-    {"low-priority-iframes", IDS_FLAGS_LOW_PRIORITY_IFRAMES_UI_NAME,
-     IDS_FLAGS_LOW_PRIORITY_IFRAMES_UI_DESCRIPTION, kOsAll,
+    {"disallow-doc-written-script-loads",
+     IDS_FLAGS_DISALLOW_DOC_WRITTEN_SCRIPTS_UI_NAME,
+     IDS_FLAGS_DISALLOW_DOC_WRITTEN_SCRIPTS_UI_DESCRIPTION, kOsAll,
      // NOTE: if we want to add additional experiment entries for other
      // features controlled by kBlinkSettings, we'll need to add logic to
      // merge the flag values.
-     SINGLE_VALUE_TYPE_AND_VALUE(switches::kBlinkSettings,
-                                 "lowPriorityIframes=true")},
+     SINGLE_VALUE_TYPE_AND_VALUE(
+         switches::kBlinkSettings,
+         "disallowFetchForDocWrittenScriptsInMainFrame=true")},
 #if defined(OS_ANDROID)
     {"enable-ntp-popular-sites", IDS_FLAGS_NTP_POPULAR_SITES_NAME,
      IDS_FLAGS_NTP_POPULAR_SITES_DESCRIPTION, kOsAndroid,
@@ -1813,6 +1815,12 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_GOOGLE_BRANDED_CONTEXT_MENU_NAME,
      IDS_FLAGS_GOOGLE_BRANDED_CONTEXT_MENU_DESCRIPTION, kOsDesktop,
      SINGLE_VALUE_TYPE(switches::kEnableGoogleBrandedContextMenu)},
+#endif
+#if defined(OS_MACOSX)
+    {"enable-fullscreen-in-tab-detaching",
+     IDS_FLAGS_TAB_DETACHING_IN_FULLSCREEN_NAME,
+     IDS_FLAGS_TAB_DETACHING_IN_FULLSCREEN_DESCRIPTION, kOsMac,
+     SINGLE_VALUE_TYPE(switches::kEnableFullscreenTabDetaching)},
 #endif
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in

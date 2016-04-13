@@ -112,7 +112,6 @@ template_instrumenting_agents_h = string.Template("""// Code generated from Insp
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -121,7 +120,7 @@ ${forward_list}
 class CORE_EXPORT InstrumentingAgents : public GarbageCollectedFinalized<InstrumentingAgents> {
     WTF_MAKE_NONCOPYABLE(InstrumentingAgents);
 public:
-    static RawPtr<InstrumentingAgents> create()
+    static InstrumentingAgents* create()
     {
         return new InstrumentingAgents();
     }
@@ -426,8 +425,6 @@ def agent_class_name(agent):
     custom_agent_names = ["PageDebugger", "PageRuntime", "WorkerRuntime", "PageConsole"]
     if agent in custom_agent_names:
         return "%sAgent" % agent
-    if agent == "AsyncCallTracker":
-        return agent
     return "Inspector%sAgent" % agent
 
 

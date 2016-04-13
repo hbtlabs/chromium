@@ -49,12 +49,12 @@ var SiteSettingsBehaviorImpl = {
    *     for.
    * @param {string} secondaryPattern The secondary pattern to change the
    *     permission for.
-   * @param {number} value What value to set the permission to.
    * @param {number} category The category permission to change.
+   * @param {string} value What value to set the permission to.
    * @protected
    */
   setCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, value, category) {
+        primaryPattern, secondaryPattern, category, value) {
     this.browserProxy.setCategoryPermissionForOrigin(
         primaryPattern, secondaryPattern, category, value);
   },
@@ -283,6 +283,16 @@ var SiteSettingsBehaviorImpl = {
         assertNotReached();
         return '';
     }
+  },
+
+  /**
+   * Ensures the URL has a scheme (assumes http if omitted).
+   * @param {string} url The URL with or without a scheme.
+   * @return {string} The URL with a scheme, or an empty string.
+   */
+  ensureUrlHasScheme: function(url) {
+    if (url.length == 0) return url;
+    return url.includes('://') ? url : 'http://' + url;
   },
 };
 

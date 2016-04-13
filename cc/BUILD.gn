@@ -124,10 +124,6 @@ component("cc") {
     "layers/heads_up_display_layer.h",
     "layers/heads_up_display_layer_impl.cc",
     "layers/heads_up_display_layer_impl.h",
-    "layers/io_surface_layer.cc",
-    "layers/io_surface_layer.h",
-    "layers/io_surface_layer_impl.cc",
-    "layers/io_surface_layer_impl.h",
     "layers/layer.cc",
     "layers/layer.h",
     "layers/layer_client.h",
@@ -558,10 +554,10 @@ component("cc") {
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
     "//media",
-    "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/latency_info",
   ]
 
   defines = [ "CC_IMPLEMENTATION=1" ]
@@ -802,7 +798,6 @@ test("cc_unittests") {
     "input/top_controls_manager_unittest.cc",
     "layers/heads_up_display_layer_impl_unittest.cc",
     "layers/heads_up_display_unittest.cc",
-    "layers/io_surface_layer_impl_unittest.cc",
     "layers/layer_impl_unittest.cc",
     "layers/layer_iterator_unittest.cc",
     "layers/layer_list_iterator_unittest.cc",
@@ -882,6 +877,7 @@ test("cc_unittests") {
     "test/mock_helper_unittest.cc",
     "test/ordered_simple_task_runner_unittest.cc",
     "test/test_web_graphics_context_3d_unittest.cc",
+    "tiles/gpu_image_decode_controller_unittest.cc",
     "tiles/picture_layer_tiling_set_unittest.cc",
     "tiles/picture_layer_tiling_unittest.cc",
     "tiles/software_image_decode_controller_unittest.cc",
@@ -956,12 +952,12 @@ test("cc_unittests") {
     "//media",
     "//testing/gmock",
     "//testing/gtest",
-    "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/gl:test_support",
+    "//ui/latency_info",
   ]
 
   data_deps = [

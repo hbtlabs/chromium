@@ -41,6 +41,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/Referrer.h"
+#include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include <v8.h>
@@ -142,6 +143,11 @@ public:
     // Will be called when |PerformanceTiming| events are updated
     virtual void didChangePerformanceTiming() { }
 
+    // Will be called when a particular loading code path has been used. This
+    // propogates renderer loading behavior to the browser process for
+    // histograms.
+    virtual void didObserveLoadingBehavior(WebLoadingBehaviorFlag) { }
+
     // Transmits the change in the set of watched CSS selectors property
     // that match any element on the frame.
     virtual void selectorMatchChanged(const Vector<String>& addedSelectors, const Vector<String>& removedSelectors) = 0;
@@ -174,8 +180,6 @@ public:
     virtual void documentElementAvailable() = 0;
     virtual void runScriptsAtDocumentElementAvailable() = 0;
     virtual void runScriptsAtDocumentReady(bool documentIsEmpty) = 0;
-
-    virtual v8::Local<v8::Value> createTestInterface(const AtomicString& name) = 0;
 
     virtual void didCreateScriptContext(v8::Local<v8::Context>, int extensionGroup, int worldId) = 0;
     virtual void willReleaseScriptContext(v8::Local<v8::Context>, int worldId) = 0;

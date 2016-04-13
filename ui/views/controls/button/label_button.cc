@@ -10,6 +10,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -30,12 +31,6 @@ namespace {
 // The default spacing between the icon and text.
 const int kSpacing = 5;
 
-#if !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
-// Default text and shadow colors for STYLE_BUTTON.
-const SkColor kStyleButtonTextColor = SK_ColorBLACK;
-const SkColor kStyleButtonShadowColor = SK_ColorWHITE;
-#endif
-
 const gfx::FontList& GetDefaultNormalFontList() {
   static base::LazyInstance<gfx::FontList>::Leaky font_list =
       LAZY_INSTANCE_INITIALIZER;
@@ -43,6 +38,9 @@ const gfx::FontList& GetDefaultNormalFontList() {
 }
 
 const gfx::FontList& GetDefaultBoldFontList() {
+  if (!views::PlatformStyle::kDefaultLabelButtonHasBoldFont)
+    return GetDefaultNormalFontList();
+
   static base::LazyInstance<gfx::FontList>::Leaky font_list =
       LAZY_INSTANCE_INITIALIZER;
   if ((font_list.Get().GetFontStyle() & gfx::Font::BOLD) == 0) {
@@ -163,10 +161,15 @@ const gfx::FontList& LabelButton::GetFontList() const {
 
 void LabelButton::SetFontList(const gfx::FontList& font_list) {
   cached_normal_font_list_ = font_list;
-  cached_bold_font_list_ = font_list.DeriveWithStyle(
-      font_list.GetFontStyle() | gfx::Font::BOLD);
-  label_->SetFontList(is_default_ ?
-      cached_bold_font_list_ : cached_normal_font_list_);
+  if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
+    cached_bold_font_list_ =
+        font_list.DeriveWithStyle(font_list.GetFontStyle() | gfx::Font::BOLD);
+    if (is_default_) {
+      label_->SetFontList(cached_bold_font_list_);
+      return;
+    }
+  }
+  label_->SetFontList(cached_normal_font_list_);
 }
 
 void LabelButton::SetElideBehavior(gfx::ElideBehavior elide_behavior) {
@@ -198,9 +201,10 @@ void LabelButton::SetIsDefault(bool is_default) {
   ui::Accelerator accel(ui::VKEY_RETURN, ui::EF_NONE);
   is_default_ ? AddAccelerator(accel) : RemoveAccelerator(accel);
 
-  label_->SetFontList(
-      is_default ? cached_bold_font_list_ : cached_normal_font_list_);
+  const bool bold = PlatformStyle::kDefaultLabelButtonHasBoldFont && is_default;
+  label_->SetFontList(bold ? cached_bold_font_list_ : cached_normal_font_list_);
   InvalidateLayout();
+  ResetLabelEnabledColor();
 }
 
 void LabelButton::SetStyle(ButtonStyle style) {
@@ -215,7 +219,8 @@ void LabelButton::SetStyle(ButtonStyle style) {
   SetFocusPainter(nullptr);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetFocusable(true);
-  SetMinSize(gfx::Size(70, 33));
+  SetMinSize(gfx::Size(PlatformStyle::kMinLabelButtonWidth,
+                       PlatformStyle::kMinLabelButtonHeight));
 
   // Themed borders will be set once the button is added to a Widget, since that
   // provides the value of GetNativeTheme().
@@ -229,7 +234,7 @@ void LabelButton::SetImageLabelSpacing(int spacing) {
   InvalidateLayout();
 }
 
-void LabelButton::SetFocusPainter(scoped_ptr<Painter> focus_painter) {
+void LabelButton::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
   focus_painter_ = std::move(focus_painter);
 }
 
@@ -241,7 +246,7 @@ gfx::Size LabelButton::GetPreferredSize() const {
   Label label(GetText(), cached_normal_font_list_);
   label.SetShadows(label_->shadows());
 
-  if (style() == STYLE_BUTTON) {
+  if (style_ == STYLE_BUTTON && PlatformStyle::kDefaultLabelButtonHasBoldFont) {
     // Some text appears wider when rendered normally than when rendered bold.
     // Accommodate the widest, as buttons may show bold and shouldn't resize.
     const int current_width = label.GetPreferredSize().width();
@@ -362,11 +367,11 @@ void LabelButton::EnableCanvasFlippingForRTLUI(bool flip) {
   image_->EnableCanvasFlippingForRTLUI(flip);
 }
 
-scoped_ptr<LabelButtonBorder> LabelButton::CreateDefaultBorder() const {
+std::unique_ptr<LabelButtonBorder> LabelButton::CreateDefaultBorder() const {
   return PlatformStyle::CreateLabelButtonBorder(style());
 }
 
-void LabelButton::SetBorder(scoped_ptr<Border> border) {
+void LabelButton::SetBorder(std::unique_ptr<Border> border) {
   border_is_themed_border_ = false;
   View::SetBorder(std::move(border));
   ResetCachedPreferredSize();
@@ -396,6 +401,7 @@ void LabelButton::OnBlur() {
 void LabelButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   ResetColorsFromNativeTheme();
   UpdateThemedBorder();
+  ResetLabelEnabledColor();
   // Invalidate the layout to pickup the new insets from the border.
   InvalidateLayout();
 }
@@ -413,19 +419,19 @@ void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   ink_drop_container_->SetVisible(false);
 }
 
-scoped_ptr<views::InkDropAnimation> LabelButton::CreateInkDropAnimation()
+std::unique_ptr<views::InkDropAnimation> LabelButton::CreateInkDropAnimation()
     const {
   return GetText().empty()
              ? CustomButton::CreateInkDropAnimation()
-             : make_scoped_ptr(new views::FloodFillInkDropAnimation(
+             : base::WrapUnique(new views::FloodFillInkDropAnimation(
                    size(), GetInkDropCenter(), GetInkDropBaseColor()));
 }
 
-scoped_ptr<views::InkDropHover> LabelButton::CreateInkDropHover() const {
+std::unique_ptr<views::InkDropHover> LabelButton::CreateInkDropHover() const {
   if (!ShouldShowInkDropHover())
     return nullptr;
   return GetText().empty() ? CustomButton::CreateInkDropHover()
-                           : make_scoped_ptr(new views::InkDropHover(
+                           : base::WrapUnique(new views::InkDropHover(
                                  size(), kInkDropSmallCornerRadius,
                                  GetInkDropCenter(), GetInkDropBaseColor()));
 }
@@ -440,9 +446,7 @@ gfx::Point LabelButton::GetInkDropCenter() const {
 void LabelButton::StateChanged() {
   const gfx::Size previous_image_size(image_->GetPreferredSize());
   UpdateImage();
-  const SkColor color = button_state_colors_[state()];
-  if (state() != STATE_DISABLED && label_->enabled_color() != color)
-    label_->SetEnabledColor(color);
+  ResetLabelEnabledColor();
   label_->SetEnabled(state() != STATE_DISABLED);
   if (image_->GetPreferredSize() != previous_image_size)
     Layout();
@@ -467,37 +471,20 @@ void LabelButton::ResetColorsFromNativeTheme() {
     theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonDisabledColor),
   };
 
-  // Certain styles do not change text color when hovered or pressed.
-  bool constant_text_color = false;
   // Use hardcoded colors for inverted color scheme support and STYLE_BUTTON.
   if (color_utils::IsInvertedColorScheme()) {
-    constant_text_color = true;
-    colors[STATE_NORMAL] = SK_ColorWHITE;
+    colors[STATE_NORMAL] = colors[STATE_HOVERED] = colors[STATE_PRESSED] =
+        SK_ColorWHITE;
     label_->SetBackgroundColor(SK_ColorBLACK);
     label_->set_background(Background::CreateSolidBackground(SK_ColorBLACK));
     label_->SetAutoColorReadabilityEnabled(true);
     label_->SetShadows(gfx::ShadowValues());
   } else if (style() == STYLE_BUTTON) {
-    // TODO(erg): This is disabled on desktop linux because of the binary asset
-    // confusion. These details should either be pushed into ui::NativeThemeWin
-    // or should be obsoleted by rendering buttons with paint calls instead of
-    // with static assets. http://crbug.com/350498
-#if !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
-    constant_text_color = true;
-    colors[STATE_NORMAL] = kStyleButtonTextColor;
-    label_->SetBackgroundColor(theme->GetSystemColor(
-        ui::NativeTheme::kColorId_ButtonBackgroundColor));
-    label_->SetAutoColorReadabilityEnabled(false);
-    label_->SetShadows(gfx::ShadowValues(
-        1, gfx::ShadowValue(gfx::Vector2d(0, 1), 0, kStyleButtonShadowColor)));
-#endif
-    label_->set_background(NULL);
+    PlatformStyle::ApplyLabelButtonTextStyle(label_, &colors);
+    label_->set_background(nullptr);
   } else {
-    label_->set_background(NULL);
+    label_->set_background(nullptr);
   }
-
-  if (constant_text_color)
-    colors[STATE_HOVERED] = colors[STATE_PRESSED] = colors[STATE_NORMAL];
 
   for (size_t state = STATE_NORMAL; state < STATE_COUNT; ++state) {
     if (!explicitly_set_colors_[state]) {
@@ -571,6 +558,15 @@ ui::NativeTheme::State LabelButton::GetForegroundThemeState(
 void LabelButton::ResetCachedPreferredSize() {
   cached_preferred_size_valid_ = false;
   cached_preferred_size_ = gfx::Size();
+}
+
+void LabelButton::ResetLabelEnabledColor() {
+  const SkColor color =
+      explicitly_set_colors_[state()]
+          ? button_state_colors_[state()]
+          : PlatformStyle::TextColorForButton(button_state_colors_, *this);
+  if (state() != STATE_DISABLED && label_->enabled_color() != color)
+    label_->SetEnabledColor(color);
 }
 
 }  // namespace views

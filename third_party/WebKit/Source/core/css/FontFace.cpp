@@ -93,14 +93,14 @@ FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family
     return fontFace;
 }
 
-FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBuffer> source, const FontFaceDescriptors& descriptors)
+FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, DOMArrayBuffer* source, const FontFaceDescriptors& descriptors)
 {
     FontFace* fontFace = new FontFace(context, family, descriptors);
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->data()), source->byteLength());
     return fontFace;
 }
 
-FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, PassRefPtr<DOMArrayBufferView> source, const FontFaceDescriptors& descriptors)
+FontFace* FontFace::create(ExecutionContext* context, const AtomicString& family, DOMArrayBufferView* source, const FontFaceDescriptors& descriptors)
 {
     FontFace* fontFace = new FontFace(context, family, descriptors);
     fontFace->initCSSFontFace(static_cast<const unsigned char*>(source->baseAddress()), source->byteLength());
@@ -395,7 +395,6 @@ void FontFace::loadInternal(ExecutionContext* context)
         return;
 
     m_cssFontFace->load();
-    toDocument(context)->styleEngine().fontSelector()->fontLoader()->loadPendingFonts();
 }
 
 FontTraits FontFace::traits() const
@@ -592,8 +591,8 @@ void FontFace::initCSSFontFace(Document* document, CSSValue* src)
             if (allowDownloading && item->isSupportedFormat() && document) {
                 FontResource* fetched = item->fetch(document);
                 if (fetched) {
-                    FontLoader* fontLoader = document->styleEngine().fontSelector()->fontLoader();
-                    source = new RemoteFontFaceSource(fetched, fontLoader, CSSValueToFontDisplay(m_display.get()));
+                    CSSFontSelector* fontSelector = document->styleEngine().fontSelector();
+                    source = new RemoteFontFaceSource(fetched, fontSelector, CSSValueToFontDisplay(m_display.get()));
                 }
             }
         } else {

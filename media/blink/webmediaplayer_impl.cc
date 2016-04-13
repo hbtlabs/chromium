@@ -17,9 +17,7 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram.h"
-#include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_runner_util.h"
@@ -207,7 +205,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       volume_multiplier_(1.0),
       renderer_factory_(std::move(renderer_factory)),
       surface_manager_(params.surface_manager()),
-      suppress_destruction_errors_(false) {
+      suppress_destruction_errors_(false),
+      can_suspend_state_(CanSuspendState::UNKNOWN) {
   DCHECK(!adjust_allocated_memory_cb_.is_null());
   DCHECK(renderer_factory_);
   DCHECK(client_);
@@ -953,16 +952,6 @@ void WebMediaPlayerImpl::OnPipelineError(PipelineStatus error) {
   if (suppress_destruction_errors_)
     return;
 
-#if defined(OS_ANDROID)
-  // For 10% of pipeline decode failures log the playback URL. The URL is set
-  // as the crash-key 'subresource_url' during DoLoad().
-  //
-  // TODO(dalecurtis): This is temporary to track down higher than average
-  // decode failure rates for video-only content. See http://crbug.com/595076.
-  if (base::RandDouble() <= 0.1 && error == PIPELINE_ERROR_DECODE)
-    base::debug::DumpWithoutCrashing();
-#endif
-
   media_log_->AddEvent(media_log_->CreatePipelineErrorEvent(error));
 
   if (ready_state_ == WebMediaPlayer::ReadyStateHaveNothing) {
@@ -1079,18 +1068,11 @@ void WebMediaPlayerImpl::OnShown() {
 void WebMediaPlayerImpl::OnSuspendRequested(bool must_suspend) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-#if defined(OS_MACOSX)
-  // TODO(sandersd): Idle suspend is disabled on OSX since hardware decoded
-  // frames are owned by the video decoder in the GPU process. A mechanism for
-  // detaching ownership from the decoder is needed. http://crbug.com/595716.
-  return;
-#endif
-
   if (must_suspend) {
     must_suspend_ = true;
   } else {
-    // TODO(sandersd): Remove this when |delegate_| becomes aware of this state.
-    if (delegate_state_ == DelegateState::PAUSED_SEEK)
+    // TODO(sandersd): Remove this when idleness is separate from play state.
+    if (delegate_state_ == DelegateState::PAUSED_BUT_NOT_IDLE)
       return;
     is_idle_ = true;
   }
@@ -1435,12 +1417,12 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state) {
     case DelegateState::PAUSED:
       delegate_->DidPause(delegate_id_, false);
       break;
-    case DelegateState::PAUSED_SEEK:
+    case DelegateState::PAUSED_BUT_NOT_IDLE:
       // It doesn't really matter what happens when we enter this state, only
       // that we reset the idle timer when leaving it.
       //
-      // TODO(sandersd): Ideally |delegate_| would understand this state and not
-      // run the idle timer.
+      // TODO(sandersd): Ideally the delegate would consider idleness and play
+      // state as orthogonal properties so that we could avoid this.
       delegate_->DidPause(delegate_id_, false);
       break;
     case DelegateState::ENDED:
@@ -1470,6 +1452,26 @@ void WebMediaPlayerImpl::SetSuspendState(bool is_suspended) {
   // Do not change the state after an error has occurred.
   // TODO(sandersd): Update PipelineController to remove the need for this.
   if (IsNetworkStateError(network_state_))
+    return;
+
+#if defined(OS_MACOSX) || defined(OS_WIN)
+  // TODO(sandersd): Idle suspend is disabled on OSX and Windows for hardware
+  // decoding / opaque video frames since these frames are owned by the decoder
+  // in the GPU process. http://crbug.com/595716 and http://crbug.com/602708
+  if (can_suspend_state_ == CanSuspendState::UNKNOWN) {
+    scoped_refptr<VideoFrame> frame = GetCurrentFrameFromCompositor();
+    if (frame) {
+      can_suspend_state_ =
+          frame->metadata()->IsTrue(VideoFrameMetadata::DECODER_OWNS_FRAME)
+              ? CanSuspendState::NO
+              : CanSuspendState::YES;
+    }
+  }
+#else
+  can_suspend_state_ = CanSuspendState::YES;
+#endif
+
+  if (can_suspend_state_ == CanSuspendState::NO)
     return;
 
   if (is_suspended) {
@@ -1539,8 +1541,8 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
   if (!has_session) {
     result.delegate_state = DelegateState::GONE;
   } else if (paused_) {
-    if (seeking()) {
-      result.delegate_state = DelegateState::PAUSED_SEEK;
+    if (seeking() || fullscreen_) {
+      result.delegate_state = DelegateState::PAUSED_BUT_NOT_IDLE;
     } else if (ended_) {
       result.delegate_state = DelegateState::ENDED;
     } else {

@@ -56,11 +56,6 @@ SelectionEditor::SelectionEditor(FrameSelection& frameSelection)
 
 SelectionEditor::~SelectionEditor()
 {
-#if !ENABLE(OILPAN)
-    // Oilpan: No need to clear out VisibleSelection observer;
-    // it is finalized as a part object of FrameSelection.
-    stopObservingVisibleSelectionChangeIfNecessary();
-#endif
 }
 
 void SelectionEditor::dispose()
@@ -582,7 +577,7 @@ static bool isBoundary(TextGranularity granularity)
 bool SelectionEditor::modify(EAlteration alter, SelectionDirection direction, TextGranularity granularity, EUserTriggered userTriggered)
 {
     if (userTriggered == UserTriggered) {
-        RawPtr<FrameSelection> trialFrameSelection = FrameSelection::create();
+        FrameSelection* trialFrameSelection = FrameSelection::create();
         trialFrameSelection->setSelection(m_selection);
         trialFrameSelection->modify(alter, direction, granularity, NotUserTriggered);
 
@@ -695,7 +690,7 @@ bool SelectionEditor::modify(EAlteration alter, unsigned verticalDistance, Verti
         return false;
 
     if (userTriggered == UserTriggered) {
-        RawPtr<FrameSelection> trialFrameSelection = FrameSelection::create();
+        FrameSelection* trialFrameSelection = FrameSelection::create();
         trialFrameSelection->setSelection(m_selection);
         trialFrameSelection->modify(alter, verticalDistance, direction, NotUserTriggered);
     }
@@ -850,7 +845,7 @@ bool SelectionEditor::setSelectedRange(const EphemeralRange& range, TextAffinity
     return true;
 }
 
-RawPtr<Range> SelectionEditor::firstRange() const
+Range* SelectionEditor::firstRange() const
 {
     if (m_logicalRange)
         return m_logicalRange->cloneRange();

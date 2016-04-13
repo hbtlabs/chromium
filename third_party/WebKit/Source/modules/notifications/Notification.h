@@ -47,8 +47,6 @@
 #include "public/platform/modules/notifications/WebNotificationData.h"
 #include "public/platform/modules/notifications/WebNotificationDelegate.h"
 #include "public/platform/modules/notifications/WebNotificationPermission.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -58,8 +56,7 @@ class NotificationOptions;
 class NotificationPermissionCallback;
 class ScriptState;
 
-class MODULES_EXPORT Notification final : public RefCountedGarbageCollectedEventTargetWithInlineData<Notification>, public ActiveScriptWrappable, public ActiveDOMObject, public WebNotificationDelegate {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(Notification);
+class MODULES_EXPORT Notification final : public EventTargetWithInlineData, public ActiveScriptWrappable, public ActiveDOMObject, public WebNotificationDelegate {
     USING_GARBAGE_COLLECTED_MIXIN(Notification);
     DEFINE_WRAPPERTYPEINFO();
 public:

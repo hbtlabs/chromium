@@ -43,11 +43,10 @@ class MediaStreamComponent;
 class MediaStreamTrackSourcesCallback;
 
 class MODULES_EXPORT MediaStreamTrack
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<MediaStreamTrack>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public MediaStreamSource::Observer {
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MediaStreamTrack);
     USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
     DEFINE_WRAPPERTYPEINFO();
 public:

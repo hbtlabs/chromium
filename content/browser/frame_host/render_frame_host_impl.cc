@@ -275,8 +275,8 @@ RenderFrameHostImpl::~RenderFrameHostImpl() {
   if (is_active() && !frame_tree_node_->IsMainFrame() && render_frame_created_)
     Send(new FrameMsg_Delete(routing_id_));
 
-  // NULL out the swapout timer; in crash dumps this member will be null only if
-  // the dtor has run.
+  // Null out the swapout timer; in crash dumps this member will be null only if
+  // the dtor has run.  (It may also be null in tests.)
   swapout_event_monitor_timeout_.reset();
 
   for (const auto& iter: visual_state_callbacks_) {
@@ -1181,8 +1181,10 @@ void RenderFrameHostImpl::SwapOut(
     return;
   }
 
-  swapout_event_monitor_timeout_->Start(
-      base::TimeDelta::FromMilliseconds(RenderViewHostImpl::kUnloadTimeoutMS));
+  if (swapout_event_monitor_timeout_) {
+    swapout_event_monitor_timeout_->Start(base::TimeDelta::FromMilliseconds(
+        RenderViewHostImpl::kUnloadTimeoutMS));
+  }
 
   // There may be no proxy if there are no active views in the process.
   int proxy_routing_id = MSG_ROUTING_NONE;
@@ -1355,7 +1357,8 @@ void RenderFrameHostImpl::OnSwappedOut() {
     return;
 
   TRACE_EVENT_ASYNC_END0("navigation", "RenderFrameHostImpl::SwapOut", this);
-  swapout_event_monitor_timeout_->Stop();
+  if (swapout_event_monitor_timeout_)
+    swapout_event_monitor_timeout_->Stop();
 
   ClearAllWebUI();
 
@@ -1371,8 +1374,8 @@ void RenderFrameHostImpl::OnSwappedOut() {
   CHECK(deleted);
 }
 
-void RenderFrameHostImpl::ResetSwapOutTimerForTesting() {
-  swapout_event_monitor_timeout_->Stop();
+void RenderFrameHostImpl::DisableSwapOutTimerForTesting() {
+  swapout_event_monitor_timeout_.reset();
 }
 
 void RenderFrameHostImpl::OnContextMenu(const ContextMenuParams& params) {
@@ -1878,7 +1881,7 @@ void RenderFrameHostImpl::RegisterMojoServices() {
     // WakeLockServiceContext is owned by WebContentsImpl so it will outlive
     // this RenderFrameHostImpl, hence a raw pointer can be bound to service
     // factory callback.
-    GetServiceRegistry()->AddService<mojom::WakeLockService>(
+    GetServiceRegistry()->AddService<blink::mojom::WakeLockService>(
         base::Bind(&WakeLockServiceContext::CreateService,
                    base::Unretained(wake_lock_service_context),
                    GetProcess()->GetID(), GetRoutingID()));
@@ -2515,17 +2518,6 @@ void RenderFrameHostImpl::DidCancelPopupMenu() {
 
 #elif defined(OS_ANDROID)
 
-void RenderFrameHostImpl::ActivateNearestFindResult(int request_id,
-                                                    float x,
-                                                    float y) {
-  Send(
-      new InputMsg_ActivateNearestFindResult(GetRoutingID(), request_id, x, y));
-}
-
-void RenderFrameHostImpl::RequestFindMatchRects(int current_version) {
-  Send(new FrameMsg_FindMatchRects(GetRoutingID(), current_version));
-}
-
 void RenderFrameHostImpl::DidSelectPopupMenuItems(
     const std::vector<int>& selected_indices) {
   Send(new FrameMsg_SelectPopupMenuItems(routing_id_, false, selected_indices));
@@ -2648,23 +2640,25 @@ AXTreeIDRegistry::AXTreeID RenderFrameHostImpl::RoutingIDToAXTreeID(
   RenderFrameProxyHost* rfph = RenderFrameProxyHost::FromID(
       GetProcess()->GetID(), routing_id);
   if (rfph) {
-    FrameTree* frame_tree = frame_tree_node()->frame_tree();
+    FrameTree* frame_tree = rfph->frame_tree_node()->frame_tree();
     FrameTreeNode* frame_tree_node = frame_tree->FindByRoutingID(
         GetProcess()->GetID(), routing_id);
     rfh = frame_tree_node->render_manager()->current_frame_host();
   } else {
     rfh = RenderFrameHostImpl::FromID(GetProcess()->GetID(), routing_id);
+
+    // As a sanity check, make sure we're within the same frame tree and
+    // crash the renderer if not.
+    if (rfh &&
+        rfh->frame_tree_node()->frame_tree() !=
+            frame_tree_node()->frame_tree()) {
+      AccessibilityFatalError();
+      return AXTreeIDRegistry::kNoAXTreeID;
+    }
   }
 
   if (!rfh)
     return AXTreeIDRegistry::kNoAXTreeID;
-
-  // As a sanity check, make sure we're within the same frame tree and
-  // crash the renderer if not.
-  if (rfh->frame_tree_node()->frame_tree() != frame_tree_node()->frame_tree()) {
-    AccessibilityFatalError();
-    return AXTreeIDRegistry::kNoAXTreeID;
-  }
 
   return rfh->GetAXTreeID();
 }

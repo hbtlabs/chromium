@@ -54,6 +54,7 @@ MIDIAccess::MIDIAccess(PassOwnPtr<MIDIAccessor> accessor, bool sysexEnabled, con
     , m_sysexEnabled(sysexEnabled)
     , m_hasPendingActivity(false)
 {
+    ThreadState::current()->registerPreFinalizer(this);
     m_accessor->setClient(this);
     for (size_t i = 0; i < ports.size(); ++i) {
         const MIDIAccessInitializer::PortDescriptor& port = ports[i];
@@ -69,12 +70,17 @@ MIDIAccess::~MIDIAccess()
 {
 }
 
+void MIDIAccess::dispose()
+{
+    m_accessor.clear();
+}
+
 EventListener* MIDIAccess::onstatechange()
 {
     return getAttributeEventListener(EventTypeNames::statechange);
 }
 
-void MIDIAccess::setOnstatechange(RawPtr<EventListener> listener)
+void MIDIAccess::setOnstatechange(EventListener* listener)
 {
     m_hasPendingActivity = listener;
     setAttributeEventListener(EventTypeNames::statechange, listener);
@@ -204,7 +210,7 @@ DEFINE_TRACE(MIDIAccess)
 {
     visitor->trace(m_inputs);
     visitor->trace(m_outputs);
-    RefCountedGarbageCollectedEventTargetWithInlineData<MIDIAccess>::trace(visitor);
+    EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

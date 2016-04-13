@@ -150,14 +150,6 @@ VisibleSelectionTemplate<Strategy>& VisibleSelectionTemplate<Strategy>::operator
     return *this;
 }
 
-#if !ENABLE(OILPAN)
-template <typename Strategy>
-VisibleSelectionTemplate<Strategy>::~VisibleSelectionTemplate()
-{
-    didChange();
-}
-#endif
-
 template <typename Strategy>
 VisibleSelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::selectionFromContentsOfNode(Node* node)
 {
@@ -214,7 +206,7 @@ EphemeralRange firstEphemeralRangeOf(const VisibleSelection& selection)
     return EphemeralRange(start, end);
 }
 
-RawPtr<Range> firstRangeOf(const VisibleSelection& selection)
+Range* firstRangeOf(const VisibleSelection& selection)
 {
     return createRange(firstEphemeralRangeOf(selection));
 }

@@ -141,6 +141,7 @@
             '../ppapi/ppapi.gyp:*',
             '../ppapi/ppapi_internal.gyp:*',
             '../ppapi/tools/ppapi_tools.gyp:*',
+            '../services/shell/shell.gyp:*',
             '../skia/skia.gyp:*',
             '../sync/tools/sync_tools.gyp:*',
             '../third_party/catapult/telemetry/telemetry.gyp:*',
@@ -261,6 +262,10 @@
         ['use_openssl==1', {
           'dependencies': [
             '../third_party/boringssl/boringssl.gyp:*',
+          ],
+        }],
+        ['use_openssl==1 and OS!="ios"', {
+          'dependencies': [
             '../third_party/boringssl/boringssl_tests.gyp:*',
           ],
         }],
@@ -822,6 +827,7 @@
             '../ui/android/ui_android.gyp:ui_android_unittests',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests',
             '../ui/events/events_unittests.gyp:events_unittests',
+            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             # Unit test bundles packaged as an apk.
             '../base/base.gyp:base_unittests_apk',
@@ -850,6 +856,7 @@
             '../ui/events/events_unittests.gyp:events_unittests_apk',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests_apk',
             '../ui/gl/gl_tests.gyp:gl_unittests_apk',
+            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests_apk',
           ],
           'conditions': [
@@ -1049,6 +1056,7 @@
             '../ui/events/events_unittests.gyp:events_unittests',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
+            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             '../ui/views/views.gyp:views_unittests',
             '../url/url.gyp:url_unittests',
@@ -1152,6 +1160,7 @@
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
             '../ui/keyboard/keyboard.gyp:keyboard_unittests',
+            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             '../url/url.gyp:url_unittests',
           ],
@@ -1270,6 +1279,7 @@
             '../ui/events/events.gyp:*',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
+            '../ui/latency_info/latency_info.gyp:*',
             '../ui/keyboard/keyboard.gyp:*',
             '../ui/snapshot/snapshot.gyp:snapshot_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',

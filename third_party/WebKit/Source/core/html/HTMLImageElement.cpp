@@ -61,7 +61,7 @@ using namespace HTMLNames;
 
 class HTMLImageElement::ViewportChangeListener final : public MediaQueryListListener {
 public:
-    static RawPtr<ViewportChangeListener> create(HTMLImageElement* element)
+    static ViewportChangeListener* create(HTMLImageElement* element)
     {
         return new ViewportChangeListener(element);
     }
@@ -72,9 +72,6 @@ public:
             m_element->notifyViewportChanged();
     }
 
-#if !ENABLE(OILPAN)
-    void clearElement() { m_element = nullptr; }
-#endif
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         visitor->trace(m_element);
@@ -99,37 +96,25 @@ HTMLImageElement::HTMLImageElement(Document& document, HTMLFormElement* form, bo
 {
     setHasCustomStyleCallbacks();
     if (form && form->inShadowIncludingDocument()) {
-#if ENABLE(OILPAN)
         m_form = form;
-#else
-        m_form = form->createWeakPtr();
-#endif
         m_formWasSetByParser = true;
         m_form->associate(*this);
         m_form->didAssociateByParser();
     }
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::create(Document& document)
+HTMLImageElement* HTMLImageElement::create(Document& document)
 {
     return new HTMLImageElement(document);
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+HTMLImageElement* HTMLImageElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
     return new HTMLImageElement(document, form, createdByParser);
 }
 
 HTMLImageElement::~HTMLImageElement()
 {
-#if !ENABLE(OILPAN)
-    if (m_listener) {
-        document().mediaQueryMatcher().removeViewportListener(m_listener.get());
-        m_listener->clearElement();
-    }
-    if (m_form)
-        m_form->disassociate(*this);
-#endif
 }
 
 DEFINE_TRACE(HTMLImageElement)
@@ -149,28 +134,28 @@ void HTMLImageElement::notifyViewportChanged()
     selectSourceURL(ImageLoader::UpdateSizeChanged);
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document, int width)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->setWidth(width);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
-RawPtr<HTMLImageElement> HTMLImageElement::createForJSConstructor(Document& document, int width, int height)
+HTMLImageElement* HTMLImageElement::createForJSConstructor(Document& document, int width, int height)
 {
-    RawPtr<HTMLImageElement> image = new HTMLImageElement(document);
+    HTMLImageElement* image = new HTMLImageElement(document);
     image->setWidth(width);
     image->setHeight(height);
     image->m_elementCreatedByParser = false;
-    return image.release();
+    return image;
 }
 
 bool HTMLImageElement::isPresentationAttribute(const QualifiedName& name) const
@@ -230,18 +215,10 @@ void HTMLImageElement::resetFormOwner()
         m_form->disassociate(*this);
     }
     if (nearestForm) {
-#if ENABLE(OILPAN)
         m_form = nearestForm;
-#else
-        m_form = nearestForm->createWeakPtr();
-#endif
         m_form->associate(*this);
     } else {
-#if ENABLE(OILPAN)
         m_form = nullptr;
-#else
-        m_form = WeakPtr<HTMLFormElement>();
-#endif
     }
 }
 
@@ -381,8 +358,8 @@ void HTMLImageElement::attach(const AttachContext& context)
         if (m_isFallbackImage) {
             float deviceScaleFactor = blink::deviceScaleFactor(layoutImage->frame());
             std::pair<Image*, float> brokenImageAndImageScaleFactor = ImageResource::brokenImage(deviceScaleFactor);
-            RawPtr<ImageResource> newImageResource = ImageResource::create(brokenImageAndImageScaleFactor.first);
-            layoutImage->imageResource()->setImageResource(newImageResource.get());
+            ImageResource* newImageResource = ImageResource::create(brokenImageAndImageScaleFactor.first);
+            layoutImage->imageResource()->setImageResource(newImageResource);
         }
         if (layoutImageResource->hasImage())
             return;

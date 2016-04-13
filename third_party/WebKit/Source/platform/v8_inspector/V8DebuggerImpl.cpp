@@ -409,7 +409,7 @@ bool V8DebuggerImpl::setScriptSource(const String16& sourceID, const String16& n
             *stackChanged = resultTuple->Get(1)->BooleanValue();
             // Call stack may have changed after if the edited function was on the stack.
             if (!preview && isPaused())
-                *newCallFrames = currentCallFrames();
+                newCallFrames->swap(currentCallFrames());
             return true;
         }
     // Compile error.
@@ -828,6 +828,11 @@ const V8DebuggerImpl::ContextByIdMap* V8DebuggerImpl::contextGroup(int contextGr
     if (!m_contexts.contains(contextGroupId))
         return nullptr;
     return m_contexts.get(contextGroupId);
+}
+
+V8InspectorSessionImpl* V8DebuggerImpl::sessionForContextGroup(int contextGroupId)
+{
+    return contextGroupId ? m_sessions.get(contextGroupId) : nullptr;
 }
 
 } // namespace blink

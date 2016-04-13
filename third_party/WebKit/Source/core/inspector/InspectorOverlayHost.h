@@ -32,14 +32,13 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class CORE_EXPORT InspectorOverlayHost final : public GarbageCollectedFinalized<InspectorOverlayHost>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static RawPtr<InspectorOverlayHost> create()
+    static InspectorOverlayHost* create()
     {
         return new InspectorOverlayHost();
     }

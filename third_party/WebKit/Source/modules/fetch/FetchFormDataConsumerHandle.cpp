@@ -6,7 +6,6 @@
 
 #include "modules/fetch/DataConsumerHandleUtil.h"
 #include "modules/fetch/FetchBlobDataConsumerHandle.h"
-#include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextCodec.h"
@@ -292,11 +291,11 @@ PassOwnPtr<FetchDataConsumerHandle> FetchFormDataConsumerHandle::create(const St
 {
     return adoptPtr(new FetchFormDataConsumerHandle(body));
 }
-PassOwnPtr<FetchDataConsumerHandle> FetchFormDataConsumerHandle::create(PassRefPtr<DOMArrayBuffer> body)
+PassOwnPtr<FetchDataConsumerHandle> FetchFormDataConsumerHandle::create(DOMArrayBuffer* body)
 {
     return adoptPtr(new FetchFormDataConsumerHandle(body->data(), body->byteLength()));
 }
-PassOwnPtr<FetchDataConsumerHandle> FetchFormDataConsumerHandle::create(PassRefPtr<DOMArrayBufferView> body)
+PassOwnPtr<FetchDataConsumerHandle> FetchFormDataConsumerHandle::create(DOMArrayBufferView* body)
 {
     return adoptPtr(new FetchFormDataConsumerHandle(body->baseAddress(), body->byteLength()));
 }

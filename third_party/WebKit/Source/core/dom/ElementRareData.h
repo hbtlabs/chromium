@@ -23,6 +23,7 @@
 #define ElementRareData_h
 
 #include "core/animation/ElementAnimations.h"
+#include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CompositorProxiedPropertySet.h"
 #include "core/dom/DatasetDOMStringMap.h"
@@ -52,7 +53,7 @@ public:
 
     ~ElementRareData();
 
-    void setPseudoElement(PseudoId, RawPtr<PseudoElement>);
+    void setPseudoElement(PseudoId, PseudoElement*);
     PseudoElement* pseudoElement(PseudoId) const;
 
     short tabIndex() const { return m_tabindex; }
@@ -70,6 +71,9 @@ public:
     }
 
     CSSStyleDeclaration& ensureInlineCSSStyleDeclaration(Element* ownerElement);
+    InlineStylePropertyMap& ensureInlineStylePropertyMap(Element* ownerElement);
+
+    InlineStylePropertyMap* inlineStylePropertyMap() { return m_cssomMapWrapper.get(); }
 
     void clearShadow() { m_shadow = nullptr; }
     ElementShadow* shadow() const { return m_shadow.get(); }
@@ -81,14 +85,14 @@ public:
     }
 
     NamedNodeMap* attributeMap() const { return m_attributeMap.get(); }
-    void setAttributeMap(RawPtr<NamedNodeMap> attributeMap) { m_attributeMap = attributeMap; }
+    void setAttributeMap(NamedNodeMap* attributeMap) { m_attributeMap = attributeMap; }
 
     ComputedStyle* ensureComputedStyle() const { return m_computedStyle.get(); }
     void setComputedStyle(PassRefPtr<ComputedStyle> computedStyle) { m_computedStyle = computedStyle; }
     void clearComputedStyle() { m_computedStyle = nullptr; }
 
     ClassList* classList() const { return m_classList.get(); }
-    void setClassList(RawPtr<ClassList> classList) { m_classList = classList.leakRef(); }
+    void setClassList(ClassList* classList) { m_classList = classList; }
     void clearClassListValueForQuirksMode()
     {
         if (!m_classList)
@@ -97,7 +101,7 @@ public:
     }
 
     DatasetDOMStringMap* dataset() const { return m_dataset.get(); }
-    void setDataset(RawPtr<DatasetDOMStringMap> dataset) { m_dataset = dataset; }
+    void setDataset(DatasetDOMStringMap* dataset) { m_dataset = dataset; }
 
     LayoutSize minimumSizeForResizing() const { return m_minimumSizeForResizing; }
     void setMinimumSizeForResizing(LayoutSize size) { m_minimumSizeForResizing = size; }
@@ -118,7 +122,7 @@ public:
     void decrementCompositorProxiedProperties(uint32_t properties);
     CompositorProxiedPropertySet* proxiedPropertyCounts() const { return m_proxiedProperties.get(); }
 
-    void setCustomElementDefinition(RawPtr<CustomElementDefinition> definition) { m_customElementDefinition = definition; }
+    void setCustomElementDefinition(CustomElementDefinition* definition) { m_customElementDefinition = definition; }
     CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
 
     AttrNodeList& ensureAttrNodeList();
@@ -150,6 +154,7 @@ private:
     Member<NamedNodeMap> m_attributeMap;
     Member<AttrNodeList> m_attrNodeList;
     Member<InlineCSSStyleDeclaration> m_cssomWrapper;
+    Member<InlineStylePropertyMap> m_cssomMapWrapper;
     OwnPtr<CompositorProxiedPropertySet> m_proxiedProperties;
 
     Member<ElementAnimations> m_elementAnimations;
@@ -208,7 +213,7 @@ inline void ElementRareData::clearPseudoElements()
     setPseudoElement(PseudoIdFirstLetter, nullptr);
 }
 
-inline void ElementRareData::setPseudoElement(PseudoId pseudoId, RawPtr<PseudoElement> element)
+inline void ElementRareData::setPseudoElement(PseudoId pseudoId, PseudoElement* element)
 {
     switch (pseudoId) {
     case PseudoIdBefore:

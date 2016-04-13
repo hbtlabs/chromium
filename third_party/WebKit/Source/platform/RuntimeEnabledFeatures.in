@@ -28,6 +28,7 @@ ApplicationCache status=stable
 AudioOutputDevices status=stable
 AudioVideoTracks status=experimental
 BackgroundSync status=stable
+BackspaceDefaultHandler status=test
 CacheIgnoreSearchOption status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
@@ -53,7 +54,7 @@ CSSOMSmoothScroll status=experimental
 CSSPaintAPI status=test, depends_on=Worklet
 CSSPropertyD status=experimental
 CSSSnapSize status=experimental
-CSSStickyPosition
+CSSStickyPosition status=experimental
 CSSTouchActionPanDirections status=experimental
 CSSTypedOM status=experimental
 CSSVariables status=stable
@@ -204,8 +205,8 @@ Suborigins status=experimental
 // like to enable this always but can't until more websites fix this bug.
 // Chromium sets this conditionally (eg. based on the presence of a
 // touchscreen) in ApplyWebPreferences.
-SrcObject status=test
 Touch status=stable
+TraceWrappables
 TrustedEvents status=stable
 TrustedEventsDefaultAction
 UnsafeES3APIs

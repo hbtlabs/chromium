@@ -169,12 +169,12 @@
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_switches_util.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/latency_info/latency_info.h"
 #include "url/url_constants.h"
 #include "v8/include/v8.h"
 
@@ -795,8 +795,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
   // Ensure that sandbox flags are inherited from an opener in a different
   // process.  In that case, the browser process will set any inherited sandbox
   // flags in |replicated_frame_state|, so apply them here.
-  if (opener_frame && !was_created_by_renderer &&
-      webview()->mainFrame()->isWebLocalFrame()) {
+  if (!was_created_by_renderer && webview()->mainFrame()->isWebLocalFrame()) {
     webview()->mainFrame()->toWebLocalFrame()->forceSandboxFlags(
         params.replicated_frame_state.sandbox_flags);
   }

@@ -246,16 +246,8 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_SETSHADER_PTR
-#   define SK_SUPPORT_LEGACY_SETSHADER_PTR
-#endif
-
 #ifndef    SK_SUPPORT_LEGACY_TYPEFACE_PTR
 #   define SK_SUPPORT_LEGACY_TYPEFACE_PTR
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_MASKFILTER_PTR
-#   define SK_SUPPORT_LEGACY_MASKFILTER_PTR
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

@@ -751,6 +751,130 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CrossSiteIframe) {
       DepictFrameTree(root));
 }
 
+// Class to sniff incoming IPCs for FrameHostMsg_FrameRectChanged messages.
+class FrameRectChangedMessageFilter : public content::BrowserMessageFilter {
+ public:
+  FrameRectChangedMessageFilter()
+      : content::BrowserMessageFilter(FrameMsgStart),
+        message_loop_runner_(new content::MessageLoopRunner),
+        frame_rect_received_(false) {}
+
+  bool OnMessageReceived(const IPC::Message& message) override {
+    IPC_BEGIN_MESSAGE_MAP(FrameRectChangedMessageFilter, message)
+      IPC_MESSAGE_HANDLER(FrameHostMsg_FrameRectChanged, OnFrameRectChanged)
+    IPC_END_MESSAGE_MAP()
+    return false;
+  }
+
+  gfx::Rect last_rect() const { return last_rect_; }
+
+  void Wait() {
+    last_rect_ = gfx::Rect();
+    message_loop_runner_->Run();
+  }
+
+ private:
+  ~FrameRectChangedMessageFilter() override {}
+
+  void OnFrameRectChanged(const gfx::Rect& rect) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::Bind(&FrameRectChangedMessageFilter::OnFrameRectChangedOnUI, this,
+                   rect));
+  }
+
+  void OnFrameRectChangedOnUI(const gfx::Rect& rect) {
+    last_rect_ = rect;
+    if (!frame_rect_received_) {
+      frame_rect_received_ = true;
+      message_loop_runner_->Quit();
+    }
+  }
+
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  bool frame_rect_received_;
+  gfx::Rect last_rect_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameRectChangedMessageFilter);
+};
+
+// Test that the view bounds for an out-of-process iframe are set and updated
+// correctly, including accounting for local frame offsets in the parent and
+// scroll positions.
+#if defined(OS_ANDROID)
+// Browser process hit testing is not implemented on Android.
+// https://crbug.com/491334
+#define MAYBE_ViewBoundsInNestedFrameTest DISABLED_ViewBoundsInNestedFrameTest
+#else
+#define MAYBE_ViewBoundsInNestedFrameTest ViewBoundsInNestedFrameTest
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       MAYBE_ViewBoundsInNestedFrameTest) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  NavigateToURL(shell(), main_url);
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  RenderWidgetHostViewBase* rwhv_root = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  ASSERT_EQ(1U, root->child_count());
+
+  FrameTreeNode* parent_iframe_node = root->child_at(0);
+  GURL site_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_positioned_frame.html"));
+  NavigateFrameToURL(parent_iframe_node, site_url);
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site A ------- proxies for B\n"
+      "        +--Site B -- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://baz.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* nested_iframe_node = parent_iframe_node->child_at(0);
+  RenderWidgetHostViewBase* rwhv_nested =
+      static_cast<RenderWidgetHostViewBase*>(
+          nested_iframe_node->current_frame_host()
+              ->GetRenderWidgetHost()
+              ->GetView());
+
+  SurfaceHitTestReadyNotifier notifier(
+      static_cast<RenderWidgetHostViewChildFrame*>(rwhv_nested));
+  notifier.WaitForSurfaceReady();
+
+  // Verify the view bounds of the nested iframe, which should account for the
+  // relative offset of its direct parent within the root frame.
+  gfx::Rect bounds = rwhv_nested->GetViewBounds();
+  EXPECT_EQ(bounds.x() - rwhv_root->GetViewBounds().x(), 397);
+  EXPECT_EQ(bounds.y() - rwhv_root->GetViewBounds().y(), 112);
+
+  scoped_refptr<FrameRectChangedMessageFilter> filter =
+      new FrameRectChangedMessageFilter();
+  root->current_frame_host()->GetProcess()->AddFilter(filter.get());
+
+  // Scroll the parent frame downward to verify that the child rect gets updated
+  // correctly.
+  blink::WebMouseWheelEvent scroll_event;
+  scroll_event.type = blink::WebInputEvent::MouseWheel;
+  scroll_event.x = 387;
+  scroll_event.y = 110;
+  scroll_event.deltaX = 0.0f;
+  scroll_event.deltaY = -30.0f;
+  rwhv_root->ProcessMouseWheelEvent(scroll_event);
+
+  filter->Wait();
+
+  // The precise amount of scroll for the first view position update is not
+  // deterministic, so this simply verifies that the OOPIF moved from its
+  // earlier position.
+  gfx::Rect update_rect = filter->last_rect();
+  EXPECT_LT(update_rect.y(), bounds.y() - rwhv_root->GetViewBounds().y());
+}
+
 // Test that mouse events are being routed to the correct RenderWidgetHostView
 // based on coordinates.
 #if defined(OS_ANDROID) || defined(THREAD_SANITIZER)
@@ -4095,16 +4219,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // delay the SwapOut ACK from the A->B navigation, so that the second B->A
 // navigation is initiated before the first page receives the SwapOut ACK.
 // Ensure that the RVH(A) that's pending deletion is not reused in that case.
-// crbug.com/554825
-#if defined(THREAD_SANITIZER)
-#define MAYBE_RenderViewHostPendingDeletionIsNotReused \
-        DISABLED_RenderViewHostPendingDeletionIsNotReused
-#else
-#define MAYBE_RenderViewHostPendingDeletionIsNotReused \
-        RenderViewHostPendingDeletionIsNotReused
-#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       MAYBE_RenderViewHostPendingDeletionIsNotReused) {
+                       RenderViewHostPendingDeletionIsNotReused) {
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   NavigateToURL(shell(), a_url);
 
@@ -4121,6 +4237,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // process.
   scoped_refptr<SwapoutACKMessageFilter> filter = new SwapoutACKMessageFilter();
   rfh->GetProcess()->AddFilter(filter.get());
+  rfh->DisableSwapOutTimerForTesting();
 
   // Navigate to B.  This must wait for DidCommitProvisionalLoad, as opposed to
   // DidStopLoading, since otherwise the SwapOut timer might call OnSwappedOut
@@ -4130,7 +4247,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   shell()->LoadURL(b_url);
   commit_observer.WaitForCommit();
   EXPECT_FALSE(deleted_observer.deleted());
-  rfh->ResetSwapOutTimerForTesting();
 
   // Since the SwapOut ACK for A->B is dropped, the first page's
   // RenderFrameHost and RenderViewHost should be pending deletion after the
@@ -4330,79 +4446,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, DocumentActiveElement) {
   verify_active_element_property(child_rfh, "tagName", "iframe");
   verify_active_element_property(child_rfh, "src",
                                  grandchild->current_url().spec());
-}
-
-// Check that document.hasFocus() works properly with out-of-process iframes.
-// The test builds a page with four cross-site frames and then focuses them one
-// by one, checking the value of document.hasFocus() in all frames.  For any
-// given focused frame, document.hasFocus() should return true for that frame
-// and all its ancestor frames.
-// Disabled due to flakes; see https://crbug.com/559273.
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, DISABLED_DocumentHasFocus) {
-  GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b(c),d)"));
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-
-  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
-
-  EXPECT_EQ(
-      " Site A ------------ proxies for B C D\n"
-      "   |--Site B ------- proxies for A C D\n"
-      "   |    +--Site C -- proxies for A B D\n"
-      "   +--Site D ------- proxies for A B C\n"
-      "Where A = http://a.com/\n"
-      "      B = http://b.com/\n"
-      "      C = http://c.com/\n"
-      "      D = http://d.com/",
-      DepictFrameTree(root));
-
-  FrameTreeNode* child1 = root->child_at(0);
-  FrameTreeNode* child2 = root->child_at(1);
-  FrameTreeNode* grandchild = root->child_at(0)->child_at(0);
-
-  // Helper function to check document.hasFocus() for a given frame.
-  auto document_has_focus = [](FrameTreeNode* node) {
-    bool hasFocus = false;
-    EXPECT_TRUE(ExecuteScriptAndExtractBool(
-        node->current_frame_host(),
-        "window.domAutomationController.send(document.hasFocus())",
-        &hasFocus));
-    return hasFocus;
-  };
-
-  // The main frame should be focused to start with.
-  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
-
-  EXPECT_TRUE(document_has_focus(root));
-  EXPECT_FALSE(document_has_focus(child1));
-  EXPECT_FALSE(document_has_focus(grandchild));
-  EXPECT_FALSE(document_has_focus(child2));
-
-  FocusFrame(child1);
-  EXPECT_EQ(child1, root->frame_tree()->GetFocusedFrame());
-
-  EXPECT_TRUE(document_has_focus(root));
-  EXPECT_TRUE(document_has_focus(child1));
-  EXPECT_FALSE(document_has_focus(grandchild));
-  EXPECT_FALSE(document_has_focus(child2));
-
-  FocusFrame(grandchild);
-  EXPECT_EQ(grandchild, root->frame_tree()->GetFocusedFrame());
-
-  EXPECT_TRUE(document_has_focus(root));
-  EXPECT_TRUE(document_has_focus(child1));
-  EXPECT_TRUE(document_has_focus(grandchild));
-  EXPECT_FALSE(document_has_focus(child2));
-
-  FocusFrame(child2);
-  EXPECT_EQ(child2, root->frame_tree()->GetFocusedFrame());
-
-  EXPECT_TRUE(document_has_focus(root));
-  EXPECT_FALSE(document_has_focus(child1));
-  EXPECT_FALSE(document_has_focus(grandchild));
-  EXPECT_TRUE(document_has_focus(child2));
 }
 
 // Check that window.focus works for cross-process subframes.
@@ -4886,133 +4929,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   EXPECT_EQ(rwhv_parent, router->gesture_target_);
 }
 #endif  // defined(USE_AURA)
-
-// Ensure that a cross-process subframe can receive keyboard events when in
-// focus. Flaky: https://crbug.com/596508.
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       DISABLED_SubframeKeyboardEventRouting) {
-  GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/frame_tree/page_with_one_frame.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
-
-  GURL frame_url(
-      embedded_test_server()->GetURL("b.com", "/page_with_input_field.html"));
-  NavigateFrameToURL(root->child_at(0), frame_url);
-
-  // Focus the subframe and then its input field.  The return value
-  // "input-focus" will be sent once the input field's focus event fires.
-  FocusFrame(root->child_at(0));
-  std::string result;
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      root->child_at(0)->current_frame_host(), "focusInputField()", &result));
-  EXPECT_EQ(result, "input-focus");
-
-  // The subframe should now be focused.
-  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
-
-  // Generate a few keyboard events and route them to currently focused frame.
-  SimulateKeyPress(web_contents, ui::VKEY_F, false, false, false, false);
-  SimulateKeyPress(web_contents, ui::VKEY_O, false, false, false, false);
-  SimulateKeyPress(web_contents, ui::VKEY_O, false, false, false, false);
-
-  // Verify that the input field in the subframe received the keystrokes.
-  EXPECT_TRUE(ExecuteScriptAndExtractString(
-      root->child_at(0)->current_frame_host(),
-      "window.domAutomationController.send(getInputFieldText());", &result));
-  EXPECT_EQ("FOO", result);
-}
-
-// Ensure that sequential focus navigation (advancing focused elements with
-// <tab> and <shift-tab>) works across cross-process subframes.
-// The test sets up six inputs fields in a page with two cross-process
-// subframes:
-//                 child1            child2
-//             /------------\    /------------\.
-//             | 2. <input> |    | 4. <input> |
-//  1. <input> | 3. <input> |    | 5. <input> |  6. <input>
-//             \------------/    \------------/.
-//
-// The test then presses <tab> six times to cycle through focused elements 1-6.
-// The test then repeats this with <shift-tab> to cycle in reverse order.
-
-// Freqently times out. https://crbug.com/599730.
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       DISABLED_SequentialFocusNavigation) {
-  GURL main_url(embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
-  EXPECT_TRUE(NavigateToURL(shell(), main_url));
-
-  WebContents* contents = shell()->web_contents();
-  FrameTreeNode* root =
-      static_cast<WebContentsImpl*>(contents)->GetFrameTree()->root();
-
-  // Assign a name to each frame.  This will be sent along in test messages
-  // from focus events.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(),
-                            "window.name = 'root';"));
-  EXPECT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(),
-                            "window.name = 'child1';"));
-  EXPECT_TRUE(ExecuteScript(root->child_at(1)->current_frame_host(),
-                            "window.name = 'child2';"));
-
-  // This script will insert two <input> fields in the document, one at the
-  // beginning and one at the end.  For root frame, this means that we will
-  // have an <input>, then two <iframe> elements, then another <input>.
-  std::string script =
-      "function onFocus(e) {"
-      "  domAutomationController.setAutomationId(0);"
-      "  domAutomationController.send(window.name + '-focused-' + e.target.id);"
-      "}"
-      "var input1 = document.createElement('input');"
-      "input1.id = 'input1';"
-      "var input2 = document.createElement('input');"
-      "input2.id = 'input2';"
-      "document.body.insertBefore(input1, document.body.firstChild);"
-      "document.body.appendChild(input2);"
-      "input1.addEventListener('focus', onFocus, false);"
-      "input2.addEventListener('focus', onFocus, false);";
-
-  // Add two input fields to each of the three frames.
-  EXPECT_TRUE(ExecuteScript(root->current_frame_host(), script));
-  EXPECT_TRUE(ExecuteScript(root->child_at(0)->current_frame_host(), script));
-  EXPECT_TRUE(ExecuteScript(root->child_at(1)->current_frame_host(), script));
-
-  // Helper to simulate a tab press and wait for a focus message.
-  auto press_tab_and_wait_for_message = [contents](bool reverse) {
-    DOMMessageQueue msg_queue;
-    std::string reply;
-    SimulateKeyPress(contents, ui::VKEY_TAB, false, reverse /* shift */, false,
-                     false);
-    EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
-    return reply;
-  };
-
-  // Press <tab> six times to focus each of the <input> elements in turn.
-  EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
-  EXPECT_EQ("\"child1-focused-input1\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
-  EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(root->child_at(1), root->frame_tree()->GetFocusedFrame());
-  EXPECT_EQ("\"child2-focused-input2\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ("\"root-focused-input2\"", press_tab_and_wait_for_message(false));
-  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
-
-  // Now, press <shift-tab> to navigate focus in the reverse direction.
-  EXPECT_EQ("\"child2-focused-input2\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ(root->child_at(1), root->frame_tree()->GetFocusedFrame());
-  EXPECT_EQ("\"child2-focused-input1\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ("\"child1-focused-input2\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ(root->child_at(0), root->frame_tree()->GetFocusedFrame());
-  EXPECT_EQ("\"child1-focused-input1\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ("\"root-focused-input1\"", press_tab_and_wait_for_message(true));
-  EXPECT_EQ(root, root->frame_tree()->GetFocusedFrame());
-}
 
 // A WebContentsDelegate to capture ContextMenu creation events.
 class ContextMenuObserverDelegate : public WebContentsDelegate {
@@ -6459,8 +6375,17 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TextInputStateChanged) {
   EXPECT_EQ("fourth", web_contents()->GetTextInputState()->value);
 }
 
+// Disable this test on Android (http://crbug.com/603209)
+#if defined(OS_ANDROID)
+#define MAYBE_TextInputStateChangesAfterRendererCrashes \
+  DISABLED_TextInputStateChangesAfterRendererCrashes
+#else
+#define MAYBE_TextInputStateChangesAfterRendererCrashes \
+  TextInputStateChangesAfterRendererCrashes
+#endif
+
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       TextInputStateChangesAfterRendererCrashes) {
+                       MAYBE_TextInputStateChangesAfterRendererCrashes) {
   GURL main_url(
       embedded_test_server()->GetURL("a.com", "/page_with_iframe.html"));
   NavigateToURL(shell(), main_url);

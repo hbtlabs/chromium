@@ -28,26 +28,6 @@ Polymer({
     },
 
     /**
-     * The text for the start casting button.
-     * @private {string}
-     */
-    startCastingButtonText_: {
-      type: String,
-      readOnly: true,
-      value: loadTimeData.getString('startCastingButton'),
-    },
-
-    /**
-     * The text for the stop casting button.
-     * @private {string}
-     */
-    stopCastingButtonText_: {
-      type: String,
-      readOnly: true,
-      value: function() { return loadTimeData.getString('stopCastingButton'); },
-    },
-
-    /**
      * Whether the custom controller should be hidden.
      * A custom controller is shown iff |route| specifies customControllerPath
      * and the view can be loaded.
@@ -58,6 +38,10 @@ Polymer({
       value: true,
     },
   },
+
+  behaviors: [
+    I18nBehavior,
+  ],
 
   /**
    * Fires a close-route-click event. This is called when the button to close

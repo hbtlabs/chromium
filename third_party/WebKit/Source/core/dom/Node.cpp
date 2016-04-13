@@ -92,9 +92,9 @@
 #include "platform/TraceEvent.h"
 #include "platform/TracedValue.h"
 #include "wtf/HashSet.h"
-#include "wtf/Partitions.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
+#include "wtf/allocator/Partitions.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -391,7 +391,7 @@ void Node::setNodeValue(const String&)
     // By default, setting nodeValue has no effect.
 }
 
-RawPtr<NodeList> Node::childNodes()
+NodeList* Node::childNodes()
 {
     if (isContainerNode())
         return ensureRareData().ensureNodeLists().ensureChildNodeList(toContainerNode(*this));
@@ -464,7 +464,7 @@ Node& Node::treeRoot() const
     return const_cast<Node&>(*node);
 }
 
-RawPtr<Node> Node::insertBefore(RawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
+Node* Node::insertBefore(Node* newChild, Node* refChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->insertBefore(newChild, refChild, exceptionState);
@@ -473,7 +473,7 @@ RawPtr<Node> Node::insertBefore(RawPtr<Node> newChild, Node* refChild, Exception
     return nullptr;
 }
 
-RawPtr<Node> Node::replaceChild(RawPtr<Node> newChild, RawPtr<Node> oldChild, ExceptionState& exceptionState)
+Node* Node::replaceChild(Node* newChild, Node* oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->replaceChild(newChild, oldChild, exceptionState);
@@ -482,7 +482,7 @@ RawPtr<Node> Node::replaceChild(RawPtr<Node> newChild, RawPtr<Node> oldChild, Ex
     return nullptr;
 }
 
-RawPtr<Node> Node::removeChild(RawPtr<Node> oldChild, ExceptionState& exceptionState)
+Node* Node::removeChild(Node* oldChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->removeChild(oldChild, exceptionState);
@@ -491,7 +491,7 @@ RawPtr<Node> Node::removeChild(RawPtr<Node> oldChild, ExceptionState& exceptionS
     return nullptr;
 }
 
-RawPtr<Node> Node::appendChild(RawPtr<Node> newChild, ExceptionState& exceptionState)
+Node* Node::appendChild(Node* newChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
         return toContainerNode(this)->appendChild(newChild, exceptionState);
@@ -513,7 +513,7 @@ void Node::normalize()
     // Go through the subtree beneath us, normalizing all nodes. This means that
     // any two adjacent text nodes are merged and any empty text nodes are removed.
 
-    RawPtr<Node> node = this;
+    Node* node = this;
     while (Node* firstChild = node->firstChild())
         node = firstChild;
     while (node) {
@@ -697,7 +697,7 @@ void Node::markAncestorsWithChildNeedsDistributionRecalc()
     if (RuntimeEnabledFeatures::shadowDOMV1Enabled() && inShadowIncludingDocument() && !document().childNeedsDistributionRecalc()) {
         // TODO(hayato): Support a non-document composed tree.
         // TODO(hayato): Enqueue a task only if a 'slotchange' event listner is registered in the document composed tree.
-        Microtask::enqueueMicrotask(WTF::bind(&Document::updateDistribution, RawPtr<Document>(&document())));
+        Microtask::enqueueMicrotask(WTF::bind(&Document::updateDistribution, &document()));
     }
     for (Node* node = this; node && !node->childNeedsDistributionRecalc(); node = node->parentOrShadowHostNode())
         node->setChildNeedsDistributionRecalc();
@@ -993,6 +993,21 @@ bool Node::canParticipateInFlatTree() const
 bool Node::isSlotOrActiveInsertionPoint() const
 {
     return isHTMLSlotElement(*this) || isActiveInsertionPoint(*this);
+}
+
+AtomicString Node::slotName() const
+{
+    DCHECK(slottable());
+    if (isElementNode())
+        return normalizeSlotName(toElement(*this).fastGetAttribute(HTMLNames::slotAttr));
+    DCHECK(isTextNode());
+    return emptyAtom;
+}
+
+// static
+AtomicString Node::normalizeSlotName(const AtomicString& name)
+{
+    return (name.isNull() || name.isEmpty()) ? emptyAtom : name;
 }
 
 bool Node::isInV1ShadowTree() const
@@ -1345,7 +1360,7 @@ void Node::setTextContent(const String& text)
     case ELEMENT_NODE:
     case DOCUMENT_FRAGMENT_NODE: {
         // FIXME: Merge this logic into replaceChildrenWithText.
-        RawPtr<ContainerNode> container = toContainerNode(this);
+        ContainerNode* container = toContainerNode(this);
 
         // Note: This is an intentional optimization.
         // See crbug.com/352836 also.
@@ -1527,6 +1542,38 @@ String Node::debugNodeName() const
     return nodeName();
 }
 
+static void dumpAttributeDesc(const Node& node, const QualifiedName& name, std::ostream& ostream)
+{
+    if (!node.isElementNode())
+        return;
+    const AtomicString& value = toElement(node).getAttribute(name);
+    if (value.isEmpty())
+        return;
+    ostream << ' ' << name.toString().utf8().data() << '=' << value;
+}
+
+// |std::ostream| version of |Node::showNode|
+std::ostream& operator<<(std::ostream& ostream, const Node& node)
+{
+    // We avoid to print "" by utf8().data().
+    ostream << node.nodeName().utf8().data();
+    if (node.isTextNode())
+        return ostream << " " << node.nodeValue();
+    dumpAttributeDesc(node, HTMLNames::idAttr, ostream);
+    dumpAttributeDesc(node, HTMLNames::classAttr, ostream);
+    dumpAttributeDesc(node, HTMLNames::styleAttr, ostream);
+    return ostream;
+}
+
+std::ostream& operator<<(std::ostream& ostream, const Node* node)
+{
+    if (!node)
+        return ostream << "null";
+    return ostream << *node;
+}
+
+#ifndef NDEBUG
+
 static void appendAttributeDesc(const Node* node, StringBuilder& stringBuilder, const QualifiedName& name, const char* attrDesc)
 {
     if (!node->isElementNode())
@@ -1541,28 +1588,6 @@ static void appendAttributeDesc(const Node* node, StringBuilder& stringBuilder, 
     stringBuilder.append(attr);
     stringBuilder.appendLiteral("\"");
 }
-
-// |std::ostream| version of |Node::showNode|
-std::ostream& operator<<(std::ostream& ostream, const Node& node)
-{
-    ostream << node.nodeName();
-    if (node.isTextNode())
-        return ostream << " " << node.nodeValue();
-    StringBuilder attrs;
-    appendAttributeDesc(&node, attrs, HTMLNames::idAttr, " ID");
-    appendAttributeDesc(&node, attrs, HTMLNames::classAttr, " CLASS");
-    appendAttributeDesc(&node, attrs, HTMLNames::styleAttr, " STYLE");
-    return ostream << attrs.toString();
-}
-
-std::ostream& operator<<(std::ostream& ostream, const Node* node)
-{
-    if (!node)
-        return ostream << "null";
-    return ostream << *node;
-}
-
-#ifndef NDEBUG
 
 void Node::showNode(const char* prefix) const
 {
@@ -1813,7 +1838,7 @@ const AtomicString& Node::interfaceName() const
 
 ExecutionContext* Node::getExecutionContext() const
 {
-    return document().contextDocument().get();
+    return document().contextDocument();
 }
 
 void Node::didMoveToNewDocument(Document& oldDocument)
@@ -1910,10 +1935,9 @@ EventTargetData& Node::ensureEventTargetData()
         return *eventTargetDataMap().get(this);
     DCHECK(!eventTargetDataMap().contains(this));
     setHasEventTargetData(true);
-    RawPtr<EventTargetData> data = new EventTargetData;
-    EventTargetData* dataPtr = data.get();
-    eventTargetDataMap().set(this, data.release());
-    return *dataPtr;
+    EventTargetData* data = new EventTargetData;
+    eventTargetDataMap().set(this, data);
+    return *data;
 }
 
 #if !ENABLE(OILPAN)
@@ -2005,10 +2029,7 @@ void Node::unregisterMutationObserver(MutationObserverRegistration* registration
     if (index == kNotFound)
         return;
 
-    // Deleting the registration may cause this node to be derefed, so we must make sure the Vector operation completes
-    // before that, in case |this| is destroyed (see MutationObserverRegistration::m_registrationNodeKeepAlive).
     // FIXME: Simplify the registration/transient registration logic to make this understandable by humans.
-    RawPtr<Node> protect(this);
 #if ENABLE(OILPAN)
     // The explicit dispose() is needed to have the registration
     // object unregister itself promptly.
@@ -2064,7 +2085,7 @@ void Node::handleLocalEvents(Event& event)
     fireEventListeners(&event);
 }
 
-void Node::dispatchScopedEvent(RawPtr<Event> event)
+void Node::dispatchScopedEvent(Event* event)
 {
     event->setTrusted(true);
     EventDispatcher::dispatchScopedEvent(*this, event->createMediator());
@@ -2090,12 +2111,12 @@ void Node::dispatchSubtreeModifiedEvent()
     dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMSubtreeModified, true));
 }
 
-DispatchEventResult Node::dispatchDOMActivateEvent(int detail, RawPtr<Event> underlyingEvent)
+DispatchEventResult Node::dispatchDOMActivateEvent(int detail, Event* underlyingEvent)
 {
 #if DCHECK_IS_ON()
     DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
 #endif
-    RawPtr<UIEvent> event = UIEvent::create(EventTypeNames::DOMActivate, true, true, document().domWindow(), detail);
+    UIEvent* event = UIEvent::create(EventTypeNames::DOMActivate, true, true, document().domWindow(), detail);
     event->setUnderlyingEvent(underlyingEvent);
     dispatchScopedEvent(event);
 
@@ -2107,7 +2128,7 @@ DispatchEventResult Node::dispatchDOMActivateEvent(int detail, RawPtr<Event> und
 DispatchEventResult Node::dispatchMouseEvent(const PlatformMouseEvent& nativeEvent, const AtomicString& eventType,
     int detail, Node* relatedTarget)
 {
-    RawPtr<MouseEvent> event = MouseEvent::create(eventType, document().domWindow(), nativeEvent, detail, relatedTarget);
+    MouseEvent* event = MouseEvent::create(eventType, document().domWindow(), nativeEvent, detail, relatedTarget);
     return dispatchEvent(event);
 }
 
@@ -2278,7 +2299,7 @@ void Node::decrementConnectedSubframeCount()
     rareData()->decrementConnectedSubframeCount();
 }
 
-RawPtr<StaticNodeList> Node::getDestinationInsertionPoints()
+StaticNodeList* Node::getDestinationInsertionPoints()
 {
     updateDistribution();
     HeapVector<Member<InsertionPoint>, 8> insertionPoints;
@@ -2418,11 +2439,6 @@ unsigned Node::lengthOfContents() const
 
 v8::Local<v8::Object> Node::wrap(v8::Isolate* isolate, v8::Local<v8::Object> creationContext)
 {
-    // It's possible that no one except for the new wrapper owns this object at
-    // this moment, so we have to prevent GC to collect this object until the
-    // object gets associated with the wrapper.
-    RawPtr<Node> protect(this);
-
     DCHECK(!DOMDataStore::containsWrapper(this, isolate));
 
     const WrapperTypeInfo* wrapperType = wrapperTypeInfo();

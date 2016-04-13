@@ -56,12 +56,11 @@ typedef HeapVector<Member<MessagePort>, 1> MessagePortArray;
 typedef Vector<OwnPtr<WebMessagePortChannel>, 1> MessagePortChannelArray;
 
 class CORE_EXPORT MessagePort
-    : public RefCountedGarbageCollectedEventTargetWithInlineData<MessagePort>
+    : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public WebMessagePortChannelClient {
     DEFINE_WRAPPERTYPEINFO();
-    REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MessagePort);
     USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
 public:
     static MessagePort* create(ExecutionContext&);
@@ -99,7 +98,7 @@ public:
     // ActiveDOMObject implementation.
     void stop() override { close(); }
 
-    void setOnmessage(RawPtr<EventListener> listener)
+    void setOnmessage(EventListener* listener)
     {
         setAttributeEventListener(EventTypeNames::message, listener);
         start();

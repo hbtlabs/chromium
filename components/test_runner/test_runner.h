@@ -41,13 +41,13 @@ class Arguments;
 namespace test_runner {
 
 class InvokeCallbackTask;
+class MockContentSettingsClient;
 class MockCredentialManagerClient;
 class MockScreenOrientationClient;
 class MockWebSpeechRecognizer;
 class MockWebUserMediaClient;
 class SpellCheckClient;
 class TestInterfaces;
-class WebContentSettings;
 class WebTestDelegate;
 class WebTestProxyBase;
 
@@ -588,6 +588,11 @@ class TestRunner : public WebTestRunner {
   void ResolveBeforeInstallPromptPromise(int request_id,
                                          const std::string& platform);
 
+  // Immediately run all pending idle tasks, including all pending
+  // requestIdleCallback calls.  Invoke the callback when all
+  // idle tasks are complete.
+  void RunIdleTasks(v8::Local<v8::Function> callback);
+
   // Calls setlocale(LC_ALL, ...) for a specified locale.
   // Resets between tests.
   void SetPOSIXLocale(const std::string& locale);
@@ -790,7 +795,7 @@ class TestRunner : public WebTestRunner {
   blink::WebFrame* top_loading_frame_;
 
   // WebContentSettingsClient mock object.
-  scoped_ptr<WebContentSettings> web_content_settings_;
+  scoped_ptr<MockContentSettingsClient> mock_content_settings_client_;
 
   bool pointer_locked_;
   enum {

@@ -62,29 +62,6 @@ namespace blink {
 
 namespace {
 
-class NodeDispatchEventTask: public SuspendableTask {
-    WTF_MAKE_NONCOPYABLE(NodeDispatchEventTask);
-public:
-    NodeDispatchEventTask(const WebPrivatePtr<Node>& node, WebDOMEvent event)
-        : m_event(event)
-    {
-        m_node = node;
-    }
-
-    ~NodeDispatchEventTask()
-    {
-        m_node.reset();
-    }
-
-    void run() override
-    {
-        m_node->dispatchEvent(m_event);
-    }
-private:
-    WebPrivatePtr<Node> m_node;
-    WebDOMEvent m_event;
-};
-
 class NodeDispatchSimulatedClickTask: public SuspendableTask {
     WTF_MAKE_NONCOPYABLE(NodeDispatchSimulatedClickTask);
 public:
@@ -216,12 +193,6 @@ bool WebNode::isDocumentTypeNode() const
     return m_private->getNodeType() == Node::DOCUMENT_TYPE_NODE;
 }
 
-void WebNode::dispatchEvent(const WebDOMEvent& event)
-{
-    if (!event.isNull())
-        m_private->getExecutionContext()->postSuspendableTask(adoptPtr(new NodeDispatchEventTask(m_private, event)));
-}
-
 void WebNode::simulateClick()
 {
     m_private->getExecutionContext()->postSuspendableTask(adoptPtr(new NodeDispatchSimulatedClickTask(m_private)));
@@ -239,40 +210,9 @@ WebElement WebNode::querySelector(const WebString& selector, WebExceptionCode& e
     if (!m_private->isContainerNode())
         return WebElement();
     TrackExceptionState exceptionState;
-    WebElement element = toContainerNode(m_private.get())->querySelector(selector, exceptionState).get();
+    WebElement element = toContainerNode(m_private.get())->querySelector(selector, exceptionState);
     ec = exceptionState.code();
     return element;
-}
-
-WebElement WebNode::querySelector(const WebString& selector) const
-{
-    WebExceptionCode ec = 0;
-    WebElement element = querySelector(selector, ec);
-    DCHECK(!ec);
-    return element;
-}
-
-void WebNode::querySelectorAll(const WebString& selector, WebVector<WebElement>& results, WebExceptionCode& ec) const
-{
-    if (!m_private->isContainerNode())
-        return;
-    TrackExceptionState exceptionState;
-    RawPtr<StaticElementList> elements = toContainerNode(m_private.get())->querySelectorAll(selector, exceptionState);
-    ec = exceptionState.code();
-    if (exceptionState.hadException())
-        return;
-    Vector<WebElement> temp;
-    temp.reserveCapacity(elements->length());
-    for (unsigned i = 0; i < elements->length(); ++i)
-        temp.append(WebElement(elements->item(i)));
-    results.assign(temp);
-}
-
-void WebNode::querySelectorAll(const WebString& selector, WebVector<WebElement>& results) const
-{
-    WebExceptionCode ec = 0;
-    querySelectorAll(selector, results, ec);
-    DCHECK(!ec);
 }
 
 bool WebNode::focused() const

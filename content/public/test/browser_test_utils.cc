@@ -24,6 +24,8 @@
 #include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -39,6 +41,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -56,7 +59,7 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/events/latency_info.h"
+#include "ui/latency_info/latency_info.h"
 #include "ui/resources/grit/webui_resources.h"
 
 #if defined(USE_AURA)
@@ -745,6 +748,13 @@ bool FrameHasSourceUrl(const GURL& url, RenderFrameHost* frame) {
   return frame->GetLastCommittedURL() == url;
 }
 
+RenderFrameHost* ChildFrameAt(RenderFrameHost* frame, size_t index) {
+  RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(frame);
+  if (index >= rfh->frame_tree_node()->child_count())
+    return nullptr;
+  return rfh->frame_tree_node()->child_at(index)->current_frame_host();
+}
+
 bool ExecuteWebUIResourceTest(WebContents* web_contents,
                               const std::vector<int>& js_resource_ids) {
   // Inject WebUI test runner script first prior to other scripts required to
@@ -781,7 +791,8 @@ std::string GetCookies(BrowserContext* browser_context, const GURL& url) {
   std::string cookies;
   base::WaitableEvent event(true, false);
   net::URLRequestContextGetter* context_getter =
-      browser_context->GetRequestContext();
+      BrowserContext::GetDefaultStoragePartition(browser_context)->
+          GetURLRequestContext();
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -797,7 +808,8 @@ bool SetCookie(BrowserContext* browser_context,
   bool result = false;
   base::WaitableEvent event(true, false);
   net::URLRequestContextGetter* context_getter =
-      browser_context->GetRequestContext();
+      BrowserContext::GetDefaultStoragePartition(browser_context)->
+          GetURLRequestContext();
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,

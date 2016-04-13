@@ -1,7 +1,7 @@
 include_rules = [
   # common must not depend on embedder.
   "-mojo",
-  "+mojo/shell/public/cpp",
+  "+services/shell/public/cpp",
   "+mojo/common",
   "+mojo/message_pump",
   "+mojo/public",
@@ -9,9 +9,9 @@ include_rules = [
 
 specific_include_rules = {
   "trace_controller_impl\.h": [
-    "+mojo/services/tracing/public/interfaces/tracing.mojom.h"
+    "+services/tracing/public/interfaces/tracing.mojom.h"
   ],
   "tracing_impl\.h": [
-    "+mojo/services/tracing/public/interfaces/tracing.mojom.h"
+    "+services/tracing/public/interfaces/tracing.mojom.h"
   ],
 }

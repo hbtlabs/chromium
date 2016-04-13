@@ -5,9 +5,10 @@
 #ifndef UI_APP_LIST_VIEWS_APP_LIST_VIEW_H_
 #define UI_APP_LIST_VIEWS_APP_LIST_VIEW_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
 #include "ui/app_list/app_list_export.h"
@@ -157,7 +158,6 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
 
   // Overridden from views::WidgetDelegateView:
   views::View* GetInitiallyFocusedView() override;
-  gfx::ImageSkia GetWindowIcon() override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(gfx::Path* mask) const override;
 
@@ -184,7 +184,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDelegateView,
   views::View* overlay_view_;
 
   base::ObserverList<AppListViewObserver> observers_;
-  scoped_ptr<HideViewAnimationObserver> animation_observer_;
+  std::unique_ptr<HideViewAnimationObserver> animation_observer_;
 
   // For UMA and testing. If non-null, triggered when the app list is painted.
   base::Closure next_paint_callback_;

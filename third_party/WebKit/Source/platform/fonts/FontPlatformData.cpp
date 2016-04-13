@@ -286,20 +286,20 @@ static inline bool tableHasSpace(hb_face_t* face, hb_set_t* glyphs,
 bool FontPlatformData::hasSpaceInLigaturesOrKerning(
     TypesettingFeatures features) const
 {
-    HarfBuzzFace* hbFace = harfBuzzFace();
+    const HarfBuzzFace* hbFace = harfBuzzFace();
     if (!hbFace)
         return false;
 
     hb_face_t* face = hbFace->face();
     ASSERT(face);
-    hb_font_t* font = hbFace->getScaledFont();
+    OwnPtr<hb_font_t> font = adoptPtr(hbFace->createFont());
     ASSERT(font);
 
     hb_codepoint_t space;
     // If the space glyph isn't present in the font then each space character
     // will be rendering using a fallback font, which grantees that it cannot
     // affect the shape of the preceding word.
-    if (!hb_font_get_glyph(font, spaceCharacter, 0, &space))
+    if (!hb_font_get_glyph(font.get(), spaceCharacter, 0, &space))
         return false;
 
     if (!hb_ot_layout_has_substitution(face)
@@ -353,11 +353,10 @@ PassRefPtr<OpenTypeVerticalData> FontPlatformData::verticalData() const
     return FontCache::fontCache()->getVerticalData(typeface()->uniqueID(), *this);
 }
 
-PassRefPtr<SharedBuffer> FontPlatformData::openTypeTable(uint32_t table) const
+PassRefPtr<SharedBuffer> FontPlatformData::openTypeTable(SkFontTableTag tag) const
 {
     RefPtr<SharedBuffer> buffer;
 
-    SkFontTableTag tag = WTF::bswap32(table);
     const size_t tableSize = m_typeface->getTableSize(tag);
     if (tableSize) {
         Vector<char> tableBuffer(tableSize);

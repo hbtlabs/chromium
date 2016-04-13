@@ -44,11 +44,6 @@ class CORE_EXPORT FormAssociatedElement : public GarbageCollectedMixin {
 public:
     virtual ~FormAssociatedElement();
 
-#if !ENABLE(OILPAN)
-    void ref() { refFormAssociatedElement(); }
-    void deref() { derefFormAssociatedElement(); }
-#endif
-
     static HTMLFormElement* findAssociatedForm(const HTMLElement*);
     HTMLFormElement* form() const { return m_form.get(); }
     ValidityState* validity();
@@ -118,22 +113,14 @@ protected:
     String customValidationMessage() const;
 
 private:
-#if !ENABLE(OILPAN)
-    virtual void refFormAssociatedElement() = 0;
-    virtual void derefFormAssociatedElement() = 0;
-#endif
-
-    void setFormAttributeTargetObserver(RawPtr<FormAttributeTargetObserver>);
+    void setFormAttributeTargetObserver(FormAttributeTargetObserver*);
     void resetFormAttributeTargetObserver();
 
     Member<FormAttributeTargetObserver> m_formAttributeTargetObserver;
     Member<HTMLFormElement> m_form;
     Member<ValidityState> m_validityState;
     String m_customValidationMessage;
-    // Non-Oilpan: Even if m_formWasSetByParser is true, m_form can be null
-    // because parentNode is not a strong reference and |this| and m_form don't
-    // die together.
-    // Oilpan: If m_formWasSetByParser is true, m_form is always non-null.
+    // If m_formWasSetByParser is true, m_form is always non-null.
     bool m_formWasSetByParser;
 };
 

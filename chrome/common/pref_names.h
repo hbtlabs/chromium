@@ -217,6 +217,7 @@ extern const char kAccessibilityScreenMagnifierEnabled[];
 extern const char kAccessibilityScreenMagnifierType[];
 extern const char kAccessibilityScreenMagnifierScale[];
 extern const char kAccessibilityVirtualKeyboardEnabled[];
+extern const char kAccessibilityMonoAudioEnabled[];
 extern const char kAccessibilityAutoclickEnabled[];
 extern const char kAccessibilityAutoclickDelayMs[];
 extern const char kAccessibilityCaretHighlightEnabled[];
@@ -333,7 +334,7 @@ extern const char kPluginsAlwaysAuthorize[];
 extern const char kPluginsMetadata[];
 extern const char kPluginsResourceCacheUpdate[];
 #endif
-extern const char kCheckDefaultBrowser[];
+extern const char kDefaultBrowserLastDeclined[];
 extern const char kResetCheckDefaultBrowser[];
 extern const char kDefaultBrowserSettingEnabled[];
 #if defined(OS_MACOSX)
@@ -408,6 +409,7 @@ extern const char kFullscreenAllowed[];
 extern const char kLocalDiscoveryNotificationsEnabled[];
 
 extern const char kPushMessagingAppIdentifierMap[];
+extern const char kBackgroundBudgetMap[];
 
 extern const char kEasyUnlockAllowed[];
 extern const char kEasyUnlockEnabled[];
@@ -702,7 +704,7 @@ extern const char kMediaGalleriesUniqueId[];
 extern const char kMediaGalleriesRememberedGalleries[];
 #endif  // !defined(OS_ANDROID)
 
-#if defined(USE_ASH)
+#if defined(USE_AURA)
 extern const char kShelfAlignment[];
 extern const char kShelfAlignmentLocal[];
 extern const char kShelfAutoHideBehavior[];
@@ -714,9 +716,7 @@ extern const char kLogoutDialogDurationMs[];
 extern const char kPinnedLauncherApps[];
 extern const char kPolicyPinnedLauncherApps[];
 extern const char kShowLogoutButtonInTray[];
-#endif
 
-#if defined(USE_AURA)
 extern const char kMaxSeparationForGestureTouchesInPixels[];
 extern const char kSemiLongPressTimeInMs[];
 extern const char kTabScrubActivationDelayInMs[];

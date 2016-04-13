@@ -50,6 +50,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/gpu_data_manager.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/audio/audio_manager.h"
@@ -79,7 +80,6 @@
 // header, but is exported to allow injecting the overlay-composited
 // callback.
 #include "chromecast/graphics/cast_screen.h"
-#include "ui/aura/env.h"
 #include "ui/gfx/screen.h"
 #include "ui/ozone/platform/cast/overlay_manager_cast.h"  // nogncheck
 #endif
@@ -206,7 +206,7 @@ DefaultCommandLineSwitch g_default_switches[] = {
 #endif
 #if defined(OS_LINUX)
 #if defined(ARCH_CPU_X86_FAMILY)
-  // This is needed for now to enable the egltest Ozone platform to work with
+  // This is needed for now to enable the x11 Ozone platform to work with
   // current Linux/NVidia OpenGL drivers.
   { switches::kIgnoreGpuBlacklist, ""},
 #elif defined(ARCH_CPU_ARM_FAMILY)
@@ -400,7 +400,9 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
       metrics::CastMetricsServiceClient::Create(
           content::BrowserThread::GetBlockingPool(),
           cast_browser_process_->pref_service(),
-          cast_browser_process_->browser_context()->GetRequestContext()));
+          content::BrowserContext::GetDefaultStoragePartition(
+              cast_browser_process_->browser_context())->
+                  GetURLRequestContext()));
 
   if (!PlatformClientAuth::Initialize())
     LOG(ERROR) << "PlatformClientAuth::Initialize failed.";
@@ -484,10 +486,6 @@ void CastBrowserMainParts::PostMainMessageLoopRun() {
   cast_browser_process_->cast_service()->Finalize();
   cast_browser_process_->metrics_service_client()->Finalize();
   cast_browser_process_.reset();
-
-#if defined(USE_AURA)
-  aura::Env::DeleteInstance();
-#endif
 
   DeregisterKillOnAlarm();
 #endif

@@ -2040,6 +2040,7 @@ interface HTMLElement : Element
     getter outerText
     getter spellcheck
     getter style
+    getter styleMap
     getter tabIndex
     getter title
     getter translate
@@ -3403,6 +3404,7 @@ interface IntersectionObserver
 interface IntersectionObserverEntry
     attribute @@toStringTag
     getter boundingClientRect
+    getter intersectionRatio
     getter intersectionRect
     getter rootBounds
     getter target
@@ -3539,6 +3541,7 @@ interface MediaDevices
     attribute @@toStringTag
     method constructor
     method enumerateDevices
+    method getSupportedConstraints
     method getUserMedia
 interface MediaElementAudioSourceNode : AudioSourceNode
     attribute @@toStringTag

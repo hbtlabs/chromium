@@ -246,7 +246,7 @@ void ShellSurface::Maximize() {
   TRACE_EVENT0("exo", "ShellSurface::Maximize");
 
   if (!widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_MAXIMIZED);
 
   // Note: This will ask client to configure its surface even if already
   // maximized.
@@ -270,7 +270,7 @@ void ShellSurface::SetFullscreen(bool fullscreen) {
   TRACE_EVENT1("exo", "ShellSurface::SetFullscreen", "fullscreen", fullscreen);
 
   if (!widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_FULLSCREEN);
 
   // Note: This will ask client to configure its surface even if fullscreen
   // state doesn't change.
@@ -365,7 +365,7 @@ void ShellSurface::OnSurfaceCommit() {
   geometry_ = pending_geometry_;
 
   if (enabled() && !widget_)
-    CreateShellSurfaceWidget();
+    CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
 
   // Apply the accumulated pending origin offset to reflect acknowledged
   // configure requests.
@@ -378,9 +378,47 @@ void ShellSurface::OnSurfaceCommit() {
   if (widget_) {
     UpdateWidgetBounds();
 
+    gfx::Point surface_origin = GetSurfaceOrigin();
+
+    // Determine if window should be ignored by shelf if all configure requests
+    // have been acknowledged.
+    if (pending_configs_.empty()) {
+      gfx::Rect hit_test_bounds =
+          surface_->GetHitTestBounds() + surface_origin.OffsetFromOrigin();
+
+      // Prevent window from being activated when hit test bounds are empty.
+      bool activatable = activatable_ && !hit_test_bounds.IsEmpty();
+      if (activatable != CanActivate()) {
+        set_can_activate(activatable);
+
+        // Activate or deactivate window if activation state changed.
+        aura::client::ActivationClient* activation_client =
+            ash::Shell::GetInstance()->activation_client();
+        if (activatable)
+          activation_client->ActivateWindow(widget_->GetNativeWindow());
+        else if (widget_->IsActive())
+          activation_client->DeactivateWindow(widget_->GetNativeWindow());
+      }
+
+      // When maximized, only allow the shelf to recognize this window if the
+      // hit-test bounds contains the widget bounds. This prevents shaped
+      // windows that might only occupy a small area of the widget from dimming
+      // the shelf when maximized.
+      bool ignored_by_shelf = widget_->IsMaximized() &&
+                              !hit_test_bounds.Contains(gfx::Rect(
+                                  widget_->GetNativeWindow()->bounds().size()));
+
+      // Update state and shelf visibility if |ignored_by_shelf| changed.
+      ash::wm::WindowState* window_state =
+          ash::wm::GetWindowState(widget_->GetNativeWindow());
+      if (ignored_by_shelf != window_state->ignored_by_shelf()) {
+        window_state->set_ignored_by_shelf(ignored_by_shelf);
+        ash::Shell::GetInstance()->UpdateShelfVisibility();
+      }
+    }
+
     // Update surface bounds.
-    surface_->SetBounds(
-        gfx::Rect(GetSurfaceOrigin(), surface_->layer()->size()));
+    surface_->SetBounds(gfx::Rect(surface_origin, surface_->layer()->size()));
 
     // Show widget if not already visible.
     if (!widget_->IsClosed() && !widget_->IsVisible())
@@ -473,7 +511,7 @@ gfx::Size ShellSurface::GetPreferredSize() const {
   if (!geometry_.IsEmpty())
     return geometry_.size();
 
-  return surface_ ? surface_->GetVisibleBounds().size() : gfx::Size();
+  return surface_ ? surface_->layer()->size() : gfx::Size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -616,7 +654,7 @@ void ShellSurface::OnMouseEvent(ui::MouseEvent* event) {
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, private:
 
-void ShellSurface::CreateShellSurfaceWidget() {
+void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   DCHECK(enabled());
   DCHECK(!widget_);
 
@@ -626,20 +664,19 @@ void ShellSurface::CreateShellSurfaceWidget() {
   params.delegate = this;
   params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  params.show_state = ui::SHOW_STATE_NORMAL;
+  params.show_state = show_state;
   params.parent = ash::Shell::GetContainer(
       ash::Shell::GetPrimaryRootWindow(), ash::kShellWindowId_DefaultContainer);
   if (!initial_bounds_.IsEmpty()) {
-    gfx::Point position(initial_bounds_.origin());
+    params.bounds = initial_bounds_;
     if (parent_) {
-      aura::Window::ConvertPointToTarget(GetMainSurface(parent_), params.parent,
-                                         &position);
+      aura::Window::ConvertRectToTarget(GetMainSurface(parent_), params.parent,
+                                        &params.bounds);
     }
-    params.bounds = gfx::Rect(position + GetVisibleBounds().OffsetFromOrigin(),
-                              initial_bounds_.size());
   }
-  params.activatable = activatable_ ? views::Widget::InitParams::ACTIVATABLE_YES
-                                    : views::Widget::InitParams::ACTIVATABLE_NO;
+  bool activatable = activatable_ && !surface_->GetHitTestBounds().IsEmpty();
+  params.activatable = activatable ? views::Widget::InitParams::ACTIVATABLE_YES
+                                   : views::Widget::InitParams::ACTIVATABLE_NO;
 
   // Note: NativeWidget owns this widget.
   widget_ = new ShellSurfaceWidget(this);
@@ -659,12 +696,19 @@ void ShellSurface::CreateShellSurfaceWidget() {
   if (parent_)
     wm::AddTransientChild(parent_, widget_->GetNativeWindow());
 
-  // Ash manages the position of a top-level shell surfaces unless
-  // |initial_bounds_| has been set.
-  if (initial_bounds_.IsEmpty()) {
-    ash::wm::GetWindowState(widget_->GetNativeWindow())
-        ->set_window_position_managed(true);
-  }
+  // Allow Ash to manage the position of a top-level shell surfaces if show
+  // state is one that allows auto positioning and |initial_bounds_| has
+  // not been set.
+  ash::wm::GetWindowState(widget_->GetNativeWindow())
+      ->set_window_position_managed(
+          ash::wm::ToWindowShowState(
+              ash::wm::WINDOW_STATE_TYPE_AUTO_POSITIONED) == show_state &&
+          initial_bounds_.IsEmpty());
+
+  // Don't allow the shelf to recognize this window until we have some
+  // initial contents.
+  ash::wm::GetWindowState(widget_->GetNativeWindow())
+      ->set_ignored_by_shelf(true);
 }
 
 void ShellSurface::Configure() {
@@ -810,7 +854,7 @@ bool ShellSurface::IsResizing() const {
 
 gfx::Rect ShellSurface::GetVisibleBounds() const {
   // Use |geometry_| if set, otherwise use the visual bounds of the surface.
-  return geometry_.IsEmpty() ? surface_->GetVisibleBounds() : geometry_;
+  return geometry_.IsEmpty() ? gfx::Rect(surface_->layer()->size()) : geometry_;
 }
 
 gfx::Point ShellSurface::GetSurfaceOrigin() const {

@@ -11,9 +11,9 @@
 #include "base/macros.h"
 #include "components/font_service/public/interfaces/font_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/services/tracing/public/cpp/tracing_impl.h"
-#include "mojo/shell/public/cpp/interface_factory.h"
-#include "mojo/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/shell_client.h"
+#include "services/tracing/public/cpp/tracing_impl.h"
 #include "skia/ext/skia_utils_base.h"
 
 namespace font_service {
@@ -37,7 +37,7 @@ class FontServiceApp : public mojo::ShellClient,
 
   // FontService:
   void MatchFamilyName(const mojo::String& family_name,
-                       TypefaceStyle requested_style,
+                       TypefaceStylePtr requested_style,
                        const MatchFamilyNameCallback& callback) override;
   void OpenStream(uint32_t id_number,
                   const OpenStreamCallback& callback) override;

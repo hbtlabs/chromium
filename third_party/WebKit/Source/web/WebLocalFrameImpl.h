@@ -128,7 +128,6 @@ public:
     void reloadImage(const WebNode&) override;
     void reloadLoFiImages() override;
     void loadRequest(const WebURLRequest&) override;
-    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -197,13 +196,7 @@ public:
     bool selectionStartHasSpellingMarkerFor(int from, int length) const override;
     WebString layerTreeAsText(bool showDebugInfo = false) const override;
 
-    void registerTestInterface(const WebString& name, WebTestInterfaceFactory*) override;
-
     WebFrameImplBase* toImplBase() override { return this; }
-
-    // Creates a test interface by name if available, returns an empty handle
-    // for unknown names.
-    v8::Local<v8::Value> createTestInterface(const AtomicString& name);
 
     // WebLocalFrame methods:
     void setAutofillClient(WebAutofillClient*) override;
@@ -341,9 +334,7 @@ public:
     void setDevToolsFrontend(WebDevToolsFrontendImpl* frontend) { m_webDevToolsFrontend = frontend; }
     WebDevToolsFrontendImpl* devToolsFrontend() { return m_webDevToolsFrontend; }
 
-#if ENABLE(OILPAN)
     DECLARE_TRACE();
-#endif
 
 private:
     friend class FrameLoaderClientImpl;
@@ -400,14 +391,10 @@ private:
 
     WebDevToolsFrontendImpl* m_webDevToolsFrontend;
 
-    HashMap<AtomicString, OwnPtr<WebTestInterfaceFactory>> m_testInterfaces;
-
-#if ENABLE(OILPAN)
     // Oilpan: WebLocalFrameImpl must remain alive until close() is called.
     // Accomplish that by keeping a self-referential Persistent<>. It is
     // cleared upon close().
     SelfKeepAlive<WebLocalFrameImpl> m_selfKeepAlive;
-#endif
 };
 
 DEFINE_TYPE_CASTS(WebLocalFrameImpl, WebFrame, frame, frame->isWebLocalFrame(), frame.isWebLocalFrame());

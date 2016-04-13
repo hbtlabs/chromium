@@ -10,8 +10,8 @@ CONSOLE WARNING: 'webkitIDBFactory' is deprecated. Please use 'IDBFactory' inste
 CONSOLE WARNING: 'webkitIDBDatabase' is deprecated. Please use 'IDBDatabase' instead.
 CONSOLE WARNING: 'webkitIDBCursor' is deprecated. Please use 'IDBCursor' instead.
 CONSOLE WARNING: 'webkitIndexedDB' is deprecated. Please use 'indexedDB' instead.
-CONSOLE ERROR: The 'WebUSB' feature is currently enabled in limited trials. Please see [Phosphor console URL] for information on enabling a trial for your site.
-CONSOLE ERROR: The 'WebBluetooth' feature is currently enabled in limited trials. Please see [Phosphor console URL] for information on enabling a trial for your site.
+CONSOLE ERROR: The 'WebUSB' feature is currently enabled in limited trials. Please see https://bit.ly/OriginTrials for information on enabling a trial for your site.
+CONSOLE ERROR: The 'WebBluetooth' feature is currently enabled in limited trials. Please see https://bit.ly/OriginTrials for information on enabling a trial for your site.
 CONSOLE WARNING: 'webkitURL' is deprecated. Please use 'URL' instead.
 This test documents all interface attributes and methods on the global window object and element instances.
 
@@ -2243,6 +2243,7 @@ interface HTMLMediaElement : HTMLElement
     getter seeking
     getter sinkId
     getter src
+    getter srcObject
     getter textTracks
     getter volume
     getter webkitAudioDecodedByteCount
@@ -2268,6 +2269,7 @@ interface HTMLMediaElement : HTMLElement
     setter playbackRate
     setter preload
     setter src
+    setter srcObject
     setter volume
 interface HTMLMenuElement : HTMLElement
     attribute @@toStringTag
@@ -2973,6 +2975,7 @@ interface IntersectionObserver
 interface IntersectionObserverEntry
     attribute @@toStringTag
     getter boundingClientRect
+    getter intersectionRatio
     getter intersectionRect
     getter rootBounds
     getter target
