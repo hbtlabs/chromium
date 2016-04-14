@@ -606,6 +606,8 @@ group("mojo_apptests") {
 group("gn_only") {
   testonly = true
 
+  deps = []
+
   if (!is_ios) {
     deps += [ "//mojo/common:mojo_common_perftests" ]
   }
