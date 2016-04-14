@@ -614,7 +614,7 @@ group("gn_only") {
 
   if (!is_android && !is_ios && !is_chromeos) {
     deps += [
-      "content/browser/bluetooth/tools:bluetooth_metrics_hash",
+      "//content/browser/bluetooth/tools:bluetooth_metrics_hash",
       "//components/proximity_auth:proximity_auth_unittests",
     ]
   }
