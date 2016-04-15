@@ -146,15 +146,15 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
   void ResetWindowControls() override {
     // TODO(sky): push to wm?
   }
-  void UpdateWindowIcon() override {
-    // NOTIMPLEMENTED();
-  }
-  void UpdateWindowTitle() override {
-    // NOTIMPLEMENTED();
-  }
-  void SizeConstraintsChanged() override {
-    // NOTIMPLEMENTED();
-  }
+
+  // These have no implementation. The Window Manager handles the actual
+  // rendering of the icon/title. See NonClientFrameViewMash. The values
+  // associated with these methods are pushed to the server by the way of
+  // NativeWidgetMus functions.
+  void UpdateWindowIcon() override {}
+  void UpdateWindowTitle() override {}
+  void SizeConstraintsChanged() override {}
+
   gfx::Size GetPreferredSize() const override {
     return widget_->non_client_view()
         ->GetWindowBoundsForClientBounds(
@@ -238,7 +238,7 @@ class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
 // NativeWidgetMus, public:
 
 NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                                 mojo::Connector* connector,
+                                 shell::Connector* connector,
                                  mus::Window* window,
                                  mus::mojom::SurfaceType surface_type)
     : window_(window),
@@ -352,6 +352,10 @@ void NativeWidgetMus::ConfigurePropertiesForNewWindow(
     (*properties)[mus::mojom::WindowManager::kUserSetBounds_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(init_params.bounds);
   }
+  if (!init_params.name.empty()) {
+    (*properties)[mus::mojom::WindowManager::kName_Property] =
+        mojo::ConvertTo<std::vector<uint8_t>>(init_params.name);
+  }
 
   if (!Widget::RequiresNonClientView(init_params.type))
     return;
@@ -420,6 +424,9 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
     if (parent_mus)
       parent_mus->AddTransientWindow(window_);
   }
+
+  if (params.parent_mus)
+    params.parent_mus->AddChild(window_);
 
   // TODO(sky): deal with show state.
   if (!params.bounds.size().IsEmpty())
@@ -874,6 +881,10 @@ void NativeWidgetMus::OnSizeConstraintsChanged() {
 
 void NativeWidgetMus::RepostNativeEvent(gfx::NativeEvent native_event) {
   // NOTIMPLEMENTED();
+}
+
+std::string NativeWidgetMus::GetName() const {
+  return window_->GetName();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -102,14 +102,6 @@
             "group_name": "Enabled"
         }
     ],
-    "DisableAutoHidingToolbar": [
-        {
-            "group_name": "Enabled",
-            "params": {
-                "disable_auto_hiding_toolbar_threshold": "800"
-            }
-        }
-    ],
     "DocumentWriteEvaluator": [
         {
             "enable_features": [
@@ -172,7 +164,6 @@
         {
             "group_name": "Enabled5",
             "params": {
-                "country": "IN",
                 "version": "5"
             }
         }
@@ -297,10 +288,10 @@
     ],
     "ResourcePriorities": [
         {
-            "group_name": "AllExceptAsyncScripts_11011_1_1_10"
+            "group_name": "Launch50pct_11011_1_1_10"
         },
         {
-            "group_name": "Control"
+            "group_name": "Control50pct"
         }
     ],
     "SafeBrowsingAndroid": [

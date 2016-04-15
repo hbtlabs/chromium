@@ -33,14 +33,14 @@ protected:
 
     bool isLogicalTopWithinBounds(LayoutUnit logicalTopInFlowThread) const
     {
-        return (m_group.isFirstGroup() || logicalTopInFlowThread >= m_group.logicalTopInFlowThread())
-            && (m_group.isLastGroup() || logicalTopInFlowThread < m_group.logicalBottomInFlowThread());
+        return logicalTopInFlowThread >= m_group.logicalTopInFlowThread()
+            && logicalTopInFlowThread < m_group.logicalBottomInFlowThread();
     }
 
     bool isLogicalBottomWithinBounds(LayoutUnit logicalBottomInFlowThread) const
     {
-        return (m_group.isFirstGroup() || logicalBottomInFlowThread > m_group.logicalTopInFlowThread())
-            && (m_group.isLastGroup() || logicalBottomInFlowThread <= m_group.logicalBottomInFlowThread());
+        return logicalBottomInFlowThread > m_group.logicalTopInFlowThread()
+            && logicalBottomInFlowThread <= m_group.logicalBottomInFlowThread();
     }
 
     // Examine and collect column balancing data from a layout box that has been found to intersect
@@ -140,8 +140,7 @@ private:
         // breaks assumed so far.
         LayoutUnit columnLogicalHeight(LayoutUnit startOffset) const
         {
-            // TODO(leviw): This should probably be fromFloatCeil.
-            return LayoutUnit(ceilf((m_breakOffset - startOffset) / float(m_assumedImplicitBreaks + 1)));
+            return LayoutUnit::fromFloatCeil(float(m_breakOffset - startOffset) / float(m_assumedImplicitBreaks + 1));
         }
 
     private:

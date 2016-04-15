@@ -189,7 +189,7 @@
   },
   "chromeos_unittests": {
     "label": "//chromeos:chromeos_unittests",
-    "type": "unknown",
+    "type": "console_test_launcher",
   },
   "components_browsertests": {
     "label": "//components:components_browsertests",
@@ -298,6 +298,14 @@
   "gpu_unittests": {
     "label": "//gpu:gpu_unittests",
     "type": "windowed_test_launcher",
+  },
+  "headless_browsertests": {
+    "label": "//headless:headless_browsertests",
+    "type": "console_test_launcher",
+  },
+  "headless_unittests": {
+    "label": "//headless:headless_unittests",
+    "type": "console_test_launcher",
   },
   "installer_util_unittests": {
     "label": "//chrome/installer/util:installer_util_unittests",

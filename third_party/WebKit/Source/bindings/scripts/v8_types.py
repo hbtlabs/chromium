@@ -111,6 +111,7 @@ CPP_SPECIAL_CONVERSION_RULES = {
     'Date': 'double',
     'Dictionary': 'Dictionary',
     'EventHandler': 'EventListener*',
+    'EventListener': 'EventListener*',
     'NodeFilter': 'NodeFilter*',
     'Promise': 'ScriptPromise',
     'ScriptValue': 'ScriptValue',
@@ -179,7 +180,7 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
     if base_idl_type in CPP_SPECIAL_CONVERSION_RULES:
         return CPP_SPECIAL_CONVERSION_RULES[base_idl_type]
 
-    if base_idl_type in NON_WRAPPER_TYPES:
+    if base_idl_type == 'SerializedScriptValue':
         return ('PassRefPtr<%s>' if used_as_rvalue_type else 'RefPtr<%s>') % base_idl_type
     if idl_type.is_string_type:
         if not raw_type:
@@ -492,7 +493,7 @@ V8_VALUE_TO_CPP_VALUE = {
     'FlexibleArrayBufferView': 'toFlexibleArrayBufferView({isolate}, {v8_value}, {variable_name}, allocateFlexibleArrayBufferViewStorage({v8_value}))',
     'NodeFilter': 'toNodeFilter({v8_value}, info.Holder(), ScriptState::current({isolate}))',
     'Promise': 'ScriptPromise::cast(ScriptState::current({isolate}), {v8_value})',
-    'SerializedScriptValue': 'SerializedScriptValueFactory::instance().create({isolate}, {v8_value}, nullptr, nullptr, nullptr, exceptionState)',
+    'SerializedScriptValue': 'SerializedScriptValueFactory::instance().create({isolate}, {v8_value}, nullptr, exceptionState)',
     'ScriptValue': 'ScriptValue(ScriptState::current({isolate}), {v8_value})',
     'Window': 'toDOMWindow({isolate}, {v8_value})',
     'XPathNSResolver': 'toXPathNSResolver(ScriptState::current({isolate}), {v8_value})',
@@ -588,7 +589,7 @@ def v8_value_to_cpp_value_array_or_sequence(native_array_element_type, v8_value,
         native_array_element_type.name != 'Dictionary'):
         this_cpp_type = None
         ref_ptr_type = 'Member'
-        expression_format = '(to{ref_ptr_type}NativeArray<{native_array_element_type}, V8{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState))'
+        expression_format = '(to{ref_ptr_type}NativeArray<{native_array_element_type}>({v8_value}, {index}, {isolate}, exceptionState))'
     else:
         ref_ptr_type = None
         this_cpp_type = native_array_element_type.cpp_type
@@ -864,6 +865,7 @@ CPP_VALUE_TO_V8_VALUE = {
     'ScriptValue': '{cpp_value}.v8Value()',
     'SerializedScriptValue': '{cpp_value} ? {cpp_value}->deserialize() : v8::Local<v8::Value>(v8::Null({isolate}))',
     # General
+    # TODO(bashi): Freeze converted array when the type is FrozenArray.
     'array': 'toV8({cpp_value}, {creation_context}, {isolate})',
     'DOMWrapper': 'toV8({cpp_value}, {creation_context}, {isolate})',
     # Passing nullable dictionaries isn't a pattern currently used

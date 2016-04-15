@@ -31,7 +31,6 @@
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/SelectRuleFeatureSet.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/dom/shadow/SlotAssignment.h"
 #include "platform/heap/Handle.h"
 #include "wtf/DoublyLinkedList.h"
 #include "wtf/HashMap.h"
@@ -49,19 +48,6 @@ public:
     ShadowRoot& youngestShadowRoot() const { DCHECK(m_shadowRoots.head()); return *m_shadowRoots.head(); }
     ShadowRoot* oldestShadowRoot() const { return m_shadowRoots.tail(); }
     ElementShadow* containingShadow() const;
-
-    ShadowRoot* shadowRootIfV1() const
-    {
-        if (isV1())
-            return &youngestShadowRoot();
-        return nullptr;
-    }
-
-    HTMLSlotElement* assignedSlotFor(const Node& node) const
-    {
-        DCHECK(m_slotAssignment);
-        return m_slotAssignment->assignedSlotFor(node);
-    }
 
     ShadowRoot& addShadowRoot(Element& shadowHost, ShadowRootType);
 
@@ -90,10 +76,6 @@ public:
 private:
     ElementShadow();
 
-#if !ENABLE(OILPAN)
-    void removeDetachedShadowRoots();
-#endif
-
     void distribute();
     void clearDistribution();
 
@@ -106,23 +88,14 @@ private:
     bool needsSelectFeatureSet() const { return m_needsSelectFeatureSet; }
     void setNeedsSelectFeatureSet() { m_needsSelectFeatureSet = true; }
 
-#if ENABLE(OILPAN)
-    // The cost of |new| in Oilpan is lower than non-Oilpan.  We should reduce
-    // the size of HashMap entry.
-    typedef HeapHashMap<Member<const Node>, Member<DestinationInsertionPoints>> NodeToDestinationInsertionPoints;
-#else
-    typedef HashMap<const Node*, DestinationInsertionPoints> NodeToDestinationInsertionPoints;
-#endif
+    using NodeToDestinationInsertionPoints = HeapHashMap<Member<const Node>, Member<DestinationInsertionPoints>>;
     NodeToDestinationInsertionPoints m_nodeToInsertionPoints;
 
     SelectRuleFeatureSet m_selectFeatures;
-    // FIXME: Oilpan: add a heap-based version of DoublyLinkedList<>.
+    // TODO(Oilpan): add a heap-based version of DoublyLinkedList<>.
     DoublyLinkedList<ShadowRoot> m_shadowRoots;
     bool m_needsDistributionRecalc;
     bool m_needsSelectFeatureSet;
-
-    // TODO(hayato): ShadowRoot should be an owner of SlotAssigment
-    Member<SlotAssignment> m_slotAssignment;
 };
 
 inline Element* ElementShadow::host() const
@@ -143,13 +116,6 @@ inline ShadowRoot* Element::youngestShadowRoot() const
     if (ElementShadow* shadow = this->shadow())
         return &shadow->youngestShadowRoot();
     return 0;
-}
-
-inline ShadowRoot* Element::shadowRootIfV1() const
-{
-    if (ElementShadow* shadow = this->shadow())
-        return shadow->shadowRootIfV1();
-    return nullptr;
 }
 
 inline ElementShadow* ElementShadow::containingShadow() const

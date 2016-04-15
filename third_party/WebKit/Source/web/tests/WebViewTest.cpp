@@ -67,6 +67,7 @@
 #include "public/platform/WebClipboard.h"
 #include "public/platform/WebDisplayMode.h"
 #include "public/platform/WebDragData.h"
+#include "public/platform/WebDragOperation.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
@@ -76,7 +77,6 @@
 #include "public/web/WebDateTimeChooserCompletion.h"
 #include "public/web/WebDeviceEmulationParams.h"
 #include "public/web/WebDocument.h"
-#include "public/web/WebDragOperation.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
@@ -2358,7 +2358,7 @@ TEST_F(WebViewTest, HasTouchEventHandlers)
     std::string url = m_baseURL + "has_touch_event_handlers.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "has_touch_event_handlers.html");
     WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad(url, true, 0, &client);
-    const EventHandlerRegistry::EventHandlerClass touchEvent = EventHandlerRegistry::TouchEventBlocking;
+    const EventHandlerRegistry::EventHandlerClass touchEvent = EventHandlerRegistry::TouchStartOrMoveEventBlocking;
 
     // The page is initialized with at least one no-handlers call.
     // In practice we get two such calls because WebViewHelper::initializeAndLoad first
@@ -2495,7 +2495,7 @@ TEST_F(WebViewTest, DeleteElementWithRegisteredHandler)
     // checking below. We do a precise GC (collectAllGarbage does not scan the stack)
     // to ensure the div element dies. This is also why the Document is in a Persistent
     // since we want that to stay around.
-    Heap::collectAllGarbage();
+    ThreadHeap::collectAllGarbage();
 
     EXPECT_FALSE(registry.hasEventHandlers(EventHandlerRegistry::ScrollEvent));
 }

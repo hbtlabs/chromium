@@ -7,15 +7,6 @@
  * containing the urls that will be opened when chrome is started.
  */
 
-/**
- * @typedef {{
- *   title: string,
- *   tooltip: string,
- *   url: string
- * }}
- */
-var StartupPageInfo;
-
 Polymer({
   is: 'settings-startup-urls-page',
 
@@ -31,7 +22,11 @@ Polymer({
      */
     startupPages_: Array,
 
+    /** @private */
     showStartupUrlDialog_: Boolean,
+
+    /** @private {?StartupPageInfo} */
+    startupUrlDialogModel_: Object,
   },
 
   /** @override */
@@ -41,15 +36,17 @@ Polymer({
       this.startupPages_ = startupPages;
     }.bind(this));
     this.browserProxy_.loadStartupPages();
+
+    this.addEventListener(settings.EDIT_STARTUP_URL_EVENT, function(event) {
+      this.startupUrlDialogModel_ = event.detail;
+      this.openDialog_();
+      event.stopPropagation();
+    }.bind(this));
   },
 
-  /**
-   * @param {string} url Location of an image to get a set of icons fors.
-   * @return {string} A set of icon URLs.
-   * @private
-   */
-  getIconSet_: function(url) {
-    return getFaviconImageSet(url);
+  /** @private */
+  onAddPageTap_: function() {
+    this.openDialog_();
   },
 
   /**
@@ -58,12 +55,13 @@ Polymer({
    * (because of 'restamp').
    * @private
    */
-  onAddPageTap_: function() {
+  openDialog_: function() {
     this.showStartupUrlDialog_ = true;
     this.async(function() {
       var dialog = this.$$('settings-startup-url-dialog');
       dialog.addEventListener('iron-overlay-closed', function() {
         this.showStartupUrlDialog_ = false;
+        this.startupUrlDialogModel_ = null;
       }.bind(this));
     }.bind(this));
   },
@@ -71,13 +69,5 @@ Polymer({
   /** @private */
   onUseCurrentPagesTap_: function() {
     this.browserProxy_.useCurrentPages();
-  },
-
-  /**
-   * @param {!{model: !{index: number}}} e
-   * @private
-   */
-  onRemoveUrlTap_: function(e) {
-    this.browserProxy_.removeStartupPage(e.model.index);
   },
 });

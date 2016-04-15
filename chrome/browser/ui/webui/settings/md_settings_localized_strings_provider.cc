@@ -69,6 +69,7 @@ void AddCommonStrings(content::WebUIDataSource* html_source) {
       {"save", IDS_SAVE},
       {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
       {"basicPageTitle", IDS_SETTINGS_BASIC},
+      {"internalSearch", IDS_SETTINGS_INTERNAL_SEARCH},
       {"settings", IDS_SETTINGS_SETTINGS},
       {"restart", IDS_SETTINGS_RESTART},
   };
@@ -566,7 +567,10 @@ void AddOnStartupStrings(content::WebUIDataSource* html_source) {
       {"onStartupOpenSpecific", IDS_SETTINGS_ON_STARTUP_OPEN_SPECIFIC},
       {"onStartupUseCurrent", IDS_SETTINGS_ON_STARTUP_USE_CURRENT},
       {"onStartupAddNewPage", IDS_SETTINGS_ON_STARTUP_ADD_NEW_PAGE},
+      {"onStartupEditPage", IDS_SETTINGS_ON_STARTUP_EDIT_PAGE},
       {"onStartupSiteUrl", IDS_SETTINGS_ON_STARTUP_SITE_URL},
+      {"onStartupRemove", IDS_SETTINGS_ON_STARTUP_REMOVE},
+      {"onStartupEdit", IDS_SETTINGS_ON_STARTUP_EDIT},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));

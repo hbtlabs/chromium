@@ -49,6 +49,7 @@ namespace blink {
 class GraphicsLayer;
 class InspectedFrames;
 class InspectorOverlay;
+class InspectorResourceContainer;
 class InspectorResourceContentLoader;
 class LocalFrame;
 class Page;
@@ -110,7 +111,7 @@ public:
     WebString evaluateInWebInspectorOverlay(const WebString& script) override;
 
 private:
-    WebDevToolsAgentImpl(WebLocalFrameImpl*, WebDevToolsAgentClient*, InspectorOverlay*);
+    WebDevToolsAgentImpl(WebLocalFrameImpl*, WebDevToolsAgentClient*, InspectorOverlay*, bool includeViewAgents);
 
     // InspectorTracingAgent::Client implementation.
     void enableTracing(const WTF::String& categoryFilter) override;
@@ -152,6 +153,7 @@ private:
     Member<InspectorResourceContentLoader> m_resourceContentLoader;
     Member<InspectorOverlay> m_overlay;
     Member<InspectedFrames> m_inspectedFrames;
+    Member<InspectorResourceContainer> m_resourceContainer;
     OwnPtr<V8InspectorSession> m_v8Session;
 
     Member<InspectorDOMAgent> m_domAgent;
@@ -164,6 +166,7 @@ private:
     OwnPtr<protocol::Frontend> m_inspectorFrontend;
     InspectorAgentRegistry m_agents;
     bool m_deferredAgentsInitialized;
+    bool m_includeViewAgents;
 
     typedef Vector<std::pair<int, OwnPtr<protocol::Value>>> NotificationQueue;
     NotificationQueue m_notificationQueue;

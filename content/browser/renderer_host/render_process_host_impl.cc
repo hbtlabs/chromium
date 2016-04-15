@@ -35,6 +35,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/supports_user_data.h"
 #include "base/sys_info.h"
 #include "base/threading/thread.h"
@@ -84,6 +85,7 @@
 #include "content/browser/memory/memory_message_filter.h"
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/mime_registry_message_filter.h"
+#include "content/browser/mojo/constants.h"
 #include "content/browser/mojo/mojo_application_host.h"
 #include "content/browser/mojo/mojo_child_connection.h"
 #include "content/browser/notifications/notification_message_filter.h"
@@ -696,7 +698,9 @@ bool RenderProcessHostImpl::Init() {
   if (channel_)
     return true;
 
-  shell_pipe_token_ = MojoConnectToChild(id_, instance_id_++, this);
+  mojo_child_connection_.reset(new MojoChildConnection(
+      kRendererMojoApplicationName,
+      base::StringPrintf("%d_%d", id_, instance_id_++)));
 
   base::CommandLine::StringType renderer_prefix;
   // A command prefix is something prepended to the command line of the spawned
@@ -892,7 +896,7 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   ResourceContext* resource_context = browser_context->GetResourceContext();
 
   scoped_refptr<net::URLRequestContextGetter> media_request_context(
-      browser_context->GetMediaRequestContextForRenderProcess(GetID()));
+      GetStoragePartition()->GetMediaURLRequestContext());
 
   ResourceMessageFilter::GetContextsCallback get_contexts_callback(
       base::Bind(&GetContexts, browser_context->GetResourceContext(),
@@ -1121,6 +1125,11 @@ void RenderProcessHostImpl::NotifyTimezoneChange(const std::string& zone_id) {
 ServiceRegistry* RenderProcessHostImpl::GetServiceRegistry() {
   DCHECK(mojo_application_host_);
   return mojo_application_host_->service_registry();
+}
+
+shell::Connection* RenderProcessHostImpl::GetChildConnection() {
+  DCHECK(mojo_child_connection_);
+  return mojo_child_connection_->connection();
 }
 
 std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -1629,10 +1638,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     }
   }
 
-  if (!shell_pipe_token_.empty()) {
-    renderer_cmd->AppendSwitchASCII(switches::kPrimordialPipeToken,
-                                    shell_pipe_token_);
-  }
+  DCHECK(mojo_child_connection_);
+  renderer_cmd->AppendSwitchASCII(switches::kPrimordialPipeToken,
+                                  mojo_child_connection_->shell_client_token());
 
 #if defined(OS_WIN) && !defined(OFFICIAL_BUILD)
   // Needed because we can't show the dialog from the sandbox. Don't pass
@@ -2587,6 +2595,11 @@ void RenderProcessHostImpl::OnProcessLaunched() {
   if (child_process_launcher_) {
     DCHECK(child_process_launcher_->GetProcess().IsValid());
     DCHECK(!is_process_backgrounded_);
+
+    if (mojo_child_connection_) {
+      mojo_child_connection_->SetProcessHandle(
+          child_process_launcher_->GetProcess().Handle());
+    }
 
     // Not all platforms launch processes in the same backgrounded state. Make
     // sure |is_process_backgrounded_| reflects this platform's initial process

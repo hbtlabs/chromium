@@ -8,7 +8,6 @@
 #include "base/memory/ptr_util.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_player.h"
-#include "cc/animation/animation_registrar.h"
 #include "cc/animation/layer_animation_value_observer.h"
 #include "cc/trees/mutator_host_client.h"
 
@@ -76,12 +75,9 @@ void ElementAnimations::CreateLayerAnimationController(int layer_id) {
   DCHECK(!layer_animation_controller_);
   DCHECK(animation_host_);
 
-  AnimationRegistrar* registrar = animation_host_->animation_registrar();
-  DCHECK(registrar);
-
   layer_animation_controller_ =
-      registrar->GetAnimationControllerForId(layer_id);
-  layer_animation_controller_->SetAnimationRegistrar(registrar);
+      animation_host_->GetAnimationControllerForId(layer_id);
+  layer_animation_controller_->SetAnimationHost(animation_host_);
   layer_animation_controller_->set_layer_animation_delegate(this);
   layer_animation_controller_->set_value_provider(this);
 
@@ -108,7 +104,7 @@ void ElementAnimations::DestroyLayerAnimationController() {
   if (layer_animation_controller_) {
     layer_animation_controller_->remove_value_provider(this);
     layer_animation_controller_->remove_layer_animation_delegate(this);
-    layer_animation_controller_->SetAnimationRegistrar(nullptr);
+    layer_animation_controller_->SetAnimationHost(nullptr);
     layer_animation_controller_ = nullptr;
   }
 }
@@ -154,10 +150,52 @@ bool ElementAnimations::IsEmpty() const {
 void ElementAnimations::PushPropertiesTo(
     ElementAnimations* element_animations_impl) {
   DCHECK(layer_animation_controller_);
-  DCHECK(element_animations_impl->layer_animation_controller());
+  DCHECK(element_animations_impl->layer_animation_controller_);
 
   layer_animation_controller_->PushAnimationUpdatesTo(
-      element_animations_impl->layer_animation_controller());
+      element_animations_impl->layer_animation_controller_.get());
+}
+
+void ElementAnimations::AddAnimation(std::unique_ptr<Animation> animation) {
+  layer_animation_controller_->AddAnimation(std::move(animation));
+}
+
+void ElementAnimations::PauseAnimation(int animation_id,
+                                       base::TimeDelta time_offset) {
+  layer_animation_controller_->PauseAnimation(animation_id, time_offset);
+}
+
+void ElementAnimations::RemoveAnimation(int animation_id) {
+  layer_animation_controller_->RemoveAnimation(animation_id);
+}
+
+void ElementAnimations::AbortAnimation(int animation_id) {
+  layer_animation_controller_->AbortAnimation(animation_id);
+}
+
+void ElementAnimations::AbortAnimations(TargetProperty::Type target_property,
+                                        bool needs_completion) {
+  layer_animation_controller_->AbortAnimations(target_property,
+                                               needs_completion);
+}
+
+Animation* ElementAnimations::GetAnimation(
+    TargetProperty::Type target_property) const {
+  return layer_animation_controller_->GetAnimation(target_property);
+}
+
+Animation* ElementAnimations::GetAnimationById(int animation_id) const {
+  return layer_animation_controller_->GetAnimationById(animation_id);
+}
+
+void ElementAnimations::AddEventObserver(
+    LayerAnimationEventObserver* observer) {
+  layer_animation_controller_->AddEventObserver(observer);
+}
+
+void ElementAnimations::RemoveEventObserver(
+    LayerAnimationEventObserver* observer) {
+  layer_animation_controller_->RemoveEventObserver(observer);
 }
 
 void ElementAnimations::SetFilterMutated(LayerTreeType tree_type,

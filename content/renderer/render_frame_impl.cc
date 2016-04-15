@@ -621,8 +621,9 @@ bool IsReload(FrameMsg_Navigate_Type::Value navigation_type) {
 RenderFrameImpl::CreateRenderFrameImplFunction g_create_render_frame_impl =
     nullptr;
 
-void OnGotInstanceID(mojo::shell::mojom::ConnectResult result,
-                     const std::string& user_id, uint32_t instance_id) {}
+void OnGotInstanceID(shell::mojom::ConnectResult result,
+                     const std::string& user_id,
+                     uint32_t instance_id) {}
 
 WebString ConvertRelativePathToHtmlAttribute(const base::FilePath& path) {
   DCHECK(!path.IsAbsolute());
@@ -1490,8 +1491,8 @@ void RenderFrameImpl::OnNavigate(
 }
 
 void RenderFrameImpl::BindServiceRegistry(
-    mojo::shell::mojom::InterfaceProviderRequest services,
-    mojo::shell::mojom::InterfaceProviderPtr exposed_services) {
+    shell::mojom::InterfaceProviderRequest services,
+    shell::mojom::InterfaceProviderPtr exposed_services) {
   service_registry_.Bind(std::move(services));
   service_registry_.BindRemoteServiceProvider(std::move(exposed_services));
 }
@@ -4397,7 +4398,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   params.http_status_code = response.httpStatusCode();
   params.url_is_unreachable = ds->hasUnreachableURL();
-  params.is_post = false;
+  params.method = "GET";
   params.intended_as_new_entry =
       navigation_state->request_params().intended_as_new_entry;
   params.did_create_new_entry = commit_type == blink::WebStandardCommit;
@@ -4465,6 +4466,15 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     params.page_state = SingleHistoryItemToPageState(item);
     post_id = ExtractPostId(item);
   }
+
+  // When using subframe navigation entries, method and post id are set for all
+  // frames. Otherwise, they are only set for the main frame navigation.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+    params.method = request.httpMethod().latin1();
+    if (params.method == "POST")
+      params.post_id = post_id;
+  }
+
   params.frame_unique_name = item.target().utf8();
   params.item_sequence_number = item.itemSequenceNumber();
   params.document_sequence_number = item.documentSequenceNumber();
@@ -4534,10 +4544,12 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
           frame, ds->request());
     }
 
-    base::string16 method = request.httpMethod();
-    if (base::EqualsASCII(method, "POST")) {
-      params.is_post = true;
-      params.post_id = post_id;
+    // When using subframe navigation entries, method and post id have already
+    // been set.
+    if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
+      params.method = request.httpMethod().latin1();
+      if (params.method == "POST")
+        params.post_id = post_id;
     }
 
     // Send the user agent override back.
@@ -5914,8 +5926,7 @@ media::MediaPermission* RenderFrameImpl::GetMediaPermission() {
 }
 
 #if defined(ENABLE_MOJO_MEDIA)
-mojo::shell::mojom::InterfaceProvider*
-RenderFrameImpl::GetMediaInterfaceProvider() {
+shell::mojom::InterfaceProvider* RenderFrameImpl::GetMediaInterfaceProvider() {
   if (!media_interface_provider_) {
     media_interface_provider_.reset(new MediaInterfaceProvider(base::Bind(
         &RenderFrameImpl::ConnectToApplication, base::Unretained(this))));
@@ -5982,14 +5993,14 @@ void RenderFrameImpl::GetInterface(mojo::InterfaceRequest<Interface> request) {
   GetServiceRegistry()->ConnectToRemoteService(std::move(request));
 }
 
-mojo::shell::mojom::InterfaceProviderPtr RenderFrameImpl::ConnectToApplication(
+shell::mojom::InterfaceProviderPtr RenderFrameImpl::ConnectToApplication(
     const GURL& url) {
   if (!connector_)
     GetServiceRegistry()->ConnectToRemoteService(mojo::GetProxy(&connector_));
-  mojo::shell::mojom::InterfaceProviderPtr interface_provider;
-  mojo::shell::mojom::IdentityPtr target(mojo::shell::mojom::Identity::New());
+  shell::mojom::InterfaceProviderPtr interface_provider;
+  shell::mojom::IdentityPtr target(shell::mojom::Identity::New());
   target->name = url.spec();
-  target->user_id = mojo::shell::mojom::kInheritUserID;
+  target->user_id = shell::mojom::kInheritUserID;
   target->instance = "";
   connector_->Connect(std::move(target), GetProxy(&interface_provider), nullptr,
                       nullptr, base::Bind(&OnGotInstanceID));

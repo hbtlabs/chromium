@@ -32,6 +32,7 @@
 #include "build/build_config.h"
 #include "components/plugins/renderer/plugin_placeholder.h"
 #include "components/test_runner/gamepad_controller.h"
+#include "components/test_runner/layout_and_paint_async_then.h"
 #include "components/test_runner/pixel_dump.h"
 #include "components/test_runner/web_test_interfaces.h"
 #include "components/test_runner/web_test_proxy.h"
@@ -208,7 +209,6 @@ BlinkTestRunner::BlinkTestRunner(RenderView* render_view)
     : RenderViewObserver(render_view),
       RenderViewObserverTracker<BlinkTestRunner>(render_view),
       proxy_(NULL),
-      focused_view_(NULL),
       is_main_window_(false),
       focus_on_next_commit_(false),
       leak_detector_(new LeakDetector(this)) {
@@ -491,28 +491,8 @@ void BlinkTestRunner::SetGeofencingMockPosition(double latitude,
 
 void BlinkTestRunner::SetFocus(blink::WebView* web_view, bool focus) {
   RenderView* render_view = RenderView::FromWebView(web_view);
-  if (!render_view) {
-    NOTREACHED();
-    return;
-  }
-
-  // Check whether the focused view was closed meanwhile.
-  if (!BlinkTestRunner::Get(focused_view_))
-    focused_view_ = NULL;
-
-  if (focus) {
-    if (focused_view_ != render_view) {
-      if (focused_view_)
-        SetFocusAndActivate(focused_view_, false);
-      SetFocusAndActivate(render_view, true);
-      focused_view_ = render_view;
-    }
-  } else {
-    if (focused_view_ == render_view) {
-      SetFocusAndActivate(render_view, false);
-      focused_view_ = NULL;
-    }
-  }
+  if (render_view)  // Check whether |web_view| has been already closed.
+    SetFocusAndActivate(render_view, focus);
 }
 
 void BlinkTestRunner::SetAcceptAllCookies(bool accept) {
@@ -612,8 +592,7 @@ bool BlinkTestRunner::AllowExternalPages() {
   return test_config_.allow_external_pages;
 }
 
-std::string BlinkTestRunner::DumpHistoryForWindow(
-    test_runner::WebTestProxyBase* proxy) {
+std::string BlinkTestRunner::DumpHistoryForWindow(blink::WebView* web_view) {
   size_t pos = 0;
   std::vector<int>::iterator id;
   for (id = routing_ids_.begin(); id != routing_ids_.end(); ++id, ++pos) {
@@ -622,7 +601,7 @@ std::string BlinkTestRunner::DumpHistoryForWindow(
       NOTREACHED();
       continue;
     }
-    if (BlinkTestRunner::Get(render_view)->proxy() == proxy)
+    if (render_view->GetWebView() == web_view)
       break;
   }
 
@@ -850,7 +829,8 @@ void BlinkTestRunner::OnLayoutDumpCompleted(std::string completed_layout_dump) {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderProcessObserver::GetInstance()->test_interfaces();
   if (interfaces->TestRunner()->ShouldDumpBackForwardList()) {
-    completed_layout_dump.append(proxy()->DumpBackForwardLists());
+    for (WebView* web_view : interfaces->GetWindowList())
+      completed_layout_dump.append(DumpHistoryForWindow(web_view));
   }
 
   Send(new ShellViewHostMsg_TextDump(routing_id(), completed_layout_dump));
@@ -875,8 +855,10 @@ void BlinkTestRunner::CaptureDumpContinued() {
 #ifndef NDEBUG
   // Force a layout/paint by the end of the test to ensure test coverage of
   // incremental painting.
-  proxy()->LayoutAndPaintAsyncThen(base::Bind(
-      &BlinkTestRunner::CaptureDumpComplete, base::Unretained(this)));
+  test_runner::LayoutAndPaintAsyncThen(
+      render_view()->GetWebView(),
+      base::Bind(&BlinkTestRunner::CaptureDumpComplete,
+                 base::Unretained(this)));
 #else
   CaptureDumpComplete();
 #endif
@@ -941,7 +923,10 @@ void BlinkTestRunner::OnSetTestConfiguration(
   ForceResizeRenderView(
       render_view(),
       WebSize(params.initial_size.width(), params.initial_size.height()));
-  SetFocus(proxy_->web_view(), true);
+  LayoutTestRenderProcessObserver::GetInstance()
+      ->test_interfaces()
+      ->TestRunner()
+      ->SetFocus(render_view()->GetWebView(), true);
 }
 
 void BlinkTestRunner::OnSessionHistory(

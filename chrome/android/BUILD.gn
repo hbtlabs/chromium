@@ -194,6 +194,7 @@ android_library("chrome_java") {
       "//components/dom_distiller/android:dom_distiller_content_java",
       "//components/dom_distiller/android:dom_distiller_core_java",
       "//components/gcm_driver/android:gcm_driver_java",
+      "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/invalidation/impl:java",
       "//components/navigation_interception/android:navigation_interception_java",
       "//components/policy/android:policy_java",
@@ -263,10 +264,11 @@ junit_binary("chrome_junit_tests") {
   java_files = [
     "junit/src/org/chromium/chrome/browser/ShortcutHelperTest.java",
     "junit/src/org/chromium/chrome/browser/SSLClientCertificateRequestTest.java",
-    "junit/src/org/chromium/chrome/browser/crash/LogcatExtractionCallableTest.java",
     "junit/src/org/chromium/chrome/browser/bookmarks/BookmarkModelUnitTest.java",
     "junit/src/org/chromium/chrome/browser/bookmarks/BookmarkUtilsTest.java",
+    "junit/src/org/chromium/chrome/browser/compositor/overlays/strip/StripLayoutHelperTest.java",
     "junit/src/org/chromium/chrome/browser/contextualsearch/ContextualSearchSelectionControllerTest.java",
+    "junit/src/org/chromium/chrome/browser/crash/LogcatExtractionCallableTest.java",
     "junit/src/org/chromium/chrome/browser/externalauth/ExternalAuthUtilsTest.java",
     "junit/src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
     "junit/src/org/chromium/chrome/browser/gcore/GoogleApiClientHelperTest.java",
@@ -297,6 +299,7 @@ junit_binary("chrome_junit_tests") {
   ]
   deps = [
     ":chrome_java",
+    ":chrome_java_resources",
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",

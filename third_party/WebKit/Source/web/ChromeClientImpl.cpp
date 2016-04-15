@@ -253,6 +253,20 @@ bool ChromeClientImpl::hadFormInteraction() const
     return m_webView->pageImportanceSignals() && m_webView->pageImportanceSignals()->hadFormInteraction();
 }
 
+void ChromeClientImpl::startDragging(LocalFrame* frame,
+    const WebDragData& dragData,
+    WebDragOperationsMask mask,
+    const WebImage& dragImage,
+    const WebPoint& dragImageOffset)
+{
+    m_webView->startDragging(frame, dragData, mask, dragImage, dragImageOffset);
+}
+
+bool ChromeClientImpl::acceptsLoadDrops() const
+{
+    return !m_webView->client() || m_webView->client()->acceptsLoadDrops();
+}
+
 namespace {
 
 void updatePolicyForEvent(const WebInputEvent* inputEvent, NavigationPolicy* policy)
@@ -353,12 +367,12 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     return newView->page();
 }
 
-void ChromeClientImpl::didOverscroll(const FloatSize& unusedDelta, const FloatSize& accumulatedRootOverScroll, const FloatPoint& position, const FloatSize& velocity)
+void ChromeClientImpl::didOverscroll(const FloatSize& overscrollDelta, const FloatSize& accumulatedOverscroll, const FloatPoint& positionInViewport, const FloatSize& velocityInViewport)
 {
     if (!m_webView->client())
         return;
 
-    m_webView->client()->didOverscroll(unusedDelta, accumulatedRootOverScroll, position, velocity);
+    m_webView->client()->didOverscroll(overscrollDelta, accumulatedOverscroll, positionInViewport, velocityInViewport);
 }
 
 void ChromeClientImpl::show(NavigationPolicy navigationPolicy)
@@ -911,11 +925,16 @@ bool ChromeClientImpl::shouldOpenModalDialogDuringPageDismissal(const DialogType
 
 void ChromeClientImpl::setEventListenerProperties(WebEventListenerClass eventClass, WebEventListenerProperties properties)
 {
-    if (eventClass == WebEventListenerClass::Touch)
-        m_webView->hasTouchEventHandlers(properties != WebEventListenerProperties::Nothing);
-
-    if (WebLayerTreeView* treeView = m_webView->layerTreeView())
+    if (WebLayerTreeView* treeView = m_webView->layerTreeView()) {
         treeView->setEventListenerProperties(eventClass, properties);
+        if (eventClass == WebEventListenerClass::TouchStartOrMove) {
+            m_webView->hasTouchEventHandlers(properties != WebEventListenerProperties::Nothing || eventListenerProperties(WebEventListenerClass::TouchEndOrCancel) != WebEventListenerProperties::Nothing);
+        } else if (eventClass == WebEventListenerClass::TouchEndOrCancel) {
+            m_webView->hasTouchEventHandlers(properties != WebEventListenerProperties::Nothing || eventListenerProperties(WebEventListenerClass::TouchStartOrMove) != WebEventListenerProperties::Nothing);
+        }
+    } else {
+        m_webView->hasTouchEventHandlers(true);
+    }
 }
 
 WebEventListenerProperties ChromeClientImpl::eventListenerProperties(WebEventListenerClass eventClass) const
@@ -925,13 +944,13 @@ WebEventListenerProperties ChromeClientImpl::eventListenerProperties(WebEventLis
     return WebEventListenerProperties::Nothing;
 }
 
-void ChromeClientImpl::setHaveScrollEventHandlers(bool hasEventHandlers)
+void ChromeClientImpl::setHasScrollEventHandlers(bool hasEventHandlers)
 {
     if (WebLayerTreeView* treeView = m_webView->layerTreeView())
         treeView->setHaveScrollEventHandlers(hasEventHandlers);
 }
 
-bool ChromeClientImpl::haveScrollEventHandlers() const
+bool ChromeClientImpl::hasScrollEventHandlers() const
 {
     if (WebLayerTreeView* treeView = m_webView->layerTreeView())
         return treeView->haveScrollEventHandlers();

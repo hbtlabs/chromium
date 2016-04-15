@@ -10,6 +10,7 @@
 
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -598,6 +599,7 @@ ui::EventRewriteStatus EventRewriter::RewriteMouseWheelEvent(
   if (!sticky_keys_controller_)
     return ui::EVENT_REWRITE_CONTINUE;
   int flags = wheel_event.flags();
+  RewriteLocatedEvent(wheel_event, &flags);
   ui::EventRewriteStatus status =
       sticky_keys_controller_->RewriteMouseEvent(wheel_event, &flags);
   if ((wheel_event.flags() == flags) &&

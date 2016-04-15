@@ -19,9 +19,7 @@
 #import "ios/web/navigation/crw_session_entry.h"
 #include "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/public/navigation_manager.h"
-#import "ios/web/net/crw_ssl_status_updater.h"
 #include "ios/web/public/browser_state.h"
-#include "ios/web/public/cert_store.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/ssl_status.h"
 #include "ios/web/public/url_util.h"
@@ -31,17 +29,13 @@
 #import "ios/web/public/web_state/js/crw_js_injection_manager.h"
 #import "ios/web/public/web_state/ui/crw_native_content_provider.h"
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
-#include "ios/web/web_state/blocked_popup_info.h"
 #import "ios/web/web_state/error_translation_util.h"
 #include "ios/web/web_state/frame_info.h"
-#import "ios/web/web_state/js/crw_js_post_request_loader.h"
 #import "ios/web/web_state/js/crw_js_window_id_manager.h"
 #import "ios/web/web_state/ui/crw_web_controller+protected.h"
 #import "ios/web/web_state/ui/crw_wk_script_message_router.h"
 #import "ios/web/web_state/ui/web_view_js_utils.h"
-#import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 #import "ios/web/web_state/web_state_impl.h"
-#import "ios/web/web_state/web_view_internal_creation_util.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/cert/x509_certificate.h"
@@ -66,171 +60,27 @@
 
 #pragma mark -
 
-@interface CRWWKWebViewWebController ()<CRWSSLStatusUpdaterDataSource,
-                                        CRWSSLStatusUpdaterDelegate> {
-  // The WKWebView managed by this instance.
-  base::scoped_nsobject<WKWebView> _wkWebView;
-
+@interface CRWWKWebViewWebController () {
   // The actual URL of the document object (i.e., the last committed URL).
   // TODO(crbug.com/549616): Remove this in favor of just updating the
   // navigation manager and treating that as authoritative. For now, this allows
   // sharing the flow that's currently in the superclass.
   GURL _documentURL;
 
-  // Object for loading POST requests with body.
-  base::scoped_nsobject<CRWJSPOSTRequestLoader> _POSTRequestLoader;
-
-  // Controller used for certs verification to help with blocking requests with
-  // bad SSL cert, presenting SSL interstitials and determining SSL status for
-  // Navigation Items.
-  base::scoped_nsobject<CRWCertVerificationController>
-      _certVerificationController;
-
-  // Updates SSLStatus for current navigation item.
-  base::scoped_nsobject<CRWSSLStatusUpdater> _SSLStatusUpdater;
-
-  // CertVerification errors which happened inside
-  // |webView:didReceiveAuthenticationChallenge:completionHandler:|.
-  // Key is leaf-cert/host pair. This storage is used to carry calculated
-  // cert status from |didReceiveAuthenticationChallenge:| to
-  // |didFailProvisionalNavigation:| delegate method.
-  std::unique_ptr<CertVerificationErrorsCacheType> _certVerificationErrors;
-
   // YES if the user has interacted with the content area since the last URL
   // change.
   BOOL _interactionRegisteredSinceLastURLChange;
 }
 
-// Dictionary where keys are the names of WKWebView properties and values are
-// selector names which should be called when a corresponding property has
-// changed. e.g. @{ @"URL" : @"webViewURLDidChange" } means that
-// -[self webViewURLDidChange] must be called every time when WKWebView.URL is
-// changed.
-@property(nonatomic, readonly) NSDictionary* wkWebViewObservers;
-
-// Identifier used for storing and retrieving certificates.
-@property(nonatomic, readonly) int certGroupID;
-
-// Loads POST request with body in |_wkWebView| by constructing an HTML page
-// that executes the request through JavaScript and replaces document with the
-// result.
-// Note that this approach includes multiple body encodings and decodings, plus
-// the data is passed to |_wkWebView| on main thread.
-// This is necessary because WKWebView ignores POST request body.
-// Workaround for https://bugs.webkit.org/show_bug.cgi?id=145410
-- (void)loadPOSTRequest:(NSMutableURLRequest*)request;
-
-// Returns the WKWebViewConfigurationProvider associated with the web
-// controller's BrowserState.
-- (web::WKWebViewConfigurationProvider&)webViewConfigurationProvider;
-
-// Returns a new autoreleased web view created with given configuration.
-- (WKWebView*)createWebViewWithConfiguration:(WKWebViewConfiguration*)config;
-
-// Sets the value of the webView property, and performs its basic setup.
-- (void)setWebView:(WKWebView*)webView;
-
 // Returns YES if the given WKBackForwardListItem is valid to use for
 // navigation.
 - (BOOL)isBackForwardListItemValid:(WKBackForwardListItem*)item;
-
-// Asynchronously returns the referrer policy for the current page.
-- (void)queryPageReferrerPolicy:(void(^)(NSString*))responseHandler;
-
-// Informs CWRWebDelegate that CRWWebController has detected and blocked a
-// popup.
-- (void)didBlockPopupWithURL:(GURL)popupURL
-                   sourceURL:(GURL)sourceURL
-              referrerPolicy:(const std::string&)referrerPolicyString;
-
-// Used in webView:didReceiveAuthenticationChallenge:completionHandler: to reply
-// with NSURLSessionAuthChallengeDisposition and credentials.
-+ (void)processHTTPAuthForUser:(NSString*)user
-                      password:(NSString*)password
-             completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
-                                         NSURLCredential*))completionHandler;
-
-// Returns YES if a KVO change to |newURL| could be a 'navigation' within the
-// document (hash change, pushState/replaceState, etc.). This should only be
-// used in the context of a URL KVO callback firing, and only if |isLoading| is
-// YES for the web view (since if it's not, no guesswork is needed).
-- (BOOL)isKVOChangePotentialSameDocumentNavigationToURL:(const GURL&)newURL;
-
-// Called when a non-document-changing URL change occurs. Updates the
-// _documentURL, and informs the superclass of the change.
-- (void)URLDidChangeWithoutDocumentChange:(const GURL&)URL;
-
-// Returns YES if there is currently a requested but uncommitted load for
-// |targetURL|.
-- (BOOL)isLoadRequestPendingForURL:(const GURL&)targetURL;
-
-// Called when WKWebView estimatedProgress has been changed.
-- (void)webViewEstimatedProgressDidChange;
-
-// Called when WKWebView certificateChain or hasOnlySecureContent property has
-// changed.
-- (void)webViewSecurityFeaturesDidChange;
-
-// Called when WKWebView loading state has been changed.
-- (void)webViewLoadingStateDidChange;
-
-// Called when WKWebView title has been changed.
-- (void)webViewTitleDidChange;
-
-// Called when WKWebView URL has been changed.
-- (void)webViewURLDidChange;
 
 @end
 
 @implementation CRWWKWebViewWebController
 
-#pragma mark CRWWebController public methods
-
-- (instancetype)initWithWebState:(web::WebStateImpl*)webState {
-  self = [super initWithWebState:webState];
-  if (self) {
-    DCHECK(webState);
-    web::BrowserState* browserState = webState->GetBrowserState();
-    _certVerificationController.reset([[CRWCertVerificationController alloc]
-        initWithBrowserState:browserState]);
-    _certVerificationErrors.reset(
-        new CertVerificationErrorsCacheType(kMaxCertErrorsCount));
-  }
-  return self;
-}
-
-- (void)terminateNetworkActivity {
-  web::CertStore::GetInstance()->RemoveCertsForGroup(self.certGroupID);
-  [super terminateNetworkActivity];
-}
-
-- (void)close {
-  _SSLStatusUpdater.reset();
-  [_certVerificationController shutDown];
-  [super close];
-}
-
-#pragma mark -
-#pragma mark Testing-Only Methods
-
-- (void)injectWebViewContentView:(CRWWebViewContentView*)webViewContentView {
-  [super injectWebViewContentView:webViewContentView];
-  [self setWebView:static_cast<WKWebView*>(webViewContentView.webView)];
-}
-
 #pragma mark - Protected property implementations
-
-- (WKWebView*)webView {
-  return _wkWebView.get();
-}
-
-- (UIScrollView*)webScrollView {
-  return [_wkWebView scrollView];
-}
-
-- (NSString*)title {
-  return [_wkWebView title];
-}
 
 - (GURL)documentURL {
   return _documentURL;
@@ -238,14 +88,6 @@
 
 - (BOOL)interactionRegisteredSinceLastURLChange {
   return _interactionRegisteredSinceLastURLChange;
-}
-
-- (CRWCertVerificationController*)certVerificationController {
-  return _certVerificationController;
-}
-
-- (void)clearCertVerificationErrors {
-  _certVerificationErrors->Clear();
 }
 
 // Overridden to track interactions since URL change.
@@ -256,16 +98,6 @@
 }
 
 #pragma mark Protected method implementations
-
-- (void)ensureWebViewCreated {
-  WKWebViewConfiguration* config =
-      [self webViewConfigurationProvider].GetWebViewConfiguration();
-  [self ensureWebViewCreatedWithConfiguration:config];
-}
-
-- (void)resetWebView {
-  [self setWebView:nil];
-}
 
 - (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel {
   DCHECK(trustLevel);
@@ -280,7 +112,7 @@
 // non-HTML contents (e.g. PDF documents).
 - (web::WebViewDocumentType)webViewDocumentType {
   // This happens during tests.
-  if (!_wkWebView) {
+  if (!self.webView) {
     return web::WEB_VIEW_DOCUMENT_TYPE_GENERIC;
   }
 
@@ -351,10 +183,10 @@
     [self registerLoadRequest:[self currentNavigationURL]
                      referrer:[self currentSessionEntryReferrer]
                    transition:[self currentTransition]];
-    if ([self currentNavigationURL] == net::GURLWithNSURL([_wkWebView URL])) {
-      [_wkWebView reload];
+    if ([self currentNavigationURL] == net::GURLWithNSURL([self.webView URL])) {
+      [self.webView reload];
     } else {
-      [_wkWebView goToBackForwardListItem:holder->back_forward_list_item()];
+      [self.webView goToBackForwardListItem:holder->back_forward_list_item()];
     }
   };
 
@@ -392,9 +224,8 @@
 }
 
 - (void)abortWebLoad {
-  [_wkWebView stopLoading];
+  [self.webView stopLoading];
   [self.pendingNavigationInfo setCancelled:YES];
-  _certVerificationErrors->Clear();
 }
 
 - (void)applyWebViewScrollZoomScaleFromZoomState:
@@ -423,106 +254,6 @@
 
 #pragma mark Private methods
 
-- (NSDictionary*)wkWebViewObservers {
-  return @{
-    @"certificateChain" : @"webViewSecurityFeaturesDidChange",
-    @"estimatedProgress" : @"webViewEstimatedProgressDidChange",
-    @"hasOnlySecureContent" : @"webViewSecurityFeaturesDidChange",
-    @"loading" : @"webViewLoadingStateDidChange",
-    @"title" : @"webViewTitleDidChange",
-    @"URL" : @"webViewURLDidChange",
-  };
-}
-
-- (int)certGroupID {
-  DCHECK(self.webStateImpl);
-  // Request tracker IDs are used as certificate groups.
-  return self.webStateImpl->GetRequestTracker()->identifier();
-}
-
-- (void)loadPOSTRequest:(NSMutableURLRequest*)request {
-  if (!_POSTRequestLoader) {
-    _POSTRequestLoader.reset([[CRWJSPOSTRequestLoader alloc] init]);
-  }
-
-  CRWWKScriptMessageRouter* messageRouter =
-      [self webViewConfigurationProvider].GetScriptMessageRouter();
-
-  [_POSTRequestLoader loadPOSTRequest:request
-                            inWebView:_wkWebView
-                        messageRouter:messageRouter
-                    completionHandler:^(NSError* loadError) {
-                      if (loadError)
-                        [self handleLoadError:loadError inMainFrame:YES];
-                      else
-                        self.webStateImpl->SetContentsMimeType("text/html");
-                    }];
-}
-
-- (web::WKWebViewConfigurationProvider&)webViewConfigurationProvider {
-  DCHECK(self.webStateImpl);
-  web::BrowserState* browserState = self.webStateImpl->GetBrowserState();
-  return web::WKWebViewConfigurationProvider::FromBrowserState(browserState);
-}
-
-- (void)ensureWebViewCreatedWithConfiguration:(WKWebViewConfiguration*)config {
-  if (!_wkWebView) {
-    [self setWebView:[self createWebViewWithConfiguration:config]];
-    // Notify super class about created web view. -webViewDidChange is not
-    // called from -setWebView:scriptMessageRouter: as the latter used in unit
-    // tests with fake web view, which cannot be added to view hierarchy.
-    [self webViewDidChange];
-  }
-}
-
-- (WKWebView*)createWebViewWithConfiguration:(WKWebViewConfiguration*)config {
-  return [web::CreateWKWebView(CGRectZero, config,
-                               self.webStateImpl->GetBrowserState(),
-                               [self useDesktopUserAgent]) autorelease];
-}
-
-- (void)setWebView:(WKWebView*)webView {
-  DCHECK_NE(_wkWebView.get(), webView);
-
-  // Unwind the old web view.
-  // TODO(eugenebut): Remove CRWWKScriptMessageRouter once crbug.com/543374 is
-  // fixed.
-  CRWWKScriptMessageRouter* messageRouter =
-      [self webViewConfigurationProvider].GetScriptMessageRouter();
-  if (_wkWebView) {
-    [messageRouter removeAllScriptMessageHandlersForWebView:_wkWebView];
-  }
-  [_wkWebView setNavigationDelegate:nil];
-  [_wkWebView setUIDelegate:nil];
-  for (NSString* keyPath in self.wkWebViewObservers) {
-    [_wkWebView removeObserver:self forKeyPath:keyPath];
-  }
-  [self clearActivityIndicatorTasks];
-
-  _wkWebView.reset([webView retain]);
-
-  // Set up the new web view.
-  if (webView) {
-    base::WeakNSObject<CRWWKWebViewWebController> weakSelf(self);
-    void (^messageHandler)(WKScriptMessage*) = ^(WKScriptMessage* message) {
-      [weakSelf didReceiveScriptMessage:message];
-    };
-    [messageRouter setScriptMessageHandler:messageHandler
-                                      name:kScriptMessageName
-                                   webView:webView];
-    [messageRouter setScriptMessageHandler:messageHandler
-                                      name:kScriptImmediateName
-                                   webView:webView];
-  }
-  [_wkWebView setNavigationDelegate:self];
-  [_wkWebView setUIDelegate:self];
-  for (NSString* keyPath in self.wkWebViewObservers) {
-    [_wkWebView addObserver:self forKeyPath:keyPath options:0 context:nullptr];
-  }
-  [self clearInjectedScriptManagers];
-  [self setDocumentURL:[self defaultURL]];
-}
-
 - (void)setDocumentURL:(const GURL&)newURL {
   if (newURL != _documentURL) {
     _documentURL = newURL;
@@ -533,7 +264,7 @@
 - (BOOL)isBackForwardListItemValid:(WKBackForwardListItem*)item {
   // The current back-forward list item MUST be in the WKWebView's back-forward
   // list to be valid.
-  WKBackForwardList* list = [_wkWebView backForwardList];
+  WKBackForwardList* list = [self.webView backForwardList];
   return list.currentItem == item ||
          [list.forwardList indexOfObject:item] != NSNotFound ||
          [list.backList indexOfObject:item] != NSNotFound;
@@ -549,297 +280,6 @@
   SEL rendererCrashSelector = @selector(webControllerWebProcessDidCrash:);
   if ([self.delegate respondsToSelector:rendererCrashSelector])
     [self.delegate webControllerWebProcessDidCrash:self];
-}
-
-- (void)queryPageReferrerPolicy:(void(^)(NSString*))responseHandler {
-  DCHECK(responseHandler);
-  [self evaluateJavaScript:@"__gCrWeb.getPageReferrerPolicy()"
-       stringResultHandler:^(NSString* referrer, NSError* error) {
-      DCHECK_NE(error.code, WKErrorJavaScriptExceptionOccurred);
-      responseHandler(!error ? referrer : nil);
-  }];
-}
-
-- (void)didBlockPopupWithURL:(GURL)popupURL
-                   sourceURL:(GURL)sourceURL
-              referrerPolicy:(const std::string&)referrerPolicyString {
-  web::ReferrerPolicy referrerPolicy =
-      [self referrerPolicyFromString:referrerPolicyString];
-  web::Referrer referrer(sourceURL, referrerPolicy);
-  NSString* const kWindowName = @"";  // obsoleted
-  base::WeakNSObject<CRWWKWebViewWebController> weakSelf(self);
-  void(^showPopupHandler)() = ^{
-      // On Desktop cross-window comunication is not supported for unblocked
-      // popups; so it's ok to create a new independent page.
-      CRWWebController* child = [[weakSelf delegate]
-          webPageOrderedOpen:popupURL
-                    referrer:referrer
-                  windowName:kWindowName
-                inBackground:NO];
-      DCHECK(!child || child.sessionController.openedByDOM);
-  };
-
-  web::BlockedPopupInfo info(popupURL, referrer, kWindowName, showPopupHandler);
-  [self.delegate webController:self didBlockPopup:info];
-}
-
-- (void)didBlockPopupWithURL:(GURL)popupURL sourceURL:(GURL)sourceURL {
-  if (![self.delegate respondsToSelector:
-      @selector(webController:didBlockPopup:)]) {
-    return;
-  }
-
-  base::WeakNSObject<CRWWKWebViewWebController> weakSelf(self);
-  dispatch_async(dispatch_get_main_queue(), ^{
-      [self queryPageReferrerPolicy:^(NSString* policy) {
-          [weakSelf didBlockPopupWithURL:popupURL
-                               sourceURL:sourceURL
-                          referrerPolicy:base::SysNSStringToUTF8(policy)];
-      }];
-  });
-}
-
-- (void)handleSSLCertError:(NSError*)error {
-  CHECK(web::IsWKWebViewSSLCertError(error));
-
-  net::SSLInfo info;
-  web::GetSSLInfoFromWKWebViewSSLCertError(error, &info);
-
-  web::SSLStatus status;
-  status.security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
-  status.cert_status = info.cert_status;
-  // |info.cert| can be null if certChain in NSError is empty or can not be
-  // parsed.
-  if (info.cert) {
-    status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
-                                                              self.certGroupID);
-  }
-
-  // Retrieve verification results from _certVerificationErrors cache to avoid
-  // unnecessary recalculations. Verification results are cached for the leaf
-  // cert, because the cert chain in |didReceiveAuthenticationChallenge:| is
-  // the OS constructed chain, while |chain| is the chain from the server.
-  NSArray* chain = error.userInfo[web::kNSErrorPeerCertificateChainKey];
-  NSString* host = [error.userInfo[web::kNSErrorFailingURLKey] host];
-  scoped_refptr<net::X509Certificate> leafCert;
-  BOOL recoverable = NO;
-  if (chain.count && host.length) {
-    // The complete cert chain may not be available, so the leaf cert is used
-    // as a key to retrieve _certVerificationErrors, as well as for storing the
-    // cert decision.
-    leafCert = web::CreateCertFromChain(@[ chain.firstObject ]);
-    if (leafCert) {
-      auto error = _certVerificationErrors->Get(
-          {leafCert, base::SysNSStringToUTF8(host)});
-      bool cacheHit = error != _certVerificationErrors->end();
-      if (cacheHit) {
-        recoverable = error->second.is_recoverable;
-        status.cert_status = error->second.status;
-        info.cert_status = error->second.status;
-      }
-      UMA_HISTOGRAM_BOOLEAN("WebController.CertVerificationErrorsCacheHit",
-                            cacheHit);
-    }
-  }
-
-  // Present SSL interstitial and inform everyone that the load is cancelled.
-  [self.delegate presentSSLError:info
-                    forSSLStatus:status
-                     recoverable:recoverable
-                        callback:^(BOOL proceed) {
-                          if (proceed) {
-                            // The interstitial will be removed during reload.
-                            [_certVerificationController
-                                allowCert:leafCert
-                                  forHost:host
-                                   status:status.cert_status];
-                            [self loadCurrentURL];
-                          }
-                        }];
-  [self loadCancelled];
-}
-
-- (void)updateSSLStatusForCurrentNavigationItem {
-  if ([self isBeingDestroyed]) {
-    return;
-  }
-
-  web::NavigationManager* navManager = self.webState->GetNavigationManager();
-  web::NavigationItem* currentNavItem = navManager->GetLastCommittedItem();
-  if (!currentNavItem) {
-    return;
-  }
-
-  if (!_SSLStatusUpdater) {
-    _SSLStatusUpdater.reset([[CRWSSLStatusUpdater alloc]
-        initWithDataSource:self
-         navigationManager:navManager
-               certGroupID:self.certGroupID]);
-    [_SSLStatusUpdater setDelegate:self];
-  }
-  NSString* host = base::SysUTF8ToNSString(_documentURL.host());
-  NSArray* certChain = [_wkWebView certificateChain];
-  BOOL hasOnlySecureContent = [_wkWebView hasOnlySecureContent];
-  [_SSLStatusUpdater updateSSLStatusForNavigationItem:currentNavItem
-                                         withCertHost:host
-                                            certChain:certChain
-                                 hasOnlySecureContent:hasOnlySecureContent];
-}
-
-- (void)handleHTTPAuthForChallenge:(NSURLAuthenticationChallenge*)challenge
-                 completionHandler:
-                     (void (^)(NSURLSessionAuthChallengeDisposition,
-                               NSURLCredential*))completionHandler {
-  NSURLProtectionSpace* space = challenge.protectionSpace;
-  DCHECK(
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPBasic] ||
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodNTLM] ||
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPDigest]);
-
-  if (self.shouldSuppressDialogs) {
-    [self didSuppressDialog];
-    completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
-    return;
-  }
-
-  SEL selector = @selector(webController:
-         runAuthDialogForProtectionSpace:
-                      proposedCredential:
-                       completionHandler:);
-  if (![self.UIDelegate respondsToSelector:selector]) {
-    // Embedder does not support HTTP Authentication.
-    completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
-    return;
-  }
-
-  [self.UIDelegate webController:self
-      runAuthDialogForProtectionSpace:space
-                   proposedCredential:challenge.proposedCredential
-                    completionHandler:^(NSString* user, NSString* password) {
-                      [CRWWKWebViewWebController
-                          processHTTPAuthForUser:user
-                                        password:password
-                               completionHandler:completionHandler];
-                    }];
-}
-
-+ (void)processHTTPAuthForUser:(NSString*)user
-                      password:(NSString*)password
-             completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
-                                         NSURLCredential*))completionHandler {
-  DCHECK_EQ(user == nil, password == nil);
-  if (!user || !password) {
-    // Embedder cancelled authentication.
-    completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
-    return;
-  }
-  completionHandler(
-      NSURLSessionAuthChallengeUseCredential,
-      [NSURLCredential
-          credentialWithUser:user
-                    password:password
-                 persistence:NSURLCredentialPersistenceForSession]);
-}
-
-- (void)processAuthChallenge:(NSURLAuthenticationChallenge*)challenge
-         forCertAcceptPolicy:(web::CertAcceptPolicy)policy
-                  certStatus:(net::CertStatus)certStatus
-           completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
-                                       NSURLCredential*))completionHandler {
-  SecTrustRef trust = challenge.protectionSpace.serverTrust;
-  if (policy == web::CERT_ACCEPT_POLICY_RECOVERABLE_ERROR_ACCEPTED_BY_USER) {
-    // Cert is invalid, but user agreed to proceed, override default behavior.
-    completionHandler(NSURLSessionAuthChallengeUseCredential,
-                      [NSURLCredential credentialForTrust:trust]);
-    return;
-  }
-
-  if (policy != web::CERT_ACCEPT_POLICY_ALLOW &&
-      SecTrustGetCertificateCount(trust)) {
-    // The cert is invalid and the user has not agreed to proceed. Cache the
-    // cert verification result in |_certVerificationErrors|, so that it can
-    // later be reused inside |didFailProvisionalNavigation:|.
-    // The leaf cert is used as the key, because the chain provided by
-    // |didFailProvisionalNavigation:| will differ (it is the server-supplied
-    // chain), thus if intermediates were considered, the keys would mismatch.
-    scoped_refptr<net::X509Certificate> leafCert =
-        net::X509Certificate::CreateFromHandle(
-            SecTrustGetCertificateAtIndex(trust, 0),
-            net::X509Certificate::OSCertHandles());
-    if (leafCert) {
-      BOOL is_recoverable =
-          policy == web::CERT_ACCEPT_POLICY_RECOVERABLE_ERROR_UNDECIDED_BY_USER;
-      std::string host =
-          base::SysNSStringToUTF8(challenge.protectionSpace.host);
-      _certVerificationErrors->Put(
-          web::CertHostPair(leafCert, host),
-          CertVerificationError(is_recoverable, certStatus));
-    }
-  }
-  completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
-}
-
-- (BOOL)isKVOChangePotentialSameDocumentNavigationToURL:(const GURL&)newURL {
-  DCHECK([_wkWebView isLoading]);
-  // If the origin changes, it can't be same-document.
-  if (_documentURL.GetOrigin().is_empty() ||
-      _documentURL.GetOrigin() != newURL.GetOrigin()) {
-    return NO;
-  }
-  if (self.loadPhase == web::LOAD_REQUESTED) {
-    // Normally LOAD_REQUESTED indicates that this is a regular, pending
-    // navigation, but it can also happen during a fast-back navigation across
-    // a hash change, so that case is potentially a same-document navigation.
-    return web::GURLByRemovingRefFromGURL(newURL) ==
-           web::GURLByRemovingRefFromGURL(_documentURL);
-  }
-  // If it passes all the checks above, it might be (but there's no guarantee
-  // that it is).
-  return YES;
-}
-
-- (void)URLDidChangeWithoutDocumentChange:(const GURL&)newURL {
-  DCHECK(newURL == net::GURLWithNSURL([_wkWebView URL]));
-  DCHECK_EQ(_documentURL.host(), newURL.host());
-  DCHECK(_documentURL != newURL);
-
-  // If called during window.history.pushState or window.history.replaceState
-  // JavaScript evaluation, only update the document URL. This callback does not
-  // have any information about the state object and cannot create (or edit) the
-  // navigation entry for this page change. Web controller will sync with
-  // history changes when a window.history.didPushState or
-  // window.history.didReplaceState message is received, which should happen in
-  // the next runloop.
-  //
-  // Otherwise, simulate the whole delegate flow for a load (since the
-  // superclass currently doesn't have a clean separation between URL changes
-  // and document changes). Note that the order of these calls is important:
-  // registering a load request logically comes before updating the document
-  // URL, but also must come first since it uses state that is reset on URL
-  // changes.
-  if (!self.changingHistoryState) {
-    // If this wasn't a previously-expected load (e.g., certain back/forward
-    // navigations), register the load request.
-    if (![self isLoadRequestPendingForURL:newURL])
-      [self registerLoadRequest:newURL];
-  }
-
-  [self setDocumentURL:newURL];
-
-  if (!self.changingHistoryState) {
-    [self didStartLoadingURL:_documentURL updateHistory:YES];
-    [self updateSSLStatusForCurrentNavigationItem];
-    [self didFinishNavigation];
-  }
-}
-
-- (BOOL)isLoadRequestPendingForURL:(const GURL&)targetURL {
-  if (self.loadPhase != web::LOAD_REQUESTED)
-    return NO;
-
-  web::NavigationItem* pendingItem =
-      self.webState->GetNavigationManager()->GetPendingItem();
-  return pendingItem && pendingItem->GetURL() == targetURL;
 }
 
 #pragma mark -
@@ -861,165 +301,6 @@
                          willDecelerate:(BOOL)decelerate {
   [self evaluateJavaScript:@"__gCrWeb.setWebViewScrollViewIsDragging(false)"
        stringResultHandler:nil];
-}
-
-#pragma mark -
-#pragma mark KVO Observation
-
-- (void)observeValueForKeyPath:(NSString*)keyPath
-                      ofObject:(id)object
-                        change:(NSDictionary*)change
-                       context:(void*)context {
-  NSString* dispatcherSelectorName = self.wkWebViewObservers[keyPath];
-  DCHECK(dispatcherSelectorName);
-  if (dispatcherSelectorName)
-    [self performSelector:NSSelectorFromString(dispatcherSelectorName)];
-}
-
-- (void)webViewEstimatedProgressDidChange {
-  if ([self.delegate respondsToSelector:
-          @selector(webController:didUpdateProgress:)]) {
-    [self.delegate webController:self
-               didUpdateProgress:[_wkWebView estimatedProgress]];
-  }
-}
-
-- (void)webViewSecurityFeaturesDidChange {
-  if (self.loadPhase == web::LOAD_REQUESTED) {
-    // Do not update SSL Status for pending load. It will be updated in
-    // |webView:didCommitNavigation:| callback.
-    return;
-  }
-  [self updateSSLStatusForCurrentNavigationItem];
-}
-
-- (void)webViewLoadingStateDidChange {
-  if ([_wkWebView isLoading]) {
-    [self addActivityIndicatorTask];
-  } else {
-    [self clearActivityIndicatorTasks];
-    if ([self currentNavItem] &&
-        [self currentBackForwardListItemHolder]->navigation_type() ==
-            WKNavigationTypeBackForward) {
-      // A fast back/forward may not call |webView:didFinishNavigation:|, so
-      // finishing the navigation should be signalled explicitly.
-      [self didFinishNavigation];
-    }
-  }
-}
-
-- (void)webViewTitleDidChange {
-  // WKWebView's title becomes empty when the web process dies; ignore that
-  // update.
-  if (self.webProcessIsDead) {
-    DCHECK_EQ(self.title.length, 0U);
-    return;
-  }
-
-  if ([self.delegate respondsToSelector:
-          @selector(webController:titleDidChange:)]) {
-    DCHECK(self.title);
-    [self.delegate webController:self titleDidChange:self.title];
-  }
-}
-
-- (void)webViewURLDidChange {
-  // TODO(stuartmorgan): Determine if there are any cases where this still
-  // happens, and if so whether anything should be done when it does.
-  if (![_wkWebView URL]) {
-    DVLOG(1) << "Received nil URL callback";
-    return;
-  }
-  GURL url(net::GURLWithNSURL([_wkWebView URL]));
-  // URL changes happen at three points:
-  // 1) When a load starts; at this point, the load is provisional, and
-  //    it should be ignored until it's committed, since the document/window
-  //    objects haven't changed yet.
-  // 2) When a non-document-changing URL change happens (hash change,
-  //    history.pushState, etc.). This URL change happens instantly, so should
-  //    be reported.
-  // 3) When a navigation error occurs after provisional navigation starts,
-  //    the URL reverts to the previous URL without triggering a new navigation.
-  //
-  // If |isLoading| is NO, then it must be case 2 or 3. If the last committed
-  // URL (_documentURL) matches the current URL, assume that it is a revert from
-  // navigation failure and do nothing. If the URL does not match, assume it is
-  // a non-document-changing URL change, and handle accordingly.
-  //
-  // If |isLoading| is YES, then it could either be case 1, or it could be case
-  // 2 on a page that hasn't finished loading yet. If it's possible that it
-  // could be a same-page navigation (in which case there may not be any other
-  // callback about the URL having changed), then check the actual page URL via
-  // JavaScript. If the origin of the new URL matches the last committed URL,
-  // then check window.location.href, and if it matches, trust it. The origin
-  // check ensures that if a site somehow corrupts window.location.href it can't
-  // do a redirect to a slow-loading target page while it is still loading to
-  // spoof the origin. On a document-changing URL change, the
-  // window.location.href will match the previous URL at this stage, not the web
-  // view's current URL.
-  if (![_wkWebView isLoading]) {
-    if (_documentURL == url)
-      return;
-    [self URLDidChangeWithoutDocumentChange:url];
-  } else if ([self isKVOChangePotentialSameDocumentNavigationToURL:url]) {
-    [_wkWebView evaluateJavaScript:@"window.location.href"
-                 completionHandler:^(id result, NSError* error) {
-                     // If the web view has gone away, or the location
-                     // couldn't be retrieved, abort.
-                     if (!_wkWebView ||
-                         ![result isKindOfClass:[NSString class]]) {
-                       return;
-                     }
-                     GURL jsURL([result UTF8String]);
-                     // Check that window.location matches the new URL. If
-                     // it does not, this is a document-changing URL change as
-                     // the window location would not have changed to the new
-                     // URL when the script was called.
-                     BOOL windowLocationMatchesNewURL = jsURL == url;
-                     // Re-check origin in case navigaton has occured since
-                     // start of JavaScript evaluation.
-                     BOOL newURLOriginMatchesDocumentURLOrigin =
-                         _documentURL.GetOrigin() == url.GetOrigin();
-                     // Check that the web view URL still matches the new URL.
-                     // TODO(crbug.com/563568): webViewURLMatchesNewURL check
-                     // may drop same document URL changes if pending URL
-                     // change occurs immediately after. Revisit heuristics to
-                     // prevent this.
-                     BOOL webViewURLMatchesNewURL =
-                         net::GURLWithNSURL([_wkWebView URL]) == url;
-                     // Check that the new URL is different from the current
-                     // document URL. If not, URL change should not be reported.
-                     BOOL URLDidChangeFromDocumentURL = url != _documentURL;
-                     if (windowLocationMatchesNewURL &&
-                         newURLOriginMatchesDocumentURLOrigin &&
-                         webViewURLMatchesNewURL &&
-                         URLDidChangeFromDocumentURL) {
-                       [self URLDidChangeWithoutDocumentChange:url];
-                     }
-                 }];
-  }
-}
-
-#pragma mark - CRWSSLStatusUpdater DataSource/Delegate Methods
-
-- (void)SSLStatusUpdater:(CRWSSLStatusUpdater*)SSLStatusUpdater
-    querySSLStatusForCertChain:(NSArray*)certChain
-                          host:(NSString*)host
-             completionHandler:(StatusQueryHandler)completionHandler {
-  base::ScopedCFTypeRef<SecTrustRef> trust(
-      web::CreateServerTrustFromChain(certChain, host));
-  [_certVerificationController querySSLStatusForTrust:std::move(trust)
-                                                 host:host
-                                    completionHandler:completionHandler];
-}
-
-- (void)SSLStatusUpdater:(CRWSSLStatusUpdater*)SSLStatusUpdater
-    didChangeSSLStatusForNavigationItem:(web::NavigationItem*)navigationItem {
-  web::NavigationItem* currentNavigationItem =
-      self.webState->GetNavigationManager()->GetLastCommittedItem();
-  if (navigationItem == currentNavigationItem) {
-    [self didUpdateSSLStatusForCurrentNavigationItem];
-  }
 }
 
 @end

@@ -227,7 +227,12 @@ void NavigatorImpl::DidFailProvisionalLoadWithError(
     // TODO(creis): Find a way to cancel any pending RFH here.
   }
 
-  DiscardPendingEntryOnFailureIfNeeded(render_frame_host->navigation_handle());
+  // Discard the pending navigation entry if needed.
+  // PlzNavigate: the entry has already been discarded in FailedNavigation.
+  if (!IsBrowserSideNavigationEnabled()) {
+    DiscardPendingEntryOnFailureIfNeeded(
+        render_frame_host->navigation_handle());
+  }
 
   if (delegate_)
     delegate_->DidFailProvisionalLoadWithError(render_frame_host, params);
@@ -1025,7 +1030,12 @@ void NavigatorImpl::DidStartMainFrameNavigation(
   NavigationEntryImpl* pending_entry = controller_->GetPendingEntry();
   bool has_browser_initiated_pending_entry =
       pending_entry && !pending_entry->is_renderer_initiated();
-  if (!has_browser_initiated_pending_entry) {
+
+  // If there is a transient entry, creating a new pending entry will result
+  // in deleting it, which leads to inconsistent state.
+  bool has_transient_entry = !!controller_->GetTransientEntry();
+
+  if (!has_browser_initiated_pending_entry && !has_transient_entry) {
     std::unique_ptr<NavigationEntryImpl> entry =
         NavigationEntryImpl::FromNavigationEntry(
             controller_->CreateNavigationEntry(

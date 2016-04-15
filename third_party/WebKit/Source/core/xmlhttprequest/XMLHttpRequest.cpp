@@ -223,11 +223,6 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
     , m_downloadingToFile(false)
     , m_responseTextOverflow(false)
 {
-#if ENABLE(ASSERT) && !ENABLE(OILPAN)
-    // Verify that this object was allocated on the 'eager' heap.
-    // (this check comes 'for free' with Oilpan enabled.)
-    ASSERT(IS_EAGERLY_FINALIZED());
-#endif
 }
 
 XMLHttpRequest::~XMLHttpRequest()
@@ -873,6 +868,9 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody, Excepti
     }
 
     m_sameOriginRequest = getSecurityOrigin()->canRequestNoSuborigin(m_url);
+
+    if (!m_sameOriginRequest && m_includeCredentials)
+        UseCounter::count(&executionContext, UseCounter::XMLHttpRequestCrossOriginWithCredentials);
 
     // We also remember whether upload events should be allowed for this request in case the upload listeners are
     // added after the request is started.

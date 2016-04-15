@@ -207,6 +207,7 @@ void LogAbortChainSameURLHistogram(int aborted_chain_size_same_url) {
 PageLoadTracker::PageLoadTracker(
     bool in_foreground,
     PageLoadMetricsEmbedderInterface* embedder_interface,
+    PageLoadTracker* const currently_committed_load_or_null,
     content::NavigationHandle* navigation_handle,
     int aborted_chain_size,
     int aborted_chain_size_same_url)
@@ -220,8 +221,12 @@ PageLoadTracker::PageLoadTracker(
       embedder_interface_(embedder_interface) {
   DCHECK(!navigation_handle->HasCommitted());
   embedder_interface_->RegisterObservers(this);
+  const GURL& currently_committed_url =
+      currently_committed_load_or_null
+          ? currently_committed_load_or_null->committed_url()
+          : GURL::EmptyGURL();
   for (const auto& observer : observers_) {
-    observer->OnStart(navigation_handle);
+    observer->OnStart(navigation_handle, currently_committed_url);
   }
 }
 
@@ -333,7 +338,8 @@ void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
   }
 }
 
-bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing) {
+bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
+                                   const PageLoadMetadata& new_metadata) {
   // Throw away IPCs that are not relevant to the current navigation.
   // Two timing structures cannot refer to the same navigation if they indicate
   // that a navigation started at different times, so a new timing struct with a
@@ -341,15 +347,17 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing) {
   bool valid_timing_descendent =
       timing_.navigation_start.is_null() ||
       timing_.navigation_start == new_timing.navigation_start;
-  if (IsValidPageLoadTiming(new_timing) && valid_timing_descendent) {
+  // Ensure flags sent previously are still present in the new metadata fields.
+  bool valid_behavior_descendent =
+      (metadata_.behavior_flags & new_metadata.behavior_flags) ==
+      metadata_.behavior_flags;
+  if (IsValidPageLoadTiming(new_timing) && valid_timing_descendent &&
+      valid_behavior_descendent) {
     timing_ = new_timing;
+    metadata_ = new_metadata;
     return true;
   }
   return false;
-}
-
-bool PageLoadTracker::HasBackgrounded() {
-  return !started_in_foreground_ || !background_time_.is_null();
 }
 
 void PageLoadTracker::set_renderer_tracked(bool renderer_tracked) {
@@ -383,10 +391,10 @@ PageLoadExtraInfo PageLoadTracker::GetPageLoadMetricsInfo() {
   } else {
     DCHECK(commit_time_.is_null());
   }
-  return PageLoadExtraInfo(first_background_time, first_foreground_time,
-                           started_in_foreground_,
-                           commit_time_.is_null() ? GURL() : url_,
-                           time_to_commit, abort_type_, time_to_abort);
+  return PageLoadExtraInfo(
+      first_background_time, first_foreground_time, started_in_foreground_,
+      commit_time_.is_null() ? GURL() : url_, time_to_commit, abort_type_,
+      time_to_abort, metadata_);
 }
 
 void PageLoadTracker::NotifyAbort(UserAbortType abort_type,
@@ -514,12 +522,13 @@ void MetricsWebContentsObserver::DidStartNavigation(
   DCHECK_GT(2ul, provisional_loads_.size());
   // Passing raw pointers to observers_ and embedder_interface_ is safe because
   // the MetricsWebContentsObserver owns them both list and they are torn down
-  // after the PageLoadTracker.
-  provisional_loads_.insert(
-      std::make_pair(navigation_handle,
-                     make_scoped_ptr(new PageLoadTracker(
-                         in_foreground_, embedder_interface_.get(),
-                         navigation_handle, chain_size, chain_size_same_url))));
+  // after the PageLoadTracker. The PageLoadTracker does not hold on to
+  // committed_load_ or navigation_handle beyond the scope of the constructor.
+  provisional_loads_.insert(std::make_pair(
+      navigation_handle,
+      make_scoped_ptr(new PageLoadTracker(
+          in_foreground_, embedder_interface_.get(), committed_load_.get(),
+          navigation_handle, chain_size, chain_size_same_url))));
 }
 
 void MetricsWebContentsObserver::DidFinishNavigation(
@@ -688,7 +697,8 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
 
 void MetricsWebContentsObserver::OnTimingUpdated(
     content::RenderFrameHost* render_frame_host,
-    const PageLoadTiming& timing) {
+    const PageLoadTiming& timing,
+    const PageLoadMetadata& metadata) {
   bool error = false;
   if (!committed_load_ || !committed_load_->renderer_tracked()) {
     RecordInternalError(ERR_IPC_WITH_NO_RELEVANT_LOAD);
@@ -713,7 +723,7 @@ void MetricsWebContentsObserver::OnTimingUpdated(
   if (error)
     return;
 
-  if (!committed_load_->UpdateTiming(timing)) {
+  if (!committed_load_->UpdateTiming(timing, metadata)) {
     // If the page load tracker cannot update its timing, something is wrong
     // with the IPC (it's from another load, or it's invalid in some other way).
     // We expect this to be a rare occurrence.

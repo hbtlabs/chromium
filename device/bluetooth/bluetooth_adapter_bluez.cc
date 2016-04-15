@@ -5,6 +5,7 @@
 #include "device/bluetooth/bluetooth_adapter_bluez.h"
 
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -24,9 +25,6 @@
 #include "device/bluetooth/bluetooth_device_bluez.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_pairing_bluez.h"
-#include "device/bluetooth/bluetooth_remote_gatt_characteristic_bluez.h"
-#include "device/bluetooth/bluetooth_remote_gatt_descriptor_bluez.h"
-#include "device/bluetooth/bluetooth_remote_gatt_service_bluez.h"
 #include "device/bluetooth/bluetooth_socket_bluez.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -533,9 +531,11 @@ void BluetoothAdapterBlueZ::DevicePropertyChanged(
 
   // When a device becomes paired, mark it as trusted so that the user does
   // not need to approve every incoming connection
-  if (property_name == properties->paired.name() &&
-      properties->paired.value() && !properties->trusted.value()) {
-    device_bluez->SetTrusted();
+  if (property_name == properties->paired.name()) {
+    if (properties->paired.value() && !properties->trusted.value()) {
+      device_bluez->SetTrusted();
+    }
+    NotifyDevicePairedChanged(device_bluez, properties->paired.value());
   }
 
   // UMA connection counting

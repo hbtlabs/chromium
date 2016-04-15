@@ -212,8 +212,7 @@ group("both_gn_and_gyp") {
       "//ios/public/provider/chrome/browser",
       "//ios/public/provider/web",
       "//ios/testing:ocmock_support_unittest",
-      "//ios/third_party/fishhook",
-      "//ios/third_party/ochamcrest",
+      "//ios/third_party/earl_grey",
       "//ios/web:ios_web_inttests",
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
@@ -629,14 +628,6 @@ group("gn_only") {
     ]
   }
 
-  if (is_win && use_drfuzz) {
-    # build libfuzzer fuzzers on Windows to run with Dr. Fuzz
-    deps += [
-      "//testing/libfuzzer/fuzzers",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
-    ]
-  }
-
   if (is_linux && !is_chromeos && !is_chromecast) {
     # TODO(GYP): Figure out if any of these should be in gn_all
     # and figure out how cross-platform they are
@@ -656,8 +647,6 @@ group("gn_only") {
       "//media/cast:udp_proxy",
       "//native_client/src/trusted/debug_stub:gdb_rsp_unittest",
       "//storage/browser:dump_file_system",
-      "//testing/libfuzzer/fuzzers",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/angle:libANGLE",
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -723,6 +712,14 @@ group("gn_only") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone/demo" ]
+  }
+
+  if ((is_linux && !is_chromeos && !is_chromecast) || (is_win && use_drfuzz) ||
+      (use_libfuzzer && is_mac)) {
+    deps += [
+      "//testing/libfuzzer/fuzzers",
+      "//testing/libfuzzer/tests:libfuzzer_tests",
+    ]
   }
 
   if (enable_nacl) {
@@ -878,6 +875,15 @@ group("chromium_builder_perf") {
       deps += [ "//breakpad:minidump_stackwalk($host_toolchain)" ]
     }
   }
+}
+
+# For compatibility with GYP. The linux_chromium_chromeos_rel_ng and
+# linux_chromium_chromeos_compile_rel_ng bots reference this target as
+# something to build, but all targets for those bots to compile are set
+# up differently.
+# TODO bug 601920: Remove reference to aura_builder on bot config and delete
+# this group.
+group("aura_builder") {
 }
 
 # Because of the source assignment filter, many targets end up over-filtering

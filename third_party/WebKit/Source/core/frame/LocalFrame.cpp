@@ -619,7 +619,8 @@ double LocalFrame::devicePixelRatio() const
 
 PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
 {
-    m_view->updateLifecycleToCompositingCleanPlusScrolling();
+    // TODO(crbug.com/603230): Synchronized painting is unnecessary in this lifecycle update.
+    m_view->updateAllLifecyclePhases();
     LayoutObject* layoutObject = node.layoutObject();
     if (!layoutObject)
         return nullptr;
@@ -645,7 +646,8 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
     if (!selection().isRange())
         return nullptr;
 
-    m_view->updateLifecycleToCompositingCleanPlusScrolling();
+    // TODO(crbug.com/603230): Synchronized painting is unnecessary in the lifecycle update.
+    m_view->updateAllLifecyclePhases();
     ASSERT(document()->isActive());
 
     FloatRect paintingRect = FloatRect(selection().bounds());
@@ -753,50 +755,6 @@ bool LocalFrame::shouldReuseDefaultView(const KURL& url) const
 void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
 {
     spellChecker().removeSpellingMarkersUnderWords(words);
-}
-
-ScrollResult LocalFrame::applyScrollDelta(ScrollGranularity granularity, const FloatSize& delta, bool isScrollBegin)
-{
-    if (isScrollBegin)
-        host()->topControls().scrollBegin();
-
-    if (!view() || delta.isZero())
-        return ScrollResult(false, false, delta.width(), delta.height());
-
-    FloatSize remainingDelta = delta;
-
-    // If this is main frame, allow top controls to scroll first.
-    if (shouldScrollTopControls(granularity, delta))
-        remainingDelta = host()->topControls().scrollBy(remainingDelta);
-
-    if (remainingDelta.isZero())
-        return ScrollResult(delta.width(), delta.height(), 0.0f, 0.0f);
-
-    ScrollResult result = view()->getScrollableArea()->userScroll(granularity, remainingDelta);
-    result.didScrollX = result.didScrollX || (remainingDelta.width() != delta.width());
-    result.didScrollY = result.didScrollY || (remainingDelta.height() != delta.height());
-
-    return result;
-}
-
-bool LocalFrame::shouldScrollTopControls(ScrollGranularity granularity, const FloatSize& delta) const
-{
-    if (!isMainFrame())
-        return false;
-
-    if (granularity != ScrollByPixel && granularity != ScrollByPrecisePixel)
-        return false;
-
-    // Always give the delta to the top controls if the scroll is in
-    // the direction to show the top controls. If it's in the
-    // direction to hide the top controls, only give the delta to the
-    // top controls when the frame can scroll.
-    DoublePoint maximumScrollPosition =
-        host()->visualViewport().maximumScrollPositionDouble() +
-        toDoubleSize(view()->maximumScrollPositionDouble());
-    DoublePoint scrollPosition = host()->visualViewport()
-        .visibleRectInDocument().location();
-    return delta.height() < 0 || scrollPosition.y() < maximumScrollPosition.y();
 }
 
 String LocalFrame::localLayerTreeAsText(unsigned flags) const

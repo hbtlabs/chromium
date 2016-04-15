@@ -157,6 +157,7 @@
 #include "net/url_request/url_request.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/strings/grit/app_locale_settings.h"
 
@@ -670,6 +671,8 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
   metrics::MetricsService* metrics = browser_process_->metrics_service();
   // TODO(asvitkine): Turn into a DCHECK after http://crbug.com/359406 is fixed.
   CHECK(!field_trial_list_);
+  // TODO(asvitkine): Remove this after http://crbug.com/359406 is fixed.
+  base::FieldTrialList::EnableGlobalStateChecks();
   field_trial_list_.reset(
       new base::FieldTrialList(metrics->CreateEntropyProvider().release()));
 
@@ -974,12 +977,14 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
                                         flags_ui::kAddSentinels);
   }
 #endif  // !defined(OS_CHROMEOS)
-
-#if defined(OS_MACOSX)
   // The MaterialDesignController needs to look at command line flags, which
   // are not available until this point. Now that they are, proceed with
-  // (conditionally) loading the Material Design resource packs. See
-  // https://crbug.com/585290 .
+  // initializing the MaterialDesignController.
+  ui::MaterialDesignController::Initialize();
+
+#if defined(OS_MACOSX)
+  // Material Design resource packs can be loaded now that command line flags
+  // are set. See https://crbug.com/585290 .
   ui::ResourceBundle::GetSharedInstance().LoadMaterialDesignResources();
 #endif
 

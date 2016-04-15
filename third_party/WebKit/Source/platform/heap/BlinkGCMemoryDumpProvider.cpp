@@ -26,7 +26,7 @@ void dumpMemoryTotals(blink::WebProcessMemoryDump* memoryDump)
     dumpName.append("/allocated_objects");
     WebMemoryAllocatorDump* objectsDump = memoryDump->createMemoryAllocatorDump(dumpName);
 
-    // Heap::markedObjectSize() can be underestimated if we're still in the
+    // ThreadHeap::markedObjectSize() can be underestimated if we're still in the
     // process of lazy sweeping.
     objectsDump->addScalar("size", "bytes", ProcessHeap::totalAllocatedObjectSize() + ProcessHeap::totalMarkedObjectSize());
 }
@@ -58,25 +58,28 @@ bool BlinkGCMemoryDumpProvider::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfD
     // In the case of a detailed dump perform a mark-only GC pass to collect
     // more detailed stats.
     if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed)
-        Heap::collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
+        ThreadHeap::collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
     dumpMemoryTotals(memoryDump);
 
     if (m_isHeapProfilingEnabled) {
         // Overhead should always be reported, regardless of light vs. heavy.
         base::trace_event::TraceEventMemoryOverhead overhead;
-        base::hash_map<base::trace_event::AllocationContext, size_t> bytesByContext;
+        base::hash_map<base::trace_event::AllocationContext, base::trace_event::AllocationMetrics> metricsByContext;
         {
             MutexLocker locker(m_allocationRegisterMutex);
             if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed) {
-                for (const auto& allocSize : *m_allocationRegister)
-                    bytesByContext[allocSize.context] += allocSize.size;
+                for (const auto& allocSize : *m_allocationRegister) {
+                    base::trace_event::AllocationMetrics& metrics = metricsByContext[allocSize.context];
+                    metrics.size += allocSize.size;
+                    metrics.count++;
+                }
             }
             m_allocationRegister->EstimateTraceMemoryOverhead(&overhead);
         }
-        memoryDump->dumpHeapUsage(bytesByContext, overhead, "blink_gc");
+        memoryDump->dumpHeapUsage(metricsByContext, overhead, "blink_gc");
     }
 
-    // Merge all dumps collected by Heap::collectGarbage.
+    // Merge all dumps collected by ThreadHeap::collectGarbage.
     if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed)
         memoryDump->takeAllDumpsFrom(m_currentProcessMemoryDump.get());
     return true;

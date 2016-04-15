@@ -177,7 +177,7 @@ with a destructor.
 A pre-finalizer must have the following function signature: `void preFinalizer()`. You can change the function name.
 
 A pre-finalizer must be registered in the constructor by using the following statement:
-"`ThreadState::current()->registerPreFinalizer(preFinalizerName);`".
+"`ThreadState::current()->registerPreFinalizer(this);`".
 
 ```c++
 class YourClass : public GarbageCollectedFinalized<YourClass> {
@@ -185,7 +185,7 @@ class YourClass : public GarbageCollectedFinalized<YourClass> {
 public:
     YourClass()
     {
-        ThreadState::current()->registerPreFinalizer(dispose);
+        ThreadState::current()->registerPreFinalizer(this);
     }
     void dispose()
     {
@@ -230,12 +230,6 @@ void someFunction()
 }
 // OK to leave the object behind. The Blink GC system will free it up when it becomes unused.
 ```
-
-*** aside
-*Transitional only*
-
-`RawPtr<T>` is a simple wrapper of a raw pointer `T*` used in the transitional period.
-Most`RawPtr<T>`s will be replaced with raw pointers.
 
 ### Member, WeakMember
 

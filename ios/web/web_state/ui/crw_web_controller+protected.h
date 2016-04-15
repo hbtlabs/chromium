@@ -112,16 +112,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 #pragma mark Methods implemented by subclasses
 // Everything in this section must be implemented by subclasses.
 
-// If |contentView_| contains a web view, this is the web view it contains.
-// If not, it's nil.
-@property(nonatomic, readonly) WKWebView* webView;
-
-// The scroll view of |webView|.
-@property(nonatomic, readonly) UIScrollView* webScrollView;
-
-// The title of the page.
-@property(nonatomic, readonly) NSString* title;
-
 // Downloader for PassKit files. Lazy initialized.
 @property(nonatomic, readonly) CRWPassKitDownloader* passKitDownloader;
 
@@ -136,16 +126,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 @property(nonatomic, readonly) BOOL interactionRegisteredSinceLastURLChange;
 
 - (CRWWebControllerPendingNavigationInfo*)pendingNavigationInfo;
-
-// Designated initializer. Initializes web controller with |webState|. The
-// calling code must retain the ownership of |webState|.
-- (instancetype)initWithWebState:(web::WebStateImpl*)webState;
-
-// Creates a web view if it's not yet created.
-- (void)ensureWebViewCreated;
-
-// Destroys the web view by setting webView property to nil.
-- (void)resetWebView;
 
 // Sets _documentURL to newURL, and updates any relevant state information.
 - (void)setDocumentURL:(const GURL&)newURL;
@@ -178,36 +158,11 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 - (void)applyWebViewScrollZoomScaleFromZoomState:
     (const web::PageZoomState&)zoomState;
 
-// Creates a web view with given |config|. No-op if web view is already created.
-- (void)ensureWebViewCreatedWithConfiguration:(WKWebViewConfiguration*)config;
-
 // Called when web controller receives a new message from the web page.
 - (void)didReceiveScriptMessage:(WKScriptMessage*)message;
 
-// Convenience method to inform CWRWebDelegate about a blocked popup.
-- (void)didBlockPopupWithURL:(GURL)popupURL sourceURL:(GURL)sourceURL;
-
 // Called when a load ends in an SSL error and certificate chain.
 - (void)handleSSLCertError:(NSError*)error;
-
-// Updates SSL status for the current navigation item based on the information
-// provided by web view.
-- (void)updateSSLStatusForCurrentNavigationItem;
-
-// Used in webView:didReceiveAuthenticationChallenge:completionHandler: to reply
-// with NSURLSessionAuthChallengeDisposition and credentials.
-- (void)handleHTTPAuthForChallenge:(NSURLAuthenticationChallenge*)challenge
-                 completionHandler:
-                     (void (^)(NSURLSessionAuthChallengeDisposition,
-                               NSURLCredential*))completionHandler;
-
-// Used in webView:didReceiveAuthenticationChallenge:completionHandler: to
-// reply with NSURLSessionAuthChallengeDisposition and credentials.
-- (void)processAuthChallenge:(NSURLAuthenticationChallenge*)challenge
-         forCertAcceptPolicy:(web::CertAcceptPolicy)policy
-                  certStatus:(net::CertStatus)certStatus
-           completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
-                                       NSURLCredential*))completionHandler;
 
 #pragma mark - Optional methods for subclasses
 // Subclasses may overwrite methods in this section.
@@ -256,6 +211,13 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 - (void)handleLoadError:(NSError*)error inMainFrame:(BOOL)inMainFrame;
 
 #pragma mark - Internal methods for use by subclasses
+
+// If |contentView_| contains a web view, this is the web view it contains.
+// If not, it's nil.
+@property(nonatomic, readonly) WKWebView* webView;
+
+// The scroll view of |webView|.
+@property(nonatomic, readonly) UIScrollView* webScrollView;
 
 // The web view's view of the current URL. During page transitions
 // this may not be the same as the session history's view of the current URL.
@@ -309,11 +271,12 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // Returns NavigationManager's session controller.
 @property(nonatomic, readonly) CRWSessionController* sessionController;
 
-// Controller used for certs verification to help with blocking requests with
-// bad SSL cert, presenting SSL interstitials and determining SSL status for
-// Navigation Items.
-@property(nonatomic, readonly)
-    CRWCertVerificationController* certVerificationController;
+// Dictionary where keys are the names of WKWebView properties and values are
+// selector names which should be called when a corresponding property has
+// changed. e.g. @{ @"URL" : @"webViewURLDidChange" } means that
+// -[self webViewURLDidChange] must be called every time when WKWebView.URL is
+// changed.
+@property(nonatomic, readonly) NSDictionary* wkWebViewObservers;
 
 // Returns a new script which wraps |script| with windowID check so |script| is
 // not evaluated on windowID mismatch.
@@ -392,6 +355,10 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // agent.
 - (BOOL)useDesktopUserAgent;
 
+// Updates SSL status for the current navigation item based on the information
+// provided by web view.
+- (void)updateSSLStatusForCurrentNavigationItem;
+
 // Called when SSL status has been updated for the current navigation item.
 - (void)didUpdateSSLStatusForCurrentNavigationItem;
 
@@ -437,23 +404,9 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // non-document-changing URL change.
 - (void)didFinishNavigation;
 
-// Called when a JavaScript dialog, HTTP authentication dialog or window.open
-// call has been suppressed.
-- (void)didSuppressDialog;
-
 // Returns the referrer policy for the given referrer policy string (as reported
 // from JS).
 - (web::ReferrerPolicy)referrerPolicyFromString:(const std::string&)policy;
-
-// Returns YES if the popup should be blocked, NO otherwise.
-- (BOOL)shouldBlockPopupWithURL:(const GURL&)popupURL
-                      sourceURL:(const GURL&)sourceURL;
-
-// Call to stop web controller activity, in particular to stop all network
-// requests. Called as part of the close sequence if it hasn't already been
-// halted; should also be called from the web delegate as part of any shutdown
-// sequence which doesn't call -close.
-- (void)terminateNetworkActivity;
 
 // Acts on a single message from the JS object, parsed from JSON into a
 // DictionaryValue. Returns NO if the format for the message was invalid.
@@ -491,10 +444,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // Returns the current entry from the underlying session controller.
 - (CRWSessionEntry*)currentSessionEntry;
 
-// Clears certVerification errors which happened inside
-// |webView:didReceiveAuthenticationChallenge:completionHandler:|.
-- (void)clearCertVerificationErrors;
-
 // Resets pending external request information.
 - (void)resetExternalRequest;
 
@@ -506,6 +455,15 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 
 // Extracts Referer value from WKNavigationAction request header.
 - (NSString*)refererFromNavigationAction:(WKNavigationAction*)action;
+
+// Loads POST request with body in |_wkWebView| by constructing an HTML page
+// that executes the request through JavaScript and replaces document with the
+// result.
+// Note that this approach includes multiple body encodings and decodings, plus
+// the data is passed to |_wkWebView| on main thread.
+// This is necessary because WKWebView ignores POST request body.
+// Workaround for https://bugs.webkit.org/show_bug.cgi?id=145410
+- (void)loadPOSTRequest:(NSMutableURLRequest*)request;
 
 @end
 

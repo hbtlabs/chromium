@@ -39,10 +39,7 @@
 #include "core/layout/line/RootInlineBox.h"
 #include "platform/geometry/FloatQuad.h"
 #include "wtf/text/CString.h"
-
-#ifndef NDEBUG
-#include <stdio.h>
-#endif
+#include <ostream> // NOLINT
 
 namespace blink {
 
@@ -65,6 +62,7 @@ VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::create(cons
     const PositionTemplate<Strategy> deepPosition = canonicalPositionOf(positionWithAffinity.position());
     if (deepPosition.isNull())
         return VisiblePositionTemplate<Strategy>();
+    DCHECK(positionWithAffinity.position().inShadowIncludingDocument()) << positionWithAffinity;
     const PositionWithAffinityTemplate<Strategy> downstreamPosition(deepPosition);
     if (positionWithAffinity.affinity() == TextAffinity::Downstream)
         return VisiblePositionTemplate<Strategy>(downstreamPosition);
@@ -126,16 +124,27 @@ void VisiblePositionTemplate<Strategy>::showTreeForThis() const
 template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingStrategy>;
 template class CORE_TEMPLATE_EXPORT VisiblePositionTemplate<EditingInFlatTreeStrategy>;
 
+std::ostream& operator<<(std::ostream& ostream, const VisiblePosition& position)
+{
+    return ostream << position.deepEquivalent() << '/' << position.affinity();
+}
+
+std::ostream& operator<<(std::ostream& ostream, const VisiblePositionInFlatTree& position)
+{
+    return ostream << position.deepEquivalent() << '/' << position.affinity();
+}
+
 } // namespace blink
 
 #ifndef NDEBUG
 
 void showTree(const blink::VisiblePosition* vpos)
 {
-    if (vpos)
+    if (vpos) {
         vpos->showTreeForThis();
-    else
-        fprintf(stderr, "Cannot showTree for (nil) VisiblePosition.\n");
+        return;
+    }
+    DVLOG(0) << "Cannot showTree for (nil) VisiblePosition.";
 }
 
 void showTree(const blink::VisiblePosition& vpos)

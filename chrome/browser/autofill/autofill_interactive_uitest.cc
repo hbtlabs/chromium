@@ -626,7 +626,14 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, DontAutofillForOutsideClick) {
 
 // Test that a field is still autofillable after the previously autofilled
 // value is deleted.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, OnDeleteValueAfterAutofill) {
+// TODO(crbug.com/603488) Test is timing out flakily on CrOS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_OnDeleteValueAfterAutofill DISABLED_OnDeleteValueAfterAutofill
+#else
+#define MAYBE_OnDeleteValueAfterAutofill OnDeleteValueAfterAutofill
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+                       MAYBE_OnDeleteValueAfterAutofill) {
   CreateTestProfile();
 
   // Load the test page.
@@ -1016,9 +1023,17 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   ExpectFieldValue("state_freeform", std::string());
 }
 
+// TODO(crbug.com/603488) Test is timing out flakily on CrOS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_AutofillFormWithNonAutofillableField \
+  DISABLED_AutofillFormWithNonAutofillableField
+#else
+#define MAYBE_AutofillFormWithNonAutofillableField \
+  AutofillFormWithNonAutofillableField
+#endif
 // Test that we properly autofill forms with non-autofillable fields.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       AutofillFormWithNonAutofillableField) {
+                       MAYBE_AutofillFormWithNonAutofillableField) {
   CreateTestProfile();
 
   // Load the test page.

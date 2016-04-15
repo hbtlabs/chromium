@@ -14,8 +14,6 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
-#include "content/browser/speech/google_one_shot_remote_engine.h"
-#include "content/browser/speech/google_streaming_remote_engine.h"
 #include "content/browser/speech/speech_recognition_engine.h"
 #include "content/browser/speech/speech_recognizer_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -108,14 +106,6 @@ int SpeechRecognitionManagerImpl::CreateSession(
   session->config = config;
   session->context = config.initial_context;
 
-  std::string hardware_info;
-  bool can_report_metrics = false;
-  if (delegate_)
-    delegate_->GetDiagnosticInformation(&can_report_metrics, &hardware_info);
-
-  // The legacy api cannot use continuous mode.
-  DCHECK(!config.is_legacy_api || !config.continuous);
-
 #if !defined(OS_ANDROID)
   // A SpeechRecognitionEngine (and corresponding Config) is required only
   // when using SpeechRecognizerImpl, which performs the audio capture and
@@ -124,7 +114,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
   // activities performed outside of the browser (delegated via JNI to the
   // Android API implementation).
 
-  SpeechRecognitionEngineConfig remote_engine_config;
+  SpeechRecognitionEngine::Config remote_engine_config;
   remote_engine_config.language = config.language;
   remote_engine_config.grammars = config.grammars;
   remote_engine_config.audio_sample_rate =
@@ -135,21 +125,13 @@ int SpeechRecognitionManagerImpl::CreateSession(
   remote_engine_config.continuous = config.continuous;
   remote_engine_config.interim_results = config.interim_results;
   remote_engine_config.max_hypotheses = config.max_hypotheses;
-  remote_engine_config.hardware_info = hardware_info;
   remote_engine_config.origin_url = config.origin_url;
   remote_engine_config.auth_token = config.auth_token;
   remote_engine_config.auth_scope = config.auth_scope;
   remote_engine_config.preamble = config.preamble;
 
-  SpeechRecognitionEngine* google_remote_engine;
-  if (config.is_legacy_api) {
-    google_remote_engine =
-        new GoogleOneShotRemoteEngine(config.url_request_context_getter.get());
-  } else {
-    google_remote_engine = new GoogleStreamingRemoteEngine(
-        config.url_request_context_getter.get());
-  }
-
+  SpeechRecognitionEngine* google_remote_engine =
+      new SpeechRecognitionEngine(config.url_request_context_getter.get());
   google_remote_engine->SetConfig(remote_engine_config);
 
   session->recognizer = new SpeechRecognizerImpl(

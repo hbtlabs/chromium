@@ -63,7 +63,7 @@ void RootWindowController::Destroy() {
   }
 }
 
-mojo::Connector* RootWindowController::GetConnector() {
+shell::Connector* RootWindowController::GetConnector() {
   return app_->connector();
 }
 
@@ -89,6 +89,12 @@ void RootWindowController::OnAccelerator(uint32_t id, const ui::Event& event) {
       app_->OnAccelerator(id, event);
       break;
   }
+}
+
+ShelfLayout* RootWindowController::GetShelfLayoutManager() {
+  return static_cast<ShelfLayout*>(
+      layout_manager_[GetWindowForContainer(mojom::Container::USER_SHELF)]
+          .get());
 }
 
 RootWindowController::RootWindowController(WindowManagerApplication* app)

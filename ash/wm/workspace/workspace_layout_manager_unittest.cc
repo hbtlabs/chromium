@@ -18,10 +18,11 @@
 #include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
+#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "base/compiler_specific.h"
 #include "ui/aura/client/aura_constants.h"
@@ -842,7 +843,7 @@ class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
 
   // Turn the top window back drop on / off.
   void ShowTopWindowBackdrop(bool show) {
-    std::unique_ptr<ash::WorkspaceLayoutManagerDelegate> backdrop;
+    std::unique_ptr<ash::WorkspaceLayoutManagerBackdropDelegate> backdrop;
     if (show) {
       backdrop.reset(new ash::WorkspaceBackdropDelegate(default_container_));
     }

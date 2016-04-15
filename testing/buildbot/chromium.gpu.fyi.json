@@ -9,6 +9,7 @@
   "GPU Win Builder (dbg)": {},
   "GPU Win x64 Builder": {},
   "GPU Win x64 Builder (dbg)": {},
+  "Linux ChromiumOS Builder": {},
   "Linux Debug (NVIDIA)": {
     "gtest_tests": [
       {
@@ -743,31 +744,6 @@
         ],
         "isolate_name": "telemetry_gpu_test",
         "name": "trace_test",
-        "override_compile_targets": [
-          "telemetry_gpu_test_run"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0412",
-              "os": "Linux"
-            }
-          ]
-        }
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=debug",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--webgl-conformance-version=2.0.0",
-          "--webgl2-only=true"
-        ],
-        "isolate_name": "telemetry_gpu_test",
-        "name": "webgl2_conformance_tests",
         "override_compile_targets": [
           "telemetry_gpu_test_run"
         ],
@@ -2881,31 +2857,6 @@
         ],
         "isolate_name": "telemetry_gpu_test",
         "name": "trace_test",
-        "override_compile_targets": [
-          "telemetry_gpu_test_run"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0412",
-              "os": "Linux"
-            }
-          ]
-        }
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=release",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--webgl-conformance-version=2.0.0",
-          "--webgl2-only=true"
-        ],
-        "isolate_name": "telemetry_gpu_test",
-        "name": "webgl2_conformance_tests",
         "override_compile_targets": [
           "telemetry_gpu_test_run"
         ],
@@ -5393,6 +5344,68 @@
       }
     ],
     "isolated_scripts": [
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_test",
+        "name": "maps_pixel_test",
+        "override_compile_targets": [
+          "telemetry_gpu_test_run"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        }
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
+          "--refimg-cloud-storage-bucket",
+          "chromium-gpu-archive/reference-images",
+          "--os-type",
+          "mac",
+          "--build-revision",
+          "${got_revision}",
+          "--test-machine-name",
+          "${buildername}"
+        ],
+        "isolate_name": "telemetry_gpu_test",
+        "name": "pixel_test",
+        "non_precommit_args": [
+          "--upload-refimg-to-cloud-storage"
+        ],
+        "override_compile_targets": [
+          "telemetry_gpu_test_run"
+        ],
+        "precommit_args": [
+          "--download-refimg-from-cloud-storage"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac"
+            }
+          ]
+        }
+      },
       {
         "args": [
           "webgl_conformance",

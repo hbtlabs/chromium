@@ -44,8 +44,8 @@ void MojoApplication::InitWithToken(std::string token) {
   application_setup.Bind(
       mojo::InterfacePtrInfo<mojom::ApplicationSetup>(std::move(handle), 0u));
 
-  mojo::shell::mojom::InterfaceProviderPtr services;
-  mojo::shell::mojom::InterfaceProviderPtr exposed_services;
+  shell::mojom::InterfaceProviderPtr services;
+  shell::mojom::InterfaceProviderPtr exposed_services;
   service_registry_.Bind(GetProxy(&exposed_services));
   application_setup->ExchangeInterfaceProviders(GetProxy(&services),
                                                 std::move(exposed_services));
@@ -68,8 +68,8 @@ void MojoApplication::OnActivate(
   application_setup.Bind(
       mojo::InterfacePtrInfo<mojom::ApplicationSetup>(std::move(pipe), 0u));
 
-  mojo::shell::mojom::InterfaceProviderPtr services;
-  mojo::shell::mojom::InterfaceProviderPtr exposed_services;
+  shell::mojom::InterfaceProviderPtr services;
+  shell::mojom::InterfaceProviderPtr exposed_services;
   service_registry_.Bind(GetProxy(&exposed_services));
   application_setup->ExchangeInterfaceProviders(GetProxy(&services),
                                                 std::move(exposed_services));

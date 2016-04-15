@@ -14,12 +14,12 @@
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
-namespace mojo {
-class Connector;
-}
-
 namespace mus {
 class WindowManagerClient;
+}
+
+namespace shell {
+class Connector;
 }
 
 namespace ui {
@@ -31,6 +31,7 @@ namespace wm {
 
 class LayoutManager;
 class ShadowController;
+class ShelfLayout;
 class WindowManager;
 class WindowManagerApplication;
 
@@ -49,7 +50,7 @@ class RootWindowController : public mus::WindowObserver,
   // Deletes this.
   void Destroy();
 
-  mojo::Connector* GetConnector();
+  shell::Connector* GetConnector();
 
   mus::Window* root() { return root_; }
 
@@ -64,6 +65,8 @@ class RootWindowController : public mus::WindowObserver,
   mus::WindowManagerClient* window_manager_client();
 
   void OnAccelerator(uint32_t id, const ui::Event& event);
+
+  ShelfLayout* GetShelfLayoutManager();
 
  private:
   explicit RootWindowController(WindowManagerApplication* app);

@@ -363,8 +363,7 @@
       },
       {
         "args": [
-          "--enable-browser-side-navigation",
-          "--test-launcher-filter-file=src/testing/buildbot/filters/browser-side-navigation.linux.content_unittests.filter"
+          "--enable-browser-side-navigation"
         ],
         "swarming": {
           "can_use_on_swarming_builders": true
@@ -6856,6 +6855,20 @@
           "can_use_on_swarming_builders": true
         },
         "test": "wtf_unittests"
+      }
+    ]
+  },
+  "Headless Linux (dbg)": {
+    "additional_compile_targets": [
+      "headless_lib",
+      "headless_tests"
+    ],
+    "gtest_tests": [
+      {
+        "test": "headless_browsertests"
+      },
+      {
+        "test": "headless_unittests"
       }
     ]
   },

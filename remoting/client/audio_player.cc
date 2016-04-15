@@ -31,7 +31,7 @@ void AudioPlayer::ProcessAudioPacket(std::unique_ptr<AudioPacket> packet) {
   DCHECK_EQ(AudioPacket::ENCODING_RAW, packet->encoding());
   DCHECK_NE(AudioPacket::SAMPLING_RATE_INVALID, packet->sampling_rate());
   DCHECK_EQ(kSampleSizeBytes, static_cast<int>(packet->bytes_per_sample()));
-  DCHECK_EQ(packet->channels(), static_cast<int>(kChannels));
+  DCHECK_EQ(kChannels, static_cast<int>(packet->channels()));
   DCHECK_EQ(packet->data(0).size() % (kChannels * kSampleSizeBytes), 0u);
 
   // No-op if the Pepper player won't start.

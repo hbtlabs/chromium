@@ -149,7 +149,6 @@ namespace {
 // FrameHosts when elements are moved around.
 ScrollCustomizationCallbacks& scrollCustomizationCallbacks()
 {
-    DCHECK(RuntimeEnabledFeatures::scrollCustomizationEnabled());
     DEFINE_STATIC_LOCAL(ScrollCustomizationCallbacks, scrollCustomizationCallbacks, (new ScrollCustomizationCallbacks));
     return scrollCustomizationCallbacks;
 }
@@ -175,29 +174,6 @@ Element::Element(const QualifiedName& tagName, Document* document, ConstructionT
 Element::~Element()
 {
     DCHECK(needsAttach());
-
-#if !ENABLE(OILPAN)
-    if (hasRareData()) {
-        elementRareData()->clearShadow();
-        detachAllAttrNodesFromElement();
-    }
-
-    if (isCustomElement())
-        CustomElement::wasDestroyed(this);
-
-    if (RuntimeEnabledFeatures::scrollCustomizationEnabled())
-        scrollCustomizationCallbacks().removeCallbacksForElement(this);
-
-    // With Oilpan, either the Element has been removed from the Document
-    // or the Document is dead as well. If the Element has been removed from
-    // the Document the element has already been removed from the pending
-    // resources. If the document is also dead, there is no need to remove
-    // the element from the pending resources.
-    if (hasPendingResources()) {
-        document().accessSVGExtensions().removeElementFromPendingResources(this);
-        DCHECK(!hasPendingResources());
-    }
-#endif
 }
 
 inline ElementRareData* Element::elementRareData() const
@@ -506,9 +482,18 @@ void Element::setApplyScroll(ScrollStateCallback* scrollStateCallback, String na
     scrollCustomizationCallbacks().setApplyScroll(this, scrollStateCallback);
 }
 
+void Element::removeApplyScroll()
+{
+    scrollCustomizationCallbacks().removeApplyScroll(this);
+}
+
+ScrollStateCallback* Element::getApplyScroll()
+{
+    return scrollCustomizationCallbacks().getApplyScroll(this);
+}
+
 void Element::nativeDistributeScroll(ScrollState& scrollState)
 {
-    DCHECK(RuntimeEnabledFeatures::scrollCustomizationEnabled());
     if (scrollState.fullyConsumed())
         return;
 
@@ -550,43 +535,43 @@ void Element::callDistributeScroll(ScrollState& scrollState)
 void Element::nativeApplyScroll(ScrollState& scrollState)
 {
     DCHECK(RuntimeEnabledFeatures::scrollCustomizationEnabled());
+
+    // All elements in the scroll chain should be boxes.
+    DCHECK(!layoutObject() || layoutObject()->isBox());
+
     if (scrollState.fullyConsumed())
         return;
 
-    const double deltaX = scrollState.deltaX();
-    const double deltaY = scrollState.deltaY();
-    bool scrolled = false;
+    FloatSize delta(scrollState.deltaX(), scrollState.deltaY());
+
+    if (delta.isZero())
+        return;
 
     // TODO(esprehn): This should use updateLayoutIgnorePendingStylesheetsForNode.
-    if (deltaY || deltaX)
-        document().updateLayoutIgnorePendingStylesheets();
+    document().updateLayoutIgnorePendingStylesheets();
 
-    // Handle the scrollingElement separately, as it scrolls the viewport.
-    if (this == document().scrollingElement()) {
-        FloatSize delta(deltaX, deltaY);
-        if (document().frame()->applyScrollDelta(ScrollByPrecisePixel, delta, scrollState.isBeginning()).didScroll()) {
-            scrolled = true;
-            scrollState.consumeDeltaNative(scrollState.deltaX(), scrollState.deltaY());
-        }
-    } else {
-        if (!layoutObject())
-            return;
-        LayoutBoxItem curBox = LayoutBoxItem(toLayoutBox(layoutObject())).enclosingBox();
-        // FIXME: Native scrollers should only consume the scroll they
-        // apply. See crbug.com/457765.
-        if (deltaX && curBox.scroll(ScrollByPrecisePixel, FloatSize(deltaX, 0)).didScrollX) {
-            scrollState.consumeDeltaNative(scrollState.deltaX(), 0);
-            scrolled = true;
-        }
+    LayoutBox* boxToScroll = nullptr;
 
-        if (deltaY && curBox.scroll(ScrollByPrecisePixel, FloatSize(0, deltaY)).didScrollY) {
-            scrollState.consumeDeltaNative(0, scrollState.deltaY());
-            scrolled = true;
-        }
-    }
+    // Handle the scrollingElement separately, as it should scroll the viewport.
+    if (this == document().scrollingElement())
+        boxToScroll = document().layoutView();
+    else if (layoutObject())
+        boxToScroll = toLayoutBox(layoutObject());
 
-    if (!scrolled)
+    if (!boxToScroll)
         return;
+
+    ScrollResult result =
+        LayoutBoxItem(boxToScroll).enclosingBox().scroll(
+            ScrollByPrecisePixel,
+            delta);
+
+    if (!result.didScroll())
+        return;
+
+    // FIXME: Native scrollers should only consume the scroll they
+    // apply. See crbug.com/457765.
+    scrollState.consumeDeltaNative(delta.width(), delta.height());
 
     // We need to setCurrentNativeScrollingElement in both the
     // distributeScroll and applyScroll default implementations so

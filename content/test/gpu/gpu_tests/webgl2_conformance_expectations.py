@@ -55,6 +55,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/glsl3/forbidden-operators.html', bug=483282)
 
     self.Fail('conformance2/misc/expando-loss-2.html', bug=483282)
+    self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
     self.Fail('conformance2/vertex_arrays/vertex-array-object.html', bug=483282)
 
     # Windows only.
@@ -304,24 +305,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=483282)
 
     # Mac only.
-    self.Skip('deqp/data/gles3/shaders/qualification_order.html',
+    self.Fail('deqp/data/gles3/shaders/qualification_order.html',
         ['mac'], bug=483282)
-    self.Skip('deqp/data/gles3/shaders/scoping.html',
-        ['mac'], bug=483282)
-    self.Skip('deqp/functional/gles3/defaultvertexattribute.html',
-        ['mac'], bug=483282)
-    self.Skip('deqp/functional/gles3/floatstatequery.html',
-        ['mac'], bug=483282)
-    self.Fail('deqp/functional/gles3/internalformatquery.html',
+    self.Fail('deqp/data/gles3/shaders/scoping.html',
         ['mac'], bug=483282)
     self.Fail('deqp/functional/gles3/pixelbufferobject.html',
         ['mac'], bug=483282)
     self.Fail('deqp/functional/gles3/texturestatequery.html',
         ['mac'], bug=483282)
-    self.Skip('deqp/functional/gles3/shaderswitch.html',
-        ['mavericks'], bug=483282)
-    self.Fail('deqp/functional/gles3/rbostatequery.html',
-        ['mac'], bug=569808)
     self.Fail('deqp/functional/gles3/negativeshaderapi.html',
         ['mac'], bug=483282)
     self.Fail('deqp/functional/gles3/vertexarrays.html',
@@ -333,19 +324,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac'], bug=483282)
     self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
         ['mac'], bug=483282)
-    self.Fail('conformance2/renderbuffers/' +
-        'multisampled-renderbuffer-initialization.html',
-        ['mac'], bug=483282)
     self.Fail('conformance2/textures/misc/compressed-tex-image.html',
         ['mac'], bug=565438)
-    self.Fail('conformance2/textures/misc/gl-get-tex-parameter.html',
-        ['mac'], bug=483282)
     self.Fail('conformance2/textures/misc/tex-new-formats.html',
         ['mac'], bug=483282)
     self.Fail('conformance2/textures/misc/tex-storage-compressed-formats.html',
         ['mac'], bug=295792)
-    self.Fail('conformance2/renderbuffers/invalidate-framebuffer.html',
-        ['mac'], bug=483282)
     self.Fail('conformance2/renderbuffers/framebuffer-test.html',
         ['mac'], bug=483282)
     self.Fail('conformance2/renderbuffers/readbuffer.html',
@@ -361,6 +345,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
     self.Fail('deqp/functional/gles3/shaderstruct.html',
+        ['mac', ('nvidia', 0xfe9)], bug=483282)
+    self.Fail('deqp/functional/gles3/shaderswitch.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
 
     # Mac AMD
@@ -431,9 +417,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=295792)
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
         ['linux', 'amd'], bug=483282)
-
-    # Linux Intel: driver is GL 3.0 and doesn't support features needed for ES3.
-    self.Skip('*', ['linux', 'intel'], bug=540543)
 
     # Conflicting expectations to test that the
     # "Expectations Have No collisions" unittest works.

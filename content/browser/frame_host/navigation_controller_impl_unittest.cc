@@ -45,6 +45,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
+#include "content/test/browser_side_navigation_test_utils.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
@@ -316,6 +317,17 @@ class LoadCommittedDetailsObserver : public WebContentsObserver {
   LoadCommittedDetails details_;
 };
 
+// PlzNavigate
+// A NavigationControllerTest run with --enable-browser-side-navigation.
+class NavigationControllerTestWithBrowserSideNavigation
+    : public NavigationControllerTest {
+ public:
+  void SetUp() override {
+    EnableBrowserSideNavigation();
+    NavigationControllerTest::SetUp();
+  }
+};
+
 // -----------------------------------------------------------------------------
 
 TEST_F(NavigationControllerTest, Defaults) {
@@ -416,6 +428,14 @@ TEST_F(NavigationControllerTest, GoToOffset) {
 // is being aborted. This caused the last committed entry to be displayed in
 // the omnibox, which is the entry before A was created.
 TEST_F(NavigationControllerTest, DontDiscardWrongPendingEntry) {
+  if (IsBrowserSideNavigationEnabled()) {
+    // PlzNavigate: this exact order of events cannot happen in PlzNavigate. A
+    // similar issue with the wrong pending entry being discarded is tested in
+    // the PlzNavigate version of the test below.
+    SUCCEED() << "Test is not applicable with PlzNavigate.";
+    return;
+  }
+
   NavigationControllerImpl& controller = controller_impl();
   GURL initial_url("http://www.google.com");
   GURL url_1("http://foo.com");
@@ -445,6 +465,52 @@ TEST_F(NavigationControllerTest, DontDiscardWrongPendingEntry) {
   // Get the DidStartProvisionalLoad message for url_2.
   main_test_rfh()->SimulateNavigationStart(url_2);
 
+  EXPECT_EQ(url_2, controller.GetVisibleEntry()->GetURL());
+}
+
+// PlzNavigate: tests a case similar to
+// NavigationControllerTest.DontDiscardWrongPendingEntry.
+// Tests hat receiving a DidFailProvisionalLoad from the renderer that is
+// trying to commit an error page won't reset the pending entry of a navigation
+// that just started.
+TEST_F(NavigationControllerTestWithBrowserSideNavigation,
+       DontDiscardWrongPendingEntry) {
+  NavigationControllerImpl& controller = controller_impl();
+  GURL initial_url("http://www.google.com");
+  GURL url_1("http://google.com/foo");
+  GURL url_2("http://foo2.com");
+
+  // Navigate inititally. This is the url that could erroneously be the visible
+  // entry when url_1 fails.
+  NavigateAndCommit(initial_url);
+
+  // Set the pending entry as url_1 and receive the DidStartProvisionalLoad
+  // message, creating the NavigationHandle.
+  controller.LoadURL(url_1, Referrer(), ui::PAGE_TRANSITION_TYPED,
+                     std::string());
+  EXPECT_EQ(url_1, controller.GetVisibleEntry()->GetURL());
+  main_test_rfh()->SimulateNavigationStart(url_1);
+  EXPECT_EQ(url_1, controller.GetVisibleEntry()->GetURL());
+
+  // The navigation fails and needs to show an error page. This resets the
+  // pending entry.
+  main_test_rfh()->SimulateNavigationError(url_1, net::ERR_TIMED_OUT);
+  EXPECT_EQ(initial_url, controller.GetVisibleEntry()->GetURL());
+
+  // A navigation to url_2 starts, creating a pending navigation entry.
+  controller.LoadURL(url_2, Referrer(), ui::PAGE_TRANSITION_TYPED,
+                     std::string());
+  EXPECT_EQ(url_2, controller.GetVisibleEntry()->GetURL());
+
+  // The DidFailProvsionalLoad IPC is received from the current RFH that is
+  // committing an error page. This should not reset the pending entry for the
+  // new ongoing navigation.
+  FrameHostMsg_DidFailProvisionalLoadWithError_Params error;
+  error.error_code = net::ERR_TIMED_OUT;
+  error.url = url_1;
+  main_test_rfh()->OnMessageReceived(
+      FrameHostMsg_DidFailProvisionalLoadWithError(
+          main_test_rfh()->GetRoutingID(), error));
   EXPECT_EQ(url_2, controller.GetVisibleEntry()->GetURL());
 }
 
@@ -777,7 +843,7 @@ TEST_F(NavigationControllerTest, LoadURL_SamePage_DifferentMethod) {
   params.did_create_new_entry = true;
   params.url = url1;
   params.transition = ui::PAGE_TRANSITION_TYPED;
-  params.is_post = true;
+  params.method = "POST";
   params.post_id = 123;
   params.page_state = PageState::CreateForTesting(url1, false, 0, 0);
   main_test_rfh()->PrepareForCommit();
@@ -1885,7 +1951,7 @@ TEST_F(NavigationControllerTest, Redirect) {
   params.redirects.push_back(GURL("http://foo2"));
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
 
   main_test_rfh()->PrepareForCommit();
@@ -1953,7 +2019,7 @@ TEST_F(NavigationControllerTest, PostThenRedirect) {
   params.redirects.push_back(GURL("http://foo2"));
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
-  params.is_post = true;
+  params.method = "POST";
   params.page_state = PageState::CreateFromURL(url2);
 
   main_test_rfh()->PrepareForCommit();
@@ -1972,7 +2038,7 @@ TEST_F(NavigationControllerTest, PostThenRedirect) {
 
   params.nav_entry_id = entry_id;
   params.did_create_new_entry = false;
-  params.is_post = false;
+  params.method = "GET";
 
   EXPECT_EQ(0U, notifications.size());
   LoadCommittedDetailsObserver observer(contents());
@@ -2022,7 +2088,7 @@ TEST_F(NavigationControllerTest, ImmediateRedirect) {
   params.redirects.push_back(GURL("http://foo2"));
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
 
   LoadCommittedDetailsObserver observer(contents());
@@ -2126,7 +2192,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
     params.should_update_history = false;
     params.gesture = NavigationGestureUser;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(subframe_url);
 
     // Navigating should do nothing.
@@ -2146,7 +2212,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
 
   LoadCommittedDetailsObserver observer(contents());
@@ -2210,7 +2276,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
     params.should_update_history = false;
     params.gesture = NavigationGestureUser;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(url2);
 
     // Navigating should do nothing.
@@ -2257,7 +2323,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
     params.should_update_history = false;
     params.gesture = NavigationGestureUser;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(url3);
 
     // Navigating should do nothing.
@@ -2309,7 +2375,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
     params.should_update_history = false;
     params.gesture = NavigationGestureUser;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(url4);
 
     // Navigating should do nothing.
@@ -2375,7 +2441,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
     params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
     params.should_update_history = false;
     params.gesture = NavigationGestureUser;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(subframe_url);
     params.item_sequence_number = item_sequence_number1;
 
@@ -2397,7 +2463,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   params.transition = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
   params.item_sequence_number = item_sequence_number2;
 
@@ -2535,7 +2601,7 @@ TEST_F(NavigationControllerTest, InPage) {
   self_params.transition = ui::PAGE_TRANSITION_LINK;
   self_params.should_update_history = false;
   self_params.gesture = NavigationGestureUser;
-  self_params.is_post = false;
+  self_params.method = "GET";
   self_params.page_state = PageState::CreateFromURL(url1);
   self_params.was_within_same_page = true;
 
@@ -2560,7 +2626,7 @@ TEST_F(NavigationControllerTest, InPage) {
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
   params.was_within_same_page = true;
 
@@ -2659,7 +2725,7 @@ TEST_F(NavigationControllerTest, InPage_Replace) {
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url2);
   params.was_within_same_page = true;
 
@@ -2714,7 +2780,7 @@ TEST_F(NavigationControllerTest, ClientRedirectAfterInPageNavigation) {
     params.redirects.push_back(url);
     params.should_update_history = true;
     params.gesture = NavigationGestureUnknown;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(url);
     params.was_within_same_page = true;
 
@@ -2743,7 +2809,7 @@ TEST_F(NavigationControllerTest, ClientRedirectAfterInPageNavigation) {
     params.redirects.push_back(url);
     params.should_update_history = true;
     params.gesture = NavigationGestureUnknown;
-    params.is_post = false;
+    params.method = "GET";
     params.page_state = PageState::CreateFromURL(url);
 
     // This SHOULD generate a new entry.
@@ -2930,7 +2996,7 @@ TEST_F(NavigationControllerTest, RestoreNavigate) {
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url);
   TestRenderFrameHost* main_rfh =
       static_cast<TestRenderFrameHost*>(our_contents->GetMainFrame());
@@ -3013,7 +3079,7 @@ TEST_F(NavigationControllerTest, RestoreNavigateAfterFailure) {
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.should_update_history = false;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url);
   TestRenderFrameHost* main_rfh =
       static_cast<TestRenderFrameHost*>(our_contents->GetMainFrame());
@@ -3780,7 +3846,7 @@ TEST_F(NavigationControllerTest, IsInPageNavigationWithUniversalFileAccess) {
   params.gesture = NavigationGestureUser;
   params.page_state = PageState::CreateFromURL(different_origin_url);
   params.was_within_same_page = true;
-  params.is_post = false;
+  params.method = "GET";
   params.post_id = -1;
   main_test_rfh()->SendRendererInitiatedNavigationRequest(different_origin_url,
                                                           false);
@@ -3834,7 +3900,7 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(subframe_url);
   subframe->SendRendererInitiatedNavigationRequest(subframe_url, false);
   subframe->PrepareForCommit();
@@ -4002,7 +4068,7 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   params.transition = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
   params.should_update_history = false;
   params.gesture = NavigationGestureAuto;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url1_sub);
 
   // This should return false meaning that nothing was actually updated.
@@ -5038,7 +5104,7 @@ TEST_F(NavigationControllerTest, PostThenReplaceStateThenReload) {
   params.gesture = NavigationGestureUser;
   params.page_state = PageState::CreateFromURL(url);
   params.was_within_same_page = false;
-  params.is_post = true;
+  params.method = "POST";
   params.post_id = 2;
   main_test_rfh()->SendRendererInitiatedNavigationRequest(url, false);
   main_test_rfh()->PrepareForCommit();
@@ -5054,7 +5120,7 @@ TEST_F(NavigationControllerTest, PostThenReplaceStateThenReload) {
   params.gesture = NavigationGestureUser;
   params.page_state = PageState::CreateFromURL(replace_url);
   params.was_within_same_page = true;
-  params.is_post = false;
+  params.method = "GET";
   params.post_id = -1;
   main_test_rfh()->SendRendererInitiatedNavigationRequest(replace_url, false);
   main_test_rfh()->PrepareForCommit();
@@ -5079,7 +5145,7 @@ TEST_F(NavigationControllerTest, UnreachableURLGivesErrorPage) {
   params.gesture = NavigationGestureUser;
   params.page_state = PageState::CreateFromURL(url);
   params.was_within_same_page = false;
-  params.is_post = true;
+  params.method = "POST";
   params.post_id = 2;
   params.url_is_unreachable = true;
 
@@ -5214,7 +5280,7 @@ TEST_F(NavigationControllerTest, RendererNavigateBogusSecurityInfo) {
   params.transition = ui::PAGE_TRANSITION_LINK;
   params.should_update_history = true;
   params.gesture = NavigationGestureUser;
-  params.is_post = false;
+  params.method = "GET";
   params.page_state = PageState::CreateFromURL(url);
   params.was_within_same_page = false;
   params.security_info = "bogus security info!";

@@ -43,7 +43,6 @@
 #include "wtf/Functional.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/Locker.h"
-#include "wtf/RawPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/TypeTraits.h"
 
@@ -118,13 +117,6 @@ public:
         checkPointer();
     }
 
-    template<typename U>
-    PersistentBase(const RawPtr<U>& other) : m_raw(other.get())
-    {
-        initialize();
-        checkPointer();
-    }
-
     ~PersistentBase()
     {
         uninitialize();
@@ -154,7 +146,6 @@ public:
     T& operator*() const { return *m_raw; }
     bool operator!() const { return !m_raw; }
     operator T*() const { return m_raw; }
-    operator RawPtr<T>() const { return m_raw; }
     T* operator->() const { return *this; }
     T* get() const { return m_raw; }
 
@@ -186,13 +177,6 @@ public:
 
     template<typename U>
     PersistentBase& operator=(const Member<U>& other)
-    {
-        assign(other);
-        return *this;
-    }
-
-    template<typename U>
-    PersistentBase& operator=(const RawPtr<U>& other)
     {
         assign(other);
         return *this;
@@ -274,15 +258,15 @@ private:
         if (!m_raw)
             return;
 
-        // Heap::isHeapObjectAlive(m_raw) checks that m_raw is a traceable
+        // ThreadHeap::isHeapObjectAlive(m_raw) checks that m_raw is a traceable
         // object. In other words, it checks that the pointer is either of:
         //
         //   (a) a pointer to the head of an on-heap object.
         //   (b) a pointer to the head of an on-heap mixin object.
         //
-        // Otherwise, Heap::isHeapObjectAlive will crash when it calls
+        // Otherwise, ThreadHeap::isHeapObjectAlive will crash when it calls
         // header->checkHeader().
-        Heap::isHeapObjectAlive(m_raw);
+        ThreadHeap::isHeapObjectAlive(m_raw);
 #endif
     }
 
@@ -313,8 +297,6 @@ public:
     Persistent(const Persistent<U>& other) : Parent(other) { }
     template<typename U>
     Persistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    Persistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     Persistent& operator=(U* other)
@@ -349,11 +331,31 @@ public:
         return *this;
     }
 
-    template<typename U>
-    Persistent& operator=(const RawPtr<U>& other)
+    // Requests that the thread state clear this handle when the thread shuts
+    // down. This is intended for use with ThreadSpecific<Persistent<T>>.
+    // It's important that the Persistent<T> exist until then, because this
+    // takes a raw pointer to that handle.
+    //
+    // Example:
+    //   Foo& sharedFoo()
+    //   {
+    //        DEFINE_THREAD_SAFE_STATIC_LOCAL(
+    //            ThreadSpecific<Persistent<Foo>>, threadSpecificFoo,
+    //            new ThreadSpecific<Persistent<Foo>>);
+    //        Persistent<Foo>& fooHandle = *threadSpecificFoo;
+    //        if (!fooHandle) {
+    //            fooHandle = new Foo;
+    //            fooHandle.clearOnThreadShutdown();
+    //        }
+    //        return *fooHandle;
+    //   }
+    void clearOnThreadShutdown()
     {
-        Parent::operator=(other);
-        return *this;
+        void (*closure)(Persistent<T>*) = [](Persistent<T>* handle)
+        {
+            *handle = nullptr;
+        };
+        ThreadState::current()->registerThreadShutdownHook(WTF::bind(closure, this));
     }
 };
 
@@ -381,8 +383,6 @@ public:
     WeakPersistent(const WeakPersistent<U>& other) : Parent(other) { }
     template<typename U>
     WeakPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    WeakPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     WeakPersistent& operator=(U* other)
@@ -416,13 +416,6 @@ public:
         Parent::operator=(other);
         return *this;
     }
-
-    template<typename U>
-    WeakPersistent& operator=(const RawPtr<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
 };
 
 // Unlike Persistent, we can destruct a CrossThreadPersistent in a thread
@@ -440,8 +433,6 @@ public:
     CrossThreadPersistent(const CrossThreadPersistent<U>& other) : Parent(other) { }
     template<typename U>
     CrossThreadPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    CrossThreadPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     T* atomicGet() { return Parent::atomicGet(); }
 
@@ -477,13 +468,6 @@ public:
         Parent::operator=(other);
         return *this;
     }
-
-    template<typename U>
-    CrossThreadPersistent& operator=(const RawPtr<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
 };
 
 // Combines the behavior of CrossThreadPersistent and WeakPersistent.
@@ -500,8 +484,6 @@ public:
     CrossThreadWeakPersistent(const CrossThreadWeakPersistent<U>& other) : Parent(other) { }
     template<typename U>
     CrossThreadWeakPersistent(const Member<U>& other) : Parent(other) { }
-    template<typename U>
-    CrossThreadWeakPersistent(const RawPtr<U>& other) : Parent(other.get()) { }
 
     template<typename U>
     CrossThreadWeakPersistent& operator=(U* other)
@@ -531,13 +513,6 @@ public:
 
     template<typename U>
     CrossThreadWeakPersistent& operator=(const Member<U>& other)
-    {
-        Parent::operator=(other);
-        return *this;
-    }
-
-    template<typename U>
-    CrossThreadWeakPersistent& operator=(const RawPtr<U>& other)
     {
         Parent::operator=(other);
         return *this;
@@ -731,12 +706,6 @@ public:
         checkPointer();
     }
 
-    template<typename U>
-    Member(const RawPtr<U>& other) : m_raw(other.get())
-    {
-        checkPointer();
-    }
-
     Member(WTF::HashTableDeletedValueType) : m_raw(reinterpret_cast<T*>(-1))
     {
     }
@@ -773,8 +742,6 @@ public:
 
     T* operator->() const { return m_raw; }
     T& operator*() const { return *m_raw; }
-    template<typename U>
-    operator RawPtr<U>() const { return m_raw; }
 
     template<typename U>
     Member& operator=(const Persistent<U>& other)
@@ -794,14 +761,6 @@ public:
 
     template<typename U>
     Member& operator=(U* other)
-    {
-        m_raw = other;
-        checkPointer();
-        return *this;
-    }
-
-    template<typename U>
-    Member& operator=(RawPtr<U> other)
     {
         m_raw = other;
         checkPointer();
@@ -844,7 +803,7 @@ protected:
         //   (a) a pointer to the head of an on-heap object.
         //   (b) a pointer to the head of an on-heap mixin object.
         //
-        // We can check it by calling Heap::isHeapObjectAlive(m_raw),
+        // We can check it by calling ThreadHeap::isHeapObjectAlive(m_raw),
         // but we cannot call it here because it requires to include T.h.
         // So we currently only try to implement the check for (a), but do
         // not insist that T's definition is in scope.
@@ -907,14 +866,6 @@ public:
         return *this;
     }
 
-    template<typename U>
-    WeakMember& operator=(const RawPtr<U>& other)
-    {
-        this->m_raw = other;
-        this->checkPointer();
-        return *this;
-    }
-
     WeakMember& operator=(std::nullptr_t)
     {
         this->m_raw = nullptr;
@@ -943,9 +894,6 @@ public:
     UntracedMember(std::nullptr_t) : Member<T>(nullptr) { }
 
     UntracedMember(T* raw) : Member<T>(raw) { }
-
-    template<typename U>
-    UntracedMember(const RawPtr<U>& other) : Member<T>(other) { }
 
     template<typename U>
     UntracedMember(const Persistent<U>& other) : Member<T>(other) { }
@@ -979,14 +927,6 @@ public:
         return *this;
     }
 
-    template<typename U>
-    UntracedMember& operator=(const RawPtr<U>& other)
-    {
-        this->m_raw = other;
-        this->checkPointer();
-        return *this;
-    }
-
     UntracedMember& operator=(std::nullptr_t)
     {
         this->m_raw = nullptr;
@@ -1009,7 +949,7 @@ template<typename T, bool = IsGarbageCollectedType<T>::value>
 class RawPtrOrMemberTrait {
     STATIC_ONLY(RawPtrOrMemberTrait)
 public:
-    using Type = RawPtr<T>;
+    using Type = T*;
 };
 
 template<typename T>
@@ -1255,12 +1195,6 @@ struct PointerParamStorageTraits<T*, true> {
 
 template<typename T>
 struct ParamStorageTraits<T*> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
-    STATIC_ONLY(ParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
-};
-
-template<typename T>
-struct ParamStorageTraits<RawPtr<T>> : public PointerParamStorageTraits<T*, blink::IsGarbageCollectedType<T>::value> {
     STATIC_ONLY(ParamStorageTraits);
     static_assert(sizeof(T), "T must be fully defined");
 };

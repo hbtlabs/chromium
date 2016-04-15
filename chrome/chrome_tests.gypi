@@ -89,6 +89,7 @@
       'browser/chrome_browser_main_mac_browsertest.mm',
       'browser/chrome_content_browser_client_browsertest.cc',
       'browser/chrome_main_browsertest.cc',
+      'browser/chrome_navigation_browsertest.cc',
       'browser/chrome_plugin_browsertest.cc',
       'browser/chrome_security_exploit_browsertest.cc',
       'browser/chrome_service_worker_browsertest.cc',
@@ -659,6 +660,7 @@
     'chrome_browser_tests_views_sources': [
       'browser/ui/global_error/global_error_service_browsertest.cc',
       'browser/ui/views/extensions/extension_uninstall_dialog_view_browsertest.cc',
+      'browser/ui/views/frame/browser_non_client_frame_view_browsertest_win.cc',
       'browser/ui/views/frame/browser_window_property_manager_browsertest_win.cc',
       'browser/ui/views/select_file_dialog_extension_browsertest.cc',
     ],
@@ -1336,6 +1338,8 @@
       'test/chromedriver/net/sync_websocket_factory.h',
       'test/chromedriver/net/sync_websocket_impl.cc',
       'test/chromedriver/net/sync_websocket_impl.h',
+      'test/chromedriver/net/timeout.cc',
+      'test/chromedriver/net/timeout.h',
       'test/chromedriver/net/url_request_context_getter.cc',
       'test/chromedriver/net/url_request_context_getter.h',
       'test/chromedriver/net/websocket.cc',
@@ -1438,6 +1442,7 @@
       'test/chromedriver/command_listener_proxy_unittest.cc',
       'test/chromedriver/commands_unittest.cc',
       'test/chromedriver/logging_unittest.cc',
+      'test/chromedriver/net/timeout_unittest.cc',
       'test/chromedriver/performance_logger_unittest.cc',
       'test/chromedriver/server/http_handler_unittest.cc',
       'test/chromedriver/session_commands_unittest.cc',
@@ -2632,6 +2637,9 @@
         ['toolkit_views==1 and OS!="mac" and chromeos == 0', {
           'sources': [ '<@(chrome_browser_tests_views_non_cros_or_mac_sources)' ],
         }],
+        ['OS=="linux" or OS=="win"', {
+          'sources': [ '<@(chrome_browser_tests_non_mac_desktop_sources)' ],
+        }],
         ['OS=="ios"', {
           'sources!': [
             # TODO(dbeam): log webui URLs on iOS and test them.
@@ -3179,6 +3187,8 @@
           'target_name': 'chrome_junit_tests',
           'type': 'none',
           'dependencies': [
+            # Allow unit-testing Chrome UI components
+            'android/chrome_apk.gyp:chrome_public_apk_java',
             'chrome_java',
             '../base/base.gyp:base',
             '../base/base.gyp:base_java_test_support',

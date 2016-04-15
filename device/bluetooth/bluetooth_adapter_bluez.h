@@ -11,6 +11,7 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -43,9 +44,6 @@ class BluetoothBlueZTest;
 class BluetoothAdapterProfileBlueZ;
 class BluetoothDeviceBlueZ;
 class BluetoothPairingBlueZ;
-class BluetoothRemoteGattCharacteristicBlueZ;
-class BluetoothRemoteGattDescriptorBlueZ;
-class BluetoothRemoteGattServiceBlueZ;
 
 // The BluetoothAdapterBlueZ class implements BluetoothAdapter for platforms
 // that use BlueZ.

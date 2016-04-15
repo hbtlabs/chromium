@@ -341,7 +341,7 @@ void HTMLInputElement::updateFocusAppearance(SelectionBehaviorOnFocus selectionB
     if (isTextField()) {
         switch (selectionBehavior) {
         case SelectionBehaviorOnFocus::Reset:
-            select(NotDispatchSelectEvent);
+            select(DispatchSelectEvent);
             break;
         case SelectionBehaviorOnFocus::Restore:
             restoreCachedSelection();
@@ -423,9 +423,9 @@ void HTMLInputElement::updateTouchEventHandlerRegistry()
         EventHandlerRegistry& registry = document().frameHost()->eventHandlerRegistry();
         // TODO(dtapuska): Make this passive touch listener see crbug.com/584438
         if (hasTouchEventHandler)
-            registry.didAddEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
+            registry.didAddEventHandler(*this, EventHandlerRegistry::TouchStartOrMoveEventBlocking);
         else
-            registry.didRemoveEventHandler(*this, EventHandlerRegistry::TouchEventBlocking);
+            registry.didRemoveEventHandler(*this, EventHandlerRegistry::TouchStartOrMoveEventBlocking);
         m_hasTouchEventHandler = hasTouchEventHandler;
     }
 }
@@ -1457,12 +1457,12 @@ String HTMLInputElement::localizeValue(const String& proposedValue) const
 
 bool HTMLInputElement::isInRange() const
 {
-    return m_inputType->isInRange(value());
+    return willValidate() && m_inputType->isInRange(value());
 }
 
 bool HTMLInputElement::isOutOfRange() const
 {
-    return m_inputType->isOutOfRange(value());
+    return willValidate() && m_inputType->isOutOfRange(value());
 }
 
 bool HTMLInputElement::isRequiredFormControl() const

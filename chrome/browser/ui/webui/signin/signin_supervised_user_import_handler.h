@@ -30,9 +30,22 @@ class SigninSupervisedUserImportHandler : public content::WebUIMessageHandler {
   void RegisterMessages() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(SigninSupervisedUserImportHandlerTest,
+                           NotAuthenticated);
+  FRIEND_TEST_ALL_PREFIXES(SigninSupervisedUserImportHandlerTest, AuthError);
+  FRIEND_TEST_ALL_PREFIXES(SigninSupervisedUserImportHandlerTest,
+                           CustodianIsSupervised);
+  FRIEND_TEST_ALL_PREFIXES(SigninSupervisedUserImportHandlerTest,
+                           SendExistingSupervisedUsers);
   // Assigns a new |webui_callback_id_|. Ensures that previous in-flight request
   // has been fulfilled.
   void AssignWebUICallbackId(const base::ListValue* args);
+
+  // Callback for the "openUrlInLastActiveProfileBrowser" message. Opens the
+  // given url in a new background tab in the browser owned by the last active
+  // profile. Hyperlinks don't work in the user manager since the system profile
+  // browser is not tabbed.
+  void OpenUrlInLastActiveProfileBrowser(const base::ListValue* args);
 
   // Callback for the "getExistingSupervisedUsers" message.
   // Checks the sign-in status of the custodian and accordingly
@@ -40,7 +53,7 @@ class SigninSupervisedUserImportHandler : public content::WebUIMessageHandler {
   void GetExistingSupervisedUsers(const base::ListValue* args);
 
   void LoadCustodianProfileCallback(Profile* custodian_profile,
-                                     Profile::CreateStatus status);
+                                    Profile::CreateStatus status);
 
   // Reject the WebUI callback with an error message.
   void RejectCallback(const base::string16& error);

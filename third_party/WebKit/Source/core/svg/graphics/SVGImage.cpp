@@ -168,6 +168,11 @@ static float resolveHeightForRatio(float width, const FloatSize& intrinsicRatio)
     return width * intrinsicRatio.height() / intrinsicRatio.width();
 }
 
+bool SVGImage::hasIntrinsicDimensions() const
+{
+    return !concreteObjectSize(FloatSize()).isEmpty();
+}
+
 FloatSize SVGImage::concreteObjectSize(const FloatSize& defaultObjectSize) const
 {
     SVGSVGElement* svg = svgRootElement(m_page.get());
@@ -358,7 +363,8 @@ void SVGImage::drawInternal(SkCanvas* canvas, const SkPaint& paint, const FloatR
         transform.scale(scale.width(), scale.height());
         TransformRecorder transformRecorder(imagePicture.context(), *this, transform);
 
-        view->updateLifecycleToCompositingCleanPlusScrolling();
+        // TODO(crbug.com/603230): Synchronized painting is unnecessary in this lifecycle update.
+        view->updateAllLifecyclePhases();
         view->paint(imagePicture.context(), CullRect(enclosingIntRect(srcRect)));
         ASSERT(!view->needsLayout());
     }

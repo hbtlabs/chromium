@@ -8,13 +8,15 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_argument.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
-#include "cc/animation/animation_registrar.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
+#include "cc/animation/layer_animation_controller.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/timing_function.h"
 #include "ui/gfx/geometry/box_f.h"
@@ -77,7 +79,6 @@ class AnimationHost::ScrollOffsetAnimations : public AnimationDelegate {
     DCHECK_EQ(layer_id, scroll_offset_animation_player_->layer_id());
 
     Animation* animation = scroll_offset_animation_player_->element_animations()
-                               ->layer_animation_controller()
                                ->GetAnimation(TargetProperty::SCROLL_OFFSET);
     if (!animation) {
       scroll_offset_animation_player_->DetachLayer();
@@ -152,9 +153,9 @@ std::unique_ptr<AnimationHost> AnimationHost::Create(
 }
 
 AnimationHost::AnimationHost(ThreadInstance thread_instance)
-    : animation_registrar_(AnimationRegistrar::Create()),
-      mutator_host_client_(nullptr),
-      thread_instance_(thread_instance) {
+    : mutator_host_client_(nullptr),
+      thread_instance_(thread_instance),
+      supports_scroll_animations_(false) {
   if (thread_instance_ == ThreadInstance::IMPL)
     scroll_offset_animations_ =
         base::WrapUnique(new ScrollOffsetAnimations(this));
@@ -166,6 +167,11 @@ AnimationHost::~AnimationHost() {
   ClearTimelines();
   DCHECK(!mutator_host_client());
   DCHECK(layer_to_element_animations_map_.empty());
+
+  AnimationControllerMap copy = all_animation_controllers_;
+  for (AnimationControllerMap::iterator iter = copy.begin(); iter != copy.end();
+       ++iter)
+    (*iter).second->SetAnimationHost(nullptr);
 }
 
 AnimationTimeline* AnimationHost::GetTimelineById(int timeline_id) const {
@@ -330,7 +336,7 @@ LayerAnimationController* AnimationHost::GetControllerForLayerId(
   if (!element_animations)
     return nullptr;
 
-  return element_animations->layer_animation_controller();
+  return element_animations->layer_animation_controller_.get();
 }
 
 ElementAnimations* AnimationHost::GetElementAnimationsForLayerId(
@@ -343,39 +349,96 @@ ElementAnimations* AnimationHost::GetElementAnimationsForLayerId(
 
 void AnimationHost::SetSupportsScrollAnimations(
     bool supports_scroll_animations) {
-  animation_registrar_->set_supports_scroll_animations(
-      supports_scroll_animations);
+  supports_scroll_animations_ = supports_scroll_animations;
 }
 
 bool AnimationHost::SupportsScrollAnimations() const {
-  return animation_registrar_->supports_scroll_animations();
+  return supports_scroll_animations_;
 }
 
 bool AnimationHost::NeedsAnimateLayers() const {
-  return animation_registrar_->needs_animate_layers();
+  return !active_animation_controllers_.empty();
 }
 
 bool AnimationHost::ActivateAnimations() {
-  return animation_registrar_->ActivateAnimations();
+  if (!NeedsAnimateLayers())
+    return false;
+
+  TRACE_EVENT0("cc", "AnimationHost::ActivateAnimations");
+  AnimationControllerMap active_controllers_copy =
+      active_animation_controllers_;
+  for (auto& it : active_controllers_copy)
+    it.second->ActivateAnimations();
+
+  return true;
 }
 
 bool AnimationHost::AnimateLayers(base::TimeTicks monotonic_time) {
-  return animation_registrar_->AnimateLayers(monotonic_time);
+  if (!NeedsAnimateLayers())
+    return false;
+
+  TRACE_EVENT0("cc", "AnimationHost::AnimateLayers");
+  AnimationControllerMap controllers_copy = active_animation_controllers_;
+  for (auto& it : controllers_copy)
+    it.second->Animate(monotonic_time);
+
+  return true;
 }
 
 bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
                                          AnimationEvents* events) {
-  return animation_registrar_->UpdateAnimationState(start_ready_animations,
-                                                    events);
+  if (!NeedsAnimateLayers())
+    return false;
+
+  TRACE_EVENT0("cc", "AnimationHost::UpdateAnimationState");
+  AnimationControllerMap active_controllers_copy =
+      active_animation_controllers_;
+  for (auto& it : active_controllers_copy)
+    it.second->UpdateState(start_ready_animations, events);
+
+  return true;
 }
 
 std::unique_ptr<AnimationEvents> AnimationHost::CreateEvents() {
-  return animation_registrar_->CreateEvents();
+  return base::WrapUnique(new AnimationEvents());
 }
 
 void AnimationHost::SetAnimationEvents(
     std::unique_ptr<AnimationEvents> events) {
-  return animation_registrar_->SetAnimationEvents(std::move(events));
+  for (size_t event_index = 0; event_index < events->events_.size();
+       ++event_index) {
+    int event_layer_id = events->events_[event_index].layer_id;
+
+    // Use the map of all controllers, not just active ones, since non-active
+    // controllers may still receive events for impl-only animations.
+    const AnimationControllerMap& animation_controllers =
+        all_animation_controllers_;
+    auto iter = animation_controllers.find(event_layer_id);
+    if (iter != animation_controllers.end()) {
+      switch (events->events_[event_index].type) {
+        case AnimationEvent::STARTED:
+          (*iter).second->NotifyAnimationStarted(events->events_[event_index]);
+          break;
+
+        case AnimationEvent::FINISHED:
+          (*iter).second->NotifyAnimationFinished(events->events_[event_index]);
+          break;
+
+        case AnimationEvent::ABORTED:
+          (*iter).second->NotifyAnimationAborted(events->events_[event_index]);
+          break;
+
+        case AnimationEvent::PROPERTY_UPDATE:
+          (*iter).second->NotifyAnimationPropertyUpdate(
+              events->events_[event_index]);
+          break;
+
+        case AnimationEvent::TAKEOVER:
+          (*iter).second->NotifyAnimationTakeover(events->events_[event_index]);
+          break;
+      }
+    }
+  }
 }
 
 bool AnimationHost::ScrollOffsetAnimationWasInterrupted(int layer_id) const {
@@ -602,6 +665,52 @@ bool AnimationHost::ImplOnlyScrollAnimationUpdateTarget(
 void AnimationHost::ScrollAnimationAbort(bool needs_completion) {
   DCHECK(scroll_offset_animations_);
   return scroll_offset_animations_->ScrollAnimationAbort(needs_completion);
+}
+
+scoped_refptr<LayerAnimationController>
+AnimationHost::GetAnimationControllerForId(int id) {
+  scoped_refptr<LayerAnimationController> to_return;
+  if (!ContainsKey(all_animation_controllers_, id)) {
+    to_return = LayerAnimationController::Create(id);
+    to_return->SetAnimationHost(this);
+    all_animation_controllers_[id] = to_return.get();
+  } else {
+    to_return = all_animation_controllers_[id];
+  }
+  return to_return;
+}
+
+void AnimationHost::DidActivateAnimationController(
+    LayerAnimationController* controller) {
+  active_animation_controllers_[controller->id()] = controller;
+}
+
+void AnimationHost::DidDeactivateAnimationController(
+    LayerAnimationController* controller) {
+  if (ContainsKey(active_animation_controllers_, controller->id()))
+    active_animation_controllers_.erase(controller->id());
+}
+
+void AnimationHost::RegisterAnimationController(
+    LayerAnimationController* controller) {
+  all_animation_controllers_[controller->id()] = controller;
+}
+
+void AnimationHost::UnregisterAnimationController(
+    LayerAnimationController* controller) {
+  if (ContainsKey(all_animation_controllers_, controller->id()))
+    all_animation_controllers_.erase(controller->id());
+  DidDeactivateAnimationController(controller);
+}
+
+const AnimationHost::AnimationControllerMap&
+AnimationHost::active_animation_controllers_for_testing() const {
+  return active_animation_controllers_;
+}
+
+const AnimationHost::AnimationControllerMap&
+AnimationHost::all_animation_controllers_for_testing() const {
+  return all_animation_controllers_;
 }
 
 }  // namespace cc

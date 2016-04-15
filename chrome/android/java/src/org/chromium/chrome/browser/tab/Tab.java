@@ -124,7 +124,7 @@ import java.util.List;
  *    their own native pointer reference, but Tab#destroy() will handle deleting the native
  *    object.
  */
-public final class Tab implements ViewGroup.OnHierarchyChangeListener,
+public class Tab implements ViewGroup.OnHierarchyChangeListener,
         View.OnSystemUiVisibilityChangeListener {
     public static final int INVALID_TAB_ID = -1;
 
@@ -1428,6 +1428,9 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         intent.setAction(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(getUrl()));
         intent.putExtra(IntentHandler.EXTRA_TAB_ID, mId);
+        if (isIncognito()) {
+            intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
+        }
         IntentHandler.addTrustedIntentExtras(intent, activity);
 
         AsyncTabParamsManager.add(mId,

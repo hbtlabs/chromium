@@ -14,12 +14,12 @@
 #include "build/build_config.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_view_test_client.h"
+#include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebDOMMessageEvent.h"
-#include "third_party/WebKit/public/web/WebDragOperation.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
@@ -72,12 +72,14 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
     view_test_client_ = std::move(view_test_client);
   }
 
+  WebTestDelegate* delegate() { return delegate_; }
+  void set_delegate(WebTestDelegate* delegate) {
+    DCHECK(delegate);
+    DCHECK(!delegate_);
+    delegate_ = delegate;
+  }
+
   void SetInterfaces(WebTestInterfaces* interfaces);
-  void SetDelegate(WebTestDelegate* delegate);
-
-  std::string DumpBackForwardLists();
-
-  void LayoutAndPaintAsyncThen(const base::Closure& callback);
 
   void GetScreenOrientationForTesting(blink::WebScreenInfo&);
 

@@ -290,6 +290,12 @@ void Widget::Init(const InitParams& in_params) {
   TRACE_EVENT0("views", "Widget::Init");
   InitParams params = in_params;
 
+  // If an internal name was not provided the class name of the contents view
+  // is a reasonable default.
+  if (params.name.empty() && params.delegate &&
+      params.delegate->GetContentsView())
+    params.name = params.delegate->GetContentsView()->GetClassName();
+
   params.child |= (params.type == InitParams::TYPE_CONTROL);
   is_top_level_ = !params.child;
 
@@ -933,7 +939,7 @@ void Widget::SetCapture(View* view) {
 
   if (internal::NativeWidgetPrivate::IsMouseButtonDown())
     is_mouse_button_pressed_ = true;
-  root_view_->SetMouseHandler(view, auto_release_capture_);
+  root_view_->SetMouseHandler(view);
 }
 
 void Widget::ReleaseCapture() {
@@ -986,6 +992,10 @@ void Widget::OnSizeConstraintsChanged() {
 }
 
 void Widget::OnOwnerClosing() {}
+
+std::string Widget::GetName() const {
+  return native_widget_->GetName();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, NativeWidgetDelegate implementation:

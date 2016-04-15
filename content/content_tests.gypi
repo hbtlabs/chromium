@@ -303,6 +303,7 @@
     'content_browsertests_webrtc_sources': [
       'browser/media/webrtc/webrtc_audio_debug_recordings_browsertest.cc',
       'browser/media/webrtc/webrtc_browsertest.cc',
+      'browser/media/webrtc/webrtc_datachannel_browsertest.cc',
       'browser/media/webrtc/webrtc_getusermedia_browsertest.cc',
       'browser/media/webrtc/webrtc_internals_browsertest.cc',
       'browser/media/webrtc/webrtc_ip_permissions_browsertest.cc',
@@ -741,8 +742,7 @@
     'content_unittests_speech_sources': [
       'browser/speech/chunked_byte_buffer_unittest.cc',
       'browser/speech/endpointer/endpointer_unittest.cc',
-      'browser/speech/google_one_shot_remote_engine_unittest.cc',
-      'browser/speech/google_streaming_remote_engine_unittest.cc',
+      'browser/speech/speech_recognition_engine_unittest.cc',
       'browser/speech/speech_recognizer_impl_unittest.cc',
     ],
     # Put WebRTC-related sources in the plugin+WebRTC section below.

@@ -142,9 +142,6 @@ ElementShadow::ElementShadow()
 
 ElementShadow::~ElementShadow()
 {
-#if !ENABLE(OILPAN)
-    removeDetachedShadowRoots();
-#endif
 }
 
 ShadowRoot& ElementShadow::addShadowRoot(Element& shadowHost, ShadowRootType type)
@@ -182,25 +179,6 @@ ShadowRoot& ElementShadow::addShadowRoot(Element& shadowHost, ShadowRootType typ
 
     return *shadowRoot;
 }
-
-#if !ENABLE(OILPAN)
-void ElementShadow::removeDetachedShadowRoots()
-{
-    // Dont protect this ref count.
-    Element* shadowHost = host();
-    DCHECK(shadowHost);
-
-    while (ShadowRoot* oldRoot = m_shadowRoots.head()) {
-        InspectorInstrumentation::willPopShadowRoot(shadowHost, oldRoot);
-        shadowHost->document().removeFocusedElementOfSubtree(oldRoot);
-        m_shadowRoots.removeHead();
-        oldRoot->setParentOrShadowHostNode(0);
-        oldRoot->setParentTreeScope(shadowHost->document());
-        oldRoot->setPrev(0);
-        oldRoot->setNext(0);
-    }
-}
-#endif
 
 void ElementShadow::attach(const Node::AttachContext& context)
 {
@@ -263,11 +241,7 @@ const InsertionPoint* ElementShadow::finalDestinationInsertionPointFor(const Nod
     DCHECK(!key->needsDistributionRecalc());
 #endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
-#if ENABLE(OILPAN)
-    return it == m_nodeToInsertionPoints.end() ? nullptr : it->value->last().get();
-#else
-    return it == m_nodeToInsertionPoints.end() ? nullptr : it->value.last().get();
-#endif
+    return it == m_nodeToInsertionPoints.end() ? nullptr : it->value->last();
 }
 
 const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(const Node* key) const
@@ -277,17 +251,13 @@ const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(c
     DCHECK(!key->needsDistributionRecalc());
 #endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
-#if ENABLE(OILPAN)
-    return it == m_nodeToInsertionPoints.end() ? nullptr : it->value.get();
-#else
-    return it == m_nodeToInsertionPoints.end() ? nullptr : &it->value;
-#endif
+    return it == m_nodeToInsertionPoints.end() ? nullptr : it->value;
 }
 
 void ElementShadow::distribute()
 {
     if (isV1())
-        distributeV1();
+        youngestShadowRoot().distributeV1();
     else
         distributeV0();
 }
@@ -301,7 +271,7 @@ void ElementShadow::distributeV0()
         HTMLShadowElement* shadowInsertionPoint = 0;
         const HeapVector<Member<InsertionPoint>>& insertionPoints = root->descendantInsertionPoints();
         for (size_t i = 0; i < insertionPoints.size(); ++i) {
-            InsertionPoint* point = insertionPoints[i].get();
+            InsertionPoint* point = insertionPoints[i];
             if (!point->isActive())
                 continue;
             if (isHTMLShadowElement(*point)) {
@@ -335,24 +305,12 @@ void ElementShadow::distributeV0()
     InspectorInstrumentation::didPerformElementShadowDistribution(host());
 }
 
-void ElementShadow::distributeV1()
-{
-    if (!m_slotAssignment)
-        m_slotAssignment = SlotAssignment::create();
-    m_slotAssignment->resolveAssignment(youngestShadowRoot());
-}
-
 void ElementShadow::didDistributeNode(const Node* node, InsertionPoint* insertionPoint)
 {
-#if ENABLE(OILPAN)
     NodeToDestinationInsertionPoints::AddResult result = m_nodeToInsertionPoints.add(node, nullptr);
     if (result.isNewEntry)
-        result.storedValue->value = new DestinationInsertionPoints();
+        result.storedValue->value = new DestinationInsertionPoints;
     result.storedValue->value->append(insertionPoint);
-#else
-    NodeToDestinationInsertionPoints::AddResult result = m_nodeToInsertionPoints.add(node, DestinationInsertionPoints());
-    result.storedValue->value.append(insertionPoint);
-#endif
 }
 
 const SelectRuleFeatureSet& ElementShadow::ensureSelectFeatureSet()
@@ -408,7 +366,6 @@ DEFINE_TRACE(ElementShadow)
     // It is therefore enough to trace one of the shadow roots here and the
     // rest will be traced from there.
     visitor->trace(m_shadowRoots.head());
-    visitor->trace(m_slotAssignment);
 }
 
 } // namespace blink

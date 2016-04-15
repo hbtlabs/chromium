@@ -79,7 +79,6 @@ ElementData::ElementData(const ElementData& other, bool isUnique)
     // NOTE: The inline style is copied by the subclass copy constructor since we don't know what to do with it here.
 }
 
-#if ENABLE(OILPAN)
 void ElementData::finalizeGarbageCollectedObject()
 {
     if (m_isUnique)
@@ -87,15 +86,6 @@ void ElementData::finalizeGarbageCollectedObject()
     else
         toShareableElementData(this)->~ShareableElementData();
 }
-#else
-void ElementData::destroy()
-{
-    if (m_isUnique)
-        delete toUniqueElementData(this);
-    else
-        delete toShareableElementData(this);
-}
-#endif
 
 UniqueElementData* ElementData::makeUniqueCopy() const
 {
@@ -163,7 +153,7 @@ ShareableElementData::ShareableElementData(const UniqueElementData& other)
 
 ShareableElementData* ShareableElementData::createWithAttributes(const Vector<Attribute>& attributes)
 {
-    void* slot = Heap::allocate<ElementData>(sizeForShareableElementDataWithAttributeCount(attributes.size()));
+    void* slot = ThreadHeap::allocate<ElementData>(sizeForShareableElementDataWithAttributeCount(attributes.size()));
     return new (slot) ShareableElementData(attributes);
 }
 
@@ -199,7 +189,7 @@ UniqueElementData* UniqueElementData::create()
 
 ShareableElementData* UniqueElementData::makeShareableCopy() const
 {
-    void* slot = Heap::allocate<ElementData>(sizeForShareableElementDataWithAttributeCount(m_attributeVector.size()));
+    void* slot = ThreadHeap::allocate<ElementData>(sizeForShareableElementDataWithAttributeCount(m_attributeVector.size()));
     return new (slot) ShareableElementData(*this);
 }
 

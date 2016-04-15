@@ -144,6 +144,15 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "ui/chromeos/user_activity_power_manager_notifier.h"
 #include "ui/display/chromeos/display_configurator.h"
+
+#if defined(USE_X11)
+#include "ui/display/chromeos/x11/native_display_delegate_x11.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ui/display/types/native_display_delegate.h"
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 #endif  // defined(OS_CHROMEOS)
 
 namespace ash {
@@ -762,9 +771,8 @@ Shell::~Shell() {
   mru_window_tracker_.reset();
 
   // Chrome implementation of shelf delegate depends on FocusClient,
-  // so must be deleted before |focus_client_|.
+  // so must be deleted before |focus_client_| (below).
   shelf_delegate_.reset();
-  focus_client_.reset();
 
   // Destroy SystemTrayNotifier after destroying SystemTray as TrayItems
   // needs to remove observers from it.
@@ -808,8 +816,11 @@ Shell::~Shell() {
   // of its owned RootWindowControllers relies on the value.
   display_manager_->CreateScreenForShutdown();
   display_configuration_controller_.reset();
+
+  // Depends on |focus_client_|, so must be destroyed before.
   window_tree_host_manager_->Shutdown();
   window_tree_host_manager_.reset();
+  focus_client_.reset();
   screen_position_controller_.reset();
   accessibility_delegate_.reset();
   new_window_delegate_.reset();
@@ -865,7 +876,17 @@ void Shell::Init(const ShellInitParams& init_params) {
   // --ash-host-window-bounds flag.
   if (in_mus_)
     display_configurator_->set_configure_display(false);
-  display_configurator_->Init(!gpu_support_->IsPanelFittingDisabled());
+
+#if defined(USE_OZONE)
+  display_configurator_->Init(
+      in_mus_ ? nullptr
+              : ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate(),
+      !gpu_support_->IsPanelFittingDisabled());
+#elif defined(USE_X11)
+  display_configurator_->Init(
+      base::WrapUnique(new ui::NativeDisplayDelegateX11()),
+      !gpu_support_->IsPanelFittingDisabled());
+#endif
 
   // The DBusThreadManager must outlive this Shell. See the DCHECK in ~Shell.
   chromeos::DBusThreadManager* dbus_thread_manager =

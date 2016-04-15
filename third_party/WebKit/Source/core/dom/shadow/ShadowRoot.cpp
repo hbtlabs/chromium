@@ -43,10 +43,8 @@
 namespace blink {
 
 struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope, public DoublyLinkedListNode<ShadowRoot> {
-#if ENABLE(OILPAN)
     char emptyClassFieldsDueToGCMixinMarker[1];
-#endif
-    Member<void*> willbeMember[3];
+    Member<void*> willbeMember[4];
     unsigned countersAndFlags[1];
 };
 
@@ -57,6 +55,7 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
     , TreeScope(*this, document)
     , m_prev(nullptr)
     , m_next(nullptr)
+    , m_slotAssignment(nullptr)
     , m_numberOfStyles(0)
     , m_type(static_cast<unsigned>(type))
     , m_registeredWithParentShadowRoot(false)
@@ -68,39 +67,7 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
 
 ShadowRoot::~ShadowRoot()
 {
-#if !ENABLE(OILPAN)
-    DCHECK(!m_prev);
-    DCHECK(!m_next);
-
-    if (m_shadowRootRareData && m_shadowRootRareData->styleSheets())
-        m_shadowRootRareData->styleSheets()->detachFromDocument();
-
-    document().styleEngine().didRemoveShadowRoot(this);
-
-    // We cannot let ContainerNode destructor call willBeDeletedFromDocument()
-    // for this ShadowRoot instance because TreeScope destructor
-    // clears Node::m_treeScope thus ContainerNode is no longer able
-    // to access it Document reference after that.
-    willBeDeletedFromDocument();
-
-    // We must remove all of our children first before the TreeScope destructor
-    // runs so we don't go through TreeScopeAdopter for each child with a
-    // destructed tree scope in each descendant.
-    removeDetachedChildren();
-
-    // We must call clearRareData() here since a ShadowRoot class inherits TreeScope
-    // as well as Node. See a comment on TreeScope.h for the reason.
-    if (hasRareData())
-        clearRareData();
-#endif
 }
-
-#if !ENABLE(OILPAN)
-void ShadowRoot::dispose()
-{
-    removeDetachedChildren();
-}
-#endif
 
 ShadowRoot* ShadowRoot::olderShadowRootForBindings() const
 {
@@ -367,11 +334,19 @@ const HeapVector<Member<HTMLSlotElement>>& ShadowRoot::descendantSlots()
     return m_shadowRootRareData->descendantSlots();
 }
 
+void ShadowRoot::distributeV1()
+{
+    if (!m_slotAssignment)
+        m_slotAssignment = SlotAssignment::create();
+    m_slotAssignment->resolveAssignment(*this);
+}
+
 DEFINE_TRACE(ShadowRoot)
 {
     visitor->trace(m_prev);
     visitor->trace(m_next);
     visitor->trace(m_shadowRootRareData);
+    visitor->trace(m_slotAssignment);
     TreeScope::trace(visitor);
     DocumentFragment::trace(visitor);
 }

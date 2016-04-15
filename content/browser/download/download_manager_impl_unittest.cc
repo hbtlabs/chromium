@@ -85,6 +85,8 @@ class MockDownloadItemImpl : public DownloadItemImpl {
                          base::FilePath(),
                          std::vector<GURL>(),
                          GURL(),
+                         GURL(),
+                         GURL(),
                          "application/octet-stream",
                          "application/octet-stream",
                          base::Time(),
@@ -249,6 +251,8 @@ class MockDownloadItemFactory
       const base::FilePath& target_path,
       const std::vector<GURL>& url_chain,
       const GURL& referrer_url,
+      const GURL& tab_url,
+      const GURL& tab_referrer_url,
       const std::string& mime_type,
       const std::string& original_mime_type,
       const base::Time& start_time,
@@ -318,6 +322,8 @@ DownloadItemImpl* MockDownloadItemFactory::CreatePersistedItem(
     const base::FilePath& target_path,
     const std::vector<GURL>& url_chain,
     const GURL& referrer_url,
+    const GURL& tab_url,
+    const GURL& tab_referrer_url,
     const std::string& mime_type,
     const std::string& original_mime_type,
     const base::Time& start_time,
@@ -416,13 +422,6 @@ class MockBrowserContext : public BrowserContext {
   MOCK_METHOD1(CreateZoomLevelDelegateMock,
                ZoomLevelDelegate*(const base::FilePath&));
   MOCK_CONST_METHOD0(IsOffTheRecord, bool());
-  MOCK_METHOD0(GetMediaRequestContext,
-               net::URLRequestContextGetter*());
-  MOCK_METHOD1(GetMediaRequestContextForRenderProcess,
-               net::URLRequestContextGetter*(int renderer_child_id));
-  MOCK_METHOD2(GetMediaRequestContextForStoragePartition,
-               net::URLRequestContextGetter*(
-                   const base::FilePath& partition_path, bool in_memory));
   MOCK_METHOD0(GetResourceContext, ResourceContext*());
   MOCK_METHOD0(GetDownloadManagerDelegate, DownloadManagerDelegate*());
   MOCK_METHOD0(GetGuestManager, BrowserPluginGuestManager* ());
@@ -431,6 +430,11 @@ class MockBrowserContext : public BrowserContext {
   MOCK_METHOD0(GetSSLHostStateDelegate, SSLHostStateDelegate*());
   MOCK_METHOD0(GetPermissionManager, PermissionManager*());
   MOCK_METHOD0(GetBackgroundSyncController, BackgroundSyncController*());
+  MOCK_METHOD0(CreateMediaRequestContext,
+               net::URLRequestContextGetter*());
+  MOCK_METHOD2(CreateMediaRequestContextForStoragePartition,
+               net::URLRequestContextGetter*(
+                   const base::FilePath& partition_path, bool in_memory));
 
   // Define these two methods to avoid a
   // cannot access private member declared in class 'ScopedVector<net::URLRequestInterceptor>'
@@ -752,6 +756,8 @@ TEST_F(DownloadManagerTest, GetDownloadByGuid) {
       base::FilePath(),
       base::FilePath(),
       std::vector<GURL>(),
+      GURL("http://example.com/a"),
+      GURL("http://example.com/a"),
       GURL("http://example.com/a"),
       "application/octet-stream",
       "application/octet-stream",

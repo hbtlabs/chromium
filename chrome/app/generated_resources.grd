@@ -5611,6 +5611,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK_DESCRIPTION" desc="Description for the flag for gesture requiment for media playback">
         User gesture requirement for playing media elements. Disabling this will allow autoplay to work.
       </message>
+      <if expr="is_android">
+          <message name="IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_NAME" desc="Title for the flag for using media style notification">
+              Media style notification
+          </message>
+          <message name="IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION" desc="Description for the flag for using media style notification">
+              Use Android MediaStyle notifications for Chrome media notifications.
+          </message>
+      </if>
       <if expr="use_ash">
         <message name="IDS_FLAGS_ASH_MAXIMIZE_MODE_WINDOW_BACKDROP_NAME" desc="Title for the flag which can be used for window backdrops in TouchView.">
           Window backdrops in TouchView
@@ -10808,19 +10816,19 @@ I don't think this site should be blocked!
       <message name="IDS_SYNC_CONFIRMATION_TITLE" desc="Title of the sync confirmation dialog in the tab modal signin flow">
         You're now signed in to Chrome
       </message>
-      <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_TITLE" desc="Title of the chrome sync section of the sync confirmation dialog in the tab modal signin flow">
+      <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_TITLE" desc="Title of the chrome sync section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Chrome Sync
       </message>
       <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_BODY" desc="Body of the chrome sync section of the sync confirmation dialog in the tab modal signin flow">
         Your bookmarks, history, passwords and other settings will be synced to your Google Account so you can use them on all your devices. Control what to sync in <ph name="BEGIN_LINK">&lt;a id="settingsLink" href="#"&gt;Settings&lt;/a&gt;.</ph>
        </message>
-      <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_MESSAGE" desc="Body of the chrome sync section of the sync confirmation dialog in the tab modal signin flow">
+      <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_MESSAGE" desc="Body of the chrome sync section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Your bookmarks, history, passwords, and other settings will be synced to your Google Account so you can use them on all your devices
       </message>
-      <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_TITLE" desc="Title of the personalize services section of the sync confirmation dialog in the tab modal signin flow">
+      <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_TITLE" desc="Title of the personalize services section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Personalize Google services
       </message>
-      <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_BODY" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow">
+      <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_BODY" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Google may use your browsing history to personalize Search and other Google services
       </message>
       <message name="IDS_SYNC_CONFIRMATION_SYNC_SETTINGS_LINK_BODY" desc="Label of the section containing the link to go to the sync setting page.">
@@ -11463,7 +11471,7 @@ Some features may be unavailable.  Please check that the profile exists and you 
 
         <!-- Personalize Google Services section of the configure sync dialog -->
         <message name="IDS_SYNC_PERSONALIZE_GOOGLE_SERVICES_MESSAGE" desc="Text of the section containing a link to the Google Activity Controls.">
-          Control how Google uses your browsing history to personalize Search and other Google services from <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;</ph>Google Activity Controls<ph name="END_LINK">&lt;/a&gt;</ph>.
+          Control how Google uses your browsing history to personalize Search and other Google services from <ph name="BEGIN_LINK">&lt;a id="activity-controls" href="$1" target=&quot;_blank&quot;&gt;</ph>Google Activity Controls<ph name="END_LINK">&lt;/a&gt;</ph>.
         </message>
 
         <!-- Passphrase dialog strings -->
@@ -14543,14 +14551,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_DATA_USE_LEARN_MORE_LINK_URL" desc="URL for the 'Learn more' link in the the dialog shown when data use tracking has ended.">
         <!-- Intentionally empty. This is overridden via Finch. -->
-      </message>
-
-      <!-- Disable Auto-Hiding Toolbar Flags -->
-      <message name="IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_NAME" desc="Name of the flag to disable auto-hiding the toolbar.">
-        Disable auto-hiding the toolbar on large tablets
-      </message>
-      <message name="IDS_FLAGS_DISABLE_AUTO_HIDING_TOOLBAR_DESCRIPTION" desc="Description of the flag to disable auto-hiding the toolbar.">
-        When enabled, the toolbar will never be hidden due to scrolling on devices with a minimum screen dp >= 800. It will still be hidden if page contents go full screen.
       </message>
 
       <!-- Update Menu Item Flags -->

@@ -11,7 +11,9 @@ cr.define('settings_startup_urls_page', function() {
   function TestStartupUrlsPageBrowserProxy() {
     settings.TestBrowserProxy.call(this, [
       'addStartupPage',
+      'editStartupPage',
       'loadStartupPages',
+      'removeStartupPage',
       'useCurrentPages',
       'validateStartupPage',
     ]);
@@ -35,8 +37,19 @@ cr.define('settings_startup_urls_page', function() {
     },
 
     /** @override */
+    editStartupPage: function(modelIndex, url) {
+      this.methodCalled('editStartupPage', [modelIndex, url]);
+      return Promise.resolve(this.urlIsValid_);
+    },
+
+    /** @override */
     loadStartupPages: function() {
       this.methodCalled('loadStartupPages');
+    },
+
+    /** @override */
+    removeStartupPage: function(modelIndex) {
+      this.methodCalled('removeStartupPage', modelIndex);
     },
 
     /** @override */
@@ -72,21 +85,48 @@ cr.define('settings_startup_urls_page', function() {
       settings.StartupUrlsPageBrowserProxyImpl.instance_ = browserProxy;
       PolymerTest.clearBody();
       dialog = document.createElement('settings-startup-url-dialog');
-      document.body.appendChild(dialog);
     });
 
     teardown(function() { dialog.remove(); });
 
+    test('Initialization_Add', function() {
+      document.body.appendChild(dialog);
+      assertTrue(dialog.$.dialog.opened);
+
+      // Assert that the "Add" button is disabled.
+      var actionButton = dialog.$.actionButton;
+      assertTrue(!!actionButton);
+      assertTrue(actionButton.disabled);
+
+      // Assert that the text field is empty.
+      var inputElement = dialog.$.url;
+      assertTrue(!!inputElement);
+      assertEquals('', inputElement.value);
+    });
+
+    test('Initialization_Edit', function() {
+      dialog.model = createSampleUrlEntry();
+      document.body.appendChild(dialog);
+      assertTrue(dialog.$.dialog.opened);
+
+      // Assert that the "Edit" button is enabled.
+      var actionButton = dialog.$.actionButton;
+      assertTrue(!!actionButton);
+      assertFalse(actionButton.disabled);
+      // Assert that the text field is pre-populated.
+      var inputElement = dialog.$.url;
+      assertTrue(!!inputElement);
+      assertEquals(dialog.model.url, inputElement.value);
+    });
+
     // Test that validation occurs as the user is typing, and that the action
     // button is updated accordingly.
     test('Validation', function() {
-      assertTrue(dialog.$.dialog.opened);
-      var addButton = dialog.$.add;
-      assertTrue(!!addButton);
-      assertTrue(addButton.disabled);
+      document.body.appendChild(dialog);
 
+      var actionButton = dialog.$.actionButton;
+      assertTrue(actionButton.disabled);
       var inputElement = dialog.$.url;
-      assertTrue(!!inputElement);
 
       var expectedUrl = "dummy-foo.com";
       inputElement.value = expectedUrl;
@@ -95,7 +135,7 @@ cr.define('settings_startup_urls_page', function() {
 
       return browserProxy.whenCalled('validateStartupPage').then(function(url) {
         assertEquals(expectedUrl, url);
-        assertTrue(addButton.disabled);
+        assertTrue(actionButton.disabled);
 
         browserProxy.setUrlValidity(true);
         browserProxy.resetResolver('validateStartupPage');
@@ -103,30 +143,45 @@ cr.define('settings_startup_urls_page', function() {
 
         return browserProxy.whenCalled('validateStartupPage');
       }).then(function() {
-        assertFalse(addButton.disabled);
+        assertFalse(actionButton.disabled);
       });
     });
 
-    test('AddStartupPage', function() {
-      assertTrue(dialog.$.dialog.opened);
-      var addButton = dialog.$.add;
-      addButton.disabled = false;
+    /**
+     * Tests that the appropritae browser proxy method is called when the action
+     * button is tapped.
+     * @param {string} proxyMethodName
+     */
+    function testProxyCalled(proxyMethodName) {
+      var actionButton = dialog.$.actionButton;
+      actionButton.disabled = false;
 
       // Test that the dialog remains open if the user somehow manages to submit
       // an invalid URL.
       browserProxy.setUrlValidity(false);
-      MockInteractions.tap(addButton);
-      return browserProxy.whenCalled('addStartupPage').then(function() {
+      MockInteractions.tap(actionButton);
+      return browserProxy.whenCalled(proxyMethodName).then(function() {
         assertTrue(dialog.$.dialog.opened);
 
         // Test that dialog is closed if the user submits a valid URL.
         browserProxy.setUrlValidity(true);
-        browserProxy.resetResolver('addStartupPage');
-        MockInteractions.tap(addButton);
-        return browserProxy.whenCalled('addStartupPage');
+        browserProxy.resetResolver(proxyMethodName);
+        MockInteractions.tap(actionButton);
+        return browserProxy.whenCalled(proxyMethodName);
       }).then(function() {
         assertFalse(dialog.$.dialog.opened);
       });
+    }
+
+    test('AddStartupPage', function() {
+      document.body.appendChild(dialog);
+      return testProxyCalled('addStartupPage');
+    });
+
+    test('EditStartupPage', function() {
+      dialog.model = createSampleUrlEntry();
+      document.body.appendChild(dialog);
+      return testProxyCalled('editStartupPage');
     });
   });
 
@@ -166,6 +221,56 @@ cr.define('settings_startup_urls_page', function() {
       MockInteractions.tap(addPageButton);
       Polymer.dom.flush();
       assertTrue(!!page.$$('settings-startup-url-dialog'));
+    });
+
+    test('EditPage_OpensDialog', function() {
+      assertFalse(!!page.$$('settings-startup-url-dialog'));
+      page.fire(settings.EDIT_STARTUP_URL_EVENT, createSampleUrlEntry());
+      Polymer.dom.flush();
+      assertTrue(!!page.$$('settings-startup-url-dialog'));
+    });
+  });
+
+  /** @return {!StartupPageInfo} */
+  function createSampleUrlEntry() {
+    return {
+      modelIndex: 2,
+      title: 'Test page',
+      tooltip: 'test tooltip',
+      url: 'chrome://foo',
+    };
+  }
+
+  suite('StartupUrlEntry', function() {
+    /** @type {?SettingsStartupUrlEntryElement} */
+    var element = null;
+
+    var browserProxy = null;
+
+    setup(function() {
+      browserProxy = new TestStartupUrlsPageBrowserProxy();
+      settings.StartupUrlsPageBrowserProxyImpl.instance_ = browserProxy;
+      PolymerTest.clearBody();
+      element = document.createElement('settings-startup-url-entry');
+      element.model = createSampleUrlEntry();
+      document.body.appendChild(element);
+
+      // Bring up the popup menu for the following tests to use.
+      assertFalse(!!element.$$('iron-dropdown'));
+      MockInteractions.tap(element.$.dots);
+      Polymer.dom.flush();
+      assertTrue(!!element.$$('iron-dropdown'));
+    });
+
+    teardown(function() { element.remove(); });
+
+    test('MenuOptions_Remove', function() {
+      var removeButton = element.shadowRoot.querySelector('#remove')
+      MockInteractions.tap(removeButton);
+      return browserProxy.whenCalled('removeStartupPage').then(
+          function(modelIndex) {
+            assertEquals(element.model.modelIndex, modelIndex);
+          });
     });
   });
 });

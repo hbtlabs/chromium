@@ -218,7 +218,7 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     NO_TEST_SERVER
   };
 
-  scoped_ptr<ExtensionTestMessageListener> RunAppHelper(
+  std::unique_ptr<ExtensionTestMessageListener> RunAppHelper(
       const std::string& test_name,
       const std::string& app_location,
       TestServer test_server,
@@ -226,13 +226,13 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     // For serving guest pages.
     if ((test_server == NEEDS_TEST_SERVER) && !StartEmbeddedTestServer()) {
       LOG(ERROR) << "FAILED TO START TEST SERVER.";
-      return scoped_ptr<ExtensionTestMessageListener>();
+      return std::unique_ptr<ExtensionTestMessageListener>();
     }
 
     LoadAndLaunchPlatformApp(app_location.c_str(), "Launched");
     if (!ui_test_utils::ShowAndFocusNativeWindow(GetPlatformAppWindow())) {
       LOG(ERROR) << "UNABLE TO FOCUS TEST WINDOW.";
-      return scoped_ptr<ExtensionTestMessageListener>();
+      return std::unique_ptr<ExtensionTestMessageListener>();
     }
 
     // Flush any pending events to make sure we start with a clean slate.
@@ -240,14 +240,14 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
 
     *embedder_web_contents = GetFirstAppWindowWebContents();
 
-    scoped_ptr<ExtensionTestMessageListener> done_listener(
+    std::unique_ptr<ExtensionTestMessageListener> done_listener(
         new ExtensionTestMessageListener("TEST_PASSED", false));
     done_listener->set_failure_message("TEST_FAILED");
     if (!content::ExecuteScript(
             *embedder_web_contents,
             base::StringPrintf("runTest('%s')", test_name.c_str()))) {
       LOG(ERROR) << "UNABLE TO START TEST";
-      return scoped_ptr<ExtensionTestMessageListener>();
+      return std::unique_ptr<ExtensionTestMessageListener>();
     }
 
     return done_listener;
@@ -257,9 +257,8 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
                   const std::string& app_location,
                   TestServer test_server) {
     content::WebContents* embedder_web_contents = NULL;
-    scoped_ptr<ExtensionTestMessageListener> done_listener(
-        RunAppHelper(
-            test_name, app_location, test_server, &embedder_web_contents));
+    std::unique_ptr<ExtensionTestMessageListener> done_listener(RunAppHelper(
+        test_name, app_location, test_server, &embedder_web_contents));
 
     ASSERT_TRUE(done_listener);
     ASSERT_TRUE(done_listener->WaitUntilSatisfied());
@@ -389,7 +388,7 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     }
 
     size_t CountWidgets() {
-      scoped_ptr<content::RenderWidgetHostIterator> widgets(
+      std::unique_ptr<content::RenderWidgetHostIterator> widgets(
           content::RenderWidgetHost::GetRenderWidgetHosts());
       size_t num_widgets = 0;
       while (content::RenderWidgetHost* widget = widgets->GetNextHost()) {
@@ -687,7 +686,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusEvent) {
 IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusTracksEmbedder) {
   content::WebContents* embedder_web_contents = NULL;
 
-  scoped_ptr<ExtensionTestMessageListener> done_listener(
+  std::unique_ptr<ExtensionTestMessageListener> done_listener(
       RunAppHelper("testFocusTracksEmbedder", "web_view/focus", NO_TEST_SERVER,
                    &embedder_web_contents));
   done_listener->WaitUntilSatisfied();
@@ -708,7 +707,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
   content::WebContents* embedder_web_contents = NULL;
 
   {
-    scoped_ptr<ExtensionTestMessageListener> done_listener(
+    std::unique_ptr<ExtensionTestMessageListener> done_listener(
         RunAppHelper("testAdvanceFocus", "web_view/focus", NO_TEST_SERVER,
                      &embedder_web_contents));
     done_listener->WaitUntilSatisfied();
@@ -903,11 +902,9 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, NewWindow_OpenInNewTab) {
   content::WebContents* embedder_web_contents = NULL;
 
   ExtensionTestMessageListener loaded_listener("Loaded", false);
-  scoped_ptr<ExtensionTestMessageListener> done_listener(
-    RunAppHelper("testNewWindowOpenInNewTab",
-                 "web_view/newwindow",
-                 NEEDS_TEST_SERVER,
-                 &embedder_web_contents));
+  std::unique_ptr<ExtensionTestMessageListener> done_listener(
+      RunAppHelper("testNewWindowOpenInNewTab", "web_view/newwindow",
+                   NEEDS_TEST_SERVER, &embedder_web_contents));
 
   loaded_listener.WaitUntilSatisfied();
 #if defined(OS_MACOSX)
@@ -1238,7 +1235,7 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_FocusRestored) {
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
 IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, DISABLED_Focus_InputMethod) {
   content::WebContents* embedder_web_contents = NULL;
-  scoped_ptr<ExtensionTestMessageListener> done_listener(
+  std::unique_ptr<ExtensionTestMessageListener> done_listener(
       RunAppHelper("testInputMethod", "web_view/focus", NO_TEST_SERVER,
                    &embedder_web_contents));
   ASSERT_TRUE(done_listener->WaitUntilSatisfied());
@@ -1423,14 +1420,12 @@ IN_PROC_BROWSER_TEST_P(WebViewTextInputStateInteractiveTest,
       base::Bind(&TextInputStateHelper::HasGivenValue, "last one"));
 }
 
-// TODO(ekaramad): Activate this test for OOPIF when input event routing for
-// OOPIF-<webview> is fixed.
 IN_PROC_BROWSER_TEST_P(WebViewTextInputStateInteractiveTest,
                        CrashingWebViewResetsState) {
   SetupTest("web_view/text_input_state",
             "/extensions/platform_apps/web_view/text_input_state/guest.html");
 
-  // Press tab key twice to end up in the <input> of the <webview>,
+  // Press tab key twice to end up in the <input> of the <webview>.
   ExtensionTestMessageListener listener("GUEST-FOCUSED", false);
   for (size_t i = 0; i < 2; ++i)
     SendKeyPressToPlatformApp(ui::VKEY_TAB);
@@ -1445,7 +1440,43 @@ IN_PROC_BROWSER_TEST_P(WebViewTextInputStateInteractiveTest,
   // Now crash the <webview>.
   guest_web_contents()->GetRenderProcessHost()->Shutdown(false, 0);
 
-  // State should reset to none.
+  // Wait for the outer WebContentsImpl |text_input_state_->type| to be reset to
+  // none.
+  TextInputStateHelper::WaitForDesiredState(
+      embedder_web_contents(),
+      base::Bind(&TextInputStateHelper::IsStateOfGivenType,
+                 ui::TEXT_INPUT_TYPE_NONE));
+}
+
+// This test creates a <webview> with a text input field inside, gives focus to
+// the input field, and then detaches the <webview>. It monitors the embedder
+// WebContents text input state to make sure it tracks the state properly.
+IN_PROC_BROWSER_TEST_P(WebViewTextInputStateInteractiveTest,
+                       OuterWebContentsResetsStateAfterDetach) {
+  SetupTest("web_view/text_input_state",
+            "/extensions/platform_apps/web_view/text_input_state/guest.html");
+
+  // Press tab key twice to end up in the <input> of the <webview>.
+  ExtensionTestMessageListener listener("GUEST-FOCUSED", false);
+  for (size_t i = 0; i < 2; ++i)
+    SendKeyPressToPlatformApp(ui::VKEY_TAB);
+
+  listener.WaitUntilSatisfied();
+
+  // Now wait for a text input state change.
+  TextInputStateHelper::WaitForDesiredState(
+      embedder_web_contents(),
+      base::Bind(&TextInputStateHelper::HasGivenValue, "guest"));
+
+  // Now detach the <webview>.
+  ExtensionTestMessageListener detach_listener("detached", false);
+  detach_listener.set_failure_message("failed-to-detach");
+  EXPECT_TRUE(
+      content::ExecuteScript(embedder_web_contents(), "detachWebView();"));
+  detach_listener.WaitUntilSatisfied();
+
+  // Wait for the outer WebContentsImpl |text_input_state_->type| to be reset to
+  // none.
   TextInputStateHelper::WaitForDesiredState(
       embedder_web_contents(),
       base::Bind(&TextInputStateHelper::IsStateOfGivenType,

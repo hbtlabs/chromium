@@ -6,6 +6,8 @@
 
 #include "base/bind.h"
 #include "services/catalog/catalog.h"
+#include "services/catalog/constants.h"
+#include "services/catalog/reader.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/shell_connection.h"
 
@@ -16,40 +18,47 @@ Factory::Factory(base::TaskRunner* file_task_runner,
                  ManifestProvider* manifest_provider)
     : file_task_runner_(file_task_runner),
       store_(std::move(store)),
-      manifest_provider_(manifest_provider),
       weak_factory_(this) {
-  mojo::shell::mojom::ShellClientRequest request = GetProxy(&shell_client_);
-  shell_connection_.reset(new mojo::ShellConnection(this, std::move(request)));
+  shell::mojom::ShellClientRequest request = GetProxy(&shell_client_);
+  shell_connection_.reset(new shell::ShellConnection(this, std::move(request)));
+
+  base::FilePath system_package_dir;
+  PathService::Get(base::DIR_MODULE, &system_package_dir);
+  system_package_dir = system_package_dir.AppendASCII(kMojoApplicationsDirName);
+  system_reader_.reset(new Reader(file_task_runner, manifest_provider));
+  system_reader_->Read(system_package_dir, &system_catalog_,
+                       base::Bind(&Factory::SystemPackageDirScanned,
+                                  weak_factory_.GetWeakPtr()));
 }
 
 Factory::~Factory() {}
 
-mojo::shell::mojom::ShellClientPtr Factory::TakeShellClient() {
+shell::mojom::ShellClientPtr Factory::TakeShellClient() {
   return std::move(shell_client_);
 }
 
-bool Factory::AcceptConnection(mojo::Connection* connection) {
+bool Factory::AcceptConnection(shell::Connection* connection) {
   connection->AddInterface<mojom::Catalog>(this);
   connection->AddInterface<mojom::Resolver>(this);
-  connection->AddInterface<mojo::shell::mojom::ShellResolver>(this);
+  connection->AddInterface<shell::mojom::ShellResolver>(this);
   return true;
 }
 
-void Factory::Create(mojo::Connection* connection,
+void Factory::Create(shell::Connection* connection,
                      mojom::ResolverRequest request) {
   Catalog* instance =
       GetCatalogForUserId(connection->GetRemoteIdentity().user_id());
   instance->BindResolver(std::move(request));
 }
 
-void Factory::Create(mojo::Connection* connection,
-                     mojo::shell::mojom::ShellResolverRequest request) {
+void Factory::Create(shell::Connection* connection,
+                     shell::mojom::ShellResolverRequest request) {
   Catalog* instance =
       GetCatalogForUserId(connection->GetRemoteIdentity().user_id());
   instance->BindShellResolver(std::move(request));
 }
 
-void Factory::Create(mojo::Connection* connection,
+void Factory::Create(shell::Connection* connection,
                      mojom::CatalogRequest request) {
   Catalog* instance =
       GetCatalogForUserId(connection->GetRemoteIdentity().user_id());
@@ -62,10 +71,18 @@ Catalog* Factory::GetCatalogForUserId(const std::string& user_id) {
     return it->second.get();
 
   // TODO(beng): There needs to be a way to load the store from different users.
-  Catalog* instance = new Catalog(std::move(store_), file_task_runner_,
-                                  &system_catalog_, manifest_provider_);
+  Catalog* instance = new Catalog(std::move(store_), system_reader_.get());
   catalogs_[user_id] = make_scoped_ptr(instance);
+  if (loaded_)
+    instance->CacheReady(&system_catalog_);
+
   return instance;
+}
+
+void Factory::SystemPackageDirScanned() {
+  loaded_ = true;
+  for (auto& catalog : catalogs_)
+    catalog.second->CacheReady(&system_catalog_);
 }
 
 }  // namespace catalog

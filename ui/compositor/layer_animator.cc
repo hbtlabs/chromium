@@ -14,7 +14,6 @@
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_player.h"
-#include "cc/animation/animation_registrar.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
 #include "cc/animation/layer_animation_controller.h"
@@ -161,7 +160,6 @@ void LayerAnimator::SetCompositor(Compositor* compositor) {
     DCHECK_EQ(animation_controller_state_->id(),
               delegate_->GetCcLayer()->id());
     timeline->animation_host()
-        ->animation_registrar()
         ->RegisterAnimationController(animation_controller_state_.get());
   }
 
@@ -176,16 +174,19 @@ void LayerAnimator::SetCompositor(Compositor* compositor) {
 void LayerAnimator::ResetCompositor(Compositor* compositor) {
   DCHECK(compositor);
 
+  cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
+  DCHECK(timeline);
+
+  const int layer_id = animation_player_->layer_id();
+
   // Store a reference to LAC if any so it may be picked up in SetCompositor.
-  if (animation_player_->element_animations()) {
+  if (layer_id) {
     animation_controller_state_ =
-        animation_player_->element_animations()->layer_animation_controller();
+        timeline->animation_host()->GetControllerForLayerId(layer_id);
   }
 
   DetachLayerFromAnimationPlayer();
 
-  cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
-  DCHECK(timeline);
   timeline->DetachPlayer(animation_player_);
 }
 
@@ -197,7 +198,6 @@ void LayerAnimator::AttachLayerToAnimationPlayer(int layer_id) {
 
   if (animation_player_->element_animations()) {
     animation_player_->element_animations()
-        ->layer_animation_controller()
         ->AddEventObserver(this);
   }
 }
@@ -205,7 +205,6 @@ void LayerAnimator::AttachLayerToAnimationPlayer(int layer_id) {
 void LayerAnimator::DetachLayerFromAnimationPlayer() {
   if (animation_player_->element_animations()) {
     animation_player_->element_animations()
-        ->layer_animation_controller()
         ->RemoveEventObserver(this);
   }
 

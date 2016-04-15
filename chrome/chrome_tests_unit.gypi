@@ -154,6 +154,7 @@
       'browser/net/url_info_unittest.cc',
       'browser/page_load_metrics/observers/aborts_page_load_metrics_observer_unittest.cc',
       'browser/page_load_metrics/observers/core_page_load_metrics_observer_unittest.cc',
+      'browser/page_load_metrics/observers/document_write_page_load_metrics_observer_unittest.cc',
       'browser/page_load_metrics/observers/from_gws_page_load_metrics_observer_unittest.cc',
       'browser/page_load_metrics/observers/google_captcha_observer_unittest.cc',
       'browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.cc',
@@ -1599,8 +1600,9 @@
       'browser/signin/cross_device_promo_unittest.cc',
       'browser/signin/signin_global_error_unittest.cc',
       'browser/sync/sync_global_error_unittest.cc',
+      'browser/ui/webui/signin/signin_supervised_user_import_handler_unittest.cc',
+      'browser/ui/webui/signin/sync_confirmation_handler_unittest.cc',
       'browser/upgrade_detector_impl_unittest.cc',
-      'browser/ui/webui/signin/sync_confirmation_handler_unittest.cc'
     ],
     'chrome_unit_tests_app_list_sources': [
       'browser/ui/app_list/app_context_menu_unittest.cc',

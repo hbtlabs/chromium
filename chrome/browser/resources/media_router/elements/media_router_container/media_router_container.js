@@ -1088,18 +1088,29 @@ Polymer({
   },
 
   /**
-   * Updates |currentView_| if there is a new blocking issue. Clears any
-   * pending route creation properties if the issue corresponds with
-   * |pendingCreatedRouteId_|.
+   * Updates |currentView_| if there is a new blocking issue or a blocking
+   * issue is resolved. Clears any pending route creation properties if the
+   * issue corresponds with |pendingCreatedRouteId_|.
    *
-   * @param {?media_router.Issue} issue The new issue.
+   * @param {?media_router.Issue} issue The new issue, or null if the
+   *                              blocking issue was resolved.
    * @private
    */
   maybeShowIssueView_: function(issue) {
-    if (!!issue && issue.isBlocking)
-      this.currentView_ = media_router.MediaRouterView.ISSUE;
-    else
-      this.updateElementPositioning_();
+    if (!!issue) {
+      if (issue.isBlocking) {
+        this.currentView_ = media_router.MediaRouterView.ISSUE;
+      } else if (this.currentView_ == media_router.MediaRouterView.SINK_LIST) {
+        // Make space for the non-blocking issue in the sink list.
+        this.updateElementPositioning_();
+      }
+    } else {
+      // Switch back to the sink list if the issue was cleared. If the previous
+      // issue was non-blocking, this would be a no-op. It is expected that
+      // the only way to clear an issue is by user action; the IssueManager
+      // (C++ side) does not clear issues in the UI.
+      this.currentView_ = media_router.MediaRouterView.SINK_LIST;
+    }
 
     if (!!this.pendingCreatedRouteId_ && !!issue &&
         issue.routeId == this.pendingCreatedRouteId_) {
@@ -1302,7 +1313,7 @@ Polymer({
   onSinkClick_: function(event) {
     var clickedSink = (this.isUserSearching_) ?
         this.$$('#searchResults').itemForElement(event.target).sinkItem :
-        this.$.sinkList.itemForElement(event.target);
+        this.$$('#sinkList').itemForElement(event.target);
     this.showOrCreateRoute_(clickedSink);
     this.fire('sink-click', {index: event['model'].index});
   },
@@ -1634,12 +1645,15 @@ Polymer({
       this.$['container-header'].style.marginTop = firstRunFlowHeight + 'px';
       this.$['content'].style.marginTop =
           firstRunFlowHeight + headerHeight + 'px';
-      this.$['sink-list'].style.maxHeight =
-          this.dialogHeight_ - headerHeight - firstRunFlowHeight -
-              issueHeight - searchHeight + 'px';
-      var searchResults = this.$$('#search-results');
-      if (searchResults) {
-        searchResults.style.maxHeight = this.$['sink-list'].style.maxHeight;
+
+      var sinkList = this.$$('#sink-list');
+      if (sinkList) {
+        sinkList.style.maxHeight =
+            this.dialogHeight_ - headerHeight - firstRunFlowHeight -
+                issueHeight - searchHeight + 'px';
+        var searchResults = this.$$('#search-results');
+        if (searchResults)
+          searchResults.style.maxHeight = sinkList.style.maxHeight;
       }
     });
   },

@@ -679,6 +679,14 @@ void RenderFrameHostImpl::AccessibilityFatalError() {
 
 gfx::AcceleratedWidget
     RenderFrameHostImpl::AccessibilityGetAcceleratedWidget() {
+  // Only the main frame's current frame host is connected to the native
+  // widget tree for accessibility, so return null if this is queried on
+  // any other frame.
+  if (frame_tree_node()->parent() ||
+      frame_tree_node()->current_frame_host() != this) {
+    return gfx::kNullAcceleratedWidget;
+  }
+
   RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
       render_view_host_->GetWidget()->GetView());
   if (view)
@@ -897,10 +905,30 @@ void RenderFrameHostImpl::OnDidStartProvisionalLoad(
 
 void RenderFrameHostImpl::OnDidFailProvisionalLoadWithError(
     const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params) {
-  if (!IsBrowserSideNavigationEnabled() && navigation_handle_) {
+  if (!navigation_handle_) {
+    bad_message::ReceivedBadMessage(
+        GetProcess(), bad_message::RFH_FAIL_PROVISIONAL_LOAD_NO_HANDLE);
+    return;
+  }
+
+  if (IsBrowserSideNavigationEnabled() &&
+      navigation_handle_->GetNetErrorCode() == net::OK) {
+    // The renderer should not be sending this message unless asked to commit
+    // an error page.
+    // TODO(clamy): Stop sending DidFailProvisionalLoad IPCs at all when enough
+    // observers have moved to DidFinishNavigation.
+    bad_message::ReceivedBadMessage(
+        GetProcess(), bad_message::RFH_FAIL_PROVISIONAL_LOAD_NO_ERROR);
+    return;
+  }
+
+  // Update the error code in the NavigationHandle of the navigation.
+  // PlzNavigate: this has already done in NavigationRequest::OnRequestFailed.
+  if (!IsBrowserSideNavigationEnabled()) {
     navigation_handle_->set_net_error_code(
         static_cast<net::Error>(params.error_code));
   }
+
   frame_tree_node_->navigator()->DidFailProvisionalLoadWithError(this, params);
 }
 
@@ -1912,7 +1940,7 @@ void RenderFrameHostImpl::RegisterMojoServices() {
   if (!frame_mojo_shell_)
     frame_mojo_shell_.reset(new FrameMojoShell(this));
 
-  GetServiceRegistry()->AddService<mojo::shell::mojom::Connector>(base::Bind(
+  GetServiceRegistry()->AddService<shell::mojom::Connector>(base::Bind(
       &FrameMojoShell::BindRequest, base::Unretained(frame_mojo_shell_.get())));
 
 #if defined(ENABLE_WEBVR)
@@ -2244,10 +2272,10 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   GetProcess()->GetServiceRegistry()->ConnectToRemoteService(
       mojo::GetProxy(&setup));
 
-  mojo::shell::mojom::InterfaceProviderPtr exposed_services;
+  shell::mojom::InterfaceProviderPtr exposed_services;
   service_registry_->Bind(GetProxy(&exposed_services));
 
-  mojo::shell::mojom::InterfaceProviderPtr services;
+  shell::mojom::InterfaceProviderPtr services;
   setup->ExchangeInterfaceProviders(routing_id_, GetProxy(&services),
                                     std::move(exposed_services));
   service_registry_->BindRemoteServiceProvider(std::move(services));
@@ -2739,6 +2767,15 @@ void RenderFrameHostImpl::CreateWebBluetoothService(
   DCHECK(!web_bluetooth_service_);
   web_bluetooth_service_.reset(
       new WebBluetoothServiceImpl(this, std::move(request)));
+  // RFHI owns web_bluetooth_service_ and web_bluetooth_service owns the
+  // binding_ which may run the error handler. binding_ can't run the error
+  // handler after it's destroyed so it can't run after the RFHI is destroyed.
+  web_bluetooth_service_->SetClientConnectionErrorHandler(base::Bind(
+      &RenderFrameHostImpl::DeleteWebBluetoothService, base::Unretained(this)));
+}
+
+void RenderFrameHostImpl::DeleteWebBluetoothService() {
+  web_bluetooth_service_.reset();
 }
 
 }  // namespace content

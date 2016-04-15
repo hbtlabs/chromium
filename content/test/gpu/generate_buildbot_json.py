@@ -144,6 +144,7 @@ FYI_WATERFALL = {
     'GPU Mac Builder (dbg)',
     'GPU Linux Builder',
     'GPU Linux Builder (dbg)',
+    'Linux ChromiumOS Builder',
    ],
 
   'testers': {
@@ -670,7 +671,14 @@ TELEMETRY_TESTS = {
   'gpu_process_launch_tests': {'target_name': 'gpu_process'},
   'gpu_rasterization': {},
   'hardware_accelerated_feature': {},
-  'maps_pixel_test': {'target_name': 'maps'},
+  'maps_pixel_test': {
+    'target_name': 'maps',
+    'tester_configs': [
+      {
+        'allow_on_mac_nvidia': True,
+      },
+    ],
+  },
   'memory_test': {},
   'pixel_test': {
     'target_name': 'pixel',
@@ -689,7 +697,12 @@ TELEMETRY_TESTS = {
     ],
     'precommit_args': [
       '--download-refimg-from-cloud-storage',
-    ]
+    ],
+    'tester_configs': [
+      {
+        'allow_on_mac_nvidia': True,
+      },
+    ],
   },
   'screenshot_sync': {},
   'trace_test': {},
@@ -772,6 +785,10 @@ TELEMETRY_TESTS = {
           # http://crbug.com/599451: this test is currently too slow
           # to run on x64 in Debug mode. Need to shard the tests.
           'Win7 x64 Debug (NVIDIA)',
+          # http://crbug.com/540543: Linux Intel driver is GL 3.0 and
+          # doesn't support features needed for ES3
+          'Linux Release (New Intel)',
+          'Linux Debug (New Intel)',
         ],
       },
     ],

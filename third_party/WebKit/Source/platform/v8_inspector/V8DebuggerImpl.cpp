@@ -35,6 +35,7 @@
 #include "platform/v8_inspector/DebuggerScript.h"
 #include "platform/v8_inspector/InspectedContext.h"
 #include "platform/v8_inspector/ScriptBreakpoint.h"
+#include "platform/v8_inspector/V8Compat.h"
 #include "platform/v8_inspector/V8DebuggerAgentImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
 #include "platform/v8_inspector/V8RuntimeAgentImpl.h"
@@ -271,11 +272,6 @@ void V8DebuggerImpl::setPauseOnNextStatement(bool pause)
         v8::Debug::DebugBreak(m_isolate);
     else
         v8::Debug::CancelDebugBreak(m_isolate);
-}
-
-bool V8DebuggerImpl::pausingOnNextStatement()
-{
-    return v8::Debug::CheckDebugBreak(m_isolate);
 }
 
 bool V8DebuggerImpl::canBreakProgram()

@@ -197,6 +197,8 @@
       'CrWinClangLLD64 tester': 'none',
       'CrWinClngLLD64dbg tester': 'none',
       'CrWinClngLLDdbg tester': 'none',
+      'Headless Linux (dbg)':
+        '//build/args/bots/chromium.fyi/headless_linux_dbg.gn',
       'LTO Linux Perf': 'gn_official_goma_lto',
       'Libfuzzer Upload Linux ASan': 'gn_release_libfuzzer_asan',
       'Libfuzzer Upload Linux MSan': 'gn_release_libfuzzer_msan',
@@ -214,6 +216,9 @@
       'WinClang': 'win_clang_debug_bot',
       'Windows Browser (DrMemory light) (1)': 'none',
       'Windows Browser (DrMemory light) (2)': 'none',
+
+      'Linux Kitchen (kitchen_run)': 'swarming_gn_release_bot',
+      'Linux Kitchen (annotated_run)': 'swarming_gn_release_bot',
     },
 
     'chromium.gpu': {
@@ -258,6 +263,8 @@
         'swarming_gpu_tests_deqp_gles_gyp_release_bot_minimal_symbols_x64',
       'GPU Win x64 Builder (dbg)':
         'swarming_gpu_tests_deqp_gles_gyp_debug_bot_minimal_symbols_x64',
+      'Linux ChromiumOS Builder':
+        'swarming_gpu_fyi_tests_chromeos_gyp_release_bot',
       'Linux Debug (NVIDIA)': 'none',
       'Linux Debug (New Intel)': 'none',
       'Linux Release (ATI)': 'none',
@@ -563,7 +570,7 @@
     },
 
     'official.desktop': {
-      'blimp-engine': 'gn_blimp_debug',
+      'blimp-engine': '//build/args/bots/official.desktop/blimp-engine.gn',
       'mac64': 'gyp_official',
       'precise64': 'gn_official',
 
@@ -685,7 +692,7 @@
       'linux_chromium_cfi_rel_ng': 'gn_cfi_release_trybot',
       'linux_chromium_chromeos_asan_variable': 'findit',
       'linux_chromium_chromeos_compile_rel_ng':
-        'swarming_chromeos_gyp_release_trybot',
+        'swarming_chromeos_gn_release_trybot',
       'linux_chromium_chromeos_rel_ng': 'swarming_chromeos_gyp_release_trybot',
       'linux_chromium_chromeos_variable': 'findit',
       'linux_chromium_chromeos_variable_chrome': 'findit',
@@ -1016,13 +1023,6 @@
       'error',
     ],
 
-    # This is the "deployment" config for the blimp builds. Currently
-    # we want them to be debug, non-optimized builds (and we don't need any
-    # chrome branding), so we don't use the "official" mixin.
-    'gn_blimp_debug': [
-      'gn', 'blimp', 'debug',
-    ],
-
     'gn_cfi_release_bot': [
       'gn', 'cfi', 'release_bot',
     ],
@@ -1252,6 +1252,10 @@
       'swarming', 'asan', 'lsan', 'release_trybot',
     ],
 
+    'swarming_chromeos_gn_release_trybot': [
+      'swarming', 'chromeos_with_codecs', 'gn', 'release_trybot',
+    ],
+
     'swarming_chromeos_gyp_debug_bot': [
       'swarming', 'chromeos_with_codecs', 'gyp', 'debug_bot',
     ],
@@ -1278,6 +1282,11 @@
 
     'swarming_gn_msan_release_bot_x64': [
       'swarming', 'gn', 'msan', 'release_bot', 'x64',
+    ],
+
+    'swarming_gpu_fyi_tests_chromeos_gyp_release_bot': [
+      'swarming', 'gpu_tests', 'internal_gles2_conform_tests', 'gyp',
+      'release_bot', 'angle_deqp_tests', 'chromeos',
     ],
 
     'swarming_gpu_fyi_tests_gn_debug_bot': [
@@ -1564,19 +1573,6 @@
       'gyp_defines': 'asan=1',
     },
 
-    # Removes dependencies on X11 and audio libraries for a containerized
-    # build.
-    'blimp': {
-      # This list must be kept in sync with the list in
-      # //build/args/blimp_engine.gn.
-      'gn_args': ('use_aura=true use_ozone=true ozone_auto_platforms=false '
-                  'ozone_platform="headless" ozone_platform_headless=true '
-                  'metrics_use_blimp=true '
-                  'use_low_quality_image_interpolation=true use_alsa=false '
-                  'use_pulseaudio=false use_cups=false use_glib=false'),
-      'gyp_defines': 'target_arch=unknown',
-    },
-
     'cast': {
       'gn_args': 'is_chromecast=true',
       'gyp_defines': 'chromecast=1',
@@ -1622,9 +1618,11 @@
 
     'cronet': {
       'gn_args': ('disable_file_support=true disable_ftp_support=true '
-                  'enable_websockets=false'),
+                  'enable_websockets=false use_platform_icu_alternatives=true '
+                  'disable_brotli_filter=true'),
       'gyp_defines': ('disable_file_support=1 disable_ftp_support=1 '
-                      'enable_websockets=0'),
+                      'enable_websockets=0 use_platform_icu_alternatives=1 '
+                      'disable_brotli_filter=1'),
     },
 
     'crosscompile': {

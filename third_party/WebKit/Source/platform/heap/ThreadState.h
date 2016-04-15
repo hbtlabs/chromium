@@ -39,6 +39,7 @@
 #include "wtf/AddressSanitizer.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
+#include "wtf/Functional.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/ThreadSpecific.h"
@@ -92,7 +93,7 @@ class Visitor;
 // public:
 //     Foo()
 //     {
-//         ThreadState::current()->registerPreFinalizer(dispose);
+//         ThreadState::current()->registerPreFinalizer(this);
 //     }
 // private:
 //     void dispose()
@@ -106,7 +107,7 @@ public:                                             \
 static bool invokePreFinalizer(void* object)        \
 {                                                   \
     Class* self = reinterpret_cast<Class*>(object); \
-    if (Heap::isHeapObjectAlive(self))              \
+    if (ThreadHeap::isHeapObjectAlive(self))              \
         return false;                               \
     self->Class::preFinalizer();                    \
     return true;                                    \
@@ -255,7 +256,7 @@ public:
     //
     // 1) All threads park at safe points.
     // 2) The GCing thread calls preGC() for all ThreadStates.
-    // 3) The GCing thread calls Heap::collectGarbage().
+    // 3) The GCing thread calls ThreadHeap::collectGarbage().
     //    This does marking but doesn't do sweeping.
     // 4) The GCing thread calls postGC() for all ThreadStates.
     // 5) The GCing thread resume all threads.
@@ -505,6 +506,11 @@ public:
     size_t threadStackSize();
 #endif
 
+    // Registers a closure that will be called while the thread is shutting down
+    // (i.e. ThreadState::isTerminating will be true), in order to allow for any
+    // persistent handles that should be cleared.
+    void registerThreadShutdownHook(PassOwnPtr<SameThreadClosure>);
+
 #if defined(LEAK_SANITIZER)
     void registerStaticPersistentNode(PersistentNode*);
     void releaseStaticPersistentNodes();
@@ -657,6 +663,10 @@ private:
 
     v8::Isolate* m_isolate;
     void (*m_traceDOMWrappers)(v8::Isolate*, Visitor*);
+
+    // Invoked while the thread is terminating. Intended to be used to free
+    // persistent pointers into the thread's heap.
+    Vector<OwnPtr<SameThreadClosure>> m_threadShutdownHooks;
 
 #if defined(ADDRESS_SANITIZER)
     void* m_asanFakeStack;
