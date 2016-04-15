@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     uint32_t hash = base::SuperFastHash(uuid_canonical_string.data(),
                                         uuid_canonical_string.size());
 
-    // Strip off the signed bit because UMA doesn't support negative values,
+    // Strip off the sign bit because UMA doesn't support negative values,
     // but takes a signed int as input.
     hash &= 0x7fffffff;
 

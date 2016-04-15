@@ -71878,7 +71878,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="GATTCharacteristicHash" type="int">
-<!-- Hash values can be produced using tool: bluetooth_metrics_hash -->
+<!-- Hash values can be produced using tool: bluetooth_metrics_hash (Only built via GN, not GYP) -->
 
   <int value="1615384" label="alert_notification_control_point"/>
   <int value="4531384" label="date_of_birth"/>
@@ -72054,7 +72054,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="GATTServiceHash" type="int">
-<!-- Hash values can be produced using tool: bluetooth_metrics_hash -->
+<!-- Hash values can be produced using tool: bluetooth_metrics_hash (Only built via GN, not GYP) -->
 
   <int value="7464675" label="pulse_oximeter"/>
   <int value="26695985" label="fe20"/>

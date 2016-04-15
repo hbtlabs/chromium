@@ -30,7 +30,7 @@ int HashUUID(const std::string& canonical_uuid) {
   uint32_t data =
       base::SuperFastHash(canonical_uuid.data(), canonical_uuid.size());
 
-  // Strip off the signed bit because UMA doesn't support negative values,
+  // Strip off the sign bit because UMA doesn't support negative values,
   // but takes a signed int as input.
   return static_cast<int>(data & 0x7fffffff);
 }
